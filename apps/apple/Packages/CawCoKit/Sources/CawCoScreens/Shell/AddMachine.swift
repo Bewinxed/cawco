@@ -46,10 +46,11 @@ final class JoinState {
     }
 
     /// Sent once and kept nowhere: `password`, when given, signs this one connection in to add the hub's key.
-    func start(_ hub: HubConnection, target: String, port: Int?, hubUrl: String, password: String?) async {
+    /// No hub address: the machine reaches the hub through the hub's own SSH connection to it.
+    func start(_ hub: HubConnection, target: String, port: Int?, password: String?) async {
         refused = nil
         do {
-            let response = try await hub.api.machines.connectSSH(.init(body: .json(.init(target: target, port: port, hubUrl: hubUrl, password: password))))
+            let response = try await hub.api.machines.connectSSH(.init(body: .json(.init(target: target, port: port, password: password))))
             switch response {
             case let .ok(ok):
                 job = try ok.body.json
@@ -242,7 +243,7 @@ final class AddMachineController: KitDialogController {
     }
 
     private func render() {
-        let key = tabs.selectedIndex == 0 ? "ssh:\(sshView):\(join.job?.lines.count ?? 0):\(join.job?.problem != nil):\(join.refused ?? ""):\(keyOpen):\(hubUrl)"
+        let key = tabs.selectedIndex == 0 ? "ssh:\(sshView):\(join.job?.lines.count ?? 0):\(join.job?.problem != nil):\(join.refused ?? ""):\(keyOpen)"
             : "command:\(hubUrl):\(joined?.machineId ?? "")"
         guard key != view_ else { return paintFooter() }
         let swapsView = key.split(separator: ":").prefix(2) != view_.split(separator: ":").prefix(2)
@@ -295,7 +296,8 @@ final class AddMachineController: KitDialogController {
         return column
     }
 
-    /// The address the machine is told to reach this hub on, the same choice on both tabs.
+    /// The address the machine is told to reach this hub on, for the command run by hand.
+    /// An SSH add needs none: the hub's own connection carries the machine to it.
     private func addressField() -> UIView {
         let select = KitSelect()
         let addresses = join.info?.addresses ?? []
@@ -327,7 +329,7 @@ final class AddMachineController: KitDialogController {
         passwordHint.text = "Used once to add this hub's key to the machine, and not kept. Leave it empty if the machine already accepts the key."
         passwordHint.wrap = .pretty
         passwordColumn.addArrangedSubview(passwordHint)
-        let form = UIStackView(arrangedSubviews: [first, passwordColumn, addressField()])
+        let form = UIStackView(arrangedSubviews: [first, passwordColumn])
         form.axis = .vertical
         form.spacing = Space.space4
         if let failure = failure() {
@@ -486,13 +488,13 @@ final class AddMachineController: KitDialogController {
             return ("\(job.target) did not answer on port \(Int(job.port ?? 22)) (\(unreachable.detail)). Check the address and that SSH is running there, then Retry.", [])
         }
         if problem.value4 != nil {
-            return ("\(host) can't reach this hub at \(job.hubUrl). Pick an address it can reach, then Retry.", tail)
+            return ("\(host) signed in, but the install script didn't come through this hub's SSH connection. Its last output is below. Retry.", tail)
         }
         if let step = problem.value5 {
             return ("The step \"\(step.step)\" failed on \(job.target). Its last output is below. Fix what it names, then Retry.", tail)
         }
         if problem.value6 != nil {
-            return ("CawCo installed on \(job.target), but the machine never came online on this hub. Its last output is below. Check that it can reach \(job.hubUrl), then Retry.", tail)
+            return ("CawCo installed on \(job.target), but the machine never came online on this hub through its SSH connection. Its last output is below. Retry.", tail)
         }
         return nil
     }
@@ -547,7 +549,7 @@ final class AddMachineController: KitDialogController {
         let close = { [weak self] in self?.dismiss(animated: true) ?? () }
         var buttons: [UIView]
         if tabs.selectedIndex == 0, sshView == "form" {
-            let canStart = !(target.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty && !hubUrl.isEmpty && portNumber != nil && !starting
+            let canStart = !(target.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty && portNumber != nil && !starting
             port.layer.borderColor = (portNumber == nil ? Palette.destructive : Palette.borderControl).resolvedColor(with: traitCollection).cgColor
             let add = KitButton.make(join.job?.state == .failed || join.job?.state == .stopped ? "Retry" : "Add machine", variant: .action) { [weak self] in self?.startSSH() }
             add.isEnabled = canStart
@@ -572,16 +574,16 @@ final class AddMachineController: KitDialogController {
     private func startSSH() {
         guard let port = portNumber, !starting else { return }
         let target = (self.target.text ?? "").trimmingCharacters(in: .whitespaces)
-        guard !target.isEmpty, !hubUrl.isEmpty else { return }
+        guard !target.isEmpty else { return }
         let typed = password.text ?? ""
         password.text = ""
         showPassword(false)
         starting = true
         paintFooter()
         view.endEditing(true)
-        Task { @MainActor [weak self, hub, hubUrl] in
+        Task { @MainActor [weak self, hub] in
             guard let self else { return }
-            await join.start(hub, target: target, port: port, hubUrl: hubUrl, password: typed.isEmpty ? nil : typed)
+            await join.start(hub, target: target, port: port, password: typed.isEmpty ? nil : typed)
             starting = false
             paintFooter()
         }
