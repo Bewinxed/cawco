@@ -137,81 +137,123 @@ const readRow = (page: Page) =>
       '[data-slot="peers"] [data-slot="button"]'
     );
     const edge = row.getBoundingClientRect().right;
+
+    /**
+     * The mark's centre against the label's first line's: the label's box is
+     * its lines, each one line-height tall (the mark line's padding gives
+     * back what its trim took).
+     */
+    const geometry = (step: Element) => {
+      const labelBox = step.querySelector('[data-slot="step-label"]');
+      const markRect = step
+        .querySelector('[data-slot="step-mark"]')
+        ?.getBoundingClientRect();
+      if (!(labelBox && markRect)) {
+        return { lines: 0, markOff: null };
+      }
+      const lineHeight = Number.parseFloat(
+        getComputedStyle(labelBox).lineHeight
+      );
+      const labelRect = labelBox.getBoundingClientRect();
+      return {
+        lines: Math.round(labelRect.height / lineHeight),
+        markOff: Math.abs(
+          markRect.top + markRect.height / 2 - (labelRect.top + lineHeight / 2)
+        ),
+      };
+    };
+
+    /** The label as it shows, without what only a screen reader hears ("Done: …"), and as it is spoken. */
+    const labelOf = (step: Element) => ({
+      label: [
+        ...(step.querySelector('[data-slot="step-label"]')?.childNodes ?? []),
+      ]
+        .filter(
+          (node) =>
+            !(node instanceof Element && node.classList.contains("sr-only"))
+        )
+        .map((node) => node.textContent)
+        .join("")
+        .trim(),
+      spoken: text("step-label", step),
+    });
+
+    /** The number a standing step draws (its attribute, through `::before`), and whether it is hidden from a screen reader. */
+    const numberOf = (step: Element) => {
+      const shown = step.querySelector(".step-number");
+      return {
+        number:
+          shown && getComputedStyle(shown, "::before").content !== "none"
+            ? shown.getAttribute("data-n")
+            : null,
+        numberHidden: shown?.getAttribute("aria-hidden") ?? null,
+      };
+    };
+
+    /** What a hand's selection over `code` copies: its words with their spaces. */
+    const selectionOf = (code: Element): string => {
+      const selection = getSelection();
+      if (!selection) {
+        return "";
+      }
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      const copied = selection.toString();
+      selection.removeAllRanges();
+      return copied;
+    };
+
+    /** A step's command box: its words, whether it shows them whole, its Copy and its height. */
+    const commandOf = (step: Element) => {
+      const code = step.querySelector('[data-slot="step-command"] code');
+      if (!code) {
+        return {
+          command: null,
+          commandWhole: null,
+          wordsWhole: null,
+          selected: null,
+          copy: null,
+          boxMinHeight: null,
+        };
+      }
+      const line = Number.parseFloat(getComputedStyle(code).lineHeight);
+      const box = code.parentElement;
+      return {
+        command: code.textContent,
+        commandWhole: code.scrollWidth <= code.clientWidth,
+        // Each word on one line: broken between words, never inside one.
+        wordsWhole: [...code.querySelectorAll(".word")].every(
+          (word) => word.getBoundingClientRect().height <= line + 0.5
+        ),
+        selected: selectionOf(code),
+        copy: box?.querySelector("button")?.textContent?.trim() ?? null,
+        boxMinHeight: box ? getComputedStyle(box).minHeight : null,
+      };
+    };
+
     return {
       name: text("name"),
       want: text("want"),
       meta: text("meta"),
       steps: [...row.querySelectorAll('[data-slot="step"]')].map((step) => {
-        const code = step.querySelector('[data-slot="step-command"] code');
-        // The mark's centre against the label's first line's: the label's
-        // box is its lines, each one line-height tall (the mark line's
-        // padding gives back what its trim took).
-        const labelBox = step.querySelector('[data-slot="step-label"]');
-        const markBox = step.querySelector('[data-slot="step-mark"]');
-        const lineHeight = labelBox
-          ? Number.parseFloat(getComputedStyle(labelBox).lineHeight)
-          : 0;
-        const labelRect = labelBox?.getBoundingClientRect();
-        const markRect = markBox?.getBoundingClientRect();
         const link = step.querySelector('[data-slot="step-link"] a');
         return {
           step: step.getAttribute("data-step"),
           done: step.hasAttribute("data-done"),
           ticked: step.querySelector('[data-slot="step-mark"] svg') !== null,
-          // What it shows, without what only a screen reader hears ("…, done").
-          label: [
-            ...(step.querySelector('[data-slot="step-label"]')?.childNodes ??
-              []),
-          ]
-            .filter(
-              (node) =>
-                !(node instanceof Element && node.classList.contains("sr-only"))
-            )
-            .map((node) => node.textContent)
-            .join("")
-            .trim(),
-          spoken: text("step-label", step),
-          lines:
-            labelRect && lineHeight
-              ? Math.round(labelRect.height / lineHeight)
-              : 0,
-          markOff:
-            labelRect && markRect
-              ? Math.abs(
-                  markRect.top +
-                    markRect.height / 2 -
-                    (labelRect.top + lineHeight / 2)
-                )
-              : null,
-          // The number a standing step draws: its attribute, through `::before`.
-          number: (() => {
-            const shown = step.querySelector(".step-number");
-            return shown &&
-              getComputedStyle(shown, "::before").content !== "none"
-              ? shown.getAttribute("data-n")
-              : null;
-          })(),
-          // Each of the command's words on one line: broken between words, never inside one.
-          wordsWhole: code
-            ? [...code.querySelectorAll(".word")].every(
-                (word) =>
-                  word.getBoundingClientRect().height <=
-                  Number.parseFloat(getComputedStyle(code).lineHeight) + 0.5
-              )
-            : null,
-          boxMinHeight: code?.parentElement
-            ? getComputedStyle(code.parentElement).minHeight
-            : null,
+          ...labelOf(step),
+          ...geometry(step),
+          ...numberOf(step),
+          ...commandOf(step),
           note: text("step-note", step),
-          command: code?.textContent ?? null,
-          commandWhole: code ? code.scrollWidth <= code.clientWidth : null,
-          copy:
-            code?.parentElement?.querySelector("button")?.textContent?.trim() ??
-            null,
           link: link?.textContent?.replace(/\s+/g, " ").trim() ?? null,
           href: link?.getAttribute("href") ?? null,
         };
       }),
+      listRole:
+        row.querySelector('[data-slot="steps"]')?.getAttribute("role") ?? null,
       button: button?.textContent?.replace(/\s+/g, " ").trim() ?? "",
       href: button?.getAttribute("href") ?? null,
       buttons: row.querySelectorAll('[data-slot="peers"] [data-slot="button"]')
@@ -223,6 +265,27 @@ const readRow = (page: Page) =>
   }, ROW);
 
 type Row = NonNullable<Awaited<ReturnType<typeof readRow>>>;
+
+const LISTITEM = /^\s*- listitem/;
+const DIGIT_ONLY = /^\s*- (text: )?"?\d+"?\s*$/;
+
+/**
+ * Chromium's accessibility tree of the steps (Playwright's ARIA snapshot)
+ * read as a person with a screen reader meets it: a list, one listitem per
+ * step whose first words are its label as spoken, and no digit alone.
+ */
+const treeReads = (tree: string, row: Row): boolean => {
+  const lines = tree.split("\n");
+  const items = lines.flatMap((line, at) =>
+    LISTITEM.test(line) ? [`${line} ${lines[at + 1] ?? ""}`] : []
+  );
+  return (
+    lines[0]?.trim().startsWith("- list") === true &&
+    items.length === row.steps.length &&
+    row.steps.every((todo, at) => items[at]?.includes(todo.spoken)) &&
+    !lines.some((line) => DIGIT_ONLY.test(line))
+  );
+};
 
 /** Where the row is read and captured: the desk light first, its words' reference. */
 const SHOTS = [
@@ -356,6 +419,16 @@ const run = async (kit: Kit) => {
         path: join(kit.out, `${name}-${one.view}-${one.theme}.png`),
       });
       rows[one.label] = row;
+      if (row.steps.length > 0) {
+        const tree = await one.page
+          .locator(`${ROW} [data-slot="steps"]`)
+          .ariaSnapshot();
+        kit.check(
+          `${name}, ${one.label}: the steps are a list (role="list") in the accessibility tree, each a listitem led by its label, no number read out`,
+          row.listRole === "list" && treeReads(tree, row),
+          tree
+        );
+      }
       kit.check(
         `${name}, ${one.label}: nothing in the row is wider than it; every command shows whole, no word broken, with Copy, in a box at least 36px tall; every standing step draws its number; every step's mark sits on its label's first line within 0.5px`,
         !row.spills &&
@@ -364,9 +437,12 @@ const run = async (kit: Kit) => {
               (todo.command === null ||
                 (todo.commandWhole === true &&
                   todo.wordsWhole === true &&
+                  todo.selected === todo.command &&
                   todo.copy === "Copy" &&
                   todo.boxMinHeight === "36px")) &&
-              (todo.done || todo.number === String(index + 1)) &&
+              (todo.done ||
+                (todo.number === String(index + 1) &&
+                  todo.numberHidden === "true")) &&
               todo.markOff !== null &&
               todo.markOff <= 0.5
           ),
@@ -433,12 +509,15 @@ const run = async (kit: Kit) => {
       .screenshot({ path: join(kit.out, "fresh-phone320-light.png") });
     wrapped.push(...squeezed.steps.filter((todo) => todo.lines >= 2));
     kit.check(
-      "3, phone 320 light: nothing in the row is wider than it, and the command shows whole with no word broken",
+      "3, phone 320 light: nothing in the row is wider than it, and the command shows whole with no word broken; its text and a hand selection over it copy the command with its spaces",
       !squeezed.spills &&
         squeezed.steps.every(
           (todo) =>
             todo.command === null ||
-            (todo.commandWhole === true && todo.wordsWhole === true)
+            (todo.commandWhole === true &&
+              todo.wordsWhole === true &&
+              todo.selected === COMMAND &&
+              todo.command === COMMAND)
         ),
       JSON.stringify(squeezed)
     );
@@ -465,7 +544,7 @@ const run = async (kit: Kit) => {
     ticking.steps[1]?.ticked === true &&
       ticking.steps[1].label === "Let CawCo take Tailscale's certificate" &&
       ticking.steps[1].spoken ===
-        "Let CawCo take Tailscale's certificate, done" &&
+        "Done: Let CawCo take Tailscale's certificate" &&
       ticking.steps[1].command === null &&
       ticking.steps[1].note === "" &&
       ticking.steps[0]?.done === false &&

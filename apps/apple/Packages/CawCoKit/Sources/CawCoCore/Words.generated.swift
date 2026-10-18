@@ -765,6 +765,9 @@ public enum Words {
             "A listener CawCo can't share holds it. Run this once in a terminal on \(host)."
         }
 
+        /// What a screen reader hears before a step that is taken (its tick says it to the eye).
+        public static let stepDone = "Done:"
+
         /// A step's command box, for a screen reader.
         public static let command = "Command"
 

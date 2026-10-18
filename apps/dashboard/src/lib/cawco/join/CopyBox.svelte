@@ -76,31 +76,6 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  /* Read whole: the box keeps its height for one line and grows for more,
-     the Copy button centred on whatever it holds. The command keeps room
-     for 20 characters a line (`--operator=` and a name, whole); narrower
-     than that and Copy, Copy wraps under the command at the box's end. */
-  .box[data-wrap] {
-    flex-wrap: wrap;
-    row-gap: var(--space-1);
-    height: auto;
-    min-height: var(--c-btn-h);
-    padding-block: var(--space-1);
-  }
-  .box[data-wrap] code {
-    flex: 1 1 20ch;
-    white-space: normal;
-  }
-  .box[data-wrap] .copy {
-    margin-inline-start: auto;
-  }
-  /* A word breaks between words, never inside one, unless it alone is
-     wider than the line. */
-  .word {
-    display: inline-block;
-    max-inline-size: 100%;
-    overflow-wrap: anywhere;
-  }
   .copy {
     --hit-edge: 1px;
     display: inline-flex;
@@ -127,5 +102,30 @@
     .copy:hover {
       background: var(--surface-hover);
     }
+  }
+  /* Read whole: the box keeps its height for one line and grows for more,
+     the Copy button centred on whatever it holds. The command keeps room
+     for 20 characters a line (`--operator=` and a name, whole); narrower
+     than that and Copy, Copy wraps under the command at the box's end. */
+  .box[data-wrap] {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+    height: auto;
+    min-height: var(--c-btn-h);
+    padding-block: var(--space-1);
+  }
+  .box[data-wrap] code {
+    flex: 1 1 20ch;
+    white-space: normal;
+  }
+  .box[data-wrap] .copy {
+    margin-inline-start: auto;
+  }
+  /* A word breaks between words, never inside one, unless it alone is
+     wider than the line. */
+  .word {
+    display: inline-block;
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
   }
 </style>

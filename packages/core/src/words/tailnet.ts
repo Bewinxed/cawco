@@ -46,6 +46,8 @@ export const tailnetWords = {
   stepPort: (port: number) => `Free port ${port} on the tailnet address`,
   portNote: (host: string) =>
     `A listener CawCo can't share holds it. Run this once in a terminal on ${host}.`,
+  /** What a screen reader hears before a step that is taken (its tick says it to the eye). */
+  stepDone: "Done:",
   /** A step's command box, for a screen reader. */
   command: "Command",
   /** HTTPS came on while the row stood: its tick. */

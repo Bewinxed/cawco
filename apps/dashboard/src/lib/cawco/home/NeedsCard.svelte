@@ -610,7 +610,8 @@
       <!-- Every step on the path, in order: a step that stands says what to
            do, where or why, and its control; a step taken is its tick and
            its label. -->
-      <ol data-slot="steps" class="steps">
+      <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
+      <ol data-slot="steps" class="steps" role="list">
         {#each tailnetTodos as one, index (one.todo.step)}
           <li
             data-slot="step"
@@ -632,8 +633,9 @@
               </span>
             </span>
             <span data-slot="step-label" class="step-label"
-              >{one.label}{#if one.todo.done}<span class="sr-only">, done</span
-                >{/if}</span
+              >{#if one.todo.done}<span class="sr-only"
+                  >{tailnetWords.stepDone}{" "}</span
+                >{/if}{one.label}</span
             >
             {#if !one.todo.done}
               <span data-slot="step-note" class="step-note">{one.note}</span>
