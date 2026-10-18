@@ -59,7 +59,7 @@ final class McpSectionController: ConfigSectionController {
         let machines = hub.fleet.machines
         let shown = rows.keep(servers.map(\.name))
         for server in servers {
-            let (row, _) = rows.row(server.name)
+            let row = rows.row(server.name)
             let name = server.name
             let run = McpRun(server.config)
             row.opens = { [weak self] in self?.open(name) }

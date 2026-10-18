@@ -306,18 +306,18 @@ extension UIView {
 final class KeyedRows {
     private(set) var rows: [String: ConfigRow] = [:]
 
-    /// The row for `key`, made the first time; `made` says it was.
-    func row(_ key: String) -> (row: ConfigRow, made: Bool) {
-        if let kept = rows[key] { return (kept, false) }
+    /// The row for `key`, made the first time it is asked for.
+    func row(_ key: String) -> ConfigRow {
+        if let kept = rows[key] { return kept }
         let made = ConfigRow()
         rows[key] = made
-        return (made, true)
+        return made
     }
 
-    /// The rows for these keys, in order; the rest let go.
+    /// The rows for these keys, in order, each made if it is new; the rest let go.
     func keep(_ keys: [String]) -> [ConfigRow] {
         let listed = Set(keys)
         rows = rows.filter { listed.contains($0.key) }
-        return keys.compactMap { rows[$0] }
+        return keys.map(row)
     }
 }

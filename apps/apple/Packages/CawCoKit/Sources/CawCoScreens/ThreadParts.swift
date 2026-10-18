@@ -300,6 +300,10 @@ final class FolderFileController: UIViewController {
     private let projectId: String
     private let path: String
     private let column = UIStackView()
+    #if DEBUG
+    /// The words it read, or why it could not, once drawn (ConfigProbe).
+    private(set) var probeShown: String?
+    #endif
 
     init(hub: HubConnection, projectId: String, path: String) {
         self.hub = hub
@@ -335,6 +339,9 @@ final class FolderFileController: UIViewController {
         let shown: UIView
         do {
             let content = try await hub.threads.file(projectId, path: path)
+            #if DEBUG
+            probeShown = content
+            #endif
             if path.hasSuffix(".md") {
                 let markdown = MarkdownDocumentView()
                 markdown.setSource(content)
@@ -349,6 +356,9 @@ final class FolderFileController: UIViewController {
             let said = KitLabel(TypeScale.typeBody, ink: Palette.statusFailInk, lines: 0)
             said.text = error.localizedDescription
             shown = said
+            #if DEBUG
+            probeShown = "failed: \(error.localizedDescription)"
+            #endif
         }
         column.arrangedSubviews.forEach { $0.removeFromSuperview() }
         column.addArrangedSubview(shown)

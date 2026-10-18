@@ -132,10 +132,10 @@ enum ConfigProbe {
                 await capture("delegate-types-projects", shell)
                 say("delegate-types projects", types.probeProjects())
                 types.probeOpenFile("writer")
-                let opened = await until(30) { onScreen(FolderFileController.self, shell) != nil }
+                let opened = await until(30) { onScreen(FolderFileController.self, shell)?.probeShown != nil }
                 let sheet = types.presentedViewController
-                try? await Task.sleep(for: .seconds(1))
-                say("delegate-types file", "opened \(opened) | " + (sheet.map { AccountsProbe.texts(in: $0.view).joined(separator: " | ") } ?? ""))
+                say("delegate-types file", "opened \(opened) | " + (sheet.map { AccountsProbe.texts(in: $0.view).joined(separator: " | ") } ?? "")
+                    + " | read: " + (onScreen(FolderFileController.self, shell)?.probeShown ?? "").split(separator: "\n").joined(separator: " / "))
                 if let sheet {
                     sheet.dismiss(animated: false)
                     await until { types.presentedViewController == nil }

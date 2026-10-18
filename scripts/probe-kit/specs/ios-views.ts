@@ -999,9 +999,28 @@ async function askViewLeg(
   // From the project's page, whatever the leg before left open (Made ends on a task).
   const from = device.heard.length;
   await device.relaunch(projectId);
-  const strip = await device
-    .next("a strip line", from, stripOf)
-    .catch(() => undefined);
+  // The strip as it settles: a launch lays the page out more than once (the
+  // first reading stood 43pt lower, its ⋯ where the Decisions tab then sat),
+  // so the newest reading counts once no newer one comes for a while.
+  const latest = (): { at: number; reading: Strip } | undefined => {
+    for (let at = device.heard.length - 1; at >= from; at -= 1) {
+      const reading = stripOf(device.heard[at] ?? "");
+      if (reading) {
+        return { at, reading };
+      }
+    }
+  };
+  const strip = await until(
+    `${device.tag}: the strip at rest after the launch`,
+    async () => {
+      const before = latest();
+      await Bun.sleep(1500);
+      const after = latest();
+      return before && after?.at === before.at ? before.reading : undefined;
+    },
+    Boolean,
+    30_000
+  ).catch(() => undefined);
   let since = device.heard.length;
   // From the strip wider than a phone; from the head's ⋯ on one.
   if (strip?.ask) {

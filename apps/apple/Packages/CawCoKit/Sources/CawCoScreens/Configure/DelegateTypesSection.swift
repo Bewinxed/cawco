@@ -72,7 +72,7 @@ final class DelegateTypesSectionController: ConfigSectionController {
         list.isHidden = all.isEmpty
         let shown = rows.keep(all.map(\.name))
         for type in all {
-            let (row, _) = rows.row(type.name)
+            let row = rows.row(type.name)
             let name = type.name
             row.opens = { [weak self] in self?.open(name) }
             row.show(name: name, meta: "\(type.description) · \(Self.runsOn(type))", mark: BrandLogo.harnessView(type.harness.rawValue), mono: true,
@@ -100,7 +100,7 @@ final class DelegateTypesSectionController: ConfigSectionController {
             let group = projectGroup(entry)
             let shown = group.rows.keep(entry.types.map(\.value1.name))
             for type in entry.types {
-                let row = group.rows.row(type.value1.name).row
+                let row = group.rows.row(type.value1.name)
                 let path = type.value2.path ?? ""
                 let projectId = entry.projectId
                 row.opens = path.isEmpty ? nil : { [weak self] in self?.openFile(path, in: projectId) }

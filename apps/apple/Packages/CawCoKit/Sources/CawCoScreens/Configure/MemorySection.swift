@@ -72,7 +72,7 @@ final class MemorySectionController: ConfigSectionController {
         noMatch.isHidden = !keys.isEmpty
 
         if mainShown {
-            let row = rows.row(FleetMemory.main).row
+            let row = rows.row(FleetMemory.main)
             let memory = FleetMemory.file(FleetMemory.main, hub: hub)
             row.opens = { [weak self] in self?.open(FleetMemory.main) }
             row.show(name: FleetMemory.fileLabel(FleetMemory.main),
@@ -86,7 +86,7 @@ final class MemorySectionController: ConfigSectionController {
             row.accessibilityIdentifier = "memory.row.main"
         }
         for doc in docs {
-            let row = rows.row(doc.path).row
+            let row = rows.row(doc.path)
             let path = doc.path
             let file = MemoryFile(content: doc.content, hash: doc.hash, updatedAt: doc.updatedAt, scope: doc.scope)
             row.opens = { [weak self] in self?.open(path) }

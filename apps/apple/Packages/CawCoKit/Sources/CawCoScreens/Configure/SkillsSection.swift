@@ -107,17 +107,17 @@ final class SkillsSectionController: ConfigSectionController {
         noSkills.isHidden = !skills.isEmpty
         skillsList.isHidden = skills.isEmpty
         skillsList.set(skillRows.keep(skills.map(\.name)))
-        for skill in skills { drawSkill(skill, in: skillRows.row(skill.name).row) }
+        for skill in skills { drawSkill(skill, in: skillRows.row(skill.name)) }
 
         noMarkets.isHidden = !markets.isEmpty
         marketList.isHidden = markets.isEmpty
         marketList.set(marketRows.keep(markets.map(\.name)))
-        for market in markets { drawMarket(market, in: marketRows.row(market.name).row, installed: Set(plugins.map(\.id))) }
+        for market in markets { drawMarket(market, in: marketRows.row(market.name), installed: Set(plugins.map(\.id))) }
 
         noPlugins.isHidden = !plugins.isEmpty
         pluginList.isHidden = plugins.isEmpty
         pluginList.set(pluginRows.keep(plugins.map(\.id)))
-        for plugin in plugins { drawPlugin(plugin, in: pluginRows.row(plugin.id).row) }
+        for plugin in plugins { drawPlugin(plugin, in: pluginRows.row(plugin.id)) }
 
         inventory.configure(machines: hub.fleet.machines, taken: skills.map(\.name))
     }

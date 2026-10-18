@@ -103,7 +103,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
             if all.isEmpty { empty.addArrangedSubview(form) } else { content.insertArrangedSubview(form, at: 0) }
         }
         let shown = rows.keep(all.map(\.name))
-        for row in all { draw(row, in: rows.row(row.name).row) }
+        for row in all { draw(row, in: rows.row(row.name)) }
         list.set(shown)
     }
 
