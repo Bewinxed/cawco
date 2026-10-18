@@ -25,7 +25,7 @@
  * and leaves bun.lock as it was. The gate's frozen install refuses it, and
  * finish_item's first sentence says package.json and bun.lock disagree and
  * to run `bun install` in the workspace and commit bun.lock; the
- * workspace's bun.lock is unchanged, the item still runs, nothing lands.
+ * workspace's bun.lock is unchanged, the item is not done, nothing lands.
  *
  *   bun scripts/probe-kit/run.ts landing-recut
  */
@@ -295,7 +295,7 @@ const delegated = async (fleet: Fleet, tag: Tag, lockfile: boolean) => {
  * S: package.json gains a dependency and bun.lock is not updated. The gate's
  * frozen install refuses it, finish_item says in its first sentence to run
  * `bun install` and commit bun.lock, the workspace's bun.lock is as
- * committed, the item still runs, and nothing lands.
+ * committed, the item is not done, and nothing lands.
  */
 const staleLeg = async (kit: Kit, fleet: Fleet): Promise<void> => {
   const { check } = kit;
@@ -335,10 +335,15 @@ const staleLeg = async (kit: Kit, fleet: Fleet): Promise<void> => {
     .quiet()
     .nothrow()
     .text();
+  // The scripted delegate never tries again after the refusal, so the hub's
+  // quiet-turn rule may fail its item: any state but done is not landed.
+  const row = itemRow(fleet, started.workItemId);
   check(
-    "S: its item still runs, and its commit is not on main",
-    answer.row?.state === "running" && !main.includes("Delegate commit stale"),
-    `${JSON.stringify(answer.row)}; main: ${main.trim().split("\n").join(" | ")}`
+    "S: its item is not done, and its commit is not on main",
+    row !== undefined &&
+      row.state !== "done" &&
+      !main.includes("Delegate commit stale"),
+    `${JSON.stringify(row)}; main: ${main.trim().split("\n").join(" | ")}`
   );
 };
 
