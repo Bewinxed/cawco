@@ -361,8 +361,9 @@
       return;
     }
     const id = paneId;
-    // Its tab's state as it is when the bound is applied, not as it was here.
-    loadedPanes.enter({ id, onScreen: () => onScreen, unload });
+    // Entered once per pane, never again as its tab comes and goes: the
+    // registry reads `onScreen` as the bound is applied, not as it was here.
+    untrack(() => loadedPanes.enter({ id, onScreen: () => onScreen, unload }));
     return () => loadedPanes.leave(id);
   });
   $effect(() => {
