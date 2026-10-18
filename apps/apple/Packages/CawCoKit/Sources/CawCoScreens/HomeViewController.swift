@@ -391,6 +391,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     #if DEBUG
     /// Each build's tab counts, for a probe to read off the app's log.
     static let probeLog = Logger(subsystem: "dev.cawco.app", category: "HomeProbe")
+    /// Whether the last build drew the status line, so its coming and going are logged once each.
+    private var probeStatusDrawn: Bool?
 
     /// Session `id`'s row on screen in this home, and the list's place for its questions.
     func probeRow(_ id: String) -> (place: String, row: SessionRowView, item: Item)? {
@@ -632,10 +634,19 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         usageStrip = home.usage
         snapshot.appendSections([.top])
         // The status line is drawn only until the hub is live and read
-        // (StatusLine.svelte): then it says nothing and takes no room.
-        if !(live && ready) {
+        // (StatusLine.svelte): then it says nothing and takes no room. An
+        // update the hub announced, and its return, it says while they stand.
+        let statusDrawn = !(live && ready) || hub.restart != nil || hub.updated != nil
+        if statusDrawn {
             snapshot.appendItems([.status], toSection: .top)
         }
+        #if DEBUG
+        // Its leaving is no new words on the line, so it is said here (probe ios-hub-update).
+        if statusDrawn != probeStatusDrawn {
+            probeStatusDrawn = statusDrawn
+            Self.probeLog.notice("home status line \(statusDrawn ? "drawn" : "gone", privacy: .public)")
+        }
+        #endif
         if variant == .page {
             // The phone has no rail: the rail's usage strip stands here, always
             // (owner pick i). In the rail the strip is the rail's own, in its footer.

@@ -51,6 +51,7 @@
    * or the grace has run out; merely connecting, only on a page that has
    * had the hub.
    */
+  import { connectionWords } from "@cawco/core";
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -178,11 +179,9 @@
   const retryIn = $derived(
     cawco.retryAt ? Math.max(0, Math.ceil((cawco.retryAt - now) / 1000)) : 0
   );
-  /** How long an update has left, in the unit a person reads it in. */
-  const left = (until: number): string => {
-    const seconds = Math.max(0, Math.ceil((until - now) / 1000));
-    return seconds > 60 ? `${Math.ceil(seconds / 60)} min` : `${seconds}s`;
-  };
+  /** How long an update has left, in whole seconds. */
+  const left = (until: number): number =>
+    Math.max(0, Math.ceil((until - now) / 1000));
 
   /** The retry, as the countdown or the try that is out now. */
   const retry = $derived(
@@ -205,7 +204,10 @@
   const words = $derived.by((): string => {
     switch (shown?.kind) {
       case "updating":
-        return `CawCo is updating${shown.version ? ` to ${unbroken(shown.version)}` : ""} — the hub is back within ${left(shown.until)}.`;
+        return connectionWords.updating(
+          shown.version ? unbroken(shown.version) : null,
+          left(shown.until)
+        );
       case "lost":
       case "retrying":
         return `Hub unreachable — ${retry}.`;
@@ -214,7 +216,9 @@
       case "back":
         return shown.updated === undefined
           ? "Hub reconnected."
-          : `CawCo updated${shown.updated ? ` to ${unbroken(shown.updated)}` : ""}.`;
+          : connectionWords.updated(
+              shown.updated ? unbroken(shown.updated) : null
+            );
       case "older":
         return {
           busy: "CawCo updated — this page has stopped updating. It reloads once you're not using it.",

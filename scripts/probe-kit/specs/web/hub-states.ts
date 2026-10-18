@@ -69,6 +69,8 @@ interface Socket {
   /** The hub's board has arrived on the socket open now. */
   live: () => boolean;
   mode: "proxy" | "refuse";
+  /** When each socket the page asked for while refused was refused. */
+  refused: number[];
   say: (payload: object) => void;
 }
 
@@ -77,6 +79,7 @@ async function proxied(page: Page): Promise<Socket> {
   let boarded = false;
   const socket: Socket = {
     mode: "proxy",
+    refused: [],
     live: () => boarded && current !== null,
     drop: () => {
       boarded = false;
@@ -92,6 +95,7 @@ async function proxied(page: Page): Promise<Socket> {
     (url) => url.pathname === "/ws/dashboard",
     (ws) => {
       if (socket.mode === "refuse") {
+        socket.refused.push(Date.now());
         ws.close({ code: 4000, reason: "probe refuses the socket" });
         return;
       }
@@ -1264,6 +1268,7 @@ async function runLeg(
   // `visibility: hidden` and draws no words at all.
   await settle(page);
   socket.mode = "refuse";
+  const triesFrom = socket.refused.length;
   socket.drop();
   let calm = true;
   const seen: string[] = [];
@@ -1284,6 +1289,16 @@ async function runLeg(
     `${name}: an announced restart reads as the update until its deadline`,
     calm,
     seen.slice(0, 3).join(" ‖ ") || (await bandNow(page)).words
+  );
+  // While the update stands the page tries every second (client.svelte.ts
+  // `scheduleReconnect`), so it hears the hub back within one: a backoff
+  // would have spaced its tries 1, 2, then 4 s apart over the same window.
+  const tries = socket.refused.slice(triesFrom);
+  const gaps = tries.slice(1).map((at, i) => at - (tries[i] ?? at));
+  kit.check(
+    `${name}: while updating the page tries the hub every second`,
+    tries.length >= 3 && gaps.every((gap) => gap <= 1600),
+    `${tries.length} tries, ${gaps.map((gap) => `${(gap / 1000).toFixed(1)}s`).join(", ")} apart`
   );
   await coversNothing("updating");
   await versionWhole(kit, page, name);

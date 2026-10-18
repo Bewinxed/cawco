@@ -248,7 +248,9 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   countdown makes it determinate; the board holds its last good rows, so the false zero never renders)
 - Hub updating (connection band, the waiting tone): **"CawCo is updating to 1.4.2 — the hub is back
   within 40s."** (the same shape as the outage's line; the deadline the hub gave makes it determinate,
-  nothing is pressed while it runs, and only past the deadline does the band say "Hub unreachable")
+  nothing is pressed while it runs, and only past the deadline does the band say "Hub unreachable");
+  once it answers, **"CawCo updated to 1.4.2."** The app's status line says the same: both read core
+  `words/connection.ts`
 - A project the hub didn't give (an error empty, where its board would be): **"The tasks, stages and
   views for Launch couldn't be read. The hub didn't answer (502). Nothing was changed." → [Retry]**
   (one failed read is said once, in one place, naming only the parts that didn't come; its one Retry

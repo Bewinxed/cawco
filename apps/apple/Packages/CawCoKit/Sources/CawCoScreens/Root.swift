@@ -24,6 +24,10 @@ public final class RootViewController: ObservedViewController {
     private var readFrom: URL?
     private var shown: UIViewController?
     private var shownKey = ""
+    /// The hub's return from its update, held for --dur-hold wherever it is
+    /// drawn, then let go (`holdUpdated`).
+    private var heldUpdate: HubConnection.Updated?
+    private var updateHold: Task<Void, Never>?
     #if DEBUG
     /// What the shell last said it shows (`refreshContent`, `show`).
     private var shellSaid = ""
@@ -144,6 +148,7 @@ public final class RootViewController: ObservedViewController {
     }
 
     override public func refreshContent() {
+        holdUpdated(hub.updated)
         // The gate reads what this pass decided: whether the board is up, and read.
         defer { gate.update(onBoard: shownKey == "board", read: hub.address != nil && readFrom == hub.address) }
         guard let address = hub.address else {
@@ -175,6 +180,23 @@ public final class RootViewController: ObservedViewController {
         }
         #endif
         show(key: "board") { waiting }
+    }
+
+    /// "CawCo updated to X." is a moment: it stands for its hold and goes,
+    /// whichever screen is in front. Held by the window, not by the status
+    /// line that says it, so a home that is not on screen as the hub comes
+    /// back does not keep it for whenever it next shows.
+    private func holdUpdated(_ updated: HubConnection.Updated?) {
+        guard updated != heldUpdate else { return }
+        heldUpdate = updated
+        updateHold?.cancel()
+        updateHold = nil
+        guard updated != nil else { return }
+        updateHold = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Motion.durHold))
+            guard !Task.isCancelled else { return }
+            self?.hub.updateSaid()
+        }
     }
 
     /// Opens what a tapped push names (PushNote.route). The shell keeps it

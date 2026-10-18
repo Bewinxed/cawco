@@ -102,7 +102,7 @@ public final class HomeModel {
         switch hub.state {
         case .connected:
             fleet.fleetRead && fleet.liveRead && fleet.runsRead && fleet.catalogsRead ? "All caught up" : "Reading the fleet"
-        case .connecting:
+        case .connecting, .updating:
             "Connecting…"
         case .unreachable:
             "Hub unreachable"

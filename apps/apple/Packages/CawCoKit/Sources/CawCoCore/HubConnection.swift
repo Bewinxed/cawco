@@ -30,9 +30,28 @@ final class HubNewerNotice {
 public final class HubConnection {
     /// What to tell a reader about the hub. `connecting` is the transient
     /// every connect and every first seconds of a drop pass through;
-    /// `unreachable` holds from `outageGrace` after the socket went until it is back.
+    /// `updating` holds while the hub is away for the update it announced,
+    /// until its deadline (`restart`); `unreachable` holds from
+    /// `outageGrace` after the socket went, or from that deadline, until it is back.
     public enum State: Sendable {
-        case connected, connecting, unreachable
+        case connected, connecting, updating, unreachable
+    }
+
+    /// The update the hub said it restarts for (`hub.restart`): the build
+    /// it goes to, when its machine named one, and when it answers again
+    /// (the update's trial: the new build, or the one before it rolled back)
+    /// on this device's clock. The frame says how long from now, so no two
+    /// clocks are compared (core frames.ts `HubRestartFrame`).
+    public struct Restart: Sendable, Equatable {
+        public let version: String?
+        public let until: Date
+    }
+
+    /// The hub answered again after the update it announced: the build it
+    /// went to (nil when unnamed), and when, which tells two returns apart.
+    public struct Updated: Sendable, Equatable {
+        public let version: String?
+        public let at: Date
     }
 
     /// The socket's own state.
@@ -73,7 +92,30 @@ public final class HubConnection {
     /// that is never shown as the hub's word. Until the read lands the board
     /// reads `connecting`.
     public var state: State {
-        socket == .connected && synced ? .connected : (outage ? .unreachable : .connecting)
+        if socket == .connected && synced { return .connected }
+        if outage { return .unreachable }
+        return restart == nil ? .connecting : .updating
+    }
+
+    /// The update the hub restarts for, while its deadline is ahead
+    /// (client.svelte.ts `cawco.restart`): the socket closing is that
+    /// update, not an outage, until then. Nil once the hub is back and read,
+    /// once it took it back, or once the deadline passed (from then the hub
+    /// is unreachable like any other).
+    public private(set) var restart: Restart?
+    /// The socket closed while `restart` stood: the next connection that is
+    /// read is the hub back from that update, unless it announces it again.
+    @ObservationIgnored private var restartDropped = false
+    @ObservationIgnored private var restartDeadline: Task<Void, Never>?
+
+    /// The hub is back from the update it announced (HubBand.svelte `back`):
+    /// the status line says so, and the window lets it go (`updateSaid`)
+    /// once it has stood for its hold. A close or a new announcement takes it back.
+    public private(set) var updated: Updated?
+
+    /// `updated` has stood for its hold.
+    public func updateSaid() {
+        updated = nil
     }
 
     /// This connection's first full read (machines, sessions, projects and the
@@ -333,6 +375,9 @@ public final class HubConnection {
         NotificationClearing.keepHub(address)
         endPairing()
         resetFleet()
+        // An update another hub announced says nothing of this one.
+        endRestart()
+        updated = nil
         attempts = 0
         start()
     }
@@ -384,6 +429,7 @@ public final class HubConnection {
         heartbeat?.cancel(); heartbeat = nil
         fleetRead?.cancel(); fleetRead = nil
         outageTimer?.cancel(); outageTimer = nil
+        restartDeadline?.cancel(); restartDeadline = nil
         sessions.reset()
         workItems.reset()
         workflowRuns.reset()
@@ -484,7 +530,12 @@ public final class HubConnection {
             guard mine == generation, !Task.isCancelled else {
                 return
             }
-            let delay = min(Self.reconnectBase * pow(2, Double(min(attempts, Self.reconnectMaxAttempts))), Self.reconnectMax)
+            // An announced update is a hub on its way back: until its deadline
+            // every try is `reconnectBase` apart, so its return is heard
+            // within a second (client.svelte.ts `scheduleReconnect`).
+            let delay = restart != nil
+                ? Self.reconnectBase
+                : min(Self.reconnectBase * pow(2, Double(min(attempts, Self.reconnectMaxAttempts))), Self.reconnectMax)
             retryAt = Date.now.addingTimeInterval(delay)
             try? await Task.sleep(for: .seconds(delay))
             attempts += 1
@@ -558,8 +609,14 @@ public final class HubConnection {
         socket = .closed
         synced = false
         fleetRead?.cancel()
+        updated = nil
+        // An announced update is the hub on its way back until its deadline,
+        // which ends it (`restartLapsed`), not the grace.
+        if restart != nil {
+            restartDropped = true
+        }
         // A socket closed for the background is no outage: nothing failed.
-        if !outage, outageTimer == nil, !suspended {
+        if !outage, outageTimer == nil, !suspended, restart == nil {
             outageTimer = Task { [weak self] in
                 try? await Task.sleep(for: Self.outageGrace)
                 guard !Task.isCancelled, let self else {
@@ -1156,7 +1213,7 @@ public final class HubConnection {
                 return false
             }
             hub.fleet.fleetRead = true
-            if hub.socket == .connected { hub.synced = true }
+            if hub.socket == .connected { hub.didSync() }
             hub.log.notice("fleet read: \(hub.fleet.rows.count) rows, \(hub.fleet.machines.count) machines, hub newer than this app: \(hub.hubNewer)")
             return true
         }
@@ -1165,6 +1222,60 @@ public final class HubConnection {
     /// A read's result, its error kept: a failure to decode is told apart from a failure to reach.
     private nonisolated static func attempt<T: Sendable>(_ body: @Sendable () async throws -> T) async -> Result<T, any Error> {
         do { return .success(try await body()) } catch { return .failure(error) }
+    }
+
+    /// This connection's first full read landed: the board is the hub's word
+    /// again. A connection read after the socket closed under an announced
+    /// update, and not told of it again, is the hub back from it.
+    private func didSync() {
+        synced = true
+        guard let restart, restartDropped else { return }
+        log.notice("hub back after its update to \(restart.version ?? "a new build", privacy: .public)")
+        endRestart()
+        updated = Updated(version: restart.version, at: .now)
+    }
+
+    /// The hub's word that it restarts for an update, or no longer does
+    /// (`hub.restart`, client.svelte.ts `handleFrame`): `withinMs` from now
+    /// is its deadline on this device's clock. Sent as the hub's machine
+    /// starts installing, to each connection made while it does, and as
+    /// nil when the install ended without a restart.
+    private func announce(_ said: Components.Schemas.HubRestartFrame.RestartPayload?) {
+        let stood = restart != nil
+        endRestart()
+        guard let said else {
+            if stood { log.notice("hub restart taken back: the update ended without one") }
+            return
+        }
+        let within = max(0, said.withinMs) / 1000
+        updated = nil
+        restart = Restart(version: said.version, until: .now.addingTimeInterval(within))
+        log.notice("hub restarts for its update to \(said.version ?? "a new build", privacy: .public): back within \(Int(within.rounded(.up)))s")
+        restartDeadline = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(within))
+            guard !Task.isCancelled else { return }
+            self?.restartLapsed()
+        }
+    }
+
+    private func endRestart() {
+        restartDeadline?.cancel()
+        restartDeadline = nil
+        restart = nil
+        restartDropped = false
+    }
+
+    /// The announced deadline passed with the hub not back: from now it is
+    /// away like any other, and a socket still closed is the outage.
+    private func restartLapsed() {
+        let away = socket != .connected && !suspended
+        log.notice("hub restart deadline passed\(away ? " with the hub away: unreachable" : "", privacy: .public)")
+        endRestart()
+        if away {
+            outageTimer?.cancel()
+            outageTimer = nil
+            outage = true
+        }
     }
 
     /// The answer came and was not in this app's shape (the generated client
@@ -1514,6 +1625,8 @@ public final class HubConnection {
             adopt(pairingRequests: frame.requests)
         case let .projectOffer(instanceId, offer):
             offers.adopt(instanceId, offer: offer)
+        case let .hubRestart(said):
+            announce(said)
         case .ignored:
             break
         }

@@ -266,6 +266,8 @@ enum Frame {
     case hubAuth(Components.Schemas.HubAuthFrame)
     /// A plain session's "make this a project" offer, or nil once it was answered.
     case projectOffer(instanceId: String, offer: Components.Schemas.ProjectOfferSummary?)
+    /// The hub restarts for an update, and by when it answers again; nil when it took that back.
+    case hubRestart(Components.Schemas.HubRestartFrame.RestartPayload?)
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -325,6 +327,8 @@ enum Frame {
             self = .hubAuth(frame)
         case .projectOffer(let frame):
             self = .projectOffer(instanceId: frame.instanceId, offer: frame.offer)
+        case .hub_restart(let frame):
+            self = .hubRestart(frame.restart)
         default:
             self = .ignored
         }

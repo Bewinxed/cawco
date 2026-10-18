@@ -121,6 +121,13 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     swift: "Sheet",
     members: [{ file: "words/sheet.ts", export: "sheetWords", as: "" }],
   },
+  {
+    // The hub's connection while an announced update restarts it: the band, the app's status line.
+    swift: "Connection",
+    members: [
+      { file: "words/connection.ts", export: "connectionWords", as: "" },
+    ],
+  },
 ];
 
 /** The helpers a word may call, and their Swift twins. */
@@ -135,6 +142,12 @@ const HELPERS: Record<string, string> = {
     '    /// A whole number in two figures: 5 → "05".',
     "    public static func pad2(_ n: Int) -> String {",
     '        n < 10 && n >= 0 ? "0\\(n)" : "\\(n)"',
+    "    }",
+  ].join("\n"),
+  timeLeft: [
+    '    /// A wait in the unit a person reads it in: "45s" up to a minute, then "3 min", rounded up.',
+    "    public static func timeLeft(_ seconds: Int) -> String {",
+    '        seconds > 60 ? "\\((seconds + 59) / 60) min" : "\\(seconds)s"',
     "    }",
   ].join("\n"),
 };

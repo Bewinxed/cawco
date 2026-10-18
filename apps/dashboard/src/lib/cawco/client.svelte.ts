@@ -4694,13 +4694,22 @@ function send(envelope: Envelope): void {
  * `WS_RECONNECT_MAX_DELAY` and no more.
  *
  * `WS_RECONNECT_MAX_ATTEMPTS` now only decides when to stop growing the delay.
+ *
+ * An update the hub announced (`state.restart`) is a hub known to be on its
+ * way back: until its deadline every try is `WS_RECONNECT_BASE_DELAY` apart,
+ * so the page hears it back within a second, not up to a whole capped delay
+ * after.
  */
 function scheduleReconnect(): void {
   const attempt = globalThis.__cawcoReconnectAttempts;
-  const delay = Math.min(
-    WS_RECONNECT_BASE_DELAY * 2 ** Math.min(attempt, WS_RECONNECT_MAX_ATTEMPTS),
-    WS_RECONNECT_MAX_DELAY
-  );
+  const updating = state.restart !== null && state.restart.until > Date.now();
+  const delay = updating
+    ? WS_RECONNECT_BASE_DELAY
+    : Math.min(
+        WS_RECONNECT_BASE_DELAY *
+          2 ** Math.min(attempt, WS_RECONNECT_MAX_ATTEMPTS),
+        WS_RECONNECT_MAX_DELAY
+      );
   state.retryAt = Date.now() + delay;
   globalThis.__cawcoReconnectTimeout = setTimeout(() => {
     globalThis.__cawcoReconnectAttempts += 1;
