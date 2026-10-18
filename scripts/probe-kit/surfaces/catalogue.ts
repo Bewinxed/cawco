@@ -305,9 +305,7 @@ const openKeychain = async (page: Page) => {
 
 /** What a Mac answers its keychain's unlock with (core `AuthState`). */
 type UnlockAnswer =
-  | "authenticated"
-  | "unauthenticated"
-  | "unreadable-credentials";
+  "authenticated" | "unauthenticated" | "unreadable-credentials";
 
 /** The page's machine list (client.svelte.ts `load<Machine[]>("/api/agents")`), read on connect. */
 const AGENTS_READ = "**/api/agents";
@@ -405,7 +403,12 @@ const studioRouted = async (page: Page): Promise<void> => {
           verb: "frames",
           machineId: STUDIO_MACHINE,
           requestId,
-          payload: { kind: "control_result", ok: true, requestId, result: answer },
+          payload: {
+            kind: "control_result",
+            ok: true,
+            requestId,
+            result: answer,
+          },
         })
       );
     });
