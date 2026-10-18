@@ -41,6 +41,13 @@ import {
   socketPathProblem,
   workspaceFleetDir,
 } from "../packages/core/src/paths";
+import {
+  listedPid,
+  type Pid,
+  type Spawned,
+  signal as signalPid,
+  spawnedPid,
+} from "../packages/core/src/signal";
 import { ensureDeps } from "./lib/deps";
 import { type HeavySlot, heavySlot } from "./lib/heavy-run";
 import { welcomed } from "./lib/keeper-dial";
@@ -1380,21 +1387,23 @@ async function standUp(
    * Freezes a role's process where it stands (SIGSTOP), or lets it run on
    * (SIGCONT): what reaches it meanwhile waits at its door, read when it runs.
    *
-   * Through `process.kill`, not the subprocess's own `kill`: on macOS, Bun
-   * 1.4.2's `Subprocess.kill("SIGSTOP")` leaves the child running (measured:
-   * a child ticking every 100 ms printed 15 lines through a 1.5 s "stop"),
-   * while `process.kill(pid, "SIGSTOP")` stops it (0 lines). Bun maps a
-   * signal name to the Linux number on every platform, and 19 is SIGCONT on
-   * macOS (oven-sh/bun#35296); `process.kill` maps names per platform. Back to
-   * `child.kill` once the fix (oven-sh/bun#39970, open as of Bun 1.4.3) ships.
+   * Through core's `signal` (node's `process.kill` within), not the
+   * subprocess's own `kill`: on macOS, Bun 1.4.2's `Subprocess.kill("SIGSTOP")`
+   * leaves the child running (measured: a child ticking every 100 ms printed
+   * 15 lines through a 1.5 s "stop"), while SIGSTOP sent to its pid that way
+   * stops it (0 lines). Bun maps a signal name to the Linux number on every
+   * platform, and 19 is SIGCONT on macOS (oven-sh/bun#35296); `process.kill`
+   * maps names per platform. Back to `child.kill` once the fix
+   * (oven-sh/bun#39970, open as of Bun 1.4.3) ships.
    */
   const freeze = (role: Role, frozen: boolean) => {
     const child = procs[role];
-    if (!child || child.exitCode !== null) {
+    const pid = child?.exitCode === null ? spawnedPid(child) : undefined;
+    if (pid === undefined) {
       throw new Error(`${role} is not running`);
     }
-    process.kill(child.pid, frozen ? "SIGSTOP" : "SIGCONT");
-    console.log(`… ${role} (pid ${child.pid}) ${frozen ? "frozen" : "thawed"}`);
+    signalPid(pid, frozen ? "SIGSTOP" : "SIGCONT");
+    console.log(`… ${role} (pid ${pid}) ${frozen ? "frozen" : "thawed"}`);
   };
   /** The log files a role's launches wrote so far, read whole, oldest first. */
   const logs = async (role: Role): Promise<string> => {
@@ -1446,19 +1455,23 @@ async function standUp(
     walk(pid);
     return out;
   };
-  /** Sends `signal` to `pid` and every process under it. */
+  /** Sends `signal` to `pid` and every process under it, as /proc (or `pgrep`) lists them; one gone meanwhile is nothing to signal. */
   const killTree = async (
-    pid: number,
+    pid: Pid,
     signal: "SIGTERM" | "SIGKILL" | "SIGCONT"
   ) => {
-    const tree = [pid, ...(await descendants(pid))];
+    const tree = [pid, ...(await descendants(pid)).map(listedPid)];
     for (const one of tree) {
-      try {
-        process.kill(one, signal);
-      } catch {
-        // gone already
-      }
+      signalPid(one, signal);
     }
+  };
+  /** A process the fleet started, by its pid: one whose spawn made none is a broken fleet. */
+  const pidOf = (child: Spawned): Pid => {
+    const pid = spawnedPid(child);
+    if (pid === undefined) {
+      throw new Error("a fleet process's spawn made no process");
+    }
+    return pid;
   };
   /** sessiond and every process under it, as a control-group stop ends them. */
   const killSessiond = async () => {
@@ -1466,17 +1479,18 @@ async function standUp(
     if (!child) {
       return;
     }
-    const tree = [child.pid, ...(await descendants(child.pid))];
-    await killTree(child.pid, "SIGTERM");
+    const pid = pidOf(child);
+    const tree = [pid, ...(await descendants(pid))];
+    await killTree(pid, "SIGTERM");
     await delay(3000);
-    await killTree(child.pid, "SIGKILL");
+    await killTree(pid, "SIGKILL");
     await child.exited;
     console.log(
       `… sessiond (pid ${child.pid}) and its ${tree.length - 1} children killed`
     );
   };
-  /** What sessiond holds: each live process's proc id and PID. */
-  const heldProcs = async (): Promise<{ procId: string; pid: number }[]> => {
+  /** What sessiond holds: each live process's proc id and PID, as its keeper lists them. */
+  const heldProcs = async (): Promise<{ procId: string; pid: Pid }[]> => {
     const client = welcomed(
       sessiondSocket,
       await SessiondClient.connect(sessiondSocket)
@@ -1484,21 +1498,19 @@ async function standUp(
     try {
       return client.procs
         .filter((proc) => proc.alive)
-        .map(({ procId, pid }) => ({ procId, pid }));
+        .map(({ procId, pid }) => ({ procId, pid: listedPid(pid) }));
     } finally {
       client.close();
     }
   };
   /** The PID sessiond runs a session's own process under (Claude Code, a pi host), by its proc id. */
-  const sessionPid = async (
-    instanceId: string
-  ): Promise<number | undefined> => {
+  const sessionPid = async (instanceId: string): Promise<Pid | undefined> => {
     const client = welcomed(
       sessiondSocket,
       await SessiondClient.connect(sessiondSocket)
     );
     try {
-      return client.procs.find((proc) => {
+      const pid = client.procs.find((proc) => {
         const id = parseProcId(proc.procId);
         return (
           proc.alive &&
@@ -1506,6 +1518,8 @@ async function standUp(
           id.instanceId === instanceId
         );
       })?.pid;
+      // None while sessiond holds no process for it.
+      return pid === undefined ? undefined : listedPid(pid);
     } finally {
       client.close();
     }
@@ -2145,11 +2159,12 @@ async function standUp(
       if (child.exitCode !== null) {
         continue;
       }
+      const pid = pidOf(child);
       // biome-ignore lint/performance/noAwaitInLoops: one machine's process at a time, as `stop` does
-      await killTree(child.pid, "SIGCONT");
-      await killTree(child.pid, "SIGTERM");
+      await killTree(pid, "SIGCONT");
+      await killTree(pid, "SIGTERM");
       if (!(await exited(child, 10_000))) {
-        await killTree(child.pid, "SIGKILL");
+        await killTree(pid, "SIGKILL");
         await child.exited;
       }
       console.log(`… pid ${child.pid} of an added machine stopped`);

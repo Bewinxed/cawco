@@ -73,6 +73,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Socket, SocketHandler } from "bun";
 import { processStart } from "../packages/core/src/process-identity";
+import { signal } from "../packages/core/src/signal";
 import { ensureDeps } from "./lib/deps";
 import type { Harness } from "./scratch-fleet";
 
@@ -1031,7 +1032,7 @@ const frozenCase = async (label: string, dies: boolean) => {
   if (!pid) {
     throw new Error(`${label}: sessiond holds no process for ${id}`);
   }
-  process.kill(pid, "SIGSTOP");
+  signal(pid, "SIGSTOP");
   const frozenAt = Date.now();
   let frozen = true;
   try {
@@ -1057,7 +1058,7 @@ const frozenCase = async (label: string, dies: boolean) => {
     if (dies) {
       await fleet.killTree(pid, "SIGKILL");
     } else {
-      process.kill(pid, "SIGCONT");
+      signal(pid, "SIGCONT");
     }
     frozen = false;
     const answered = dies
@@ -1101,7 +1102,7 @@ const frozenCase = async (label: string, dies: boolean) => {
     );
   } finally {
     if (frozen) {
-      process.kill(pid, "SIGCONT");
+      signal(pid, "SIGCONT");
     }
   }
 };

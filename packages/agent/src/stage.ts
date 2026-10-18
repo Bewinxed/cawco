@@ -47,6 +47,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { PreviewSource, WorkspaceRef } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
   AS_PAGE,
   COMPONENTS_PATH,
@@ -118,7 +119,9 @@ const SERVE_LET_GO_MS = (SERVE_BEAT_S + 7) * 1000;
  * a shell that writes a blank line to its stdout every {@link SERVE_BEAT_S}
  * seconds and, once that write fails (the daemon that reads it is gone, as
  * the stage host's beat finds), ends its whole process group, the server
- * with it. Otherwise it waits on the server and ends with its status, which
+ * with it: the group the runner's launch made the command's shell lead,
+ * named by that shell's own pid (`$$`, which a subshell keeps), never by
+ * `kill 0`. Otherwise it waits on the server and ends with its status, which
  * the daemon reads as a crash. SIGPIPE is ignored only after the server
  * started, so the server keeps its own.
  */
@@ -129,7 +132,7 @@ const serveScript = (command: string): string =>
     "} &",
     "s=$!",
     "trap '' PIPE",
-    `(while sleep ${SERVE_BEAT_S}; do echo 2>/dev/null || kill -TERM 0; done) &`,
+    `(while sleep ${SERVE_BEAT_S}; do echo 2>/dev/null || { [ "$$" -gt 1 ] && kill -TERM -- "-$$"; exit; }; done) &`,
     "b=$!",
     'wait "$s"',
     "r=$?",
@@ -651,24 +654,29 @@ async function writeHost(stage: Stage): Promise<void> {
 
 /** Ends a stage's process group: TERM to its executor, which hands it to the command inside the boundary; KILL after {@link KILL_GRACE_MS}. */
 function kill(stage: Stage): void {
-  const pid = stage.child?.pid;
+  const leader = stage.child ? spawnedPid(stage.child) : undefined;
   stage.child = undefined;
   clearInterval(stage.health);
   stage.health = undefined;
   clearInterval(stage.mirror);
   stage.mirror = undefined;
-  if (!pid) {
+  // No child, or one whose spawn made no process: nothing to signal.
+  if (leader === undefined) {
     return;
   }
-  const signal = (name: NodeJS.Signals) => {
-    try {
-      process.kill(-pid, name);
-    } catch {
-      // Gone already.
-    }
-  };
-  signal("SIGTERM");
-  setTimeout(() => signal("SIGKILL"), KILL_GRACE_MS).unref();
+  signalGroup(leader, "SIGTERM");
+  setTimeout(() => killLeft(stage, leader), KILL_GRACE_MS).unref();
+}
+
+/** The KILL after a stopped stage's grace, to whatever of its group is left; a refusal is said, and nothing is sent. */
+function killLeft(stage: Stage, leader: Pid): void {
+  try {
+    signalGroup(leader, "SIGKILL");
+  } catch (error) {
+    console.warn(
+      `[stage] ${stage.workspace.id} ${stage.root}: what is left of its group was not killed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 /** The stage ended, or stopped answering, on its own: started again after its wait, or in `error` once its restarts are spent. */

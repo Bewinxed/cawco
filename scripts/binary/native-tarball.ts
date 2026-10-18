@@ -13,6 +13,8 @@ import { mkdir, open, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "../../packages/core/src/bounded";
+import { ownIdentity } from "../../packages/core/src/process-identity";
+import { identifiedPid } from "../../packages/core/src/signal";
 
 const REGISTRY = "https://registry.npmjs.org";
 const ATTEMPTS = 5;
@@ -120,15 +122,16 @@ async function metadataFor(
 }
 
 /**
- * Holds `${dest}.lock` (the holder's pid) so one process at a time appends to
- * `${dest}.part`; a lock whose pid is gone is taken over.
+ * Holds `${dest}.lock` (the holder's identity: its pid, start and boot) so
+ * one process at a time appends to `${dest}.part`; a lock whose process is
+ * gone, or whose pid is another process's now, is taken over.
  */
 async function lockDownload(dest: string, label: string) {
   const lock = `${dest}.lock`;
   for (;;) {
     try {
       const handle = await open(lock, "wx");
-      await handle.write(String(process.pid));
+      await handle.write(JSON.stringify(await ownIdentity()));
       await handle.close();
       return async () => {
         await rm(lock, { force: true });
@@ -138,18 +141,17 @@ async function lockDownload(dest: string, label: string) {
         throw error;
       }
     }
-    const holder = Number(
-      await Bun.file(lock)
-        .text()
-        .catch(() => "")
-    );
-    let alive = false;
-    try {
-      alive = holder > 0 && process.kill(holder, 0);
-    } catch {
-      alive = false;
-    }
-    if (alive) {
+    // A lock that does not parse as an identity names no live holder.
+    const named = await Bun.file(lock)
+      .json()
+      .catch(() => undefined);
+    const holder =
+      typeof named === "object" && named !== null
+        ? await identifiedPid(
+            named as { bootId?: string; pid?: number; procStart?: string }
+          )
+        : undefined;
+    if (holder !== undefined) {
       throw new Error(
         `${label} is being downloaded by another build (pid ${holder}, ${lock})`
       );

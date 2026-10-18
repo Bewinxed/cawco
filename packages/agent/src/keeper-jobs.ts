@@ -16,6 +16,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { type KeeperName, keeperService } from "@cawco/core/keepers";
 import { hostEnvironment } from "@cawco/core/session-env";
+import {
+  isAlive,
+  listedPid,
+  type Pid,
+  signal as signalPid,
+} from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 
 interface Ran {
@@ -122,7 +128,7 @@ export interface KeeperJob {
   /** Its name in the service manager, for a log line: `systemd (--user cawco-sessiond-x.service)`. */
   readonly name: string;
   /** Its main process as the service manager knows it, or none when it is not running. */
-  readonly pid: () => Promise<number | undefined>;
+  readonly pid: () => Promise<Pid | undefined>;
   /**
    * Ends it and takes it off the machine, unit or plist and all. Only for a
    * keeper that holds nothing, or one wedged past saving. A legacy keeper is
@@ -183,8 +189,9 @@ const systemdJob = (service: string): KeeperJob => {
         "--value",
         unit,
       ]);
+      // `MainPID=0`: no process runs it.
       const pid = Number(shown.stdout.trim());
-      return shown.code === 0 && pid > 0 ? pid : undefined;
+      return shown.code === 0 && pid > 0 ? listedPid(pid) : undefined;
     },
     async start() {
       await must(["systemctl", "--user", "start", unit]);
@@ -225,8 +232,10 @@ const launchdJob = (service: string): KeeperJob => {
   const domain = `gui/${process.getuid?.() ?? 0}`;
   const target = `${domain}/${label}`;
   const plist = join(launchAgentsDir(), `${label}.plist`);
-  const pid = async (): Promise<number | undefined> =>
-    (await launchdState(label))?.pid;
+  const pid = async (): Promise<Pid | undefined> => {
+    const shown = (await launchdState(label))?.pid;
+    return shown === undefined ? undefined : listedPid(shown);
+  };
   return {
     name: `launchd (${target})`,
     file: plist,
@@ -261,7 +270,7 @@ const launchdJob = (service: string): KeeperJob => {
         // on the machine's endpoint, a symlink now, which exits by itself.
         const running = await pid();
         if (running !== undefined) {
-          killNow(running);
+          signalPid(running, "SIGKILL");
           await gone(running);
         }
       }
@@ -271,24 +280,14 @@ const launchdJob = (service: string): KeeperJob => {
   };
 };
 
-const killNow = (target: number): void => {
-  try {
-    process.kill(target, "SIGKILL");
-  } catch {
-    // already gone
-  }
-};
-
 /** How long a killed keeper gets to be gone before its removal goes on. */
 const GONE_MS = 10_000;
 
 /** Resolves once `target` is no longer a process, or {@link GONE_MS} has passed. */
-const gone = async (target: number): Promise<void> => {
+const gone = async (target: Pid): Promise<void> => {
   const deadline = Date.now() + GONE_MS;
   for (;;) {
-    try {
-      process.kill(target, 0);
-    } catch {
+    if (!isAlive(target)) {
       return;
     }
     if (Date.now() > deadline) {

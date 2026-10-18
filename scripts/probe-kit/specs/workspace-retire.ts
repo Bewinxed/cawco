@@ -83,6 +83,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { signal as signalPid } from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -937,7 +938,7 @@ const unstartablePhase = async (kit: Kit, scene: Scene): Promise<void> => {
   await writeFile(join(stateDir, "accounts.json"), '{"damaged":true}\n');
   for (const proc of await fleet.heldProcs()) {
     if (proc.procId.startsWith(`boundary-${wb.id}`)) {
-      process.kill(proc.pid, "SIGKILL");
+      signalPid(proc.pid, "SIGKILL");
     }
   }
   const down = await until(

@@ -52,6 +52,12 @@ import {
   type SessiondServerMessage,
 } from "@cawco/core/sessiond";
 import {
+  listedPid,
+  type Pid,
+  signal as signalPid,
+  spawnedPid,
+} from "@cawco/core/signal";
+import {
   type ChildGroup,
   type Children,
   JOIN_CHILDREN,
@@ -144,14 +150,6 @@ const childEnvironment = (spec: ProcSpec): Record<string, string> => ({
   ...spec.env,
 });
 
-const signalPid = (pid: number, sig: NodeJS.Signals): void => {
-  try {
-    process.kill(pid, sig);
-  } catch {
-    // already gone
-  }
-};
-
 /** A live (or recently dead) child, plus the ring nobody else may reach. */
 interface Proc {
   alive: boolean;
@@ -162,6 +160,8 @@ interface Proc {
   exitCode: number | null;
   /** Cuts stdout into lines. Framing only. */
   lines: LineSplitter;
+  /** The child's pid, read once its spawn made it: a child with none never becomes a proc. */
+  pid: Pid;
   procId: string;
   ring: SessionRing<string>;
   signal: NodeJS.Signals | null;
@@ -414,7 +414,7 @@ export class SessiondServer {
       this.#send(conn, {
         type: "proc.limit",
         procId: proc.procId,
-        pid: proc.child.pid ?? -1,
+        pid: proc.pid,
         group: group.name,
         limit,
         max,
@@ -440,7 +440,7 @@ export class SessiondServer {
   procs(): SessiondProcInfo[] {
     return [...this.#procs.values()].map((proc) => ({
       procId: proc.procId,
-      pid: proc.child.pid ?? -1,
+      pid: proc.pid,
       alive: proc.alive,
       ...(proc.exitCode === null ? {} : { exitCode: proc.exitCode }),
       ...(proc.signal === null ? {} : { signal: proc.signal }),
@@ -772,10 +772,19 @@ export class SessiondServer {
       unmade();
       return refusedSpawn(commandId, error);
     }
+    const started = new Promise<Error | undefined>((resolve) => {
+      child.once("spawn", () => resolve(undefined));
+      child.once("error", (error) => resolve(error));
+    });
+    const pid = spawnedPid(child);
+    if (pid === undefined) {
+      return neverRan(commandId, started, unmade);
+    }
 
     const proc: Proc = {
       procId,
       child,
+      pid,
       tree: new Map(),
       ring: new SessionRing<string>(SESSIOND_RING_LINES),
       sizes: [],
@@ -797,18 +806,15 @@ export class SessiondServer {
     child.stdin.on("error", () => {
       /* a write to a stdin whose child already died is not an event */
     });
-    const started = await new Promise<Error | undefined>((resolve) => {
-      child.once("spawn", () => resolve(undefined));
-      child.once("error", (error) => resolve(error));
-    });
-    if (started) {
+    const failed = await started;
+    if (failed) {
       // It never ran: nobody's session, and no exit to announce.
       proc.alive = false;
       if (this.#procs.get(procId) === proc) {
         this.#procs.delete(procId);
       }
       unmade();
-      return refusedSpawn(commandId, started);
+      return refusedSpawn(commandId, failed);
     }
     if (group) {
       this.#groups.set(group.path, {
@@ -820,9 +826,7 @@ export class SessiondServer {
     }
     child.on("error", () => this.#reap(proc, null, null));
     child.on("exit", (code, signal) => this.#reap(proc, code, signal));
-    if (child.pid !== undefined) {
-      await capChildTasks(child.pid);
-    }
+    await capChildTasks(pid);
     return ack(commandId, "applied");
   }
 
@@ -894,8 +898,8 @@ export class SessiondServer {
    * one the kernel kills for memory is asked nothing first, and what it had
    * started is known only from the reading before.
    */
-  #survey(proc: Proc, table: Listed[]): number[] {
-    const root = proc.child.pid ?? -1;
+  #survey(proc: Proc, table: Listed[]): Pid[] {
+    const root = proc.pid;
     const byParent = new Map<number, Listed[]>();
     for (const row of table) {
       const siblings = byParent.get(row.ppid);
@@ -927,11 +931,11 @@ export class SessiondServer {
       }
     }
     proc.tree = running;
-    return [...running.keys()];
+    return [...running.keys()].map(listedPid);
   }
 
   /** {@link #survey} on a fresh reading of the process table. */
-  async #readTree(proc: Proc): Promise<number[]> {
+  async #readTree(proc: Proc): Promise<Pid[]> {
     return this.#survey(proc, await processTable());
   }
 
@@ -1236,6 +1240,20 @@ const refusedSpawn = (commandId: string, error: unknown): SessiondAck => {
         `${SESSIOND_PROCESS_LIMIT}: the kernel refused the fork (EAGAIN)`
       )
     : ack(commandId, "failed", `spawn: ${reasonOf(error)}`);
+};
+
+/**
+ * A spawn that made no process, and so no pid: node leaves its pid unset and
+ * says why in its `error`. Nobody's session, and nothing to signal.
+ */
+const neverRan = async (
+  commandId: string,
+  started: Promise<Error | undefined>,
+  unmade: () => void
+): Promise<SessiondAck> => {
+  const why = await started;
+  unmade();
+  return refusedSpawn(commandId, why ?? new Error("the spawn made no process"));
 };
 
 const toLine = (event: {

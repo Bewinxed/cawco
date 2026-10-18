@@ -37,6 +37,7 @@
  */
 
 import type { Page } from "playwright-core";
+import { signal } from "../../../packages/core/src/signal";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { box } from "../geom";
 import { capture, contrast, peakContrast, type Rgb } from "../ink";
@@ -229,14 +230,14 @@ async function failOne(kit: Kit, fleet: Fleet): Promise<void> {
     () => fleet.sessionPid(id),
     (pid) => pid > 0
   );
-  process.kill(first, "SIGKILL");
+  signal(first, "SIGKILL");
   const second = await until(
     "the failing session started again with its turn",
     () => fleet.sessionPid(id),
     (pid) => pid > 0 && pid !== first,
     90_000
   );
-  process.kill(second, "SIGKILL");
+  signal(second, "SIGKILL");
   const failed = await until(
     "the failing session's row failed",
     row,

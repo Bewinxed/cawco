@@ -283,7 +283,9 @@ const runShell = async (file, args, input, context, directory) => {
   const take = (chunk) => { output += chunk.toString(); };
   child.stdout.on("data", take);
   child.stderr.on("data", take);
-  const stop = () => { try { process.kill(-child.pid, "SIGKILL"); } catch {} };
+  // Its own group (\`detached\`), by a pid its spawn made: core's signal wall
+  // (signal.ts) cannot be imported here, so its rule is kept by hand.
+  const stop = () => { const pid = child.pid; if (!Number.isInteger(pid) || pid <= 1) return; try { process.kill(-pid, "SIGKILL"); } catch {} };
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; stop(); }, timeout);
   context.signal.addEventListener("abort", stop, { once: true });

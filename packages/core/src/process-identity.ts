@@ -17,6 +17,7 @@
  */
 
 import { dlopen, FFIType } from "bun:ffi";
+import { readFileSync } from "node:fs";
 import { readdir, readFile, readlink } from "node:fs/promises";
 
 // ── macOS: libSystem ─────────────────────────────────────────────────────
@@ -818,6 +819,26 @@ export async function processTable(): Promise<ProcessRow[]> {
       ...(cpuMicroseconds === undefined ? {} : { cpuMicroseconds }),
     };
   });
+}
+
+/**
+ * The process group `pid` is in, read from the kernel at the moment of
+ * asking (`/proc/<pid>/stat`'s fifth field on Linux, `kinfo_proc`'s
+ * `e_pgid` on macOS), synchronously and with no spawn: a zombie not yet
+ * reaped still has one. Undefined when there is no such process.
+ */
+export function processGroup(pid: number): number | undefined {
+  if (process.platform !== "linux") {
+    return darwinKinfo(pid)?.pgid;
+  }
+  let stat: string;
+  try {
+    stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+  } catch {
+    return;
+  }
+  const group = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
+  return Number.isInteger(group) ? group : undefined;
 }
 
 /** A process's arguments and environment, or undefined when it is gone or not ours to read. */

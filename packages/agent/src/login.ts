@@ -9,11 +9,12 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { accountConfigDir, accountIds, accountsRoot } from "@cawco/core/paths";
+import { bootId, processStart } from "@cawco/core/process-identity";
 import {
-  bootId,
-  markerIsLive,
-  processStart,
-} from "@cawco/core/process-identity";
+  identifiedPid,
+  isSignalRefused,
+  signal as signalPid,
+} from "@cawco/core/signal";
 import {
   isDamagedRecord,
   readRecordSync,
@@ -186,15 +187,20 @@ export const endOrphanedSignIns = async (): Promise<void> => {
       continue;
     }
     // biome-ignore lint/performance/noAwaitInLoops: one marker per account, each read and ended before the next
-    if (await markerIsLive(marker)) {
-      try {
-        process.kill(marker.pid, "SIGTERM");
-      } catch (error) {
-        // Gone between the check and the signal: nothing left to end.
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-          throw error;
-        }
+    const live = await identifiedPid(marker).catch((error: unknown) => {
+      if (!isSignalRefused(error)) {
+        throw error;
       }
+      // It names no process CawCo may signal: said, and dropped as every marker is.
+      console.warn(
+        `[login] ${markerFile(account)}: ${error.message}; the sign-in it marked is not ended, and the marker is removed`
+      );
+    });
+    // Gone between the check and the signal, it has nothing left to end.
+    if (live !== undefined && signalPid(live, "SIGTERM") === "denied") {
+      throw new Error(
+        `[login] the sign-in ${markerFile(account)} marks, pid ${live}, is not this user's to end`
+      );
     }
     rmSync(markerFile(account), { force: true });
   }

@@ -28,6 +28,7 @@ import {
   keeperEndpoints,
   publishKeeper,
 } from "../../packages/core/src/keepers";
+import { isAlive, listedPid, signal } from "../../packages/core/src/signal";
 import { welcomed } from "../lib/keeper-dial";
 
 const VERSION = "0.0.0-probe.2";
@@ -139,14 +140,6 @@ const launchctl = async (...args: string[]) => {
     ran.exited,
   ]);
   return { code, out, err };
-};
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 };
 
 const build = { kind: "build", version: VERSION } as const;
@@ -290,7 +283,7 @@ try {
   );
   await pool.replaceElsewhere("held-1", fresh);
   const killed = await until(
-    async () => child !== undefined && !alive(child.pid),
+    async () => child !== undefined && !isAlive(listedPid(child.pid)),
     10_000
   );
   step(
@@ -334,7 +327,7 @@ try {
   // 9. A build's keeper removed (bootout: SIGTERM, its own drain): it removes its own endpoint only.
   await job.remove();
   const goneBuild =
-    pid !== undefined && (await until(async () => !alive(pid), 15_000));
+    pid !== undefined && (await until(async () => !isAlive(pid), 15_000));
   step(
     "a build's keeper removed through launchd ends, its own endpoint gone, the machine's endpoint left as it was",
     goneBuild &&
@@ -358,10 +351,10 @@ try {
   await until(() => welcomes(own), 45_000);
   const second = await job.pid();
   if (second !== undefined) {
-    process.kill(second, "SIGKILL");
+    signal(second, "SIGKILL");
   }
   const killedOutright =
-    second !== undefined && (await until(async () => !alive(second), 10_000));
+    second !== undefined && (await until(async () => !isAlive(second), 10_000));
   // Ended, and loaded still (KeepAlive waits out its throttle before it starts it again): the job says how.
   const killedExit = await job.exited();
   step(

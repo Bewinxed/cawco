@@ -67,6 +67,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  isAlive,
+  listedPid,
+  type Pid,
+} from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -230,7 +235,7 @@ const respond = (request: Seen): Reply => {
 };
 
 /** The host pid of the process whose argv is {@link SLEEP}, if one runs. */
-const sleepPid = async (): Promise<number | undefined> => {
+const sleepPid = async (): Promise<Pid | undefined> => {
   const wanted = `${SLEEP.join("\0")}\0`;
   for (const pid of await readdir("/proc")) {
     if (!PID.test(pid)) {
@@ -239,17 +244,8 @@ const sleepPid = async (): Promise<number | undefined> => {
     // biome-ignore lint/performance/noAwaitInLoops: one scan, stopped at the first match
     const argv = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => "");
     if (argv === wanted) {
-      return Number(pid);
+      return listedPid(Number(pid));
     }
-  }
-};
-
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
   }
 };
 
@@ -571,7 +567,7 @@ const run = async (kit: Kit) => {
         closed,
         state: stateOf(),
         told: await told(),
-        sleepAlive: sleeping === undefined ? undefined : alive(sleeping),
+        sleepAlive: sleeping === undefined ? undefined : isAlive(sleeping),
         sleeping,
       };
     };

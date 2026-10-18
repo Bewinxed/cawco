@@ -878,6 +878,13 @@ async function recordOpenClose(udid: string, cawFrame: Frame) {
       `rm -f ${file}; nohup xcrun simctl io ${udid} recordVideo --codec=h264 --force ${file} >/dev/null 2>&1 </dev/null & echo $!`
     )
   ).trim();
+  // The Mac's own pid for the recording, which its `kill` below is sent to on
+  // the Mac: one that is not an integer above 1 is no process to stop there.
+  if (!/^\d+$/.test(pid) || Number(pid) <= 1) {
+    throw new Error(
+      `the phone's recording on the Mac gave no pid to stop it by (${JSON.stringify(pid)})`
+    );
+  }
   await pause(1500);
   // Close, open, close, open: it ends open, as the pass that follows needs.
   for (const step of ["close", "open", "close", "open"]) {

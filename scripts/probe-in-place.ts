@@ -59,6 +59,14 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { machinePath } from "../packages/core/src/machine-path";
+import { processStart } from "../packages/core/src/process-identity";
+import { identifiedPid, type Pid, signal } from "../packages/core/src/signal";
+
+/** A stand-in session's child, as its pid file names it: its pid and its start, so a kill reaches it only while it is still that process. */
+interface PidFile {
+  pid: number;
+  procStart?: string;
+}
 
 const root = resolve(import.meta.dir, "..");
 const hold = process.argv.includes("--hold");
@@ -993,7 +1001,11 @@ if (role === "sessiond") {
         (proc) => proc.procId === ctx.instanceId && proc.alive
       )?.pid;
       if (pid !== undefined) {
-        await writeFile(join(scratch, `pid-${ctx.instanceId}`), String(pid));
+        const record: PidFile = { pid, procStart: await processStart(pid) };
+        await writeFile(
+          join(scratch, `pid-${ctx.instanceId}`),
+          JSON.stringify(record)
+        );
       }
       return session(ctx, key, spec.accountDir?.accountId, pid);
     },
@@ -1010,6 +1022,18 @@ if (role === "sessiond") {
     `in-place-${crypto.randomUUID().slice(0, 8)}`
   );
   await mkdir(join(dir, "home", ".config", "cawco"), { recursive: true });
+  /** The stand-in's child for `id`, while it is still the process its pid file names. */
+  const standIn = async (id: string): Promise<Pid> => {
+    const record = JSON.parse(
+      await readFile(join(dir, `pid-${id}`), "utf8")
+    ) as PidFile;
+    const pid = await identifiedPid(record);
+    assert.ok(
+      pid !== undefined,
+      `${id}'s child is no longer the process its pid file names (${JSON.stringify(record)})`
+    );
+    return pid;
+  };
   const freePort = async (): Promise<number> => {
     const lease = Bun.serve({
       hostname: "127.0.0.1",
@@ -1903,10 +1927,7 @@ if (role === "sessiond") {
     });
     const stopped = await tool(parent, "stop_delegate", { target: g2 });
     assert.ok(!stopped.isError, stopped.text);
-    process.kill(
-      Number(await readFile(join(dir, `pid-${g3}`), "utf8")),
-      "SIGTERM"
-    );
+    signal(await standIn(g3), "SIGTERM");
     const endedLine = async (id: string) =>
       (
         (await api(`/api/instances/${id}/transcript?limit=200`)) as {
@@ -2010,10 +2031,7 @@ if (role === "sessiond") {
         )
     );
     const h1After = (await row(h1)) as Row;
-    process.kill(
-      Number(await readFile(join(dir, `pid-${h2}`), "utf8")),
-      "SIGKILL"
-    );
+    signal(await standIn(h2), "SIGKILL");
     const h2Lines = await until(
       'H2\'s end said as "Ended from outside CawCo (SIGKILL)"',
       () => endedLine(h2),

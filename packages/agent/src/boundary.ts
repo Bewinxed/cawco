@@ -142,6 +142,7 @@ import {
   standalone,
 } from "@cawco/core/runtime";
 import type { ProcSpec } from "@cawco/core/sessiond";
+import { listedPid, type Pid, signal as signalPid } from "@cawco/core/signal";
 import {
   DamagedRecord,
   isDamagedRecord,
@@ -1227,7 +1228,13 @@ const armHookNow = async (
     const gh = await hostGh();
     await mkdir(ghConfigOf(id), { recursive: true });
     await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id, gh), 0o644);
-    await writeWhole(held.exec, execScript(id, held, gh), 0o755);
+    // Its host's pid as the keeper listed it at its start, and matched to
+    // the keeper's list again before any boundary on record is armed.
+    await writeWhole(
+      held.exec,
+      execScript(id, { ...held, pid: listedPid(held.pid) }, gh),
+      0o755
+    );
   }
   await openToolDoor(id);
   await openGitDoor({ id, path: held.path });
@@ -2287,6 +2294,12 @@ const LAUNCH = [
   "exit(($status & 127) ? 128 + ($status & 127) : $status >> 8);",
 ].join(" ");
 
+/**
+ * The runner inside the boundary: takes each request off the FIFO and runs
+ * it. A `cancel <pgid>` ends that command's group; a pgid of 0, 1 or with a
+ * leading zero is never one its launch made, and `kill -- -0` or `-1` would
+ * be its own group or every process it may signal, so it is no request.
+ */
 const RUNNER = `fifo=$1
 CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|GIT_SSH_COMMAND|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
 export CAWCO_SANDBOX_ENV
@@ -2298,7 +2311,7 @@ while :; do
     case $req in
       "cancel "*)
         pid=\${req#cancel }
-        case $pid in ''|*[!0-9]*) continue ;; esac
+        case $pid in ''|*[!0-9]*|0*|1) continue ;; esac
         kill -TERM -- "-$pid" 2>/dev/null
         ( sleep 4; kill -KILL -- "-$pid" 2>/dev/null ) &
         continue ;;
@@ -2465,7 +2478,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       exec: join(stateDir(id), "exec"),
       gen,
       path: ref.path,
-      pid: 0,
+      pid: undefined,
       scratch: scratchOf(id),
     },
     await hostGh()
@@ -4194,15 +4207,15 @@ const RESTART_WAIT_TENTHS = WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 100;
  * config: it writes `branch.*` only before the boundary starts
  * (`cloneInPlace`).
  */
-const mountCheck = (id: string, held: Pick<Held, "gen" | "pid">): string =>
-  `place=${shellQuote(placeOf(id, held.gen))}
+const mountCheck = (id: string, gen: string | undefined, pid: string): string =>
+  `place=${shellQuote(placeOf(id, gen))}
 read -r outer inner _ < "$place" 2>/dev/null
-if ! awk 'FILENAME == ARGV[1] { want[$0] = 1; next } ($5 in want) { delete want[$5] } END { for (p in want) exit 1 }' ${shellQuote(guardedOf(id, held.gen))} "/proc/\${inner:-0}/mountinfo" 2>/dev/null; then
-  kill -USR1 ${held.pid} 2>/dev/null
+if ! awk 'FILENAME == ARGV[1] { want[$0] = 1; next } ($5 in want) { delete want[$5] } END { for (p in want) exit 1 }' ${shellQuote(guardedOf(id, gen))} "/proc/\${inner:-0}/mountinfo" 2>/dev/null; then
+  kill -USR1 ${pid} 2>/dev/null
   for _ in $(seq ${RESTART_WAIT_TENTHS}); do
     read -r now _ < "$place" 2>/dev/null
     if [ -n "$now" ] && [ "$now" != "\${outer:-}" ]; then PATH=$caller_path exec "$0" "$@"; fi
-    kill -0 ${held.pid} 2>/dev/null || break
+    kill -0 ${pid} 2>/dev/null || break
     sleep 0.1
   done
   echo ${shellQuote(stoppedLine(id))} >&2
@@ -4256,12 +4269,21 @@ if [ "$guarded" = 3 ]; then status=1; elif [ "$guarded" != 0 ]; then echo "cawco
 `
     : "";
 
+/**
+ * The executor's text for the boundary whose host is `held.pid`, which it
+ * signals (`kill -USR1`) and looks for (`kill -0`). Undefined for the form's
+ * own text ({@link planFor}), which is hashed and never run, and names no
+ * process.
+ */
 const execScript = (
   id: string,
-  held: Pick<Held, "exec" | "gen" | "path" | "pid" | "scratch">,
+  held: Pick<Held, "exec" | "gen" | "path" | "scratch"> & {
+    readonly pid: Pid | undefined;
+  },
   gh: string | undefined
 ): string => {
   const linux = process.platform === "linux";
+  const pid = held.pid === undefined ? "PID" : String(held.pid);
   // The hub's git helper (`hub-git.ts`) first, then the upstream guard's
   // shims ({@link writeGuardShims}), then on macOS the toolchain shims.
   const helpers = `${gitHelperDirOf(id)}:${guardShimsOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
@@ -4279,11 +4301,11 @@ if [ -e "$gate" ]; then
   [ -e "$gate" ] || PATH=$caller_path exec "$0" "$@"
 fi
 fifo=${shellQuote(fifoOf(id, held.gen))}
-if ! [ -p "$fifo" ] || ! kill -0 ${held.pid} 2>/dev/null; then
+if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
   echo ${shellQuote(stoppedLine(id))} >&2
   exit 126
 fi
-${linux ? mountCheck(id, held) : ""}
+${linux ? mountCheck(id, held.gen, pid) : ""}
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
 # Kept off other people's repositories, or asking the person first
@@ -4319,11 +4341,11 @@ ${guardBefore(id, held)}printf '%s\\n' "$req" > "$fifo"
 cat "$req/out" & out=$!
 cat "$req/err" >&2 & err=$!
 wait "$out" "$err"
-${linux ? followTaker(id, held.gen) : `taker=${held.pid}`}
+${linux ? followTaker(id, held.gen) : `taker=${pid}`}
 # A sandbox stopped mid-command leaves no status: the command is cut off.
 until [ -s "$req/status" ]; do
 ${linux ? '  [ -z "$taker" ] && [ -s "$req/sandbox" ] && take' : ""}
-  if ! kill -0 "\${taker:-${held.pid}}" 2>/dev/null; then
+  if ! kill -0 "\${taker:-${pid}}" 2>/dev/null; then
     echo ${shellQuote(`cawco: workspace ${id}'s boundary stopped while this command ran, so it was cut off.`)} >&2
     rm -rf "$req"
     exit 137
@@ -4450,14 +4472,6 @@ const ownInodes = async (path: string): Promise<number> => {
     );
   }
   return files.length;
-};
-
-const kill = (pid: number, signal: NodeJS.Signals): void => {
-  try {
-    process.kill(pid, signal);
-  } catch {
-    // already gone
-  }
 };
 
 /** Whether `pid` is still a bwrap: a pid on record names no other process. */
@@ -4599,7 +4613,7 @@ export const workspaceNetworks = async (
 const killMarked = async (id: string): Promise<void> => {
   for (const { pid, command } of await commandLines({ environment: true })) {
     if (command.includes(`CAWCO_WORKSPACE=${id}`) && pid !== process.pid) {
-      kill(pid, "SIGKILL");
+      signalPid(listedPid(pid), "SIGKILL");
     }
   }
 };
@@ -4621,7 +4635,7 @@ const stopBoundary = async (
   const procId = boundaryProcId(id, held.gen);
   const place = await readPlace(id, held.gen);
   if (place && (await isBwrap(place.outer))) {
-    kill(place.outer, "SIGKILL");
+    signalPid(listedPid(place.outer), "SIGKILL");
     const deadline = Date.now() + STOP_TIMEOUT_MS;
     while (
       // biome-ignore lint/performance/noAwaitInLoops: polls one process until its host has cleaned up, or the deadline passes

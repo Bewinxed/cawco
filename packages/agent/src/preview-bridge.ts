@@ -28,6 +28,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
 import { listeners, workspaceNetworks } from "./boundary";
@@ -201,10 +202,10 @@ const killGroup = async (
   proc: Bridge["proc"],
   socket: string
 ): Promise<void> => {
-  try {
-    process.kill(-proc.pid, "SIGKILL");
-  } catch {
-    // The group is gone already.
+  // Its socket is bound, so `setsid` has made it its group's leader.
+  const leader = spawnedPid(proc);
+  if (leader !== undefined) {
+    signalGroup(leader, "SIGKILL");
   }
   await rm(socket, { force: true });
   await proc.exited;

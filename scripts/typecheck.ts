@@ -6,7 +6,8 @@
  *
  * The checks: every workspace package's own `typecheck` script; the
  * generated-artifact checks (openapi, hub migrations, role budgets, openui views, the Swift
- * tool presentation, Claude Code paths, Apple operations, the Swift words);
+ * tool presentation, Claude Code paths, Apple operations, the Swift words,
+ * every signal through core's signalling module);
  * the machine handover protocol's sweep (protocol-sweep.ts: its laws over
  * every short schedule of the reducer, and each named mutant caught); the
  * root, scripts and probe-kit TypeScript projects; and typecheck coverage,
@@ -25,6 +26,7 @@
  */
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
+import { type Pid, signalGroup, spawnedPid } from "../packages/core/src/signal";
 import { heavySlot } from "./lib/heavy-run";
 
 await heavySlot();
@@ -100,6 +102,7 @@ const checks: Check[] = [
   project("tsconfig.json"),
   script(".", "claude-paths:check"),
   script(".", "machine-paths:check"),
+  script(".", "signal:check"),
   script("packages/hub", "roles:check"),
   script("packages/core", "openui:check"),
   script("packages/core", "tools:check"),
@@ -117,14 +120,7 @@ if (!checks.some((check) => check.name === DASHBOARD)) {
  * reaches everything it started: `bun run` hands the work to a shell and its
  * children, which hold the output pipes open past their parent's end.
  */
-const groups = new Set<number>();
-const signalGroup = (pid: number, signal: NodeJS.Signals): void => {
-  try {
-    process.kill(-pid, signal);
-  } catch {
-    // The group has already ended.
-  }
-};
+const groups = new Set<Pid>();
 // Out of the terminal's process group, a check no longer hears Ctrl-C itself.
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
@@ -156,7 +152,16 @@ const run = async (check: Check): Promise<Outcome> => {
       output: "",
     };
   }
-  const { pid } = child;
+  const pid = spawnedPid(child);
+  if (pid === undefined) {
+    return {
+      check,
+      ok: false,
+      why: "did not start: its spawn made no process",
+      seconds: seconds(),
+      output: "",
+    };
+  }
   groups.add(pid);
   let timedOut = false;
   let grace: ReturnType<typeof setTimeout> | undefined;

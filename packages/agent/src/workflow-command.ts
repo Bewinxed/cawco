@@ -13,6 +13,7 @@ import {
 } from "@cawco/core";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { ensureBoundary } from "./boundary";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
@@ -44,17 +45,6 @@ const live = new Set<Running>();
  * directory, or starting their boundary), by id, with when the cancel came.
  */
 const cancelledEarly = new Map<string, number>();
-
-/** Signals a process group; one already gone is no error. */
-const signalGroup = (pid: number, signal: NodeJS.Signals): void => {
-  try {
-    process.kill(-pid, signal);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-      throw error;
-    }
-  }
-};
 
 /** Where queue frames go: the daemon's socket. */
 let sendQueue: (frame: CommandQueueFrame) => void = () => undefined;
@@ -402,28 +392,36 @@ export async function runWorkflowCommand(
     const running: Running = {
       runId: named?.id,
       stop: (why) => {
-        const { pid } = child;
-        if (stopped || !pid) {
+        // A spawn that made no process leaves nothing to signal.
+        const leader = spawnedPid(child);
+        if (stopped || leader === undefined) {
           return;
         }
         stopped = why;
         clock.stop();
         try {
-          signalGroup(pid, "SIGTERM");
+          if (signalGroup(leader, "SIGTERM") === "denied") {
+            reject(
+              new Error(
+                `command group ${leader} is not this user's to signal, so it was not stopped`
+              )
+            );
+            return;
+          }
         } catch (error) {
           reject(error);
           return;
         }
         setTimeout(() => {
           try {
-            signalGroup(pid, "SIGKILL");
+            signalGroup(leader, "SIGKILL");
           } catch (error) {
-            console.warn(`could not kill command group ${pid}: ${error}`);
+            console.warn(`could not kill command group ${leader}: ${error}`);
           }
         }, KILL_GRACE_MS).unref();
       },
     };
-    if (child.pid) {
+    if (spawnedPid(child) !== undefined) {
       live.add(running);
     }
     const clock = commandClock(
