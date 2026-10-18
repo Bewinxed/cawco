@@ -1290,35 +1290,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
         composerBinding.prompts = ordered
         claimCardKeys()
-        #if DEBUG
-        approveForProbe(standing.first)
-        openCommandForProbe(standing.first)
-        #endif
     }
 
     #if DEBUG
-    /// `-approve-asks`: the permission standing on the composer is approved
-    /// as its Approve approves it (`answer`), a moment after it stands, for a
-    /// simulator pass (probe-kit spec `ios-chat-opens`).
-    private static let approvesAsks = ProcessInfo.processInfo.arguments.contains("-approve-asks")
     private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "Probe")
-    /// The asks already approved here.
-    private var approved: Set<String> = []
-
-    /// `-open-ask-command`: the standing card's command opened whole, as its
-    /// chevron opens it, a second after it stands, for a simulator pass where
-    /// nothing can tap (probe-kit spec `ios-long-ask` on iOS 27).
-    private static let opensAskCommand = ProcessInfo.processInfo.arguments.contains("-open-ask-command")
-    private var commandOpened: Set<String> = []
-
-    private func openCommandForProbe(_ ask: ParkedAsk?) {
-        guard Self.opensAskCommand, let ask, !commandOpened.contains(ask.requestId) else { return }
-        commandOpened.insert(ask.requestId)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            guard let self, let card = cards[ask.requestId] else { return }
-            Self.probeLog.notice("probe opened \(ask.requestId, privacy: .public) \(card.probeOpenCommand() ? "whole" : "no chevron", privacy: .public)")
-        }
-    }
 
     /// `-probe-send <words>`: once this pane can send, its Send sends `words`
     /// with one picture of about 2 MB (noise, which does not compress), once
@@ -1341,16 +1316,6 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
         Self.probeLog.notice("probe send: \(words, privacy: .public) with a picture of \(png.count) bytes")
         send(words, [.image(name: "probe.png", mediaType: "image/png", data: png)])
-    }
-
-    private func approveForProbe(_ ask: ParkedAsk?) {
-        guard Self.approvesAsks, let ask, !ask.isQuestion, !approved.contains(ask.requestId) else { return }
-        approved.insert(ask.requestId)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, madeAsks.contains(where: { $0.requestId == ask.requestId }) else { return }
-            Self.probeLog.notice("probe approve \(ask.requestId, privacy: .public)")
-            answer(ask, .allow, [:])
-        }
     }
     #endif
 

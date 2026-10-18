@@ -45,7 +45,7 @@ import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec } from "../kit";
 
 const BUNDLE = "dev.cawco.app";
-/** iOS 18.5: where axe and Maestro reach the simulator from a workspace (ios-seen.ts). */
+/** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
 const SIM = {
   runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
   device: "iPhone 16 Pro",

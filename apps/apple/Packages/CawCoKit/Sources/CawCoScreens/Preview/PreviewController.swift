@@ -2059,31 +2059,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             parts.append("\(Self.text(name, 40) ?? "")=\(Int(at.x.rounded())),\(Int(at.y.rounded()))")
         }
         PreviewProbe.say("preview page \(parts.joined(separator: " "))")
-        typeForProbe(rects["field"] as? [String: Any])
-    }
-
-    private var typedForProbe = false
-
-    /// `-preview-type`: the field the page reported takes the focus and the words, once.
-    private func typeForProbe(_ field: [String: Any]?) {
-        guard let words = PreviewProbe.typeWords, !typedForProbe, let field,
-              let x = field["x"] as? Double, let y = field["y"] as? Double,
-              let width = field["width"] as? Double, let height = field["height"] as? Double,
-              let quoted = try? JSONSerialization.data(withJSONObject: [words], options: .fragmentsAllowed) else { return }
-        typedForProbe = true
-        let script = """
-        (() => {
-          const field = document.elementFromPoint(\(x + width / 2), \(y + height / 2));
-          field?.focus();
-          document.execCommand("insertText", false, \(String(decoding: quoted, as: UTF8.self))[0]);
-          return document.activeElement?.id || "none";
-        })()
-        """
-        web?.evaluateJavaScript(script) { value, error in
-            MainActor.assumeIsolated {
-                PreviewProbe.say("preview typed into=\(value as? String ?? "none")\(error.map { " error=\($0.localizedDescription)" } ?? "")")
-            }
-        }
     }
     #endif
 

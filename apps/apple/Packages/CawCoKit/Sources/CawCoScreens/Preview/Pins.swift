@@ -888,14 +888,6 @@ enum PreviewProbe {
     }()
     /// `-open-plan`: the session's plan opens in its sheet the first time its ring shows (scripts/probe-kit/specs/ios-plan.ts).
     static let openPlanAtLaunch = ProcessInfo.processInfo.arguments.contains("-open-plan")
-    /// `-preview-type <words>`: where simulator input is refused, the probe
-    /// page's first reported `field` takes the focus and `words` as typing
-    /// inserts them (`insertText`, its input events).
-    static let typeWords: String? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let at = arguments.firstIndex(of: "-preview-type"), arguments.indices.contains(at + 1) else { return nil }
-        return arguments[at + 1]
-    }()
     /// `-side-switch`: the first time the plan and the preview stand beside the conversation together, the switch is pressed to the other.
     static let sideSwitch = ProcessInfo.processInfo.arguments.contains("-side-switch")
     /// `-place-pick <path>`: a page's `cawco.pickPlace()` picker takes the folder `path` and Use this place, as the person's would.

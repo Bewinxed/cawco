@@ -64,6 +64,12 @@ const RUNTIMES: { choice: SimChoice; tag: string }[] = [
   },
 ];
 const AXE = "/opt/homebrew/bin/axe";
+/**
+ * axe's tap as a touch down and up: on Xcode 27 its default tap style
+ * reports success and delivers nothing, dtuhidd dropping the gesture
+ * (cameroncooke/AXe#71: "`--tap-style physical` is 3/3 under the same conditions").
+ */
+const TAP = `${AXE} tap --tap-style physical`;
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
@@ -295,14 +301,14 @@ async function onRuntime(
       tag,
       udid: pad.sim.udid,
     };
-    const { asked, canvasId, refused } = await inkStep(on);
+    const { asked, canvasId } = await inkStep(on);
     await reachedStep(on, asked);
     if (!canvasId) {
       return;
     }
     await editStep(on, canvasId);
     await captureCanvas(on);
-    await formStep(on, refused);
+    await formStep(on);
     console.log(`  captures: ${shots}`);
   } finally {
     await Bun.write(
@@ -343,10 +349,8 @@ const carriesCanvas = (block: Block) =>
     (file) => file.name === "canvas.excalidraw"
   );
 
-/** 1a. The pencil's stroke, sent: the canvas's id, and axe's error when the simulator's input was refused. */
-async function inkStep(
-  on: On
-): Promise<{ asked: number; canvasId?: string; refused?: string }> {
+/** 1a. The pencil's stroke, sent: the canvas's id. */
+async function inkStep(on: On): Promise<{ asked: number; canvasId?: string }> {
   const { fleet, heard, kit, session, tag, udid } = on;
   const asked = inkRequests.length;
   await sh(
@@ -360,26 +364,13 @@ async function inkStep(
   ).catch(() => undefined);
   const at = swipe?.match(SWIPE_AT);
   let dragged = "no swipe asked for";
-  /** The simulator's input refused inside this boundary (iOS 27's remote automation socket): axe's exact error. */
-  let refused: string | undefined;
   if (at) {
     const [x, y] = [Number(at[1]), Number(at[2])];
     dragged = await sh(
       `${AXE} drag --start-x ${x} --start-y ${y} --end-x ${x} --end-y ${y - 160} --duration 0.4 --steps 30 --udid ${udid}`
     )
       .then(() => `dragged up from ${x},${y}`)
-      .catch((error: Error) => {
-        refused = error.message;
-        return `axe drag: ${error.message}`;
-      });
-  }
-  // No input to stand in for the pencil's swipe: Draw opens the canvas, and the form's words go in by `-preview-type`.
-  const by = refused ? "Draw" : "the pencil's swipe";
-  if (refused) {
-    heard.length = 0;
-    await sh(
-      `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} -preview-probe -canvas-probe-ink -preview-type '${TYPED}' >/dev/null`
-    );
+      .catch((error: Error) => `axe drag: ${error.message}`);
   }
   const sent = await until(
     `${tag}: the canvas sent`,
@@ -393,14 +384,13 @@ async function inkStep(
       line.startsWith("canvas PASS ink") || line.startsWith("canvas FAIL ink")
   );
   kit.check(
-    `${tag} 1a: ${by} opens the canvas, a pen stroke is one element synced to the hub, and Send carries the file, the outline and the picture`,
+    `${tag} 1a: the pencil's swipe opens the canvas, a pen stroke is one element synced to the hub, and Send carries the file, the outline and the picture`,
     inkChecks.length === 3 &&
       inkChecks.every((line) => line.startsWith("canvas PASS")) &&
-      inkChecks[0]?.includes(by) === true &&
       !!canvasId,
     `${dragged}; ${inkChecks.join(" | ") || "no ink lines"}; ${sent ?? "not sent"}`
   );
-  return { asked, canvasId, refused };
+  return { asked, canvasId };
 }
 
 /** 1b. What reached the agent: the hub's transcript of the message, and the model's request for it. */
@@ -513,7 +503,7 @@ async function captureCanvas(on: On): Promise<void> {
 }
 
 /** 3. A form re-published keeps what was typed. */
-async function formStep(on: On, refused?: string): Promise<void> {
+async function formStep(on: On): Promise<void> {
   const { fleet, heard, kit, session, shots, tag, udid } = on;
   const after = (mark: number) => heard.slice(mark);
   const madeAt = heard.length;
@@ -530,7 +520,7 @@ async function formStep(on: On, refused?: string): Promise<void> {
     90_000
   ).catch(() => undefined);
   const field = standing?.match(PAGE) ?? undefined;
-  const typedBy = await typeIn(on, madeAt, field, refused);
+  const typedBy = await typeIn(on, field);
   const typedLine = `value=${encodeURIComponent(TYPED)} focus=name revised=0`;
   const typed = await until(
     `${tag}: the words in the field`,
@@ -540,8 +530,7 @@ async function formStep(on: On, refused?: string): Promise<void> {
   ).catch(() => after(madeAt).findLast((line) => PAGE.test(line)));
   const formDoc = after(madeAt).findLast((line) => DOC.test(line));
   const formOrigin = formDoc?.match(DOC)?.[1];
-  const under =
-    typed?.includes(typedLine) || refused ? "" : await underTap(udid, field);
+  const under = typed?.includes(typedLine) ? "" : await underTap(udid, field);
   await sh(
     `xcrun simctl io ${udid} screenshot "${join(shots, "app-form-typed.png")}" >/dev/null`
   );
@@ -581,33 +570,16 @@ async function formStep(on: On, refused?: string): Promise<void> {
   );
 }
 
-/**
- * The words into the form's field: a tap on it and the keys (axe), or,
- * with the simulator's input refused, `-preview-type`'s own. Answers how.
- */
+/** The words into the form's field: a tap on it and the keys (axe). Answers how. */
 async function typeIn(
   on: On,
-  madeAt: number,
-  field: RegExpMatchArray | undefined,
-  refused: string | undefined
+  field: RegExpMatchArray | undefined
 ): Promise<string> {
-  if (refused) {
-    const into = await until(
-      `${on.tag}: the words put in by -preview-type`,
-      () =>
-        on.heard
-          .slice(madeAt)
-          .findLast((line) => line.startsWith("preview typed into=")),
-      Boolean,
-      30_000
-    ).catch(() => "not typed");
-    return `the simulator's input refused (${refused.slice(0, 220)}), so -preview-type: ${into}`;
-  }
   if (!field) {
     return "the form never reported";
   }
   return await sh(
-    `${AXE} tap -x ${field[4]} -y ${field[5]} --udid ${on.udid} >/dev/null && sleep 1 && ${AXE} type '${TYPED}' --udid ${on.udid} >/dev/null`
+    `${TAP} -x ${field[4]} -y ${field[5]} --udid ${on.udid} >/dev/null && sleep 1 && ${AXE} type '${TYPED}' --udid ${on.udid} >/dev/null`
   )
     .then(() => `tapped ${field[4]},${field[5]} and typed`)
     .catch((error: Error) => `axe: ${error.message}`);

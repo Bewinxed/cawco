@@ -112,13 +112,13 @@ enum CanvasProbe {
 
     // MARK: The pen's stroke, sent (PRD §7 P4's live check)
 
-    /// `-canvas-probe-ink` (scripts/probe-kit/specs/ios-canvas.ts): the
-    /// canvas opens by the pencil's swipe (`-cawcoProbePencil`, the script's
-    /// finger standing in for the pencil the simulator lacks) or by Attach →
-    /// Draw; a pen stroke goes through Excalidraw's own pointer path
-    /// (`pointerType: "pen"`, as WebKit hands a pencil's touch to the page)
-    /// and syncs to the hub; Send carries the file, the outline and the
-    /// picture. The spec reads what the session's model received.
+    /// `-canvas-probe-ink -cawcoProbePencil` (scripts/probe-kit/specs/ios-canvas.ts):
+    /// the canvas opens by the pencil's swipe (the script's finger standing
+    /// in for the pencil the simulator lacks); a pen stroke goes through
+    /// Excalidraw's own pointer path (`pointerType: "pen"`, as WebKit hands a
+    /// pencil's touch to the page) and syncs to the hub; Send carries the
+    /// file, the outline and the picture. The spec reads what the session's
+    /// model received.
     private static func inkPass(_ composer: ComposerView, _ window: UIWindow) async {
         guard let binding = composer.binding, let host = binding.canvasHost else { return }
         var carried: [[String]] = []
@@ -128,18 +128,13 @@ enum CanvasProbe {
             send(words, attachments)
         }
         defer { binding.onSend = send }
-        let by = CanvasDebug.pencil ? "the pencil's swipe" : "Draw"
-        if CanvasDebug.pencil {
-            askForSwipe(composer, window)
-        } else {
-            composer.openCanvas()
-        }
+        askForSwipe(composer, window)
         guard await until(90, { composer.canvasRoom?.up == true && composer.canvasRoom?.moving == false }),
               let web = composer.canvasRoom?.web, await until(30, { web.connected && web.drawn != nil }),
               let canvas = binding.canvas else {
-            return check("ink: the canvas opens by \(by) and its page joins its doc", false, "note \(composer.probeCanvasNote ?? "none")")
+            return check("ink: the canvas opens by the pencil's swipe and its page joins its doc", false, "note \(composer.probeCanvasNote ?? "none")")
         }
-        check("ink: the canvas opens by \(by) and its page joins its doc", true, "canvas \(canvas.id), drawn \(web.drawn ?? -1)")
+        check("ink: the canvas opens by the pencil's swipe and its page joins its doc", true, "canvas \(canvas.id), drawn \(web.drawn ?? -1)")
         let drawn = await stroke(web)
         var hubDrawn = -1
         for _ in 0 ..< 40 where hubDrawn != drawn.count {
