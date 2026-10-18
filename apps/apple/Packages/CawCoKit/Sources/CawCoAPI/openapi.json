@@ -40211,6 +40211,11 @@
           "edgeId": {
             "type": "string"
           },
+          "kind": {
+            "description": "What the problem is, where a reader decides on it: `call-cycle`, a\nworkflow that calls itself through the fleet's saved graphs. Absent on\nevery other, whose `message` is all there is to say.",
+            "const": "call-cycle",
+            "type": "string"
+          },
           "line": {
             "type": "number"
           },
@@ -42723,6 +42728,10 @@
           },
           "handoffKind": {
             "$ref": "#/components/schemas/BlockMetadataHandoffKind"
+          },
+          "harnessNote": {
+            "$ref": "#/components/schemas/HarnessNote",
+            "description": "A `ui.system_note` that is a notice of the harness's in the user's role,\ntyped where its normaliser read it: what a reader draws it from, never\nits `content`, which keeps its words for the shipped app."
           },
           "hookName": {
             "type": "string"
