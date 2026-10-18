@@ -65,6 +65,10 @@ const STEPS = [
 ];
 const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Notes</title></head>
 <body><h1>Notes</h1><p>The tone prop, drawn.</p></body></html>`;
+/** SessionViewController's `plan sheet …`: the sheet's content in the window (its top, its height) and the plan's own height. */
+const SHEET = /^plan sheet \S+ content=-?\d+,(\d+) plan=(\d+)$/;
+/** TaskPanel.swift's `plan rail …`: the rail's x and the first child's arm end, in its box. */
+const RAIL = /^plan rail x=([\d.]+) lead=[\d.]+ children=-?\d+:(-?\d+)/;
 const SPLIT =
   /^split pane=(-?\d+),(-?\d+),(\d+),(\d+) preview=(-?\d+),(-?\d+),(\d+),(\d+) transcript=(\d+) .* composerShare=([\d.]+) .*card=plan/;
 
@@ -302,6 +306,26 @@ const run = async (kit: Kit) => {
       `drawn: ${drawn ?? "nothing"}`
     );
 
+    // 2b. The sheet stands as tall as the plan, not its title alone; the sub-step's arm reaches its mark.
+    const sheetLine = await until(
+      "the plan's sheet stood",
+      () => heard.findLast((line) => SHEET.test(line)),
+      Boolean,
+      30_000
+    ).catch(() => undefined);
+    const [, contentHeight, planHeight] = (sheetLine?.match(SHEET) ?? []).map(
+      Number
+    );
+    const rail = heard.findLast((line) => RAIL.test(line));
+    const [, railX, armEnd] = (rail?.match(RAIL) ?? []).map(Number);
+    kit.check(
+      "2b: the phone's plan sheet holds the plan whole (as tall as it, up to its cap), and the sub-step's elbow reaches its mark",
+      contentHeight >= Math.min(planHeight, 400) - 1 &&
+        planHeight > 100 &&
+        armEnd - railX >= 8,
+      `${sheetLine ?? "no sheet line"}; ${rail ?? "no rail line"}`
+    );
+
     // The plan's sheet beside the dashboard's, at the simulator's viewport, light and dark, for a later review.
     for (const theme of ["light", "dark"] as const) {
       // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
@@ -421,7 +445,7 @@ async function onIpad(
         `xcrun simctl io ${udid} screenshot "${join(keep, `app-ipad-plan-${theme}.png`)}" >/dev/null`
       );
       try {
-        const page = await kit.page("ipad", { engine: "webkit", theme });
+        const page = await kit.page("ipadWide", { engine: "webkit", theme });
         await page.goto(`${dashboard}/session/${session}`, {
           waitUntil: "domcontentloaded",
         });

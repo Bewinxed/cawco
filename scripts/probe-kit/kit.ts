@@ -51,6 +51,9 @@ export const VIEWS = {
   /** An iPhone 15 Pro, portrait: the owner's phone. */
   iphone15Pro: { width: 393, height: 852, touch: true },
   ipad: { width: 1032, height: 1376, touch: true },
+  /** The same iPad in landscape: a pane past 900px, so the web stands the side panel beside the
+   *  conversation (SideSplit `phone`) as the app does on an iPad's regular width. */
+  ipadWide: { width: 1376, height: 1032, touch: true },
 } as const;
 export type View = keyof typeof VIEWS;
 

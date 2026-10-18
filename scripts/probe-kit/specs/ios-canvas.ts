@@ -75,6 +75,10 @@ const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const SWIPE_AT = /^canvas swipe at (\d+),(\d+)$/;
 const SENT = /^canvas ink sent canvas ([0-9a-f-]{36}) to /;
+/** PreviewController's `preview head room …`: the head's width, the name's, and the controls after it. */
+const ROOM = /^preview head room width=(\d+) title=(\d+) controls=(\d+):(\d+)$/;
+/** PreviewController's `preview captured …`: how many bytes the page's thumbnail came to. */
+const BYTES = /bytes=(\d+)/;
 const DOC =
   /^preview doc origin=(\d+) elements=(-?\d+) width=(\d+) scale=([\d.]+)$/;
 const PAGE =
@@ -469,6 +473,18 @@ async function editStep(on: On, canvasId: string): Promise<void> {
       outline.includes("agent-box"),
     `before ${before ?? "nothing"}; after ${edited ?? "nothing"}; navigations ${navigated}; the tool's outline ${outline.includes("agent-box") ? "names agent-box" : outline.slice(0, 160)}`
   );
+  // 2b. Docked in the panel (stage.svelte.ts `tellPlace`): its rail at the top, Undock in place of Dock and Done.
+  const hello = after(shownAt).findLast((line) =>
+    line.startsWith("preview hello")
+  );
+  // The head as it stands now (logged when it changes, on layouts and the page's heartbeat).
+  const room = heard.findLast((line) => ROOM.test(line));
+  const named = Number(room?.match(ROOM)?.[2] ?? 0);
+  kit.check(
+    `${tag} 2b: the canvas in the panel is told it stands docked, and the head keeps the artifact's name beside its controls`,
+    !!hello?.includes("place=docked") && named > 0,
+    `${hello ?? "no hello"}; ${room ?? "no head room line"}`
+  );
 }
 
 /** The canvas in the panel beside the dashboard's at the iPad's viewport, light and dark. */
@@ -482,7 +498,7 @@ async function captureCanvas(on: On): Promise<void> {
       `xcrun simctl io ${udid} screenshot "${join(shots, `app-canvas-${theme}.png`)}" >/dev/null`
     );
     try {
-      const page = await kit.page("ipad", { engine: "webkit", theme });
+      const page = await kit.page("ipadWide", { engine: "webkit", theme });
       await page.goto(`${dashboard}/session/${session}`, {
         waitUntil: "domcontentloaded",
       });
@@ -567,6 +583,22 @@ async function formStep(on: On): Promise<void> {
       Number(formDoc?.match(DOC)?.[3]) < 980 &&
       formNavigations === 0,
     `${typedBy}; typed: ${typed ?? "nothing"}; after: ${kept ?? "nothing"}; document ${formDoc ?? "-"} → ${docAfter ?? "-"}; navigations ${formNavigations}; the tool: ${republished.slice(0, 120)}${under}`
+  );
+  // 3b. What the page said of itself reaches its card (ToolGroup `preview.title`, `.thumbnail`), and the
+  // head keeps the name while Send picks stands; where the transcript stands to the composer, said.
+  const captured = after(madeAt).find((line) =>
+    line.startsWith("preview captured")
+  );
+  const room = heard.findLast((line) => ROOM.test(line));
+  const clearance = after(madeAt)
+    .filter((line) => line.startsWith("transcript clearance"))
+    .slice(-2);
+  kit.check(
+    `${tag} 3b: the form's title and thumbnail reach the panel's store for its card, and the head keeps the artifact's name`,
+    !!captured?.includes("title=Form") &&
+      Number(captured?.match(BYTES)?.[1] ?? 0) > 0 &&
+      Number(room?.match(ROOM)?.[2] ?? 0) > 0,
+    `${captured ?? "no capture"}; ${room ?? "no head room line"}; ${clearance.join(" | ") || "no clearance line"}`
   );
 }
 

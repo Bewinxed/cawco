@@ -45,7 +45,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var sending = false
     /// Comments: the open pins' list, floating over the page's top-right (PinList.svelte).
     private var pinsButton: UIButton!
-    private let pinsBadge = KitBadge("0")
+    /// Comments' open count (PreviewPane.svelte `.count`): tabular figures in the muted ink, after its word.
+    private let pinsBadge = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
     /// The mode, the kit's segmented control: Interact, Comment, Draw (PreviewPane.svelte `.modes`).
     private var modes: KitSegmented!
     private var reloadButton: UIButton!
@@ -105,6 +106,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// else, goes again from Reload.
     private var failureOf: String?
     private var revision: String?
+    /// The line under the name, standing only while it has words to say.
+    private let pathRow = UIView()
+    /// What is on show is an artifact's page, which has no path of its own to say.
+    private var showsPage = false
+    /// The revision the overlay was asked to draw the card's thumbnail of.
+    private var capturedFor: String?
+
+    private func paintPath() {
+        pathRow.isHidden = pathLabel.text?.isEmpty ?? true
+    }
     private var artifactId: String?
     private var origin: URL?
     /// The pane's modes (core comments.ts `PreviewMode`): Interact, the page
@@ -181,11 +192,27 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// How long a loaded page has for its overlay to answer the hello (PreviewPane.svelte `PAGE_SILENT_MS`).
     private static let silentAfter = Duration.seconds(3)
 
-    init(hub: HubConnection, instanceId: String) {
+    /// `ownTab`: the artifact in a tab of its own (routes/artifact/[id], PreviewPane
+    /// `ownTab`), at the tab's width: no + or Open in new tab, and Close goes back to its session.
+    init(hub: HubConnection, instanceId: String, ownTab: Bool = false) {
         self.hub = hub
         self.instanceId = instanceId
+        self.ownTab = ownTab
         super.init(nibName: nil, bundle: nil)
     }
+
+    let ownTab: Bool
+    /// Open in new tab: the artifact `id` in a tab of its own.
+    var onOpenTab: (_ artifactId: String) -> Void = { _ in }
+    /// The panel gives its canvas back to the composer (its Undock, the canvas's own rail's): `folded`, as its chip.
+    var onGiveBack: (_ id: String, _ name: String, _ folded: Bool) -> Void = { _, _, _ in }
+    /// Close in its own tab: back to the session it belongs to.
+    var onBackToSession: () -> Void = {}
+    private var newCanvasButton: UIButton!
+    private var openTabButton: UIButton!
+    private var undockButton: UIButton!
+    /// The head's + is making a canvas.
+    private var making = false
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("PreviewController is built in code") }
@@ -203,8 +230,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // The title control keeps its own width up to the head's room; the path under it gives way first.
         let title = UIStackView(arrangedSubviews: [titleButton, UIView()])
         // The path starts where the title control's glyph does.
-        let path = UIView()
+        let path = pathRow
         path.hold(pathLabel, insets: UIEdgeInsets(top: 0, left: Space.space2, bottom: 0, right: 0))
+        path.isHidden = true
         let identity = UIStackView(arrangedSubviews: [title, path])
         identity.axis = .vertical
         identity.isLayoutMarginsRelativeArrangement = true
@@ -231,6 +259,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         inspectOpen = UserDefaults.standard.string(forKey: inspectKey) == "open"
         sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
         pinsButton = KitButton.make("Comments", glyph: .chat, variant: .ghost, height: .sm) { [weak self] in self?.openList() }
+        // The head's one control recipe (SideSurface `.side-head` buttons: `padding: 0 space-2`), so the name keeps its room.
+        for labelled in [sendButton!, pinsButton!] {
+            labelled.configuration?.contentInsets.leading = Space.space2
+            labelled.configuration?.contentInsets.trailing = Space.space2
+        }
         pinsBadge.isUserInteractionEnabled = false
         pinsBadge.isAccessibilityElement = false
         pinsButton.addSubview(pinsBadge)
@@ -256,20 +289,46 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         expandButton = KitButton.make("", glyph: .maximize, variant: .ghost, height: .sm) { [weak self] in self?.onExpand() }
         expandButton.accessibilityLabel = "Expand"
         expandButton.toolTip = "Expand"
-        closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.close() }
+        expandButton.isHidden = ownTab
+        closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in
+            guard let self else { return }
+            if ownTab { onBackToSession() } else { close() }
+        }
         closeButton.accessibilityLabel = "Close"
-        let head = UIStackView(arrangedSubviews: [identity, sendButton, inspectButton, modes, pinsButton, reload, expandButton, closeButton])
+        // The head's +: a new canvas, standing here at once (PreviewPane.svelte `newCanvas`).
+        newCanvasButton = KitButton.make("", glyph: .plus, variant: .ghost, height: .sm) { [weak self] in self?.newCanvas() }
+        newCanvasButton.accessibilityLabel = "New canvas"
+        newCanvasButton.toolTip = "New canvas"
+        newCanvasButton.isHidden = ownTab
+        // The same artifact, its doc and its tools, in a tab of its own.
+        openTabButton = KitButton.make("", glyph: .external, variant: .ghost, height: .sm) { [weak self] in
+            guard let self, let id = artifactId else { return }
+            onOpenTab(id)
+        }
+        openTabButton.accessibilityLabel = "Open in new tab"
+        openTabButton.toolTip = "Open in new tab"
+        openTabButton.isHidden = ownTab
+        // A canvas here goes back to the composer (`giveBack(false)`).
+        undockButton = KitButton.make("", glyph: .undock, variant: .ghost, height: .sm) { [weak self] in self?.giveBack(folded: false) }
+        undockButton.accessibilityLabel = "Undock"
+        undockButton.toolTip = "Undock"
+        undockButton.isHidden = true
+        let head = UIStackView(arrangedSubviews: [identity, sendButton, newCanvasButton, undockButton, openTabButton, inspectButton, modes,
+                                                  pinsButton, reload, expandButton, closeButton])
         head.spacing = Space.space1
         head.alignment = .center
         head.translatesAutoresizingMaskIntoConstraints = false
         dragArea = head
-        for control in [sendButton!, inspectButton!, modes!, pinsButton!, reload, expandButton!, closeButton!] as [UIView] {
+        for control in [sendButton!, newCanvasButton!, undockButton!, openTabButton!, inspectButton!, modes!, pinsButton!, reload,
+                        expandButton!, closeButton!] as [UIView] {
             control.setContentHuggingPriority(.required, for: .horizontal)
             control.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
+        pinsBadge.tabular = true
+        pinsBadge.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             pinsBadge.centerYAnchor.constraint(equalTo: pinsButton.centerYAnchor),
-            pinsBadge.trailingAnchor.constraint(equalTo: pinsButton.trailingAnchor, constant: -(Space.space3 + 1)),
+            pinsBadge.trailingAnchor.constraint(equalTo: pinsButton.trailingAnchor, constant: -Space.space2),
         ])
 
         web = makeWeb()
@@ -796,10 +855,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             adoptSheet(frame)
         }
         pathLabel.text = Self.place(frame)
+        showsPage = frame.source?.value3 != nil
+        paintPath()
         self.origin = origin
         connected = false
-        // A canvas draws with its own tools: no modes over it.
-        modes.isHidden = frame.artifact.kind == .canvas
+        // A canvas draws with its own tools: no modes or Comments over it, and
+        // it can go back to the composer (`canUndock`).
+        let canvas = frame.artifact.kind == .canvas
+        modes.isHidden = canvas
+        pinsButton.isHidden = canvas
+        undockButton.isHidden = !canvas || ownTab
         paintSend()
         pageLoaded = false
         paintCover(animated: false)
@@ -936,9 +1001,40 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             // stands unseen until its host says this (canvas.css `data-canvas-inset`).
             "inset": ["top": 0, "side": 0],
         ])
+        // A canvas here stands docked in the panel (stage.svelte.ts `tellPlace`, `at === "panel"`):
+        // its rail stays at its top, and its rail's Dock reads Undock.
+        if artifact.kind == .canvas {
+            deliver(["type": "cawco:place", "docked": true, "inset": ["top": 0, "side": 0]])
+        }
         #if DEBUG
-        PreviewProbe.say("preview hello theme=\(theme)")
+        PreviewProbe.say("preview hello theme=\(theme)\(artifact.kind == .canvas ? " place=docked" : "")")
         #endif
+    }
+
+    /// The head's +: a new canvas in the session, shown here at once (PreviewPane.svelte `newCanvas`).
+    private func newCanvas() {
+        guard !making else { return }
+        making = true
+        newCanvasButton.isEnabled = false
+        Task { [weak self, hub, instanceId] in
+            do {
+                let made = try await hub.createDraftCanvas(in: instanceId)
+                hub.openArtifact(made.id, in: instanceId)
+            } catch {
+                self?.failed("The canvas couldn't be made: \(error.localizedDescription). Try + again.", of: nil)
+            }
+            self?.making = false
+            self?.newCanvasButton.isEnabled = true
+        }
+    }
+
+    /// The canvas on show goes back to the composer (PreviewPane.svelte `giveBack`): Undock, or Done while it is docked.
+    private func giveBack(folded: Bool) {
+        guard !ownTab, let frame = hub.previews.byInstance[instanceId], frame.state == .open, frame.artifact.kind == .canvas else { return }
+        #if DEBUG
+        PreviewProbe.say("preview give back \(frame.artifact.id) folded=\(folded)")
+        #endif
+        onGiveBack(frame.artifact.id, frame.artifact.name, folded)
     }
 
     func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
@@ -966,8 +1062,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// reads them the same way). The page is code an agent wrote: every
     /// field is checked and bounded.
     func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
-        // Read on the main thread: a message past `messageMost` is not the overlay's, and goes unread.
-        guard let said = message.body as? NSString, said.length <= Self.messageMost else { return }
+        // Read on the main thread: a message past `messageMost` is not the overlay's, and goes unread;
+        // its capture alone carries a picture, up to wire.ts `PNG_MAX` of base64.
+        guard let said = message.body as? NSString,
+              said.length <= (said.hasPrefix(#"{"type":"cawco:capture""#) ? Self.captureMost : Self.messageMost) else { return }
         guard let data = (said as String).data(using: .utf8),
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         if let ask = Self.pickPlaceAsk(body) {
@@ -980,10 +1078,35 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         case "cawco:loaded":
             hello()
         case "cawco:ready", "cawco:navigated":
-            if let at = (body["url"] as? String).flatMap(URL.init(string:)), at.host() == origin?.host(), at.port == origin?.port {
+            // A page's place is its artifact's own: no path stands under its name (PreviewPane.svelte `subtitle={page ? "" : …}`).
+            if !showsPage, let at = (body["url"] as? String).flatMap(URL.init(string:)), at.host() == origin?.host(), at.port == origin?.port {
                 pathLabel.text = at.path() + (at.query().map { "?\($0)" } ?? "")
+                paintPath()
             }
-            if body["type"] as? String == "cawco:ready" { ready() }
+            // Its title, for the transcript's card (`preview.title`, wire.ts `previewTitle`).
+            if let revision, let title = Self.text(body["title"], 300) {
+                hub.previews.titled(instanceId, revision: revision, title: title)
+            }
+            if body["type"] as? String == "cawco:ready" {
+                ready()
+                // Once per revision the overlay draws the page for the card's thumbnail (PreviewPane.svelte `captured`).
+                if let revision, capturedFor != revision {
+                    capturedFor = revision
+                    deliver(["type": "cawco:capture"])
+                }
+            }
+        case "cawco:capture":
+            if let revision, let png = Self.png(body["png"]) {
+                hub.previews.captured(instanceId, revision: revision, png: png)
+                #if DEBUG
+                PreviewProbe.say("preview captured revision=\(revision) bytes=\(png.count) title=\(hub.previews.pages[instanceId]?.title ?? "")")
+                #endif
+            }
+        case "cawco:undock":
+            // The docked canvas's own rail (CanvasStages.svelte `actions.undock`).
+            giveBack(folded: false)
+        case "cawco:done":
+            giveBack(folded: true)
         case "cawco:sheet":
             // A sheet's page said its stories and props: the inspector's controls.
             if let said = SheetOnPage(body["sheet"]) {
@@ -1392,12 +1515,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The head's Comments, its badge the open pins (PreviewPane.svelte `.comments`), and Send picks.
     private func paintPins() {
         guard isViewLoaded else { return }
+        // The open count stands always, 0 too, one `--btn-gap` after the word (or the glyph alone on a narrow pane).
         pinsBadge.text = "\(comments.open)"
-        pinsBadge.isHidden = comments.open == 0
         KitButton.setTitle(narrow ? "" : "Comments", of: pinsButton, variant: .ghost, height: .sm)
         pinsButton.accessibilityLabel = "Comments, \(comments.open) open\(pinsShown ? "" : ", pins hidden")"
-        let badge = comments.open == 0 ? 0 : pinsBadge.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width + Space.space1
-        pinsButton.configuration?.contentInsets.trailing = Space.space3 + 1 + badge
+        let badge = pinsBadge.intrinsicContentSize.width + Space.space1
+        pinsButton.configuration?.contentInsets.trailing = Space.space2 + badge
         paintSend()
     }
 
@@ -1971,6 +2094,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     /// The header as last logged on a layout: logged again only when it moved.
     private var laidHead = ""
+    private var laidRoom = ""
 
     /// The card and its question as last logged on a layout.
     private var laidCard: [String] = []
@@ -1985,6 +2109,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             laidHead = line
             PreviewProbe.say(line)
         }
+        probeRoom()
         DispatchQueue.main.async { [weak self] in
             guard let self, openPin != nil, !card.isHidden else { return }
             view.layoutIfNeeded()
@@ -1993,6 +2118,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             laidCard = now
             now.forEach(PreviewProbe.say)
         }
+    }
+
+    /// What of the head the name keeps, against the controls shown after it,
+    /// as laid out: read on each layout and on the page's heartbeat, so a
+    /// head that settled after its first layout is read as it stands.
+    private func probeRoom() {
+        guard PreviewProbe.on, view.window != nil, let head = dragArea as? UIStackView, head.bounds.width > 0 else { return }
+        let shown = head.arrangedSubviews.dropFirst().filter { !$0.isHidden }
+        let room = "preview head room width=\(Int(head.bounds.width)) title=\(Int(titleButton.bounds.width)) controls=\(shown.count):\(Int(shown.reduce(0) { $0 + $1.bounds.width }))"
+        guard room != laidRoom else { return }
+        laidRoom = room
+        PreviewProbe.say(room)
     }
 
     /// The open card's lines: its controls, its question, and its footer's
@@ -2014,6 +2151,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 self?.web.evaluateJavaScript(Self.docRead) { value, _ in
                     MainActor.assumeIsolated { self?.sayDoc(value as? String) }
                 }
+                self?.probeRoom()
             }
         }
     }
@@ -2068,6 +2206,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         (value as? String).map { String($0.prefix(max)) }
     }
 
+    /// The longest capture the page may post, in UTF-16 units: wire.ts `PNG_MAX` of base64 and its envelope.
+    private static let captureMost = 4_000_000 + 1024
+
+    /// wire.ts `previewPng`: a base64 PNG of at most `PNG_MAX`, its bytes.
+    private static func png(_ value: Any?) -> Data? {
+        guard let text = value as? String, !text.isEmpty, text.count <= 4_000_000,
+              text.wholeMatch(of: /[A-Za-z0-9+\/]+={0,2}/) != nil else { return nil }
+        return Data(base64Encoded: text)
+    }
+
     /// A pin's id (wire.ts `previewPinId`).
     private static func pinId(_ value: Any?) -> String? {
         guard let id = value as? String, id.wholeMatch(of: /[0-9a-f-]{36}/) != nil else { return nil }
@@ -2082,8 +2230,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     /// source.ts `previewPlace`: a page by its name, a folder by its leaf, a dev server by its port.
+    /// The line under the name (PreviewPane.svelte `subtitle`): a page has none, a
+    /// folder its leaf, a dev server its port.
     private static func place(_ frame: PreviewFrame) -> String {
-        if let page = frame.source?.value3?.page { return page }
+        if frame.source?.value3 != nil { return "" }
         if let dir = frame.source?.value2?.dir { return (dir as NSString).lastPathComponent }
         if let port = frame.source?.value1?.port { return "localhost:\(Int(port))" }
         return ""
@@ -2194,7 +2344,14 @@ extension PreviewController {
             content.onGone = { [weak self] in self?.cancelPick() }
             let sheet = HouseSheetController(content, title: Words.PlacePick.title, scroller: pick.scroll)
             placePickSheet = sheet
-            present(sheet, animated: true)
+            present(sheet, animated: true) { [weak content] in
+                #if DEBUG
+                // The sheet stood: the form whole under its head, not the title alone.
+                guard let content else { return }
+                let box = content.view.convert(content.view.bounds, to: nil)
+                PreviewProbe.say("place pick sheet content=\(Int(box.minY)),\(Int(box.height)) form=\(Int(content.pick.scroll.contentSize.height))")
+                #endif
+            }
         } else {
             pick.alpha = 0
             well.insertSubview(pick, belowSubview: card)

@@ -193,6 +193,11 @@ public final class SessionComposerBinding {
     }
 
     /// The draft's canvas as the screen kept it (a restored draft): back as its chip.
+    /// The artifact panel gives the canvas `id` back to this message (ComposerView `takeBack`).
+    public func takeBack(canvas id: String, name: String, folded: Bool, from box: CGRect?) {
+        composer?.takeBack(id: id, name: name, folded: folded, from: box, of: self)
+    }
+
     public func restoreCanvas(id: String, name: String) {
         guard canvas == nil else { return }
         canvas = DraftCanvas(id: id, name: name, folded: true)

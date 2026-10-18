@@ -37,6 +37,8 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     private let transcriptView = TranscriptView()
     private let transcriptHost = UIViewController()
     let composerBinding: SessionComposerBinding
+    /// What rides with the words: picks, pastes and uploads.
+    private var attacher: ComposerAttacher!
     private var transcript: SessionTranscript
     private var cards: [String: PromptCardView] = [:]
     private var shownOnce = false
@@ -78,9 +80,13 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         composerBinding.agentName = "Caw"
         composerBinding.placeholder = "Message the project…"
         composerBinding.delegates = false
-        composerBinding.attachMenu = nil
+        // Files and pictures ride with the words in a thread too (ThreadPane's Composer, `attach` on).
+        attacher = ComposerAttacher(hub: hub, binding: composerBinding, presenter: self)
+        composerBinding.attachMenu = attacher.menu()
+        composerBinding.onPasteItems = { [weak self] items in self?.attacher.pasted(items) }
+        composerBinding.onRetryFile = { [weak self] id in self?.attacher.upload(id) }
         composerBinding.perch = seatBox
-        composerBinding.onSend = { [weak self] words, _ in self?.send(words) }
+        composerBinding.onSend = { [weak self] words, attachments in self?.send(words, attachments) }
         composerBinding.onStop = { [weak self] in self?.stopTurn() }
         composerBinding.recall = { [weak self] in self?.recall() ?? [] }
         planRing.addAction(UIAction { [weak self] _ in self?.openPlan() }, for: .touchUpInside)
@@ -645,8 +651,10 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     /// Your words go to the thread as one message (ThreadPane.svelte
     /// `onsubmit`): its row lands them however soon its frame draws it; a
     /// refusal gives them back to the field with why.
-    private func send(_ words: String) {
+    private func send(_ words: String, _ attachments: [ComposerAttachment]) {
         guard hub.state == .connected, writable, !sending, !projectId.isEmpty else { return }
+        // Nothing goes while a pick is being read or a file is not on the hub yet.
+        guard let carried = ComposerAttacher.carried(attachments) else { return }
         let id = unanswered.flatMap { $0.words == words ? $0.id : nil } ?? UUID().uuidString.lowercased()
         sending = true
         sendError = nil
@@ -654,11 +662,14 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         requestRefresh()
         Task { [weak self, hub, projectId, threadId] in
             do {
-                let said = try await hub.threads.say(projectId: projectId, threadId: threadId, body: words, id: id)
+                let said = try await hub.threads.say(projectId: projectId, threadId: threadId, body: words, id: id,
+                                                     images: carried.images, texts: carried.texts, files: carried.files)
                 self?.unanswered = nil
                 if threadId == nil { self?.started(said.id) }
             } catch {
+                // The words and what rode with them come back (`draft.restore(text, extras)`).
                 self?.composerBinding.setDraft(words)
+                for attachment in attachments { self?.composerBinding.attach(attachment) }
                 let unreached = ThreadsStore.unreachable(error)
                 self?.unanswered = unreached ? (words, id) : nil
                 self?.sendError = unreached ? ThreadsStore.sendUnreached : ThreadsStore.failureWords(error)

@@ -73,8 +73,14 @@ final class PlacePickView: UIView {
         column.setCustomSpacing(Space.space3 + Space.space1, after: browse)
         scroll.alwaysBounceVertical = false
         scroll.keyboardDismissMode = .interactive
-        scroll.hold(column, insets: UIEdgeInsets(top: Space.space5, left: Space.space5, bottom: Space.space5, right: Space.space5))
-        column.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -Space.space5 * 2).isActive = true
+        // `.place-pick`'s `padding: space-5` over the well; in the house sheet the sheet's own 16 holds it.
+        let pad = titled ? Space.space5 : 0
+        scroll.hold(column, insets: UIEdgeInsets(top: pad, left: pad, bottom: pad, right: pad))
+        column.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -pad * 2).isActive = true
+        // As tall as the form where nothing else sets its height (the sheet): the sheet's cap still wins, and it scrolls.
+        let natural = scroll.frameLayoutGuide.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor)
+        natural.priority = .defaultHigh - 1
+        natural.isActive = true
         hold(scroll)
         accessibilityLabel = Words.PlacePick.title
         watch()

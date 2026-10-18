@@ -148,28 +148,44 @@ final class ThreadPortrait: UIView {
 }
 
 /// How far a conversation's plan has got, as the control that opens it
-/// (plan/PlanRing.svelte): a tray chip, the progress ring, "Plan" and its figure.
+/// (plan/PlanRing.svelte): a tray chip (app.css `.kit-tray-chip`, the
+/// delegate chips' recipe: the raised surface on a hairline with the tile's
+/// shadow at `--radius-sm`, label type at the strong weight, `--c-pill-gap`
+/// apart), the progress ring, "Plan" and its figure. Pressed while the plan
+/// is on show: the fill, in the strong ink.
 final class PlanRingButton: UIControl {
+    private let surface = UIView()
     private let ring = TaskRingView(size: .md)
-    private let glyph = GlyphView(.toolTodo, size: Size.iconSm, tint: Palette.inkMuted)
-    private let word = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-    private let figure = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+    private let glyph = GlyphView(.toolTodo, size: Size.iconMd, tint: Palette.inkMuted)
+    private let word = KitLabel(TypeScale.typeLabel.with(weight: TypeScale.weightStrong), ink: Palette.inkMuted)
+    private let figure = KitLabel(TypeScale.typeLabel.with(weight: TypeScale.weightStrong), ink: Palette.inkMuted)
 
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerRadius = Radius.radiusSm
-        layer.cornerCurve = .continuous
+        surface.isUserInteractionEnabled = false
+        surface.layer.cornerRadius = Radius.radiusSm
+        surface.layer.cornerCurve = .continuous
+        surface.layer.borderWidth = 1
+        surface.boxShadow = Shadow.shadowTile
+        addSubview(surface)
         word.text = Words.Plan.plan
         figure.tabular = true
         let line = UIStackView(arrangedSubviews: [ring, glyph, word, figure])
-        line.spacing = Space.space2
+        line.spacing = Size.cPillGap
         line.alignment = .center
         line.isUserInteractionEnabled = false
         hold(line, insets: UIEdgeInsets(top: 0, left: Space.space2, bottom: 0, right: Space.space2))
         heightAnchor.constraint(equalToConstant: Size.cTrayChipCoarse).isActive = true
         isAccessibilityElement = true
         accessibilityTraits = .button
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PlanRingButton, _: UITraitCollection) in view.paintFill() }
+        paintFill()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        surface.frame = bounds
     }
 
     @available(*, unavailable)
@@ -196,11 +212,18 @@ final class PlanRingButton: UIControl {
     }
 
     override var isHighlighted: Bool {
-        didSet { paintFill() }
+        didSet {
+            paintFill()
+            // `.kit-tray-chip:active`: the press scale, on the control clock.
+            guard !UIAccessibility.isReduceMotionEnabled else { return }
+            let scale = isHighlighted ? Motion.pressScale : 1
+            Motion.easeOut.animator(Motion.durControl) { self.transform = CGAffineTransform(scaleX: scale, y: scale) }.startAnimation()
+        }
     }
 
     private func paintFill() {
-        backgroundColor = isHighlighted || open ? Palette.surfaceFill : .clear
+        surface.backgroundColor = open ? Palette.surfaceFill : Palette.surfaceRaised
+        surface.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
     }
 }
 
@@ -232,14 +255,19 @@ final class PlanSheetController: ObservedViewController {
         scroll.alwaysBounceVertical = true
         view.hold(scroll)
         scroll.addSubview(plan)
+        // As tall as the plan: the sheet is as tall as its content, up to its cap, and scrolls past it.
+        let natural = scroll.frameLayoutGuide.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor)
+        natural.priority = .defaultHigh - 1
         NSLayoutConstraint.activate([
-            plan.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: Space.space5),
-            plan.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -Space.space5),
-            // `.body.sheet`: `space-3` under the header's seam, `space-4` at its foot.
+            // `.body.sheet`: the sheet's content edge, `space-3` under the header's seam, nothing at its foot.
+            plan.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+            plan.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
             plan.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space3),
-            plan.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Space.space4),
-            plan.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -2 * Space.space5),
+            plan.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+            plan.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
+            natural,
         ])
+        plan.onResize = { [weak self] in self?.view.setNeedsLayout() }
     }
 
     override func refreshContent() {

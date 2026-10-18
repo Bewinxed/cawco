@@ -44,6 +44,8 @@ const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const CREATE = "mcp__cawco__artifact_create";
+/** PreviewController's `place pick sheet …`: the sheet's content in the window (its top, its height) and the form's own height. */
+const SHEET_LINE = /^place pick sheet content=-?\d+,(\d+) form=(\d+)$/;
 /** The page asks once its overlay is joined, as Caw's setup page's "Choose a machine and folder" does. */
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Setup</title></head>
@@ -286,6 +288,16 @@ const run = async (kit: Kit) => {
         sent.label === want.label &&
         sent.path === want.path,
       `opened ${said("place pick opened").length - opened}; ${chosen}; ${answer ?? "no answer"}`
+    );
+
+    // 1b. In the phone's drawer the picker is the house sheet, as tall as its form under its head.
+    const sheet = heard.findLast((line) => line.startsWith("place pick sheet"));
+    const [, height, form] = sheet?.match(SHEET_LINE)?.map(Number) ?? [];
+    kit.check(
+      "1b: the picker's sheet holds its whole form (machine, folder, Browse, Use this place, Cancel), not its title alone",
+      (height ?? 0) >= Math.min(form ?? Number.POSITIVE_INFINITY, 400) - 1 &&
+        (form ?? 0) > 150,
+      sheet ?? "no sheet line"
     );
 
     // 2. What the page received, as the hub reads the page.

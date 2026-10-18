@@ -56,7 +56,8 @@ final class PlanView: UIStackView {
         }
         if let spec = plan.spec {
             addPart(Self.head(Words.Plan.spec))
-            let document = MarkdownDocumentView()
+            // MessageBody, as PlanPane.svelte draws the spec: its headings at body 500, never above the parts' own.
+            let document = MarkdownDocumentView(message: true)
             document.setSource(spec)
             addArrangedSubview(document)
         }
@@ -198,12 +199,19 @@ private final class PlanTree: UIStackView {
     override func layoutSubviews() {
         super.layoutSubviews()
         guard nested, let box = superview else { return }
+        // The rows lay out after this stack does: their marks are placed first, so
+        // the arms reach the marks as drawn, not a mark of no size at its row's corner.
+        for row in rows { row.superview?.layoutIfNeeded() }
+        // Each elbow ends at its child's mark (`.kit-nest > li::before`: the arm runs on to the glyph).
         let children = rows.map { row -> (glyphY: Double, armEnd: Double) in
             let mark = row.mark.convert(row.mark.bounds, to: box)
-            return (Double(mark.midY), Double(mark.minX) - 2)
+            return (Double(mark.midY), Double(mark.minX))
         }
         if children.map(\.glyphY) != rail.children.map(\.glyphY) || children.map(\.armEnd) != rail.children.map(\.armEnd) {
             rail.children = children
+            #if DEBUG
+            PreviewProbe.say("plan rail x=\(rail.railX) lead=\(String(format: "%.1f", rail.lead)) children=\(children.map { "\(Int($0.glyphY.rounded())):\(Int($0.armEnd.rounded()))" }.joined(separator: ","))")
+            #endif
         }
     }
 }

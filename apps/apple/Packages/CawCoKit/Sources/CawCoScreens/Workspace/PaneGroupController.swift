@@ -270,6 +270,8 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         let label = panes.label(id)
         let activity = context.home.activity(id)
         let face: SessionStatusView.Face = {
+            // An artifact's own tab is no session: at rest, unless the hub is out of reach.
+            if ArtifactTabs.artifactId(of: id) != nil { return context.hub.state == .connected ? .idle : .unreachable }
             // A thread is what its status says: Caw working on it, waiting on you in it, or at rest.
             if ThreadTabs.isThread(id) {
                 if context.hub.state != .connected { return .unreachable }
@@ -288,7 +290,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         let status = face == .idle || face == .stored ? "" : face.label
         // A thread, like a run, has no session details behind its tab.
         return PaneTab(id: id, label: label, face: face, needs: activity == .blocked,
-                       isRun: BoardRun.runId(of: id) != nil || ThreadTabs.isThread(id), status: status)
+                       isRun: BoardRun.runId(of: id) != nil || ThreadTabs.isThread(id) || ArtifactTabs.artifactId(of: id) != nil, status: status)
     }
 
     // MARK: Panes
@@ -305,6 +307,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         let controller = panes.controller(for: id)
         // Told before it appears, so a neighbour never loads its preview's page only to let it go.
         (controller as? SessionViewController)?.standsInFront(id == leaf?.active)
+        (controller as? ArtifactTabController)?.standsInFront(id == leaf?.active)
         addChild(controller)
         controller.view.translatesAutoresizingMaskIntoConstraints = true
         controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -421,6 +424,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
             slot.transform = .identity
             // Only the tab in front runs its preview's page.
             panes.session(id)?.standsInFront(id == active)
+            panes.artifactTab(id)?.standsInFront(id == active)
         }
         stack.configure(count: shownTabs.count, selected: activeIndex ?? 0)
     }
@@ -506,8 +510,8 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     /// a tab's long press, its pull down and VoiceOver all offer (`TabAction`).
     private func actions(for id: String) -> [[TabAction]] {
         var first: [TabAction] = []
-        // A run and a Caw thread are no harness session: no details, no continuing.
-        if BoardRun.runId(of: id) == nil, !ThreadTabs.isThread(id) {
+        // A run, a Caw thread and an artifact's own tab are no harness session: no details, no continuing.
+        if BoardRun.runId(of: id) == nil, !ThreadTabs.isThread(id), ArtifactTabs.artifactId(of: id) == nil {
             first.append(TabAction(title: "Session details") { [weak self] in
                 guard let self else { return }
                 tabDetails.pin(id, tab: strip.tabView(id))

@@ -200,6 +200,9 @@ final class DocThumb: UIControl {
         meta.attributedText = Styled.string(metaLine, TypeScale.typeMeta, color: Palette.inkMuted, leading: TypeScale.leadingUi, tabular: true)
         let text = UIStackView(arrangedSubviews: [nameLine, meta])
         text.axis = .vertical
+        // Each line its own width (DocThumb.svelte `.text`, a column of spans): the
+        // short size line never narrows the name, which gives way only at the cap.
+        text.alignment = .leading
         let row = railLine([glyph, text])
         row.isUserInteractionEnabled = false
         pin(row, insets: UIEdgeInsets(top: 0, left: Space.space2, bottom: 0, right: Space.space3))

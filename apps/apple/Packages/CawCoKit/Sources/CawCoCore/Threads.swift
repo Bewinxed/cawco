@@ -36,6 +36,17 @@ public enum ThreadTabs {
     public static func isThread(_ id: String) -> Bool { id.hasPrefix(prefix) }
 }
 
+/// An artifact in a tab of its own (routes/artifact/[id]): its tab's id is the
+/// artifact's, under a prefix of its own.
+public enum ArtifactTabs {
+    public static let prefix = "artifact:"
+    public static func tabId(_ artifactId: String) -> String { prefix + artifactId }
+    /// The artifact a tab's id names; nil for any other tab.
+    public static func artifactId(of id: String) -> String? {
+        id.hasPrefix(prefix) ? String(id.dropFirst(prefix.count)) : nil
+    }
+}
+
 /// One message of a thread (core threads.ts `ThreadMessage`), read off the
 /// hub's JSON once: yours, Caw's, or an event that woke him.
 public struct ThreadNote: Sendable, Equatable {
@@ -99,8 +110,9 @@ public struct ThreadNote: Sendable, Equatable {
         return ThreadNote(raw)
     }
 
+    /// The block's ISO 8601 timestamp, its zone with it (`Z`): the transcript reads no time without one.
     static func stamp(_ ms: Double) -> String {
-        Date(timeIntervalSince1970: ms / 1000).formatted(.iso8601.year().month().day().time(includingFractionalSeconds: true))
+        Date(timeIntervalSince1970: ms / 1000).formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
     }
 
     /// The message as the transcript's block (ThreadPane.svelte `blockOf`):
@@ -339,19 +351,34 @@ public final class ThreadsStore {
     private static let noHub = "No hub is connected."
 
     /// Your words in a thread, or the first of a new one (`sayInThread`,
-    /// `startThread`): Caw is woken with them. `id` is the message's, so its
-    /// row lands the words that flew under it. Answers the thread they went to.
+    /// `startThread`): Caw is woken with them, and with what rides with them
+    /// (client.svelte.ts `carriedOf`: its pictures, its texts and the files
+    /// already on the hub). `id` is the message's, so its row lands the words
+    /// that flew under it. Answers the thread they went to.
     @discardableResult
-    public func say(projectId: String, threadId: String?, body: String, id: String) async throws -> ThreadSummary {
+    public func say(projectId: String, threadId: String?, body: String, id: String,
+                    images: [(mediaType: String, data: Data)] = [], texts: [(name: String, content: String)] = [],
+                    files: [SentFile] = []) async throws -> ThreadSummary {
         guard let client = hub.client else { throw TaskRefusal(message: Self.noHub) }
         let said: Components.Schemas.ThreadSaid
         if let threadId {
+            typealias Said = Operations.PostApiProjectsByIdThreadsByThreadIdMessages.Input.Body.JsonPayload
+            let carried = images.map { Said.ImagesPayloadPayload(mediaType: $0.mediaType, data: $0.data.base64EncodedString()) }
+            let attached = texts.map { Said.AttachmentsPayloadPayload(value1: .init(kind: .text, name: $0.name, content: $0.content)) }
+                + files.map { Said.AttachmentsPayloadPayload(value2: .init(kind: .file, name: $0.name, mediaType: $0.mediaType, size: $0.size, ref: $0.ref)) }
             let output = try await client.postApiProjectsByIdThreadsByThreadIdMessages(
-                path: .init(id: projectId, threadId: threadId), body: .json(.init(body: body, id: id)))
+                path: .init(id: projectId, threadId: threadId),
+                body: .json(.init(body: body, id: id, images: carried.isEmpty ? nil : carried, attachments: attached.isEmpty ? nil : attached)))
             guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
             said = try ok.body.json
         } else {
-            let output = try await client.postApiProjectsByIdThreads(path: .init(id: projectId), body: .json(.init(body: body, id: id)))
+            typealias Started = Operations.PostApiProjectsByIdThreads.Input.Body.JsonPayload
+            let carried = images.map { Started.ImagesPayloadPayload(mediaType: $0.mediaType, data: $0.data.base64EncodedString()) }
+            let attached = texts.map { Started.AttachmentsPayloadPayload(value1: .init(kind: .text, name: $0.name, content: $0.content)) }
+                + files.map { Started.AttachmentsPayloadPayload(value2: .init(kind: .file, name: $0.name, mediaType: $0.mediaType, size: $0.size, ref: $0.ref)) }
+            let output = try await client.postApiProjectsByIdThreads(
+                path: .init(id: projectId),
+                body: .json(.init(body: body, id: id, images: carried.isEmpty ? nil : carried, attachments: attached.isEmpty ? nil : attached)))
             guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
             said = try ok.body.json
             if messages[said.thread.id] == nil { messages[said.thread.id] = [] }

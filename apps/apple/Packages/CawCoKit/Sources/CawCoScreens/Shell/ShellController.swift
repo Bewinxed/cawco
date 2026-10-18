@@ -141,6 +141,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         panes.onOpenProject = { [weak self] projectId in self?.go(.project(projectId)) }
         panes.onCheckMachines = { [weak self] source in self?.openMachines(from: source) }
         panes.onRetarget = { [weak self] from, to in self?.workspace.retarget(from, to: to) }
+        // An artifact's own tab learned its name: the strips draw it.
+        panes.onNamed = { [weak self] _ in self?.workspaceController.requestRefresh() }
         // The details' "N MCP" leads to the fleet's MCP configuration (`/config/mcp`).
         panes.onOpenMcp = { [weak self] in
             self?.dialogPresenter.dismiss(animated: true)

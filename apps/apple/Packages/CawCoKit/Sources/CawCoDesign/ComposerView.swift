@@ -829,7 +829,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     /// part. Mentions are not on this composer yet, and the web's full hint
     /// names them, so only the first part is shown.
     private func fitHint() {
-        hint.text = Self.hintShort
+        hint.text = binding?.placeholder ?? Self.hintShort
     }
 
     /// Lines the draft runs to at the field's width, and the height it wants.
@@ -1927,6 +1927,55 @@ extension ComposerView {
         room.fold(into: nil) { [weak self, weak room] in
             guard let self, let room, canvasRoom === room else { return }
             closeCanvas()
+        }
+    }
+
+    /// The panel gives its canvas back (its Undock, or Done while docked;
+    /// canvas-room.svelte.ts `takeBack`): the message takes it in place of any
+    /// canvas it held, the panel closes, and the canvas stands over the field
+    /// out of the panel's box (`from`, in the window), or, `folded`, is the
+    /// message's chip with its picture. The message's own docked canvas undocks.
+    func takeBack(id: String, name: String, folded: Bool, from box: CGRect?, of source: SessionComposerBinding) {
+        guard source === binding, let binding, let host = binding.canvasHost, !canvasWorking else { return }
+        if let held = binding.canvas, held.id == id, held.docked {
+            if !folded { undockCanvas() }
+            return
+        }
+        if binding.canvas != nil {
+            binding.canvas = nil
+            closeCanvas()
+        }
+        let canvas = DraftCanvas(id: id, name: name, folded: folded)
+        binding.canvas = canvas
+        syncCanvasChip()
+        canvasWorking = true
+        setCanvasNote(nil)
+        renderAction(animated: true)
+        noteCanvas("the panel gives back the canvas \(id) folded=\(folded)")
+        Task { [weak self] in
+            do {
+                try await host.hub.closePreview(binding.sessionId)
+            } catch {
+                guard let self, self.binding === binding else { return }
+                canvasWorking = false
+                binding.canvas = nil
+                syncCanvasChip()
+                renderAction(animated: true)
+                return setCanvasNote("The canvas couldn't leave the panel: \(error.localizedDescription). It stays docked.")
+            }
+            guard let self, self.binding === binding, binding.canvas?.id == id else { return }
+            canvasWorking = false
+            renderAction(animated: true)
+            if folded { return refreshThumb(drawing: false) }
+            readPage(of: canvas, in: binding) { [weak self] in
+                guard let self, let held = binding.canvas, held.id == id, let page = held.page else { return }
+                let room = room(for: held)
+                room.attach(page, instanceId: binding.sessionId).docked = false
+                binding.canvas?.folded = false
+                syncCanvasChip()
+                (superview ?? self).layoutIfNeeded()
+                if let box { room.flyFromPanel(box) } else { room.grow(from: nil) }
+            }
         }
     }
 
