@@ -10,21 +10,40 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { IconChevronRight } from "#lib/icons.js";
-  import type { PlanFixture } from "./fixtures";
+  import { type PlanFixture, progress } from "./fixtures";
 
   let {
     plan,
-    title = "Plan",
-    ring = true,
+    today = false,
+    toEnd = false,
     children,
   }: {
     plan: PlanFixture;
-    title?: string;
-    ring?: boolean;
+    /** The sheet's head as it is now: the title alone. */
+    today?: boolean;
+    /** The sheet stands scrolled to its foot (the spec opened there). */
+    toEnd?: boolean;
     children: Snippet;
   } = $props();
 
   let host = $state<HTMLElement>();
+  const got = $derived(progress(plan));
+
+  /** Holds the sheet at its foot while what is in it lays out. */
+  function foot(node: HTMLElement) {
+    if (!toEnd) {
+      return;
+    }
+    const hold = () => {
+      node.scrollTop = node.scrollHeight;
+    };
+    const sizes = new ResizeObserver(hold);
+    for (const child of node.children) {
+      sizes.observe(child);
+    }
+    hold();
+    return () => sizes.disconnect();
+  }
 </script>
 
 <div bind:this={host} data-coarse class="phone" data-slot="phone-screen">
@@ -53,29 +72,27 @@
       >
         <Drawer.Header>
           <Drawer.Title class="sheet-title">
-            <span>{title}</span>
-            {#if ring}
-              <span class="ring"
-                ><TaskRing done={plan.done} total={plan.total} /></span
+            <span>Plan</span>
+            {#if !today}
+              <span class="progress" data-slot="progress"
+                ><TaskRing done={got.done} total={got.total} /></span
               >
-              <span data-num class="num figure"
-                >{plan.done} of {plan.total}</span
-              >
+              <span data-num class="num figure">{got.done} of {got.total}</span>
             {/if}
           </Drawer.Title>
         </Drawer.Header>
-        {#if plan.task && ring}
+        {#if plan.task && !today}
           <button
-            aria-label="Open {plan.task.id}, {plan.task.stage}"
+            aria-label="Open the task {plan.task.title}, {plan.task.stage}"
             class="task touch-hit"
             type="button"
           >
-            <span class="ref">{plan.task.id}</span>
+            <span class="task-title">{plan.task.title}</span>
             <span class="stage">· {plan.task.stage}</span>
             <IconChevronRight aria-hidden="true" />
           </button>
         {/if}
-        <div class="scroll kit-sheet-scroll">
+        <div class="scroll kit-sheet-scroll" {@attach foot}>
           {@render children()}
         </div>
       </Drawer.Content>
@@ -113,7 +130,7 @@
     align-items: center;
     gap: var(--space-2);
   }
-  .ring {
+  .progress {
     display: grid;
     color: var(--ink-muted);
   }
@@ -133,10 +150,12 @@
     border-block-end: 1px solid var(--border-hairline);
     background: none;
     color: var(--ink-muted);
-    font: var(--type-meta);
+    font: var(--type-label);
+    text-align: start;
     cursor: pointer;
 
     & :global(svg) {
+      flex: none;
       margin-inline-start: auto;
       inline-size: var(--icon-md);
       block-size: var(--icon-md);
@@ -146,10 +165,14 @@
       outline-offset: -2px;
     }
   }
-  .ref {
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
+  .task-title {
+    min-inline-size: 0;
     color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .stage {
+    flex: none;
+    font: var(--type-meta);
   }
   .scroll {
     min-block-size: 0;
