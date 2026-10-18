@@ -47,7 +47,7 @@
  */
 import {
   type DeclaredStep,
-  namedAmong,
+  machineCalled,
   type ProjectGate,
   type RunsOnCapability,
 } from "@cawco/core";
@@ -291,7 +291,7 @@ const seenAt = (machine: {
 
 /**
  * The machine with `capability` seen last, named among the fleet (core
- * `namedAmong`); undefined when none ever registered.
+ * `machineCalled`); undefined when none ever registered.
  */
 export const lastCapable = (
   machines: readonly {
@@ -305,7 +305,7 @@ export const lastCapable = (
   const [last] = capableMachines(machines, capability, () => true).sort(
     (a, b) => seenAt(b) - seenAt(a)
   );
-  return last ? namedAmong(last, machines) : undefined;
+  return last ? machineCalled(last.machineId, machines) : undefined;
 };
 
 /**

@@ -6658,7 +6658,7 @@ const make = async (path: string): Promise<DbShape> => {
         db
           .select()
           .from(agents)
-          // Join order: core `namedAmong` numbers machines that share a name by it.
+          // Join order: core `machineCalled` numbers machines that share a name by it.
           .orderBy(asc(agents.createdAt), asc(agents.machineId))
           .all()
           .map(

@@ -86,7 +86,7 @@ import {
   deliverableKind,
   type InstanceRow,
   type LandsMode,
-  namesAmong,
+  machinesCalled,
   POST_OUTPUT_RULE,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
@@ -741,7 +741,7 @@ export const createDispatcher = ({
     }
     const up = fitting.filter((machine) => online(machine.machineId));
     const fleet = db.listAgents();
-    const hosts = (machines: MachineFacts[]) => namesAmong(machines, fleet);
+    const hosts = (machines: MachineFacts[]) => machinesCalled(machines, fleet);
     if (up.length === 0) {
       return `${needs}, and none is online (${hosts(fitting)} ${fitting.length === 1 ? "is" : "are"} offline), so it starts nowhere else: bring one online.`;
     }

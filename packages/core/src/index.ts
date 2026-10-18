@@ -915,78 +915,6 @@ export interface NamedMachine {
   machineId: string;
 }
 
-/**
- * A machine's {@link machineLabel} and its place, from 0, among the machines
- * in `fleet` that show the same name (machines on one host do, a scratch
- * fleet's all of them); the hub lists `fleet` in join order.
- */
-const placeAmong = (
-  machine: NamedMachine,
-  fleet: readonly NamedMachine[]
-): { name: string; place: number } => {
-  const name = machineLabel(machine.hostname);
-  const alike = fleet.filter(
-    (other) => machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
-  );
-  return {
-    name,
-    place: Math.max(
-      0,
-      alike.findIndex((other) => other.machineId === machine.machineId)
-    ),
-  };
-};
-
-/**
- * A machine as a list names it among `fleet`: its {@link machineLabel},
- * never its id. Machines that show the same name are told apart by their
- * place ({@link placeAmong}): the first is "obelisk", the next "obelisk · 2",
- * so a list never names two machines alike.
- */
-export function namedAmong(
-  machine: NamedMachine,
-  fleet: readonly NamedMachine[]
-): string {
-  const { name, place } = placeAmong(machine, fleet);
-  return place > 0 ? `${name} · ${place + 1}` : name;
-}
-
-/** Machines as a sentence lists them, each by {@link namedAmong} among `fleet`, or `none`. */
-export function namesAmong(
-  machines: readonly NamedMachine[],
-  fleet: readonly NamedMachine[],
-  none = "none"
-): string {
-  return (
-    machines.map((machine) => namedAmong(machine, fleet)).join(", ") || none
-  );
-}
-
-/** A machine's state that keeps a request from it. */
-export type MachineFault = "offline" | "silent" | "unknown";
-
-const MACHINE_FAULT_WORDS: Record<MachineFault, [string, string]> = {
-  offline: ["isn't connected.", "Try again once it's back."],
-  silent: ["didn't answer in time.", "Try again in a moment."],
-  unknown: ["isn't on this hub any more.", "Pick another machine."],
-};
-
-/**
- * Why a machine could not take a request, as the person reads it (WORDS.md's
- * error formula): the machine by its name, never its id; what to do. `name`
- * is its {@link namedAmong}, undefined when the hub doesn't know the machine.
- * `next: false`, the cause alone, for a reader that says its own next step
- * (a preview pane that tries again by itself).
- */
-export function machineFaultWords(
-  name: string | undefined,
-  fault: MachineFault,
-  { next = true }: { next?: boolean } = {}
-): string {
-  const [cause, step] = MACHINE_FAULT_WORDS[fault];
-  return `${name ?? "That machine"} ${cause}${next ? ` ${step}` : ""}`;
-}
-
 /** Ordinals a sentence spells out; past them it says "machine number 11". */
 const ORDINALS = [
   "first",
@@ -1002,11 +930,13 @@ const ORDINALS = [
 ];
 
 /**
- * A machine as a sentence names it when the hub may not know it: its name,
- * else words for a stranger, never its id. Where machines share a name, the
- * roster's {@link namedAmong} tells them apart as "obelisk-of-light · 2",
- * which inside a sentence reads like a count; a sentence says
- * "obelisk-of-light (the second machine with that name)".
+ * A machine as a sentence names it among `fleet`: its {@link machineLabel},
+ * else words for a stranger, never its id. Machines that show the same name
+ * (machines on one host do, a scratch fleet's all of them) are told apart by
+ * their place among those in `fleet`, which the hub lists in join order: the
+ * first is "obelisk-of-light", the next "obelisk-of-light (the second
+ * machine with that name)". Before 2026-10-18 the next was
+ * "obelisk-of-light · 2", which inside a sentence read like a count.
  */
 export function machineCalled(
   machineId: string,
@@ -1016,12 +946,56 @@ export function machineCalled(
   if (!machine) {
     return "a machine this hub doesn't know";
   }
-  const { name, place } = placeAmong(machine, fleet);
-  if (place === 0) {
+  const name = machineLabel(machine.hostname);
+  const place = fleet
+    .filter(
+      (other) =>
+        machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
+    )
+    .findIndex((other) => other.machineId === machineId);
+  if (place <= 0) {
     return name;
   }
   const nth = ORDINALS[place];
   return `${name} (${nth ? `the ${nth} machine` : `machine number ${place + 1}`} with that name)`;
+}
+
+/** Machines as a sentence lists them, each {@link machineCalled} among `fleet`, or `none`. */
+export function machinesCalled(
+  machines: readonly NamedMachine[],
+  fleet: readonly NamedMachine[],
+  none = "none"
+): string {
+  return (
+    machines
+      .map((machine) => machineCalled(machine.machineId, fleet))
+      .join(", ") || none
+  );
+}
+
+/** A machine's state that keeps a request from it. */
+export type MachineFault = "offline" | "silent" | "unknown";
+
+const MACHINE_FAULT_WORDS: Record<MachineFault, [string, string]> = {
+  offline: ["isn't connected.", "Try again once it's back."],
+  silent: ["didn't answer in time.", "Try again in a moment."],
+  unknown: ["isn't on this hub any more.", "Pick another machine."],
+};
+
+/**
+ * Why a machine could not take a request, as the person reads it (WORDS.md's
+ * error formula): the machine by its name, never its id; what to do. `name`
+ * is its {@link machineCalled}, undefined when the hub doesn't know the machine.
+ * `next: false`, the cause alone, for a reader that says its own next step
+ * (a preview pane that tries again by itself).
+ */
+export function machineFaultWords(
+  name: string | undefined,
+  fault: MachineFault,
+  { next = true }: { next?: boolean } = {}
+): string {
+  const [cause, step] = MACHINE_FAULT_WORDS[fault];
+  return `${name ?? "That machine"} ${cause}${next ? ` ${step}` : ""}`;
 }
 
 /** What a daemon reports about the checkout it was started from. */

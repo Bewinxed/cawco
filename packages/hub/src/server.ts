@@ -241,7 +241,6 @@ import {
   memoryScopeProblem,
   type NeutralSystemMessage,
   namedAccount,
-  namedAmong,
   PAIRING_REQUIRED,
   PLACEMENT_STRATEGIES,
   type PlacementPreview,
@@ -3453,9 +3452,8 @@ export const createServer = (
     words: { next?: boolean } = {}
   ): string => {
     const agents = db.listAgents();
-    const machine = agents.find((each) => each.machineId === machineId);
-    return machine
-      ? machineFaultWords(namedAmong(machine, agents), fault, words)
+    return agents.some((each) => each.machineId === machineId)
+      ? machineFaultWords(machineCalled(machineId, agents), fault, words)
       : machineFaultWords(undefined, "unknown", words);
   };
   /** {@link machineFault} for an ask the machine did not answer: not connected, or silent. */

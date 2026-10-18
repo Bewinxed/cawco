@@ -26,9 +26,9 @@ import {
   delegateTypeProblem,
   handoffMarker,
   IMAGE_GENERATION_TIMEOUT_MS,
+  machineCalled,
   machineLabel,
-  namedAmong,
-  namesAmong,
+  machinesCalled,
   pauseClock,
   QUESTION_DISMISSED,
   relaunchOf,
@@ -192,7 +192,7 @@ export interface Fleet {
 
 /** The machines work can start on now, by the names delegate and start_session take. */
 const onlineNames = (machines: Machine[]): string =>
-  namesAmong(
+  machinesCalled(
     machines.filter((machine) => machine.status === "online"),
     machines
   );
@@ -228,7 +228,7 @@ function resolveMachine(
   const [found] = matches;
   if (!offline && found.status !== "online") {
     throw new Error(
-      `${namedAmong(found, machines)} is offline. Online now: ${onlineNames(machines)}.`
+      `${machineCalled(found.machineId, machines)} is offline. Online now: ${onlineNames(machines)}.`
     );
   }
   return found;
@@ -1751,7 +1751,7 @@ export const handoffActions = ({
       .filter((machine) => pauses.has(machine.machineId))
       .map(
         (machine) =>
-          `${namedAmong(machine, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
+          `${machineCalled(machine.machineId, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
       );
     const where = [
       `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`,
@@ -1952,7 +1952,9 @@ export const handoffActions = ({
       },
     };
     emit({ verb: "send", machineId, instanceId: id, payload: opening });
-    const on = target ? ` on ${namedAmong(target, fleet.machines())}` : "";
+    const on = target
+      ? ` on ${machineCalled(target.machineId, fleet.machines())}`
+      : "";
     return {
       id,
       title,
@@ -2005,7 +2007,7 @@ export const handoffActions = ({
       queued: started.queued,
       title: started.title,
       text: target
-        ? `${started.text} It runs on ${namedAmong(target, fleet.machines())}.`
+        ? `${started.text} It runs on ${machineCalled(target.machineId, fleet.machines())}.`
         : started.text,
       workItemId: started.workItemId,
       workspaceId: started.workspaceId,
@@ -2142,7 +2144,7 @@ export const handoffActions = ({
   async machinePause(machine, minutes, resume = false) {
     const machines = fleet.machines();
     const found = resolveMachine(machines, machine, true);
-    const name = namedAmong(found, machines);
+    const name = machineCalled(found.machineId, machines);
     if (resume === (minutes !== undefined)) {
       throw new Error(
         "Pass minutes to pause the machine, or resume: true to end its pause."
