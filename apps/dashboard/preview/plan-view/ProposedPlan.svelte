@@ -18,7 +18,6 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import SessionMark from "#lib/cawco/SessionMark.svelte";
   import TreeCount from "#lib/cawco/TreeCount.svelte";
-  import { duration } from "#lib/components/features/workflows/workflow-ui.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     IconChevronDown,
@@ -26,7 +25,7 @@
     IconExternal,
     IconPlus,
   } from "#lib/icons.js";
-  import { folds, type PlanFixture, type Step } from "./fixtures";
+  import { clockWords, type PlanFixture, type Step } from "./fixtures";
   import StepMark from "./StepMark.svelte";
 
   let {
@@ -66,9 +65,6 @@
     specOpen = plan.spec?.open ?? false;
   });
 
-  /** The plan has folds: every row keeps the fold column, so counts line up. */
-  const foldColumn = $derived(folds(plan.steps));
-
   const running = (steps: Step[]): boolean =>
     steps.some(
       (step) =>
@@ -84,7 +80,7 @@
       return step.took ?? null;
     }
     if ((state === "doing" || state === "waiting") && step.startedAgo) {
-      return duration(new Date(loaded - step.startedAgo), null, clock.now);
+      return clockWords(clock.now - (loaded - step.startedAgo));
     }
     return null;
   };
@@ -115,7 +111,6 @@
     class="row"
     data-state={state}
     data-carried={step.carrier ? "" : undefined}
-    data-folds={foldColumn || undefined}
   >
     <span class="pv-mark" data-box>
       {#if step.carrier}
@@ -147,10 +142,13 @@
       {/if}
     </span>
     <span data-slot="words" class="words">{step.words}</span>
-    <span data-slot="time" data-num class="num time">{time ?? ""}</span>
-    {#if foldColumn}
-      <span data-slot="fold" class="fold">
-        {#if step.fold}
+    <!-- The trailing edge: the time in one fixed track on every row, so
+         every time ends on one x and a row's words wrap the same whether it
+         is timed or not; a fold's count stands before it, on the rows that
+         fold something. -->
+    <span class="trail">
+      {#if step.fold}
+        <span data-slot="fold" class="fold">
           <span class="chev" aria-hidden="true" data-open={open || undefined}
             ><IconChevronRight /></span
           >
@@ -160,9 +158,10 @@
             ontoggle={() => turn(step.id)}
             {open}
           />
-        {/if}
-      </span>
-    {/if}
+        </span>
+      {/if}
+      <span data-slot="time" data-num class="num time">{time ?? ""}</span>
+    </span>
     {#if step.promoted}
       <span class="under">
         <button class="link touch-hit" type="button">
@@ -270,7 +269,6 @@
     --mark-w: var(--mark-size, 18px);
     --mark-gap: calc(var(--space-2) + var(--status-dot-size) / 2);
     --time-w: 7ch;
-    --fold-w: 40px;
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
@@ -301,9 +299,9 @@
      to or waits on runs under its words. */
   .row {
     display: grid;
-    grid-template-columns: var(--mark-w) minmax(0, 1fr) var(--time-w);
+    grid-template-columns: var(--mark-w) minmax(0, 1fr) auto;
     grid-template-areas:
-      "mark words time"
+      "mark words trail"
       ". under under";
     column-gap: var(--space-2);
     row-gap: 2px;
@@ -312,15 +310,6 @@
     padding-block: 5px;
     font: var(--type-label);
     color: var(--ink-strong);
-
-    &[data-folds] {
-      grid-template-columns:
-        var(--mark-w) minmax(0, 1fr) var(--time-w)
-        var(--fold-w);
-      grid-template-areas:
-        "mark words time fold"
-        ". under under under";
-    }
   }
   .pv-mark {
     grid-area: mark;
@@ -347,9 +336,16 @@
   .row[data-state="failed"] .words {
     color: var(--status-fail-ink);
   }
+  .trail {
+    grid-area: trail;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    block-size: max(1lh, var(--mark-w));
+  }
   .time {
-    grid-area: time;
-    justify-self: end;
+    inline-size: var(--time-w);
+    text-align: end;
     color: var(--ink-muted);
     font: var(--type-meta);
     line-height: inherit;
@@ -357,7 +353,6 @@
     white-space: nowrap;
   }
   .fold {
-    grid-area: fold;
     display: flex;
     align-items: center;
     justify-content: end;
