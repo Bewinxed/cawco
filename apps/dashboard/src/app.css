@@ -863,12 +863,20 @@
      element scrolled out of view and an inert surface parked behind the one
      in front all hold every loop they carry still. A list swap's leaving
      layer (`data-leaving`) is inert so nobody clicks a row on its way out,
-     but its rows still play their exit. */
-  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving])) *,
-  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]))
-    *::before,
-  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]))
-    *::after,
+     but its rows still play their exit.
+     Each ancestor is its own one-item :where(), never one list: Blink's
+     ancestor bloom filter reads a one-item :where() as a plain ancestor and
+     rejects every element with no such ancestor before matching it, and
+     reads nothing from a list (selector_filter.cc). */
+  :where(:root[data-at-rest]) *,
+  :where(:root[data-at-rest]) *::before,
+  :where(:root[data-at-rest]) *::after,
+  :where([data-offscreen]) *,
+  :where([data-offscreen]) *::before,
+  :where([data-offscreen]) *::after,
+  :where([inert]:not([data-leaving])) *,
+  :where([inert]:not([data-leaving])) *::before,
+  :where([inert]:not([data-leaving])) *::after,
   :where([data-offscreen]) {
     animation-play-state: paused !important;
   }
