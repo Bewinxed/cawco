@@ -314,7 +314,9 @@
           ><IconError class="size-icon-sm" /></span
         ><b>Couldn't compact the conversation</b></span
       >
-      <span data-slot="reason" class="block mt-space-1 text-pretty rail-hang"
+      <span
+        data-slot="reason"
+        class="block mt-space-1 text-pretty wrap-break-word rail-hang"
         >{reason}</span
       >
     </span>

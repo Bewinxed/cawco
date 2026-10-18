@@ -618,7 +618,7 @@
                           >
                           <!-- literal: 300px -->
                           <pre
-                            class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
+                            class="m-0 max-h-(--value-max) overflow-auto overscroll-contain font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
                             style:--value-max="300px">{result.text}</pre>
                         </div>
                       </div>
@@ -649,7 +649,7 @@
                             >
                             <!-- literal: 300px -->
                             <pre
-                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
+                              class="m-0 max-h-(--value-max) overflow-auto overscroll-contain font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
                               style:--value-max="300px">{f.text}</pre>
                           </div>
                         {/each}
@@ -664,7 +664,7 @@
                             >
                             <!-- literal: 300px -->
                             <pre
-                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
+                              class="m-0 max-h-(--value-max) overflow-auto overscroll-contain font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
                               style:--value-max="300px">{result.text}</pre>
                             {#if result.more}
                               <span

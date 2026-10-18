@@ -3275,11 +3275,11 @@
           bind:this={editRow}
           style:--edit-inset="{edit.inset}px"
           style:bottom="{edit.base}px"
-          style:height="{edit.row}px"
+          style:min-height="{edit.row}px"
         >
           <span
             data-slot="what"
-            class="inline-flex items-center gap-space-2 me-auto text-ink-row opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none"
+            class="inline-flex min-w-0 items-center gap-space-2 me-auto text-ink-row opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none"
             >Editing your queued message</span
           >
           <!-- A touch screen has no Esc: a button keeps the message as it
@@ -3362,7 +3362,7 @@
           ? "Meta+Shift+D Control+Shift+D"
           : undefined}
         aria-label={FIELD_LABEL}
-        class="group/cin kit-dock-shell field-shell relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off not-focus-within:touch-none not-focus-within:touch-callout-none"
+        class="group/cin kit-dock-shell field-shell relative z-2 py-(--cin-pad) pe-(--cin-pad) ps-space-3 flex items-end gap-space-2 data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none data-recalling:outline-off data-grown:outline-off [&:is([data-recalling],[data-grown]):has(:is(input,textarea,select,[contenteditable]):focus-visible)]:outline-off not-focus-within:touch-none not-focus-within:touch-callout-none"
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
         onpointerdown={onholddown}

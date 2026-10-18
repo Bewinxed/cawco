@@ -1079,7 +1079,7 @@
               </dt>
               <!-- literal: 200px -->
               <dd
-                class="m-0 max-h-(--value-max) overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap break-word"
+                class="m-0 max-h-(--value-max) overflow-auto overscroll-contain font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap break-word"
                 style:--value-max="200px"
               >
                 {field.value}
@@ -1117,7 +1117,7 @@
         <!-- literal: 12px, 2.75rem -->
         <Button
           answer="approve-strong"
-          class="min-h-space-8 coarse:min-h-(--btn-h-coarse) flex-none"
+          class="min-h-space-8 coarse:min-h-(--btn-h-coarse) min-w-c-btn-h flex-none"
           fit="prompt"
           width="shrink"
           data-prompt-grant={grant}
@@ -1134,7 +1134,7 @@
         <!-- literal: 12px, 2.75rem -->
         <Button
           answer="deny-strong"
-          class="min-h-space-8 coarse:min-h-(--btn-h-coarse) flex-none"
+          class="min-h-space-8 coarse:min-h-(--btn-h-coarse) min-w-c-btn-h flex-none"
           fit="prompt"
           width="shrink"
           data-prompt-refuse={refuse}

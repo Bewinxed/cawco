@@ -55,7 +55,7 @@
     style:--atts-max-h="180px"
     style:--atts-pad-coarse="calc(var(--space-1) + 8px)"
     style:--atts-m-coarse="-8px"
-    class="flex flex-wrap gap-space-2 max-h-(--atts-max-h) overflow-y-auto p-space-1 coarse:p-(--atts-pad-coarse) coarse:m-(--atts-m-coarse) transition-fade-show"
+    class="flex flex-wrap gap-space-2 max-h-(--atts-max-h) overflow-y-auto overscroll-contain p-space-1 coarse:p-(--atts-pad-coarse) coarse:m-(--atts-m-coarse) transition-fade-show"
     transition:unfold
     {@attach reflow()}
   >
@@ -63,7 +63,7 @@
       <!-- The canvas, folded: a tap opens it again out of this box. -->
       <span
         data-slot="canvas-chip"
-        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pr-space-1 pl-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong data-canvas-hidden:invisible"
+        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pe-space-1 ps-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong data-canvas-hidden:invisible"
         data-artifact={folded.id}
         data-canvas-hidden={canvasHidden || undefined}
         data-flip="pop"
@@ -110,7 +110,7 @@
     {/if}
     {#each draft.images as img, i (img.name + i)}
       <span
-        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pr-space-1 pl-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong mark-line"
+        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pe-space-1 ps-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong mark-line"
         data-flip="pop"
       >
         <img
