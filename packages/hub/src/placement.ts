@@ -10,6 +10,7 @@ import {
   type PlacementExplain,
   type PlacementStrategy,
   type ProviderRouting,
+  spanWords,
 } from "@cawco/core";
 import type { AccountPaces } from "./forecast";
 
@@ -371,6 +372,45 @@ class Usage {
     );
   }
 
+  /** Whether it can take a session now: not benched, not past its reserve, under its limits. */
+  room = (account: Account): boolean =>
+    !(this.benched(account.id) || this.pastReserve(account)) &&
+    this.headroom(account);
+
+  /**
+   * When an account with no room takes a session again: the latest of its
+   * bench and the resets of the windows that stop it (spent, or past its
+   * reserve). Undefined when nothing read names that moment.
+   */
+  backAt(account: Account): number | undefined {
+    const { now, bench } = this.#input;
+    const benched = bench
+      .filter(
+        (one) =>
+          one.accountId === account.id &&
+          one.until > now &&
+          (one.scope === null || one.scope === this.#scope)
+      )
+      .map((one) => one.until);
+    const reserve = account.reservePct ?? Number.POSITIVE_INFINITY;
+    const stopping = [
+      [this.#window(account.id, "session"), 100],
+      [this.#window(account.id, "weekly_all"), reserve],
+      ...(this.#scope
+        ? [[this.#window(account.id, "weekly_scoped"), reserve] as const]
+        : []),
+    ] as const;
+    const resets = stopping.flatMap(([window, reservePct]) =>
+      window?.resetsAt &&
+      used(window, now) >= Math.min(100, reservePct) &&
+      Date.parse(window.resetsAt) > now
+        ? [Date.parse(window.resetsAt)]
+        : []
+    );
+    const all = [...benched, ...resets];
+    return all.length > 0 ? Math.max(...all) : undefined;
+  }
+
   said(id: string): string {
     return `5-hour ${pct(this.session(id))}, weekly ${pct(this.weekly(id))}`;
   }
@@ -567,9 +607,10 @@ const eligible = (
 };
 
 /**
- * The strategies' part: drop the benched and the past-reserve, prefer the
- * delegate type's account, else the kind's strategy, else the pinned or
- * first account anyway.
+ * The strategies' part: drop the benched, the past-reserve and the spent,
+ * prefer the delegate type's account, else the kind's strategy. With no
+ * account left, nothing starts: the refusal says when the first one is back
+ * ({@link noRoomRefusal}).
  */
 const choose = (
   input: PlacementInput,
@@ -581,9 +622,7 @@ const choose = (
   // shows room.
   const carry = input.exclude !== undefined;
   const candidates = allowed.filter(
-    (account) =>
-      !(usage.benched(account.id) || usage.pastReserve(account)) &&
-      (!carry || (usage.read(account) && usage.headroom(account)))
+    (account) => usage.room(account) && (!carry || usage.read(account))
   );
   const outNote = allowed
     .filter((account) => !candidates.includes(account))
@@ -636,17 +675,31 @@ const choose = (
       why: `No other account this session may run on has room for it now${out}.`,
     };
   }
-  // Nothing left: the pinned account, else the first, anyway.
-  const fallback =
-    allowed.find((account) => account.id === pinnedId) ?? byOrder(allowed)[0];
-  return {
-    ok: true,
-    accountId: fallback?.id ?? null,
-    strategy: choice.strategy,
-    why: fallback
-      ? `No allowed account has room for it now${out}, so it starts on ${accountName(fallback)} anyway.`
-      : `No allowed account has room for it now${out}.`,
-  };
+  return { ok: false, refusal: noRoomRefusal(allowed, usage, out, input.now) };
+};
+
+/**
+ * Why nothing started: no account it may run on has room now. Names the one
+ * back first and when, in the words the account surfaces say a reset in
+ * ("A resets in 3h 10m"), or that no reading says when.
+ */
+const noRoomRefusal = (
+  allowed: Account[],
+  usage: Usage,
+  out: string,
+  now: number
+): string => {
+  let first: { account: Account; at: number } | undefined;
+  for (const account of allowed) {
+    const at = usage.backAt(account);
+    if (at !== undefined && (!first || at < first.at)) {
+      first = { account, at };
+    }
+  }
+  const back = first
+    ? ` ${accountName(first.account)} resets in ${spanWords(first.at - now)} (${clockWords(first.at)}); start it again then.`
+    : " No reading says when one resets.";
+  return `No account this session may run on has room for it now${out}.${back}`;
 };
 
 /**
@@ -749,9 +802,9 @@ export const place = (input: PlacementInput): Placement => {
       refusal: `None of the accounts signed in on ${machine} (${signedIn.map(accountName).join(", ")}) is allowed here: the project or task limits this session to ${limits.map(name).join(", ")}.`,
     };
   }
-  // One account: no choice to make.
+  // One account with room: no choice to make. Without room, the refusal.
   const [only] = allowed;
-  if (allowed.length === 1 && only) {
+  if (allowed.length === 1 && only && new Usage(input).room(only)) {
     return {
       ok: true,
       accountId: only.id,

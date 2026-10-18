@@ -2726,6 +2726,8 @@ export const startDaemon = (rediscover = false) =>
       );
     } else if (denied.state === "failed") {
       yield* Effect.logWarning(denied.detail);
+    } else if (denied.state === "unsynced") {
+      yield* Effect.logInfo(`${denied.detail}: spawns wait for it`);
     }
     // Size the transcript cache from machine config (if set).
     const machineConfig = yield* Effect.promise(() => readConfig());

@@ -65,8 +65,9 @@ import { excludeFromCheckout } from "./checkout-exclude";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import {
   convergeDeniedTools,
+  fleetDenialsSynced,
   machineDenyList,
-  resolvedFleetDenials,
+  readFleetDenials,
 } from "./denied-tools";
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
@@ -175,8 +176,8 @@ interface Sidecar {
   cawcoTodos?: boolean;
   /**
    * The fleet's denied-tools list, synced from `supervisor_config.denied_tools`.
-   * Absent from a sidecar written before this field existed, which is what has
-   * {@link resolvedFleetDenials} fall back to compiled constants.
+   * Absent from a sidecar written before this field existed: the machine has
+   * not heard the list, and {@link readFleetDenials} says so.
    */
   deniedTools?: string[];
   /**
@@ -329,8 +330,8 @@ const readSidecar = async (): Promise<Sidecar> => {
     // this machine is cawco's, so none of them is cawco's to take away.
     memoryDocs: stored?.memoryDocs ?? {},
     ...(stored?.memoryHook ? { memoryHook: stored.memoryHook } : {}),
-    // A sidecar written before denied-tools syncing names none, which is what
-    // has resolvedFleetDenials fall back to the compiled constants.
+    // A sidecar written before denied-tools syncing names none: the machine
+    // has not heard the list, until this sync writes it.
     ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
     ...(stored?.cawcoTodos ? { cawcoTodos: true } : {}),
     // A sidecar written before hooks existed manages none, which is the truth.
@@ -679,16 +680,12 @@ interface Ran {
  * install into. Killed rather than left running if it hangs: a marketplace
  * behind a dead network would otherwise hold the whole sync open forever.
  */
-const runClaude = async (
-  bin: string,
-  args: string[],
-  extraEnv?: Record<string, string>
-): Promise<Ran> => {
+const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
   const ran = await readWithin(CLI_TIMEOUT_MS, async (signal) => {
     const child = Bun.spawn([bin, ...args], {
       // `$HOME/.claude`, the dir every path in this file names, whatever
       // config dir the daemon itself was started in.
-      env: { ...claudeHomeEnv(), ...extraEnv },
+      env: claudeHomeEnv(),
       stdout: "pipe",
       stderr: "pipe",
       signal,
@@ -713,52 +710,6 @@ const runClaude = async (
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
-};
-
-/**
- * A clone that fell back to ssh and had nothing to authenticate with.
- *
- * The marketplaces and plugins a fleet carries are public repositories, and a
- * public repository needs no account to clone. But a plugin manifest names its
- * source as `{ "source": "github", "repo": "owner/name" }`, and the CLI turns
- * that into an ssh remote on a machine whose `gh` is not logged in — so a
- * machine with an expired token cannot install a plugin that anyone on the
- * internet can `git clone`. That is the whole failure, and it is not the
- * operator's to fix with a login.
- */
-const SSH_REFUSED =
-  /Permission denied \(publickey\)|Could not read from remote repository|Host key verification failed/i;
-
-/**
- * Git config, passed to the child alone, that sends github over anonymous
- * https. `GIT_CONFIG_COUNT` is git's own environment form (git ≥ 2.31), so it
- * reaches every git the CLI shells out to and NOTHING else: not the machine's
- * `~/.gitconfig`, not this daemon, not the operator's own clones.
- */
-const HTTPS_GITHUB: Record<string, string> = {
-  GIT_CONFIG_COUNT: "2",
-  GIT_CONFIG_KEY_0: "url.https://github.com/.insteadOf",
-  GIT_CONFIG_VALUE_0: "git@github.com:",
-  GIT_CONFIG_KEY_1: "url.https://github.com/.insteadOf",
-  GIT_CONFIG_VALUE_1: "ssh://git@github.com/",
-};
-
-/**
- * A `claude plugin …` that clones, retried over https if ssh refused it.
- *
- * The retry is second, not first, on purpose: a fleet MAY legitimately carry a
- * private marketplace, and on a machine that reaches it with an ssh key the
- * first attempt is the one that works. Rewriting up front would break exactly
- * that machine. So the normal path is unchanged, and the rewrite is reached
- * only by the failure it answers — a public repo refused for want of an
- * account.
- */
-const runClaudeCloning = async (bin: string, args: string[]): Promise<Ran> => {
-  const first = await runClaude(bin, args);
-  if (!SSH_REFUSED.test(first.output)) {
-    return first;
-  }
-  return await runClaude(bin, args, HTTPS_GITHUB);
 };
 
 /**
@@ -968,12 +919,7 @@ const syncPlugins = async (
       report.marketplaces[name] = { state: "applied" };
       continue;
     }
-    const ran = await runClaudeCloning(bin, [
-      "plugin",
-      "marketplace",
-      "add",
-      source,
-    ]);
+    const ran = await runClaude(bin, ["plugin", "marketplace", "add", source]);
     const linked = await linkedMarketplaces();
     if (linked[name]) {
       marketplaces.push(name);
@@ -1050,7 +996,7 @@ const syncPlugins = async (
       report.plugins[id] = { state: "applied" };
       continue;
     }
-    const ran = await runClaudeCloning(bin, [
+    const ran = await runClaude(bin, [
       "plugin",
       "install",
       id,
@@ -2845,15 +2791,6 @@ const syncHooks = async (
   return written;
 };
 
-/** What to write into the sidecar's `deniedTools`: the hub's value if it sent one, else what was cached. */
-const deniedToolsForSidecar = (
-  fromHub: string[] | undefined,
-  fromCache: string[] | undefined
-): { deniedTools: string[] } | Record<string, never> => {
-  const list = fromHub ?? fromCache;
-  return list ? { deniedTools: list } : {};
-};
-
 const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skillStates: Record<string, FleetItemState> = {};
@@ -2903,16 +2840,16 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   // fleet that keeps none, and the machine gives back whatever cawco
   // registered before this daemon knew what that field meant.
   const hooks = await syncHooks(config.hooks ?? [], managed.hooks, hookStates);
-  // What the machine's own `claude` was denied for the fleet before this sync.
-  const deniedBefore = machineDenyList(await resolvedFleetDenials());
+  // What the machine's own `claude` was denied for the fleet before this sync:
+  // none of it, when the machine had not heard the list (cawco wrote nothing).
+  const before = await readFleetDenials();
+  const deniedBefore =
+    before.kind === "known" ? machineDenyList(before.denials) : [];
   await writeJson(SIDECAR, {
     mcp,
     ...installed,
     skills,
-    // A hub that sends `deniedTools` has the column; one that does not predates
-    // the migration, and the sidecar keeps whatever it already had (or nothing,
-    // which is what has resolvedFleetDenials fall back to compiled constants).
-    ...deniedToolsForSidecar(config.deniedTools, managed.deniedTools),
+    deniedTools: config.deniedTools,
     // A hub that predates the flag sends none: the choice is off.
     ...(config.cawcoTodos ? { cawcoTodos: true } : {}),
     ...(memory ? { memory } : {}),
@@ -2923,11 +2860,13 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
     placedMemory,
     placedSkills,
   } satisfies Sidecar);
+  // A spawn waiting on the fleet's denials reads them now.
+  fleetDenialsSynced();
   // The machine's own `claude` follows the fleet at once, not at the next
   // daemon start: what the fleet no longer denies comes out of
   // `permissions.deny`, what it now denies goes in.
   const settings = await convergeDeniedTools(deniedBefore);
-  if (settings.state === "failed") {
+  if (settings.state === "failed" || settings.state === "unsynced") {
     console.warn(`[fleet] ${SETTINGS_PATH}: ${settings.detail}`);
   }
   // Every account's Claude Code reads its user layer from its own dir: the

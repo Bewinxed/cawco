@@ -9,6 +9,9 @@
  * cached in the same sidecar) and is never names in the list: while it is
  * on, {@link cawcoTodosDenied} is added.
  *
+ * A machine that has not heard the list, or cannot read the sidecar, spawns
+ * nothing until it can: no compiled list stands in for the fleet's.
+ *
  * Two consumers read the resolved denials:
  *  1. The spawn paths (`claude.ts`, `opencode.ts`), through
  *     {@link sessionFleetDenials}: the baseline, plus the to-do and plan-mode
@@ -23,6 +26,7 @@
  * drift from each other.
  */
 import { cawcoTodosDenied, opencodeToolsFor } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { userLayerPath } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 
@@ -33,18 +37,11 @@ const SETTINGS = userLayerPath("settings.json");
 const SIDECAR = userLayerPath("cawco-fleet.json");
 
 /**
- * Compiled bootstrap defaults — what a machine uses when it has never synced
- * and has no sidecar. Kept as the never-synced fallback; the hub's migration
- * seeds the same four names so an upgrade changes nothing.
+ * How long a spawn on a machine that has not heard the fleet's denials waits
+ * for its first sync. The hub sends one on every register, so a spawn that
+ * reaches a just-connected daemon finds it a moment later.
  */
-export const DENIED_WEB_TOOLS = ["WebSearch", "WebFetch"] as const;
-export const DENIED_NATIVE_SUBAGENT_TOOLS = ["Task", "Agent"] as const;
-
-/** The compiled default, used as the never-synced bootstrap. */
-const COMPILED_DEFAULT: readonly string[] = [
-  ...DENIED_WEB_TOOLS,
-  ...DENIED_NATIVE_SUBAGENT_TOOLS,
-];
+const FIRST_SYNC_WAIT_MS = 30_000;
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -63,36 +60,112 @@ export interface FleetDenials {
 }
 
 /**
+ * What the sidecar says of the fleet's denials: the list and the choice, or
+ * that this machine has not heard them yet (no sidecar, or one written before
+ * a sync carried `deniedTools`), or why the sidecar cannot be read.
+ */
+export type FleetDenialsRead =
+  | { kind: "known"; denials: FleetDenials }
+  | { kind: "unsynced"; reason: string }
+  | { kind: "unreadable"; reason: string };
+
+const UNSYNCED = `this machine has not had its first fleet sync, so it does not know the fleet's denied tools yet (${SIDECAR})`;
+
+/**
+ * The fleet's denials as the last sync wrote them, read now. Nothing stands in
+ * for a list the hub never sent: a machine that has not heard it, or cannot
+ * read it, says so ({@link resolvedFleetDenials} refuses on it). An empty list
+ * is only ever the operator's own, cleared in the hub.
+ */
+export const readFleetDenials = async (): Promise<FleetDenialsRead> => {
+  const file = Bun.file(SIDECAR);
+  if (!(await file.exists())) {
+    return { kind: "unsynced", reason: UNSYNCED };
+  }
+  let stored: unknown;
+  try {
+    stored = await file.json();
+  } catch (error) {
+    return {
+      kind: "unreadable",
+      reason: `could not parse ${SIDECAR}: ${said(error)}`,
+    };
+  }
+  const sidecar = asRecord(stored);
+  if (!sidecar) {
+    return {
+      kind: "unreadable",
+      reason: `${SIDECAR} is not a JSON object`,
+    };
+  }
+  if (sidecar.deniedTools === undefined) {
+    return { kind: "unsynced", reason: UNSYNCED };
+  }
+  const list = sidecar.deniedTools;
+  if (!(
+    Array.isArray(list) && list.every((tool) => typeof tool === "string")
+  )) {
+    return {
+      kind: "unreadable",
+      reason: `${SIDECAR}: deniedTools is not a list of tool names`,
+    };
+  }
+  return {
+    kind: "known",
+    denials: { deniedTools: list, cawcoTodos: sidecar.cawcoTodos === true },
+  };
+};
+
+/** Settled by the first fleet sync this daemon writes the sidecar in. */
+let markSynced: () => void = () => undefined;
+const firstSync = new Promise<void>((resolve) => {
+  markSynced = resolve;
+});
+
+/** Called by the fleet sync once the sidecar it wrote carries the denials. */
+export const fleetDenialsSynced = (): void => markSynced();
+
+/** A spawn refused because the fleet's denials are not known here, in words. */
+export class FleetDenialsRefused extends Error {
+  constructor(reason: string) {
+    super(`Not started: ${reason}.`);
+    this.name = "FleetDenialsRefused";
+  }
+}
+
+/**
  * The single source of truth for the fleet's denials. Both the spawn path
- * and the settings-convergence path call this, so they read the same value
- * and cannot drift.
+ * and the settings-convergence path read the sidecar through
+ * {@link readFleetDenials}, so they read the same value and cannot drift.
  *
- * Resolution order, for the list:
- *  1. The sidecar's `deniedTools` — present after at least one fleet sync.
- *  2. The compiled default — identical to what the migration seeds.
- * The choice is the sidecar's `cawcoTodos`; off until a sync says otherwise.
- *
- * The list is never empty when the sidecar has no `deniedTools` key: that
- * case falls back to the compiled default, which carries all four names.
- * An empty list is only possible when the operator has explicitly cleared the
- * fleet baseline in the hub — which is an intentional policy choice.
+ * A machine that has not heard them waits for its first sync (the hub sends
+ * one on register) and says so; one that has not had it within
+ * {@link FIRST_SYNC_WAIT_MS}, or whose sidecar cannot be read, refuses with
+ * {@link FleetDenialsRefused}.
  */
 export const resolvedFleetDenials = async (): Promise<FleetDenials> => {
-  try {
-    const file = Bun.file(SIDECAR);
-    if (await file.exists()) {
-      const sidecar = asRecord(await file.json()) ?? {};
-      return {
-        deniedTools: Array.isArray(sidecar.deniedTools)
-          ? (sidecar.deniedTools as string[])
-          : COMPILED_DEFAULT,
-        cawcoTodos: sidecar.cawcoTodos === true,
-      };
-    }
-  } catch {
-    // Unreadable sidecar: fall back to compiled default.
+  let read = await readFleetDenials();
+  if (read.kind === "unsynced") {
+    console.info(
+      `[fleet] ${read.reason}: the spawn waits for its first fleet sync`
+    );
+    await readWithin(FIRST_SYNC_WAIT_MS, () => firstSync);
+    read = await readFleetDenials();
   }
-  return { deniedTools: COMPILED_DEFAULT, cawcoTodos: false };
+  switch (read.kind) {
+    case "known":
+      return read.denials;
+    case "unsynced":
+      throw new FleetDenialsRefused(
+        `${read.reason}, and none came within ${FIRST_SYNC_WAIT_MS / 1000}s`
+      );
+    case "unreadable":
+      throw new FleetDenialsRefused(read.reason);
+    default: {
+      const unhandled: never = read;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 /** What the machine's own `claude` is denied: the baseline, and the to-do and plan-mode set while the fleet's choice is on. */
@@ -155,7 +228,8 @@ export function withDeniedTools(
 
 /** What a boot-time converge came to, so the daemon can say it in one line. */
 export type DenyConvergence =
-  { state: "applied" | "unchanged" } | { state: "failed"; detail: string };
+  | { state: "applied" | "unchanged" }
+  | { state: "failed" | "unsynced"; detail: string };
 
 /**
  * Converges `~/.claude/settings.json` with the machine's share of the fleet's
@@ -164,13 +238,22 @@ export type DenyConvergence =
  * knows them; daemon start passes none). Writes only when that changes the
  * file. Nothing is written over a file that cannot
  * be parsed: the rest of it is the user's own, and a rewrite from an empty
- * root would take their settings with it.
+ * root would take their settings with it. Nothing is written either while the
+ * fleet's denials are not known here: `unsynced` until the first sync,
+ * `failed` with the sidecar's own fault.
  */
 export const convergeDeniedTools = async (
   dropped: readonly string[] = []
 ): Promise<DenyConvergence> => {
   try {
-    const deny = machineDenyList(await resolvedFleetDenials());
+    const read = await readFleetDenials();
+    if (read.kind !== "known") {
+      return {
+        state: read.kind === "unsynced" ? "unsynced" : "failed",
+        detail: read.reason,
+      };
+    }
+    const deny = machineDenyList(read.denials);
 
     const file = Bun.file(SETTINGS);
     let settings: unknown = {};

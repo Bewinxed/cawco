@@ -93,6 +93,7 @@ import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
 import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
+import { DEFAULT_DENIED_TOOLS } from "../fleet-choices";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
 import type { MoveState } from "../moves";
@@ -5998,9 +5999,10 @@ const make = async (path: string): Promise<DbShape> => {
           .where(eq(fleetHooks.enabled, true))
           .all()
           .map(hookOf),
-        // The fleet's denied-tools list, from the supervisor_config single row.
-        // Absent (undefined) when no row exists yet, which is what has a daemon
-        // fall back to compiled constants — the same list the migration seeds.
+        // The fleet's denied-tools list, from the supervisor_config single row,
+        // always sent: a machine spawns nothing until it has heard it. Before
+        // anyone set it, the baseline is the one the dashboard shows
+        // (fleet-choices.ts `readChoices`).
         ...(() => {
           const row = db
             .select({
@@ -6011,7 +6013,9 @@ const make = async (path: string): Promise<DbShape> => {
             .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
             .get();
           return {
-            deniedTools: row?.deniedSeeded ? deniedToolNames() : undefined,
+            deniedTools: row?.deniedSeeded
+              ? deniedToolNames()
+              : [...DEFAULT_DENIED_TOOLS],
             cawcoTodos: row?.cawcoTodos ?? false,
           };
         })(),

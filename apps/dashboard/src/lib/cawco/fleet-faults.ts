@@ -117,8 +117,8 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
     action: "resync",
     toolchain: true,
   },
-  // agent/fleet.ts SSH_REFUSED — the same three sentences, matched here so the
-  // dashboard can say what that code already knows.
+  // git's own refusal of an ssh clone, as the machine's `claude plugin …`
+  // reported it.
   "ssh-refused": {
     title: "Git fell back to ssh and had nothing to authenticate with",
     why: "The repository is public, but the plugin manifest names an ssh remote, and this machine’s git had no key or token it would accept — an expired gh login does exactly this.",
@@ -212,12 +212,7 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
   },
 };
 
-/**
- * The same three sentences `packages/agent/src/fleet.ts` matches to decide
- * whether to retry a clone over https. Duplicated deliberately rather than
- * shared: that copy governs a retry on the machine, this one governs what the
- * page says, and neither should start behaving like the other by accident.
- */
+/** What git says when an ssh clone had nothing to authenticate with. */
 const SSH_REFUSED =
   /Permission denied \(publickey\)|Could not read from remote repository|Host key verification failed/i;
 const CLI_TOO_OLD = /unknown option|unknown argument|unknown command/i;

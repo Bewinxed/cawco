@@ -122,13 +122,22 @@ final class PastePanel: UIStackView, UITextFieldDelegate {
     #endif
 }
 
-/// A device-code sign-in on one machine (DevicePanel.svelte). Before: Start
-/// sign-in, which mints the one code. Waiting: the code in a well, Copy code,
-/// Open sign-in link, and how long is left to enter it. Expired: the well
-/// dims and Start again mints a new one. Signed in: the check beside who.
+/// A provider sign-in on one machine (DevicePanel.svelte). Before: Start
+/// sign-in. Asking: the provider's own question, its options as buttons or a
+/// field and Continue. Waiting: the code in a well, Copy code, Open sign-in
+/// link, and how long is left to enter it (when the provider said). Linked:
+/// Open sign-in link, a field for what the page ends on, and Done. Expired:
+/// the well dims and Start again starts a new one. Signed in: the check
+/// beside who.
 final class DevicePanel: UIStackView {
     private let flow: DeviceSignin
     private let machine: String
+    private let question = metaLine()
+    private let options = UIStackView()
+    private var drawnPrompt: SigninStart.Prompt?
+    private let field = KitField()
+    private lazy var send = KitButton.make(Words.Accounts.Device.answer, variant: .action, height: .sm) { [weak self] in self?.submit() }
+    private let entry = UIStackView()
     private let well = UIView()
     private let codeLabel = KitLabel(TypeScale.typeCode, ink: Palette.inkStrong)
     private lazy var copy = KitButton.make(Words.Accounts.Device.copy, glyph: .copy, variant: .outline, height: .sm) { [weak self] in self?.copyCode() }
@@ -166,8 +175,17 @@ final class DevicePanel: UIStackView {
         for part in [copy, link, start, UIView()] { buttons.addArrangedSubview(part) }
         buttons.spacing = Space.space2
         buttons.alignment = .center
-        for part in [well, buttons, line, warn, problem, got] { addArrangedSubview(part) }
-        for part in [well, line, warn, problem, got] { part.isHidden = true }
+        options.axis = .vertical
+        options.spacing = Space.space2
+        options.alignment = .leading
+        field.accessibilityIdentifier = "device.field.\(flow.machineId)"
+        field.addAction(UIAction { [weak self] _ in self?.submit() }, for: .editingDidEndOnExit)
+        send.accessibilityIdentifier = "device.send.\(flow.machineId)"
+        for part in [field, send] { entry.addArrangedSubview(part) }
+        entry.spacing = Space.space2
+        entry.alignment = .center
+        for part in [question, options, well, buttons, entry, line, warn, problem, got] { addArrangedSubview(part) }
+        for part in [question, options, entry, well, line, warn, problem, got] { part.isHidden = true }
     }
 
     @available(*, unavailable)
@@ -182,12 +200,28 @@ final class DevicePanel: UIStackView {
         let words = Words.Accounts.Device.self
         if phase == .signedIn {
             if drawnPhase != .signedIn { got.say(flow.email ?? Words.Accounts.Signin.theAccount) }
-            for part in [well, buttons, line, warn, problem] { fold(part, open: false) }
+            for part in [question, options, entry, well, buttons, line, warn, problem] { fold(part, open: false) }
             fold(got, open: true)
             drawnPhase = phase
             return
         }
         fold(got, open: false)
+        let asking = phase == .asking || phase == .answering
+        let linked = phase == .linked || phase == .checking
+        drawPrompt(asking ? flow.prompt : nil, answering: phase == .answering)
+        let typing = (asking && flow.prompt?.kind == "text") || linked
+        if linked {
+            field.isSecureTextEntry = false
+            field.attributedPlaceholder = placeholder(Words.Accounts.Signin.codePlaceholder)
+            field.accessibilityLabel = Words.Accounts.Signin.codeLabel
+        }
+        field.isEnabled = phase != .answering && phase != .checking
+        KitButton.setTitle(
+            linked ? (phase == .checking ? Words.Accounts.Signin.checking : Words.Accounts.Signin.done)
+                : (phase == .answering ? words.answering : words.answer),
+            of: send, variant: .action, height: .sm)
+        send.configuration?.showsActivityIndicator = phase == .answering || phase == .checking
+        fold(entry, open: typing)
         // The code as it is read out: in fours.
         let bare = (flow.code ?? "").filter { $0.isLetter || $0.isNumber }
         codeLabel.text = stride(from: 0, to: bare.count, by: 4).map { at in
@@ -197,16 +231,18 @@ final class DevicePanel: UIStackView {
         fold(well, open: waiting || phase == .expired)
         Motion.easeOut.animator(Motion.durFade) { self.well.alpha = phase == .expired ? 0.5 : 1 }.startAnimation()
         copy.isHidden = !waiting
-        link.isHidden = !waiting
-        start.isHidden = waiting || !online
+        link.isHidden = !(waiting || linked)
+        start.isHidden = phase.underWay || !online
         KitButton.setTitle(phase == .starting ? words.starting : phase == .idle ? words.start : words.again, of: start, variant: .outline, height: .sm)
         start.configuration?.showsActivityIndicator = phase == .starting
         KitButton.setTitle(copied ? words.copied : words.copy, of: copy, variant: .outline, height: .sm)
         buttons.isHidden = buttons.arrangedSubviews.dropLast().allSatisfy(\.isHidden)
-        let left = max(0, flow.expiresAt - flow.now)
+        let left = max(0, (flow.expiresAt ?? 0) - flow.now)
         let clock = words.countdown(minutes: Int(left / 60000), seconds: Int(left.truncatingRemainder(dividingBy: 60000) / 1000))
         // "Enter it within" and the clock, a space between as in the web's markup.
-        line.text = waiting ? [words.enterWithin, clock].joined(separator: " ") : phase == .expired ? words.expired : nil
+        line.text = waiting && flow.expiresAt != nil ? [words.enterWithin, clock].joined(separator: " ")
+            : linked ? words.linked
+            : phase == .expired ? words.expired : nil
         line.tabular = true
         fold(line, open: line.text != nil)
         warn.text = phase == .mismatch ? words.mismatch(machine: machine, who: flow.email) : nil
@@ -216,6 +252,52 @@ final class DevicePanel: UIStackView {
         // The page is the provider's: once the machine has its answer, it closes.
         if drawnPhase == .waiting, phase != .waiting { SignInBrowser.close() }
         drawnPhase = phase
+    }
+
+    /// The provider's question: its message, and its options as buttons or the field.
+    private func drawPrompt(_ prompt: SigninStart.Prompt?, answering: Bool) {
+        question.text = prompt?.message
+        fold(question, open: prompt != nil)
+        if prompt != drawnPrompt {
+            drawnPrompt = prompt
+            options.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            for option in prompt?.options ?? [] {
+                let button = KitButton.make(option.label, variant: .outline, height: .sm) { [weak self] in
+                    guard let self else { return }
+                    Task { await self.flow.answer(option.id) }
+                }
+                button.accessibilityHint = option.description
+                options.addArrangedSubview(button)
+            }
+            if let prompt, prompt.kind == "text" {
+                field.text = ""
+                field.isSecureTextEntry = prompt.secret == true
+                field.attributedPlaceholder = placeholder(prompt.placeholder ?? "")
+                field.accessibilityLabel = prompt.message
+            }
+        }
+        for case let button as UIButton in options.arrangedSubviews { button.isEnabled = !answering }
+        fold(options, open: prompt?.kind == "select")
+    }
+
+    private func placeholder(_ text: String) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [.font: TypeScale.typeBody.font, .foregroundColor: Palette.mutedForeground])
+    }
+
+    /// Sends the field: the question's answer, or what the link's page ended on.
+    private func submit() {
+        let value = field.text ?? ""
+        switch flow.phase {
+        case .asking:
+            field.text = ""
+            Task { await flow.answer(value.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        case .linked:
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            field.text = ""
+            Task { await flow.paste(value) }
+        default:
+            return
+        }
     }
 
     private func begin() {
