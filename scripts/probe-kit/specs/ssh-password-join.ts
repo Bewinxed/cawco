@@ -484,12 +484,30 @@ async function run(kit: Kit): Promise<void> {
   const jobs: SshJoinJob[] = [];
   try {
     // ssh's own words never decide an outcome: the hub runs every add under
-    // a locale other than English (a host without it falls back to C, and
-    // OpenSSH ships no translations; the outcome must hold either way).
-    fleet.launch("hub", [], {
-      PATH: `${bin}:${fleet.env.PATH}`,
+    // German, compiled here into the scratch dir (glibc reads it through
+    // LOCPATH, so a host that never installed it runs it all the same), and
+    // proven in effect before any add.
+    const locales = join(dir, "locale");
+    mkdirSync(locales, { recursive: true });
+    await Bun.$`localedef -i de_DE -f UTF-8 ${join(locales, "de_DE.utf8")}`.quiet();
+    const localeEnv = {
+      LOCPATH: locales,
       LC_ALL: HUB_LOCALE,
       LANG: HUB_LOCALE,
+    };
+    const sunday = (
+      await Bun.$`date -d 2026-10-18 +%A`
+        .env({ ...process.env, ...localeEnv })
+        .text()
+    ).trim();
+    kit.check(
+      `the hub runs under ${HUB_LOCALE}, in effect: 2026-10-18 reads as Sonntag`,
+      sunday === "Sonntag",
+      `date said ${sunday}`
+    );
+    fleet.launch("hub", [], {
+      PATH: `${bin}:${fleet.env.PATH}`,
+      ...localeEnv,
     });
     await fleet.hubUp();
     const begin = (password?: string) =>
