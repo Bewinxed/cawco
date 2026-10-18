@@ -1301,7 +1301,7 @@
     block-size: 16px;
   }
   .search span {
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
