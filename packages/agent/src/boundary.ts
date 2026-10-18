@@ -3671,9 +3671,17 @@ const attachedIn = (
   path: string,
   procs: readonly HeldProc[],
   commands: Commands
-): boolean => {
+): boolean => attachedProcs(id, path, procs, commands).length > 0;
+
+/** The session processes {@link attachedIn} counts in workspace `id`. */
+const attachedProcs = (
+  id: string,
+  path: string,
+  procs: readonly HeldProc[],
+  commands: Commands
+): HeldProc[] => {
   const hook = `'${join(stateDir(id), "hook")}'`;
-  return procs.some((proc) => {
+  return procs.filter((proc) => {
     const { kind } = parseProcId(proc.procId);
     if (!(proc.alive && (kind === "claude" || kind === "pi"))) {
       return false;
@@ -4822,10 +4830,13 @@ const signalHeld = async (
  * Kills the workspace's boundaries, the current one and every older one
  * still beside it, with every process in them ({@link stopBoundary}), and any
  * other boundary process of the workspace; on macOS everything carrying the
- * workspace's marker. Stops serving its doors. Its record goes
- * (`boundary.json`, each older one's), so its executor says the boundary is
- * not running and a judge's exit arms nothing again ({@link watchJudge});
- * then its judges go, on every keeper that runs one. Never starts one: a
+ * workspace's marker. Stops serving its doors. What still uses it from
+ * outside the boundary ends too: a session's CLI in its clone, an executor
+ * on its way in ({@link endUsers}). Its record goes (`boundary.json`, each
+ * older one's), so its executor says the boundary is not running and a
+ * judge's exit arms nothing again ({@link watchJudge}); then its judges go,
+ * on every keeper that runs one, unless something {@link endUsers} ended
+ * outlived its SIGKILL, which its judge goes on answering. Never starts one: a
  * boundary already down, or one that never started, leaves nothing to do.
  * Its clone, state dir (its accounts, project, hook and policy), scratch dir
  * and stand-ins stay, so its next {@link ensureBoundary} starts one as a
@@ -4836,6 +4847,68 @@ const signalHeld = async (
  */
 export const stopWorkspaceBoundary = (ref: WorkspaceRef): Promise<number[]> =>
   closedWhile(ref.id, () => stopNow(ref));
+
+/**
+ * Ends what still uses workspace `ref` from outside its stopped boundary, as
+ * law `live-workspace-judge-answers` counts it ({@link inUse}): every session
+ * process a keeper holds in its clone ({@link attachedProcs}) and every
+ * executor on its way in ({@link executors}), each SIGKILLed, then waited
+ * for. Whatever stops a workspace's boundary for good (an archive, a held
+ * workspace's close, a stage clone's cut) has found no session holding it:
+ * the hub closes a workspace only once its items' sessions are asleep or
+ * ended (work-items.ts `holdOn`, `archiveNow`), so a CLI still in the clone
+ * is one whose session the hub filed gone. Left there, its judge goes next,
+ * so every call it makes is refused, and the agent's next start revives the
+ * boundary for it. On obelisk (2026-10-18) a `from` cut of held workspace
+ * bb4af2c9 closed it so, under such a CLI, and the beat exited the agent
+ * twice. A place's sessions are the person's own, and an archive never
+ * stops a place: nothing of one is ended here. Answers whether anything the
+ * law counts is still there {@link STOP_TIMEOUT_MS} on.
+ */
+const endUsers = async (ref: WorkspaceRef): Promise<boolean> => {
+  if (isPlace(ref.id)) {
+    return false;
+  }
+  const users = async () => {
+    const commands = await commandsNow();
+    const procs = (await keepers.held()).filter((proc) => proc.alive);
+    return {
+      clis: attachedProcs(ref.id, ref.path, procs, commands),
+      execs: executors(commands.lines, ref.id),
+    };
+  };
+  const found = await users();
+  if (found.clis.length === 0 && found.execs.length === 0) {
+    return false;
+  }
+  await Promise.all(
+    found.clis.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
+  );
+  for (const pid of found.execs) {
+    signalPid(listedPid(pid), "SIGKILL");
+  }
+  console.info(
+    `[workspace] ${ref.id}: its boundary is closed for good, so what still ran in its clone ends with it: ${[
+      ...found.clis.map((proc) => `${proc.procId} (pid ${proc.pid})`),
+      ...found.execs.map((pid) => `executor pid ${pid}`),
+    ].join(", ")}`
+  );
+  const deadline = Date.now() + STOP_TIMEOUT_MS;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls until the keepers and the process table say they are gone, or the deadline passes
+    const left = await users();
+    if (left.clis.length === 0 && left.execs.length === 0) {
+      return false;
+    }
+    if (Date.now() >= deadline) {
+      console.warn(
+        `[workspace] ${ref.id}: ${[...left.clis.map((proc) => `${proc.procId} (pid ${proc.pid})`), ...left.execs.map((pid) => `executor pid ${pid}`)].join(", ")} still ran ${STOP_TIMEOUT_MS / 1000}s after SIGKILL, so its judge is left answering`
+      );
+      return true;
+    }
+    await Bun.sleep(50);
+  }
+};
 
 /** {@link stopWorkspaceBoundary}'s stop itself, inside its hold. */
 const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
@@ -4862,8 +4935,13 @@ const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
   if (process.platform === "darwin") {
     await killMarked(ref.id);
   }
+  // Everything in it ends before its judge goes: a judge gone under a CLI
+  // still in the clone breaks live-workspace-judge-answers.
+  const stillUsed = await endUsers(ref);
   await rm(join(stateDir(ref.id), "boundary.json"), { force: true });
-  await signalHeld((procId) => isJudgeOf(procId, ref.id));
+  if (!stillUsed) {
+    await signalHeld((procId) => isJudgeOf(procId, ref.id));
+  }
   liveAt.delete(ref.id);
   return inners;
 };
