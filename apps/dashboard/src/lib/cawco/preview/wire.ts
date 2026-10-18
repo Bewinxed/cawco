@@ -237,7 +237,15 @@ function storyOf(value: unknown): Story | null {
     args: argsOf(raw.args),
     code: codeOf(raw.code),
     component: text(raw.component, SHEET_BOUNDS.text),
+    readOnly: readOnlyOf(raw.readOnly),
   };
+}
+
+/** Why the inspector can't write a story's args, as its page says it; null when it can. */
+function readOnlyOf(value: unknown): Story["readOnly"] {
+  const raw = record(value);
+  const reason = text(raw?.reason, SHEET_BOUNDS.text);
+  return raw && reason ? { read: raw.read === true, reason } : null;
 }
 
 /** A sheet as its page says it, checked and bounded; null when it is no sheet. */

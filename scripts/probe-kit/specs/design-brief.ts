@@ -18,11 +18,16 @@
  *    the line naming DESIGN.md and tokens.css first.
  * 2. Quay's code task, no `ui` or `design` label, gets no such section.
  * 3. Dock's task labelled `design` gets none: Dock has no design/.
+ * 4. "Pier", whose design/ holds only tokens/ (as CawCo's own does), gets
+ *    none for its `ui` task: tokens alone are no guide to brief.
+ * 5. "Wharf", whose design/ holds only DESIGN.md, gets a section naming
+ *    `design/DESIGN.md` and no file it lacks (SKILL.md, tokens.css, the
+ *    resolver, the manifest).
  *
  *   bun scripts/probe-kit/run.ts design-brief
  */
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -35,8 +40,17 @@ const STAGES =
 const SKILL_WORDS = "Quay's look: harbour blues, PROBE-SKILL-WORDS.";
 const SKILL = `---\nname: quay-design\ndescription: Quay's design system.\n---\n\n${SKILL_WORDS}\n`;
 const SECTION = "## Design system";
-const READ_FIRST =
-  "Read `design/DESIGN.md` and `design/tokens.css` first; `design/tokens.resolver.json`, `design/manifest.json`, fonts and specimens only as the work needs them.";
+/** Quay's read-first line: the two of its files an attempt reads first, nothing it lacks. */
+const READ_FIRST = "Read `design/DESIGN.md` and `design/tokens.css` first.";
+/** Wharf's: its DESIGN.md alone. */
+const WHARF_FIRST = "Read `design/DESIGN.md` first.";
+/** Files Wharf's design/ lacks: its section names none of them. */
+const WHARF_LACKS = [
+  "SKILL.md",
+  "tokens.css",
+  "tokens.resolver.json",
+  "manifest.json",
+];
 
 interface Call {
   input: object;
@@ -101,20 +115,17 @@ const run = async (kit: Kit) => {
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
 
-  /** A repository of its own, design/ committed in it when `design` says, and its project with a filer. */
-  const projectWith = async (name: string, design: boolean) => {
+  /** A repository of its own, `design` (path in design/ → text) committed in it, and its project with a filer. */
+  const projectWith = async (name: string, design: Record<string, string>) => {
     const repo = join(fleet.sandbox, name.toLowerCase());
     await mkdir(repo, { recursive: true });
     await writeFile(join(repo, "README.md"), `${name}\n`);
-    if (design) {
-      await mkdir(join(repo, "design"), { recursive: true });
-      await writeFile(join(repo, "design/SKILL.md"), SKILL);
-      await writeFile(join(repo, "design/DESIGN.md"), `# ${name}\n`);
-      await writeFile(
-        join(repo, "design/tokens.css"),
-        "@layer tokens { :root { --ink: oklch(0.3 0.02 250); } }\n"
-      );
-    }
+    await Promise.all(
+      Object.entries(design).map(async ([file, words]) => {
+        await mkdir(dirname(join(repo, "design", file)), { recursive: true });
+        await writeFile(join(repo, "design", file), words);
+      })
+    );
     await Bun.$`git init -q -b main && git add -A && git commit -qm ${name}`
       .cwd(repo)
       .env({ ...process.env, HOME: home })
@@ -142,8 +153,18 @@ const run = async (kit: Kit) => {
     });
     return { id: project.id, filer };
   };
-  const quay = await projectWith("Quay", true);
-  const dock = await projectWith("Dock", false);
+  const quay = await projectWith("Quay", {
+    "SKILL.md": SKILL,
+    "DESIGN.md": "# Quay\n",
+    "tokens.css": "@layer tokens { :root { --ink: oklch(0.3 0.02 250); } }\n",
+  });
+  const dock = await projectWith("Dock", {});
+  // Tokens alone, as CawCo's own design/ holds.
+  const pier = await projectWith("Pier", {
+    "tokens/pier.tokens.json":
+      '{ "ink": { "$type": "color", "$value": "#123" } }\n',
+  });
+  const wharf = await projectWith("Wharf", { "DESIGN.md": "# Wharf\n" });
 
   /** Files a task and starts it; the brief its attempt was filed with. */
   const briefOf = async (
@@ -242,6 +263,27 @@ const run = async (kit: Kit) => {
     "3: a design-shaped task in a project without design/ gets no Design system section",
     bareBrief.length > 0 && !bareBrief.includes(SECTION),
     `brief ${bareBrief.length} chars; section ${bareBrief.includes(SECTION) ? "present" : "absent"}`
+  );
+
+  // ── 4. A design/ of tokens alone announces no system ──────────────────
+  const tokensBrief = await briefOf(pier, "P1", "Pier hero PROBE-P1", ["ui"]);
+  kit.check(
+    "4: a design-shaped task in a project whose design/ holds only tokens/ gets no Design system section",
+    tokensBrief.length > 0 && !tokensBrief.includes(SECTION),
+    `brief ${tokensBrief.length} chars; section ${sectionOf(tokensBrief)?.slice(0, 400) ?? "absent"}`
+  );
+
+  // ── 5. A design/ with DESIGN.md alone names that file and no other ────
+  const wharfSection = sectionOf(
+    await briefOf(wharf, "W1", "Wharf hero PROBE-W1", ["ui"])
+  );
+  const lacking = WHARF_LACKS.filter((file) =>
+    wharfSection?.includes(`design/${file}`)
+  );
+  kit.check(
+    "5: a project whose design/ holds only DESIGN.md gets a section naming design/DESIGN.md and none of the files it lacks",
+    wharfSection?.includes(WHARF_FIRST) === true && lacking.length === 0,
+    `section ${wharfSection === undefined ? "absent" : `“${wharfSection.slice(0, 400)}”`}; names it lacks: ${JSON.stringify(lacking)}`
   );
 };
 

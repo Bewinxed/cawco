@@ -958,42 +958,80 @@ export const designOnBase = (
     own
   ).theirs();
 
-/** What an attempt reads first of the system, and what it fetches on demand (spec §5.7, "Use"; Open Design's order). */
-const READ_FIRST = `Read \`${DESIGN_DIR}/DESIGN.md\` and \`${DESIGN_DIR}/${STYLESHEET}\` first; \`${DESIGN_DIR}/${RESOLVER}\`, \`${DESIGN_DIR}/${MANIFEST}\`, fonts and specimens only as the work needs them.`;
+/** A design system's usage guide: an attempt is told of the system only when its clone holds one. */
+const GUIDES = ["SKILL.md", "DESIGN.md"] as const;
+/** What an attempt reads first of the system, with the guide (spec §5.7, "Use"; Open Design's order). */
+const FIRST = ["DESIGN.md", STYLESHEET] as const;
+/** What it fetches only as the work needs it. */
+const ON_DEMAND = [RESOLVER, MANIFEST] as const;
+/** The line between the files design/ holds and its SKILL.md's text, in the clone's answer. */
+const GUIDE_MARK = "cawco:skill-md";
+
+/** Files of design/ as a sentence names them: `a`, `a` and `b`, `a`, `b` and `c`. */
+const filesSaid = (files: readonly string[]): string => {
+  const quoted = files.map((file) => `\`${DESIGN_DIR}/${file}\``);
+  return quoted.length > 1
+    ? `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`
+    : (quoted[0] ?? "");
+};
+
+/** The read-first line, naming only the files design/ holds; "" when it holds none of them. */
+const readFirst = (has: Set<string>): string => {
+  const first = FIRST.filter((file) => has.has(file));
+  const later = ON_DEMAND.filter((file) => has.has(file));
+  if (first.length === 0) {
+    return later.length > 0
+      ? `Read ${filesSaid(later)} only as the work needs them.`
+      : "";
+  }
+  return later.length > 0
+    ? `Read ${filesSaid(first)} first; ${filesSaid(later)} only as the work needs them.`
+    : `Read ${filesSaid(first)} first.`;
+};
 
 /**
  * An attempt's brief's `## Design system` section (dispatch.ts): the
  * project's system as the attempt's clone holds it, design/ at its root,
  * read inside its boundary as every command in a live clone is. Its usage
- * guide (design/SKILL.md) whole, then what to read first. Empty when the
- * clone holds no design/.
+ * guide (design/SKILL.md) whole, then what to read first, naming only the
+ * files that are there. Empty when design/ holds no guide (neither SKILL.md
+ * nor DESIGN.md): a design/ of tokens alone is no system to brief.
  */
 export const designSection = async (
   run: Run,
   clone: { id: string; machineId: string; path: string }
 ): Promise<string> => {
+  const files = [...GUIDES, STYLESHEET, ...ON_DEMAND];
   const read = await runIn(run, {
     machineId: clone.machineId,
     root: clone.path,
     workspace: { id: clone.id, path: clone.path },
   })(
-    `if [ -d ${DESIGN_DIR} ]; then echo system; if [ -f ${DESIGN_DIR}/SKILL.md ]; then cat ${DESIGN_DIR}/SKILL.md; fi; fi`
+    `for f in ${files.join(" ")}; do if [ -f ${DESIGN_DIR}/$f ]; then echo "$f"; fi; done; echo ${GUIDE_MARK}; if [ -f ${DESIGN_DIR}/SKILL.md ]; then cat ${DESIGN_DIR}/SKILL.md; fi`
   );
   if (read.exitCode !== 0) {
     throw failed("design/ could not be read in the attempt's clone", read);
   }
-  const [mark, ...rest] = read.stdout.split("\n");
-  if (mark !== "system") {
+  const lines = read.stdout.split("\n");
+  const mark = lines.indexOf(GUIDE_MARK);
+  const has = new Set(lines.slice(0, Math.max(mark, 0)));
+  if (!GUIDES.some((file) => has.has(file))) {
     return "";
   }
-  const guide = rest.join("\n").trim();
+  const guide = has.has("SKILL.md")
+    ? lines
+        .slice(mark + 1)
+        .join("\n")
+        .trim()
+    : "";
+  const first = readFirst(has);
   return [
     "## Design system",
     guide
       ? `This project has a design system, at \`${DESIGN_DIR}/\` in your clone. Its usage guide, \`${DESIGN_DIR}/SKILL.md\`:`
       : `This project has a design system, at \`${DESIGN_DIR}/\` in your clone.`,
     ...(guide ? [guide] : []),
-    READ_FIRST,
+    ...(first ? [first] : []),
   ].join("\n\n");
 };
 

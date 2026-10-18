@@ -4,7 +4,8 @@
  * stage reads it (its props are docgen's answer for StatTile.svelte). Each
  * story is a state the person meets: beside the page on a desk, over its
  * foot on a phone, with a change not saved, with props the stage could not
- * read, and with a write refused. The decorator stands the inspector in a
+ * read, read-only stories (args from shared code, args the reader can't
+ * follow), and with a write refused. The decorator stands the inspector in a
  * well the size of a desk's pane (a phone's for Phone), as the pane does.
  */
 import type { SheetOnPage } from "@cawco/core/stage";
@@ -23,6 +24,7 @@ const STAT_TILE: SheetOnPage = {
       args: {},
       code: {},
       component: null,
+      readOnly: null,
     },
     {
       name: "Live",
@@ -31,6 +33,7 @@ const STAT_TILE: SheetOnPage = {
       args: { label: "Running", value: 3, unit: "sessions", tone: "live" },
       code: {},
       component: null,
+      readOnly: null,
     },
   ],
   meta: {
@@ -167,6 +170,45 @@ export const Unknown = {
       },
       "Spend"
     ),
+  },
+  decorators: desk,
+};
+
+/** STAT_TILE with story Live read-only for `readOnly`'s reason. */
+const readOnlyLive = (readOnly: { read: boolean; reason: string }) =>
+  inspector({
+    ...STAT_TILE,
+    stories: STAT_TILE.stories.map((story) =>
+      story.name === "Live"
+        ? {
+            ...story,
+            ...(readOnly.read ? {} : { args: {}, component: null }),
+            readOnly,
+          }
+        : story
+    ),
+  });
+
+/** Args read through a local helper: shown, each read-only, with why. */
+export const SharedArgs = {
+  args: {
+    inspector: readOnlyLive({
+      read: true,
+      reason:
+        'Live is built by `tile("Running", 3)`, code other stories may share, so its args are edited in the file.',
+    }),
+  },
+  decorators: desk,
+};
+
+/** Args the reader can't follow: the reason alone, never the meta's props as if they were the story's. */
+export const NotReadable = {
+  args: {
+    inspector: readOnlyLive({
+      read: false,
+      reason:
+        "Live: args not readable here: tile is imported from ./fixtures, which this reader doesn't open.",
+    }),
   },
   decorators: desk,
 };
