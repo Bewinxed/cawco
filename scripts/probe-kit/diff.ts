@@ -33,14 +33,15 @@ export interface DiffOptions {
 /**
  * Captures `name` and holds it to its baseline: a PASS or FAIL line, or a
  * note where none is approved yet. Captured with the page's animations as
- * they stand (a seeked frame stays seeked) and the caret hidden.
+ * they stand (a seeked frame stays seeked) and the caret hidden. Says
+ * whether the capture differs from its baseline.
  */
 export async function diff(
   kit: Kit,
   page: Page,
   name: string,
   options: DiffOptions = {}
-): Promise<void> {
+): Promise<boolean> {
   const shot = await page.screenshot({
     clip: options.clip,
     animations: "allow",
@@ -54,13 +55,13 @@ export async function diff(
     await mkdir(dirname(baseline), { recursive: true });
     await writeFile(baseline, shot);
     kit.note(`${name}: baseline approved (${baseline})`);
-    return;
+    return false;
   }
   if (!existsSync(baseline)) {
     kit.note(
       `${name}: no approved baseline; capture for the owner's review at ${capture}`
     );
-    return;
+    return false;
   }
   const want = PNG.sync.read(await readFile(baseline));
   const got = PNG.sync.read(shot);
@@ -71,7 +72,7 @@ export async function diff(
       false,
       `size ${got.width}×${got.height}, baseline ${want.width}×${want.height}; capture ${capture}`
     );
-    return;
+    return true;
   }
   const out = new PNG({ width: got.width, height: got.height });
   const differing = pixelmatch(
@@ -85,7 +86,7 @@ export async function diff(
   const allowed = options.maxDiffPixels ?? 0;
   if (differing <= allowed) {
     kit.check(`${name} matches its baseline`, true, `${differing} px differ`);
-    return;
+    return false;
   }
   const box = changedBox(out, 8);
   const cut = new PNG({ width: box.width, height: box.height });
@@ -99,6 +100,7 @@ export async function diff(
     false,
     `${differing} px differ (allowed ${allowed}); the region that changed: ${crop}`
   );
+  return true;
 }
 
 /**

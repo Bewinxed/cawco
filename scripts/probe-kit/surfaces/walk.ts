@@ -1,0 +1,702 @@
+/**
+ * The surfaces walked: every surface the run names, at each pass (a width,
+ * a theme, and once reduced motion), each state opened on a page of its own
+ * context with its clock held at the tape's moment, and handed to `visit`
+ * once it stands still.
+ *
+ * The dashboard is served against the hub tape (hub-tape.ts): the built one
+ * (`vite build`, `vite preview`) for every route, the dev server for the
+ * `/motion/` benches, both against the same player. `record` serves them
+ * against a recorder in front of a scratch fleet's hub instead.
+ */
+import { join } from "node:path";
+import type { BrowserContext, Page, Request } from "playwright-core";
+import { heavySlot } from "../../lib/heavy-run";
+import { until } from "../../scratch-fleet";
+import type { Attach, Tape, TapeHold } from "../hub-tape";
+import { type Kit, open, ROOT, type Theme, type View } from "../kit";
+import type { State, Surface, Width } from "./catalogue";
+import { holdStill, installReader, PROPS } from "./read";
+import type { Scene } from "./scene";
+
+/** The hub the surfaces read: a scratch fleet's, recorded (`style-snapshot --record`). */
+export const TAPE = join(
+  import.meta.dir,
+  "..",
+  "fixtures",
+  "style-snapshot",
+  "hub-tape.json.gz"
+);
+
+/** One pass: a width at a theme, reduced motion or not. */
+export interface Pass {
+  name: string;
+  reduced: boolean;
+  theme: Theme;
+  width: Width;
+}
+
+/** The widths read: never 639–641 or 899–901, where the cutover's 1px media-query edges are on record per lane. */
+const WIDTHS: Record<Width, { height: number; view: View; width: number }> = {
+  desk: { view: "desk", width: 1440, height: 900 },
+  tablet: { view: "tablet", width: 820, height: 1180 },
+  phone: { view: "phone", width: 390, height: 844 },
+};
+
+export const PASSES: Pass[] = [
+  ...(["desk", "tablet", "phone"] as const).flatMap((width) =>
+    (["light", "dark"] as const).map((theme) => ({
+      name: `${width} ${theme}`,
+      width,
+      theme,
+      reduced: false,
+    }))
+  ),
+  { name: "desk light reduced", width: "desk", theme: "light", reduced: true },
+];
+
+/** Where a page can reach this machine: a loopback origin. */
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * The dashboard's two servers against one hub (the tape's recorder or
+ * player): the built one, and the dev server once a bench asks for it.
+ * Every other loopback origin a page reaches is a preview's own, which the
+ * hub's `attach` routes on each page's context.
+ */
+export class Servers {
+  private dev: Promise<{ base: string; child: Bun.Subprocess }> | null = null;
+  private built: Promise<string> | null = null;
+  private readonly kit: Kit;
+  private readonly own = new Set<string>();
+  readonly hub: string;
+  private readonly tape: { attach: Attach; base: string };
+  /** What the hub holds back on purpose (hub-tape.ts `held`): answered, as far as a wait is concerned. */
+  private readonly held: TapeHold | undefined;
+  constructor(
+    kit: Kit,
+    hub: { attach: Attach; base: string },
+    held?: TapeHold
+  ) {
+    this.kit = kit;
+    this.hub = hub.base;
+    this.tape = hub;
+    this.held = held;
+    this.own.add(new URL(hub.base).host);
+  }
+
+  base(serve: Surface["serve"]): Promise<string> {
+    // By host and port: a socket's URL (`ws://`) is the same server as the page's (`http://`).
+    const owned = (base: string) => {
+      this.own.add(new URL(base).host);
+      return base;
+    };
+    if (serve === "built") {
+      this.built ??= this.kit.builtFor(this.hub).then(owned);
+      return this.built;
+    }
+    this.dev ??= devServer(this.hub).then((d) => {
+      owned(d.base);
+      return d;
+    });
+    return this.dev.then((d) => d.base);
+  }
+
+  /** Routes a page's context: its previews' origins on the tape. */
+  attach(context: BrowserContext): Promise<void> {
+    return this.tape.attach(
+      context,
+      (url) => LOOPBACK.has(url.hostname) && !this.own.has(url.host)
+    );
+  }
+
+  /**
+   * Whether `request` is one the hub holds back (a loading placeholder's
+   * read: `config-memory/reading`, `home/connecting`): it is never
+   * answered, on purpose, so a wait on the tape counts it answered.
+   */
+  holds(request: Request): boolean {
+    const paths = this.held?.http;
+    if (!paths || paths.length === 0) {
+      return false;
+    }
+    const url = new URL(request.url());
+    return url.host === new URL(this.hub).host && paths.includes(url.pathname);
+  }
+
+  async close(): Promise<void> {
+    (await this.dev)?.child.kill();
+  }
+}
+
+/**
+ * `vite dev` against `hub`: the `/motion/` benches' server (the kit's own
+ * is against no hub). The run's heavy-run slot is held from here for the
+ * process's life (heavy-run.ts: a run holds its slot its whole heavy life;
+ * one process holds one, however many of its parts ask).
+ */
+async function devServer(hub: string) {
+  await heavySlot();
+  const lease = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(null),
+  });
+  const port = lease.port as number;
+  await lease.stop(true);
+  const child = Bun.spawn(
+    [
+      "bunx",
+      "vite",
+      "dev",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      "--strictPort",
+    ],
+    {
+      cwd: join(ROOT, "apps", "dashboard"),
+      env: { ...process.env, CAWCO_DEV_HUB_URL: hub, CAWCO_HUB_URL: hub },
+      stdout: "ignore",
+      stderr: "ignore",
+    }
+  );
+  const base = `http://127.0.0.1:${port}`;
+  await until(
+    "the dev server answering",
+    () =>
+      fetch(base)
+        .then((r) => r.ok)
+        .catch(() => false),
+    Boolean,
+    120_000
+  );
+  return { base, child };
+}
+
+declare global {
+  interface Window {
+    /** Set once the root layout has mounted: the page's whole tree hydrated (`markHydrated`). */
+    kitHydrated?: true;
+  }
+}
+
+/**
+ * Marks the page hydrated when the root layout's `onMount` calls
+ * `releaseHeldTaps` (routes/+layout.svelte: effects flush only once the whole
+ * tree has hydrated), which app.html defines after this runs. A page the
+ * server drew stands still before it hydrates, and the dev server's takes
+ * seconds to: a state opened on it reads the server's markup and clicks
+ * buttons nothing listens to yet.
+ */
+function markHydrated(): void {
+  let release: (() => void) | undefined;
+  Object.defineProperty(window, "releaseHeldTaps", {
+    configurable: true,
+    get: () => () => {
+      window.kitHydrated = true;
+      release?.();
+    },
+    set: (fn: () => void) => {
+      release = fn;
+    },
+  });
+}
+
+/** Each page's requests not yet answered: what `quiet` waits on. */
+const inFlight = new WeakMap<Page, Set<Request>>();
+/** Each page's hub's holds (`Servers.holds`): a held request is answered as far as `quiet` waits. */
+const heldOn = new WeakMap<Page, (request: Request) => boolean>();
+/** Each request `quiet` gave up waiting on, said once: a page that keeps one open is slow, never still. */
+const gaveUp = new Set<string>();
+
+/**
+ * A page for `pass`: its width, theme and motion, the reader installed, and
+ * its clock the walk's alone. Playwright's fake clock (`clock.install`)
+ * stands paused at the tape's moment: Date, setTimeout, setInterval,
+ * requestAnimationFrame and performance.now move only when `settle` runs
+ * them on, a fixed stretch at a time, so a script's motion is where the
+ * same stretch puts it on every run (the `/motion/` benches' loops).
+ */
+export async function passPage(
+  kit: Kit,
+  pass: Pass,
+  at: number
+): Promise<Page> {
+  const w = WIDTHS[pass.width];
+  const page = await kit.page(w.view, { theme: pass.theme, scale: 1 });
+  await page.setViewportSize({ width: w.width, height: w.height });
+  if (pass.reduced) {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+  }
+  await page.context().addInitScript(installReader, PROPS);
+  await page.context().addInitScript(markHydrated);
+  // Every page focused, as a person's one window is: two passes side by side
+  // share one browser, where only one page would hold its focus, and what
+  // styles itself on focus (an editor's active line) read either way.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  await page.clock.install({ time: at - CLOCK_LEAD_MS });
+  await page.clock.pauseAt(at);
+  // Date stands at the tape's moment whatever stretches the timers are run
+  // on: what a read says of the time ("2m ago") is the same on every run.
+  await page.clock.setFixedTime(at);
+  const pending = new Set<Request>();
+  inFlight.set(page, pending);
+  page.on("request", (request) => pending.add(request));
+  // Answered once its response is in: Playwright says no requestfinished
+  // for some answered fetches (a preview's CORS ping), so that alone would
+  // hold a request in flight for good.
+  page.on("response", (response) => pending.delete(response.request()));
+  page.on("requestfinished", (request) => pending.delete(request));
+  page.on("requestfailed", (request) => pending.delete(request));
+  // A new document: the last one's requests are nobody's to wait on.
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) {
+      pending.clear();
+    }
+  });
+  // A state whose control is gone fails in seconds, not the default 30.
+  page.setDefaultTimeout(10_000);
+  return page;
+}
+
+/** How far before the tape's moment the clock is installed, so it can be paused at that moment. */
+const CLOCK_LEAD_MS = 1000;
+/** Real time for the browser's pointer-over under a still pointer once layout has moved (it sends one on a timer). */
+const POINTER_BEAT_MS = 250;
+/**
+ * The page time an act is given: its clock stands this far past the tick
+ * the act began at, whatever the act took. Past an act's own run, and short
+ * of what a state waits on: home/unlocking shows the keychain's unlock under
+ * way, and a machine control gives up after CONTROL_TIMEOUT_MS (15s). After
+ * the mark the walk runs 11s of page time of its own (`arrive`: two settles
+ * round a nudge), so a step at the act's end is read at most ACT_MS + 11s
+ * later. Our call: five seconds.
+ */
+const ACT_MS = 5000;
+
+/**
+ * An act, with the page's time flowing as a person's clicks meet a page
+ * whose motions play (a popover's control is clickable once its opening
+ * has moved it into place); then the clock stands at ACT_MS past the tick
+ * the act began at, the same tick on every run.
+ *
+ * The clock is counted in its own ticks (`performance.now()`, the fake
+ * clock's ticks across reloads), never in wall time: Date is pinned
+ * (`setFixedTime`), and Playwright's `pauseAt(time)` consumes
+ * `time - this._now.time` of that pinned wall time. A mark set in wall time
+ * jumped the clock by everything the walk had run since the page opened,
+ * plus the act's own: home/unlocking's 15s wait was given up 18s into a
+ * single jump. Paused at Date's own moment, it consumes nothing; the act's
+ * remainder of ACT_MS is then run, timer by timer. An act that moves Date
+ * (rail/older sets it a day on, so its sessions read old) keeps its moment.
+ * An act that runs past ACT_MS stands where it ended, and says so.
+ *
+ * `held`: the state reads the frame the act left (State `heldFrame`), so
+ * the clock is paused where the act left it and not run on.
+ */
+async function acting(
+  page: Page,
+  act: (page: Page) => Promise<unknown>,
+  held = false
+): Promise<void> {
+  const began = await page.evaluate(() => performance.now());
+  await page.clock.resume();
+  await page.evaluate(() => {
+    window.__ssReader?.pointerFrom();
+    window.__ssReader?.holding(true);
+  });
+  try {
+    await act(page);
+  } finally {
+    await page
+      .evaluate(() => window.__ssReader?.holding(false))
+      .catch(() => undefined);
+    const moment = await page.evaluate(() => Date.now());
+    await page.clock.pauseAt(moment);
+    await page.clock.setFixedTime(moment);
+    const now = await page.evaluate(() => performance.now());
+    const rest = began + ACT_MS - now;
+    if (held) {
+      // Read where the act left it: no stretch of page time after it.
+    } else if (rest > 0) {
+      await page.clock.runFor(rest);
+    } else {
+      console.log(
+        `  act: ran ${Math.round(now - began)} ms of page time, past its ${ACT_MS}`
+      );
+    }
+  }
+}
+/**
+ * A state's act, then the page at rest after it. What the act opened is
+ * drawn under the pointer the click left there, and the browser's own
+ * pointer-over for it sent (it sends one a beat after layout moves under a
+ * still pointer): then the pointer off the page, so nothing reads hovered
+ * and a hover's highlight is always placed, then hidden. An act that ends
+ * on a move is a hover, and what it shows is the state (a session row's
+ * hover card): its pointer stays. Measured again at rest, as on arrival.
+ *
+ * A state that reads on a held frame (State `heldFrame`: catch-up/switch's
+ * "Catching up…", which stands until the next frame and timer run) is read
+ * where its act left the page: its clock paused, no stretch run on it, and
+ * no measure again (the measure runs page time). Only the reader's own
+ * wait on the browser's frames runs, which moves no page time.
+ */
+async function actAtRest(
+  page: Page,
+  act: (page: Page) => Promise<unknown>,
+  heldFrame = false
+): Promise<void> {
+  await acting(page, act, heldFrame);
+  if (heldFrame) {
+    await holdStill(page);
+    return;
+  }
+  const rests = await page.evaluate(
+    () => window.__ssReader?.pointerRests() ?? false
+  );
+  await holdStill(page);
+  await page.waitForTimeout(POINTER_BEAT_MS);
+  if (!rests) {
+    await page.mouse.move(-1, -1);
+  }
+  await arrive(page);
+}
+/** Each stretch `settle` runs the clock on, and how many. */
+const SETTLE_STEP_MS = 1000;
+const SETTLE_STEPS = 3;
+/** Real time a socket's answer is given to land after the last request is answered. */
+const LAND_MS = 50;
+
+/**
+ * Until the tape has answered every request the page made: none in flight
+ * on two reads in a row, a socket's answers given LAND_MS to land. A
+ * request the hub holds back on purpose (`Servers.holds`) counts as
+ * answered: a loading placeholder's read waits on it for good. A page still
+ * asking after 15 s is read as it stands (its requests named).
+ */
+async function quiet(page: Page): Promise<void> {
+  const pending = inFlight.get(page);
+  const holds = heldOn.get(page);
+  const unanswered = () =>
+    pending ? [...pending].filter((request) => !holds?.(request)) : [];
+  let calm = 0;
+  for (let i = 0; i < 300 && calm < 2; i += 1) {
+    calm = unanswered().length > 0 ? 0 : calm + 1;
+    // biome-ignore lint/performance/noAwaitInLoops: polled until nothing is in flight
+    await page.waitForTimeout(LAND_MS);
+  }
+  for (const request of calm < 2 ? unanswered() : []) {
+    const url = request.url().replace(ORIGIN_PORT, ":<port>");
+    if (!gaveUp.has(url)) {
+      gaveUp.add(url);
+      console.log(`  quiet: gave up after 15 s on ${request.method()} ${url}`);
+    }
+  }
+}
+
+/** A loopback origin's port, the run's own, as a line names it. */
+const ORIGIN_PORT = /:\d{4,5}(?=\/)/;
+
+/**
+ * The page's own time, run on: each stretch only once the tape has answered
+ * what the last one asked, so an answer lands at the same point of the
+ * page's time on every run, however busy the machine.
+ */
+async function settle(page: Page): Promise<void> {
+  for (let step = 0; step < SETTLE_STEPS; step += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each stretch runs on what the last one left
+    await quiet(page);
+    await page.clock.runFor(SETTLE_STEP_MS);
+  }
+  await quiet(page);
+}
+
+/** Every scroll offset on the page and the root's box: what a still page keeps between two reads. */
+const scrollsAndBoxes = () => {
+  let sum = 0;
+  // Every inline style's text, hashed: a value a script writes moves the
+  // hash, whatever its length.
+  let styles = 7;
+  let scrolls = `${scrollX},${scrollY}`;
+  const all = document.getElementsByTagName("*");
+  for (const el of all) {
+    const r = el.getBoundingClientRect();
+    sum += r.x * 3 + r.y * 7 + r.width * 11 + r.height * 13;
+    const style = el.getAttribute("style") ?? "";
+    for (let i = 0; i < style.length; i += 1) {
+      styles = (styles * 31 + style.charCodeAt(i)) % 2_147_483_647;
+    }
+    if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+      scrolls += `;${el.scrollTop},${el.scrollLeft}`;
+    }
+  }
+  const loading = [...document.images].filter((img) => !img.complete);
+  return `${all.length} ${sum.toFixed(3)} ${styles} ${loading.length} ${document.fonts.status} ${scrolls}`;
+};
+
+/** The window and every scroll container at the top and start: the one offset each is read at. */
+const toTheStart = () => {
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  for (const el of document.getElementsByTagName("*")) {
+    if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+      el.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    }
+  }
+};
+
+/**
+ * Waits until the page stops changing: fonts and images in, the tape done
+ * answering, the page's time run on its fixed stretches (`settle`), still in
+ * its own time, then every scroll container at its start (what the page
+ * scrolled itself is done by then) and still again: every animation held,
+ * and its elements, their boxes, their inline styles and every scroll offset
+ * the same over three stretches in a row.
+ */
+export async function stand(page: Page): Promise<void> {
+  await page.evaluate(() => document.fonts.ready);
+  await settle(page);
+  await stillInPageTime(page);
+  await page.evaluate(toTheStart);
+  await stillInPageTime(page);
+  await holdStill(page);
+}
+
+/**
+ * Still in the page's own time: a paused clock holds a spring mid-way and
+ * looks still, so each read follows a stretch of it. A motion a resize or a
+ * scroll restarted (its observer's callback lands in real time, among the
+ * stretches) runs on until it rests; a loop that never rests stops at the
+ * cap, the same stretch of time on every run.
+ */
+async function stillInPageTime(page: Page): Promise<void> {
+  let last = "";
+  let still = 0;
+  for (let i = 0; i < STILL_STRETCHES && still < 3; i += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: polled until the page holds still
+    await quiet(page);
+    await page.clock.runFor(STILL_STEP_MS);
+    await holdStill(page);
+    const now = await page.evaluate(scrollsAndBoxes);
+    still = now === last ? still + 1 : 0;
+    last = now;
+  }
+}
+
+/** Each stretch of page time the stillness reads follow, and at most how many. */
+const STILL_STEP_MS = 250;
+const STILL_STRETCHES = 60;
+
+/**
+ * In the page: how many elements under `root` (its largest match, else the
+ * body) Svelte has adopted. The dev server tags each with `__svelte_meta`;
+ * a build marks each one it wires with a symbol-keyed cache (its class,
+ * style or attributes, its delegated events: svelte constants.js
+ * `CLASS_CACHE`, …). The server's markup carries neither.
+ */
+function adopted(root: string): number {
+  let top: Element = document.body;
+  let most = -1;
+  for (const el of document.querySelectorAll(root)) {
+    const n = el.getElementsByTagName("*").length;
+    if (n > most) {
+      top = el;
+      most = n;
+    }
+  }
+  let count = 0;
+  for (const el of [top, ...top.querySelectorAll("*")]) {
+    if ("__svelte_meta" in el || Object.getOwnPropertySymbols(el).length > 0) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+/** How long the adopted count holds before the page is read as hydrated, and how often it is read. */
+const HYDRATED_HOLD_MS = 1000;
+const HYDRATED_POLL_MS = 100;
+const HYDRATED_WITHIN_MS = 30_000;
+
+/**
+ * Waits until the elements Svelte has adopted under `root` are some and
+ * hold at one count for {@link HYDRATED_HOLD_MS}. The root layout's mount
+ * (`kitHydrated`) comes before the page is hydrated: async Svelte hydrates
+ * in parts, and the dev server builds each part's modules on its first
+ * request, so a read at `kitHydrated` read the server's markup (389
+ * elements on the board, none adopted) and a click on it reloaded the page.
+ */
+async function hydrated(page: Page, root: string): Promise<void> {
+  const deadline = Date.now() + HYDRATED_WITHIN_MS;
+  let last = -1;
+  let since = Date.now();
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: polled until the count holds
+    const now = await page.evaluate(adopted, root);
+    if (now !== last) {
+      last = now;
+      since = Date.now();
+    } else if (now > 0 && Date.now() - since >= HYDRATED_HOLD_MS) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `not hydrated within ${HYDRATED_WITHIN_MS / 1000}s (${now} elements adopted under ${root})`
+      );
+    }
+    await page.waitForTimeout(HYDRATED_POLL_MS);
+  }
+}
+
+/**
+ * A route as it opens, standing still, then measured once more at rest: a
+ * size a script measured while the page was still moving (the composer's
+ * ask room, Composer.svelte `askRoom`, taken as the ask grows) is measured
+ * again on `resize`, which the page is sent once it stands.
+ */
+async function arrive(page: Page): Promise<void> {
+  await stand(page);
+  // A real resize, one pixel and back: a ResizeObserver hears it (a
+  // highlight's rows measured mid-slide, highlight.svelte.ts's `sizes`),
+  // where a dispatched `resize` event reaches only window listeners.
+  const size = page.viewportSize();
+  if (size) {
+    await page.setViewportSize({ width: size.width + 1, height: size.height });
+    await quiet(page);
+    await page.clock.runFor(SETTLE_STEP_MS);
+    await page.setViewportSize(size);
+  }
+  await stand(page);
+}
+
+export interface Visit {
+  page: Page;
+  pass: Pass;
+  state: State;
+  surface: Surface;
+}
+
+/**
+ * `state` on its route freshly loaded at `base`, hydrated and arrived, its
+ * act done at rest, and what the act opened hydrated too. The read waits
+ * on both the tape's answer (`quiet`, inside `arrive`) and hydration.
+ */
+async function opened(
+  page: Page,
+  base: string,
+  surface: Surface,
+  state: State,
+  scene: Scene
+): Promise<void> {
+  const route = (state.route ?? surface.route)(scene);
+  await open(
+    page,
+    `${base}${route}`,
+    () => document.readyState !== "loading",
+    60_000
+  );
+  // The dev server built the route's modules for that load: loaded again,
+  // the page hydrates on modules already built.
+  if (surface.serve === "dev") {
+    await page.reload({ waitUntil: "domcontentloaded" });
+  }
+  await hydrated(page, "body");
+  await arrive(page);
+  const { act } = state;
+  if (!act) {
+    return;
+  }
+  await actAtRest(page, (p) => act(p, scene), state.heldFrame === true);
+  if (!state.heldFrame) {
+    await hydrated(page, state.root);
+  }
+}
+
+/**
+ * Walks `surfaces` at `passes`, handing each state to `visit` once it
+ * stands still. A state that cannot open (its control gone) is reported to
+ * `failed` and the walk goes on. Returns each surface's seconds.
+ */
+export async function walk(
+  kit: Kit,
+  servers: Servers,
+  tape: Pick<Tape, "at" | "scene">,
+  surfaces: Surface[],
+  passes: Pass[],
+  visit: (v: Visit) => Promise<void>,
+  failed: (what: string, why: string) => void
+): Promise<Map<string, number>> {
+  const seconds = new Map<string, number>();
+  const scene = tape.scene as Scene;
+  // A tape recorded without the delegate (`--record --without-delegate`)
+  // holds nothing for a state that stands on it: said once, then left out.
+  const hostOnly = (state: State) => state.hostOnly === true && !scene.split;
+  for (const surface of surfaces) {
+    for (const state of surface.states.filter(hostOnly)) {
+      kit.note(`${surface.name}/${state.name}: host only, not in this tape`);
+    }
+  }
+  for (const surface of surfaces) {
+    const started = performance.now();
+    // biome-ignore lint/performance/noAwaitInLoops: one surface at a time
+    const base = await servers.base(surface.serve);
+    // A surface's passes side by side, each on its own page and context.
+    await pool(passes, PARALLEL, async (pass) => {
+      const states = surface.states.filter(
+        (s) => !(hostOnly(s) || (s.widths && !s.widths.includes(pass.width)))
+      );
+      if (states.length === 0) {
+        return;
+      }
+      const page = await passPage(kit, pass, tape.at);
+      heldOn.set(page, (request) => servers.holds(request));
+      await servers.attach(page.context());
+      try {
+        for (const state of states) {
+          const what = `${surface.name}/${state.name} · ${pass.name}`;
+          try {
+            // biome-ignore lint/performance/noAwaitInLoops: one state at a time on the pass's page
+            await opened(page, base, surface, state, scene);
+            await visit({ page, pass, state, surface });
+          } catch (error) {
+            failed(what, String(error).split("\n")[0] ?? "");
+          }
+        }
+      } finally {
+        await page
+          .context()
+          .close()
+          .catch(() => undefined);
+      }
+    });
+    seconds.set(surface.name, (performance.now() - started) / 1000);
+  }
+  return seconds;
+}
+
+/** Passes walked at once: `PROBE_PARALLEL`, or 4. Each holds still on its own page, so how many run never moves a reading. */
+const PARALLEL = Number(process.env.PROBE_PARALLEL) || 4;
+
+/** Runs `work` on every item, at most `limit` at a time. */
+async function pool<T>(
+  items: T[],
+  limit: number,
+  work: (item: T) => Promise<void>
+): Promise<void> {
+  let next = 0;
+  const lanes = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (next < items.length) {
+        const item = items[next] as T;
+        next += 1;
+        // biome-ignore lint/performance/noAwaitInLoops: each lane takes the next item when its last is done
+        await work(item);
+      }
+    }
+  );
+  await Promise.all(lanes);
+}

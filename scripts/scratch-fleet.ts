@@ -146,6 +146,12 @@ export interface Reply {
    * limit headers rejected), until `resetsAt` (epoch ms).
    */
   refuse?: { resetsAt: number };
+  /**
+   * The model's thinking before its words, a block of its own (Anthropic
+   * messages: a `thinking` block, its deltas, then its signature), one
+   * delta per piece: what makes a transcript draw a thinking row.
+   */
+  thinking?: string[];
   tool?: ToolCall;
   /**
    * Several calls in the one message, after its words, as a model calls
@@ -369,7 +375,8 @@ const anthropicEvents = (
   words: string[],
   calls: ToolCall[],
   cache?: Reply["cache"],
-  spent?: Reply["usage"]
+  spent?: Reply["usage"],
+  thinking?: string[]
 ): string[] => {
   const ev = (type: string, data: object) =>
     `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
@@ -403,26 +410,48 @@ const anthropicEvents = (
       },
     },
   });
+  // The thinking first, a block of its own, its signature closing it.
+  const thought = thinking?.length
+    ? [
+        ev("content_block_start", {
+          index: 0,
+          content_block: { type: "thinking", thinking: "", signature: "" },
+        }),
+        ...thinking.map((piece) =>
+          ev("content_block_delta", {
+            index: 0,
+            delta: { type: "thinking_delta", thinking: piece },
+          })
+        ),
+        ev("content_block_delta", {
+          index: 0,
+          delta: { type: "signature_delta", signature: "probe-signature" },
+        }),
+        ev("content_block_stop", { index: 0 }),
+      ]
+    : [];
+  const after = thought.length > 0 ? 1 : 0;
   if (calls.length > 0) {
     // The words first, a text block of their own, then each call after
     // them, a block each.
     const said = words.length > 0;
-    const first = said ? 1 : 0;
+    const first = after + (said ? 1 : 0);
     return [
       start,
+      ...thought,
       ...(said
         ? [
             ev("content_block_start", {
-              index: 0,
+              index: after,
               content_block: { type: "text", text: "" },
             }),
             ...words.map((text) =>
               ev("content_block_delta", {
-                index: 0,
+                index: after,
                 delta: { type: "text_delta", text },
               })
             ),
-            ev("content_block_stop", { index: 0 }),
+            ev("content_block_stop", { index: after }),
           ]
         : []),
       ...calls.flatMap((call, i) => [
@@ -453,17 +482,18 @@ const anthropicEvents = (
   }
   return [
     start,
+    ...thought,
     ev("content_block_start", {
-      index: 0,
+      index: after,
       content_block: { type: "text", text: "" },
     }),
     ...words.map((text) =>
       ev("content_block_delta", {
-        index: 0,
+        index: after,
         delta: { type: "text_delta", text },
       })
     ),
-    ev("content_block_stop", { index: 0 }),
+    ev("content_block_stop", { index: after }),
     ev("message_delta", {
       delta: { stop_reason: "end_turn", stop_sequence: null },
       usage: { output_tokens: spent?.completion ?? words.length },
@@ -959,7 +989,8 @@ export interface SendSnapshot {
  */
 export async function scratchFleet(options: {
   name: string;
-  respond: (request: Seen) => Reply;
+  /** A promise holds the request until it settles: a spec paces a session's turns. */
+  respond: (request: Seen) => Reply | Promise<Reply>;
 }) {
   const heavy = await heavySlot();
   const dirs = new FleetDirs();
@@ -973,7 +1004,10 @@ export async function scratchFleet(options: {
 }
 
 async function standUp(
-  options: { name: string; respond: (request: Seen) => Reply },
+  options: {
+    name: string;
+    respond: (request: Seen) => Reply | Promise<Reply>;
+  },
   dirs: FleetDirs,
   heavy: HeavySlot
 ) {
@@ -1094,7 +1128,7 @@ async function standUp(
         }),
       };
       seen.push(one);
-      const reply = options.respond(one);
+      const reply = await options.respond(one);
       const chat = path.endsWith("/chat/completions");
       const refused = refusalOf(reply, chat);
       if (refused) {
@@ -1119,7 +1153,8 @@ async function standUp(
               reply.words,
               callsOf(reply),
               reply.cache,
-              reply.usage
+              reply.usage,
+              reply.thinking
             ),
         reply.everyMs
       );

@@ -217,7 +217,9 @@ export interface Kit {
    * the run's dashboard is built; its `dashboard()` serves that build
    * against its hub once asked. Both go when the spec ends.
    */
-  fleet: (respond: (request: Seen) => Reply) => Promise<KitFleet>;
+  fleet: (
+    respond: (request: Seen) => Reply | Promise<Reply>
+  ) => Promise<KitFleet>;
   /** A line that is neither a pass nor a fail (a capture awaiting its baseline). */
   note: (line: string) => void;
   /** Where the spec writes what a reviewer reads after a failure. */
@@ -284,7 +286,11 @@ function installRuns(): void {
 
 /** The dashboard built: `vite build`, as the probes' `vite preview` serves it. */
 const viteBuild = async (): Promise<void> => {
-  const child = Bun.spawn(["bunx", "vite", "build"], {
+  // `PROBE_BUILD_LOCK` names a lock file builds on this host share
+  // (`flock`): one build at a time across the workspaces that name it.
+  const lock = process.env.PROBE_BUILD_LOCK;
+  const build = ["bunx", "vite", "build"];
+  const child = Bun.spawn(lock ? ["flock", lock, ...build] : build, {
     cwd: DASHBOARD,
     // This process's own, git's repository variables gone (scratch-fleet.ts
     // `GIT_REPOSITORY_ENV`): the build reads `git rev-parse` for its version.
