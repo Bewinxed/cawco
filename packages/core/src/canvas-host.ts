@@ -13,6 +13,7 @@
  */
 import { rm } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
+import { agentReact } from "./agent-react";
 import { HOST_PLUGINS } from "./canvas-host-plugins";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -45,29 +46,6 @@ const overlayYjs: Bun.BunPlugin = {
   setup(build) {
     build.onResolve({ filter: YJS }, () => ({
       path: join(HOST_DIR, "yjs.ts"),
-    }));
-  },
-};
-
-/**
- * React in the host bundle is the agent package's, whoever imports it: the
- * page runs one React. Excalidraw's `tunnel-rat` imports `react` without
- * declaring it (pmndrs/tunnel-rat#24, open; 0.1.2 is its latest), and the
- * isolated install leaves it no shared fallback to reach one through
- * (bunfig.toml `hoist = false`), so unpinned the bundle fails ("Could not
- * resolve: \"react\""). Bun has no `packageExtensions` to declare it
- * (oven-sh/bun#40053), and a root declaration never reaches a package in
- * bun's global store, which a workspace installs from. This is the
- * Bun.build twin of the dashboard's vite.config.ts `resolve.dedupe`
- * (bits-ui for vaul-svelte): one copy, resolved from the package that
- * declares it.
- */
-const REACT = /^react(-dom)?(\/.*)?$/;
-const agentReact: Bun.BunPlugin = {
-  name: "agent-react",
-  setup(build) {
-    build.onResolve({ filter: REACT }, ({ path }) => ({
-      path: Bun.resolveSync(path, HOST_DIR),
     }));
   },
 };

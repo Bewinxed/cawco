@@ -19,6 +19,7 @@
 import { readFile, rm } from "node:fs/promises";
 import { join, normalize } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
+import { agentReact } from "./agent-react";
 import { embeddedFile, standalone } from "./runtime";
 
 const HOST_DIR = new URL(
@@ -43,7 +44,7 @@ export async function buildDecisionHost(outdir?: string) {
     splitting: true,
     minify: true,
     conditions: ["browser", "production"],
-    plugins: [SveltePlugin({ development: false })],
+    plugins: [SveltePlugin({ development: false }), agentReact],
     define: { "process.env.NODE_ENV": '"production"' },
     publicPath: PUBLIC_PATH,
     // Faces and stills as files of their own: fetched by unicode-range as a

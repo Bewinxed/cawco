@@ -5,6 +5,7 @@ import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
+import { agentReact } from "../packages/core/src/agent-react";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
 import { decisionHostAssets } from "../packages/core/src/decision-host";
 
@@ -290,6 +291,7 @@ export async function buildBinary(options: {
       "process.env.NODE_ENV": '"production"',
     },
     plugins: [
+      agentReact,
       {
         name: "owned-runtime-resources",
         setup(build) {

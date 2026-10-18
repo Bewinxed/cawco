@@ -14,5 +14,8 @@
 # a package there realpaths into the cache, with no node_modules of ours above
 # it. So the dashboard resolves bits-ui from its own root whatever imports it:
 # vite.config.ts `resolve.dedupe`, and tsconfig.json `paths` for its types.
+# Bun's bundles do the same for react, which tunnel-rat imports undeclared
+# (pmndrs/tunnel-rat#24): core agent-react.ts resolves it from the agent package
+# in every Bun.build, so the root declares no react.
 [install]
 hoist = false
