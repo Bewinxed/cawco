@@ -218,6 +218,35 @@ export function createSwipe(
     }
   };
 
+  /** The panes on a layer of their own now. */
+  let layered: HTMLElement[] = [];
+  /**
+   * The panes in view on layers of their own for the move alone: on as a
+   * finger lands or a tap's switch is readied, before the move's first
+   * frame, and off as the settle lands or the finger stands down, so each
+   * is painted again where it rests. A pane not painted (`data-pane-hidden`,
+   * `data-pane-settling`) takes none. MDN (will-change): "switch
+   * will-change on and off using script code before and after the change
+   * occurs".
+   */
+  const layer = (on: HTMLElement[]) => {
+    const els = on.filter(
+      (el) =>
+        el.dataset.paneHidden === undefined &&
+        el.dataset.paneSettling === undefined
+    );
+    for (const el of layered) {
+      if (!els.includes(el)) {
+        el.style.removeProperty("will-change");
+      }
+    }
+    for (const el of els) {
+      el.style.willChange = "transform";
+    }
+    layered = els;
+  };
+  const layerPanes = () => layer(panes.map(({ el }) => el));
+
   const resist = (d: number) =>
     Math.sign(d) * Math.min(Math.abs(d) * RESIST, width * RESIST_MAX);
 
@@ -240,6 +269,7 @@ export function createSwipe(
   const land = () => {
     stopSettle();
     clear();
+    layer([]);
     moving = false;
     offset = 0;
     toward = null;
@@ -341,9 +371,17 @@ export function createSwipe(
     paint(offset);
   }
 
+  /** A touch that moved nothing: the panes at rest let their layers go. */
+  const leftAtRest = () => {
+    if (held === null && animations.length === 0) {
+      layer([]);
+    }
+  };
+
   /** The finger that stopped the settle left without moving it: let it go on. */
   function resume() {
     if (held === null) {
+      leftAtRest();
       return;
     }
     const velocity = held;
@@ -402,6 +440,7 @@ export function createSwipe(
       flushSync();
       clear();
       panes = gather();
+      layerPanes();
       offset += left ? width : -width;
       paint(offset);
     } else {
@@ -439,6 +478,14 @@ export function createSwipe(
     veiled = [tabs[at + dir], far ? tabs[at - dir] : undefined].filter(
       (id): id is string => id !== undefined
     );
+    layer(
+      [from, to].flatMap(
+        (id) =>
+          root?.querySelector<HTMLElement>(
+            `:scope > [data-pane="${CSS.escape(id)}"]`
+          ) ?? []
+      )
+    );
   }
 
   /** After the switch rendered: play the settle `prepare` readied. */
@@ -466,6 +513,7 @@ export function createSwipe(
     if (out) {
       panes.push({ el: out, delta: -dir });
     }
+    layerPanes();
     offset = (now?.x ?? 0) + dir * width;
     // The strip's choice rides the settle, as after a swipe, whether the tab
     // is the next one or further along: one path for a finger and a tap.
@@ -591,6 +639,7 @@ export function createSwipe(
         samples = [{ x: touch.clientX, t: performance.now() }];
         phase = "tracking";
         hold();
+        layer(gather().map(({ el }) => el));
       };
 
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the one-finger tab-swipe touchmove handler — one state machine, not split in this pass
@@ -627,6 +676,7 @@ export function createSwipe(
             return;
           }
           if (!(prev || next)) {
+            leftAtRest();
             phase = "idle";
             return;
           }
@@ -640,6 +690,7 @@ export function createSwipe(
             leaving = null;
           }
           panes = gather();
+          layerPanes();
           phase = "decided";
           moving = true;
         }
@@ -696,6 +747,7 @@ export function createSwipe(
         },
         destroy() {
           stopSettle();
+          layer([]);
           sizes.disconnect();
           node.removeEventListener("scroll", unscroll);
           root = null;

@@ -80,7 +80,7 @@
          `visible` paints through a hidden ancestor. -->
     <div
       data-slot="pane-deck-card"
-      class="absolute inset-0 flex min-h-0 min-w-0 will-change-transform delta--1:transform-(--park-up) delta-0:transform-(--park-here) delta-1:transform-(--park-down) data-card-hidden:pointer-events-none data-card-hidden:invisible"
+      class="absolute inset-0 flex min-h-0 min-w-0 delta--1:transform-(--park-up) delta-0:transform-(--park-here) delta-1:transform-(--park-down) data-card-hidden:pointer-events-none data-card-hidden:invisible"
       data-delta={delta}
       data-leaf={leaf.id}
       inert={!focused}
@@ -97,7 +97,7 @@
            reduced motion, not none: the fades stay, the movement goes. -->
       <div
         data-pane-lift
-        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:dur-pick-up motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-none"
+        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:dur-pick-up motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-none"
         style:--lift-rest="scale(1)"
         style:--lift-up="scale(var(--press-scale))"
       >
@@ -147,9 +147,10 @@
 </div>
 
 <style>
-  /* residual: pseudo — the lift's shadow, on its own layer at a constant
-     radius: it only fades (will-change: opacity), at the set-down's timing
-     at rest and the pick-up's while lifted; no transition under reduced
+  /* residual: pseudo — the lift's shadow, at a constant radius: it only
+     fades, its own layer for the fade alone (a transition of opacity), at
+     the set-down's timing at rest and the pick-up's while lifted; no
+     transition under reduced
      motion. The lift is named by its own attribute: under `data-lifted`,
      Chrome keys an attribute selector to the attribute's name alone, and
      `[data-slot="lift"]` restyled every `data-slot` in the deck. */
@@ -160,7 +161,6 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
     opacity: 0;
-    will-change: opacity;
     transition: opacity var(--dur-panel) var(--ease-in-out);
     pointer-events: none;
   }
