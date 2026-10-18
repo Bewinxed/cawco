@@ -516,7 +516,8 @@ const claudeModels = async (kit: Kit) => {
   });
   const said = await until(
     "the picker saying why",
-    () => dialog.getByText("couldn't read its models", { exact: false }).count(),
+    () =>
+      dialog.getByText("couldn't read its models", { exact: false }).count(),
     (count) => count > 0,
     90_000
   ).catch(() => 0);
