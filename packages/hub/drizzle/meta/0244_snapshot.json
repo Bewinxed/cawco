@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "65845640-a5a2-4206-99ff-9033e55bacce",
-  "prevId": "e4984e04-28f6-412c-887b-1e9cea8b1a46",
+  "id": "1b73c152-ec6c-4635-8576-69321a91260c",
+  "prevId": "e49c918a-dac5-4471-bf31-bc710d41c110",
   "tables": {
     "account_bench": {
       "name": "account_bench",
@@ -7157,14 +7157,6 @@
         },
         "review": {
           "name": "review",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "apple_gate": {
-          "name": "apple_gate",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
