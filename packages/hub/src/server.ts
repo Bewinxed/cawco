@@ -674,12 +674,7 @@ import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
 import { sourceFacts } from "./source-facts";
-import {
-  type StagesTemplate,
-  TEMPLATES,
-  templateOf,
-  templateText,
-} from "./stages";
+import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
@@ -17713,24 +17708,16 @@ export const createServer = (
   };
 
   /**
-   * A new project's template as its stages.md (the code template is the
-   * hub's own, read with no file), and its Setup thread when it is made
-   * with Caw.
+   * A new project's template applied as any template is (tasks.ts
+   * `applyTemplate`: its stages.md and the delegate types they run), and its
+   * Setup thread when it is made with Caw.
    */
   const startProject = async (
     created: ProjectRow,
     asked: ProjectAsk
   ): Promise<ThreadSummary | undefined> => {
     if (asked.template) {
-      if (asked.template !== "code") {
-        await writeFolderFile(
-          created.id,
-          "stages.md",
-          templateText(asked.template),
-          { message: `stages: the ${asked.template} template` }
-        );
-      }
-      tasks.touched(created.id);
+      await tasks.applyTemplate(created.id, asked.template, YOU_ACTOR);
       // Its template's starter skills reach the checkout it was made from.
       fanOutFleet();
     }

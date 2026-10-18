@@ -12,7 +12,8 @@
  *   repositories (core upstream-guard.ts), asked once, while nobody has
  *   answered it (`upstream_settings`).
  * - `stages`: the template's stages, names editable (`cawco.set`).
- * - `delegates`: delegate types suggested for the template, several picks.
+ * - `delegates`: delegate types the template suggests beyond the ones its
+ *   stages run (already written with it), several picks; none, no card.
  * - `place`: the machine and folder its work happens in (`cawco.pickPlace`,
  *   stored as `{ machineId, label, path }`).
  */
@@ -23,15 +24,19 @@ import {
   type UpstreamPosts,
 } from "@cawco/core/upstream-guard";
 import { type StagesTemplate, templateText } from "./stages";
+import { templateTypes } from "./template-types";
 
-/** The delegate types a template's work suggests, the ones its stages run first. */
+/**
+ * The delegate types a template's work suggests beyond the ones its stages
+ * run: those are written with the template (template-types.ts), never picked.
+ */
 export const TEMPLATE_DELEGATES: Record<StagesTemplate, readonly string[]> = {
   code: ["implementer", "reviewer"],
-  launch: ["writer", "designer"],
-  seo: ["seo", "writer"],
-  brand: ["brand"],
-  design: ["explorer", "builder"],
-  social: ["writer"],
+  launch: ["designer"],
+  seo: [],
+  brand: [],
+  design: [],
+  social: [],
   outreach: ["outreach"],
 };
 
@@ -140,6 +145,15 @@ const upstreamCard = `- \`fleet-upstream\`: "Other people's repositories" — ${
 export const setupEvent = (ask: SetupAsk): string => {
   const template = ask.template ?? "code";
   const types = TEMPLATE_DELEGATES[template];
+  const own = templateTypes(template).map(({ type }) => `\`${type}\``);
+  const picked =
+    types.length > 0
+      ? " Write delegates/<type>.md for each type they picked (front matter: harness, model, effort, role, lands; the body is the type's brief, from their words; each goes to them as a proposal and is committed once they approve it)."
+      : "";
+  const kept =
+    own.length > 0
+      ? ` The template's own types (${own.join(", ")}) are in delegates/ already, written as the project was made: its stages run them by those names, so keep the names, and rewrite a type's brief (the body under its front matter) with folder_write only where their words change the work; the rewrite goes to them as a proposal too.`
+      : "";
   return [
     `Event setup: the person just made the project “${ask.projectName}”${
       ask.from === "prompt"
@@ -151,13 +165,17 @@ export const setupEvent = (ask: SetupAsk): string => {
       ...(ask.askFleet ? [fleetCards] : []),
       ...(ask.askUpstream ? [upstreamCard] : []),
       `- \`stages\`: the project's stages, from the ${template} template below, adjusted to their words. Show each stage's name in an editable text field and store the list with \`cawco.set("stages", [{ "name": …, "kind": … }, …])\` on every edit (kinds stay as the template has them; show each kind in words: to do, active, waiting, you, done, dropped).`,
-      `- \`delegates\`: the delegate types to set up, several picks (\`data-cawco-multiple\`), each option a type with one line on the work it takes: ${types.map((type) => `\`${type}\``).join(", ")}${types.length > 1 ? ", all recommended" : ", recommended"}; add one only when their words call for it.`,
+      ...(types.length > 0
+        ? [
+            `- \`delegates\`: the delegate types to set up, several picks (\`data-cawco-multiple\`), each option a type with one line on the work it takes: ${types.map((type) => `\`${type}\``).join(", ")}${types.length > 1 ? ", all recommended" : ", recommended"}; add one only when their words call for it.`,
+          ]
+        : []),
       `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\` as \`{ machineId, label, path }\`, \`label\` being the name CawCo shows the machine by. Once picked, the card reads "<label> — <path>", from \`cawco.on("picks", …)\` (\`picks.place.value\`).`,
       "No routines, relays or other cards.",
       'Write the page in CawCo\'s voice (WORDS.md): sentence case, no "I", options named for what they do (never Yes or No), no folder paths inside sentences.',
     ].join("\n"),
     `The ${template} template's stages.md:\n\n\`\`\`\n${templateText(template)}\`\`\``,
-    `2. End your turn. When the person sends their picks you hear that the page has new responses; artifact_read() has them in full. CawCo has then already applied the fleet's choices and added the place they picked; do not write those. Write, with folder_write: stages.md (the template's block with the stage names they kept; it must read cleanly, or folder_write refuses it with the reason), delegates/<type>.md for each type they picked (front matter: harness, model, effort, role, lands; the body is the type's brief, from their words; each goes to them as a proposal and is committed once they approve it). AGENTS.md is the person's, so propose it with memory_propose({ path: "AGENTS.md", content, why, ask: true }): what the project is and how its work is done, from their words, in CawCo's voice, no folder or file paths inside its sentences. They approve it from Needs you.`,
+    `2. End your turn. When the person sends their picks you hear that the page has new responses; artifact_read() has them in full. CawCo has then already applied the fleet's choices and added the place they picked; do not write those. Write, with folder_write: stages.md (the template's block with the stage names they kept; it must read cleanly, or folder_write refuses it with the reason).${picked}${kept} AGENTS.md is the person's, so propose it with memory_propose({ path: "AGENTS.md", content, why, ask: true }): what the project is and how its work is done, from their words, in CawCo's voice, no folder or file paths inside its sentences. They approve it from Needs you.`,
     `3. Answer in thread ${ask.threadId} with thread_reply: one or two sentences on what you set up, naming no paths (the files are shown from \`files\`), with every file you wrote in \`files\`, and that AGENTS.md waits for their approval. The person opens the board from there.`,
   ].join("\n\n");
 };

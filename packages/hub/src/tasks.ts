@@ -134,6 +134,7 @@ import {
   TRAILERS,
   taskFileIn,
 } from "./task-history";
+import { templateTypes } from "./template-types";
 import {
   budgetProblem,
   isLive,
@@ -3497,8 +3498,11 @@ export const createTasks = (store: TaskStore) => {
     /**
      * Writes a template as the project's stages.md; the code template is
      * the hub's own, so applying it takes stages.md away and the project
-     * reads the template. Answers the stages, and the tasks whose stage the
-     * template does not have (they stay where they are until moved).
+     * reads the template. Each delegate type its stages run that the
+     * project has no file for is written with it (template-types.ts); a
+     * project's own file of that name stays as it is. Answers the stages,
+     * and the tasks whose stage the template does not have (they stay where
+     * they are until moved).
      */
     applyTemplate(
       projectId: string,
@@ -3509,10 +3513,21 @@ export const createTasks = (store: TaskStore) => {
         writable(projectId);
         const content = templateText(template);
         const message = `stages: apply the ${template} template ${byWhom(actor)}`;
+        const own = new Set(await folderFileNames(projectId, "delegates"));
+        const types = templateTypes(template)
+          .filter((type) => !own.has(`${type.type}.md`))
+          .map(({ path, content: file }) => ({ path, content: file }));
         if (template === DEFAULT_TEMPLATE) {
           await removeStages(projectId, { author: actor.author, message });
-        } else {
-          await writeFolderFile(projectId, STAGES_FILE, content, {
+        }
+        const writes = [
+          ...(template === DEFAULT_TEMPLATE
+            ? []
+            : [{ path: STAGES_FILE, content }]),
+          ...types,
+        ];
+        if (writes.length > 0) {
+          await writeFolderFiles(projectId, writes, {
             author: actor.author,
             message,
           });
