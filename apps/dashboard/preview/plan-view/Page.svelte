@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * The plan-view preview: what the plan panel would draw under the
-   * advisor's one model, state by state, each on the desk's side card and
-   * the phone's bottom sheet, then live, then as it is drawn today.
+   * advisor's one model, state by state, each on the desk's side card beside
+   * the conversation and on the phone's bottom sheet; the task and delegate
+   * states with today's panel beside them on the same rows; then live.
    */
   import DeskPlan from "./DeskPlan.svelte";
   import {
@@ -13,63 +14,49 @@
     specFolded,
     specOpen,
   } from "./fixtures";
+  import Key from "./Key.svelte";
   import LiveFrame from "./LiveFrame.svelte";
   import PhonePlan from "./PhonePlan.svelte";
   import ProposedPlan from "./ProposedPlan.svelte";
+  import TodayCards from "./TodayCards.svelte";
   import TodayPlan from "./TodayPlan.svelte";
 
   const loaded = Date.now();
 
-  interface State {
-    /** What the frames show, after "Desk ·" or "Phone ·". */
-    caption: string;
-    /** The section's head. */
-    head: string;
-    id: string;
-    plan: PlanFixture;
-  }
-  const states: State[] = [
-    {
-      id: "plain",
-      head: "A session's own plan",
-      caption:
-        "A session's plan: steps with sub-steps, one under way with its time counting, two done, one to do",
-      plan: plain,
-    },
-    {
-      id: "task",
-      head: "On a task",
-      caption:
-        "On a task, the plan is the task's to-dos, the session's steps under them, one to-do moved to a task of its own and one proposed",
-      plan: attempt,
-    },
-    {
-      id: "delegates",
-      head: "Steps that delegates carry",
-      caption:
-        "Delegates in the plan: one working with its steps open, Fable waiting on you, one queued for a build slot, one failed",
-      plan: delegates,
-    },
-    {
-      id: "spec",
-      head: "The spec",
-      caption: "The spec folded at the foot of the plan",
-      plan: specFolded,
-    },
-  ];
   const sections = [
-    ...states.map(({ id, head }) => ({ id, head })),
+    { id: "plain", head: "A session's own plan" },
+    { id: "task", head: "On a task" },
+    { id: "delegates", head: "Steps that delegates carry" },
+    { id: "spec", head: "The spec" },
     { id: "live", head: "Live" },
-    { id: "today", head: "Today, for comparison" },
   ];
 </script>
+
+{#snippet desk(plan: PlanFixture, caption: string, toEnd = false)}
+  <figure>
+    <DeskPlan {plan} {toEnd}>
+      <ProposedPlan {loaded} {plan} />
+    </DeskPlan>
+    <figcaption>Desk · {caption}</figcaption>
+  </figure>
+{/snippet}
+
+{#snippet phone(plan: PlanFixture, caption: string, toEnd = false)}
+  <figure>
+    <PhonePlan {plan} {toEnd}>
+      <ProposedPlan {loaded} {plan} />
+    </PhonePlan>
+    <figcaption>Phone · {caption}</figcaption>
+  </figure>
+{/snippet}
 
 <main class="page">
   <header class="intro">
     <h1>The plan, redesigned</h1>
     <p class="what">
       A preview of the plan panel, on the desk beside a conversation and on the
-      phone as a sheet. Nothing here is built yet.
+      phone as a sheet, with today's panel beside it on the same plan. Nothing
+      here is built yet.
     </p>
     <p>
       The plan is one list of what a session is doing. Each step says its state,
@@ -88,73 +75,109 @@
     </nav>
   </header>
 
-  {#each states as state (state.id)}
-    <section id={state.id} aria-labelledby="{state.id}-head" class="state">
-      <h2 id="{state.id}-head">{state.head}</h2>
-      <div class="frames">
-        <figure>
-          <DeskPlan plan={state.plan}>
-            <ProposedPlan {loaded} plan={state.plan} />
-          </DeskPlan>
-          <figcaption>Desk · {state.caption}</figcaption>
-        </figure>
-        <figure>
-          <PhonePlan plan={state.plan}>
-            <ProposedPlan {loaded} plan={state.plan} />
-          </PhonePlan>
-          <figcaption>Phone · {state.caption}</figcaption>
-        </figure>
-        {#if state.id === "spec"}
-          <figure>
-            <DeskPlan plan={specOpen}>
-              <ProposedPlan {loaded} plan={specOpen} />
-            </DeskPlan>
-            <figcaption>Desk · The spec opened, read in place</figcaption>
-          </figure>
-          <figure>
-            <PhonePlan plan={specOpen}>
-              <ProposedPlan {loaded} plan={specOpen} />
-            </PhonePlan>
-            <figcaption>Phone · The spec opened, read in place</figcaption>
-          </figure>
-        {/if}
-      </div>
-    </section>
-  {/each}
+  <Key />
 
-  <section id="live" aria-labelledby="live-head" class="state">
-    <h2 id="live-head">Live</h2>
+  <section id="plain" aria-labelledby="plain-head" class="state">
+    <h2 id="plain-head">A session's own plan</h2>
+    <div class="frames">
+      {@render desk(
+        plain,
+        "A session's plan: steps with sub-steps, one under way with its time counting, the done ones ticked, one to do"
+      )}
+      {@render phone(
+        plain,
+        "A session's plan: the same steps in the sheet, each row a finger's height"
+      )}
+    </div>
+  </section>
+
+  <section id="task" aria-labelledby="task-head" class="state">
+    <h2 id="task-head">On a task</h2>
+    <h3 class="pair">Proposed</h3>
+    <div class="frames">
+      {@render desk(
+        attempt,
+        "On a task, the plan is the task's to-dos, the session's steps under them, one to-do moved to a task of its own, one proposed"
+      )}
+      {@render phone(
+        attempt,
+        "On a task: the task's to-dos, ticked from their marks, the task's name and stage under the title"
+      )}
+    </div>
+    <h3 class="pair">Today, for comparison</h3>
     <div class="frames">
       <figure>
-        <LiveFrame {loaded} />
+        <DeskPlan plan={attempt} today>
+          <TodayPlan plan={attempt} />
+        </DeskPlan>
         <figcaption>
-          Desk · Live: a sub-step ticks, a delegate's step arrives and opens,
-          then a to-do ticks and the ring moves on
+          Desk · Today: the same task as the panel draws it now, steps with
+          their to-do ids in the words, the spec, then the to-dos again
+        </figcaption>
+      </figure>
+      <figure>
+        <PhonePlan plan={attempt} today>
+          <TodayPlan plan={attempt} sheet />
+        </PhonePlan>
+        <figcaption>
+          Phone · Today: the same task as the sheet draws it now
         </figcaption>
       </figure>
     </div>
   </section>
 
-  <section id="today" aria-labelledby="today-head" class="state">
-    <h2 id="today-head">Today, for comparison</h2>
+  <section id="delegates" aria-labelledby="delegates-head" class="state">
+    <h2 id="delegates-head">Steps that delegates carry</h2>
+    <h3 class="pair">Proposed</h3>
+    <div class="frames">
+      {@render desk(
+        delegates,
+        "The same task with its delegates out: one working with its steps open, Fable waiting on you, one queued for a build slot, one failed with its report"
+      )}
+      {@render phone(
+        delegates,
+        "The same task with its delegates out, in the sheet"
+      )}
+    </div>
+    <h3 class="pair">Today, for comparison</h3>
     <div class="frames">
       <figure>
-        <DeskPlan plan={attempt} today>
-          <TodayPlan />
+        <DeskPlan plan={delegates} today>
+          {#snippet conversation()}
+            <TodayCards />
+          {/snippet}
+          <TodayPlan plan={delegates} />
         </DeskPlan>
         <figcaption>
-          Desk · Today: the same task's plan as the panel draws it now, steps
-          then the spec then the to-dos again
+          Desk · Today: the same delegates as cards in the conversation, and in
+          the plan only as lines of words
         </figcaption>
       </figure>
-      <figure>
-        <PhonePlan plan={attempt} ring={false}>
-          <TodayPlan sheet />
-        </PhonePlan>
-        <figcaption>
-          Phone · Today: the same task's plan as the sheet draws it now
-        </figcaption>
-      </figure>
+    </div>
+  </section>
+
+  <section id="spec" aria-labelledby="spec-head" class="state">
+    <h2 id="spec-head">The spec</h2>
+    <div class="frames">
+      {@render desk(specFolded, "The spec folded at the foot of the plan")}
+      {@render phone(specFolded, "The spec folded at the foot of the plan")}
+      {@render desk(
+        specOpen,
+        "The spec opened under the whole plan, the card scrolled down to it",
+        true
+      )}
+      {@render phone(
+        specOpen,
+        "The spec opened under the whole plan, the sheet scrolled down to it",
+        true
+      )}
+    </div>
+  </section>
+
+  <section id="live" aria-labelledby="live-head" class="state">
+    <h2 id="live-head">Live</h2>
+    <div class="frames">
+      <LiveFrame {loaded} />
     </div>
   </section>
 </main>
@@ -229,6 +252,11 @@
       font-weight: var(--weight-strong);
     }
   }
+  .pair {
+    margin: var(--space-2) 0 0;
+    font: var(--type-label);
+    color: var(--ink-muted);
+  }
   .frames {
     display: flex;
     flex-wrap: wrap;
@@ -240,10 +268,11 @@
     flex-direction: column;
     gap: var(--space-3);
     min-inline-size: 0;
-    max-inline-size: 390px;
+    max-inline-size: 780px;
     margin: 0;
   }
   figcaption {
+    max-inline-size: 72ch;
     font: var(--type-meta);
     color: var(--ink-muted);
     text-wrap: pretty;
@@ -253,7 +282,9 @@
       padding: var(--space-6) 0 64px;
     }
     .intro,
+    .page > :global(.key),
     .state > h2,
+    .pair,
     figcaption {
       padding-inline: var(--space-4);
     }
