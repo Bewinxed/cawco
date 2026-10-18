@@ -135,6 +135,7 @@ import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { deletePreview } from "./artifact-api";
 import { currentClientId } from "./client-id";
+import { devDebug } from "./dev-debug";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   deadlineIn,
@@ -1126,8 +1127,8 @@ const pageReads = new Map<
 >();
 
 // Lets the store be asserted from the console while developing.
-if (import.meta.env.DEV && typeof window !== "undefined") {
-  Object.assign(globalThis, { __cawcoDebug: { state, inflight } });
+if (import.meta.env.DEV) {
+  devDebug({ state, inflight });
 }
 
 // HMR-persistent socket references, so a module reload never leaves an orphan.

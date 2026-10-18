@@ -12,6 +12,7 @@
  */
 import type { CarrySpan, ProviderForecast } from "@cawco/core";
 import { cawco, followAccounts } from "../client.svelte";
+import { devDebug } from "../dev-debug";
 import { speakingReading } from "../usage";
 import {
   type ClaudeRings,
@@ -62,15 +63,21 @@ export function startForecast(): void {
 }
 
 /**
- * A bench's view (routes/motion/usage-relay): its forecast and the rings it
- * built from it with claudeRings/openCodeRing, in place of the hub's.
+ * A bench's view (routes/motion/usage-relay/stage.ts): its forecast and the
+ * rings it built from it with claudeRings/openCodeRing, in place of the
+ * hub's. Under `vite dev` only, written through `__cawcoDebug.usage`
+ * (dev-debug.ts); every other build folds each read of it away.
  */
-interface StagedUsage {
+export interface StagedUsage {
   claude: ClaudeRings | null;
   forecast: ProviderForecast;
   openCode: RingAccount | null;
 }
-let staged = $state<StagedUsage | null>(null);
+const bench = $state<{ staged: StagedUsage | null }>({ staged: null });
+if (import.meta.env.DEV) {
+  devDebug({ usage: bench });
+}
+const staged = $derived(import.meta.env.DEV ? bench.staged : null);
 
 const claude = $derived.by((): ClaudeRings | null => {
   if (staged) {
@@ -132,16 +139,6 @@ export const usage = {
   },
   get read() {
     return staged !== null || state.read;
-  },
-  /** A bench stands its own view in: the limits count as read with it. */
-  get staged() {
-    return staged !== null;
-  },
-  /** A bench stands its own view in for the hub's; null hands it back. */
-  stage(view: StagedUsage | null) {
-    staged = view;
-    state.cause = "data";
-    state.now = Date.now();
   },
   /** The minute clock. */
   get now() {

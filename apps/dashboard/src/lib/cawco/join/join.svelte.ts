@@ -9,6 +9,7 @@ import type { Component } from "svelte";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { IconServer, IconTerminal } from "#lib/icons.js";
 import { cawco, type Machine } from "../client.svelte";
+import { devDebug } from "../dev-debug";
 
 /** The one-liner a machine runs to join: the hub's install script, piped to sh. */
 export const installCommand = (hubUrl: string): string =>
@@ -136,6 +137,10 @@ const ssh = $state<{
   job: SshJoinJob | null;
   refused: string | null;
 }>({ job: null, refused: null });
+// The motion bench shows a finished join with no hub behind it (dev-debug.ts).
+if (import.meta.env.DEV) {
+  devDebug({ sshJoin: ssh });
+}
 
 /**
  * The SSH add in flight, or the last one. Held here rather than in the dialog
@@ -214,11 +219,6 @@ export const sshJoin = {
       ssh.refused =
         "The hub restarted during the install and lost track of it. If the machine shows up in the fleet, it joined; if not, Retry.";
     }
-  },
-  /** A run shown as given, with no hub behind it: the motion bench's finished join. */
-  stage(job: SshJoinJob): void {
-    ssh.job = job;
-    ssh.refused = null;
   },
   /** Back to the form: a finished run is dropped, a running one cannot be. */
   reset(): void {
