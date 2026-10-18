@@ -248,6 +248,7 @@ export type TokenSize =
   | "type.text-meta"
   | "type.text-label"
   | "type.text-body"
+  | "type.text-input-touch"
   | "type.text-code"
   | "type.text-title"
   | "type.text-kpi"

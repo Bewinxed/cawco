@@ -481,7 +481,9 @@
 
 {#snippet face()}
   {#if !shown}
-    <span class="truncate type-meta text-ink-muted">{gap?.short ?? empty}</span>
+    <span class="min-w-0 truncate type-meta text-ink-muted"
+      >{gap?.short ?? empty}</span
+    >
   {:else}
     <!-- Claude's cell asks for its whole first line and caption, and never
          takes less than its marks and digits; opencode's is as wide as it

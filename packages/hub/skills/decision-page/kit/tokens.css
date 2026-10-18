@@ -586,6 +586,8 @@
     --text-meta: 0.75rem;
     --text-label: 0.8125rem;
     --text-body: 0.875rem;
+    /* A field's words under a coarse pointer: 16px, the size under which iOS Safari zooms the page when the field takes focus. */
+    --text-input-touch: 1rem;
     /* Code runs a step under body: JetBrains Mono sets large. */
     --text-code: 0.75rem;
     --text-title: clamp(1.125rem, 1.048rem + 0.3155vi, 1.25rem);
