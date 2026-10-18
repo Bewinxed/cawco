@@ -2230,8 +2230,8 @@
     inset: 0;
     z-index: 80;
     background: var(--scrim);
-    backdrop-filter: blur(var(--scrim-blur));
     -webkit-backdrop-filter: blur(var(--scrim-blur));
+    backdrop-filter: blur(var(--scrim-blur));
   }
   /* The dialog stands centred in the window, a recess tray holding the raised
      body; the sheet's place, height and surface are the kit drawer's. */
