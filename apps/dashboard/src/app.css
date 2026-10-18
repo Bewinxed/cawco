@@ -2238,7 +2238,8 @@
 @layer utilities {
   .pressable {
     @media (prefers-reduced-motion: no-preference) {
-      &:active {
+      /* `[data-pressed]`: the `pressed` variant's kit menu Trigger. */
+      &:is(:active, [data-pressed]) {
         transform: scale(var(--press-scale));
       }
     }
@@ -2255,14 +2256,21 @@
    control's fade into the tint ran on the main thread. A colour change, so
    it runs under every motion preference. By day the hover step is
    surface-fill's own, so a press under the pointer is the step past it;
-   night keeps surface-fill. */
-:is(.press-tint:active, #\#):not(:disabled, [aria-disabled="true"]),
+   night keeps surface-fill. `[data-pressed]` is the `pressed` variant's
+   kit menu Trigger. */
+:is(.press-tint:is(:active, [data-pressed]), #\#):not(
+  :disabled,
+  [aria-disabled="true"]
+),
 :is([data-holding], #\#) {
   background-color: var(--surface-fill);
 }
 :root:not(.dark)
   :is(
-    :is(.press-tint:active, #\#):not(:disabled, [aria-disabled="true"]),
+    :is(.press-tint:is(:active, [data-pressed]), #\#):not(
+      :disabled,
+      [aria-disabled="true"]
+    ),
     :is([data-holding], #\#)
   ) {
   background-color: var(--surface-fill-strong);
@@ -2273,7 +2281,10 @@
 @layer utilities {
   :root:not(.dark)
     :is(
-      .press-tint:active:not(:disabled, [aria-disabled="true"]),
+      .press-tint:is(:active, [data-pressed]):not(
+          :disabled,
+          [aria-disabled="true"]
+        ),
       [data-holding]
     ) {
     --ink-muted: var(--ink-strong);

@@ -83,6 +83,12 @@ const rules = {
             "h-*",
             "min-w-*",
             "min-h-*",
+            // app.css's exact-keyword alignments (`start` as written, where
+            // Tailwind's `*-start` writes flex-start): layout.
+            "items-box-*",
+            "self-box-*",
+            "justify-self-box-*",
+            "content-box-*",
           ],
         },
       ],

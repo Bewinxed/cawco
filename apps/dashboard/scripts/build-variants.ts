@@ -155,6 +155,12 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant light (&:where(:root:not(.dark), :root:not(.dark) *));
 
+/* A control under a held press. \`:active\`, and \`[data-pressed]\` from the
+   kit menu Trigger (dropdown-menu-trigger.svelte): its menu opens on the
+   press and takes the focus into itself, and Chromium drops \`:active\` with
+   it a frame in, so the press never painted. */
+@custom-variant pressed (&:is(:active, [data-pressed]));
+
 @custom-variant reduced-transparency {
   @media (prefers-reduced-transparency: reduce) {
     @slot;
@@ -208,7 +214,7 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 
 /** Names Tailwind or the house already give a variant, or begin a functional one. */
 const RESERVED =
-  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|reduced-transparency|at-rest|workflow-cards|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
+  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|workflow-cards|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
 
 interface Pair {
   attr: string;

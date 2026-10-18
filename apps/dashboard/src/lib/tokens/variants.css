@@ -108,6 +108,12 @@
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant light (&:where(:root:not(.dark), :root:not(.dark) *));
 
+/* A control under a held press. `:active`, and `[data-pressed]` from the
+   kit menu Trigger (dropdown-menu-trigger.svelte): its menu opens on the
+   press and takes the focus into itself, and Chromium drops `:active` with
+   it a frame in, so the press never painted. */
+@custom-variant pressed (&:is(:active, [data-pressed]));
+
 @custom-variant reduced-transparency {
   @media (prefers-reduced-transparency: reduce) {
     @slot;
