@@ -188,6 +188,8 @@ export const STREAM_RELAY_WORDS = {
   startBody:
     "It listens on UDP and TCP 3478, TCP 443 and UDP 49152–49400 there.",
   stopTitle: (machine: string) => `Stop the stream relay on ${machine}?`,
+  /** Why Stop relay waits while the relay pulls or starts. */
+  stopWhileStarting: "It can be stopped once it has started.",
   stopBody:
     "Streams that go through it stop connecting until it starts again; a screen on the same network as a browser's machine still connects directly.",
   removeTitle: (machine: string) => `Remove the stream relay on ${machine}?`,

@@ -242,17 +242,21 @@
                 variant="outline"
               />
             {:else}
-              <!-- A ghost's ink starts inside its box (1px edge, 11px
+              <!-- The machine runs one relay command at a time: a stop sent
+                   while it starts would wait out the start. Remove still
+                   goes (the hub forgets the relay at once).
+                   A ghost's ink starts inside its box (1px edge, 11px
                    padding): wrapped under the words it hangs back by that
                    much, so its first letter stands on their edge. -->
               <Button
                 aria-expanded={asking("relay-stop")}
                 class="max-sm:-ms-3"
                 data-relay-stop
-                disabled={asking("relay-stop")}
+                disabled={asking("relay-stop") || busy}
                 label={words.stop}
                 onclick={() => askStop(view)}
                 size="sm"
+                title={busy ? words.stopWhileStarting : undefined}
                 variant="ghost"
               />
             {/if}
