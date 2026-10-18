@@ -483,6 +483,7 @@ public final class FleetStore {
         return InstanceRow(
             cwd: place?.path ?? "projects/\(project.id)",
             id: ThreadTabs.tabId(thread.id),
+            kind: "mainline",
             launchDir: .known,
             machineId: place?.machineId ?? "hub",
             projectId: thread.projectId,
@@ -517,6 +518,7 @@ public final class FleetStore {
         InstanceRow(
             cwd: run.workspace,
             id: run.rowId,
+            kind: "mainline",
             lastError: run.failure,
             launchDir: .known,
             machineId: run.machineId,
