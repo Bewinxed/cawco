@@ -637,7 +637,7 @@ const choose = (
         ? `${accountName(account)} is at its limit`
         : `${accountName(account)}'s limits are unread`;
     });
-  const out = outNote.length > 0 ? ` (${outNote.join("; ")}.)` : "";
+  const out = outNote.length > 0 ? ` (${outNote.join("; ")})` : "";
 
   const preferred = candidates.find((one) => one.id === input.typeAccount);
   if (preferred) {
