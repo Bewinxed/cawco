@@ -324,18 +324,52 @@ const viteBuild = async (): Promise<void> => {
   }
 };
 
+/** A dashboard server: its address, its process, and its end when its run is done with it. */
+interface Served {
+  base: string;
+  child: Bun.Subprocess;
+  /** Ends it on purpose: an end without this one is a loss (`serve`'s `lost`). */
+  stop: () => void;
+}
+
+/** How many of a lost server's last lines, of each stream, its loss says. */
+const LOST_LINES = 15;
+
+/** A log's last lines, indented under the line that says them; none when it can't be read. */
+const tailOf = async (file: string): Promise<string> => {
+  const text = await Bun.file(file)
+    .text()
+    .catch(() => "");
+  return text
+    .split("\n")
+    .filter((line) => line.trim())
+    .slice(-LOST_LINES)
+    .join("\n  ");
+};
+
 /**
  * The dashboard served against `hub`: the dev server (`vite dev`, where the
  * `/motion/` benches live: a built dashboard 404s them), or the built one
  * (`vite preview`, what the runtime specs time: a dev build's own checks
  * would be in every long task). Its address and process.
+ *
+ * What it prints goes to files of its own beside the run's output
+ * (`probe-kit/vite-<how>-<port>.err.log`, `.out.log`), and an end its run did not ask for is
+ * `lost`, with that file's last lines: two style-snapshot approves' servers
+ * stopped a few minutes into their walks, every state after was refused at
+ * `goto`, and each run still read ALL PASS, its server's own words thrown
+ * away.
  */
 async function serve(
   how: "dev" | "preview",
   hub: string,
+  lost: (why: string) => void,
   env: Record<string, string> = {}
-) {
+): Promise<Served> {
   const port = await freePort();
+  const logs = join(process.env.TMPDIR ?? join(ROOT, ".probe"), "probe-kit");
+  await mkdir(logs, { recursive: true });
+  const log = join(logs, `vite-${how}-${port}`);
   const child = Bun.spawn(
     [
       "bunx",
@@ -355,21 +389,38 @@ async function serve(
         CAWCO_DEV_HUB_URL: hub,
         CAWCO_HUB_URL: hub,
       },
-      stdout: "ignore",
-      stderr: "ignore",
+      stdout: Bun.file(`${log}.out.log`),
+      stderr: Bun.file(`${log}.err.log`),
     }
   );
+  let stopping = false;
   const base = `http://127.0.0.1:${port}`;
+  const ended = async (code: number): Promise<void> => {
+    if (stopping) {
+      return;
+    }
+    const err = await tailOf(`${log}.err.log`);
+    const out = await tailOf(`${log}.out.log`);
+    lost(
+      `vite ${how} at ${base} ended (${child.signalCode ?? `exit ${code}`}) before its run was done with it; every page after it is refused (${log}.err.log, .out.log):\n  ${err}\n  ${out}`
+    );
+  };
+  child.exited.then(ended).catch(() => undefined);
   await until(
     "the built dashboard answering",
     () => fetch(base).then((r) => r.ok),
     Boolean,
     60_000
   );
-  return { base, child };
+  return {
+    base,
+    child,
+    stop: () => {
+      stopping = true;
+      child.kill();
+    },
+  };
 }
-
-type Served = Promise<{ base: string; child: Bun.Subprocess }>;
 /** No hub answers here: the benches feed the client's own state. */
 const NO_HUB = "http://127.0.0.1:9";
 
@@ -389,8 +440,8 @@ export class Run {
   notes = 0;
   /** Every capture this run that differs from its baseline, in run order. */
   readonly changed: Changed[] = [];
-  private devServer: Served | null = null;
-  private builtServer: Served | null = null;
+  private devServer: Promise<Served> | null = null;
+  private builtServer: Promise<Served> | null = null;
   private built: Promise<void> | null = null;
   private readonly browsers = new Map<string, Promise<Browser>>();
   private slot: Promise<HeavySlot> | null = null;
@@ -411,13 +462,18 @@ export class Run {
     return this.built;
   }
 
-  /** The dashboard served (`serve`), under the run's slot. */
+  /** The dashboard served (`serve`), under the run's slot; a server lost before its run is done fails the run. */
   private async startServer(
     how: "dev" | "preview",
     hub: string
-  ): Promise<{ base: string; child: Bun.Subprocess }> {
+  ): Promise<Served> {
     await this.heavy();
-    return serve(how, hub);
+    return serve(how, hub, (why) => {
+      const line = `FAIL the dashboard server: ${why}`;
+      console.log(line);
+      this.failures += 1;
+      this.failed.push(line.slice(0, 1200));
+    });
   }
 
   browser(
@@ -542,7 +598,7 @@ export class Run {
           this.startServer("preview", hub)
         );
         ends.push(async () => {
-          (await served).child.kill();
+          (await served).stop();
         });
         return (await served).base;
       },
@@ -560,15 +616,11 @@ export class Run {
           name: `probe-kit-${spec.name}`,
           respond,
         });
-        let served: Promise<{ base: string; child: Bun.Subprocess }> | null =
-          null;
-        let servedDev: Promise<{
-          base: string;
-          child: Bun.Subprocess;
-        }> | null = null;
+        let served: Promise<Served> | null = null;
+        let servedDev: Promise<Served> | null = null;
         ends.push(async () => {
-          (await served)?.child.kill();
-          (await servedDev)?.child.kill();
+          (await served)?.stop();
+          (await servedDev)?.stop();
           // A spec that failed keeps what says why, which goes with the
           // fleet: into its output folder, the hub still answering.
           if (this.failures > failuresBefore) {
@@ -676,8 +728,8 @@ export class Run {
       // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
       await (await browser).close().catch(() => undefined);
     }
-    (await this.devServer)?.child.kill();
-    (await this.builtServer)?.child.kill();
+    (await this.devServer)?.stop();
+    (await this.builtServer)?.stop();
     (await this.slot?.catch(() => undefined))?.release();
     this.slot = null;
   }
