@@ -22,9 +22,15 @@
  *    line moved. Unset, the run writes `away.json` to its out folder.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type Browser, firefox, type Page } from "playwright-core";
+import {
+  type Browser,
+  type BrowserContext,
+  chromium,
+  firefox,
+  type Page,
+} from "playwright-core";
 import { type Kit, open, ROOT, type Spec, settle } from "../../kit";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
@@ -278,6 +284,76 @@ async function firefoxAt(
   return { browser, page: await context.newPage() };
 }
 
+/**
+ * A Chromium page at browser zoom: a window `css * 2` px wide at 200%, so
+ * 899.5px is 1799px. The browser's own zoom (an extension's
+ * `chrome.tabs.setZoom`, kept per origin), not an emulated viewport, which
+ * takes whole px only. The full Chromium build in its new headless mode:
+ * the headless shell loads no extension.
+ */
+async function chromiumZoomedAt(
+  kit: Kit,
+  base: string,
+  css: number
+): Promise<{ context: BrowserContext; page: Page }> {
+  const extension = join(kit.out, "zoom-extension");
+  await mkdir(extension, { recursive: true });
+  await writeFile(
+    join(extension, "manifest.json"),
+    JSON.stringify({
+      manifest_version: 3,
+      name: "probe-zoom",
+      version: "1",
+      background: { service_worker: "sw.js" },
+      permissions: ["tabs"],
+    })
+  );
+  await writeFile(join(extension, "sw.js"), "");
+  const profile = join(kit.out, `zoom-profile-${css}`);
+  await rm(profile, { recursive: true, force: true });
+  const context = await chromium.launchPersistentContext(profile, {
+    channel: "chromium",
+    headless: true,
+    viewport: null,
+    args: [
+      "--no-sandbox",
+      "--disable-gpu",
+      `--disable-extensions-except=${extension}`,
+      `--load-extension=${extension}`,
+      `--window-size=${Math.round(css * 2)},${HEIGHT * 2}`,
+    ],
+  });
+  await context.addInitScript(() => {
+    window.kitRuns = () => document.getAnimations();
+  });
+  const worker =
+    context.serviceWorkers()[0] ??
+    (await context.waitForEvent("serviceworker", { timeout: 30_000 }));
+  const page = context.pages()[0] ?? (await context.newPage());
+  // On the bench's origin first: the zoom is kept per origin.
+  await page.goto(`${base}/motion/lift`, { waitUntil: "domcontentloaded" });
+  await worker.evaluate(async () => {
+    /** The extension API's two calls this needs (no `@types/chrome` here). */
+    const { tabs } = (
+      globalThis as unknown as {
+        chrome: {
+          tabs: {
+            query: (q: object) => Promise<{ id?: number }[]>;
+            setZoom: (id: number, factor: number) => Promise<void>;
+          };
+        };
+      }
+    ).chrome;
+    for (const tab of await tabs.query({})) {
+      if (tab.id !== undefined) {
+        // biome-ignore lint/performance/noAwaitInLoops: one tab at a time
+        await tabs.setZoom(tab.id, 2);
+      }
+    }
+  });
+  return { context, page };
+}
+
 /** A Chromium page at an integer width, the kit's pinned context. */
 async function chromiumAt(kit: Kit, width: number): Promise<Page> {
   const page = await kit.page("desk");
@@ -322,7 +398,7 @@ async function sidesOf(
   return sides;
 }
 
-const legs = (kit: Kit): Leg[] => [
+const legs = (kit: Kit, base: string): Leg[] => [
   ...[899, 900, 901].map((w) => ({
     name: `chromium ${w}`,
     start: async () => {
@@ -330,6 +406,13 @@ const legs = (kit: Kit): Leg[] => [
       return { page, end: () => page.close() };
     },
   })),
+  {
+    name: "chromium 899.5 (200% zoom)",
+    start: async () => {
+      const { context, page } = await chromiumZoomedAt(kit, base, 899.5);
+      return { page, end: () => context.close() };
+    },
+  },
   ...[899, 899.5, 900, 901].map((w) => ({
     name: `firefox ${w}`,
     start: async () => {
@@ -406,7 +489,7 @@ async function onTheLine(kit: Kit, base: string): Promise<void> {
     ["chromium 390", refs.drawer],
     ["chromium 1440", refs.desk],
   ];
-  for (const leg of legs(kit)) {
+  for (const leg of legs(kit, base)) {
     // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
     const { page, end } = await leg.start();
     try {
