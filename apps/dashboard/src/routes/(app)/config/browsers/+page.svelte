@@ -26,6 +26,7 @@
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { IconCheck } from "#lib/icons.js";
 
   const section = sectionOf("browsers");
 
@@ -39,6 +40,8 @@
   let picked = $state<string | null>(null);
   let hostname = $state("");
   const asks = new Asker<AskHereRequest>();
+  /** Whether the question asked at `at` stands: its trigger is then held (the tile holds Cancel and the verb). */
+  const asking = (at: string): boolean => asks.pending?.at === at;
 
   const read = async (): Promise<void> => {
     try {
@@ -116,7 +119,7 @@
 
   const askStartAgain = (view: StreamRelayView) =>
     asks.ask({
-      at: "relay",
+      at: "relay-start",
       title: words.startTitle(view.machineName),
       body: words.startBody,
       confirmLabel: words.start,
@@ -126,7 +129,7 @@
 
   const askStop = (view: StreamRelayView) =>
     asks.ask({
-      at: "relay",
+      at: "relay-stop",
       title: words.stopTitle(view.machineName),
       body: words.stopBody,
       confirmLabel: words.stop,
@@ -137,14 +140,18 @@
 
   const askRemove = (view: StreamRelayView) =>
     asks.ask({
-      at: "relay",
+      at: "relay-remove",
       title: words.removeTitle(view.machineName),
-      body: words.removeBody(view.machineName, view.hostname),
+      body: words.removeBody(view.hostname),
       confirmLabel: words.remove,
       pendingLabel: "Removing…",
       destructive: true,
       run: () => change("DELETE", "/api/stream-relay"),
     });
+
+  /** Live with a port that did not answer: said in words, never by tint alone. */
+  const portDown = (view: StreamRelayView): boolean =>
+    view.state === "live" && view.health.some((port) => !port.up);
 
   const STATE_WORD: Record<StreamRelayState, string> = {
     pulling: "Pulling",
@@ -161,19 +168,32 @@
     failed: "fail",
   };
 
-  const stateWord = (view: StreamRelayView): string =>
-    view.state === "pulling" && view.progress
+  const stateWord = (view: StreamRelayView): string => {
+    if (portDown(view)) {
+      return "Live, a port is down";
+    }
+    return view.state === "pulling" && view.progress
       ? `Pulling ${view.progress.done} of ${view.progress.total}`
       : STATE_WORD[view.state];
+  };
 
-  const answering = (view: StreamRelayView): boolean =>
-    view.state === "live" &&
-    view.health.length > 0 &&
-    view.health.every((port) => port.up);
+  const stateTint = (view: StreamRelayView): BadgeVariant =>
+    portDown(view) ? "attn" : STATE_TINT[view.state];
 
   /** A port's chip words: its name and whether it answered. */
   const chip = (port: RelayPortHealth): string =>
     `${port.port} ${port.up ? "up" : "down"}`;
+
+  /**
+   * One row of the section (DESIGN.md's Devices row): the words and the
+   * trailing controls on one grid, a hairline between rows; under 640px the
+   * controls take a cell of their own under the words, at its start.
+   */
+  const ROW =
+    "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-[10px] max-sm:grid-cols-1 [&+&]:border-t [&+&]:border-(--border-hairline)";
+  /** The trailing controls' cell. */
+  const CONTROLS =
+    "flex flex-wrap items-center gap-(--space-4) max-sm:justify-self-start";
 </script>
 
 <SectionFrame
@@ -183,35 +203,21 @@
   title={section.label}
 >
   <section
-    aria-labelledby="stream-relay-title"
-    class="flex min-w-0 flex-col gap-(--space-4)"
+    aria-label={words.title}
+    class="flex min-w-0 flex-col"
     data-stream-relay
   >
-    <div class="flex min-w-0 flex-col gap-(--space-1)">
-      <h2
-        class="text-label text-(--ink-strong) text-balance"
-        id="stream-relay-title"
-      >
-        {words.title}
-      </h2>
-      <p class="max-w-[72ch] text-meta text-(--ink-muted) text-pretty">
-        {words.lead}
-      </p>
-    </div>
-
     {#if relay}
       {@const view = relay}
       <div class="flex min-w-0 flex-col" data-relay-row>
-        <div
-          class="flex min-w-0 flex-wrap items-center gap-x-(--space-4) gap-y-(--space-2)"
-        >
-          <div class="flex min-w-0 flex-1 basis-64 flex-col gap-(--space-1)">
+        <div class={ROW}>
+          <div class="flex min-w-0 flex-col gap-(--space-1)">
             <div class="flex min-w-0 flex-wrap items-center gap-(--space-2)">
               <span
                 class="min-w-0 text-label text-(--ink-strong) [overflow-wrap:anywhere]"
                 >{view.machineName}</span
               >
-              <Badge data-relay-state variant={STATE_TINT[view.state]}
+              <Badge data-relay-state variant={stateTint(view)}
                 ><span>{stateWord(view)}</span></Badge
               >
             </div>
@@ -219,23 +225,31 @@
               class="min-w-0 text-meta text-(--ink-muted) [overflow-wrap:anywhere]"
               data-relay-line
             >
-              {"Relay · "}<code class="font-mono text-(--ink-strong)"
-                >{view.address}</code
+              <code class="font-mono text-(--ink-strong)">{view.address}</code
               >{#if view.hostname}{" · "}<code
                   class="font-mono text-(--ink-strong)">{view.hostname}</code
-                >{/if}{#if answering(view)}{" · answering"}{/if}
+                >{/if}
             </p>
           </div>
-          <div class="flex flex-wrap items-center gap-(--space-2)">
+          <div class={CONTROLS}>
             {#if view.state === "stopped" || view.state === "failed"}
               <Button
+                aria-expanded={asking("relay-start")}
+                disabled={asking("relay-start")}
                 label={words.start}
                 onclick={() => askStartAgain(view)}
                 size="sm"
                 variant="outline"
               />
             {:else}
+              <!-- A ghost's ink starts inside its box (1px edge, 11px
+                   padding): wrapped under the words it hangs back by that
+                   much, so its first letter stands on their edge. -->
               <Button
+                aria-expanded={asking("relay-stop")}
+                class="max-sm:-ms-3"
+                data-relay-stop
+                disabled={asking("relay-stop")}
                 label={words.stop}
                 onclick={() => askStop(view)}
                 size="sm"
@@ -243,6 +257,9 @@
               />
             {/if}
             <Button
+              aria-expanded={asking("relay-remove")}
+              data-relay-remove
+              disabled={asking("relay-remove")}
               label={words.remove}
               onclick={() => askRemove(view)}
               size="sm"
@@ -253,26 +270,28 @@
         {#if view.state === "live" && view.health.length > 0}
           <ul
             aria-label="Each port's answer"
-            class="mt-(--space-2) flex min-w-0 flex-wrap gap-(--space-2)"
+            class="flex min-w-0 flex-wrap gap-(--space-2)"
             data-relay-ports
           >
             {#each view.health as port (port.port)}
-              <li class="flex min-w-0 max-w-full flex-col gap-(--space-1)">
+              <li>
                 <Badge
                   data-relay-port={port.port}
-                  title={port.error}
                   variant={port.up ? "done" : "fail"}
                   ><span>{chip(port)}</span></Badge
                 >
-                {#if port.error}
-                  <span
-                    class="max-w-[40ch] text-meta text-(--ink-muted) [overflow-wrap:anywhere]"
-                    data-relay-port-error>{port.error}</span
-                  >
-                {/if}
               </li>
             {/each}
           </ul>
+          {#each view.health.filter((port) => port.error) as port (port.port)}
+            <p
+              class="mt-(--space-2) max-w-[72ch] text-meta text-(--ink-muted) [overflow-wrap:anywhere]"
+              data-relay-port-error={port.port}
+            >
+              <span class="text-(--ink-strong)">{port.port}:</span>
+              {port.error}
+            </p>
+          {/each}
         {/if}
         {#if view.why}
           <p
@@ -282,7 +301,9 @@
             {view.why}
           </p>
         {/if}
-        <AskHere asker={asks} at="relay" />
+        <AskHere asker={asks} at="relay-start" />
+        <AskHere asker={asks} at="relay-stop" />
+        <AskHere asker={asks} at="relay-remove" />
       </div>
     {:else if candidates.length === 0}
       <p
@@ -294,45 +315,49 @@
     {:else}
       <ul
         aria-label="Machines with a public address"
-        class="flex min-w-0 flex-col gap-(--space-3)"
+        class="flex min-w-0 flex-col"
       >
         {#each candidates as machine (machine.machineId)}
           {@const chosen = picked === machine.machineId}
+          {@const at = `start:${machine.machineId}`}
           <li
-            class="flex min-w-0 flex-col gap-(--space-3)"
+            class="flex min-w-0 flex-col [&+&]:border-t [&+&]:border-(--border-hairline)"
             data-relay-candidate={machine.machineId}
           >
-            <div
-              class="flex min-w-0 flex-wrap items-center gap-x-(--space-4) gap-y-(--space-2)"
-            >
-              <div
-                class="flex min-w-0 flex-1 basis-64 flex-col gap-(--space-1)"
-              >
+            <div class={ROW}>
+              <div class="flex min-w-0 flex-col gap-(--space-1)">
                 <span
                   class="min-w-0 text-label text-(--ink-strong) [overflow-wrap:anywhere]"
-                  >{machine.name}</span
+                  data-relay-name>{machine.name}</span
                 >
                 <p
                   class="min-w-0 text-meta text-(--ink-muted) [overflow-wrap:anywhere]"
+                  data-relay-address
                 >
                   <code class="font-mono text-(--ink-strong)"
                     >{machine.address}</code
                   >{#if machine.seen}{` · ${words.seenAs(machine.seen)}`}{/if}{#if !machine.online}{" · offline"}{/if}
                 </p>
               </div>
-              <Button
-                aria-pressed={chosen}
-                data-relay-pick
-                label={words.runHere}
-                onclick={() => {
-                  picked = machine.machineId;
-                }}
-                size="sm"
-                variant={chosen ? "secondary" : "outline"}
-              />
+              <!-- One machine is the one picked: nothing to choose. -->
+              {#if candidates.length > 1}
+                <div class={CONTROLS}>
+                  <Button
+                    aria-pressed={chosen}
+                    data-relay-pick
+                    icon={chosen ? IconCheck : undefined}
+                    label={chosen ? words.picked : words.runHere}
+                    onclick={() => {
+                      picked = machine.machineId;
+                    }}
+                    size="sm"
+                    variant={chosen ? "secondary" : "outline"}
+                  />
+                </div>
+              {/if}
             </div>
             {#if chosen}
-              <div class="flex min-w-0 flex-col gap-(--space-3)">
+              <div class="flex min-w-0 flex-col gap-(--space-3) pb-[10px]">
                 <Field
                   hint={words.hostnameHint}
                   id="relay-hostname"
@@ -352,8 +377,9 @@
                 </Field>
                 <div>
                   <Button
+                    aria-expanded={asking(at)}
                     data-relay-start
-                    disabled={!machine.online}
+                    disabled={!machine.online || asking(at)}
                     label={words.start}
                     onclick={() => askStart(machine)}
                     size="sm"
@@ -362,7 +388,7 @@
                       : `${machine.name} is offline`}
                   />
                 </div>
-                <AskHere asker={asks} at={`start:${machine.machineId}`} />
+                <AskHere asker={asks} {at} />
               </div>
             {/if}
           </li>

@@ -126,8 +126,18 @@ const sideways = (page: Page) =>
     };
   });
 
-/** The ask tile's box against its row's and its column's: under the row, inside the column. */
-const askUnder = (page: Page, rowSelector: string, at: string) =>
+/**
+ * The ask tile's box against its row's and its column's (under its trigger,
+ * inside both), and its trigger held while it stands: disabled and
+ * `aria-expanded`, so the tile's verb is the only one (DESIGN.md, Asking in
+ * the page).
+ */
+const askUnder = (
+  page: Page,
+  rowSelector: string,
+  at: string,
+  triggerSelector: string
+) =>
   page.evaluate(
     (where) => {
       const ask = document.querySelector<HTMLElement>(
@@ -142,8 +152,8 @@ const askUnder = (page: Page, rowSelector: string, at: string) =>
       const t = tile.getBoundingClientRect();
       const r = row.getBoundingClientRect();
       const c = column.getBoundingClientRect();
-      const trigger = row.querySelector<HTMLElement>(
-        "[data-relay-start], [data-relay-row] button:last-of-type"
+      const trigger = document.querySelector<HTMLElement>(
+        where.triggerSelector
       );
       return {
         title: tile.querySelector('[data-slot="title"]')?.textContent?.trim(),
@@ -156,9 +166,14 @@ const askUnder = (page: Page, rowSelector: string, at: string) =>
         insideColumn: t.left >= c.left - 0.5 && t.right <= c.right + 0.5,
         focused:
           document.activeElement?.hasAttribute("data-ask-cancel") ?? false,
+        triggerHeld:
+          trigger !== null &&
+          (trigger.hasAttribute("disabled") ||
+            trigger.getAttribute("aria-disabled") === "true") &&
+          trigger.getAttribute("aria-expanded") === "true",
       };
     },
-    { rowSelector, at }
+    { rowSelector, at, triggerSelector }
   );
 
 const capture = async (page: Page, name: string): Promise<void> => {
@@ -176,15 +191,24 @@ const none = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
   await mock(page, { candidates: [], relay: null });
   await open(page, `${base}${URL_PATH}`, "[data-relay-none]");
   await settle(page, 400);
-  const read = await page.evaluate(() => ({
-    line: document.querySelector("[data-relay-none]")?.textContent?.trim(),
-    start: document.querySelectorAll("[data-relay-start]").length,
-    rows: document.querySelectorAll("[data-relay-candidate]").length,
-  }));
+  const read = await page.evaluate((lead) => {
+    const section = document.querySelector("[data-stream-relay]");
+    return {
+      line: document.querySelector("[data-relay-none]")?.textContent?.trim(),
+      start: document.querySelectorAll("[data-relay-start]").length,
+      rows: document.querySelectorAll("[data-relay-candidate]").length,
+      label: section?.getAttribute("aria-label"),
+      headings: section?.querySelectorAll("h2, h3").length ?? null,
+      lead: document.body.textContent?.includes(lead) ?? false,
+    };
+  }, STREAM_RELAY_WORDS.lead);
   const scroll = await sideways(page);
   kit.check(
-    `${leg.name} none: the "No machine of yours…" line, no Start relay, nothing sideways`,
+    `${leg.name} none: the "No machine of yours…" line, no Start relay, the section named "${STREAM_RELAY_WORDS.title}" by its label with no heading or lead of its own, nothing sideways`,
     read.line === STREAM_RELAY_WORDS.none &&
+      read.label === STREAM_RELAY_WORDS.title &&
+      read.headings === 0 &&
+      !read.lead &&
       read.start === 0 &&
       read.rows === 0 &&
       scroll.page <= 0 &&
@@ -203,27 +227,52 @@ const single = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
   const read = await page.evaluate((selector) => {
     const li = document.querySelector<HTMLElement>(selector);
     const field = li?.querySelector<HTMLElement>("[data-relay-hostname]");
-    const head = li?.querySelector<HTMLElement>("[data-relay-pick]");
+    const address = li?.querySelector<HTMLElement>("[data-relay-address]");
+    const hint = li?.querySelector<HTMLElement>(".hint");
     return {
       text: li?.textContent ?? "",
-      field: field
-        ? {
-            under:
-              head !== null &&
-              head !== undefined &&
-              field.getBoundingClientRect().top >=
-                head.getBoundingClientRect().bottom,
-            fontSize: getComputedStyle(field).fontSize,
-          }
-        : null,
+      picks: li?.querySelectorAll("[data-relay-pick]").length ?? null,
+      field:
+        field && address
+          ? {
+              under:
+                field.getBoundingClientRect().top >=
+                address.getBoundingClientRect().bottom,
+              fontSize: getComputedStyle(field).fontSize,
+            }
+          : null,
+      hintWrap: hint ? getComputedStyle(hint).textWrapStyle : null,
+      /** The hint's last line: how many words, and which (`pretty` keeps a lone word off it). */
+      lastLineWords: (() => {
+        const text = hint?.firstChild;
+        if (!(hint && text && text.nodeType === Node.TEXT_NODE)) {
+          return null;
+        }
+        const value = text.textContent ?? "";
+        const tops: number[] = [];
+        for (const match of value.matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(text, match.index);
+          range.setEnd(text, match.index + match[0].length);
+          tops.push(Math.round(range.getBoundingClientRect().top));
+        }
+        const last = tops.at(-1);
+        const words = [...value.matchAll(/\S+/g)].map((match) => match[0]);
+        return {
+          count: tops.filter((top) => top === last).length,
+          line: words.filter((_, index) => tops[index] === last).join(" "),
+        };
+      })(),
       start: li?.querySelectorAll("[data-relay-start]").length ?? 0,
     };
   }, row);
   kit.check(
-    `${leg.name} one machine: its name, its address, "${STREAM_RELAY_WORDS.runHere}", the DNS name field under it, Start relay`,
+    `${leg.name} one machine: its name, its address, no pick button, the DNS name field under it (its hint text-wrap pretty, its last line "${read.lastLineWords?.line}", no word alone), Start relay`,
     read.text.includes(one.name) &&
       read.text.includes(one.address) &&
-      read.text.includes(STREAM_RELAY_WORDS.runHere) &&
+      read.picks === 0 &&
+      read.hintWrap === "pretty" &&
+      (read.lastLineWords?.count ?? 0) >= 2 &&
       read.text.includes(STREAM_RELAY_WORDS.hostnameLabel) &&
       read.field?.under === true &&
       read.start === 1,
@@ -233,11 +282,17 @@ const single = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
   await page.click("[data-relay-start]");
   await page.waitForSelector(`section[data-ask="start:${one.machineId}"]`);
   await settle(page, 500);
-  const asked = await askUnder(page, row, `start:${one.machineId}`);
+  const asked = await askUnder(
+    page,
+    row,
+    `start:${one.machineId}`,
+    "[data-relay-start]"
+  );
   kit.check(
-    `${leg.name} one machine: Start relay asks in place, the tile under the button inside the row, its title "${STREAM_RELAY_WORDS.startTitle(one.name)}", Cancel focused`,
+    `${leg.name} one machine: Start relay asks in place, the tile under the button inside the row, its title "${STREAM_RELAY_WORDS.startTitle(one.name)}", Cancel focused, the trigger held (disabled, aria-expanded)`,
     asked !== null &&
       asked.title === STREAM_RELAY_WORDS.startTitle(one.name) &&
+      asked.triggerHeld &&
       asked.triggerBottom !== null &&
       asked.tileTop >= asked.triggerBottom &&
       asked.insideRow &&
@@ -262,6 +317,27 @@ const several = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
   const before = await page.evaluate(() => ({
     rows: document.querySelectorAll("[data-relay-candidate]").length,
     fields: document.querySelectorAll("[data-relay-hostname]").length,
+    /** Each row's pick button against its own address and the next row's name. */
+    order: [...document.querySelectorAll("[data-relay-candidate]")].map(
+      (row, index, rows) => {
+        const button = row
+          .querySelector("[data-relay-pick]")
+          ?.getBoundingClientRect();
+        const address = row
+          .querySelector("[data-relay-address]")
+          ?.getBoundingClientRect();
+        const next = rows[index + 1]
+          ?.querySelector("[data-relay-name]")
+          ?.getBoundingClientRect();
+        return {
+          belowOwn: !!(button && address) && button.top >= address.bottom,
+          aboveNext: !(button && next) || button.bottom <= next.top,
+          beside: !!(button && address) && button.left > address.left,
+          divided:
+            index === 0 || getComputedStyle(row).borderTopWidth === "1px",
+        };
+      }
+    ),
   }));
   const target = `[data-relay-candidate="m-long"]`;
   await page.click(`${target} [data-relay-pick]`);
@@ -274,6 +350,12 @@ const several = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
       pressed: document
         .querySelector(`${picked} [data-relay-pick]`)
         ?.getAttribute("aria-pressed"),
+      pickedWords: document
+        .querySelector(`${picked} [data-relay-pick]`)
+        ?.textContent?.trim(),
+      otherWords: document
+        .querySelector('[data-relay-candidate="m-relay"] [data-relay-pick]')
+        ?.textContent?.trim(),
       nat: document
         .querySelector('[data-relay-candidate="m-nat"] p')
         ?.textContent?.replace(/\s+/g, " ")
@@ -295,12 +377,27 @@ const several = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
       after.fields === 1 &&
       after.inTarget &&
       after.pressed === "true" &&
+      after.pickedWords === STREAM_RELAY_WORDS.picked &&
+      after.otherWords === STREAM_RELAY_WORDS.runHere &&
       after.nat ===
         `203.0.113.200 · ${STREAM_RELAY_WORDS.seenAs("203.0.113.200")}` &&
       after.off === "198.51.100.77 · offline" &&
       scroll.page <= 0 &&
       scroll.section === 0,
     JSON.stringify({ before, after, scroll })
+  );
+  const phone = leg.view === "phone";
+  kit.check(
+    phone
+      ? `${leg.name} rows: each pick button under its own address and above the next row's name, a hairline between rows`
+      : `${leg.name} rows: each pick button beside its own words, a hairline between rows`,
+    before.order.every(
+      (row) =>
+        row.divided &&
+        row.aboveNext &&
+        (phone ? row.belowOwn : row.beside && !row.belowOwn)
+    ),
+    JSON.stringify(before.order)
   );
   await capture(page, `many-${leg.name}`);
 };
@@ -319,6 +416,24 @@ const running = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
     chips: [...document.querySelectorAll("[data-relay-port]")].map((chip) =>
       chip.textContent?.trim()
     ),
+    chipTops: [
+      ...new Set(
+        [...document.querySelectorAll("[data-relay-port]")].map((chip) =>
+          Math.round(chip.getBoundingClientRect().top)
+        )
+      ),
+    ],
+    errorsUnder: (() => {
+      const row = document
+        .querySelector("[data-relay-ports]")
+        ?.getBoundingClientRect();
+      return [...document.querySelectorAll("[data-relay-port-error]")].every(
+        (line) => !!row && line.getBoundingClientRect().top >= row.bottom
+      );
+    })(),
+    stateTint: document
+      .querySelector("[data-relay-state]")
+      ?.className.includes("status-attn"),
     error: [...document.querySelectorAll("[data-relay-port-error]")].map(
       (span) => span.textContent?.trim()
     ),
@@ -327,9 +442,11 @@ const running = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
     ),
   }));
   kit.check(
-    `${leg.name} live: the relay's line, a chip per port with its word, the down port's error under it, Stop relay and Remove relay`,
-    read.state === "Live" &&
-      read.line === `Relay · ${one.address} · relay.example.com` &&
+    `${leg.name} live with tcp 443 down: the badge "Live, a port is down" in attn, the line "${one.address} · relay.example.com", a chip per port with its word, the down port's error under the chips' row, Stop relay and Remove relay`,
+    read.state === "Live, a port is down" &&
+      read.stateTint === true &&
+      read.line === `${one.address} · relay.example.com` &&
+      read.errorsUnder &&
       JSON.stringify(read.chips) ===
         JSON.stringify([
           "udp 3478 up",
@@ -337,31 +454,69 @@ const running = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
           "tcp 443 down",
           "tls up",
         ]) &&
-      JSON.stringify(read.error) === JSON.stringify([LONG_ERROR]) &&
+      JSON.stringify(read.error) ===
+        JSON.stringify([`tcp 443: ${LONG_ERROR}`]) &&
       read.buttons.includes(STREAM_RELAY_WORDS.stop) &&
       read.buttons.includes(STREAM_RELAY_WORDS.remove),
     JSON.stringify(read)
   );
-  await capture(page, `live-${leg.name}`);
-  await page.click(
-    `[data-relay-row] button:has-text("${STREAM_RELAY_WORDS.remove}")`
-  );
-  await page.waitForSelector('section[data-ask="relay"]');
-  await settle(page, 500);
-  const asked = await askUnder(page, "[data-relay-row]", "relay");
-  const scroll = await sideways(page);
-  const removeBody = STREAM_RELAY_WORDS.removeBody(
-    one.name,
-    "relay.example.com"
-  );
+  if (leg.view !== "phone") {
+    kit.check(
+      `${leg.name} live: the four port chips stand on one row (one top)`,
+      read.chipTops.length === 1,
+      JSON.stringify(read.chipTops)
+    );
+  }
+  const gap = await page.evaluate(() => {
+    const stop = document.querySelector<HTMLElement>("[data-relay-stop]");
+    const remove = document.querySelector<HTMLElement>("[data-relay-remove]");
+    const words = document
+      .querySelector("[data-relay-line]")
+      ?.getBoundingClientRect();
+    if (!(stop && remove && words)) {
+      return null;
+    }
+    const a = stop.getBoundingClientRect();
+    const b = remove.getBoundingClientRect();
+    const padding =
+      Number.parseFloat(getComputedStyle(stop).paddingInlineStart) +
+      Number.parseFloat(getComputedStyle(stop).borderInlineStartWidth);
+    return {
+      apart: Math.round(b.left - a.right),
+      wrapped: a.top >= words.bottom,
+      inkFromWords: Math.round(a.left + padding - words.left),
+      space4: Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--space-4")
+      ),
+    };
+  });
   kit.check(
-    `${leg.name} live: Remove relay asks in place under the row, its title "${STREAM_RELAY_WORDS.removeTitle(one.name)}", its consequence naming the certificate ("${removeBody}"); nothing sideways`,
+    `${leg.name} live: Stop relay and the destructive Remove relay stand --space-4 apart${leg.view === "phone" ? ", and wrapped under the words the ghost's first letter starts on their edge" : ""}`,
+    gap !== null &&
+      gap.apart === gap.space4 &&
+      (leg.view !== "phone" ||
+        (gap.wrapped && Math.abs(gap.inkFromWords) <= 1)),
+    JSON.stringify(gap)
+  );
+  await capture(page, `live-${leg.name}`);
+  await page.click("[data-relay-remove]");
+  await page.waitForSelector('section[data-ask="relay-remove"]');
+  await settle(page, 500);
+  const asked = await askUnder(
+    page,
+    "[data-relay-row]",
+    "relay-remove",
+    "[data-relay-remove]"
+  );
+  const scroll = await sideways(page);
+  const removeBody = STREAM_RELAY_WORDS.removeBody("relay.example.com");
+  kit.check(
+    `${leg.name} live: Remove relay asks in place under the row, its title "${STREAM_RELAY_WORDS.removeTitle(one.name)}", its consequence naming the certificate ("${removeBody}"), the trigger held (disabled, aria-expanded); nothing sideways`,
     asked !== null &&
       asked.title === STREAM_RELAY_WORDS.removeTitle(one.name) &&
       asked.body === removeBody &&
-      removeBody.includes(
-        "its certificate for relay.example.com is deleted from relay"
-      ) &&
+      removeBody.includes("the certificate for relay.example.com is deleted") &&
+      asked.triggerHeld &&
       asked.triggerBottom !== null &&
       asked.tileTop >= asked.triggerBottom &&
       asked.insideRow &&
@@ -371,6 +526,53 @@ const running = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
     JSON.stringify({ asked, scroll })
   );
   await capture(page, `live-remove-asked-${leg.name}`);
+};
+
+/**
+ * The Field hint's `text-wrap: pretty` is shared: Settings › Previews' hint,
+ * in host mode its longest, still wraps inside its column, nothing sideways.
+ */
+const previews = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
+  const page = await kit.page(leg.view);
+  await page.route("**/api/preview-settings", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        mode: "host",
+        pattern: "https://p-{port}.example.com",
+        ports: "3457–3556",
+      }),
+    })
+  );
+  await open(page, `${base}/config/previews`, ".hint");
+  await settle(page, 400);
+  const read = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".hint")].map((hint) => {
+      const range = document.createRange();
+      range.selectNodeContents(hint);
+      const lines = new Set(
+        [...range.getClientRects()]
+          .filter((rect) => rect.width > 0)
+          .map((rect) => Math.round(rect.top))
+      ).size;
+      return {
+        wrap: getComputedStyle(hint).textWrapStyle,
+        lines,
+        inside: hint.scrollWidth <= hint.clientWidth,
+      };
+    })
+  );
+  const scroll = await sideways(page);
+  kit.check(
+    `${leg.name} Settings › Previews: its ${read.length} field hints wrap pretty inside their column (${read.map((hint) => `${hint.lines} lines`).join(", ")}), nothing sideways`,
+    read.length > 0 &&
+      read.every(
+        (hint) => hint.wrap === "pretty" && hint.inside && hint.lines > 0
+      ) &&
+      scroll.page <= 0,
+    JSON.stringify({ read, scroll })
+  );
 };
 
 const spec: Spec = {
@@ -383,6 +585,7 @@ const spec: Spec = {
       await single(kit, base, leg);
       await several(kit, base, leg);
       await running(kit, base, leg);
+      await previews(kit, base, leg);
     }
   },
 };

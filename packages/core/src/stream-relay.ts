@@ -175,6 +175,8 @@ export const STREAM_RELAY_WORDS = {
   lead: "A stream relay lets you take over a browser from anywhere: on cellular data, behind a strict firewall, through a web-only tunnel. It runs on one of your machines that has a public address.",
   none: "No machine of yours has a public address yet. Add one (a small server at a host works), or open UDP and TCP 3478, TCP 443 and UDP 49152–49400 on your router to a machine here, then come back.",
   runHere: "Run the relay here",
+  /** The picked machine's button: its state in words. */
+  picked: "Picked",
   hostnameLabel: "DNS name (optional)",
   hostnameHint:
     "A name pointing at this machine lets the relay answer over TLS on 443, which networks that inspect traffic need. Port 80 must reach it while the certificate is issued.",
@@ -189,10 +191,9 @@ export const STREAM_RELAY_WORDS = {
   stopBody:
     "Streams that go through it stop connecting until it starts again; a screen on the same network as a browser's machine still connects directly.",
   removeTitle: (machine: string) => `Remove the stream relay on ${machine}?`,
-  removeBody: (machine: string, hostname: string | null) =>
+  removeBody: (hostname: string | null) =>
     hostname
-      ? `Streams from screens off the network of a browser's machine stop connecting. Its secret is forgotten and its certificate for ${hostname} is deleted from ${machine}, so a new relay starts with a new secret and a new certificate.`
-      : "Streams from screens off the network of a browser's machine stop connecting. Its secret is forgotten, so a new relay starts with a new one.",
-  answering: (address: string) => `Relay · ${address} · answering`,
+      ? `Streams from screens off the network of a browser's machine stop connecting, and the certificate for ${hostname} is deleted.`
+      : "Streams from screens off the network of a browser's machine stop connecting.",
   seenAs: (seen: string) => `seen by the hub as ${seen}`,
 } as const;
