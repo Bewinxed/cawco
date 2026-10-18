@@ -15,7 +15,8 @@
  *    for each frame the page sends, the frames the hub answered the same
  *    frame with on tape (its ids put back to the page's own); a frame the
  *    tape never saw is a miss.
- * A miss is listed (`misses`), never guessed at: a probe prints them.
+ * A miss is listed (`misses`), never guessed at: a probe prints them. What
+ * a hub state holds back (`held`) its player never answers.
  *
  * A preview's own origin (a session's port, the tape's own number, which
  * the page reads off the tape) is no hub the dashboard's server reaches:
@@ -70,15 +71,37 @@ export interface TapeSocket {
   path: string;
 }
 
-export interface Tape {
-  /** The moment the page's clock stands at (ms since the epoch). */
-  at: number;
+/**
+ * What a hub state's player holds back: the HTTP paths it never answers
+ * (the request stays open, as with a hub that has not answered yet) and the
+ * socket paths it opens and says nothing on (a hub not heard from yet).
+ */
+export interface TapeHold {
+  http: string[];
+  sockets: string[];
+}
+
+/** One hub state's exchanges: what its pages asked and were answered. */
+export interface TapeHub {
+  /** What its player holds back; recorded answered, played held. */
+  held?: TapeHold;
   http: TapeHttp[];
   /** What the previews' own origins answered. */
   preview: TapePreview[];
+  sockets: TapeSocket[];
+}
+
+export interface Tape extends TapeHub {
+  /** The moment the page's clock stands at (ms since the epoch). */
+  at: number;
   /** What the recording made, by name (a session's id, a project's), for the probe's routes. */
   scene: Record<string, string>;
-  sockets: TapeSocket[];
+  /**
+   * Hub states the scene moved the fleet into after the main recording (no
+   * machine online, pairing required), each recorded on its own: what the
+   * states that read it asked. A player of one answers as that hub did.
+   */
+  variants?: Record<string, TapeHub>;
 }
 
 /**
@@ -344,7 +367,7 @@ const PREVIEW_KEY = (
  * A proxy to `target` (a hub's `http://host:port`) that records every
  * exchange onto `tape`. Its address is the hub a dashboard is served against.
  */
-export function recorder(target: string, tape: Tape) {
+export function recorder(target: string, tape: TapeHub) {
   const server = Bun.serve<SocketData>({
     hostname: "127.0.0.1",
     port: 0,
@@ -599,7 +622,7 @@ export interface Miss {
 }
 
 /** The hub `tape` recorded, answering again: its address, and what it could not answer. */
-export function player(tape: Tape) {
+export function player(tape: TapeHub) {
   const http = new Map<string, TapeHttp>();
   for (const one of tape.http) {
     const key = HTTP_KEY(one.method, one.path, one.body);
@@ -642,7 +665,18 @@ export function player(tape: Tape) {
   const rooms = new Map<string, Set<Peer>>();
 
   /** A page's socket on `pathname`, answered from the tape; null when the tape has no such socket. */
+  /** Held requests and silent sockets open now: held on purpose, answered as the hub state answers (a wait on the tape counts them done). */
+  let holding = 0;
   const connect = (pathname: string, peer: Peer) => {
+    if (tape.held?.sockets.includes(pathname)) {
+      holding += 1;
+      return {
+        message: () => undefined,
+        close: () => {
+          holding -= 1;
+        },
+      };
+    }
     const played = scriptKey(pathname);
     const script = scripts.get(played)?.[0];
     if (!script) {
@@ -751,6 +785,14 @@ export function player(tape: Tape) {
         }
         return new Response("upgrade failed", { status: 400 });
       }
+      if (tape.held?.http.includes(url.pathname)) {
+        // Held: answered never, the request open for as long as the page waits.
+        holding += 1;
+        request.signal.addEventListener("abort", () => {
+          holding -= 1;
+        });
+        return new Promise<Response>(() => undefined);
+      }
       const body =
         request.method === "GET" || request.method === "HEAD"
           ? ""
@@ -784,6 +826,8 @@ export function player(tape: Tape) {
   return {
     base: `http://127.0.0.1:${server.port}`,
     attach,
+    /** What it holds back open now (`held`): no answer is due on these. */
+    holding: () => holding,
     misses: () => [...misses].sort(),
     stop: () => server.stop(true),
   };

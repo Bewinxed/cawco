@@ -2,7 +2,8 @@
  * Jev as a scratch fleet's hub reaches it on the TypeSafe route
  * (`CAWCO_TYPESAFE_URL`, hub jev.ts), as scripts/probe-fleet-watch.ts
  * stands one in: every request kept whole, every question answered by its
- * type (https://docs.typesafe.ai/api.md). A noul is answered no, a score its
+ * type (https://docs.typesafe.ai/api.md). A noul is answered no (yes when it
+ * asks about a candidate whose description the call's prompt says), a score its
  * lowest level, a choice `none` when it offers one, else its first option.
  * A starters call (hub jev-placement.ts `jevStarters`: its state holds
  * `shown` and `repository`) is answered by `starters`, which picks each
@@ -78,6 +79,31 @@ export const firstAsk = (call: JevCall): Record<string, StarterPick> =>
     ])
   );
 
+/** A description's closing stop, which a prompt saying the same task leaves off. */
+const CLOSING_STOP = /[.!]\s*$/;
+
+/**
+ * A noul's answer: yes (0.9) when it asks whether a candidate (a composer
+ * suggestion's skill, tool or MCP server: hub suggest.ts) is made for the
+ * task the call's prompt describes, and the prompt says what the
+ * candidate's description says; no (0.05) otherwise.
+ */
+const candidateFits = (call: JevCall, asked: JevAsked): number => {
+  const { candidate } = (asked.instructions ?? {}) as {
+    candidate?: { description?: unknown };
+  };
+  const { prompt } = call.state;
+  const said =
+    typeof candidate?.description === "string"
+      ? candidate.description.replace(CLOSING_STOP, "").trim().toLowerCase()
+      : "";
+  return said !== "" &&
+    typeof prompt === "string" &&
+    prompt.toLowerCase().includes(said)
+    ? 0.9
+    : 0.05;
+};
+
 export const jevMock = (
   starters: (call: JevCall) => Record<string, StarterPick> = firstAsk
 ): JevMock => {
@@ -100,7 +126,7 @@ export const jevMock = (
       const answers: Record<string, unknown> = {};
       for (const [id, asked] of Object.entries(body.questions)) {
         if (asked.type === "noul") {
-          answers[id] = { type: "noul", noul: 0.05 };
+          answers[id] = { type: "noul", noul: candidateFits(call, asked) };
         } else if (asked.type === "score") {
           answers[id] = {
             type: "score",

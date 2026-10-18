@@ -13,7 +13,7 @@ import { join } from "node:path";
 import type { BrowserContext, Page, Request } from "playwright-core";
 import { heavySlot } from "../../lib/heavy-run";
 import { until } from "../../scratch-fleet";
-import type { Attach, Tape } from "../hub-tape";
+import type { Attach, Tape, TapeHold } from "../hub-tape";
 import { type Kit, open, ROOT, type Theme, type View } from "../kit";
 import type { State, Surface, Width } from "./catalogue";
 import { holdStill, installReader, PROPS } from "./read";
@@ -71,10 +71,17 @@ export class Servers {
   private readonly own = new Set<string>();
   readonly hub: string;
   private readonly tape: { attach: Attach; base: string };
-  constructor(kit: Kit, hub: { attach: Attach; base: string }) {
+  /** What the hub holds back on purpose (hub-tape.ts `held`): answered, as far as a wait is concerned. */
+  private readonly held: TapeHold | undefined;
+  constructor(
+    kit: Kit,
+    hub: { attach: Attach; base: string },
+    held?: TapeHold
+  ) {
     this.kit = kit;
     this.hub = hub.base;
     this.tape = hub;
+    this.held = held;
     this.own.add(new URL(hub.base).host);
   }
 
@@ -101,6 +108,20 @@ export class Servers {
       context,
       (url) => LOOPBACK.has(url.hostname) && !this.own.has(url.host)
     );
+  }
+
+  /**
+   * Whether `request` is one the hub holds back (a loading placeholder's
+   * read: `config-memory/reading`, `home/connecting`): it is never
+   * answered, on purpose, so a wait on the tape counts it answered.
+   */
+  holds(request: Request): boolean {
+    const paths = this.held?.http;
+    if (!paths || paths.length === 0) {
+      return false;
+    }
+    const url = new URL(request.url());
+    return url.host === new URL(this.hub).host && paths.includes(url.pathname);
   }
 
   async close(): Promise<void> {
@@ -154,8 +175,39 @@ async function devServer(hub: string) {
   return { base, child };
 }
 
+declare global {
+  interface Window {
+    /** Set once the root layout has mounted: the page's whole tree hydrated (`markHydrated`). */
+    kitHydrated?: true;
+  }
+}
+
+/**
+ * Marks the page hydrated when the root layout's `onMount` calls
+ * `releaseHeldTaps` (routes/+layout.svelte: effects flush only once the whole
+ * tree has hydrated), which app.html defines after this runs. A page the
+ * server drew stands still before it hydrates, and the dev server's takes
+ * seconds to: a state opened on it reads the server's markup and clicks
+ * buttons nothing listens to yet.
+ */
+function markHydrated(): void {
+  let release: (() => void) | undefined;
+  Object.defineProperty(window, "releaseHeldTaps", {
+    configurable: true,
+    get: () => () => {
+      window.kitHydrated = true;
+      release?.();
+    },
+    set: (fn: () => void) => {
+      release = fn;
+    },
+  });
+}
+
 /** Each page's requests not yet answered: what `quiet` waits on. */
 const inFlight = new WeakMap<Page, Set<Request>>();
+/** Each page's hub's holds (`Servers.holds`): a held request is answered as far as `quiet` waits. */
+const heldOn = new WeakMap<Page, (request: Request) => boolean>();
 /** Each request `quiet` gave up waiting on, said once: a page that keeps one open is slow, never still. */
 const gaveUp = new Set<string>();
 
@@ -179,6 +231,7 @@ export async function passPage(
     await page.emulateMedia({ reducedMotion: "reduce" });
   }
   await page.context().addInitScript(installReader, PROPS);
+  await page.context().addInitScript(markHydrated);
   // Every page focused, as a person's one window is: two passes side by side
   // share one browser, where only one page would hold its focus, and what
   // styles itself on focus (an editor's active line) read either way.
@@ -240,10 +293,14 @@ const ACT_MS = 5000;
  * remainder of ACT_MS is then run, timer by timer. An act that moves Date
  * (rail/older sets it a day on, so its sessions read old) keeps its moment.
  * An act that runs past ACT_MS stands where it ended, and says so.
+ *
+ * `held`: the state reads the frame the act left (State `heldFrame`), so
+ * the clock is paused where the act left it and not run on.
  */
 async function acting(
   page: Page,
-  act: (page: Page) => Promise<unknown>
+  act: (page: Page) => Promise<unknown>,
+  held = false
 ): Promise<void> {
   const began = await page.evaluate(() => performance.now());
   await page.clock.resume();
@@ -262,7 +319,9 @@ async function acting(
     await page.clock.setFixedTime(moment);
     const now = await page.evaluate(() => performance.now());
     const rest = began + ACT_MS - now;
-    if (rest > 0) {
+    if (held) {
+      // Read where the act left it: no stretch of page time after it.
+    } else if (rest > 0) {
       await page.clock.runFor(rest);
     } else {
       console.log(
@@ -279,12 +338,23 @@ async function acting(
  * and a hover's highlight is always placed, then hidden. An act that ends
  * on a move is a hover, and what it shows is the state (a session row's
  * hover card): its pointer stays. Measured again at rest, as on arrival.
+ *
+ * A state that reads on a held frame (State `heldFrame`: catch-up/switch's
+ * "Catching up…", which stands until the next frame and timer run) is read
+ * where its act left the page: its clock paused, no stretch run on it, and
+ * no measure again (the measure runs page time). Only the reader's own
+ * wait on the browser's frames runs, which moves no page time.
  */
 async function actAtRest(
   page: Page,
-  act: (page: Page) => Promise<unknown>
+  act: (page: Page) => Promise<unknown>,
+  heldFrame = false
 ): Promise<void> {
-  await acting(page, act);
+  await acting(page, act, heldFrame);
+  if (heldFrame) {
+    await holdStill(page);
+    return;
+  }
   const rests = await page.evaluate(
     () => window.__ssReader?.pointerRests() ?? false
   );
@@ -303,18 +373,23 @@ const LAND_MS = 50;
 
 /**
  * Until the tape has answered every request the page made: none in flight
- * on two reads in a row, a socket's answers given LAND_MS to land. A page
- * still asking after 15 s is read as it stands (its requests named).
+ * on two reads in a row, a socket's answers given LAND_MS to land. A
+ * request the hub holds back on purpose (`Servers.holds`) counts as
+ * answered: a loading placeholder's read waits on it for good. A page still
+ * asking after 15 s is read as it stands (its requests named).
  */
 async function quiet(page: Page): Promise<void> {
   const pending = inFlight.get(page);
+  const holds = heldOn.get(page);
+  const unanswered = () =>
+    pending ? [...pending].filter((request) => !holds?.(request)) : [];
   let calm = 0;
   for (let i = 0; i < 300 && calm < 2; i += 1) {
-    calm = pending && pending.size > 0 ? 0 : calm + 1;
+    calm = unanswered().length > 0 ? 0 : calm + 1;
     // biome-ignore lint/performance/noAwaitInLoops: polled until nothing is in flight
     await page.waitForTimeout(LAND_MS);
   }
-  for (const request of calm < 2 ? (pending ?? []) : []) {
+  for (const request of calm < 2 ? unanswered() : []) {
     const url = request.url().replace(ORIGIN_PORT, ":<port>");
     if (!gaveUp.has(url)) {
       gaveUp.add(url);
@@ -416,6 +491,67 @@ const STILL_STEP_MS = 250;
 const STILL_STRETCHES = 60;
 
 /**
+ * In the page: how many elements under `root` (its largest match, else the
+ * body) Svelte has adopted. The dev server tags each with `__svelte_meta`;
+ * a build marks each one it wires with a symbol-keyed cache (its class,
+ * style or attributes, its delegated events: svelte constants.js
+ * `CLASS_CACHE`, …). The server's markup carries neither.
+ */
+function adopted(root: string): number {
+  let top: Element = document.body;
+  let most = -1;
+  for (const el of document.querySelectorAll(root)) {
+    const n = el.getElementsByTagName("*").length;
+    if (n > most) {
+      top = el;
+      most = n;
+    }
+  }
+  let count = 0;
+  for (const el of [top, ...top.querySelectorAll("*")]) {
+    if ("__svelte_meta" in el || Object.getOwnPropertySymbols(el).length > 0) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+/** How long the adopted count holds before the page is read as hydrated, and how often it is read. */
+const HYDRATED_HOLD_MS = 1000;
+const HYDRATED_POLL_MS = 100;
+const HYDRATED_WITHIN_MS = 30_000;
+
+/**
+ * Waits until the elements Svelte has adopted under `root` are some and
+ * hold at one count for {@link HYDRATED_HOLD_MS}. The root layout's mount
+ * (`kitHydrated`) comes before the page is hydrated: async Svelte hydrates
+ * in parts, and the dev server builds each part's modules on its first
+ * request, so a read at `kitHydrated` read the server's markup (389
+ * elements on the board, none adopted) and a click on it reloaded the page.
+ */
+async function hydrated(page: Page, root: string): Promise<void> {
+  const deadline = Date.now() + HYDRATED_WITHIN_MS;
+  let last = -1;
+  let since = Date.now();
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: polled until the count holds
+    const now = await page.evaluate(adopted, root);
+    if (now !== last) {
+      last = now;
+      since = Date.now();
+    } else if (now > 0 && Date.now() - since >= HYDRATED_HOLD_MS) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `not hydrated within ${HYDRATED_WITHIN_MS / 1000}s (${now} elements adopted under ${root})`
+      );
+    }
+    await page.waitForTimeout(HYDRATED_POLL_MS);
+  }
+}
+
+/**
  * A route as it opens, standing still, then measured once more at rest: a
  * size a script measured while the page was still moving (the composer's
  * ask room, Composer.svelte `askRoom`, taken as the ask grows) is measured
@@ -441,6 +577,42 @@ export interface Visit {
   pass: Pass;
   state: State;
   surface: Surface;
+}
+
+/**
+ * `state` on its route freshly loaded at `base`, hydrated and arrived, its
+ * act done at rest, and what the act opened hydrated too. The read waits
+ * on both the tape's answer (`quiet`, inside `arrive`) and hydration.
+ */
+async function opened(
+  page: Page,
+  base: string,
+  surface: Surface,
+  state: State,
+  scene: Scene
+): Promise<void> {
+  const route = (state.route ?? surface.route)(scene);
+  await open(
+    page,
+    `${base}${route}`,
+    () => document.readyState !== "loading",
+    60_000
+  );
+  // The dev server built the route's modules for that load: loaded again,
+  // the page hydrates on modules already built.
+  if (surface.serve === "dev") {
+    await page.reload({ waitUntil: "domcontentloaded" });
+  }
+  await hydrated(page, "body");
+  await arrive(page);
+  const { act } = state;
+  if (!act) {
+    return;
+  }
+  await actAtRest(page, (p) => act(p, scene), state.heldFrame === true);
+  if (!state.heldFrame) {
+    await hydrated(page, state.root);
+  }
 }
 
 /**
@@ -480,23 +652,14 @@ export async function walk(
         return;
       }
       const page = await passPage(kit, pass, tape.at);
+      heldOn.set(page, (request) => servers.holds(request));
       await servers.attach(page.context());
       try {
         for (const state of states) {
           const what = `${surface.name}/${state.name} · ${pass.name}`;
           try {
-            const route = (state.route ?? surface.route)(scene);
             // biome-ignore lint/performance/noAwaitInLoops: one state at a time on the pass's page
-            await open(
-              page,
-              `${base}${route}`,
-              () => document.readyState !== "loading",
-              60_000
-            );
-            await arrive(page);
-            if (state.act) {
-              await actAtRest(page, state.act);
-            }
+            await opened(page, base, surface, state, scene);
             await visit({ page, pass, state, surface });
           } catch (error) {
             failed(what, String(error).split("\n")[0] ?? "");

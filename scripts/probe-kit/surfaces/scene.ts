@@ -35,6 +35,7 @@
  * `PROBE-STEP:<name>`, and each request after it takes the plan's next step
  * by the tool results the conversation holds since (artifacts.ts's shape).
  */
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -42,21 +43,24 @@ import {
   CLAUDE_JSON_NAME,
 } from "../../../packages/core/src/claude-dirs";
 import { seedDecisions } from "../../decisions-preview/seed";
-import type { Reply, Seen } from "../../scratch-fleet";
+import type { Machine, Reply, Seen } from "../../scratch-fleet";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
+import type { TapeHold } from "../hub-tape";
 import { jevMock, jevOn } from "../jev-mock";
 import type { Kit, KitFleet } from "../kit";
+import { type McpOauthMock, mcpOauthMock, signIn } from "../mcp-oauth-mock";
 
 const DAY = 24 * 60 * 60 * 1000;
 const MINUTE = 60_000;
-/** A made view (views spec's good draft): figures, a table, the board by stage and a month, over the view tools. */
-const WEEK_VIEW = `root = Column([title, figures, table, board, month])
+/** A made view (views spec's good draft): figures, a table, the board by stage, each task's card and a month, over the view tools. */
+const WEEK_VIEW = `root = Column([title, figures, table, board, cards, month])
 tasks = Query("tasks", {}, {rows: []})
 stages = Query("stages", {}, {stages: [], byKind: {you: 0, done: 0}, total: 0})
 title = Text("Chip week", "title")
 figures = Row([StatTile("All tasks", stages.total), StatTile("Waiting on you", stages.byKind.you, "attn")])
 table = Table(tasks.rows, [{label: "Task", field: "title"}, {label: "Stage", field: "stage"}])
 board = Board(@Each(stages.stages, "s", StageColumn(s, tasks.rows)), "By stage")
+cards = Column(@Each(tasks.rows, "t", TaskCard(t)))
 month = Calendar(tasks.rows, "dates.createdAt", "month")
 `;
 /** The second account, signed in after every session started (the spawn sheet's account chip, the routing's two). */
@@ -98,10 +102,51 @@ const REVIEW_REPORT =
   "I read the push probe's last six runs. It never reads a push sent while the phone is locked, and it counts a burst of three as one. The post says what changed for the tray; the notes list each miss with its run.";
 const FAILED_WHY =
   "The attempt's session ended before it handed anything in: the token sheet's build failed on a missing font.";
+/** Short sessions of the cawco project, stopped: its older rows a later day folds. */
+const SKETCHES = [
+  "Sketch the tray's empty state",
+  "List the chip's hues",
+  "Time the tray's open",
+  "Read the chip row's issues",
+];
+/** What the second account's fake login carries (its credentials' token), which the first's does not. */
+const SECOND_TOKEN = "fake-scratch-second";
+/** When the first account's limit resets, from its refusal: well past the walk. */
+const LIMIT_RESETS_IN = 5 * 60 * 60 * 1000;
+/** The words the scene's rule watches for, which only the "todo" session says. */
+const TODO_PHRASE = "TODO:";
+/** What the rule says back, which the TODO session then answers at length. */
+const RULE_REPLY = "Finish the TODO before you stop.";
+/** The fleet's memory, saved twice: the second keeps the first as a version. */
+const MEMORY_V1 = "# Fleet\n\nSay what changed and how it was proven.\n";
+const MEMORY_V2 =
+  "# Fleet\n\nSay what changed and how it was proven.\n\nRead a file whole before editing it.\n";
+/** A model's document under the memory (a models/<model>.md). */
+const MODEL_DOC = "models/claude-opus-5-5.md";
+const MCP_NAME = "tray-docs";
+const HOOK_ID = "lint-written";
+/** The third machine: online, a second agent on this host (scratch-fleet.ts `launchMachine`). */
+const BENCH_MACHINE = "machine-bench";
+/** The second machine: a Mac, offline, its keychain locked. */
+export const STUDIO_HOST = "studio";
+const STUDIO_MACHINE = "machine-studio-mac";
+/** The file Caw says he wrote in the cawco project's folder (his message's `files`). */
+const BRIEF_FILE = "notes/tray-brief.md";
+const BRIEF = `# The tray's brief
+
+- The count badge never shrinks.
+- A long branch name clips with an ellipsis.
+`;
+/** The note pasted beside your picture in the thread. */
+const PHONE_NOTES =
+  "At 390px the badge is cut after the second chip.\nThe branch name was 40 characters.";
+/** The picture your thread message carried, base64: a 4×2 PNG, the tray's two chips in its two hues. */
+const TRAY_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAGElEQVR4nGOwaPlv0fL//yqN/6s0GJA5ALfCDjHN4/54AAAAAElFTkSuQmCC";
 /** Caw's words in the cawco project's thread, over the two tasks that wait on you. */
 const CAW_SAYS =
   "The push probe audit is ready for your review, and the token sheet's attempt failed: it needs you to say whether to try again.";
-/** A workflow drawn as a graph (the editor's canvas): start, one step, end. */
+/** A workflow drawn as a graph (the editor's canvas): start, one step, a branch on what it found, end. */
 const GRAPH = {
   nodes: [
     {
@@ -119,16 +164,32 @@ const GRAPH = {
       harness: "claude",
       model: "claude-haiku-4-5",
       prompt: "Read the chip row and say what overflows.",
-      outputSchema: { type: "object", properties: {} },
+      outputSchema: {
+        type: "object",
+        properties: { overflows: { type: "boolean" } },
+        required: ["overflows"],
+      },
       retries: 2,
       timeoutMinutes: 60,
       failedPorts: ["fail"],
     },
     {
+      // Whether the step found an overflow: its condition, then the else.
+      id: "branch-1",
+      kind: "branch",
+      title: "Overflows?",
+      position: { x: 560, y: 120 },
+      cases: [
+        // A case reads the result of the node before it (workflow-compile.ts `whenExpr`).
+        { port: "overflows", when: { op: "truthy", path: "overflows" } },
+        { port: "else" },
+      ],
+    },
+    {
       id: "end-1",
       kind: "end",
       title: "End",
-      position: { x: 560, y: 120 },
+      position: { x: 800, y: 120 },
       outputs: {},
     },
   ],
@@ -138,7 +199,21 @@ const GRAPH = {
       from: { node: "start-1", port: "out" },
       to: { node: "step-1" },
     },
-    { id: "e2", from: { node: "step-1", port: "out" }, to: { node: "end-1" } },
+    {
+      id: "e2",
+      from: { node: "step-1", port: "out" },
+      to: { node: "branch-1" },
+    },
+    {
+      id: "e3",
+      from: { node: "branch-1", port: "overflows" },
+      to: { node: "end-1" },
+    },
+    {
+      id: "e4",
+      from: { node: "branch-1", port: "else" },
+      to: { node: "end-1" },
+    },
   ],
 };
 /** A workflow that sets one slot and runs one step (its session hands in `overflows`), then returns. */
@@ -161,7 +236,40 @@ export default async function (w: Workflow<typeof inputs>) {
 `;
 const STEP = /PROBE-STEP:([a-z-]+)/g;
 
-type Step = { tool: { input: object; name: string } } | { words: string };
+type Step =
+  | { tool: { input: object; name: string } }
+  | {
+      /**
+       * What the session says once a rule's reply (`reply`) is its newest
+       * message: the turn answering the rule.
+       */
+      answer?: { reply: string; slow?: number; words: string };
+      /**
+       * Streamed a piece every `slow` ms (each word its own piece, as each
+       * piece of `thinking` is): a turn still going while the walk reads it.
+       */
+      slow?: number;
+      /**
+       * Refused at its account's limit (scratch-fleet.ts `Reply.refuse`)
+       * unless the request's credential carries this: a session whose
+       * first account has run out and whose second has not.
+       */
+      refusedUnless?: string;
+      /** Thought before the words, in pieces (scratch-fleet.ts `Reply.thinking`). */
+      thinking?: string[];
+      words: string;
+    };
+
+/** Where a slow reply's words part: after each run of space. */
+const AFTER_SPACE = /(?<=\s)/;
+/** Words as a slow reply streams them: each word, with the space before the next, one piece. */
+const pieces = (words: string): string[] =>
+  words.split(AFTER_SPACE).filter(Boolean);
+/** A slow reply's pace: a piece every 15 s, so a page shown it stands still between pieces (walk.ts `stand`). */
+const SLOW_MS = 15_000;
+/** What the live sessions say and think, long enough at {@link SLOW_MS} a piece to outlast the walk. */
+const LONG_NOTE = `The tray's chip row is measured at every width the dashboard is read at. At 390px the third chip is cut, and its count badge with it. The label takes its whole width because nothing lets it shrink, so a long branch name pushes everything after it out of the row. Letting the label shrink, clipping it with an ellipsis and keeping the badge whole fixes the phone. The tablet and the desk keep their widths. The next step is to measure the row again with a forty character branch name, then with two chips that both carry long names, and to say where each one clips and whether the badge stays readable at every width. After that the same check runs on the board's cards, which reuse the chip, and on the rail's rows, which show a smaller one. Each measurement is written down with its width, the branch name used and the pixel where the label clipped, so the next change to the chip can be checked against them.`;
+const LONG_THOUGHT = `The row is a flex row with no wrap. Each chip holds a label and a badge. The label has no minimum width of zero, so it never shrinks below its content. The badge comes after the label in source order. When the row is narrower than its chips, the last chip overflows the row. Clipping happens at the row's edge, so the last chip loses its badge first. The fix belongs on the label: let it shrink, clip it with an ellipsis, and leave the badge alone. Before writing it, the cards and the rail rows that reuse the chip need checking, because a change to the label's shrinking changes them too. The board's cards are wider, so they rarely clip. The rail's rows are narrower, and their chips already truncate, which suggests the rail styles the label differently. That difference is worth reading before the fix, so the fix is one rule and not two.`;
 
 /** The markdown a reply draws: one of each block the transcript renders. */
 const REPLY = `## What overflows
@@ -261,6 +369,96 @@ const plans = (repo: string): Record<string, Step[]> => ({
     { words: REPLY },
   ],
   sub: [{ words: "The label never shrinks, so the badge is cut first." }],
+  todo: [
+    {
+      words: `The chip's label shrinks now. ${TODO_PHRASE} measure it on a phone.`,
+      // The rule's reply answered at length, still going while the walk reads it.
+      answer: { reply: RULE_REPLY, words: LONG_NOTE, slow: SLOW_MS },
+    },
+  ],
+  think: [
+    {
+      thinking: [
+        "The badge is the one number the row is for, ",
+        "so the label has to give way first.",
+      ],
+      words: "The label gives way and the badge stays whole.",
+    },
+  ],
+  "live-think": [
+    {
+      thinking: pieces(LONG_THOUGHT),
+      words: "The label shrinks; the badge stays.",
+      slow: SLOW_MS,
+    },
+  ],
+  compact: [{ words: "The chip notes are in order." }],
+  // Its steps in Claude Code's own task list (the fleet keeps CawCo's
+  // to-dos off for it: hub plans.ts), one task each, the first done and the
+  // second under way.
+  plan: [
+    ...PLAN_STEPS.map((subject): Step => ({
+      tool: {
+        name: "TaskCreate",
+        input: { subject, description: subject, activeForm: subject },
+      },
+    })),
+    {
+      tool: { name: "TaskUpdate", input: { taskId: "1", status: "completed" } },
+    },
+    {
+      tool: {
+        name: "TaskUpdate",
+        input: { taskId: "2", status: "in_progress" },
+      },
+    },
+    { words: "The plan is set: the label first, then the badge." },
+  ],
+  propose: [
+    {
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${ACTION_PROPOSE}`, max_results: 1 },
+      },
+    },
+    {
+      tool: {
+        name: ACTION_PROPOSE,
+        input: {
+          connection: FEED_CONNECTION,
+          tool: "post_update",
+          args: { text: "The tray's chips keep their badge whole now." },
+          reason: "The chip fix shipped; the feed says so once you approve.",
+        },
+      },
+    },
+    { words: "The update is proposed for your approval." },
+  ],
+  limit: [
+    {
+      words: "The badge fits; the count stays whole.",
+      refusedUnless: SECOND_TOKEN,
+    },
+  ],
+  memory: [
+    {
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${ADMIN_MEMORY_READ}`, max_results: 1 },
+      },
+    },
+    { tool: { name: ADMIN_MEMORY_READ, input: { action: "get" } } },
+    { words: "The fleet's memory asks for a proof with every change." },
+  ],
+  skill: [
+    {
+      tool: {
+        name: "Skill",
+        input: { skill: SKILL_NAME, args: "Measure the chip row at 390px." },
+      },
+    },
+    { words: "The tray check passed." },
+  ],
   named: [
     {
       tool: {
@@ -437,6 +635,27 @@ const DELEGATE = "mcp__cawco__delegate";
 const FINISH_ITEM = "mcp__cawco__finish_item";
 const WORKFLOW_RUN = "mcp__cawco__workflow_run";
 const SUBMIT_RESULT = "mcp__cawco__submit_result";
+/** CawCo's action proposer (actions.ts `action_propose`), deferred, and the connection it proposes on. */
+const ACTION_PROPOSE = "mcp__cawco__action_propose";
+const FEED_CONNECTION = "tray-feed";
+/** The planning session's steps, its task list's subjects in order. */
+const PLAN_STEPS = [
+  "Read the tray's chip row",
+  "Let the label shrink",
+  "Keep the badge whole",
+];
+/** CawCo's fleet-memory read (admin-tools.ts `admin_<group>_read`), deferred. */
+const ADMIN_MEMORY_READ = "mcp__cawco__admin_memory_read";
+/** A skill on the machine (`~/.claude/skills`), which the "skill" session runs. */
+const SKILL_NAME = "tray-check";
+const SKILL = `---
+name: ${SKILL_NAME}
+description: Check the tray's chip row at a phone's width.
+---
+# Tray check
+
+Measure the chip row at 390px and say whether the count badge is whole.
+`;
 /** The delegate the "split" session starts: its card's name in the parent's transcript. */
 export const DELEGATE_TITLE = "Check the chip row";
 const WORKFLOW_NAME = "Chip audit";
@@ -521,11 +740,32 @@ export const scriptedReply =
     const at = request.body.lastIndexOf(`PROBE-STEP:${marker[1]}`);
     const taken = (request.body.slice(at).match(/"tool_result"/g) ?? []).length;
     const step = plan[Math.min(taken, plan.length - 1)] as Step;
-    if ("words" in step) {
-      return { everyMs: 2, words: [step.words] };
-    }
-    return { everyMs: 2, words: [], tool: step.tool };
+    return "words" in step
+      ? wordsReply(step, request)
+      : { everyMs: 2, words: [], tool: step.tool };
   };
+
+/** A words step as the mock says it: refused at the limit where it is, slow, or thinking first, as the step asks. */
+function wordsReply(
+  step: Extract<Step, { words: string }>,
+  request: Seen
+): Reply {
+  if (step.refusedUnless && !request.auth.includes(step.refusedUnless)) {
+    return {
+      everyMs: 2,
+      words: [],
+      refuse: { resetsAt: request.at + LIMIT_RESETS_IN },
+    };
+  }
+  if (step.answer && request.last.includes(step.answer.reply)) {
+    return wordsReply(step.answer, request);
+  }
+  return {
+    everyMs: step.slow ?? 2,
+    words: step.slow ? pieces(step.words) : [step.words],
+    ...(step.thinking ? { thinking: step.thinking } : {}),
+  };
+}
 
 /** A permission the hub holds, as `/api/pending` lists it. */
 interface PendingAsk {
@@ -571,16 +811,216 @@ export interface Scene {
 }
 
 /**
+ * The hub states the scene moves the fleet into once the main recording is
+ * done, in this order (each leaves the fleet in it): `reading`, the scene's
+ * hub not yet answering Configure's fleet read, and `silent`, its socket
+ * open and nothing said on it yet (each held at play: {@link HOLDS});
+ * composer suggestions switched on; `written`, the hub as states that write to it leave it (an
+ * account made, a key sent), kept apart so no other state reads what they
+ * wrote; `moving`, a move nobody said yes to parked on its approval (the
+ * scene's `moving`: its session); every machine offline; every machine
+ * removed; paired devices required. A state that
+ * reads one names it (catalogue `hub`); the tape keeps each on its own
+ * (hub-tape.ts `variants`).
+ */
+export const VARIANTS = [
+  "reading",
+  "silent",
+  "suggesting",
+  "written",
+  "moving",
+  "machineless",
+  "unregistered",
+  "pairing",
+] as const;
+export type Variant = (typeof VARIANTS)[number];
+
+/**
+ * What a hub state's tape holds back at play, recorded answered
+ * (hub-tape.ts `held`): Configure's read of the fleet, whose skeleton rows
+ * stand until it lands (SectionFrame); the dashboard's socket, whose status
+ * line says the hub is on its way until it speaks (StatusLine).
+ */
+export const HOLDS: Partial<Record<Variant, TapeHold>> = {
+  reading: { http: ["/api/fleet"], sockets: [] },
+  silent: { http: [], sockets: ["/ws/dashboard"] },
+};
+
+/** Moves the scene's fleet into `variant` (after the ones before it in {@link VARIANTS}). */
+export async function enterVariant(
+  fleet: KitFleet,
+  variant: Variant
+): Promise<void> {
+  if (variant === "suggesting") {
+    // Settings' "Suggest while typing" on (Jev is: the scene's TypeSafe key).
+    const response = await fetch(`${fleet.base}/api/jev/suggest`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `PUT /api/jev/suggest: ${response.status} ${await response.text()}`
+      );
+    }
+    return;
+  }
+  if (variant === "written") {
+    // Nothing moves: its states' own acts write to the hub.
+    return;
+  }
+  if (variant === "reading" || variant === "silent") {
+    // Nothing moves: recorded as the scene's hub, its tape holds back at play.
+    return;
+  }
+  if (variant === "moving") {
+    await startMove(fleet);
+    return;
+  }
+  if (variant === "machineless") {
+    // Its machines' agents stopped: no machine online (the Mac was never).
+    await fleet.stop("agent");
+    bench?.agent.kill("SIGTERM");
+    await bench?.agent.exited;
+    await until(
+      "every machine offline on the hub",
+      () => fleet.api<{ status: string }[]>("/api/agents"),
+      (machines) => machines.every((machine) => machine.status !== "online"),
+      60_000
+    );
+    return;
+  }
+  if (variant === "unregistered") {
+    // Every machine, all offline now, removed as a machine's menu removes
+    // it (its sessions with it): a hub with no machine at all.
+    const machines = await fleet.api<{ machineId: string }[]>("/api/agents");
+    for (const { machineId } of machines) {
+      // biome-ignore lint/performance/noAwaitInLoops: one removal at a time
+      const response = await fetch(`${fleet.base}/api/agents/${machineId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error(
+          `DELETE /api/agents/${machineId}: ${response.status} ${await response.text()}`
+        );
+      }
+    }
+    return;
+  }
+  // Paired devices required, as Configure → Devices turns it on: the asking
+  // caller is the first paired one, and a browser with no device's cookie
+  // (every page the walk opens) is a stranger to the hub from then on.
+  const response = await fetch(`${fleet.base}/api/auth/pairing`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ required: true, kind: "browser" }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `PUT /api/auth/pairing: ${response.status} ${await response.text()}`
+    );
+  }
+}
+
+/** The scene's second online machine (no checkout of any project on it), once `seedScene` launches it. */
+let bench: Machine | null = null;
+
+/** What `seedScene` made: the tape's `scene`, which a variant adds to before the tape is written. */
+let seeded: Scene | null = null;
+
+/** The moving session's title: its row on the board from the move's start. */
+const MOVE_TITLE = "Move the sketches";
+/** How long a move takes to park on its ask. */
+const MOVE_ASK_MS = 120_000;
+
+/**
+ * A project whose folder is no git repository, moved to the second online
+ * machine as a delegate's or the API's move is, with no yes from New
+ * session: the move's first step asks for it (`git init` first), on its
+ * session's row (moves.ts `askId`), and waits there. Its session is the
+ * scene's `moving`.
+ */
+async function startMove(fleet: KitFleet): Promise<void> {
+  if (!seeded) {
+    throw new Error("no scene to move from: seedScene first");
+  }
+  const place = join(fleet.sandbox, "sketches");
+  await mkdir(place, { recursive: true });
+  await writeFile(
+    join(place, "README.md"),
+    "# Sketches\n\nThe tray's sketches, before any of them is a branch.\n"
+  );
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "sketches",
+    machineId: MACHINE,
+    cwd: place,
+    caw: false,
+  });
+  const response = await fetch(
+    `${fleet.base}/api/projects/${project.id}/moves`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        machineId: BENCH_MACHINE,
+        spawn: { harness: "claude", title: MOVE_TITLE },
+        prompt: "Read the sketches' README.",
+      }),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      `POST /api/projects/${project.id}/moves: ${response.status} ${await response.text()}`
+    );
+  }
+  const { id, targetInstanceId } = (await response.json()) as {
+    id: string;
+    targetInstanceId: string;
+  };
+  interface Job {
+    askId?: string;
+    id: string;
+    stage: string;
+  }
+  const job = () =>
+    fleet
+      .api<Job[]>("/api/moves")
+      .then((jobs) => jobs.find((j) => j.id === id));
+  await until(
+    "the sketches' move asking for its yes",
+    job,
+    (one) => one.stage === "approval" && Boolean(one.askId),
+    MOVE_ASK_MS
+  ).catch(async (error) => {
+    throw new Error(
+      `${error}: the job stands as ${JSON.stringify(await job())}`
+    );
+  });
+  seeded.moving = targetInstanceId;
+}
+
+/** The MCP server behind OAuth the scene signs the hub in to, standing while the scene's hub does (`sceneHub`). */
+let trayDocs: McpOauthMock | null = null;
+
+/**
  * What the hub must hear before it starts: Jev's stand-in (jev-mock.ts, on
  * `CAWCO_TYPESAFE_URL`), which the scene turns on for the Caw project's
- * starters, and caw-dock.ts's short starters pace (1.5 s quiet, 5 s gap).
- * Returns its stop.
+ * starters, and caw-dock.ts's short starters pace (1.5 s quiet, 5 s gap);
+ * and, beside it, the MCP server the scene signs the hub in to
+ * (mcp-oauth-mock.ts), which the hub reads whenever it likes. Returns their
+ * stop.
  */
 export function sceneHub(fleet: KitFleet): () => void {
   const jev = jevMock();
   fleet.env.CAWCO_TYPESAFE_URL = jev.url;
   fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
-  return jev.stop;
+  const mcp = mcpOauthMock();
+  trayDocs = mcp;
+  return () => {
+    jev.stop();
+    mcp.stop();
+    trayDocs = null;
+  };
 }
 
 /**
@@ -662,6 +1102,47 @@ export async function seedScene(
     answered,
     "Ask me what the hang card's states are called. PROBE-STEP:named"
   );
+  // A rule that answers every turn ending on its phrase, and waits on the
+  // session's answer (only a repeating rule waits: hub db `noteRuleFire`).
+  // Its phrase is in no session's words but the TODO session's (started
+  // last of all, below).
+  const rule = await send("/api/rules", "POST", {
+    name: "Finish the TODO",
+    enabled: true,
+    matchKind: "phrase",
+    pattern: TODO_PHRASE,
+    caseSensitive: true,
+    wholeWord: false,
+    repeat: true,
+    reply: RULE_REPLY,
+    scope: {},
+    timing: "turn",
+    watch: "text",
+  });
+  // A session that runs a skill on the machine: the skill's own card.
+  const skillDir = join(fleet.home, CLAUDE_DIR_NAME, "skills", SKILL_NAME);
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(join(skillDir, "SKILL.md"), SKILL);
+  const skillRun = await fleet.spawn(
+    "claude",
+    "Run the tray check",
+    fleet.repo
+  );
+  await fleet.send(skillRun, "Run the tray check skill. PROBE-STEP:skill");
+  // A session that thought before it answered (its thinking row), and one
+  // compacted once its turn rests (its compaction's divider).
+  const think = await fleet.spawn(
+    "claude",
+    "Weigh the chip's wrap",
+    fleet.repo
+  );
+  await fleet.send(think, "Which gives way, label or badge? PROBE-STEP:think");
+  const compact = await fleet.spawn(
+    "claude",
+    "Order the chip notes",
+    fleet.repo
+  );
+  await fleet.send(compact, "Put the chip notes in order. PROBE-STEP:compact");
   // A delegate it starts, which reports back: its card, transcript inline.
   const split = delegate
     ? await fleet.spawn("claude", "Split the chip audit", fleet.repo)
@@ -695,6 +1176,40 @@ export async function seedScene(
     );
     tasks.push(made.id);
   }
+  // The first task filled in as a person fills one (its description,
+  // criteria, labels, checks and to-dos), waiting on the second and related
+  // to the third, and the fourth its child: the task pane's fields and
+  // relations, and the board's task graph (the Canvas tab, `taskEdges`).
+  const [chipTask, tokenSheet, hangNames, boardPhone] = tasks as [
+    string,
+    string,
+    string,
+    string,
+  ];
+  await send(`/api/projects/${project.id}/tasks/${chipTask}`, "PATCH", {
+    description:
+      "A long branch name pushes the tray's count badge out of the row.",
+    acceptance: "The badge stays whole at 390px with a 40-character branch.",
+    labels: ["tray", "ui"],
+    checks: ["bun run lint"],
+  });
+  for (const text of ["Let the label shrink", "Keep the badge whole"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: the list's order is the order they are added
+    await fleet.api(`/api/projects/${project.id}/tasks/${chipTask}/todos`, {
+      text,
+    });
+  }
+  for (const [from, edge, to] of [
+    [chipTask, "after", tokenSheet],
+    [chipTask, "related", hangNames],
+    [boardPhone, "parent", chipTask],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one edge at a time, each a write to the task's file
+    await fleet.api(`/api/projects/${project.id}/tasks/${from}/links`, {
+      edge,
+      to,
+    });
+  }
   const now = Date.now();
   fleet.write(
     "INSERT INTO routines (id, project_id, name, cron, time_zone, target, prompt, lands, enabled, created_by, keep, expires_at, next_slot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'none', 1, 'session', 0, ?, ?, ?)",
@@ -711,6 +1226,20 @@ export async function seedScene(
   );
   await mkdir(join(fleet.repo, "notes"), { recursive: true });
 
+  async function send(path: string, method: string, body: object) {
+    const response = await fetch(`${fleet.base}${path}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `${method} ${path}: ${response.status} ${await response.text()}`
+      );
+    }
+    // A create answers with the row it made (its `id`); a save, with what it saved.
+    return response.json() as Promise<{ id: string }>;
+  }
   const put = async (projectId: string, path: string, content: string) => {
     const response = await fetch(
       `${fleet.base}/api/projects/${projectId}/folder/file`,
@@ -865,6 +1394,9 @@ export async function seedScene(
     ["the art session's turn done", art],
     ["the decision session's turn done", decision],
     ["the named session's turn done", answered],
+    ["the skill session's turn done", skillRun],
+    ["the thinking session's turn done", think],
+    ["the compact session's turn done", compact],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one session at a time
     await until(
@@ -874,6 +1406,25 @@ export async function seedScene(
       180_000
     );
   }
+  // Compacted, as a person's /compact compacts it: Claude Code summarises the
+  // conversation and the transcript keeps the boundary.
+  await fleet.send(compact, "/compact");
+  await until(
+    "the compact session compacted, at rest",
+    async () => {
+      const { blocks } = await fleet.api<{ blocks: { type: string }[] }>(
+        `/api/instances/${compact}/transcript`
+      );
+      const row = await fleet.instance(compact);
+      return (
+        blocks.some((block) => block.type === "system.compact_boundary") &&
+        row?.status === "running" &&
+        row.turn_open_at === null
+      );
+    },
+    Boolean,
+    180_000
+  );
   const artifact = await until(
     "the art session's artifact filed",
     () =>
@@ -996,6 +1547,73 @@ export async function seedScene(
     now - 5 * MINUTE,
     now - 4 * MINUTE
   );
+  // Before that: your words with a picture and a pasted note riding on them
+  // (the row's chips, the note's document view), Caw's reply naming the file
+  // he wrote in the folder (FolderFiles), and the notes of a routine made
+  // and of his design-system offer (their actions under the line). The
+  // picture is in the hub's media store, as a sent one is kept: by its
+  // bytes' hash beside the database, named by its address (hub media.ts).
+  await put(project.id, BRIEF_FILE, BRIEF);
+  const picture = Buffer.from(TRAY_PNG, "base64");
+  const pictureName = `${createHash("sha256").update(picture).digest("hex")}.png`;
+  await mkdir(join(fleet.sandbox, "hub", "media"), { recursive: true });
+  await writeFile(join(fleet.sandbox, "hub", "media", pictureName), picture);
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, images, attachments, created_at) VALUES (?, ?, 'you', ?, ?, ?, ?)",
+    crypto.randomUUID(),
+    thread,
+    "Here is the tray at 390px, and my notes from the phone.",
+    JSON.stringify([
+      { mediaType: "image/png", src: `/api/media/${pictureName}` },
+    ]),
+    JSON.stringify([
+      { kind: "text", name: "phone-notes.txt", content: PHONE_NOTES },
+    ]),
+    now - 9 * MINUTE
+  );
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, files, created_at) VALUES (?, ?, 'caw', ?, ?, ?)",
+    crypto.randomUUID(),
+    thread,
+    "I wrote the tray's brief into the folder from your notes.",
+    JSON.stringify([BRIEF_FILE]),
+    now - 8 * MINUTE
+  );
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, note_title, event, created_at) VALUES (?, ?, 'event', '', ?, ?, ?)",
+    crypto.randomUUID(),
+    thread,
+    "A session made the routine Weekly digest",
+    JSON.stringify({
+      kind: "routine-made",
+      by: "session",
+      expiresAt: now + 7 * DAY,
+      instanceId: chips,
+      name: "Weekly digest",
+      routineId: "routine-weekly-digest",
+      schedule: {
+        cron: "0 9 * * 1",
+        nextAt: now + 3 * DAY,
+        timeZone: "UTC",
+        words: "At 09:00, on Monday (UTC)",
+      },
+      why: "You asked for the week's digest every Monday.",
+    }),
+    now - 7 * MINUTE
+  );
+  fleet.write(
+    "INSERT INTO thread_messages (id, thread_id, author, body, note_title, event, created_at) VALUES (?, ?, 'event', '', ?, ?, ?)",
+    crypto.randomUUID(),
+    thread,
+    "Caw offers to build the project's design system",
+    JSON.stringify({
+      kind: "design-offer",
+      projectId: project.id,
+      sources: ["the repository's styles and components"],
+      taskId: review.id,
+    }),
+    now - 6 * MINUTE
+  );
   fleet.write(
     "INSERT INTO thread_messages (id, thread_id, author, body, created_at) VALUES (?, ?, 'you', ?, ?)",
     crypto.randomUUID(),
@@ -1055,6 +1673,22 @@ export async function seedScene(
     cwd: launchPlace,
   });
 
+  // The first account's limit reached, last of its work: a session refused
+  // there (hub at-limit.ts), held with nowhere else to go until the second
+  // account signs in and takes it (rebalance.ts: what adding an account set
+  // moving, the Caw panel's notice; its transcript's line).
+  const limited = await fleet.spawn("claude", "Fit the badge", fleet.repo);
+  await fleet.send(limited, "Make the badge fit. PROBE-STEP:limit");
+  await until(
+    "the limited session held at its account's limit",
+    () =>
+      fleet.query<{ instance_id: string }>(
+        "SELECT instance_id FROM limit_holds WHERE instance_id = ?",
+        limited
+      )[0],
+    Boolean,
+    120_000
+  );
   // A second Claude account, signed in on the machine with a fake login of
   // its own (scratch-fleet.ts `furnish`'s shape), filed after every session
   // has started so each runs on the first: two signed in is what the spawn
@@ -1071,7 +1705,7 @@ export async function seedScene(
     join(secondDir, ".credentials.json"),
     JSON.stringify({
       claudeAiOauth: {
-        accessToken: "sk-ant-oat01-fake-scratch-second",
+        accessToken: `sk-ant-oat01-${SECOND_TOKEN}`,
         refreshToken: "sk-ant-ort01-fake-scratch-second",
         expiresAt: now + 365 * DAY,
         scopes: ["user:inference", "user:profile"],
@@ -1106,7 +1740,115 @@ export async function seedScene(
     (state) => state === "signed-in",
     180_000
   );
+  // The held session carried to the second account and answered there, and
+  // the notice its carry wrote.
+  await until(
+    "the limited session on the second account, at rest",
+    () =>
+      fleet.query<{ account_id: string | null; turn_open_at: number | null }>(
+        "SELECT account_id, turn_open_at FROM instances WHERE id = ?",
+        limited
+      )[0],
+    (row) => row?.account_id === SECOND_ACCOUNT && row.turn_open_at === null,
+    180_000
+  );
+  await until(
+    "the second account's rebalance noticed",
+    () => fleet.api<{ rebalances?: unknown[] }>("/api/accounts"),
+    (view) => (view.rebalances?.length ?? 0) > 0,
+    60_000
+  );
+  // A session that plans in its harness's task list (the plan's ring, its
+  // panel), started on the second account now the first is at its limit,
+  // so no carry moves it, and its list, between accounts' dirs.
+  const planned = await fleet.spawn(
+    "claude",
+    "Plan the chip's fix",
+    fleet.repo
+  );
+  await fleet.send(planned, "Plan the chip's fix. PROBE-STEP:plan");
+  await until(
+    "the planning session's turn done",
+    () => fleet.instance(planned),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    180_000
+  );
+  // A service connection the cawco project lists (the stand-in's open feed,
+  // its one tool), and a session of the project proposing one call of it
+  // for you to approve (actions.ts): the project's approved-actions ledger.
+  if (!trayDocs) {
+    throw new Error("the scene's MCP server is not standing: sceneHub first");
+  }
+  await send("/api/connections", "POST", {
+    name: FEED_CONNECTION,
+    service: "feed",
+    account: "@cawco",
+    transport: "http",
+    url: trayDocs.feedUrl,
+    auth: "none",
+    projects: [project.id],
+  });
+  await until(
+    "the feed connection answering",
+    () =>
+      fleet.api<{ connections: { name: string; state: string }[] }>(
+        "/api/connections"
+      ),
+    (view) =>
+      view.connections.some(
+        (one) => one.name === FEED_CONNECTION && one.state === "signed-in"
+      ),
+    60_000
+  );
+  const proposer = await fleet.spawn(
+    "claude",
+    "Post the tray's update",
+    fleet.repo,
+    { projectId: project.id }
+  );
+  await fleet.send(proposer, "Post the tray's update. PROBE-STEP:propose");
+  await until(
+    "the proposed action filed",
+    () => fleet.api<unknown[] | { actions?: unknown[] }>("/api/actions"),
+    (view) => (Array.isArray(view) ? view : (view.actions ?? [])).length > 0,
+    120_000
+  );
+  await until(
+    "the proposing session's turn done",
+    () => fleet.instance(proposer),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    120_000
+  );
+  // Two accounts made in Configure and signed in nowhere yet: a spare
+  // Claude login (its sign-in on a machine pastes a code) and a GitHub
+  // Copilot one (its sign-in shows a device code), each a machine's Sign in.
+  const spare = await send("/api/accounts", "POST", {
+    provider: "anthropic",
+    kind: "subscription",
+    label: "Spare",
+  });
+  const copilot = await send("/api/accounts", "POST", {
+    provider: "github-copilot",
+    kind: "oauth",
+    label: "Copilot",
+  });
 
+  // The thinking session moved by hand onto the second account, as its
+  // row's account menu moves it: the hub's line in its transcript, and its
+  // row's account dot (two Claude accounts, it on the second).
+  await send(`/api/instances/${think}/account`, "POST", {
+    accountId: SECOND_ACCOUNT,
+  });
+  await until(
+    "the thinking session on the second account, at rest",
+    () =>
+      fleet.query<{ account_id: string | null; turn_open_at: number | null }>(
+        "SELECT account_id, turn_open_at FROM instances WHERE id = ?",
+        think
+      )[0],
+    (row) => row?.account_id === SECOND_ACCOUNT && row.turn_open_at === null,
+    180_000
+  );
   // The delegate done and its report heard: the parent's turns at rest.
   if (split) {
     await until(
@@ -1134,13 +1876,194 @@ export async function seedScene(
     );
   }
 
+  // The project's finished work stopped, as an attempt's session stops once
+  // it has handed in, with four more short sessions of the project: rows a
+  // later day folds under "N older" (older.ts: past the project's day and
+  // beyond its six rows, nothing running).
+  const sketches: string[] = [];
+  for (const title of SKETCHES) {
+    // biome-ignore lint/performance/noAwaitInLoops: the rail's order is the order they start
+    const id = await fleet.spawn("claude", title, fleet.repo, {
+      projectId: project.id,
+    });
+    sketches.push(id);
+  }
+  for (const id of [reviewDone, reviewFailed, tokenFailed, ...sketches]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one stop at a time
+    await fleet.stopSession(id);
+    await until(
+      "a finished session of the project stopped",
+      () => fleet.instance(id),
+      (row) => row?.status !== undefined && row.status !== "running",
+      60_000
+    );
+  }
+  // The fleet's configuration, filed once every turn is at rest so no
+  // session runs under it: the memory saved twice (a version behind it) and
+  // a model's document, an MCP server the hub signs in to (McpSignIn), a
+  // hook saved twice (its previous version), and a rule.
+  /** The scratch machine's own last word on the model's document (its fleet report, as the hub keeps it). */
+  const machineReport = () => {
+    const [row] = fleet.query<{ fleet: string | null }>(
+      "SELECT fleet FROM agents WHERE machine_id = ?",
+      MACHINE
+    );
+    return row?.fleet
+      ? (JSON.parse(row.fleet) as Record<
+          "memoryDocs" | "skills",
+          Record<string, { state: string }> | undefined
+        >)
+      : null;
+  };
+  const machineDoc = () => machineReport()?.memoryDocs?.[MODEL_DOC]?.state;
+  await send("/api/fleet/memory", "PUT", { content: MEMORY_V1 });
+  await send("/api/fleet/memory", "PUT", { content: MEMORY_V2 });
+  // A session that reads that memory through CawCo's own tool: the memory
+  // tool's card, with the memory it read (a read before the memory was
+  // saved finds none, and its card has nothing to open).
+  const memoryRead = await fleet.spawn(
+    "claude",
+    "Read the fleet memory",
+    fleet.repo
+  );
+  await fleet.send(
+    memoryRead,
+    "What does the fleet memory ask? PROBE-STEP:memory"
+  );
+  await until(
+    "the memory session's turn done",
+    () => fleet.instance(memoryRead),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    180_000
+  );
+  await send("/api/fleet/memory/docs", "PUT", {
+    path: MODEL_DOC,
+    content: "# Opus\n\nKeep each brief under a page.\n",
+  });
+  // Its server asks for OAuth (the hub learns so on reading it, fleet-mcp.ts
+  // `probe`), and the hub is signed in to it as Configure's Sign in does.
+  if (!trayDocs) {
+    throw new Error("the scene's MCP server is not standing: sceneHub first");
+  }
+  await send(`/api/fleet/mcp/${MCP_NAME}`, "PUT", {
+    config: { type: "http", url: trayDocs.url },
+    enabled: true,
+    projectId: null,
+  });
+  await signIn(fleet.base, MCP_NAME);
+  for (const command of ["bunx biome check --write", "bunx biome check"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: the second save keeps the first as a version
+    await send(`/api/fleet/hooks/${HOOK_ID}`, "PUT", {
+      name: "Lint what was written",
+      enabled: true,
+      event: "PostToolUse",
+      matcher: "Write|Edit",
+      handler: { type: "command", command },
+    });
+  }
+  // The model's document edited on the machine, then saved again on the
+  // hub: the machine keeps its own copy and says so (agent fleet.ts
+  // `syncMemoryDocs`, drift), the document's row's fault.
+  await until(
+    "the machine holding the model's document",
+    () => machineDoc(),
+    (state) => state === "applied",
+    120_000
+  );
+  await writeFile(
+    join(fleet.home, CLAUDE_DIR_NAME, "memories", MODEL_DOC),
+    "# Opus\n\nKeep each brief under a page, and say which page.\n"
+  );
+  await send("/api/fleet/memory/docs", "PUT", {
+    path: MODEL_DOC,
+    content: "# Opus\n\nKeep each brief under half a page.\n",
+  });
+  await until(
+    "the machine refusing the model's document over its own edit",
+    () => machineDoc(),
+    (state) => state === "failed",
+    120_000
+  );
+  // The machine's own skill adopted into the fleet, as its machine's
+  // inventory adopts one: the fleet's from then on, held by the machine (a
+  // removal's ask names who holds it).
+  await send(`/api/fleet/skills/${SKILL_NAME}`, "PUT", {
+    fromMachine: MACHINE,
+  });
+  await until(
+    "the machine holding the fleet's skill",
+    () => machineReport()?.skills?.[SKILL_NAME]?.state,
+    (state) => state === "applied",
+    120_000
+  );
+  // A second machine, a Mac, offline since it last registered: its
+  // keychain locked Claude Code's login (`unreadable-credentials`, the
+  // machine menu's Unlock keychain…), as the hub keeps a machine that went
+  // away (agents: its os and auth as it last said them).
+  fleet.write(
+    "INSERT INTO agents (machine_id, hostname, home, os, status, auth, last_seen_at, created_at) VALUES (?, ?, '/Users/owner', 'darwin', 'offline', 'unreadable-credentials', ?, ?)",
+    STUDIO_MACHINE,
+    STUDIO_HOST,
+    now - 2 * 60 * MINUTE,
+    now - 30 * DAY
+  );
+
   if (unoffered.length > 0) {
     throw new Error(`the scene is not what it says: ${unoffered.join("; ")}`);
   }
+  // A second machine online, with no checkout of any project: a session
+  // started there in a project asks to move the project first (New
+  // session's Move & start).
+  bench = await fleet.launchMachine(BENCH_MACHINE);
+  // Last of all, two turns still going while the walk reads them, a piece
+  // every SLOW_MS for longer than the walk lasts. The TODO session's turn
+  // ends on the rule's phrase, so the rule answers it, and its answer to
+  // that is the long one: the rule's row, the live row, and the rule
+  // waiting on the answer (a fired rule waits until the session's next turn
+  // ends: hub rules.ts `rearmRules`). The other is still thinking (the
+  // thinking row, live).
+  const todo = await fleet.spawn("claude", "Leave the TODO", fleet.repo);
+  await fleet.send(todo, "Say what is left on the chip. PROBE-STEP:todo");
+  const liveThink = await fleet.spawn(
+    "claude",
+    "Think through the chip row",
+    fleet.repo
+  );
+  await fleet.send(
+    liveThink,
+    "Think the chip row through. PROBE-STEP:live-think"
+  );
+  await until(
+    "the rule waiting on the TODO session's answer, its reply in the transcript",
+    async () => {
+      const [state] = fleet.query<{ status: string }>(
+        "SELECT status FROM rule_state WHERE rule_id = ? AND instance_id = ?",
+        rule.id,
+        todo
+      );
+      const { blocks } = await fleet.api<{ blocks: { type: string }[] }>(
+        `/api/instances/${todo}/transcript`
+      );
+      const row = await fleet.instance(todo);
+      return (
+        state?.status === "pending" &&
+        blocks.some((block) => block.type === "user.rule") &&
+        row?.turn_open_at !== null
+      );
+    },
+    Boolean,
+    120_000
+  );
+  await until(
+    "the thinking live session's turn open",
+    () => fleet.instance(liveThink),
+    (row) => row?.status === "running" && row.turn_open_at !== null,
+    120_000
+  );
   kit.note(
     `scene: sessions ${chips}, ${ask}, ${permission}, ${art}, ${answered}, ${split}, ${runner}; artifact ${artifact}; project ${project.id} with ${tasks.length + 1} tasks; tray ${tray.id}; decisions ${decisions.projectId}`
   );
-  return {
+  seeded = {
     chips,
     ask,
     permission,
@@ -1162,5 +2085,19 @@ export async function seedScene(
     tray: tray.id,
     account: ACCOUNT,
     second: SECOND_ACCOUNT,
+    rule: rule.id,
+    limited,
+    spare: spare.id,
+    copilot: copilot.id,
+    todo,
+    memoryRead,
+    think,
+    compact,
+    planned,
+    liveThink,
+    skillRun,
+    hook: HOOK_ID,
+    memoryDoc: MODEL_DOC,
   };
+  return seeded;
 }

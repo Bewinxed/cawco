@@ -28,6 +28,7 @@ import type { Page } from "playwright-core";
 import { player, readTape } from "../hub-tape";
 import type { Spec } from "../kit";
 import { chosen, type State } from "../surfaces/catalogue";
+import type { Scene } from "../surfaces/scene";
 import { PASSES, Servers, TAPE, walk } from "../surfaces/walk";
 
 const flag = (name: string): string | undefined =>
@@ -84,13 +85,17 @@ function steady(page: Page, selector: string): Promise<boolean> {
  * still be the server's markup, which carries no `__svelte_meta`): the whole
  * page steady, then the state's act run again, then its root steady.
  */
-async function hydrated(page: Page, state: State): Promise<boolean> {
+async function hydrated(
+  page: Page,
+  state: State,
+  scene: Scene
+): Promise<boolean> {
   await page.reload({ waitUntil: "domcontentloaded" });
   if (!(await steady(page, "body"))) {
     return false;
   }
   if (state.act) {
-    await state.act(page);
+    await state.act(page, scene);
   }
   return steady(page, state.root);
 }
@@ -188,7 +193,7 @@ const spec: Spec = {
         surfaces.map((s) => ({ ...s, serve: "dev" as const })),
         PASSES.filter((p) => p.theme === "light"),
         async ({ page, pass, state, surface }) => {
-          if (!(await hydrated(page, state))) {
+          if (!(await hydrated(page, state, tape.scene as Scene))) {
             kit.note(
               `${surface.name}/${state.name} · ${pass.name}: its root did not hydrate in ${HYDRATE_MS / 1000}s`
             );
