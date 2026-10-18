@@ -97,6 +97,20 @@ function rehearsal() {
   });
 }
 
+/**
+ * When each card stands open (hang `GROWN`, fired on the card as its slide
+ * lands), on the frames' clock: the landing's frame is the one the card is
+ * painted again in where it stands. `grown` does not bubble, so it is heard
+ * on the way down.
+ */
+function landings() {
+  const at: number[] = [];
+  (window as unknown as { __landed: number[] }).__landed = at;
+  document.addEventListener("grown", () => at.push(performance.now()), {
+    capture: true,
+  });
+}
+
 function noButtonFocus() {
   window.addEventListener(
     "mousedown",
@@ -153,7 +167,7 @@ const spec: Spec = {
     const page = await kit.page("phone", {
       engine: "webkit",
       scale: 3,
-      init: [watch, attribute, noButtonFocus, rehearsal],
+      init: [watch, attribute, noButtonFocus, rehearsal, landings],
     });
     await open(page, await fleet.dashboard(), "[data-needs-caw]", 90_000);
     await page.waitForFunction(
@@ -200,8 +214,13 @@ const spec: Spec = {
     }[][] = [];
     /** Each open's raster and compositing, CPU ms. */
     const beside: { compositing: number; paint: number }[] = [];
+    /** Each open's landing: the page's CPU in the interval its card landed in and the one after, ms. */
+    const landed: number[] = [];
     for (let n = 0; n < RUNS; n += 1) {
       // biome-ignore lint/performance/noAwaitInLoops: one open at a time, each from rest
+      await page.evaluate(() => {
+        (window as unknown as { __landed: number[] }).__landed.length = 0;
+      });
       const recording = await cpu.record();
       await tell(page, { rafs: [], calls: [], tap: -1, cadence: true });
       // Frames drawn before the tap too, so the one it lands in is measured.
@@ -225,6 +244,16 @@ const spec: Spec = {
           heaviest: work.heaviest,
         };
       });
+      const [grownAt] = await page.evaluate(
+        () => (window as unknown as { __landed: number[] }).__landed
+      );
+      const into = frames.findIndex(
+        (t, k) => k > 0 && grownAt !== undefined && t > grownAt
+      );
+      if (into > 0) {
+        const two = intervals.slice(into - 1, into + 1);
+        landed.push(Math.max(...two.map((one) => one.cpu)));
+      }
       opened.push(
         await page.evaluate(
           () =>
@@ -259,7 +288,7 @@ const spec: Spec = {
     kit.check(
       `no interval with over ${DROPPED_MS}ms of the page's main-thread CPU in any of ${RUNS} opens`,
       worst <= DROPPED_MS,
-      `heaviest: ${heaviest.map(said).join("; ")}. Longest interval: ${longest ? said(longest) : "none"}. An open's raster ${median(beside.map((one) => one.paint)).toFixed(0)}ms and compositing ${median(beside.map((one) => one.compositing)).toFixed(0)}ms of CPU (medians), on threads of their own, not counted`
+      `heaviest: ${heaviest.map(said).join("; ")}. Longest interval: ${longest ? said(longest) : "none"}. The landing (the interval the card stood open in and the next), ${landed.length} of ${RUNS} opens: median ${median(landed).toFixed(0)}ms, worst ${Math.max(0, ...landed).toFixed(0)}ms of the page's CPU. An open's raster ${median(beside.map((one) => one.paint)).toFixed(0)}ms and compositing ${median(beside.map((one) => one.compositing)).toFixed(0)}ms of CPU (medians), on threads of their own, not counted`
     );
   },
 };
