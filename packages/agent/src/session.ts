@@ -1707,8 +1707,25 @@ export class SessionSupervisor {
     // longer listed it first would have the hub settle it as ended.
     this.#ending.add(session);
     await session.stop();
+    // Asleep only once no keeper holds its process, as a stop says `stopped`
+    // only then ({@link #stop}). `session.stop()` closes the CLI's stdin and
+    // its `Query`, and the SDK's own SIGTERM and SIGKILL for a child still
+    // there come on unref'd timers 2 s and 7 s on, in this process: an agent
+    // restarted inside them left a CLI the hub had filed asleep, which no
+    // custody names again, running in its workspace's clone; the hub then
+    // closed that workspace under it (obelisk, 2026-10-18).
+    const left = await this.#endHeld(instanceId).then(
+      () => undefined,
+      (error: unknown) =>
+        error instanceof Error ? error : new Error(String(error))
+    );
     this.#sessions.delete(instanceId);
     this.#forgetPulse(instanceId);
+    if (left) {
+      // Still running past its kill: not asleep, and the hub hears why.
+      this.#fail(instanceId, left, processGeneration);
+      return { asleep: false, awake: left.message };
+    }
     this.#asleep.add(instanceId);
     this.#gone(instanceId, processGeneration);
     Effect.runFork(
@@ -3130,9 +3147,16 @@ export class SessionSupervisor {
         }
         if (recovery) {
           this.#failures.set(instanceId, String(error));
-        } else {
-          this.#fail(instanceId, error, processGeneration);
+          return;
         }
+        // Its process may still run: its harness's stream failed, not the
+        // CLI. Ended here, as a stop ends it, before the hub hears the
+        // failure: a failed row holds no workspace (work-items.ts `holdOn`),
+        // and a CLI left running in one was closed under ({@link #endFailed}).
+        if (holder.session) {
+          this.#ending.add(holder.session);
+        }
+        this.#endFailed(instanceId, error, processGeneration);
       },
       died: (signal, error) => {
         const { session } = holder;
@@ -3784,7 +3808,39 @@ export class SessionSupervisor {
     this.#sessions.delete(instanceId);
     this.#busy.delete(instanceId);
     this.#forgetPulse(instanceId);
-    this.#fail(instanceId, error, processGeneration);
+    // The keeper refused its input, not its life: the process may run on,
+    // driven by nothing. It alone is ended, by its pid ({@link
+    // KeeperRefused.pid}), before the hub hears the failure. A refusal that
+    // names no pid came from a keeper that could not list its child, and
+    // ends nothing: the id alone may name the session's next process.
+    if (error.pid === undefined) {
+      this.#fail(instanceId, error, processGeneration);
+      return;
+    }
+    this.#endFailed(instanceId, error, processGeneration, error.pid);
+  }
+
+  /**
+   * A FAILED SESSION LEAVES NO PROCESS RUNNING. Its keeper's child (only the
+   * one of `pid`, when given) is ended and waited out ({@link #endHeld}),
+   * then the hub hears the failure ({@link #fail}). The hub files the row
+   * failed and holds its workspace no longer (work-items.ts `holdOn`), and
+   * nothing ends a CLI left running there: no custody names a failed session
+   * again. One that outlives its kill is said beside the failure.
+   */
+  #endFailed(
+    instanceId: string,
+    error: unknown,
+    processGeneration: string | undefined,
+    pid?: number
+  ): void {
+    this.#endHeld(instanceId, pid)
+      .catch((problem: unknown) =>
+        warn(
+          `${instanceId}: its process could not be ended after its failure: ${errorText(problem)}`
+        )
+      )
+      .finally(() => this.#fail(instanceId, error, processGeneration));
   }
 
   /** A send handed to its harness, whole as the hub sent it, until the harness reads it. */
@@ -4150,8 +4206,12 @@ export class SessionSupervisor {
     session.send(message, { attachments, images });
   }
 
-  /** Ends the instance's children on every keeper that holds one, the current or a retiring one, and waits until each has gone. */
-  #endHeld(instanceId: string): Promise<boolean> {
+  /**
+   * Ends the instance's children on every keeper that holds one, the current
+   * or a retiring one, and waits until each has gone; with `pid`, only the
+   * child of that pid, so a process started since under the same id is left.
+   */
+  #endHeld(instanceId: string, pid?: number): Promise<boolean> {
     return withKeepers(async (keepers) => {
       const children = keepers.flatMap(({ client }) =>
         client.procs
@@ -4159,6 +4219,7 @@ export class SessionSupervisor {
             const id = parseProcId(proc.procId);
             return (
               proc.alive &&
+              (pid === undefined || proc.pid === pid) &&
               (id.kind === "claude" || id.kind === "pi") &&
               id.instanceId === instanceId
             );

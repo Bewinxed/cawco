@@ -77,14 +77,22 @@ export class HeldProcessRefused extends Error {}
  * keeps what it was sent for its next start.
  */
 export class KeeperRefused extends Error {
+  /**
+   * The pid of the process the input was for, as its keeper listed it when
+   * the session took it, when known: the process the session lets go of,
+   * and ends (session.ts `#refusedInput`). The id alone may name its next
+   * process by then.
+   */
+  readonly pid: number | undefined;
   readonly procId: string;
   readonly reason: string;
-  constructor(procId: string, reason: string) {
+  constructor(procId: string, reason: string, pid?: number) {
     super(
       `This session's process could not be reached: the machine's session keeper refused its input (${reason}).`
     );
     this.procId = procId;
     this.reason = reason;
+    this.pid = pid;
   }
 }
 

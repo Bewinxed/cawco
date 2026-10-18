@@ -85,7 +85,7 @@ import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
-import { invariant, WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
+import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
 import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
@@ -3966,6 +3966,12 @@ const settling = (id: string): boolean =>
  * …/red2/c/run/gone.sock answered "nothing (connect ENOENT …)", not this
  * build's judge (0fc17cf98658ab74)." A judge of this build, asked, answered
  * "0\n0fc17cf98658ab74".
+ *
+ * Broken, it is repaired where it broke, and the agent stays up
+ * ({@link repairJudge}): what is wrong is one workspace's judge, and an exit
+ * cut every other workspace's call off while its start revived the same
+ * state, which the next close broke again (obelisk, 2026-10-18: two exits,
+ * one per `from` cut of held workspace bb4af2c9).
  */
 const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
   if (armState.arming.kind !== "listed") {
@@ -3993,26 +3999,106 @@ const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
       if (!(path && inUse(id, path, procs, commands))) {
         return;
       }
-      const hook = await readFile(join(stateDir(id), "hook"), "utf8").catch(
-        () => ""
-      );
-      const socket = HOOK_JUDGE.exec(hook)?.[1];
-      const read = socket ? await judgeSays(socket) : undefined;
-      if (settling(id)) {
+      const asked = await judgeAnswer(id, build);
+      if (asked.answers || settling(id)) {
         return;
       }
-      const said = read ? judgeWords(read) : undefined;
-      invariant(
-        read?.kind === "answered" && read.value === `0\n${build}`,
-        "live-workspace-judge-answers",
-        () =>
-          `Workspace ${id} has a session's process or a command in it, and ${
-            socket
-              ? `its hook's judge at ${socket} answered ${JSON.stringify(said)}`
-              : "its hook names no judge"
-          }, not this build's judge (${build}).`
-      );
+      await repairJudge({ id, path }, asked, build);
     })
+  );
+};
+
+/** A judge's socket file name (`judgeFor`): its form. */
+const JUDGE_SOCKET = /^judge-([0-9a-f]+)\.sock$/;
+
+/** What workspace `id`'s hook's judge answers now. */
+interface JudgeAnswer {
+  /** Whether it answers as this build's judge. */
+  readonly answers: boolean;
+  /** The socket its hook names, if any. */
+  readonly socket: string | undefined;
+  /** What it said, in words a log line quotes. */
+  readonly words: string;
+}
+
+/** Asks the judge workspace `id`'s hook names which build it runs ({@link JUDGE_BUILD_QUESTION}). */
+const judgeAnswer = async (id: string, build: string): Promise<JudgeAnswer> => {
+  const hook = await readFile(join(stateDir(id), "hook"), "utf8").catch(
+    () => ""
+  );
+  const socket = HOOK_JUDGE.exec(hook)?.[1];
+  if (!socket) {
+    return { answers: false, socket, words: "its hook names no judge" };
+  }
+  const read = await judgeSays(socket);
+  return {
+    answers: read.kind === "answered" && read.value === `0\n${build}`,
+    socket,
+    words: `its hook's judge at ${socket} answered ${JSON.stringify(judgeWords(read))}`,
+  };
+};
+
+/**
+ * Repairs law `live-workspace-judge-answers` for workspace `ref` alone, its
+ * hook's judge having answered `asked`, not as this build's:
+ *
+ *  1. the judge the hook names, if a keeper still holds it, is ended and
+ *     waited out (a hung one, or one of another build: `judgeFor` never
+ *     starts a second of a form already held);
+ *  2. its boundary is ensured ({@link ensureNow}): one running is armed
+ *     again, which starts this build's judge and points the hook at it, and
+ *     one gone is started, as the agent's start revives one under a live CLI;
+ *  3. the judge is asked again; still not answering, what uses the workspace
+ *     is ended ({@link endUsers}), so no call is refused for ever.
+ *
+ * One line names the workspace, what its judge said and what was done. The
+ * agent stays up whatever it comes to.
+ */
+const repairJudge = async (
+  ref: WorkspaceRef,
+  asked: JudgeAnswer,
+  build: string
+): Promise<void> => {
+  const form = asked.socket
+    ? JUDGE_SOCKET.exec(basename(asked.socket))?.[1]
+    : undefined;
+  if (form) {
+    const procId = judgeProcId(ref.id, form);
+    const stuck = await keepers.holding(procId);
+    if (stuck) {
+      await stuck.client.signal(procId, "SIGKILL");
+      const deadline = Date.now() + STOP_TIMEOUT_MS;
+      while (
+        // biome-ignore lint/performance/noAwaitInLoops: polls one judge until its keeper says it is gone, or the deadline passes
+        (await holding(procId)) &&
+        Date.now() < deadline
+      ) {
+        await Bun.sleep(20);
+      }
+    }
+  }
+  let started = "its judge was started again";
+  try {
+    await ensureNow(ref);
+    await rearming.get(ref.id);
+  } catch (error) {
+    started = `its boundary could not be started again (${error instanceof Error ? error.message : String(error)})`;
+  }
+  const again = await judgeAnswer(ref.id, build);
+  const broken = `law live-workspace-judge-answers was broken (a session's process or a command is in it, and ${asked.words}, not this build's judge ${build})`;
+  if (again.answers) {
+    console.warn(
+      `[workspace] ${ref.id}: ${broken}; ${started} and answers as this build's`
+    );
+    return;
+  }
+  const ended = await endUsers(ref);
+  console.warn(
+    `[workspace] ${ref.id}: ${broken}; ${started}, and still ${again.words}, so ${
+      isPlace(ref.id)
+        ? "nothing was ended: a place's sessions are the person's own, and each call there is refused until its next start arms it"
+        : `what used it was ended: ${ended.ended.join(", ") || "nothing was left"}${ended.left.length > 0 ? `; still running after SIGKILL: ${ended.left.join(", ")}` : ""}`
+    }`
   );
 };
 
@@ -4952,37 +5038,50 @@ export const stopWorkspaceBoundary = (ref: WorkspaceRef): Promise<number[]> =>
   closedWhile(ref.id, () => stopNow(ref));
 
 /**
- * Ends what still uses workspace `ref` from outside its stopped boundary, as
- * law `live-workspace-judge-answers` counts it ({@link inUse}): every session
+ * Ends what still uses workspace `ref` from outside its boundary, as law
+ * `live-workspace-judge-answers` counts it ({@link inUse}): every session
  * process a keeper holds in its clone ({@link attachedProcs}) and every
- * executor on its way in ({@link executors}), each SIGKILLed, then waited
- * for. Whatever stops a workspace's boundary for good (an archive, a held
- * workspace's close, a stage clone's cut) has found no session holding it:
- * the hub closes a workspace only once its items' sessions are asleep or
- * ended (work-items.ts `holdOn`, `archiveNow`), so a CLI still in the clone
- * is one whose session the hub filed gone. Left there, its judge goes next,
- * so every call it makes is refused, and the agent's next start revives the
- * boundary for it. On obelisk (2026-10-18) a `from` cut of held workspace
- * bb4af2c9 closed it so, under such a CLI, and the beat exited the agent
- * twice. A place's sessions are the person's own, and an archive never
- * stops a place: nothing of one is ended here. Answers whether anything the
- * law counts is still there {@link STOP_TIMEOUT_MS} on.
+ * executor on its way in ({@link executors}), each SIGKILLed, then waited for
+ * up to {@link STOP_TIMEOUT_MS}. Two callers:
+ *
+ *  - whatever stops a workspace's boundary for good ({@link stopNow}: an
+ *    archive, a held workspace's close, a stage clone's cut), before its
+ *    judge goes. The hub closes a workspace only once its items' sessions are
+ *    asleep or ended (work-items.ts `holdOn`, `archiveNow`), so a CLI still
+ *    in the clone is one whose session the hub filed gone; left there, its
+ *    judge gone, every call it made was refused, and the agent's next start
+ *    revived the boundary for it. On obelisk (2026-10-18) a `from` cut of
+ *    held workspace bb4af2c9 closed it so, under such a CLI, and the beat
+ *    exited the agent twice;
+ *  - {@link repairJudge}, when a judge started again still does not answer.
+ *
+ * A place's sessions are the person's own, and an archive never stops a
+ * place: nothing of one is ended here. Answers what it ended and what was
+ * still there after the wait, each in words.
  */
-const endUsers = async (ref: WorkspaceRef): Promise<boolean> => {
+const endUsers = async (
+  ref: WorkspaceRef
+): Promise<{ ended: string[]; left: string[] }> => {
   if (isPlace(ref.id)) {
-    return false;
+    return { ended: [], left: [] };
   }
   const users = async () => {
     const commands = await commandsNow();
     const procs = (await keepers.held()).filter((proc) => proc.alive);
+    const clis = attachedProcs(ref.id, ref.path, procs, commands);
+    const execs = executors(commands.lines, ref.id);
     return {
-      clis: attachedProcs(ref.id, ref.path, procs, commands),
-      execs: executors(commands.lines, ref.id),
+      clis,
+      execs,
+      words: [
+        ...clis.map((proc) => `${proc.procId} (pid ${proc.pid})`),
+        ...execs.map((pid) => `executor pid ${pid}`),
+      ],
     };
   };
   const found = await users();
-  if (found.clis.length === 0 && found.execs.length === 0) {
-    return false;
+  if (found.words.length === 0) {
+    return { ended: [], left: [] };
   }
   await Promise.all(
     found.clis.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
@@ -4990,24 +5089,12 @@ const endUsers = async (ref: WorkspaceRef): Promise<boolean> => {
   for (const pid of found.execs) {
     signalPid(listedPid(pid), "SIGKILL");
   }
-  console.info(
-    `[workspace] ${ref.id}: its boundary is closed for good, so what still ran in its clone ends with it: ${[
-      ...found.clis.map((proc) => `${proc.procId} (pid ${proc.pid})`),
-      ...found.execs.map((pid) => `executor pid ${pid}`),
-    ].join(", ")}`
-  );
   const deadline = Date.now() + STOP_TIMEOUT_MS;
   for (;;) {
     // biome-ignore lint/performance/noAwaitInLoops: polls until the keepers and the process table say they are gone, or the deadline passes
     const left = await users();
-    if (left.clis.length === 0 && left.execs.length === 0) {
-      return false;
-    }
-    if (Date.now() >= deadline) {
-      console.warn(
-        `[workspace] ${ref.id}: ${[...left.clis.map((proc) => `${proc.procId} (pid ${proc.pid})`), ...left.execs.map((pid) => `executor pid ${pid}`)].join(", ")} still ran ${STOP_TIMEOUT_MS / 1000}s after SIGKILL, so its judge is left answering`
-      );
-      return true;
+    if (left.words.length === 0 || Date.now() >= deadline) {
+      return { ended: found.words, left: left.words };
     }
     await Bun.sleep(50);
   }
@@ -5040,9 +5127,14 @@ const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
   }
   // Everything in it ends before its judge goes: a judge gone under a CLI
   // still in the clone breaks live-workspace-judge-answers.
-  const stillUsed = await endUsers(ref);
+  const users = await endUsers(ref);
+  if (users.ended.length > 0) {
+    console.info(
+      `[workspace] ${ref.id}: its boundary is closed for good, so what still ran in its clone ends with it: ${users.ended.join(", ")}${users.left.length > 0 ? `; ${users.left.join(", ")} still ran ${STOP_TIMEOUT_MS / 1000}s after SIGKILL, so its judge is left answering` : ""}`
+    );
+  }
   await rm(join(stateDir(ref.id), "boundary.json"), { force: true });
-  if (!stillUsed) {
+  if (users.left.length === 0) {
     await signalHeld((procId) => isJudgeOf(procId, ref.id));
   }
   liveAt.delete(ref.id);

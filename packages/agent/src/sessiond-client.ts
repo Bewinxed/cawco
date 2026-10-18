@@ -1087,6 +1087,8 @@ export const sessiondBridge = (
    * that never arrived. A spawn that failed has said so already.
    */
   let refusal: KeeperRefused | null = null;
+  /** This transport's child's pid, once its keeper has listed it. */
+  let childPid: number | undefined;
   /**
    * After a refusal this transport asks nothing more of the keeper: the
    * session starts again under the same id, and a write, an end or a signal
@@ -1116,7 +1118,7 @@ export const sessiondBridge = (
     if (refusal) {
       return;
     }
-    refusal = new KeeperRefused(procId, reason);
+    refusal = new KeeperRefused(procId, reason, childPid);
     refused(refusal);
     events.emit("error", refusal);
   };
@@ -1201,6 +1203,14 @@ export const sessiondBridge = (
     }
   }
 
+  /** Reads this transport's child's pid off its keeper's listing ({@link childPid}); a listing that fails names none. */
+  const listChild = async (): Promise<void> => {
+    const listed = await client.list().catch(() => undefined);
+    childPid = listed?.procs.find(
+      (proc) => proc.procId === procId && proc.alive
+    )?.pid;
+  };
+
   const started = (
     attach
       ? Promise.resolve().then(() => {
@@ -1219,17 +1229,23 @@ export const sessiondBridge = (
             env,
           })
           .then(() => client.subscribe(procId, listener, 0))
-  ).catch((error: unknown) => {
-    spawnFailed = true;
-    // An attach that could not subscribe leaves the child as it was.
-    if (!attach) {
-      end();
-    }
-    events.emit(
-      "error",
-      error instanceof Error ? error : new Error(String(error))
-    );
-  });
+  )
+    // This transport's child as its keeper lists it, before any write goes:
+    // every refusal follows a write or an end, so each names the process it
+    // was about ({@link KeeperRefused.pid}), never one started since under
+    // the same id. A listing that fails names none.
+    .then(listChild)
+    .catch((error: unknown) => {
+      spawnFailed = true;
+      // An attach that could not subscribe leaves the child as it was.
+      if (!attach) {
+        end();
+      }
+      events.emit(
+        "error",
+        error instanceof Error ? error : new Error(String(error))
+      );
+    });
 
   const kill = (sig: NodeJS.Signals): boolean => {
     killed = true;

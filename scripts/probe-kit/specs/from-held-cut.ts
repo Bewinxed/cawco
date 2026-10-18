@@ -29,6 +29,13 @@
  *   with the workspace's close, and no judge or boundary of it is left; the
  *   new workspace's HEAD is the source's commit; the source is held, its
  *   clone standing at that commit, "1 commit on no remote".
+ * - (d) A process the keeper holds as a session's starts in the held clone
+ *   after its close, its hook still naming the judge the close killed: law
+ *   `live-workspace-judge-answers` broken under a live attached process,
+ *   with the agent running. Through two beats: the agent still runs, no law
+ *   line; its log says the law was broken in that workspace and its judge
+ *   was started again and answers; a judge of it runs on the keeper, and the
+ *   process still runs. On 0220ca1f5 (before the repair) the beat exits 70.
  *
  *   bun scripts/probe-kit/run.ts from-held-cut
  */
@@ -263,6 +270,25 @@ const heldPhase = async (
   return source && head ? { head, source } : undefined;
 };
 
+/** A process the keeper holds as a Claude Code session's, under a session id the hub has no row of, in `clone`: its proc id. */
+const strayIn = async (fleet: KitFleet, clone: string): Promise<string> => {
+  const stray = crypto.randomUUID();
+  const keeper = welcomed(
+    fleet.sessiondSocket,
+    await SessiondClient.connect(fleet.sessiondSocket)
+  );
+  try {
+    await keeper.spawnProc(stray, {
+      command: "/bin/sh",
+      args: ["-c", "exec sleep 3600"],
+      cwd: clone,
+    });
+  } finally {
+    keeper.close();
+  }
+  return stray;
+};
+
 /**
  * (b) A written-off CLI in the held clone, and the agent restarted, whose
  * start revives the workspace's boundary and judge for it: the CLI's proc
@@ -275,21 +301,8 @@ const strayPhase = async (
 ): Promise<{ agent: ReturnType<KitFleet["launch"]>; stray: string }> => {
   // A session id the hub has no row of: nothing adopts it, as nothing
   // pumped the CLI on obelisk once its session was filed asleep.
-  const stray = crypto.randomUUID();
   await fleet.stop("agent");
-  const keeper = welcomed(
-    fleet.sessiondSocket,
-    await SessiondClient.connect(fleet.sessiondSocket)
-  );
-  try {
-    await keeper.spawnProc(stray, {
-      command: "/bin/sh",
-      args: ["-c", "exec sleep 3600"],
-      cwd: source.path,
-    });
-  } finally {
-    keeper.close();
-  }
+  const stray = await strayIn(fleet, source.path);
   const agent = fleet.launch("agent");
   await fleet.agentUp();
   const revived = await until(
@@ -376,6 +389,42 @@ const cutPhase = async (
   );
 };
 
+/** (d) The judge gone under a live attached process: repaired in that workspace, the agent up. */
+const repairPhase = async (
+  { check }: Kit,
+  fleet: KitFleet,
+  source: Workspace,
+  agent: ReturnType<KitFleet["launch"]>
+): Promise<void> => {
+  const lawsBefore = (await fleet.logs("agent")).split(LAW).length - 1;
+  const before = await ofWorkspace(fleet, source.id);
+  const stray = await strayIn(fleet, source.path);
+  const repaired = `[workspace] ${source.id}: law live-workspace-judge-answers was broken`;
+  const watchedUntil = Date.now() + 2 * BEAT_MS + 15_000;
+  while (Date.now() < watchedUntil && agent.exitCode === null) {
+    // biome-ignore lint/performance/noAwaitInLoops: watches the agent through its beats
+    await Bun.sleep(1000);
+  }
+  const log = await fleet.logs("agent");
+  const laws = log.split("\n").filter((line) => line.includes(LAW));
+  const said = log.split("\n").filter((line) => line.includes(repaired));
+  check(
+    "(d) with its judge gone under a live process, the agent still runs through two beats and no law line is in its log",
+    agent.exitCode === null && laws.length === lawsBefore,
+    `agent ${agent.exitCode === null ? "running" : `exited ${agent.exitCode}`}; ${laws.join(" / ") || "no law line"}`
+  );
+  const after = await ofWorkspace(fleet, source.id);
+  const runs = await holds(fleet, stray);
+  check(
+    "(d) its log names the workspace, the broken law and the repair: its judge started again, answering; a judge of it runs, and the process still runs",
+    said.length > 0 &&
+      said[0]?.includes("its judge was started again and answers") === true &&
+      after.some((procId) => procId.startsWith("judge-")) &&
+      runs,
+    `before: ${before.join(", ") || "none"}; after: ${after.join(", ") || "none"}; the process ${runs ? "runs" : "is gone"}; ${said.join(" / ") || "no repair line"}`
+  );
+};
+
 const spec: Spec = {
   name: "from-held-cut",
   host: "it delegates, so its fleet cuts workspaces",
@@ -387,6 +436,9 @@ const spec: Spec = {
     }
     const revived = await strayPhase(kit, fleet, held.source);
     await cutPhase(kit, fleet, parent, held, revived);
+    if (revived.agent.exitCode === null) {
+      await repairPhase(kit, fleet, held.source, revived.agent);
+    }
   },
 };
 
