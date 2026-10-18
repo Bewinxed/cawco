@@ -420,7 +420,7 @@
       <div
         data-slot="list"
         aria-label={`${harnessName(listHarness)} models`}
-        class="fai-scroll relative grid h-(--h) content-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
+        class="fai-scroll relative grid h-(--h) content-start gap-space-row overflow-x-hidden overflow-y-auto overscroll-contain p-space-1"
         id={`${uid}-models`}
         role="listbox"
         style:--h="300px"
@@ -449,7 +449,7 @@
               <!-- literal: 10px gap, 44px height, 6px 8px padding -->
               <div
                 data-slot="row"
-                class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed border border-transparent bg-transparent"
+                class="group relative flex min-h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-start text-ink-strong disabled:cursor-not-allowed border border-transparent bg-transparent"
                 style:animation={swap.leaveAnim(i)}
                 style:--gap="10px"
                 style:--h="44px"
@@ -467,7 +467,7 @@
           <!-- literal: 10px gap, 44px height, 6px 8px padding, 26px tile -->
           <button
             data-slot="row"
-            class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
+            class="group relative flex min-h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-start text-ink-strong disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
             data-fh="1"
             onclick={pickCustom}
             style:--gap="10px"
@@ -535,7 +535,7 @@
               data-slot="row"
               aria-disabled={reason ? true : undefined}
               aria-selected={picked}
-              class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-(--basis) border border-transparent bg-transparent"
+              class="group relative flex min-h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-start text-ink-strong disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-(--basis) border border-transparent bg-transparent"
               data-fh="1"
               data-model={entry.id}
               disabled={Boolean(reason)}

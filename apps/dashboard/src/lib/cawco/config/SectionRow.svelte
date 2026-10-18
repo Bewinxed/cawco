@@ -210,7 +210,7 @@
   {#if below || note}
     <!-- literal: 6px, 8px, 44px -->
     <div
-      class="flex min-w-0 flex-col gap-(--below-gap) pt-0 pr-(--below-px) pb-(--below-gap) pl-(--below-pl) empty:hidden max-phone:pl-(--below-px)"
+      class="flex min-w-0 flex-col gap-(--below-gap) pt-0 pe-(--below-px) pb-(--below-gap) ps-(--below-pl) empty:hidden max-phone:ps-(--below-px)"
       style:--below-gap="6px"
       style:--below-pl="44px"
       style:--below-px="8px"
