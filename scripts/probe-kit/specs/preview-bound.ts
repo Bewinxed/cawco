@@ -231,7 +231,7 @@ async function loadWindow(page: Page, by: "tasks" | "gaps"): Promise<Span> {
   const read = await costOf(page);
   const ready = read.heard.find(([, type]) => type === "cawco:ready")?.[0] ?? 0;
   const [thumb, , bytes] = read.heard.find(
-    ([, type]) => type === "cawco:capture"
+    ([, type]) => type === "cawco:captured"
   ) ?? [0, "", 0];
   const inside = (by === "tasks" ? read.tasks : read.gaps).filter(
     ([at, ms]) => at + ms >= ready && at <= ready + LOAD_MS
@@ -272,13 +272,13 @@ async function captureAlone(page: Page, by: "tasks" | "gaps"): Promise<Span> {
   await until(
     "the thumbnail asked alone",
     () => costOf(page),
-    (so) => so.heard.some(([, type]) => type === "cawco:capture"),
+    (so) => so.heard.some(([, type]) => type === "cawco:captured"),
     60_000
   );
   await page.waitForTimeout(AFTER_MS + 100);
   const read = await costOf(page);
   const [thumb, , bytes] = read.heard.find(
-    ([, type]) => type === "cawco:capture"
+    ([, type]) => type === "cawco:captured"
   ) ?? [0, "", 0];
   const inside = (by === "tasks" ? read.tasks : read.gaps).filter(
     ([at, ms]) => at + ms >= asked && at <= thumb + AFTER_MS
@@ -788,7 +788,7 @@ const run = async (kit: Kit) => {
   );
   await madeDesk.waitForTimeout(3000);
   const captures = (await costOf(madeDesk)).heard.filter(
-    ([, type]) => type === "cawco:capture"
+    ([, type]) => type === "cawco:captured"
   ).length;
   numbers.made = { thumbed, captures };
   kit.check(

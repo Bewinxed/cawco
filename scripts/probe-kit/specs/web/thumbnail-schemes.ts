@@ -111,7 +111,7 @@ const respond = (request: Seen): Reply => {
     : text(`${ask.name} is not offered`);
 };
 
-/** Counts the overlay's `cawco:capture` answers the dashboard hears, and keeps the last one's picture and scheme. */
+/** Counts the overlay's `cawco:captured` answers the dashboard hears, and keeps the last one's picture and scheme. */
 function countCaptures(): void {
   if (window.top !== window) {
     return;
@@ -126,7 +126,7 @@ function countCaptures(): void {
         scheme?: unknown;
         type?: unknown;
       } | null;
-      if (data?.type === "cawco:capture") {
+      if (data?.type === "cawco:captured") {
         seen.captures += 1;
         seen.png = typeof data.png === "string" ? data.png : "";
         seen.scheme = typeof data.scheme === "string" ? data.scheme : "";

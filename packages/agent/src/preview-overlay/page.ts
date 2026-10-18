@@ -5,6 +5,7 @@
 import type { PreviewElement } from "@cawco/core";
 import type { ChoiceChange } from "@cawco/core/choices";
 import {
+  ANCHOR_IDENTITIES,
   type ChainLink,
   COMMENT_LIMITS,
   deletePin,
@@ -233,6 +234,7 @@ addEventListener("cawco:hmr", (event) => {
   told();
   pins.draw();
   ink.replace();
+  pins.keepClear();
 });
 addEventListener(
   "scroll",
@@ -528,6 +530,8 @@ function morphTo(html: string) {
   navigated();
   // The page moved under its ink: each group stands where its element is now.
   ink.replace();
+  // The open card's pin, moved under the host's chrome, is brought out again.
+  pins.keepClear();
   if (held) {
     held.addEventListener(
       "focusout",
@@ -645,14 +649,25 @@ function askHost(method: string, params: object): Promise<unknown> {
   return new Promise((resolve) => asking.set(id, resolve));
 }
 
-/** The host's answer to an ask; false when the message is not one. */
+/**
+ * The host's answer to an ask; false when the message is not one. An answer
+ * is a JSON-RPC response: a `result` or an `error`, and no `method`. The ask
+ * itself has a `method` and neither, so a host in this same window (the
+ * app's host script, the page in its own tab) never has the overlay take its
+ * own ask for the answer.
+ */
 function answered(data: unknown): boolean {
   const message = data as {
     jsonrpc?: unknown;
     id?: unknown;
     result?: unknown;
   } | null;
-  if (message?.jsonrpc !== "2.0" || typeof message.id !== "number") {
+  if (
+    message?.jsonrpc !== "2.0" ||
+    typeof message.id !== "number" ||
+    "method" in message ||
+    !("result" in message || "error" in message)
+  ) {
     return false;
   }
   const resolve = asking.get(message.id);
@@ -964,24 +979,60 @@ function sourceOf(element: Element): PreviewElement["source"] {
   return fallback;
 }
 
-/** `element`'s selector in its own document (a frame's, for an element inside one). */
+/** Whether `selector` names exactly one element of `doc`. */
+const namesOne = (doc: Document, selector: string): boolean => {
+  try {
+    return doc.querySelectorAll(selector).length === 1;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * What names `el` alone in its document by what it is (core
+ * `ANCHOR_IDENTITIES`): its id, its test id, its choice, or its option
+ * within the choice that holds it. Null when none does.
+ */
+function identityOf(el: Element): string | null {
+  const doc = el.ownerDocument;
+  if (el.id && namesOne(doc, `#${CSS.escape(el.id)}`)) {
+    return `#${CSS.escape(el.id)}`;
+  }
+  for (const name of ANCHOR_IDENTITIES) {
+    const value = el.getAttribute(name);
+    if (!value) {
+      continue;
+    }
+    const own = `[${name}="${CSS.escape(value)}"]`;
+    if (namesOne(doc, own)) {
+      return own;
+    }
+    // An option's value repeats from one choice to the next: named within its own.
+    const holder = el.parentElement?.closest("[data-cawco-choice]");
+    const choice = name === "data-option" && holder && identityOf(holder);
+    if (choice && namesOne(doc, `${choice} ${own}`)) {
+      return `${choice} ${own}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * `element`'s selector in its own document (a frame's, for an element
+ * inside one): from the nearest of it and its ancestors named by identity
+ * ({@link identityOf}), else from the page's root, its body, down by places.
+ */
 function selectorOf(element: Element): string {
   const doc = element.ownerDocument;
-  if (
-    element.id &&
-    doc.querySelectorAll(`#${CSS.escape(element.id)}`).length === 1
-  ) {
-    return `#${CSS.escape(element.id)}`;
-  }
-  const testId = element.getAttribute("data-testid");
-  const testSelector = `[data-testid="${CSS.escape(testId || "")}"]`;
-  if (testId && doc.querySelectorAll(testSelector).length === 1) {
-    return testSelector;
-  }
   const path: string[] = [];
   for (let el: Element | null = element; el; el = el.parentElement) {
-    if (el.id && doc.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) {
-      path.unshift(`#${CSS.escape(el.id)}`);
+    const identity = identityOf(el);
+    if (identity) {
+      path.unshift(identity);
+      break;
+    }
+    if (el === doc.body || el === doc.documentElement) {
+      path.unshift(el.localName);
       break;
     }
     let index = 1;
@@ -1092,11 +1143,43 @@ function ownSource(el: Element): Source | null {
 const UNSHOWN = new Set(["script", "style", "template", "noscript"]);
 
 /**
+ * What an element with no words of its own reads as, in this order: the
+ * name it is given (`aria-label`, an image's `alt`, `title`, a field's
+ * `placeholder` and `name`), else where it leads or what it shows (`href`,
+ * `src`). A picture repeated card by card is told apart by these alone.
+ */
+const NAMED_BY = [
+  "aria-label",
+  "alt",
+  "title",
+  "placeholder",
+  "name",
+  "href",
+  "src",
+] as const;
+
+/**
  * The element's text as a pin keeps it: its words in order, white space
- * run together, cut to the anchor's bound. Read from its text nodes until
- * the bound is reached, so a page-sized element costs what a paragraph does.
+ * run together, cut to the anchor's bound; with none, its name
+ * ({@link NAMED_BY}). Read from its text nodes until the bound is reached,
+ * so a page-sized element costs what a paragraph does.
  */
 function textOf(el: Element): string {
+  const words = wordsOf(el);
+  if (words) {
+    return words;
+  }
+  for (const attribute of NAMED_BY) {
+    const name = el.getAttribute(attribute)?.replace(/\s+/g, " ").trim();
+    if (name) {
+      return name.slice(0, COMMENT_LIMITS.anchorText);
+    }
+  }
+  return "";
+}
+
+/** The element's words, as {@link textOf} reads them. */
+function wordsOf(el: Element): string {
   const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let text = "";
   let parent: Node | null = null;
@@ -1663,6 +1746,24 @@ function picturesLater() {
 
 type HostMessage = Record<string, unknown>;
 
+/** The most boxes a host says it covers the page with. Our call: a list and a card. */
+const COVERED_MOST = 4;
+
+/** The host's covered boxes, the viewport's px; each finite and sized, or left out. */
+function coveredOf(value: unknown): Box[] {
+  return (Array.isArray(value) ? value.slice(0, COVERED_MOST) : []).flatMap(
+    (raw) => {
+      const box = raw as Partial<Record<keyof Box, unknown>> | null;
+      const [x, y, w, h] = [box?.x, box?.y, box?.w, box?.h].map((n) =>
+        typeof n === "number" && Number.isFinite(n) ? n : Number.NaN
+      );
+      return [x, y, w, h].some(Number.isNaN) || w <= 0 || h <= 0
+        ? []
+        : [{ x, y, w, h }];
+    }
+  );
+}
+
 const idOf = (message: HostMessage) =>
   typeof message.id === "string" ? message.id : null;
 
@@ -1773,7 +1874,12 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:focus-pin": (message) =>
       pins.focus(idOf(message), message.scroll === true),
     "cawco:track-pin": (message) => pins.track(idOf(message)),
-    "cawco:capture": async () => post("cawco:capture", await thumbnail()),
+    // What the host's chrome covers of the page (its Comments list, a
+    // phone's card): a pin it opens is brought out from under it.
+    "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),
+    // Asked as `cawco:capture`, answered as `cawco:captured`: a host in this
+    // same window hears its ask and this answer, and neither is the other.
+    "cawco:capture": async () => post("cawco:captured", await thumbnail()),
     // Its conversation's tab off screen, and back (hold.ts): this document
     // and every same-origin frame in it, which the pane hears as `cawco:held`.
     "cawco:hold": () => holdPage(true),

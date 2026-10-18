@@ -22,6 +22,13 @@
  *    (Main once seeded the machine as the picker mounted: a machine heard
  *    after that could never be the pick, and every click stopped at "Choose
  *    a machine that is online.")
+ * C. The host in the page's own window (the app's host script stands on the
+ *    page's origin; a page in a tab of its own is its own parent): one
+ *    `cawco:capture` ask is answered once, as `cawco:captured`, and never
+ *    echoed; `pickPlace()` waits for the host's JSON-RPC answer, and the
+ *    place it answers is on the hub. (Main took its own messages for the
+ *    host's: the capture answered itself on and on, and pickPlace resolved
+ *    null at once.)
  *
  *   bun scripts/probe-kit/run.ts place-pick
  */
@@ -298,6 +305,169 @@ const run = async (kit: Kit) => {
     b.online && b.opened === pickWords.noMachines && whole(b, second),
     JSON.stringify(b)
   );
+
+  await oneWindow(kit, page, id, read, {
+    machineId: MACHINE,
+    label,
+    path: `${fleet.repo}/c`,
+  });
+};
+
+/** How long C listens to the window after one capture ask: the answer, and any echo of it. Our call. */
+const ECHO_MS = 3000;
+/** How long C's pickPlace must stay unanswered while its host says nothing. Our call. */
+const UNANSWERED_MS = 1000;
+
+/**
+ * C. The host in the page's own window, as the app's host script stands
+ * (its origin is the page's) and as the page in a tab of its own is: the
+ * served page opened alone, the probe its host in that window, every
+ * message on it heard. One `cawco:capture` ask is answered once, as
+ * `cawco:captured`, and the ask is never taken up again; `pickPlace()`
+ * waits for the host's JSON-RPC answer, and the place it answers is kept.
+ */
+const oneWindow = async (
+  kit: Kit,
+  page: Page,
+  id: string,
+  read: () => Promise<Placed | undefined>,
+  place: Required<Placed>
+) => {
+  const src = await page
+    .locator('iframe[title="Preview"]')
+    .first()
+    .getAttribute("src");
+  if (!src) {
+    kit.check("C: the page's address in the panel", false, "no src");
+    return;
+  }
+  const alone = await kit.page("desk");
+  await alone.goto(src);
+  await alone.locator("[data-pick]").waitFor({ timeout: 30_000 });
+  const said = await alone.evaluate(
+    async ({ artifactId, name, place: picked, echoMs, unansweredMs }) => {
+      const heard: Record<string, unknown>[] = [];
+      addEventListener("message", (event) => heard.push(event.data));
+      /** Whether `done` holds within `ms`, looked at every 50 ms. */
+      const holds = (done: () => boolean, ms: number) =>
+        new Promise<boolean>((resolve) => {
+          const end = performance.now() + ms;
+          const look = () => {
+            if (done() || performance.now() >= end) {
+              resolve(done());
+              return;
+            }
+            setTimeout(look, 50);
+          };
+          look();
+        });
+      postMessage(
+        {
+          type: "cawco:hello",
+          artifact: { id: artifactId, kind: "page", name },
+          sync: `/__cawco/artifact/${artifactId}`,
+        },
+        location.origin
+      );
+      const synced = await holds(
+        () =>
+          heard.some(
+            (one) => one?.type === "cawco:sync" && one.state === "synced"
+          ),
+        10_000
+      );
+      // One capture ask, then the window heard for its answer and any echo.
+      heard.length = 0;
+      postMessage({ type: "cawco:capture" }, location.origin);
+      await new Promise((resolve) => setTimeout(resolve, echoMs));
+      const captureAsks = heard.filter(
+        (one) => one?.type === "cawco:capture"
+      ).length;
+      const answers = heard.filter(
+        (one) => one?.type === "cawco:captured"
+      ).length;
+      const png =
+        typeof heard.find((one) => one?.type === "cawco:captured")?.png ===
+        "string";
+      // pickPlace: unanswered while the host says nothing, then the host's answer.
+      heard.length = 0;
+      const out: { settled: { place: unknown } | { error: string } | null } = {
+        settled: null,
+      };
+      (
+        window as unknown as { cawco: { pickPlace: () => Promise<unknown> } }
+      ).cawco
+        .pickPlace()
+        .then(
+          (one) => {
+            out.settled = { place: one };
+          },
+          (error: unknown) => {
+            out.settled = { error: String(error) };
+          }
+        );
+      await new Promise((resolve) => setTimeout(resolve, unansweredMs));
+      const waited = out.settled === null;
+      const ask = heard.find(
+        (one) => one?.jsonrpc === "2.0" && one.method === "cawco/pick-place"
+      );
+      if (ask) {
+        postMessage(
+          { jsonrpc: "2.0", id: ask.id, result: picked },
+          location.origin
+        );
+      }
+      await holds(() => out.settled !== null, 5000);
+      return {
+        synced,
+        asks: captureAsks,
+        answers,
+        png,
+        waited,
+        asked: !!ask,
+        settled: out.settled,
+      };
+    },
+    {
+      artifactId: id,
+      name: NAME,
+      place,
+      echoMs: ECHO_MS,
+      unansweredMs: UNANSWERED_MS,
+    }
+  );
+  kit.check(
+    "C: host and overlay in one window, one capture ask: one answer (`cawco:captured`, a picture), the ask heard once and never taken up again",
+    said.synced && said.asks === 1 && said.answers === 1 && said.png,
+    JSON.stringify({
+      synced: said.synced,
+      asks: said.asks,
+      answers: said.answers,
+      png: said.png,
+    })
+  );
+  const held = await until(
+    "C's place on the hub",
+    read,
+    (one) => one?.path === place.path,
+    10_000
+  ).catch(read);
+  const resolved = said.settled as { place?: Placed } | null;
+  kit.check(
+    "C: host and overlay in one window, pickPlace() waits for the host's answer, answers its place, and the hub keeps it",
+    said.waited &&
+      said.asked &&
+      resolved?.place?.path === place.path &&
+      held?.path === place.path &&
+      held.machineId === place.machineId,
+    JSON.stringify({
+      waited: said.waited,
+      asked: said.asked,
+      settled: said.settled,
+      held,
+    })
+  );
+  await alone.close();
 };
 
 const spec: Spec = { name: "place-pick", run };

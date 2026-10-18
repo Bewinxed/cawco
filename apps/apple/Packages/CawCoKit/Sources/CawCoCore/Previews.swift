@@ -60,7 +60,7 @@ public final class PreviewStore {
         }
     }
 
-    /// The overlay's capture of the page on show (`cawco:capture`).
+    /// The overlay's capture of the page on show (`cawco:captured`, its answer to `cawco:capture`).
     public func captured(_ instanceId: String, revision: String, thumbnail: PageThumbnail) {
         if pages[instanceId]?.revision == revision {
             pages[instanceId]?.thumbnail = thumbnail

@@ -260,16 +260,50 @@ export const deepElementAt = (
   return el;
 };
 
+/** Each document's ResizeObserver, by what it calls. */
+const sizeObservers = new WeakMap<Document, Map<() => void, ResizeObserver>>();
+
+/**
+ * A ResizeObserver of `doc`'s own window calling `changed`, one per
+ * document and caller: an element in a frame (an ink group's anchor) is
+ * observed from its own window, never the top one. Null for a document
+ * with no window.
+ */
+export function sizesIn(
+  doc: Document,
+  changed: () => void
+): ResizeObserver | null {
+  const view = doc.defaultView as (Window & typeof globalThis) | null;
+  if (!view) {
+    return null;
+  }
+  const own = sizeObservers.get(doc) ?? new Map<() => void, ResizeObserver>();
+  sizeObservers.set(doc, own);
+  const known = own.get(changed);
+  if (known) {
+    return known;
+  }
+  const made = new view.ResizeObserver(() => changed());
+  own.set(changed, made);
+  return made;
+}
+
 /**
  * Calls `changed` whenever a same-origin frame's document scrolls, resizes,
- * grows, goes back or forward, or a frame loads (a navigation, or a frame
- * added later), at any depth: the marks standing in it are placed again. The
- * top document's own scroll and size are the overlay's.
+ * goes back or forward, ends a transition or an animation, or loads
+ * something (an image, its fonts, the frame itself on a navigation, a frame
+ * added later), at any depth: the marks standing in it are placed again.
+ * The top document's own scroll and size are the overlay's, and so is every
+ * document's content changing (ink.ts). A frame's root is never observed
+ * for its size: observed from either window, Chrome skipped its report on
+ * every frame at rest ("ResizeObserver loop completed with undelivered
+ * notifications", 60 a second, the probe's b2), and a document with no root
+ * yet (a navigation before its first bytes, `document.open()`) threw
+ * "parameter 1 is not of type 'Element'".
  */
 export function watchFrames(changed: () => void): void {
   const docs = new WeakSet<Document>();
   const frames = new WeakSet<Element>();
-  const grown = new ResizeObserver(() => changed());
 
   const watchFrame = (frame: FrameElement) => {
     if (!frames.has(frame)) {
@@ -296,11 +330,11 @@ export function watchFrames(changed: () => void): void {
     for (const frame of doc.querySelectorAll<FrameElement>("iframe, frame")) {
       watchFrame(frame);
     }
+    const view = doc.defaultView;
     if (docs.has(doc)) {
       return;
     }
     docs.add(doc);
-    const view = doc.defaultView;
     if (doc !== document && view) {
       view.addEventListener("scroll", changed, {
         capture: true,
@@ -310,11 +344,12 @@ export function watchFrames(changed: () => void): void {
       // Its history moving it in place; its pushes are told through its mark (boot.ts).
       view.addEventListener("popstate", changed);
       view.addEventListener("hashchange", changed);
-      // A frame's first blank document can stand with no root yet (an
-      // iframe about to load another origin's page): nothing to watch there.
-      if (doc.documentElement) {
-        grown.observe(doc.documentElement);
-      }
+      // A transition or an animation in it ended: what it moved stands where it ends.
+      view.addEventListener("transitionend", changed, { capture: true });
+      view.addEventListener("animationend", changed, { capture: true });
+      // Something in it loaded (an image, a frame's page) or its fonts did: what that pushed stands where it is now.
+      view.addEventListener("load", changed, { capture: true });
+      doc.fonts?.addEventListener("loadingdone", changed);
     }
     // A frame added after load (a route that mounts one) is watched as it comes.
     new MutationObserver((records) => {

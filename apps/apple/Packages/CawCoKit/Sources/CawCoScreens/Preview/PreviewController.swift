@@ -1269,7 +1269,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // Read on the main thread: a message past `messageMost` is not the overlay's, and goes unread;
         // its capture alone carries a picture, up to wire.ts `PNG_MAX` of base64.
         guard let said = message.body as? NSString,
-              said.length <= (said.hasPrefix(#"{"type":"cawco:capture""#) ? Self.captureMost : Self.messageMost) else { return }
+              said.length <= (said.hasPrefix(#"{"type":"cawco:captured""#) ? Self.captureMost : Self.messageMost) else { return }
         guard let data = (said as String).data(using: .utf8),
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         if let ask = Self.pickPlaceAsk(body) {
@@ -1299,7 +1299,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                     deliver(["type": "cawco:capture"])
                 }
             }
-        case "cawco:capture":
+        case "cawco:captured":
             // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
             if let revision, let thumbnail = Self.thumbnail(body) {
                 hub.previews.captured(instanceId, revision: revision, thumbnail: thumbnail)
@@ -1809,6 +1809,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Another pin's card is dismissed first (PreviewPane.svelte `openCard`).
     private func openCard(_ id: String, made: Bool = false) {
         if let open = openPin, open != id { closeCard(by: "another") }
+        // The card never stands under the Comments panel: it goes, as a row's
+        // own press puts it away, whichever way the card opens (J, K, Enter,
+        // a pin's disc on the page).
+        if let list, list.presentingViewController != nil, !list.isBeingDismissed {
+            list.dismiss(animated: true)
+        }
         if made { madePin = id }
         openPin = id
         focusedPin = id
@@ -2451,7 +2457,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return Data(base64Encoded: text)
     }
 
-    /// The overlay's `cawco:capture` (wire.ts `previewThumbnail`): `png` drawn
+    /// The overlay's `cawco:captured` (wire.ts `previewThumbnail`): `png` drawn
     /// in `scheme`, `other` in the other scheme, or `single` when the page
     /// draws the same in both; nil when it carries no picture.
     private static func thumbnail(_ body: [String: Any]) -> PreviewStore.PageThumbnail? {

@@ -172,6 +172,9 @@
   function showList(open: boolean) {
     listOpen = open;
     store("local", listKey, open ? "open" : "shut");
+    if (!open) {
+      listYield = null;
+    }
   }
   /** ⇧C: every pin on the page hidden, or shown (Figma's own key). */
   let pinsShown = $state(true);
@@ -888,6 +891,15 @@
         : new DOMRect();
     },
   };
+  /** The well's foot at its right: where the Comments panel stands when it makes room below a pin (`listYield`). */
+  const wellFoot = {
+    getBoundingClientRect: () => {
+      const box = well?.getBoundingClientRect();
+      return box
+        ? new DOMRect(box.right - GUTTER, box.top + floorIn(box), 0, 0)
+        : new DOMRect();
+    },
+  };
   let sending = $state(false);
   const artifactId = $derived(artifact?.id);
   $effect(() => {
@@ -1034,6 +1046,148 @@
   let roomW = $state(0);
   let roomH = $state(0);
   const cardPin = $derived(pins.find((pin) => pin.id === openPin) ?? null);
+  /**
+   * The room the Comments panel makes for the open card's pin when no scroll
+   * of the page brings the pin out from under it (the overlay's `stuck`: a
+   * pin at the page's top, under the panel): the panel stands above the pin,
+   * or at the well's foot below it, on the side with more room, no taller
+   * than that room. Kept until the card closes, another opens or the panel
+   * shuts; null, it hangs from the top, as tall as the well lets it.
+   */
+  let listYield = $state<{
+    id: string;
+    room: number;
+    side: "top" | "bottom";
+  } | null>(null);
+  /** The card's gap from its pin, px (PinCard's `GAP`). */
+  const PIN_GAP = 12;
+  /** The panel's room beside a stuck pin `at` (the page's viewport px), on the side with more of it. */
+  function yieldFor(
+    id: string,
+    at: { r: number; x: number; y: number },
+    kept?: "top" | "bottom"
+  ): NonNullable<typeof listYield> | null {
+    const frame = iframe?.getBoundingClientRect();
+    const box = well?.getBoundingClientRect();
+    if (!(frame && box && iframe)) {
+      return null;
+    }
+    const y = at.y + frame.top + iframe.clientTop - box.top;
+    const above = y - at.r - PIN_GAP - GUTTER;
+    const below = floorIn(box) - GUTTER - (y + at.r + PIN_GAP);
+    const side = kept ?? (above >= below ? "top" : "bottom");
+    return { id, side, room: Math.max(0, side === "top" ? above : below) };
+  }
+  /**
+   * How far down the well the panel may reach, px from its top: its foot,
+   * or on a phone the top of the open card standing there.
+   */
+  function floorIn(box: DOMRect): number {
+    const room = pinRoom;
+    const card = sheet
+      ? room?.querySelector<HTMLElement>('[data-slot="pin-card"]')
+      : null;
+    // Its laid-out place, not its drawn one: it rises and scales in as it opens.
+    return room && card
+      ? Math.min(
+          box.height,
+          room.getBoundingClientRect().top + card.offsetTop - box.top
+        )
+      : box.height;
+  }
+  /** The open card's height on a phone, where it stands at the well's foot: the panel stands above it. */
+  let cardHeight = $state(0);
+  let pinRoom = $state<HTMLDivElement>();
+  $effect(() => {
+    const room = pinRoom;
+    if (!(sheet && cardPin && room)) {
+      cardHeight = 0;
+      return;
+    }
+    const card = room.querySelector<HTMLElement>('[data-slot="pin-card"]');
+    if (!card) {
+      return;
+    }
+    const watch = new ResizeObserver(() => {
+      cardHeight = card.offsetHeight;
+    });
+    watch.observe(card);
+    return () => watch.disconnect();
+  });
+  /**
+   * The panel's room, as its height reads it (`--pin-list-room`, its
+   * max-block-size that less `--space-4`, two gutters): the well's, a stuck
+   * pin's side of it, or on a phone the well above the open card.
+   */
+  const listRoom = $derived.by(() => {
+    if (listYield) {
+      return listYield.room + 2 * GUTTER;
+    }
+    if (sheet && cardHeight > 0) {
+      return Math.max(0, wellBox.h - cardHeight - GUTTER);
+    }
+    return wellBox.h;
+  });
+  /**
+   * What the host's chrome covers of the page, told to its overlay
+   * (`cawco:covered`, the page's viewport px): the open panel and, on a
+   * phone, the card at the well's foot. A pin the pane opens is brought out
+   * from under them (pins.ts `reveal`). Told again as either resizes or
+   * moves, and as nothing once the panel shuts.
+   */
+  $effect(() => {
+    const frame = iframe;
+    const panel = listPanel;
+    const open = listOpen;
+    const room = pinRoom;
+    const card = sheet && cardPin ? cardHeight : 0;
+    if (!(frame && connected)) {
+      return;
+    }
+    if (!(open && panel)) {
+      post({ type: "cawco:covered", boxes: [] });
+      return;
+    }
+    let raf = 0;
+    const say = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const framed = frame.getBoundingClientRect();
+        const left = framed.left + frame.clientLeft;
+        const top = framed.top + frame.clientTop;
+        // The panel's wrapper stands where it is placed, at its laid-out size (its entrance scales the panel inside).
+        const boxes = [
+          panel.parentElement ?? panel,
+          ...(card > 0 && room
+            ? [room.querySelector('[data-slot="pin-card"]')]
+            : []),
+        ]
+          .filter((el): el is Element => !!el)
+          .map((el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              x: r.left - left,
+              y: r.top - top,
+              w: r.width,
+              h: r.height,
+            };
+          });
+        post({ type: "cawco:covered", boxes });
+      });
+    };
+    const sized = new ResizeObserver(say);
+    sized.observe(panel);
+    const moved = new MutationObserver(say);
+    if (panel.parentElement) {
+      moved.observe(panel.parentElement, { attributeFilter: ["style"] });
+    }
+    say();
+    return () => {
+      cancelAnimationFrame(raf);
+      sized.disconnect();
+      moved.disconnect();
+    };
+  });
   /** Pins the agent is working on: the last delivery carried them and its turn runs. */
   const live = $derived.by(() => {
     const stamps = pins.flatMap((pin) => [
@@ -1095,6 +1249,7 @@
     const id = openPin;
     openPin = null;
     pinAt = null;
+    listYield = null;
     cardError = null;
     post({ type: "cawco:track-pin", id: null });
     if (id && id === madePin) {
@@ -1339,7 +1494,7 @@
       case "cawco:held":
         pageHeld = message.held === true;
         break;
-      case "cawco:capture": {
+      case "cawco:captured": {
         // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
         const shot = previewThumbnail(message);
         if (shot && preview) {
@@ -1377,6 +1532,16 @@
       case "cawco:pin-at": {
         if (previewPinId(message.id) === openPin) {
           pinAt = previewPinAt(message);
+          // No scroll brings it out from under the panel: the panel makes room for it.
+          // Its room follows the pin as the page settles (a scroll still
+          // running when it was first told), on the side it first took.
+          if (message.stuck === true && listOpen && openPin && pinAt) {
+            listYield = yieldFor(
+              openPin,
+              pinAt,
+              listYield?.id === openPin ? listYield.side : undefined
+            );
+          }
         }
         break;
       }
@@ -1760,7 +1925,7 @@
       align="end"
       class="pin-list-pop"
       bind:ref={listPanel}
-      customAnchor={wellCorner}
+      customAnchor={listYield?.side === "bottom" ? wellFoot : wellCorner}
       onEscapeKeydown={(event) => {
         // The panel's escape layer takes Esc before the window hears it, so
         // Esc unwinds from the innermost here: the card, then Comment or
@@ -1773,9 +1938,9 @@
       }}
       onInteractOutside={(event) => event.preventDefault()}
       onOpenAutoFocus={(event) => event.preventDefault()}
-      side="bottom"
+      side={listYield?.side === "bottom" ? "top" : "bottom"}
       sideOffset={GUTTER}
-      style={`--pin-list-room: ${wellBox.h}px; --pin-list-pane: ${wellBox.w}px`}
+      style={`--pin-list-room: ${listRoom}px; --pin-list-pane: ${wellBox.w}px`}
       trapFocus={false}
     >
       <PinList
@@ -2054,6 +2219,7 @@
   <div
     data-slot="pin-room"
     class="pin-room"
+    bind:this={pinRoom}
     bind:clientHeight={roomH}
     bind:clientWidth={roomW}
   >
@@ -2075,7 +2241,13 @@
         }}
         {sheet}
         bind:draft={
-          () => drafts.text(cardPin.id), (text) => drafts.set(cardPin.id, text)
+          () => (cardPin ? drafts.text(cardPin.id) : ""),
+          (text) => {
+            // Read as the card leaves too, its pin already gone from the pane.
+            if (cardPin) {
+              drafts.set(cardPin.id, text);
+            }
+          }
         }
       />
     {/if}

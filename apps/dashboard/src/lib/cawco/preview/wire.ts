@@ -72,7 +72,7 @@ export interface PageThumbnail {
 }
 
 /**
- * The overlay's `cawco:capture`: `png` drawn in `scheme`, `other` in the
+ * The overlay's `cawco:captured`: `png` drawn in `scheme`, `other` in the
  * other scheme, or `single` when the page draws the same in both. Null when
  * it carries no picture.
  */
