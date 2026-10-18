@@ -845,7 +845,7 @@
     color: var(--status-fail-ink);
   }
 
-  @media (width <= 900px) {
+  @media (width < 900px) {
     /* Narrow: the model and harness give way before the name does. */
     .meta {
       display: none;

@@ -1364,7 +1364,7 @@
   }
   /* At the mock's 900px breakpoint the rail returns and the burger retires.
      Scoped so it beats the display:grid above, which a utility class cannot. */
-  @media (min-width: 900px) {
+  @media (width >= 900px) {
     .burger {
       display: none;
     }
@@ -1393,7 +1393,7 @@
      the tabs for the crumb as it hydrates. The same query here makes that
      first paint the narrow bar already, its inset and ground, the hosted
      tabs not drawn, so nothing in the bar moves in the swap. */
-  @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
+  @media (width < 900px), (pointer: coarse) and (orientation: portrait) {
     .top {
       padding-inline-start: var(--space-7);
     }
@@ -1593,7 +1593,7 @@
      the group's own tab row, which leaves the toggle and Caw their ends
      (PaneTabs), so the two read as one row and the bar draws nothing of its
      own; only its two controls take a touch. */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     /* Caw's glass ends on the screen's trailing edge, and the toggle starts
        from its leading one, each inside a landscape notch's inset, so the
        row has no pad of its own. */
@@ -1739,7 +1739,7 @@
        own (surface-recess), so the inset beside them is the same ground. */
     padding-inline-end: env(safe-area-inset-right, 0px);
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .content {
       padding-inline-start: env(safe-area-inset-left, 0px);
     }

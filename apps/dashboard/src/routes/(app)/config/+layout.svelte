@@ -117,7 +117,7 @@
     min-height: 0;
     background: var(--surface-recess);
   }
-  @media (max-width: 900px) {
+  @media (width < 900px) {
     .side {
       display: none;
     }

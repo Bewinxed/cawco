@@ -187,7 +187,7 @@
   .inner :global(.delete) {
     color: var(--ink-muted);
   }
-  @media (max-width: 900px) {
+  @media (width < 900px) {
     .footer {
       padding-inline: 7px;
     }

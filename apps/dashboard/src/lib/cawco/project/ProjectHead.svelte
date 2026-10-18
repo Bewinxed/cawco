@@ -614,7 +614,7 @@
     width: min(var(--c-panel-w), calc(100vw - 24px));
     padding: 7px;
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     :global(.kit-pop.caw-settings-pop) {
       width: min(
         var(--c-panel-w),
@@ -774,7 +774,7 @@
     align-items: center;
     gap: var(--space-2);
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .project-head {
       padding: var(--space-5) var(--space-5) var(--space-3);
     }

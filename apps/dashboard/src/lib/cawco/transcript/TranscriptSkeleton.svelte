@@ -124,7 +124,7 @@
     border-radius: var(--well-r);
     background: var(--surface-recess-deep);
   }
-  @media (width <= 900px) {
+  @media (width < 900px) {
     .skeleton {
       padding-inline: var(--space-5);
     }

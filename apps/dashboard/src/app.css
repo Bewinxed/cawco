@@ -308,7 +308,7 @@
        mark: the same in every tree, whatever inset its rows keep. */
     --tree-step: calc(var(--space-1) + var(--space-2) + var(--space-3));
 
-    @media (width <= 900px) {
+    @media (width < 900px) {
       --seam-inset: var(--space-2);
     }
 
@@ -1477,7 +1477,7 @@
   /* On a phone the glass is a tab tucked into the screen's trailing edge,
      and the card hanging from it is too: its trailing side is the screen's
      edge, square and with no edge drawn there, as the glass's. */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .kit-pop.kit-hang.glass-card {
       border-end-end-radius: 0;
 
@@ -2063,7 +2063,7 @@
        column): the text column, relative. */
     --x-hang: calc(var(--x-text) - var(--x-glyph));
 
-    @media (width <= 900px) {
+    @media (width < 900px) {
       --x-rail: 0px;
     }
   }

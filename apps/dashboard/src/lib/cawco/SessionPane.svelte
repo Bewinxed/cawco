@@ -126,10 +126,10 @@
   /**
    * A named state stands where the transcript's first row would: from the
    * area's top, on the transcript's start edge (Transcript `.tr`: --space-7,
-   * --space-5 up to 900px wide). The owner: "I didn't say center the whole
+   * --space-5 under 900px wide). The owner: "I didn't say center the whole
    * block! No sane ui developer does this".
    */
-  const STATEFUL = "px-(--space-7) [@media(width<=900px)]:px-(--space-5)";
+  const STATEFUL = "px-(--space-7) [@media(width<900px)]:px-(--space-5)";
   let paneWidth = $state(0);
   /**
    * The side surface's share of this pane's width, in percent (SideSplit):

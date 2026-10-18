@@ -290,7 +290,7 @@
     width: min(var(--c-panel-w), calc(100vw - 24px));
     padding: 7px;
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     :global(.kit-pop.caw-pop) {
       width: min(
         var(--c-panel-w),

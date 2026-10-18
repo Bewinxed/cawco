@@ -421,7 +421,7 @@
    */
   const narrowQuery = new MediaQuery(NARROW_QUERY);
   /** Under 900px a task is its own page, not the split beside the view (`phone`). */
-  const sheetQuery = new MediaQuery("(max-width: 899px)");
+  const sheetQuery = new MediaQuery("(width < 900px)");
   /** Under 640px the page is the one scroller, not the pane (the styles' own line). */
   const pageScrollsQuery = new MediaQuery("(max-width: 639px)", false);
   const hosted = $derived(
@@ -2465,7 +2465,7 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .strip,
     .pane {
       padding-inline: var(--space-5);

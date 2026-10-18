@@ -118,7 +118,7 @@
   :global(:root[data-bar~="hosting"]) {
     --edge-top-under: var(--surface-shelf);
   }
-  @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
+  @media (width < 900px), (pointer: coarse) and (orientation: portrait) {
     /* css-scope: reads the Shell's bar from the root to colour the top edge */
     :global(:root[data-bar~="hosting"]) {
       --edge-top-under: var(--surface-raised);

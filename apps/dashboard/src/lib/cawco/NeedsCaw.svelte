@@ -694,7 +694,7 @@
      square (Apple HIG, Buttons: "a hit region of at least 44x44 pt") at the
      screen's edge, centred on his glass, so none of it falls off the screen
      or under the transcript. */
-  @media (max-width: 899px) and (pointer: coarse) {
+  @media (width < 900px) and (pointer: coarse) {
     .capsule::after {
       inset: auto;
       inset-inline-end: 0;
@@ -734,7 +734,7 @@
   .standing {
     display: none;
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .round {
       display: none;
     }

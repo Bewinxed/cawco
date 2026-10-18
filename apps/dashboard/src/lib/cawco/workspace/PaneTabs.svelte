@@ -1977,7 +1977,7 @@
     }
     /* A phone's tabs have no chevron: a long press opens the tab's menu
        (Session details first), and a tap on the chosen tab its details. */
-    @media (max-width: 899px) {
+    @media (width < 900px) {
       display: none;
     }
     & :global(svg) {
@@ -2045,7 +2045,7 @@
      glass (`c-bar-caw-glass-phone` across) is flush with the other edge,
      and the strip stops c-bar-phone-gap short of it, so the tabs scroll
      between them and never under. */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     :global(.session-tabs:not(.hosted)) {
       --strip-item: var(--c-tab-row-h);
       --strip-flare: var(--radius-lg);
@@ -2093,7 +2093,7 @@
      At rest the strip's start does not fade, so a first tab is drawn
      whole, its foot and all. A chosen tab is brought clear of both fades
      (TabsList `inView`). */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     :global(
       .session-tabs:not(.hosted)[data-slot="tabs"] .ff-tabs-list.scrollable
     ) {
@@ -2335,7 +2335,7 @@
      no status glyph. A swipe carries the choice from tab to tab with the
      finger (`look`, the kit's `--pick`), and nothing in it sizes a tab:
      choosing one never moves the others. */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     /* The rim is the status: no glyph beside the title. */
     .tglyph {
       display: none;
@@ -2423,7 +2423,7 @@
 
     /* A finger closes a tab from its options (owner: "remove the x make
        it close on hold menu then close"). */
-    @media (max-width: 899px), (pointer: coarse) {
+    @media (width < 900px), (pointer: coarse) {
       display: none;
     }
   }

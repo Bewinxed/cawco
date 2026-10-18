@@ -652,7 +652,7 @@
   }
   /* A phone has no peek: the button is never drawn there (peek.svelte.ts),
      and this holds before the page is live. */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .peek {
       display: none;
     }

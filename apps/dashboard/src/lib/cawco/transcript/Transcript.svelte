@@ -3836,7 +3836,7 @@
        brings in scope with `timeline-scope`. */
     scroll-timeline: --transcript-head block;
 
-    @media (width <= 900px) {
+    @media (width < 900px) {
       padding-inline: var(--space-5);
     }
   }

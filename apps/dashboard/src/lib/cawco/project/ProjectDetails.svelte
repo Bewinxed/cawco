@@ -935,7 +935,7 @@
     padding-block: var(--space-1) var(--space-3);
     padding-inline: var(--space-7) var(--space-6);
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .details {
       max-inline-size: none;
       padding-inline: var(--space-5);

@@ -176,7 +176,7 @@
      it, so the field stays at its foot over the keyboard and the best match
      nearest it however many rows the words leave (it never rides up the
      screen as results narrow). */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     :global(.kit-pop.jump-pop) {
       width: calc(100vw - 12px - env(safe-area-inset-right, 0px));
       height: calc(100dvh - var(--c-top-bar-h) - 24px);

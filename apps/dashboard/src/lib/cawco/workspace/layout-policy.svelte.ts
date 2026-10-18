@@ -12,7 +12,7 @@ import { MediaQuery } from "svelte/reactivity";
 import { choices } from "../home/choices.svelte";
 
 const coarse = new MediaQuery("pointer: coarse");
-const phone = new MediaQuery("max-width: 899px");
+const phone = new MediaQuery("(width < 900px)");
 const touchPortrait = new MediaQuery(
   "(pointer: coarse) and (orientation: portrait)"
 );
