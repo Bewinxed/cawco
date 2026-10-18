@@ -48,8 +48,12 @@
   .plan-ring[aria-pressed="true"] {
     color: var(--ink-strong);
 
+    /* The kit Toggle's on state: by day a step past the hover. */
     &::before {
-      background-color: var(--surface-fill);
+      background-color: light-dark(
+        var(--surface-fill-strong),
+        var(--surface-fill)
+      );
     }
   }
   .num {

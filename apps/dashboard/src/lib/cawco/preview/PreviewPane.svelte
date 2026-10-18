@@ -2153,7 +2153,8 @@
   }
   .comments[aria-expanded="true"],
   .inspect[aria-pressed="true"] {
-    background: var(--surface-fill);
+    /* The kit Toggle's on state: by day a step past the hover. */
+    background: light-dark(var(--surface-fill-strong), var(--surface-fill));
   }
   .count,
   .comments :global(.pins-hidden) {

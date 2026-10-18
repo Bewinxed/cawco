@@ -244,9 +244,12 @@
       background: var(--surface-hover);
     }
   }
-  .pin-row:active,
-  .pin-row[aria-current="true"] {
+  .pin-row:active {
     background: var(--surface-fill);
+  }
+  /* The pin on show takes the selected wash, apart from the hover step. */
+  .pin-row[aria-current="true"] {
+    background: var(--selected-bg);
   }
   .pin-row:focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);

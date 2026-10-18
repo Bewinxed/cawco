@@ -121,8 +121,9 @@
     text-align: left;
     color: var(--ink-strong);
   }
+  /* The chosen option takes the selected wash, never the hover step. */
   .row.on {
-    background: var(--surface-fill);
+    background: var(--selected-bg);
   }
   .tile {
     width: 26px;

@@ -280,8 +280,9 @@
         transform var(--dur-toggle) var(--ease-out);
     }
   }
+  /* The chosen project takes the selected wash, never the hover step. */
   .row.on {
-    background: var(--surface-fill);
+    background: var(--selected-bg);
   }
   .tile {
     width: 24px;

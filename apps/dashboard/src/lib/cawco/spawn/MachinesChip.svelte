@@ -180,8 +180,9 @@
         transform var(--dur-toggle) var(--ease-out);
     }
   }
+  /* A chosen machine takes the selected wash, never the hover step. */
   .row.on {
-    background: var(--surface-fill);
+    background: var(--selected-bg);
   }
   .row:disabled {
     cursor: not-allowed;

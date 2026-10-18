@@ -157,7 +157,8 @@
     right: 4px;
     top: 4px;
     height: var(--row-h);
-    background: var(--surface-fill);
+    /* The chosen mode's selected wash, apart from the hover ghost. */
+    background: var(--selected-bg);
     border-radius: var(--radius-sm);
     pointer-events: none;
     @media (prefers-reduced-motion: no-preference) {

@@ -641,7 +641,8 @@
     left: 4px;
     right: 4px;
     top: 4px;
-    background: var(--surface-fill);
+    /* The chosen model's selected wash, apart from the hover ghost. */
+    background: var(--selected-bg);
     border-radius: var(--radius-sm);
     transition: opacity var(--dur-control) var(--ease-out);
     pointer-events: none;
