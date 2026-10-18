@@ -68,3 +68,9 @@ contract: apps/dashboard/src/lib/cawco/blocks/Block.svelte:161 shadcn/require-st
 contract: apps/dashboard/src/lib/cawco/blocks/BlockPage.svelte:326 shadcn/require-static-classes | apps/dashboard/src/lib/components/ui/dropdown-menu (trigger as a Button) | same as Block.svelte:161
 
 important kept: none.
+
+## Delta R
+R2 fixed: apps/dashboard/src/lib/cawco/canvas/CanvasStages.svelte:142
+R2 fixed: apps/dashboard/src/lib/cawco/decisions/PageFrame.svelte:198
+R3 fixed: apps/dashboard/src/lib/cawco/decisions/RecordCard.svelte:160
+R1: no box-shadow state mixes a residual with a utility (ViewCalendar's shadow rules are all residual, on library DOM).

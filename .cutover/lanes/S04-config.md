@@ -63,3 +63,6 @@ contract: apps/dashboard/src/lib/cawco/config/NewMemoryPopover.svelte:100 shadcn
 contract: apps/dashboard/src/lib/cawco/config/NewMemoryPopover.svelte:121 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
 contract: apps/dashboard/src/lib/cawco/config/PickerChip.svelte:50 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
 contract: apps/dashboard/src/lib/cawco/config/PickerChip.svelte:57 shadcn/no-restyle | kit component file (src/lib/components/ui) | kit owns this treatment: add a variant or prop there
+
+R3 fixed: apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte:228
+R1/R2: none (no state-changing box-shadow, no border: 0). Other `font-mono` classes are existing markup, not a moved declaration.

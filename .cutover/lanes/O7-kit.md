@@ -115,6 +115,33 @@ with `allow: ["pointer-events"]` for these 9 files. Then the 9 comment lines are
 - svelte-check: 0 errors, 1 warning, the foundation's own (Shot.svelte:212, a video
   without captions). This lane adds no `Unused CSS selector` warning.
 
+## Delta R
+
+No R lines. R applies only where a lane converted a source declaration. The one
+conversion in this lane is progress.svelte's inline `transform`, which has no border, no
+mono family and no box-shadow. The stock shadcn classes in the kit stay as written.
+- R1 `shadow kept residual:` none. R2 `R2 fixed:` none. R3 `R3 fixed:` none.
+
+## Duplicates (delta D)
+
+The same padding edge was set twice under the `[data-inset]` state. In the vite build
+(assets/0.*.css) both rules have the same specificity, so the later rule wins:
+`data-inset:ps-space-8` (rule 1215), `data-inset:pl-9.5` (1216),
+`data-[inset]:pl-space-8` (1233).
+
+duplicate removed: apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-sub-trigger.svelte:19 data-[inset]:pl-space-8 over data-inset:pl-9.5
+duplicate removed: apps/dashboard/src/lib/components/ui/context-menu/context-menu-sub-trigger.svelte:19 data-inset:pl-9.5 over data-inset:ps-space-8
+
+In context-menu-sub-trigger the winner is the 38px `pl-9.5`, not 32px. `pl-9.5` is
+declared after `ps-space-8`, and in LTR both set the left padding, so the computed value
+was 38px and stays 38px. Removing `ps-space-8` changes nothing in LTR.
+
+Outside this lane's list, so not edited (integration or their lane):
+- dropdown-menu/dropdown-menu-item.svelte:22 `data-[inset]:pl-space-8 data-inset:pl-9.5`: 32px wins, remove `data-inset:pl-9.5`.
+- dropdown-menu/dropdown-menu-label.svelte:18 `data-[inset]:pl-space-8 data-inset:pl-9.5`: 32px wins, remove `data-inset:pl-9.5`.
+- context-menu/context-menu-label.svelte:18 `data-inset:pl-9.5 data-inset:pl-space-8`: `pl-space-8` (1217) comes after `pl-9.5` (1216), so 32px wins; remove `data-inset:pl-9.5`.
+- There is no menubar in the kit.
+
 ## Contracts
 
 None. No file in this lane has a `<style>`, and ESLint is clean over all 55 files at the

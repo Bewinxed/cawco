@@ -74,3 +74,11 @@ contract: apps/dashboard/src/lib/cawco/ContextMeter.svelte:113 shadcn/require-st
 contract: apps/dashboard/src/lib/cawco/GlassCard.svelte:410 shadcn/require-static-classes | components/ui/hang-card (kit) | a static frame class per face (FRAME map) or a hang-card variant
 contract: apps/dashboard/src/lib/cawco/HookTester.svelte:57 shadcn/require-static-classes | components/ui/badge (kit) | a badge tone variant for all/exact/regex
 contract: apps/dashboard/src/lib/cawco/MachinesButton.svelte:79 shadcn/no-unknown-classes | cawco/Shell.svelte:1645 `.tools :global(.bar-item)` | Shell's lane turns `bar-item` into utilities or `[data-bar-item]`; `data-bar-item` hook is already on the button
+
+## Delta R
+R2 fixed: apps/dashboard/src/lib/cawco/LawsBroken.svelte:37
+R2 fixed: apps/dashboard/src/lib/cawco/MachinesList.svelte:118
+R2 fixed: apps/dashboard/src/lib/cawco/MachinesList.svelte:171
+R2 fixed: apps/dashboard/src/lib/cawco/MachinesList.svelte:213
+R3 fixed: apps/dashboard/src/lib/cawco/MachineInventory.svelte:199
+(R1: no element mixes residual and utility box-shadow; `font-mono` on code/pre and on kit Inputs/pre-existing classes left as is.)

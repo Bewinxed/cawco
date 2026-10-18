@@ -73,3 +73,10 @@ contract: apps/dashboard/src/routes/(app)/workflows/+page.svelte:173 shadcn/no-r
 contract: apps/dashboard/src/routes/(app)/workflows/+page.svelte:175 shadcn/no-restyle | the kit component (or its stylesheet) owns this; integration writes its contract | "w-14" is not allowed on <Skeleton>: the grammar does not recognize it
 contract: apps/dashboard/src/routes/(app)/workflows/+page.svelte:184 shadcn/no-arbitrary-values | the kit component (or its stylesheet) owns this; integration writes its contract | "max-w-[420px]" hardcodes an off-token value
 contract: apps/dashboard/src/routes/project/[id]/view/[name]/+page.svelte:95 shadcn/no-restyle | the kit component (or its stylesheet) owns this; integration writes its contract | "h-64" is not allowed on <Skeleton>: the grammar does not recognize it
+
+## Delta R
+R2 fixed: apps/dashboard/src/routes/dev/finder/+page.svelte:114
+R2 fixed: apps/dashboard/src/routes/dev/finder/+page.svelte:156
+R2 fixed: apps/dashboard/src/routes/dev/finder/+page.svelte:166
+R3: the only font-mono is on a <code> (motion/traffic:368), exact there; no R3 fix needed.
+R1: no element changes box-shadow between states; no shadow kept residual.

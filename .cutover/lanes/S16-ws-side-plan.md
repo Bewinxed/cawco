@@ -50,3 +50,8 @@ cross-file hook: turn/Turn.svelte `.ghost` is MessageRow's own class (unchanged)
 cross-file hook: turn/Who.svelte `.who` → [data-slot="who"] (existing); selected by transcript/MessageRow.svelte:916, :947
 cross-file hook: workspace/SessionStatus.svelte `.session-status` → [data-slot="session-status"] (added); selected by RunSteps.svelte:103 (`STEP_GLYPH = ".session-status .glyph"`; `.glyph` → [data-slot="glyph"], existing)
 cross-file hook: side/SideSheet.svelte `.preview-sheet` → [data-preview-sheet] (existing attribute on the kit content, also data-slot="drawer-content"); selected by canvas/stage.svelte.ts:453 (`closest(".preview-sheet")`)
+
+## Delta R
+R2 fixed: apps/dashboard/src/lib/cawco/move/MoveAsk.svelte:27 (`border: 0` → `border-none border-current`)
+R3: no `font-family: var(--font-mono)` in this lane (the `type-code` utility carries it on `<code>`/`<pre>`).
+R1: every box-shadow state is a utility (PlanPane dot: `shadow-(--dot-ring)` / `data-plan-pane-live:shadow-none`; MoveWait card, SideSheet sheet). The SideSheet side-card `box-shadow: none` is a different element, in the foreign-dom residual. No `shadow kept residual` lines.

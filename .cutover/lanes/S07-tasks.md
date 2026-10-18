@@ -168,6 +168,12 @@ none (no source `!important`)
 ## shadcn variant (delta N)
 none
 
+## Delta R
+R2 fixed: TaskRelations.svelte (ref-open button: border-none border-current)
+R2 fixed: TaskTable.svelte (cells under max-phone: max-phone:border-none max-phone:border-current)
+R3 fixed: TaskNeeds.svelte, TaskPane.svelte, TaskRelations.svelte (2 sites), TodoList.svelte: font-(family-name:--font-mono) on spans; TaskNeeds args pre keeps font-mono (pre)
+R1: TaskTable.svelte ledger shadow-tile is the only box-shadow, a utility, no states; no residual shadow.
+
 ## Contracts
 contract: apps/dashboard/src/lib/cawco/tasks/TaskNeeds.svelte:214 shadcn/no-restyle | apps/dashboard/src/lib/cawco/tasks/TaskNeeds.svelte kit component (see no-restyle list above) | the kit component needs a variant or a parent wrapper for this treatment
 contract: apps/dashboard/src/lib/cawco/tasks/TaskNeeds.svelte:226 shadcn/no-restyle | apps/dashboard/src/lib/cawco/tasks/TaskNeeds.svelte kit component (see no-restyle list above) | the kit component needs a variant or a parent wrapper for this treatment

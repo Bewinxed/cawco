@@ -100,3 +100,41 @@ contract: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:125 shadcn/no-unkn
 contract: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:136 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte (residual `.ns-chip-btn.tool`) | `tool` modifier
 contract: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:163 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte (residual `.ns-chip-btn.tool`) | `tool` modifier
 contract: apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte:188 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte (residual `.ns-chip-btn.tool`) | `tool` modifier
+
+## Delta R
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/AccountChip.svelte:105
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/AccountChip.svelte:125
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/EffortPips.svelte:167
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/LifetimeChip.svelte:80
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:234
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:256
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:329
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:344
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:364
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:402
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:496
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/MachinesChip.svelte:120
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/MachinesChip.svelte:165
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:381
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:407
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/PermissionSection.svelte:79
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:143
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:166
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:223
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:261
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/Segmented.svelte:75
+R2 fixed: apps/dashboard/src/lib/cawco/spawn/TriggerMenu.svelte:49
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/LocationChip.svelte:85
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:234
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:319
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:364
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:402
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:442
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:496
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/LocationSection.svelte:523
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:494
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:601
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:612
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/ModelSection.svelte:619
+R3 fixed: apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte:166
+R1: no element mixes a residual and a utility box-shadow; the residual box-shadows (EffortPips knob, LocationSection browse) are single-state, with no utility shadow on those elements.

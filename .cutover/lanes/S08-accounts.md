@@ -56,3 +56,9 @@ none (none of the eight carried variants used).
 
 ## Contracts
 contract: apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte:72 shadcn/no-unknown-classes | NsPopover.svelte's trigger (S13) and workspace/SessionDetails.svelte | NsPopover's trigger needs a hook so tool and account-chip become a data-slot or attribute
+
+## Delta R
+R2 fixed: apps/dashboard/src/lib/cawco/accounts/AccountSetup.svelte:593
+R2 fixed: apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte:92
+R1: the only shadow-tile sites (AccountSetup.svelte:610, :655) have one state and no residual box-shadow, so nothing is kept residual.
+R3: no `var(--font-mono)` in this lane.

@@ -161,3 +161,10 @@ none. (`shadcn/no-restyle` is off in the lane ESLint check; its hits are listed 
 
 ## Important kept
 none (no `!important` in the sources).
+
+## Delta R
+R2 fixed: apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte:741
+R2 fixed: apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte:816
+R3 fixed: apps/dashboard/src/lib/cawco/views/ViewMade.svelte:72
+R1: no shadow state mixes a residual with a utility (ViewMade's rest and open states, ViewCanvas, ViewTable are all utilities). Nothing kept residual.
+The `border-0` left on `Table.Row class="band border-0"` (ViewRoutines.svelte:925, :979; ViewTable.svelte:63) is the sources' own class string, width only, not a `border: 0` shorthand.

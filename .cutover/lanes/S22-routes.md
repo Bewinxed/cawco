@@ -49,3 +49,8 @@ none.
 
 ## shadcn variant lines
 none.
+
+R2 fixed: apps/dashboard/src/routes/(app)/config/connections/+page.svelte:536
+R2 fixed: apps/dashboard/src/routes/(app)/config/connections/+page.svelte:591
+R2 fixed: apps/dashboard/src/routes/(app)/config/connections/+page.svelte:632
+R3: font-mono stays on <code> only (previews); no shadow state mixes.
