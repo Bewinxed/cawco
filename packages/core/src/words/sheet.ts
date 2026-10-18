@@ -1,6 +1,7 @@
 /**
  * What a sheet's pane says of its stage (live components, core stage.ts):
- * the project's own Vite, which the daemon runs in the workspace. The
+ * the project's own dev toolchain (Vite, Astro or Nuxt), which the daemon
+ * runs in the workspace. The
  * dashboard's preview pane and the app's preview read these; `bun run words`
  * writes them into the app as `Words.Sheet` (CawCoCore/Words.generated.swift).
  */
@@ -18,9 +19,11 @@ export const sheetWords = {
     `${more > 0 ? `${more} more besides. ` : ""}The session is told; the sheet redraws once it compiles.`,
   /** Where the page would be, when the stage did not start or failed its restarts. */
   downTitle: (dir: string) => `The stage for ${dir} didn't start`,
-  /** The line under it: the stage's own reason, or this when it gave none. */
-  downLine: (message: string | null) =>
-    `${message ?? "Vite ended before it served the sheet."} Try again starts it again.`,
+  /** Each dev toolchain a sheet's stage runs (core stage.ts `StageToolchain`), by its own name. */
+  toolchains: { vite: "Vite", astro: "Astro", nuxt: "Nuxt" },
+  /** The line under it: the stage's own reason, or, when it gave none, that its toolchain (its name in `toolchains`) ended. */
+  downLine: (message: string | null, toolchain: string) =>
+    `${message ?? `${toolchain} ended before it served the sheet.`} Try again starts it again.`,
   /** A workspace preview's server (`serve`), run the same way: the cover's line while it starts. */
   serverStarting: "Starting the server…",
   /** Where its page would be, when the server did not start or stopped. */

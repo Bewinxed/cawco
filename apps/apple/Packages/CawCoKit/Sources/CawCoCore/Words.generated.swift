@@ -1084,9 +1084,21 @@ public enum Words {
             "The stage for \(dir) didn't start"
         }
 
-        /// The line under it: the stage's own reason, or this when it gave none.
-        public static func downLine(message: String?) -> String {
-            "\(message ?? "Vite ended before it served the sheet.") Try again starts it again."
+        /// Each dev toolchain a sheet's stage runs (core stage.ts `StageToolchain`), by its own name.
+        public enum Toolchains {
+            public static let vite = "Vite"
+
+            public static let astro = "Astro"
+
+            public static let nuxt = "Nuxt"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["vite": vite, "astro": astro, "nuxt": nuxt]
+        }
+
+        /// The line under it: the stage's own reason, or, when it gave none, that its toolchain (its name in `toolchains`) ended.
+        public static func downLine(message: String?, toolchain: String) -> String {
+            "\(message ?? "\(toolchain) ended before it served the sheet.") Try again starts it again."
         }
 
         /// A workspace preview's server (`serve`), run the same way: the cover's line while it starts.

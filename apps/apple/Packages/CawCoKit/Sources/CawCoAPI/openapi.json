@@ -33445,8 +33445,15 @@
             "description": "A sheet as its stage reads it: its stories with their args, its meta, and each component's props."
           },
           "stage": {
-            "$ref": "#/components/schemas/StageState",
-            "description": "A sheet's stage, or a served preview's server, as it stands once started."
+            "description": "A sheet's stage, or a served preview's server, as it stands once started.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SheetStageState"
+              },
+              {
+                "$ref": "#/components/schemas/ServerStageState"
+              }
+            ]
           },
           "tailnet": {
             "$ref": "#/components/schemas/TailnetOrigin",
@@ -33689,15 +33696,24 @@
           "name"
         ]
       },
-      "StageState": {
-        "description": "A stage as the hub keeps it in each of its sheets' docs (`meta.stage`):\nwhere it is, the toolchain root it runs (from the clone's root), why it failed\nwhen it did, and the compile errors standing now.",
+      "SheetStageState": {
+        "description": "A sheet's stage: the project's own dev toolchain on its toolchain root.",
         "type": "object",
         "properties": {
+          "runs": {
+            "type": "string",
+            "enum": [
+              "sheet"
+            ]
+          },
+          "toolchain": {
+            "$ref": "#/components/schemas/StageToolchain"
+          },
           "at": {
             "type": "string"
           },
           "dir": {
-            "description": "The toolchain root, from the clone's root (\".\" for the root itself).",
+            "description": "Where it runs from the clone's root (\".\" for the root itself): a sheet's toolchain root, a server's `cwd`.",
             "type": "string"
           },
           "errors": {
@@ -33718,7 +33734,18 @@
           "at",
           "dir",
           "errors",
-          "status"
+          "runs",
+          "status",
+          "toolchain"
+        ]
+      },
+      "StageToolchain": {
+        "description": "The dev toolchains a stage runs (spec §2): the project's own Vite, or\nAstro's or Nuxt's, each started by its programmatic API with the stage's\nplugins added.",
+        "type": "string",
+        "enum": [
+          "astro",
+          "nuxt",
+          "vite"
         ]
       },
       "StageError": {
@@ -33775,6 +33802,45 @@
           "live",
           "starting",
           "waking"
+        ]
+      },
+      "ServerStageState": {
+        "description": "A workspace preview's server: the command its preview names (`serve`).",
+        "type": "object",
+        "properties": {
+          "runs": {
+            "type": "string",
+            "enum": [
+              "serve"
+            ]
+          },
+          "at": {
+            "type": "string"
+          },
+          "dir": {
+            "description": "Where it runs from the clone's root (\".\" for the root itself): a sheet's toolchain root, a server's `cwd`.",
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageError"
+            }
+          },
+          "message": {
+            "description": "Why it is in `error`, one sentence; none otherwise.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StageStatus"
+          }
+        },
+        "required": [
+          "at",
+          "dir",
+          "errors",
+          "runs",
+          "status"
         ]
       },
       "FolderWeight": {
@@ -34010,8 +34076,15 @@
             "description": "A sheet as its stage reads it: its stories with their args, its meta, and each component's props."
           },
           "stage": {
-            "$ref": "#/components/schemas/StageState",
-            "description": "A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. A served preview's: its server's status, and why it is in `error`."
+            "description": "A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. A served preview's: its server's status, and why it is in `error`.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SheetStageState"
+              },
+              {
+                "$ref": "#/components/schemas/ServerStageState"
+              }
+            ]
           },
           "state": {
             "type": "object",
@@ -48253,8 +48326,15 @@
             ]
           },
           "stage": {
-            "$ref": "#/components/schemas/StageState",
-            "description": "A sheet's stage, or a workspace preview's server (`serve`), as its doc\nkeeps it (`meta.stage`), the frame published\nagain at the same revision on each change: for a panel that holds no doc\nof its own (the app's), as the dashboard's pane reads it from the doc."
+            "description": "A sheet's stage, or a workspace preview's server (`serve`), as its doc\nkeeps it (`meta.stage`), the frame published\nagain at the same revision on each change: for a panel that holds no doc\nof its own (the app's), as the dashboard's pane reads it from the doc.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SheetStageState"
+              },
+              {
+                "$ref": "#/components/schemas/ServerStageState"
+              }
+            ]
           },
           "state": {
             "$ref": "#/components/schemas/PreviewFrameState"
@@ -50270,6 +50350,17 @@
           "port",
           "state",
           "workspace"
+        ]
+      },
+      "StageState": {
+        "description": "A stage as the hub keeps it in each of its artifacts' docs (`meta.stage`),\nas the daemon states it: a sheet's, with the toolchain it runs, or a\nworkspace preview's server's.",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/SheetStageState"
+          },
+          {
+            "$ref": "#/components/schemas/ServerStageState"
+          }
         ]
       },
       "StageCloneFrame": {

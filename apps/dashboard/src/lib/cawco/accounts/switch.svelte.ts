@@ -6,7 +6,7 @@
  * new account, the row's dot shows the account it is moving to and the menu
  * says so.
  */
-import { type Account, type AccountProvider, providerOf } from "@cawco/core";
+import type { Account, AccountProvider } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { cawco, type InstanceRow, moveInstanceAccount } from "../client.svelte";
@@ -16,15 +16,15 @@ import { accountsOf, nameOf, signinState } from "./model.svelte";
 /** Session id → the account it is moving to. */
 const moving = new SvelteMap<string, string>();
 
-/** The provider a session bills: its account's, else its model's. */
-function providerOfSession(instance: InstanceRow): AccountProvider | undefined {
-  const own = cawco.accounts?.accounts.find(
-    (one) => one.id === instance.accountId
-  );
-  return (
-    own?.provider ?? providerOf(instance.harness ?? "claude", instance.model)
-  );
-}
+/**
+ * The provider a session bills: its account's, as the hub keeps it. A session
+ * with no account on record bills none the hub knows, so it is offered no move.
+ */
+const providerOfSession = (
+  instance: InstanceRow
+): AccountProvider | undefined =>
+  cawco.accounts?.accounts.find((one) => one.id === instance.accountId)
+    ?.provider;
 
 /**
  * The accounts a session can run on, in fill-first order: its provider's,

@@ -30,6 +30,7 @@
     "./file-hash": "./src/file-hash.ts",
     "./binary-installation": "./src/binary-installation.ts",
     "./keepers": "./src/keepers.ts",
+    "./launchd": "./src/launchd.ts",
     "./handover": "./src/handover.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",

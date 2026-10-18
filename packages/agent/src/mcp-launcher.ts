@@ -1,6 +1,3 @@
-import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
-import { platform } from "node:os";
-import { basename, delimiter, dirname, join, resolve } from "node:path";
 import type { FleetMcpConfig } from "@cawco/core";
 import { chromiumExecutable } from "./browser/local-host";
 import { resolveBin, toolPath } from "./tools";
@@ -8,100 +5,29 @@ import { resolveBin, toolPath } from "./tools";
 type McpLauncher =
   { config: FleetMcpConfig } | { failure: string } | { unavailable: string };
 
-const WINDOWS_SHIM = /\.(cmd|bat)$/i;
-
-/** Resolve ordinary runners once, before any harness writes its config. */
-const resolveCommandLauncher = (
-  config: Extract<FleetMcpConfig, { command: string }>
-): McpLauncher => {
+/**
+ * A fleet MCP's command, `npx` among them, as this machine's PATH resolves it
+ * (tools.ts `toolPath`), once, before any harness writes its config. The
+ * server runs on that same PATH, so what its command runs in turn (npx's
+ * `node`) resolves there too.
+ */
+export const resolveMcpLauncher = (config: FleetMcpConfig): McpLauncher => {
+  if ("url" in config) {
+    return { config };
+  }
   const resolved = resolveBin(config.command);
   if (!resolved) {
     return {
       unavailable: `Command '${config.command}' is not installed on this machine. It will be enabled on the next sync after installation.`,
     };
   }
-  if (platform() === "win32" && WINDOWS_SHIM.test(resolved)) {
-    const cmd = resolveBin("cmd");
-    if (!cmd) {
-      return {
-        unavailable: "Command 'cmd' is not installed on this machine.",
-      };
-    }
-    return {
-      config: {
-        ...config,
-        command: cmd,
-        args: ["/c", resolved, ...(config.args ?? [])],
-      },
-    };
-  }
-  return { config: { ...config, command: resolved } };
-};
-
-/** npx belongs to the Node installation, never a same-named PATH shim. */
-export const resolveMcpLauncher = (config: FleetMcpConfig): McpLauncher => {
-  if ("url" in config) {
-    return { config };
-  }
-  if (!["npx", "npx.cmd"].includes(basename(config.command))) {
-    return resolveCommandLauncher(config);
-  }
-  const node = resolveBin("node");
-  const failure = {
-    failure: `npm's npx is missing or invalid beside this machine's Node (${node ?? "not installed"}). Install npm with that Node; non-npm npx shims cannot run fleet MCP servers.`,
+  return {
+    config: {
+      ...config,
+      command: resolved,
+      env: { ...config.env, PATH: config.env?.PATH ?? toolPath() },
+    },
   };
-  if (!node) {
-    return {
-      unavailable:
-        "Node/npm is not installed on this machine. Waiting for installation before enabling this npx server on the next sync.",
-    };
-  }
-  const nodeDir = dirname(node);
-  const windows = platform() === "win32";
-  const npx = join(nodeDir, windows ? "npx.cmd" : "npx");
-  if (!resolveBin(npx)) {
-    return {
-      unavailable:
-        "npm's npx is not installed beside this machine's Node. Waiting for npm installation before enabling this server on the next sync.",
-    };
-  }
-  try {
-    accessSync(npx, constants.X_OK);
-    const cli = windows
-      ? join(nodeDir, "node_modules", "npm", "bin", "npx-cli.js")
-      : realpathSync(npx);
-    const npmDir = dirname(dirname(cli));
-    const npm = JSON.parse(
-      readFileSync(join(npmDir, "package.json"), "utf8")
-    ) as {
-      name?: string;
-      bin?: { npx?: string };
-    };
-    if (
-      npm.name !== "npm" ||
-      !npm.bin?.npx ||
-      realpathSync(resolve(npmDir, npm.bin.npx)) !== realpathSync(cli) ||
-      (windows &&
-        !readFileSync(npx, "utf8").includes(
-          "node_modules\\npm\\bin\\npx-cli.js"
-        ))
-    ) {
-      return failure;
-    }
-    return {
-      config: {
-        ...config,
-        command: windows ? "cmd" : npx,
-        args: windows ? ["/c", npx, ...(config.args ?? [])] : config.args,
-        env: {
-          ...config.env,
-          PATH: [nodeDir, config.env?.PATH ?? toolPath()].join(delimiter),
-        },
-      },
-    };
-  } catch {
-    return failure;
-  }
 };
 
 export const prepareFleetMcp = async (

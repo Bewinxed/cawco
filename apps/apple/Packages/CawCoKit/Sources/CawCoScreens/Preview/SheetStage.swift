@@ -3,7 +3,8 @@ import CawCoDesign
 import UIKit
 
 /// What the pane shows of a stage (PreviewPane.svelte `staged`,
-/// `stageWaiting`, `compileErrors`): a sheet's, the project's own Vite, or a
+/// `stageWaiting`, `compileErrors`): a sheet's, the project's own dev
+/// toolchain (Vite, Astro or Nuxt), or a
 /// workspace preview's server (`serve`), each run by the daemon in its
 /// workspace. Starting, waking and a sheet's page compiling stand on the
 /// loading cover; compile errors on a card over the last render, dimmed; a
@@ -26,21 +27,31 @@ struct SheetStageShown: Equatable {
     /// has not) said it is ready; `served`, the port of a workspace preview's
     /// server, nil for a sheet's stage.
     init(_ stage: StageState?, connected: Bool, served: Int?) {
-        guard let stage else { return }
-        switch stage.status {
-        case .starting: waiting = served == nil ? Words.Sheet.starting(dir: stage.dir) : Words.Sheet.serverStarting
-        case .waking, .asleep: waiting = Words.Sheet.waking
-        case .live:
-            waiting = connected || served != nil ? nil : Words.Sheet.compiling
-            error = stage.errors.first
-            more = max(0, stage.errors.count - 1)
-        case .error:
-            down = if let served {
-                Down(title: Words.Sheet.serverDownTitle(port: served), line: Words.Sheet.serverDownLine(message: stage.message))
-            } else {
-                Down(title: Words.Sheet.downTitle(dir: stage.dir), line: Words.Sheet.downLine(message: stage.message))
+        if let sheet = stage?.value1 {
+            switch sheet.status {
+            case .starting: waiting = Words.Sheet.starting(dir: sheet.dir)
+            case .waking, .asleep: waiting = Words.Sheet.waking
+            case .live:
+                waiting = connected ? nil : Words.Sheet.compiling
+                error = sheet.errors.first
+                more = max(0, sheet.errors.count - 1)
+            case .error:
+                let toolchain = Words.Sheet.Toolchains.byKey[sheet.toolchain.rawValue] ?? sheet.toolchain.rawValue
+                down = Down(title: Words.Sheet.downTitle(dir: sheet.dir),
+                            line: Words.Sheet.downLine(message: sheet.message, toolchain: toolchain))
+            case .unrecognized: break
             }
-        case .unrecognized: break
+        } else if let server = stage?.value2, let served {
+            switch server.status {
+            case .starting: waiting = Words.Sheet.serverStarting
+            case .waking, .asleep: waiting = Words.Sheet.waking
+            case .live:
+                error = server.errors.first
+                more = max(0, server.errors.count - 1)
+            case .error:
+                down = Down(title: Words.Sheet.serverDownTitle(port: served), line: Words.Sheet.serverDownLine(message: server.message))
+            case .unrecognized: break
+            }
         }
     }
 

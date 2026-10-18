@@ -15,6 +15,7 @@ import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type KeeperName, keeperService } from "@cawco/core/keepers";
+import { launchdEnded, launchdJob, launchdJobs } from "@cawco/core/launchd";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   isAlive,
@@ -74,37 +75,6 @@ const systemdDir = (): string =>
 const launchAgentsDir = (): string =>
   join(homedir(), "Library", "LaunchAgents");
 
-const LAUNCHD_PID = /^\s*pid = (\d+)$/m;
-const LAUNCHD_LAST_EXIT = /^\s*last exit code = (-?\d+)/m;
-const LAUNCHD_LAST_SIGNAL = /^\s*last terminating signal = (.+)$/m;
-
-/**
- * What launchd says of the job `label` in this user's GUI domain: its process
- * while one runs, and once none does, how the last one ended (none when it
- * never ran). Undefined when launchd has no such job loaded.
- */
-export async function launchdState(
-  label: string
-): Promise<{ ended?: string; pid?: number } | undefined> {
-  const ran = await run([
-    "launchctl",
-    "print",
-    `gui/${process.getuid?.() ?? 0}/${label}`,
-  ]);
-  if (ran.code !== 0) {
-    return;
-  }
-  const pid = LAUNCHD_PID.exec(ran.stdout)?.[1];
-  if (pid) {
-    return { pid: Number(pid) };
-  }
-  const code = LAUNCHD_LAST_EXIT.exec(ran.stdout)?.[1];
-  const signal = LAUNCHD_LAST_SIGNAL.exec(ran.stdout)?.[1];
-  if (signal !== undefined) {
-    return { ended: `it was ended by ${signal.trim()}` };
-  }
-  return code === undefined ? {} : { ended: `it exited with code ${code}` };
-}
 /** A keeper's unit and its launchd label, and the service name each carries (core keepers.ts `keeperService`). */
 const KEEPER_UNIT = /^cawco-(sessiond(?:-.+)?)\.service$/;
 const KEEPER_PLIST = /^dev\.cawco\.(sessiond(?:-.+)?)\.plist$/;
@@ -227,13 +197,13 @@ const systemdJob = (service: string): KeeperJob => {
   };
 };
 
-const launchdJob = (service: string): KeeperJob => {
+const launchdKeeperJob = (service: string): KeeperJob => {
   const label = `dev.cawco.${service}`;
   const domain = `gui/${process.getuid?.() ?? 0}`;
   const target = `${domain}/${label}`;
   const plist = join(launchAgentsDir(), `${label}.plist`);
   const pid = async (): Promise<Pid | undefined> => {
-    const shown = (await launchdState(label))?.pid;
+    const shown = (await launchdJob(label))?.pid;
     return shown === undefined ? undefined : listedPid(shown);
   };
   return {
@@ -241,11 +211,14 @@ const launchdJob = (service: string): KeeperJob => {
     file: plist,
     service,
     pid,
-    // Loaded, with no process, and an exit code since it last ran: it ended
-    // by itself (KeepAlive starts it again only after launchd's throttle).
-    exited: async () => (await launchdState(label))?.ended,
+    // Loaded, with no process, and a failing status since it last ran: it
+    // ended by itself (KeepAlive starts it again only after launchd's throttle).
+    exited: async () => {
+      const state = await launchdJob(label);
+      return state && launchdEnded(state);
+    },
     async start() {
-      const state = await launchdState(label);
+      const state = await launchdJob(label);
       if (state === undefined) {
         await must(["launchctl", "bootstrap", domain, plist]);
         return;
@@ -301,7 +274,7 @@ const gone = async (target: Pid): Promise<void> => {
 /** The job of the keeper with this service name; none where there is no service manager CawCo installs into. */
 const jobOf = (service: string): KeeperJob | undefined => {
   if (process.platform === "darwin") {
-    return launchdJob(service);
+    return launchdKeeperJob(service);
   }
   if (process.platform === "linux") {
     return systemdJob(service);
@@ -335,11 +308,7 @@ export async function keeperJobsHere(): Promise<KeeperJob[]> {
     (await readdir(launchAgentsDir()).catch(() => [] as string[])).forEach(
       add(KEEPER_PLIST)
     );
-    // `launchctl list`: one job a line, PID, status and label, tab-separated.
-    const listed = await run(["launchctl", "list"]);
-    for (const line of listed.stdout.split("\n")) {
-      add(KEEPER_LABEL)(line.split("\t")[2]?.trim() ?? "");
-    }
+    [...(await launchdJobs()).keys()].forEach(add(KEEPER_LABEL));
   }
   return [...services].flatMap((service) => jobOf(service) ?? []);
 }

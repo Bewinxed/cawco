@@ -23,7 +23,7 @@
     "dev:hub": "bun run --filter '@cawco/hub' dev",
     "hub": "bun run --filter '@cawco/hub' dev",
     "lint": "bun scripts/case-clash-check.ts && bun scripts/css-scope-check.ts && bun apps/dashboard/scripts/mark-line-check.ts && bun apps/dashboard/scripts/lib-import-check.ts && bun scripts/fmt.ts --check && ultracite check",
-    "lint:changed": "bun scripts/case-clash-check.ts && bun scripts/css-scope-check.ts && bun apps/dashboard/scripts/mark-line-check.ts && bun apps/dashboard/scripts/lib-import-check.ts && bun scripts/fmt.ts --check --changed && git diff --name-only --diff-filter=ACMR \"$(git merge-base HEAD origin/main)\" | xargs -r biome check --no-errors-on-unmatched",
+    "lint:changed": "bun scripts/case-clash-check.ts && bun scripts/css-scope-check.ts && bun apps/dashboard/scripts/mark-line-check.ts && bun apps/dashboard/scripts/lib-import-check.ts && bun scripts/fmt.ts --check --changed && { git diff --name-only --diff-filter=ACMR \"$(git merge-base HEAD origin/main)\"; git ls-files --others --exclude-standard; } | sort -u | xargs -r biome check --no-errors-on-unmatched",
     "lint:fix": "ultracite fix && bun scripts/fmt.ts",
     "machine-paths:check": "bun scripts/machine-paths-check.ts",
     "mark-line:check": "bun apps/dashboard/scripts/mark-line-check.ts",

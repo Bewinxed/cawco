@@ -142,6 +142,7 @@ typeOverrides:
     StageHooksBy: OpenEnums.StageHooksBy
     StageKind: OpenEnums.StageKind
     StageStatus: OpenEnums.StageStatus
+    StageToolchain: OpenEnums.StageToolchain
     StagesTemplate: OpenEnums.StagesTemplate
     StagesViewSource: OpenEnums.StagesViewSource
     StarterGlyph: OpenEnums.StarterGlyph

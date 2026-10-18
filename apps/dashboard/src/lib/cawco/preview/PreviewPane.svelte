@@ -780,7 +780,8 @@
       )
   );
   /*
-   * A sheet's stage (live components): the project's own Vite, which the
+   * A sheet's stage (live components): the project's own dev toolchain
+   * (Vite, Astro or Nuxt), which the
    * daemon runs in its workspace; or a workspace preview's server, the
    * command it names (`serve`), run the same way. Its state is in the doc:
    * starting, waking (from sleep) and a sheet's page compiling stand on the
@@ -848,7 +849,7 @@
   const inspecting = $derived(!!inspector && inspectOpen);
   /** A right panel beside the page on a desk and a tablet; on a phone, where the pane is the sheet over the conversation, a sheet over the page's foot (the spec's §5). */
   const inspectorLayout = $derived(sheet ? "sheet" : "panel");
-  /** A compile error's place, `file:line:column` as far as Vite's payload names it. */
+  /** A compile error's place, `file:line:column` as far as the toolchain's Vite payload names it (Astro and Nuxt run Vite inside). */
   const errorPlace = (error: {
     column: number | null;
     file: string;
@@ -1922,7 +1923,7 @@
         class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
       ></span>
       {#if stageWaiting}
-        <!-- A sheet's stage on its way: the project's own Vite, started or woken by the daemon. -->
+        <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
         <p class="cover-state">{stageWaiting}</p>
       {/if}
     </div>
@@ -1959,9 +1960,12 @@
           : sheetWords.downTitle(staged.dir)}
       >
         {#snippet line()}
-          {served
-            ? sheetWords.serverDownLine(staged.message ?? null)
-            : sheetWords.downLine(staged.message ?? null)}
+          {staged.runs === "sheet"
+            ? sheetWords.downLine(
+                staged.message ?? null,
+                sheetWords.toolchains[staged.toolchain]
+              )
+            : sheetWords.serverDownLine(staged.message ?? null)}
         {/snippet}
         {#snippet action()}
           <Button

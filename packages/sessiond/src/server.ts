@@ -69,7 +69,7 @@ import {
 } from "./cgroup";
 import { paceList } from "./list-pace";
 import { type Listed, processTable } from "./table";
-import { capChildTasks, START_ROOM, TASK_RESERVE, taskHeadroom } from "./tasks";
+import { capChildTasks, START_ROOM, spawnRefusal, TASK_RESERVE } from "./tasks";
 
 /**
  * Byte ceiling per child's replay window — our choice, design §6: lines are
@@ -679,13 +679,9 @@ export class SessiondServer {
         "spawn: procId and spec.command required"
       );
     }
-    const room = await taskHeadroom();
-    if (room && room.free < TASK_RESERVE + START_ROOM) {
-      return ack(
-        commandId,
-        "failed",
-        `${SESSIOND_PROCESS_LIMIT}: ${room.what}; a child starts with ${START_ROOM} free above the ${TASK_RESERVE} kept for the keeper`
-      );
+    const refused = await spawnRefusal();
+    if (refused) {
+      return ack(commandId, "failed", refused);
     }
     const existing = this.#procs.get(procId);
     // A spawn for a live procId is the agent's deliberate relaunch (the

@@ -9,8 +9,8 @@
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { binaryRoot, helperIsLive } from "@cawco/core/binary-installation";
+import { launchdEnded, launchdJob, launchdJobs } from "@cawco/core/launchd";
 import { writeStateFile } from "@cawco/core/state-file";
-import { launchdState } from "./keeper-jobs";
 
 /** How long a launched helper has to take its lock; one that holds none after it has gone. */
 export const HELPER_START_MS = 10_000;
@@ -115,14 +115,16 @@ export async function helperJobSays(job: HelperJob): Promise<string> {
   if (!job.label) {
     return "it ended";
   }
-  const state = await launchdState(job.label);
+  const state = await launchdJob(job.label);
   if (state === undefined) {
     return "launchd has no such job loaded";
   }
   if (state.pid !== undefined) {
     return `its process ${state.pid} still runs`;
   }
-  return state.ended ?? "launchd never ran it";
+  return (
+    launchdEnded(state) ?? "it ended with status 0, or launchd never ran it"
+  );
 }
 
 /**
@@ -139,6 +141,7 @@ export async function removeFinishedHelpers(): Promise<void> {
   if (process.platform !== "darwin" || (await helperIsLive())) {
     return;
   }
+  const jobs = await launchdJobs();
   const files = (await readdir(binaryRoot())).filter(
     (name) => name.startsWith(PLIST_PREFIX) && name.endsWith(".plist")
   );
@@ -153,7 +156,7 @@ export async function removeFinishedHelpers(): Promise<void> {
       if (
         written === undefined ||
         Date.now() - written < HELPER_START_MS ||
-        (await launchdState(label))?.pid !== undefined
+        jobs.get(label)?.pid !== undefined
       ) {
         return;
       }

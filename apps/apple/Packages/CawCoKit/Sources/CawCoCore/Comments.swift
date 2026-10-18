@@ -131,8 +131,10 @@ public enum ShownFailure: String, Sendable {
     case server, machine, workspace, reach, closed, page
 }
 
-/// A sheet's stage as the hub keeps it in the sheet's doc (core stage.ts `StageState`).
-public typealias StageState = Components.Schemas.StageState
+/// A stage as its frame states it (core stage.ts `StageState`): a sheet's,
+/// with the toolchain it runs (`value1`), or a workspace preview's server's
+/// (`value2`).
+public typealias StageState = Components.Schemas.PreviewFrame.StagePayload
 public typealias StageError = Components.Schemas.StageError
 
 public extension HubConnection {

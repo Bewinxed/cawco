@@ -13,6 +13,7 @@ import {
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
+import { launchdJob } from "@cawco/core/launchd";
 import { hubDbPath } from "@cawco/core/paths";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -1390,38 +1391,23 @@ const failed = (
 const guiDomain = (): string => `gui/${process.getuid?.() ?? 0}`;
 
 /**
- * `bootstrap` and `kickstart` replaced `load` in the launchd rewrite, and `load`
- * is still there as a deprecated alias on the systems that have both — so which
- * one exists is asked rather than assumed from the OS version.
- */
-const launchctlHas = async (subcommand: string): Promise<boolean> => {
-  // `launchctl help` writes its subcommand list to stderr on some releases.
-  const help = await run(["launchctl", "help"]);
-  return `${help.stdout.toString()}${help.stderr.toString()}`.includes(
-    subcommand
-  );
-};
-
-const hasBootstrap = (): Promise<boolean> => launchctlHas("bootstrap");
-
-/**
  * A service definition someone else can rewrite is a service someone else can
  * run as you, so it is written owner-only, whole.
  */
 const writeUnit = (path: string, contents: string): Promise<void> =>
   writeStateFile(path, contents, { mode: 0o600 });
 
-/**
- * Puts whatever the plist now says in front of launchd, replacing whatever it
- * was running under that label — which is both what an install over a running
- * service means and what a restart means on a launchctl too old for `kickstart`.
- */
 /** How long a booted-out LaunchAgent gets to finish exiting. */
 const BOOTOUT_WAIT_MS = 60_000;
 
+/**
+ * Puts whatever the plist now says in front of launchd with `bootstrap`,
+ * replacing whatever it was running under that label: what an install over a
+ * running service means. `bootstrap`, `bootout` and `kickstart` are launchctl's
+ * interface; a launchctl without them refuses in its own words.
+ */
 const loadLaunchAgent = async (
   spec: ServiceSpec,
-  bootstrap: boolean,
   note: (line: string) => void
 ): Promise<void> => {
   const path = launchAgentPath(spec.name);
@@ -1443,24 +1429,11 @@ const loadLaunchAgent = async (
     await Bun.sleep(250);
   }
 
-  if (bootstrap) {
-    const bootstrapped = await run([
-      "launchctl",
-      "bootstrap",
-      guiDomain(),
-      path,
-    ]);
-    if (bootstrapped.exitCode !== 0) {
-      throw failed("launchctl bootstrap", bootstrapped);
-    }
-    note(`bootstrapped into ${guiDomain()}`);
-  } else {
-    const loaded = await run(["launchctl", "load", "-w", path]);
-    if (loaded.exitCode !== 0) {
-      throw failed("launchctl load", loaded);
-    }
-    note("loaded (legacy launchctl)");
+  const bootstrapped = await run(["launchctl", "bootstrap", guiDomain(), path]);
+  if (bootstrapped.exitCode !== 0) {
+    throw failed("launchctl bootstrap", bootstrapped);
   }
+  note(`bootstrapped into ${guiDomain()}`);
 };
 
 /**
@@ -1472,7 +1445,6 @@ export const installLaunchAgents = async (
   specs: ServiceSpec[],
   note: (line: string) => void
 ): Promise<void> => {
-  const bootstrap = await hasBootstrap();
   // launchd opens stdout/stderr before any process can create its log folder.
   await mkdir(dirname(launchAgentLog("hub")), { recursive: true });
 
@@ -1501,7 +1473,7 @@ export const installLaunchAgents = async (
     await writeUnit(path, text);
     note(`wrote ${path}`);
 
-    await loadLaunchAgent(spec, bootstrap, note);
+    await loadLaunchAgent(spec, note);
 
     note(`logs ${launchAgentLog(spec.name)}`);
     if (spec.launchAgentNote) {
@@ -1517,15 +1489,10 @@ const uninstallLaunchAgents = async (
   specs: ServiceSpec[],
   note: (line: string) => void
 ): Promise<void> => {
-  const bootstrap = await hasBootstrap();
   for (const spec of specs) {
     const path = launchAgentPath(spec.name);
-    if (bootstrap) {
-      // biome-ignore lint/performance/noAwaitInLoops: services uninstall one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
-      await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.name)}`]);
-    } else {
-      await run(["launchctl", "unload", "-w", path]);
-    }
+    // biome-ignore lint/performance/noAwaitInLoops: services uninstall one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
+    await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.name)}`]);
     await Bun.file(path)
       .delete()
       .catch(() => {
@@ -2046,18 +2013,14 @@ const restartLaunchAgent = async (
       `${spec.id} is not installed — \`cawco service install ${spec.id}\` first.`
     );
   }
-  if (await launchctlHas("kickstart")) {
-    const kicked = await run([
-      "launchctl",
-      "kickstart",
-      "-k",
-      `${guiDomain()}/${label(spec.name)}`,
-    ]);
-    if (kicked.exitCode !== 0) {
-      throw failed("launchctl kickstart -k", kicked);
-    }
-  } else {
-    await loadLaunchAgent(spec, await hasBootstrap(), note);
+  const kicked = await run([
+    "launchctl",
+    "kickstart",
+    "-k",
+    `${guiDomain()}/${label(spec.name)}`,
+  ]);
+  if (kicked.exitCode !== 0) {
+    throw failed("launchctl kickstart -k", kicked);
   }
   note(`restarted ${label(spec.name)}`);
 };
@@ -2119,23 +2082,20 @@ const modeLine = async (spec: ServiceSpec, path: string): Promise<string> => {
   return watches(spec.id) ? "dev (watching)" : "dev (never watched)";
 };
 
-const LAUNCHCTL_PID = /"PID"\s*=\s*(\d+)/;
-
 const launchAgentStatus = async (
   spec: ServiceSpec,
   note: (line: string) => void
 ): Promise<void> => {
-  const listed = await run(["launchctl", "list", label(spec.name)]);
-  const pid = LAUNCHCTL_PID.exec(listed.stdout.toString())?.[1];
+  const job = await launchdJob(label(spec.name));
   note(`service  ${spec.id} (${label(spec.name)})`);
   note(`unit     ${launchAgentPath(spec.name)}`);
   let state: string;
-  if (listed.exitCode !== 0) {
+  if (job === undefined) {
     state = "not loaded";
-  } else if (pid) {
-    state = `running (pid ${pid})`;
-  } else {
+  } else if (job.pid === undefined) {
     state = "loaded, not running";
+  } else {
+    state = `running (pid ${job.pid})`;
   }
   note(`state    ${state}`);
   note(`mode     ${await modeLine(spec, launchAgentPath(spec.name))}`);
@@ -2487,7 +2447,6 @@ export const refreshServices = async (
   const local = hub
     ? recordedEnvironment(hub, mac)[CAWCO_ENV.localDashboardPort]
     : undefined;
-  const bootstrap = mac ? await hasBootstrap() : false;
   let reload = false;
   let rebind: { moving: SocketSpec[]; spec: ServiceSpec } | undefined;
   for (const [id, before] of installed) {
@@ -2502,7 +2461,7 @@ export const refreshServices = async (
       await writeUnit(path, text);
       note(`rewrote ${path}`);
       if (mac) {
-        await loadLaunchAgent(spec, bootstrap, note);
+        await loadLaunchAgent(spec, note);
       } else {
         reload = true;
       }

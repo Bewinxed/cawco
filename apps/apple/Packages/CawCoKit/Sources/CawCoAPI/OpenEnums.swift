@@ -5851,6 +5851,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/StageToolchain`.
+    public enum StageToolchain: OpenEnum {
+        case astro
+        case nuxt
+        case vite
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "astro": self = .astro
+            case "nuxt": self = .nuxt
+            case "vite": self = .vite
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .astro: "astro"
+            case .nuxt: "nuxt"
+            case .vite: "vite"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.astro, .nuxt, .vite]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/StagesTemplate`.
     public enum StagesTemplate: OpenEnum {
         case brand

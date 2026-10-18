@@ -1439,7 +1439,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         #if DEBUG
         if next != before {
             let card = next.error.map(SheetStageShown.place) ?? "-"
-            PreviewProbe.say("preview stage status=\(stage?.status.rawValue ?? "-") cover=\(next.waiting ?? "-") card=\(card) down=\(next.down == nil ? "no" : "yes")")
+            PreviewProbe.say("preview stage status=\((stage?.value1?.status ?? stage?.value2?.status)?.rawValue ?? "-") cover=\(next.waiting ?? "-") card=\(card) down=\(next.down == nil ? "no" : "yes")")
         }
         if next.down != nil {
             DispatchQueue.main.async { [weak self] in

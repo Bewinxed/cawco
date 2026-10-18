@@ -308,20 +308,34 @@ export interface Found {
   sheets: string[];
 }
 
-/**
- * A stage as the hub keeps it in each of its sheets' docs (`meta.stage`):
- * where it is, the toolchain root it runs (from the clone's root), why it failed
- * when it did, and the compile errors standing now.
- */
-export interface StageState {
+/** What every stage's state says: where it is, where it runs, why it failed when it did, the compile errors standing now. */
+interface StageStateOf {
   at: string;
-  /** The toolchain root, from the clone's root ("." for the root itself). */
+  /** Where it runs from the clone's root ("." for the root itself): a sheet's toolchain root, a server's `cwd`. */
   dir: string;
   errors: StageError[];
   /** Why it is in `error`, one sentence; none otherwise. */
   message?: string;
   status: StageStatus;
 }
+
+/** A sheet's stage: the project's own dev toolchain on its toolchain root. */
+export interface SheetStageState extends StageStateOf {
+  runs: "sheet";
+  toolchain: StageToolchain;
+}
+
+/** A workspace preview's server: the command its preview names (`serve`). */
+export interface ServerStageState extends StageStateOf {
+  runs: "serve";
+}
+
+/**
+ * A stage as the hub keeps it in each of its artifacts' docs (`meta.stage`),
+ * as the daemon states it: a sheet's, with the toolchain it runs, or a
+ * workspace preview's server's.
+ */
+export type StageState = SheetStageState | ServerStageState;
 
 /** The daemon's word on each change of a stage: every artifact of the workspace's that previews its port hears it. */
 export interface StageFrame {

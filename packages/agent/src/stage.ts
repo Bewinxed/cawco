@@ -44,7 +44,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { PreviewSource, WorkspaceRef } from "@cawco/core";
+import { type PreviewSource, sheetWords, type WorkspaceRef } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
@@ -154,11 +154,6 @@ const TOOLCHAINS: [RegExp, StageToolchain][] = [
   [/^nuxt\.config\.[cm]?[jt]s$/, "nuxt"],
   [/^vite\.config\.[cm]?[jt]s$/, "vite"],
 ];
-const TOOLCHAIN_NAME: Record<StageToolchain, string> = {
-  vite: "Vite",
-  astro: "Astro",
-  nuxt: "Nuxt",
-};
 /**
  * The Astro major the stage starts: Astro's `dev()` is its "Programmatic
  * Astro API (experimental)", whose "API signature may change"
@@ -323,13 +318,18 @@ export const setStageSink = (send: (frame: StageFrame) => void): void => {
   sink = send;
 };
 
-const stateOf = (stage: Stage): StageState => ({
-  status: stage.status,
-  dir: stage.dir,
-  errors: stage.errors,
-  at: new Date().toISOString(),
-  ...(stage.message ? { message: stage.message } : {}),
-});
+const stateOf = (stage: Stage): StageState => {
+  const state = {
+    status: stage.status,
+    dir: stage.dir,
+    errors: stage.errors,
+    at: new Date().toISOString(),
+    ...(stage.message ? { message: stage.message } : {}),
+  };
+  return stage.runs.kind === "sheet"
+    ? { ...state, runs: "sheet", toolchain: stage.runs.toolchain }
+    : { ...state, runs: "serve" };
+};
 
 /** The stage in words: a sheet's by its toolchain root, a preview's server by its command and port. */
 const stageWords = (stage: Stage): string =>
@@ -437,7 +437,7 @@ function notInstalled(
   top: string,
   dir: string
 ): string | null {
-  const name = TOOLCHAIN_NAME[toolchain];
+  const name = sheetWords.toolchains[toolchain];
   const version = installed(toolchain, root, top);
   if (!version) {
     return `${name} isn't installed in ${dir}: run the project's install there, then call again.`;
@@ -1111,7 +1111,7 @@ async function start(stage: Stage): Promise<void> {
     case "answered":
       return;
     case "unanswered": {
-      const why = `${stage.runs.kind === "sheet" ? TOOLCHAIN_NAME[stage.runs.toolchain] : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
+      const why = `${stage.runs.kind === "sheet" ? sheetWords.toolchains[stage.runs.toolchain] : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
       crashed(stage, why);
       throw new Error(why);
     }

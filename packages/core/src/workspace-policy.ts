@@ -72,6 +72,7 @@ import {
   workspaceSpillsFile,
   xdgDataHome,
 } from "./paths";
+import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
 import { DamagedRecord, readRecord } from "./state-file";
 import {
   type Policy,
@@ -278,12 +279,95 @@ const findIn = (
     );
   });
 
+/** What git exits with, and what it wrote. */
+const gitIn = (
+  root: string,
+  args: readonly string[]
+): Promise<{ code: number; out: string; err: string }> =>
+  new Promise((done) => {
+    execFile(
+      "git",
+      safeGitArgv(["-C", root, ...args]).slice(1),
+      {
+        encoding: "utf8",
+        maxBuffer: FIND_OUTPUT_MAX,
+        env: { ...process.env, ...SAFE_GIT_ENV, LC_ALL: "C" },
+      },
+      (error, out, err) => {
+        if (!error) {
+          done({ code: 0, out, err });
+          return;
+        }
+        done({
+          code: typeof error.code === "number" ? error.code : -1,
+          out,
+          err,
+        });
+      }
+    );
+  });
+
+/**
+ * The dirs under `root` its project ignores, as git states them: each
+ * untracked dir every one of whose entries the project's own ignore rules
+ * (`.gitignore`, `.git/info/exclude`, the user's `core.excludesFile`) leave
+ * out, `git ls-files --others --ignored --exclude-standard --directory`,
+ * never one of {@link PROTECTED_UNDER}'s dirs, whose protected entries lie
+ * below it. None for a folder that is no git work tree: it declares no
+ * ignores. Any other failure refuses the boundary, in git's words.
+ */
+const ignoredDirs = async (root: string): Promise<string[]> => {
+  if ((await gitIn(root, ["rev-parse", "--is-inside-work-tree"])).code !== 0) {
+    return [];
+  }
+  const listed = await gitIn(root, [
+    "ls-files",
+    "--others",
+    "--ignored",
+    "--exclude-standard",
+    "--directory",
+    "-z",
+  ]);
+  if (listed.code !== 0) {
+    throw new Error(
+      `the dirs ${root} ignores could not be read: git ls-files exited ${listed.code}: ${listed.err.trim()}`
+    );
+  }
+  return listed.out
+    .split("\0")
+    .filter(
+      (entry) =>
+        entry.endsWith("/") &&
+        !Object.hasOwn(PROTECTED_UNDER, basename(entry.slice(0, -1)))
+    )
+    .map((entry) => join(root, entry.slice(0, -1)));
+};
+
+/** `find -path`'s pattern for exactly `path`: its glob characters escaped. */
+const FIND_GLOB = /[\\*?[\]]/g;
+
+/** `find`'s test for any of `paths`, exactly; one that is never true for none. */
+const anyPath = (paths: readonly string[]): string[] =>
+  paths.length === 0
+    ? ["-false"]
+    : [
+        "(",
+        ...paths.flatMap((path, at) => [
+          ...(at > 0 ? ["-o"] : []),
+          "-path",
+          path.replace(FIND_GLOB, "\\$&"),
+        ]),
+        ")",
+      ];
+
 /** `find`'s test for an entry that is a dir or a file of its own: never a link. */
 const DIR_OR_FILE = ["(", "-type", "d", "-o", "-type", "f", ")"];
 
 /**
- * The protected config a place has now, anywhere in it but installed
- * dependencies ({@link PROTECTED_NAMES}, {@link PROTECTED_UNDER}): each a dir
+ * The protected config a place has now ({@link PROTECTED_NAMES},
+ * {@link PROTECTED_UNDER}), anywhere in it but below the dirs its project
+ * ignores ({@link ignoredDirs}; an ignored dir that is protected config
+ * itself is found): each a dir
  * or file of its own, which srt binds onto itself and so leaves nothing on
  * the host. One that is absent is never denied to srt, which would make its
  * mount point in the person's folder.
@@ -318,14 +402,10 @@ const standInAsMade = async (root: string, path: string): Promise<boolean> => {
   );
 };
 
-const foundProtected = (root: string): Promise<string[]> =>
+const foundProtected = async (root: string): Promise<string[]> =>
   findIn(
     root,
     [
-      "-name",
-      "node_modules",
-      "-prune",
-      "-o",
       "(",
       ...PROTECTED_NAMES.flatMap((name, at) => [
         ...(at > 0 ? ["-o"] : []),
@@ -338,6 +418,9 @@ const foundProtected = (root: string): Promise<string[]> =>
       ")",
       ...DIR_OR_FILE,
       "-print0",
+      "-prune",
+      "-o",
+      ...anyPath(await ignoredDirs(root)),
       "-prune",
     ],
     "the protected config"
@@ -372,8 +455,9 @@ const ANY_GROUP_OR_OTHER_BIT = process.platform === "darwin" ? "+077" : "/077";
  * Every entry under `root` (never `root` itself) that only its owner may
  * read: a dir or file whose mode has no group or other bits (a 0700 dir, a
  * 0600 file), as a tool keeps its own data (x-use's accounts and cookies).
- * Not walked into, and nothing under a link; git's own dirs and installed
- * dependencies (`.git`, `node_modules`) are not looked in. A lead's place
+ * Not walked into, and nothing under a link; git's own dirs (`.git`) are not
+ * looked in. Every other dir is, ignored or not: a tool's data dir is one a
+ * project ignores, and what it keeps there is its own. A lead's place
  * hides each from his shell and file tools; an MCP server the owner runs
  * reaches its own data on its own.
  */
@@ -381,13 +465,8 @@ export const ownerOnlyIn = (root: string): Promise<string[]> =>
   findIn(
     root,
     [
-      "(",
       "-name",
       ".git",
-      "-o",
-      "-name",
-      "node_modules",
-      ")",
       "-prune",
       "-o",
       ...DIR_OR_FILE,
@@ -401,38 +480,49 @@ export const ownerOnlyIn = (root: string): Promise<string[]> =>
   );
 
 /**
- * What in a place shares its inodes with files elsewhere: each
- * installed dependencies dir (bun installs by hardlinking from its cache),
- * and every other file with more than one link. A clone's are copied apart
+ * What in a place shares its inodes with files elsewhere: each dir its
+ * project ignores ({@link ignoredDirs}) that holds such a file, whole (an
+ * install that hardlinks from its cache, as bun's and uv's do, fills one with
+ * them), and every other file with more than one link. A clone's are copied apart
  * but those linked to the workspaces' own bun cache (boundary.ts
  * `ownInodes`); a person's own folder is never rewritten, so
  * these are only denied for writing: a write through one would change a file
  * the host runs.
  */
-export const linkedIn = (root: string): Promise<string[]> =>
-  findIn(
-    root,
-    [
-      "-xdev",
-      "(",
-      "-name",
-      "node_modules",
-      "-type",
-      "d",
-      "-print0",
-      "-prune",
-      ")",
-      "-o",
-      "(",
-      "-type",
-      "f",
-      "-links",
-      "+1",
-      "-print0",
-      ")",
-    ],
-    "the files that share their inodes"
-  );
+export const linkedIn = async (root: string): Promise<string[]> => {
+  const ignored = await ignoredDirs(root);
+  const [files, dirs] = await Promise.all([
+    findIn(
+      root,
+      [
+        "-xdev",
+        ...anyPath(ignored),
+        "-prune",
+        "-o",
+        "-type",
+        "f",
+        "-links",
+        "+1",
+        "-print0",
+      ],
+      "the files that share their inodes"
+    ),
+    Promise.all(
+      ignored.map(async (dir) =>
+        (
+          await findIn(
+            dir,
+            ["-xdev", "-type", "f", "-links", "+1", "-print0", "-quit"],
+            "the files that share their inodes"
+          )
+        ).length > 0
+          ? [dir]
+          : []
+      )
+    ),
+  ]);
+  return [...dirs.flat(), ...files];
+};
 
 const unique = (paths: string[]): string[] => [...new Set(paths)];
 

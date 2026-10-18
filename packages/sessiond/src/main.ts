@@ -22,6 +22,7 @@ import {
 } from "@cawco/core/sessiond";
 import { placeChildren } from "./cgroup";
 import { SessiondServer } from "./server";
+import { childCapRefusal } from "./tasks";
 
 const main = async (): Promise<void> => {
   // Read directly: `CAWCO_ENV` has no key for sessiond's own override.
@@ -48,6 +49,12 @@ const main = async (): Promise<void> => {
     process.platform === "linux" ? await placeChildren() : undefined;
   if (placement) {
     console.log(`[sessiond] ${placement.said}`);
+  }
+  // Said once at the start: a keeper that cannot cap its children's tasks
+  // starts none, and each spawn it refuses says why.
+  const uncapped = await childCapRefusal();
+  if (uncapped) {
+    console.error(`[sessiond] no child will start: ${uncapped}`);
   }
   const server = new SessiondServer({
     build: { version: runtimeVersion, startedAt: Date.now() },

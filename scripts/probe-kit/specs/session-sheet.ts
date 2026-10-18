@@ -17,7 +17,8 @@
  * 1. `components_list` answers the repo's components, `src/Card.svelte`
  *    with its story file, never "this session runs in no workspace".
  * 2. `artifact_create(kind: "sheet", file: "src/Card.stories.js")` answers
- *    an id and its stage `live`.
+ *    an id and its stage `live`, which states it is a sheet's on Vite
+ *    (`runs: "sheet"`, `toolchain: "vite"`).
  * 3. A dashboard's raw `stageEnsure` control, naming a place id and a folder
  *    the hub never resolved (the same project, copied elsewhere), is refused
  *    at the hub's relay as the hub's to send, and never reaches the machine:
@@ -444,6 +445,12 @@ const run = async (kit: Kit) => {
   kit.check(
     "2: artifact_create(kind: sheet) answers an id and its stage live",
     !!id && created.match(STATUS)?.[1] === "live",
+    short(created)
+  );
+  kit.check(
+    "2: its stage states what it runs: a sheet's, on Vite",
+    created.includes('"runs":"sheet"') &&
+      created.includes('"toolchain":"vite"'),
     short(created)
   );
 
