@@ -41,13 +41,24 @@
  * return is a leg gated on the spec's own CPU pressure (`quietLeg`). Every
  * number is written to `numbers.json`.
  *
- * Asserted per Chromium return: its longest task within two frames' budget
- * (`2 × LONG_TASK_MS`) on the slower CPU, and its interaction under
- * `INPUT_MS`; a return past the bound is a reload, and its numbers are
- * noted. Asserted per kept return, on every engine: the page is the
- * document it was (no reload), its first animation frame after the press
- * comes within `BACK_MS`, and, held (e), none of its animation frames or
- * timers ran while it was off screen.
+ * The busy session streams as the spec lets it: once seeded, its live turns
+ * run only while the busy tab is away (one per `TURN_MS` of the absence) and
+ * land before the return, and none runs while a return is measured. Every
+ * run, on any tree, is shown the same turns at the same points; each return
+ * says how many elements the page put in from the reach on (`inserted`). A
+ * return to the preview says when the pane reached into its frame to post
+ * (`watchPosts`), when its release reached the page, the page's own long
+ * tasks before its first frame, and that frame.
+ *
+ * Asserted per Chromium return: its interaction under `INPUT_MS`, and,
+ * for a busy or kept return, its longest task within two frames' budget
+ * (`2 × LONG_TASK_MS`) on the slower CPU. A return past the bound loads the
+ * page again, in the dashboard's process where a frame shares it, so its
+ * longest task is the page's own load: noted, and asserted only to have let
+ * the page go and loaded it again. Asserted per kept return, on every
+ * engine: the page is the document it was (no reload), held off screen
+ * (none of its animation frames or timers ran), and its first animation
+ * frame after the press comes within `BACK_MS`.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one return at a time, as a person makes them
 import { cp, mkdir, writeFile } from "node:fs/promises";
@@ -98,6 +109,15 @@ const OUTPUT_LINES = 400;
 const SCRIPT_FUNCTIONS = 60_000;
 /** A task this long or longer is listed with when it ran (`Back.heavy`), CPU ms. */
 const HEAVY_MS = 8;
+/**
+ * A live busy turn's length (its 30 words at 40ms, its tool's second, the
+ * harness's round trip): how many turns an absence lets through.
+ */
+const TURN_MS = 3000;
+/** The most a leg's released turns may take. */
+const RELEASE_MS = 5 * 60_000;
+/** After the last released turn, for its frames to reach the page. */
+const LANDED_MS = 1500;
 /** An interaction's length in `inputsOf`'s line. */
 const LENGTH = / (\d+)ms/;
 const RIVE = join(
@@ -114,6 +134,8 @@ interface Back {
   /** The press's interaction, Event Timing's longest entry. */
   input: string;
   inputMs: number;
+  /** Elements put into the page from the reach to the window's end, each with all it holds. */
+  inserted: number;
   /** To a busy tab, to a preview kept off screen, or to one past the bound. */
   kind: "busy" | "kept" | "past";
   /** The longest task from the reach to the window's end, CPU ms, and what it was. */
@@ -140,6 +162,10 @@ type Read = Omit<Back, "kind" | "psi" | "scene" | "page">;
 interface Clock {
   /** Its document's `performance.timeOrigin`: a new one is a new document. */
   born: number;
+  /** Its own long tasks, each its start (epoch ms) and length (ms). */
+  long: [number, number][];
+  /** When the pane's last `cawco:release` reached it, epoch ms; 0 when none has. */
+  releasedAt: number;
   /** Its animation frames' times, epoch ms, the last 600. */
   tickAt: number[];
   ticks: number;
@@ -153,6 +179,12 @@ interface PageBack {
   /** Its animation frames and interval ticks while its tab was off screen; NaN when its page was gone. */
   hiddenTicks: number;
   hiddenTimers: number;
+  /** The page's own long tasks from the press to its first animation frame after it: when after the press, and how long, ms. */
+  longAfter: [number, number][];
+  /** From the press to the pane's first reach into the frame to post (`watchPosts`), ms; null where unread (WebKit) or none came. */
+  postMs: number | null;
+  /** From the press to the pane's `cawco:release` reaching the page, ms; null when none came after the press. */
+  releaseMs: number | null;
   /** Its document was replaced, or gone: the return loaded it again. */
   reloaded: boolean;
 }
@@ -177,12 +209,16 @@ async function clockOf(page: Page, pane: string): Promise<Clock | null> {
   return frame
     .evaluate(() => {
       const own = window as unknown as {
+        __long?: [number, number][];
+        __releasedAt?: number;
         __tickAt?: number[];
         __ticks?: number;
         __timers?: number;
       };
       return {
         born: performance.timeOrigin,
+        long: [...(own.__long ?? [])],
+        releasedAt: own.__releasedAt ?? 0,
         ticks: own.__ticks ?? 0,
         tickAt: [...(own.__tickAt ?? [])],
         timers: own.__timers ?? 0,
@@ -196,8 +232,10 @@ function pageBack(
   before: Clock | null,
   hidden: Clock | null,
   after: Clock | null,
-  pressAt: number
+  pressAt: number,
+  posts: number[]
 ): PageBack {
+  const posted = posts.find((at) => at >= pressAt);
   const kept = !!(before && hidden && hidden.born === before.born);
   const first = after?.tickAt.find((at) => at > pressAt);
   return {
@@ -207,11 +245,22 @@ function pageBack(
     hiddenTimers:
       kept && before && hidden ? hidden.timers - before.timers : Number.NaN,
     firstTickMs: first === undefined ? null : Math.round(first - pressAt),
+    releaseMs:
+      after && after.releasedAt > pressAt
+        ? Math.round(after.releasedAt - pressAt)
+        : null,
+    postMs: posted === undefined ? null : Math.round(posted - pressAt),
+    longAfter: (after?.long ?? [])
+      .filter(([at]) => at >= pressAt && at <= (first ?? pressAt + WINDOW_MS))
+      .map(([at, ms]): [number, number] => [
+        Math.round(at - pressAt),
+        Math.round(ms),
+      ]),
   };
 }
 
 const pageLine = (back: PageBack) =>
-  `its page ${back.reloaded ? "loaded again" : "kept"}; off screen ${back.hiddenTicks} animation frames and ${back.hiddenTimers} interval ticks; its first animation frame ${back.firstTickMs === null ? "never came" : `${back.firstTickMs}ms after the press`}`;
+  `its page ${back.reloaded ? "loaded again" : "kept"}; off screen ${back.hiddenTicks} animation frames and ${back.hiddenTimers} interval ticks; the pane reached into its frame ${back.postMs === null ? "unread" : `${back.postMs}ms after the press`}; its release reached it ${back.releaseMs === null ? "never" : `${back.releaseMs}ms after the press`}; its own long tasks before its first frame ${back.longAfter.map(([at, ms]) => `${ms}ms at ${at}ms`).join(", ") || "none"}; its first animation frame ${back.firstTickMs === null ? "never came" : `${back.firstTickMs}ms after the press`}`;
 
 /**
  * The heavy page: Rive's runtime and its wasm (compiled and instantiated at
@@ -241,8 +290,17 @@ async function heavyFolder(dir: string): Promise<void> {
 rive.RuntimeLoader.setWasmUrl("./rive.wasm");
 rive.RuntimeLoader.awaitInstance().then(function () { window.__wasm = true; });
 var c = document.getElementById("c"), g = c.getContext("2d");
-window.__ticks = 0; window.__tickAt = []; window.__timers = 0;
+window.__ticks = 0; window.__tickAt = []; window.__timers = 0; window.__releasedAt = 0;
 setInterval(function () { window.__timers++; }, 100);
+window.__long = [];
+try {
+  new PerformanceObserver(function (list) {
+    list.getEntries().forEach(function (entry) { window.__long.push([performance.timeOrigin + entry.startTime, entry.duration]); });
+  }).observe({ type: "longtask", buffered: true });
+} catch (e) {}
+addEventListener("message", function (event) {
+  if (event.data && event.data.type === "cawco:release") window.__releasedAt = performance.timeOrigin + performance.now();
+});
 (function draw(t) {
   window.__ticks++;
   window.__tickAt.push(performance.timeOrigin + performance.now());
@@ -258,41 +316,81 @@ setInterval(function () { window.__timers++; }, 100);
   );
 }
 
-/** The mock's answers, each session told apart by the mark its first message carries. */
+/**
+ * The mock's answers, each session told apart by the mark its first message
+ * carries. Once `hold` is called, the busy session's live turns go only as a
+ * leg lets them (`release`): every run, on any tree, is shown the same turns
+ * at the same points, and nothing streams while a return is measured.
+ */
 function sceneModel() {
   const tag = crypto.randomUUID().slice(0, 6);
   const mark = (name: string) => `tab-return ${name} ${tag}`;
   const counts: { busy?: number } = {};
-  const respond = (request: Seen): Reply => {
+  /** The last busy request let through; null while the turns run freely. */
+  const pace: { upTo: number | null; open: (() => void) | null } = {
+    upTo: null,
+    open: null,
+  };
+  const turn = () =>
+    new Promise<void>((resolve) => {
+      pace.open = resolve;
+    });
+  /** The busy session's `n`th turn: seeded fast, then live (30 words at 40ms, a second's tool), once its leg lets it. */
+  const busyTurn = async (n: number): Promise<Reply> => {
+    const live = n > SEED;
+    while (live && pace.upTo !== null && n > pace.upTo) {
+      await turn();
+    }
+    const id = String(n).padStart(5, "0");
+    return {
+      everyMs: live ? 40 : 1,
+      words:
+        live || n % 3 === 0
+          ? Array.from(
+              { length: live ? 30 : 4 },
+              (_, i) => `${i === 0 ? `busy ${id}: ` : ""}w${i} `
+            )
+          : [],
+      tool: {
+        name: "Bash",
+        input: {
+          command: `${live ? "sleep 1; " : ""}seq -f 'busy ${id} line %g' ${OUTPUT_LINES}`,
+          description: `Print busy ${id}`,
+        },
+      },
+    };
+  };
+  const respond = (request: Seen): Reply | Promise<Reply> => {
     if (!request.tools) {
       return { everyMs: 1, words: ["Tab return"] };
     }
     if (request.all.includes(mark("busy"))) {
       const n = (counts.busy ?? 0) + 1;
       counts.busy = n;
-      const live = n > SEED;
-      const id = String(n).padStart(5, "0");
-      return {
-        everyMs: live ? 40 : 1,
-        words:
-          live || n % 3 === 0
-            ? Array.from(
-                { length: live ? 30 : 4 },
-                (_, i) => `${i === 0 ? `busy ${id}: ` : ""}w${i} `
-              )
-            : [],
-        tool: {
-          name: "Bash",
-          input: {
-            command: `${live ? "sleep 1; " : ""}seq -f 'busy ${id} line %g' ${OUTPUT_LINES}`,
-            description: `Print busy ${id}`,
-          },
-        },
-      };
+      return busyTurn(n);
     }
     return { everyMs: 5, words: ["Done."] };
   };
-  return { counts, mark, respond };
+  /** From now on a busy turn waits for its leg. */
+  const hold = () => {
+    pace.upTo = counts.busy ?? 0;
+  };
+  /** Lets `turns` more busy turns run, and answers once each has run whole: its tool's output sent back, the next turn waiting. */
+  const release = async (turns: number) => {
+    const upTo = (pace.upTo ?? 0) + turns;
+    pace.upTo = upTo;
+    const began = Date.now();
+    while ((counts.busy ?? 0) <= upTo && Date.now() - began < RELEASE_MS) {
+      pace.open?.();
+      await Bun.sleep(50);
+    }
+    if ((counts.busy ?? 0) <= upTo) {
+      throw new Error(
+        `tab-return: ${turns} busy turns did not run within ${RELEASE_MS / 1000}s`
+      );
+    }
+  };
+  return { counts, hold, mark, release, respond };
 }
 
 /** The pane's frame for `id` and the press's input, the reach first, as two-pane-perf's `point`. */
@@ -334,6 +432,43 @@ async function away(page: Page, id: string): Promise<void> {
     .evaluate((el) => (el as HTMLElement).click());
 }
 
+/**
+ * In the dashboard's own document: when the pane reaches into a preview's
+ * frame to post to it (its `contentWindow`, epoch ms), so a return says how
+ * long the pane took to send its release, apart from how long it took to
+ * reach the page.
+ */
+function watchPosts(): void {
+  if (window.top !== window) {
+    return;
+  }
+  const posts: number[] = [];
+  (window as unknown as { __posts: number[] }).__posts = posts;
+  const own = Object.getOwnPropertyDescriptor(
+    HTMLIFrameElement.prototype,
+    "contentWindow"
+  );
+  if (!own?.get) {
+    return;
+  }
+  const read = own.get;
+  Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+    ...own,
+    get(this: HTMLIFrameElement) {
+      if (this.title === "Preview") {
+        posts.push(performance.timeOrigin + performance.now());
+      }
+      return read.call(this);
+    },
+  });
+}
+
+/** The dashboard's reaches into a preview's frame (`watchPosts`), epoch ms. */
+const postsOf = (page: Page) =>
+  page.evaluate(
+    () => (window as unknown as { __posts?: number[] }).__posts ?? []
+  );
+
 const costOf = (page: Page) =>
   page.evaluate(() => (window as unknown as { __cost: Cost }).__cost);
 
@@ -350,6 +485,27 @@ async function measureBack(
 ): Promise<Read> {
   const point = await pointAt(page, input, id);
   const held = await census(page);
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __inserted: number;
+      __insertWatch?: MutationObserver;
+    };
+    w.__insertWatch?.disconnect();
+    w.__inserted = 0;
+    w.__insertWatch = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element) {
+            w.__inserted += 1 + node.querySelectorAll("*").length;
+          }
+        }
+      }
+    });
+    w.__insertWatch.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+  });
   let madeAt = 0;
   let origin = 0;
   const main = await traceMain(
@@ -407,6 +563,14 @@ async function measureBack(
     );
   const longest = longestOf(own);
   const reach = longestOf(own.filter((task) => task.at < madeMark));
+  const inserted = await page.evaluate(() => {
+    const w = window as unknown as {
+      __inserted: number;
+      __insertWatch?: MutationObserver;
+    };
+    w.__insertWatch?.disconnect();
+    return w.__inserted;
+  });
   const cost = await costOf(page);
   const [press] = inputsOf(cost.events, [madeAt]);
   const inputMs = Number(LENGTH.exec(press ?? "")?.[1] ?? 0);
@@ -418,6 +582,7 @@ async function measureBack(
     : Number.NaN;
   return {
     held,
+    inserted,
     input: press ?? "none reported",
     inputMs,
     pressAt: origin + madeAt,
@@ -489,6 +654,7 @@ async function clickBack(
     heavy: "not traced",
     input: "a click, not traced",
     inputMs: 0,
+    inserted: 0,
     longest: 0,
     longestWhat: "not traced",
     pressAt,
@@ -541,6 +707,7 @@ const run = async (kit: Kit) => {
     (c) => (c.busy ?? 0) > SEED + 5,
     30 * 60_000
   );
+  scene.hold();
   const base = await fleet.dashboard();
   /**
    * The dashboard at the desk on `tabs`, `shown` in front once each tab
@@ -556,7 +723,10 @@ const run = async (kit: Kit) => {
       "desk",
       engine === "webkit"
         ? { engine: "webkit" }
-        : { init: [watchCost], oneProcess: engine === "one-process" }
+        : {
+            init: [watchCost, watchPosts],
+            oneProcess: engine === "one-process",
+          }
     );
     await page.addInitScript(
       ([held, active]) => {
@@ -636,6 +806,7 @@ const run = async (kit: Kit) => {
   ) => {
     const { page, input, ready } = on;
     const got: { read?: Read; page?: PageBack } = {};
+    const turns = kind === "busy" ? Math.round(absence / TURN_MS) : 0;
     const psi = await quietLeg(name, pressure, async () => {
       let before: Clock | null = null;
       if (kind === "past") {
@@ -643,9 +814,15 @@ const run = async (kit: Kit) => {
         await pastBound(on);
       } else {
         await away(page, front);
+        const began = Date.now();
         await page.waitForTimeout(SETTLE_MS);
         before = kind === "kept" ? await clockOf(page, to) : null;
-        await page.waitForTimeout(absence - SETTLE_MS);
+        // Away from the busy tab, its session runs the absence's turns, landed before the return.
+        if (turns > 0) {
+          await scene.release(turns);
+          await page.waitForTimeout(LANDED_MS);
+        }
+        await page.waitForTimeout(Math.max(0, absence - (Date.now() - began)));
       }
       const hidden = kind === "busy" ? null : await clockOf(page, to);
       const waitFor = kind === "past" ? ready : undefined;
@@ -657,7 +834,8 @@ const run = async (kit: Kit) => {
           before,
           hidden,
           await clockOf(page, to),
-          got.read.pressAt
+          got.read.pressAt,
+          await postsOf(page)
         );
       }
     });
@@ -673,7 +851,7 @@ const run = async (kit: Kit) => {
     };
     backs.push(back);
     kit.note(
-      `${name}: ${back.psi} | ${back.page ? `${pageLine(back.page)} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
+      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
     );
   };
   await leg(isolated, `1a: busy, back after ${SHORT_MS / 1000}s`, busy, "busy");
@@ -762,12 +940,17 @@ const run = async (kit: Kit) => {
     `${JSON.stringify(backs, null, 2)}\n`
   );
   for (const back of backs) {
-    if (back.traced) {
+    // Past the bound a return loads the page again, and in the dashboard's
+    // process its load is the dashboard's task: that page's own weight,
+    // noted above, not the return's.
+    if (back.traced && back.kind !== "past") {
       kit.check(
         `${back.scene}: no task longer than two frames' budget (${2 * LONG_TASK_MS}ms) on a CPU ${SLOWER}x slower`,
         back.longest * SLOWER <= 2 * LONG_TASK_MS,
         `the longest ${back.longest}ms of CPU, ${back.longest * SLOWER}ms slower; ${back.longestWhat.slice(0, 300)}`
       );
+    }
+    if (back.traced) {
       kit.check(
         `${back.scene}: the press paints within ${INPUT_MS}ms`,
         back.inputMs < INPUT_MS,
