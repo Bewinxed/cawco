@@ -107,6 +107,12 @@ import {
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
+  RELAY_RENEW,
+  RELAY_START,
+  RELAY_STOP,
+  type RelayStartArgs,
+} from "@cawco/core/stream-relay";
+import {
   CONTROL_UPSTREAM_POST,
   isUpstreamPost,
 } from "@cawco/core/upstream-post";
@@ -136,6 +142,13 @@ import {
   stopBrowser,
   watchBrowsers,
 } from "./browser/browsers";
+import {
+  renewRelay,
+  setRelaySink,
+  startRelay,
+  stopRelay,
+  watchRelay,
+} from "./browser/relay";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
@@ -226,6 +239,29 @@ const takeUpstream = (
       `[workspace] the hub's upstream rules could not be written: ${error instanceof Error ? error.message : String(error)}`
     );
   });
+};
+
+/** The settings a `relay.start` carries, or a refusal saying what came. */
+const relayStartOf = (args: unknown): RelayStartArgs => {
+  const given = args as Partial<RelayStartArgs> | null;
+  const range = given?.relayRange;
+  if (!(
+    given &&
+    typeof given.secret === "string" &&
+    given.secret.length > 0 &&
+    typeof given.address === "string" &&
+    given.address.length > 0 &&
+    (given.hostname === undefined || typeof given.hostname === "string") &&
+    (given.externalIp === undefined || typeof given.externalIp === "string") &&
+    Array.isArray(range) &&
+    range.length === 2 &&
+    range.every((port) => Number.isInteger(port))
+  )) {
+    throw new Error(
+      "relay.start takes a secret, an address and a relay range."
+    );
+  }
+  return given as RelayStartArgs;
 };
 
 /** The key a `browser.stop` or `browser.remove` names (`{ key }`), or a refusal saying what came. */
@@ -1955,6 +1991,7 @@ const attach = (
         frame.kind === "command_queue" ||
         frame.kind === "stage" ||
         frame.kind === "browsers" ||
+        frame.kind === "stream_relay" ||
         frame.kind === "stage-clone"
       ) {
         return false;
@@ -2981,6 +3018,25 @@ export const startDaemon = (rediscover = false) =>
       Effect.promise(() =>
         watchBrowsers().catch((error: unknown) =>
           console.warn(`[browser] not watched: ${String(error)}`)
+        )
+      )
+    );
+    // The fleet's stream relay, when this machine runs it (browser/relay.ts):
+    // started, stopped, its certificate renewed; read back from its container.
+    setRelaySink(machineIdValue, (frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    supervisor.registerDaemonFunction(RELAY_START, async (args) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : startRelay(relayStartOf(args))
+    );
+    supervisor.registerDaemonFunction(RELAY_STOP, () => stopRelay());
+    supervisor.registerDaemonFunction(RELAY_RENEW, () => renewRelay());
+    yield* Effect.forkScoped(
+      Effect.promise(() =>
+        watchRelay().catch((error: unknown) =>
+          console.warn(`[relay] not read back: ${String(error)}`)
         )
       )
     );

@@ -80,6 +80,37 @@ const hasImage = (docker: Docker, tag: string): Promise<boolean> =>
       () => false
     );
 
+/**
+ * `ref` pulled when the runtime lacks it, its layers counted as they land.
+ * The browser's base and the stream relay's images (coturn, certbot) come
+ * this way.
+ */
+export const pullImage = async (
+  docker: Docker,
+  ref: string,
+  onProgress: (progress: { done: number; total: number }) => void
+): Promise<void> => {
+  if (await hasImage(docker, ref)) {
+    return;
+  }
+  const layers = new Map<string, boolean>();
+  await follow(docker, await docker.pull(ref), (event) => {
+    if (!event.id || event.id === ref) {
+      return;
+    }
+    const finished =
+      event.status === "Pull complete" || event.status === "Already exists";
+    layers.set(event.id, (layers.get(event.id) ?? false) || finished);
+    onProgress({
+      done: [...layers.values()].filter(Boolean).length,
+      total: layers.size,
+    });
+  });
+  if (!(await hasImage(docker, ref))) {
+    throw new Error(`The pull of ${ref} ended without the image.`);
+  }
+};
+
 /** A build's step line: Docker's `Step 2/5 :`, Podman's `STEP 2/5:`. */
 const STEP = /step (\d+)\/(\d+)/i;
 
@@ -115,21 +146,10 @@ export const ensureImage = async (
     return tag;
   }
   const base = FROM.exec(files.Dockerfile ?? "")?.[1];
-  if (base && !(await hasImage(docker, base))) {
-    const layers = new Map<string, boolean>();
-    await follow(docker, await docker.pull(base), (event) => {
-      if (!event.id || event.id === base) {
-        return;
-      }
-      const finished =
-        event.status === "Pull complete" || event.status === "Already exists";
-      layers.set(event.id, (layers.get(event.id) ?? false) || finished);
-      onProgress({
-        stage: "pulling",
-        done: [...layers.values()].filter(Boolean).length,
-        total: layers.size,
-      });
-    });
+  if (base) {
+    await pullImage(docker, base, (step) =>
+      onProgress({ stage: "pulling", ...step })
+    );
   }
   const context = await new Bun.Archive(files).bytes();
   onProgress({ stage: "building", done: 0, total: 1 });
