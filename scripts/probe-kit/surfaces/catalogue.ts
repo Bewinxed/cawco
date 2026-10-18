@@ -59,6 +59,14 @@ export interface Surface {
   serve: "built" | "dev";
   /** Read first: the route as it opens. */
   states: State[];
+  /**
+   * The tape it reads, when not the scene's: `sheet`, a delegate's sheet
+   * (walk.ts `SHEET_TAPE`). Only a host records it (a sheet's stage runs in
+   * its workspace's boundary, which needs user namespaces), and on its own
+   * (`--record --tape=sheet`), so a failed one is recorded again alone; a
+   * run with no such tape leaves the surface out with a NOTE.
+   */
+  tape?: "sheet";
 }
 
 /** An open layer: a dialog, sheet, drawer, menu or popover standing open. */
@@ -148,6 +156,11 @@ const PERMISSION_CHIP = /^Permission mode: /;
 const ACCOUNT_CHIP = /^Account: /;
 /** The artifact's page in its session's pane. */
 const PREVIEW_FRAME = 'iframe[title="Preview"]';
+/** A sheet's page: each story in a frame of its own (stage-host/host.ts `frameOf`). */
+const SHEET_STORY = "[data-cawco-story]";
+/** The pane's Inspect, a sheet's alone, and a prop's row in the inspector it opens (SheetInspector's). */
+const INSPECT = "Inspect";
+const INSPECTOR_ROW = "aside[aria-label=Inspector] li[data-prop]";
 /** The machines popover's trigger, Connect a machine's, and the routing's Fill first card. */
 const MACHINES = /machine/;
 const ADD_MACHINE = /^Add machine$/;
@@ -401,6 +414,21 @@ const dropPin = async (page: Page) => {
     throw new Error("the preview's heading has no box");
   }
   await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2);
+};
+
+/**
+ * A sheet's inspector open: once its page has drawn a story (and said its
+ * stories and props to the pane, `cawco:sheet`), Inspect pressed, and the
+ * chosen story's props standing as controls, a row each.
+ */
+const inspectSheet = async (page: Page) => {
+  await page.frameLocator(PREVIEW_FRAME).locator(SHEET_STORY).first().waitFor();
+  await page
+    .getByRole("button", { name: INSPECT, exact: true })
+    .filter({ visible: true })
+    .first()
+    .click();
+  await page.locator(INSPECTOR_ROW).first().waitFor();
 };
 
 /** The spawn sheet opened, then each step in turn: every state of the sheet starts from a fresh page. */
@@ -1480,6 +1508,15 @@ export const SURFACES: Surface[] = [
         widths: ["desk"],
       },
     ],
+  },
+  {
+    // A sheet a delegate made, on the sheet's own tape: its inspector open
+    // over the chosen story, one control of each kind (scene.ts `CARD`).
+    name: "sheet",
+    serve: "built",
+    tape: "sheet",
+    route: (s) => `/artifact/${s.sheet}`,
+    states: [{ name: "inspect", act: inspectSheet, root: "body" }],
   },
   {
     // A part of the page that throws while it renders: the composer, its

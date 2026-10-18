@@ -9,15 +9,22 @@
  * `/motion/` benches, both against the same player. `record` serves them
  * against a recorder in front of a scratch fleet's hub instead.
  */
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { join, relative } from "node:path";
 import type { BrowserContext, Page, Request } from "playwright-core";
 import { heavySlot } from "../../lib/heavy-run";
 import { until } from "../../scratch-fleet";
-import type { Attach, Tape, TapeHold } from "../hub-tape";
+import {
+  type Attach,
+  player,
+  readTape,
+  type Tape,
+  type TapeHold,
+} from "../hub-tape";
 import { type Kit, open, ROOT, type Theme, type View } from "../kit";
 import type { State, Surface, Width } from "./catalogue";
 import { holdStill, installReader, PROPS } from "./read";
-import type { Scene } from "./scene";
+import { type Scene, VARIANTS, type Variant } from "./scene";
 
 /** The hub the surfaces read: a scratch fleet's, recorded (`style-snapshot --record`). */
 export const TAPE = join(
@@ -27,6 +34,8 @@ export const TAPE = join(
   "style-snapshot",
   "hub-tape.json.gz"
 );
+/** The hub a sheet surface reads (catalogue `tape: "sheet"`): a host's alone, recorded on its own (`style-snapshot --record --tape=sheet`). */
+export const SHEET_TAPE = join(TAPE, "..", "hub-tape-sheet.json.gz");
 
 /** One pass: a width at a theme, reduced motion or not. */
 export interface Pass {
@@ -575,6 +584,8 @@ async function arrive(page: Page): Promise<void> {
 export interface Visit {
   page: Page;
   pass: Pass;
+  /** What the tape's recording made, by name. */
+  scene: Scene;
   state: State;
   surface: Surface;
 }
@@ -660,7 +671,7 @@ export async function walk(
           try {
             // biome-ignore lint/performance/noAwaitInLoops: one state at a time on the pass's page
             await opened(page, base, surface, state, scene);
-            await visit({ page, pass, state, surface });
+            await visit({ page, pass, scene, state, surface });
           } catch (error) {
             failed(what, String(error).split("\n")[0] ?? "");
           }
@@ -675,6 +686,115 @@ export async function walk(
     seconds.set(surface.name, (performance.now() - started) / 1000);
   }
   return seconds;
+}
+
+/** The surfaces as one hub reads them: each with its states that read `hub` (the scene's own when none), and none left with no state. */
+export function onHub(
+  surfaces: Surface[],
+  hub: Variant | undefined
+): Surface[] {
+  return surfaces
+    .map((surface) => ({
+      ...surface,
+      states: surface.states.filter((state) => state.hub === hub),
+    }))
+    .filter((surface) => surface.states.length > 0);
+}
+
+/** What a walk of the tapes found: each surface's seconds, and every request no section answered. */
+interface Walked {
+  misses: string[];
+  seconds: Map<string, number>;
+}
+
+/**
+ * Walks `surfaces` against each hub on the tape in `file` their states
+ * read: the scene's own, then each variant (scene.ts `VARIANTS`), each
+ * answered by a player of its own section and served by a dashboard of its
+ * own, whose held requests count as answered (`quiet`). Adds to `into`.
+ */
+async function walkTape(
+  kit: Kit,
+  file: string,
+  surfaces: Surface[],
+  passes: Pass[],
+  visit: (v: Visit) => Promise<void>,
+  failed: (what: string, why: string) => void,
+  into: Walked
+): Promise<void> {
+  const tape = await readTape(file);
+  const sheet = file === SHEET_TAPE ? "sheet" : "";
+  for (const hub of [undefined, ...VARIANTS]) {
+    const reading = onHub(surfaces, hub);
+    if (reading.length === 0) {
+      continue;
+    }
+    const section = hub ? tape.variants?.[hub] : tape;
+    if (!section) {
+      throw new Error(
+        `${relative(ROOT, file)} holds no "${hub}" hub, which ${reading.map((s) => s.name).join(", ")} read: record it again (--record)`
+      );
+    }
+    const played = player(section);
+    const servers = new Servers(kit, played, section.held);
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: one hub at a time, each its own dashboard
+      const took = await walk(
+        kit,
+        servers,
+        tape,
+        reading,
+        passes,
+        visit,
+        failed
+      );
+      for (const [name, s] of took) {
+        into.seconds.set(name, (into.seconds.get(name) ?? 0) + s);
+      }
+    } finally {
+      await servers.close();
+      played.stop();
+    }
+    const on = [sheet, hub ?? ""].filter(Boolean).join(" ");
+    into.misses.push(
+      ...played.misses().map((m) => (on ? `${on}: ${m}` : m))
+    );
+  }
+}
+
+/**
+ * Walks `surfaces` against every tape their states read (`walkTape`): the
+ * scene's, then the sheet's (catalogue `tape`). The sheet's is a host's
+ * alone: where it was never recorded, its surfaces are left out with a
+ * NOTE.
+ */
+export async function walkTapes(
+  kit: Kit,
+  surfaces: Surface[],
+  passes: Pass[],
+  visit: (v: Visit) => Promise<void>,
+  failed: (what: string, why: string) => void
+): Promise<Walked> {
+  const into: Walked = { misses: [], seconds: new Map() };
+  for (const [file, reading] of [
+    [TAPE, surfaces.filter((s) => !s.tape)],
+    [SHEET_TAPE, surfaces.filter((s) => s.tape === "sheet")],
+  ] as const) {
+    if (reading.length === 0) {
+      continue;
+    }
+    if (file === SHEET_TAPE && !existsSync(file)) {
+      for (const surface of reading) {
+        kit.note(
+          `${surface.name}: host only, its tape is not recorded here (${relative(ROOT, file)}: style-snapshot --record --tape=sheet)`
+        );
+      }
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one tape at a time
+    await walkTape(kit, file, reading, passes, visit, failed, into);
+  }
+  return into;
 }
 
 /** Passes walked at once: `PROBE_PARALLEL`, or 4. Each holds still on its own page, so how many run never moves a reading. */
