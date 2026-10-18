@@ -3770,13 +3770,13 @@
      another spoke, a tab behind another, a deck card, the pen), and the
      transcript's rows were drawn over Workflows. A row virtua has never
      measured keeps virtua's hiding.
-     The item is named (`data-item`, virtua's `itemProps`) ahead of the
-     `:has()`: with the pseudo-class alone as the subject, every element on
-     the page was one the engine had to test it on, so every node put in
-     anywhere (each word of a streamed reply, each row virtua mounted)
-     restyled its parent, and a tab switch restyled the transcripts whole
-     ("Affected by :has()", 1,406 of them across five switches). */
-  .listing :global([data-item]:has(> [data-row][data-drawn])) {
+     The item is named (`data-item`, virtua's `itemProps`) and marked drawn
+     by its row (Row's `data-drawn`), never asked with `:has()`: as
+     `:has(> [data-row][data-drawn])`, every node put in under a row (each
+     word of a streamed reply, each row virtua mounted) walked up and
+     restyled its item ("Affected by :has()", 8-11 items in each of a busy
+     tab's return tasks, tab-return 1b). */
+  .listing :global([data-item][data-drawn]) {
     visibility: inherit !important;
   }
   /* virtua writes `pointer-events: none` on its container while it scrolls
