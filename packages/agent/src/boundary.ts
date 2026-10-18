@@ -2325,12 +2325,13 @@ const LAUNCHD_SOCKETS = "/private/tmp";
  * testmanagerd's, webinspectord's), beside those in {@link LAUNCHD_SOCKETS}.
  * A workspace writes nothing there, so every socket in it is the host's: a
  * workspace drives a simulator through CoreSimulator's mach services
- * (`simctl`), never these, but for {@link TEST_MANAGER_SOCKET}.
+ * (`simctl`), never these, but for {@link TEST_MANAGER_SOCKET} and
+ * {@link REMOTE_AUTOMATION_SOCKET}.
  */
 const SIMULATOR_SOCKETS = "/private/var/tmp";
 
 /**
- * The one host socket in {@link LAUNCHD_SOCKETS} or {@link SIMULATOR_SOCKETS}
+ * A host socket in {@link LAUNCHD_SOCKETS} or {@link SIMULATOR_SOCKETS}
  * a workspace connects to, as a Seatbelt regex over its whole path: a booted
  * simulator's testmanagerd, which `xcodebuild test-without-building` dials to
  * run a UI test runner (XCUITest, Maestro's driver). The simulator names it
@@ -2339,12 +2340,31 @@ const SIMULATOR_SOCKETS = "/private/var/tmp";
  * 18.5; newer runtimes keep the same names under `/private/var/tmp`. Refused,
  * the runner fails with "Failed to connect to unix domain socket at path
  * /private/tmp/com.apple.launchd.lzUhSQrMjS/com.apple.testmanagerd.unix-domain.socket:
- * 1 Operation not permitted". Its siblings (webinspectord's, testmanagerd's
- * remote automation, syslog) and every other socket there stay the host's.
- * testmanagerd starts and drives apps inside its own simulator, as `simctl`
- * already lets a workspace.
+ * 1 Operation not permitted". Its siblings (webinspectord's, syslog) and
+ * every other socket there stay the host's, but for
+ * {@link REMOTE_AUTOMATION_SOCKET}. testmanagerd starts and drives apps inside
+ * its own simulator, as `simctl` already lets a workspace.
  */
 const TEST_MANAGER_SOCKET = String.raw`^/private(/var)?/tmp/com\.apple\.launchd\.[A-Za-z0-9]+/com\.apple\.testmanagerd\.unix-domain\.socket$`;
+
+/**
+ * A booted iOS 27 simulator's testmanagerd remote automation socket, through
+ * which axe and xcui send taps, typing and gestures (iOS 18.5 takes them
+ * without it). The simulator runtime's own testmanagerd binds it, beside
+ * {@link TEST_MANAGER_SOCKET}: its launchd plist
+ * (RuntimeRoot/Developer/Library/LaunchDaemons/com.apple.testmanagerd.plist)
+ * lists `com.apple.testmanagerd.remote-automation.uds` under `Sockets`, keyed
+ * `TESTMANAGERD_REMOTE_AUTOMATION_SIM_SOCK`. The Mac's own testmanagerd binds
+ * no socket: its remote automation is the AppleInternal-only RemoteService
+ * `com.apple.testmanagerd.remote.automation`
+ * (/System/Library/LaunchDaemons/com.apple.testmanagerd.plist), so this name
+ * under a launchd dir in {@link SIMULATOR_SOCKETS} is a simulator's alone.
+ * Refused, every axe HID call on iOS 27.2 failed with "Failed to connect to
+ * unix domain socket at path
+ * /private/var/tmp/com.apple.launchd.q3TgJJkNqx/com.apple.testmanagerd.remote-automation.uds:
+ * 1 Operation not permitted".
+ */
+const REMOTE_AUTOMATION_SOCKET = String.raw`^/private/var/tmp/com\.apple\.launchd\.[A-Za-z0-9]+/com\.apple\.testmanagerd\.remote-automation\.uds$`;
 
 /** Linux: the agent's runtime dir, where its sandbox's proxy socket and the workspace's door go. */
 const runtimeDirOf = (id: string): string => {
@@ -2473,7 +2493,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
           ...(await darwinUserDirs()),
         ].map((path) => realpath(path).catch(() => path))
       ),
-      reachedHostSockets: [TEST_MANAGER_SOCKET],
+      reachedHostSockets: [TEST_MANAGER_SOCKET, REMOTE_AUTOMATION_SOCKET],
     });
     const file = join(generationDir(id, gen), "boundary.sb");
     return {
