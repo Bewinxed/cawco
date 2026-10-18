@@ -2277,7 +2277,16 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
  * writer closes it. Linux: srt's own plumbing for the sandbox (its proxy, the
  * proxy credential git presents) is read once as the runner starts and set
  * again over each request's environment, which the executor writes on the
- * host, so no caller's environment can drop it.
+ * host, so no caller's environment can drop it. Yarn 2 and later read no
+ * `HTTPS_PROXY`, only their own `httpsProxy` and `httpProxy` settings, so
+ * each install went direct and failed ("YN0001: Error
+ * [ERR_SOCKET_CLOSED_BEFORE_CONNECTION]: Socket closed before the connection
+ * was established", 2026-10-18): the runner gives them srt's proxy as
+ * `YARN_HTTPS_PROXY` and `YARN_HTTP_PROXY` ("most settings can also be
+ * defined through environment variables … `YARN_CACHE_FOLDER` will set the
+ * cache folder", yarnpkg.com/configuration/yarnrc). They override a
+ * project's own proxy, which the boundary's network could not reach anyway:
+ * srt's proxy is its one way out.
  *
  * Each command starts through {@link LAUNCH}.
  */
@@ -2334,7 +2343,9 @@ const LAUNCH = [
  * first `openat` (2026-10-18), and the hub's host-key check found no key.
  */
 const RUNNER = `fifo=$1
-CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|GIT_SSH_COMMAND|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
+[ -n "\${HTTPS_PROXY:-}" ] && export YARN_HTTPS_PROXY=$HTTPS_PROXY
+[ -n "\${HTTP_PROXY:-}" ] && export YARN_HTTP_PROXY=$HTTP_PROXY
+CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|YARN_HTTPS?_PROXY|GIT_SSH_COMMAND|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
 export CAWCO_SANDBOX_ENV
 sandbox=$(readlink /proc/self/ns/pid 2>/dev/null)
 launch='${LAUNCH}'
@@ -4614,22 +4625,26 @@ const writeNew = async (path: string, content: string): Promise<void> => {
 const pnpmStore = (): string => join(workspaceCacheDir(), "pnpm", "store");
 
 /**
- * Linux: pnpm's global config in the workspace's config home (its
+ * pnpm's global config in the workspace's config home (its
  * `XDG_CONFIG_HOME`), turning pnpm's global virtual store on with its store
  * in the workspaces' cache. pnpm's store defaults to
- * `$XDG_DATA_HOME/pnpm/store` (pnpm.io/settings/store#storedir), the
- * workspace's own data home: every workspace fetched every package again,
- * and since link(2) refuses across the boundary's mounts (EXDEV,
- * {@link writeBunConfig}), copied each one into its clone ("A store on a
- * genuinely different filesystem from `node_modules` cannot be hardlinked
- * from at all — the attempt fails with `EXDEV` — so `auto` already falls
- * back to copying", pnpm.io/settings/node-modules#packageimportmethod). With
- * the global virtual store pnpm hardlinks each package once into
- * `<store>/links/`, inside the cache's own mount, and a clone's
+ * `$XDG_DATA_HOME/pnpm/store` (pnpm.io/settings/store#storedir: "If the
+ * $XDG_DATA_HOME env variable is set", ahead of the macOS default), the
+ * workspace's own data home: every workspace fetched every package again. On
+ * Linux, since link(2) refuses across the boundary's mounts (EXDEV,
+ * {@link writeBunConfig}), it then copied each one into its clone ("A store
+ * on a genuinely different filesystem from `node_modules` cannot be
+ * hardlinked from at all — the attempt fails with `EXDEV` — so `auto` already
+ * falls back to copying", pnpm.io/settings/node-modules#packageimportmethod).
+ * With the global virtual store pnpm hardlinks each package once into
+ * `<store>/links/`, inside the cache (on Linux its own mount), and a clone's
  * `node_modules` is symlinks into it ("Each project's `node_modules`
  * contains only symlinks pointing into this shared location",
  * pnpm.io/global-virtual-store): a clone of 138 packages took 780 KB where a
- * copy took 119 MB, 2026-10-18.
+ * copy took 119 MB, 2026-10-18. On macOS Seatbelt lets a command read and
+ * write the cache (workspace-policy.ts `workspacePolicy`, `workspaceCaches` in
+ * its reads and writes) and judges each link by where it lands, so the same
+ * links work there.
  *
  * Two files, one for each config pnpm has had. pnpm 11 and later read
  * `$XDG_CONFIG_HOME/pnpm/config.yaml` and take only auth and registry
@@ -4649,9 +4664,6 @@ const writePnpmConfig = async (
   id: string,
   configHome: string
 ): Promise<void> => {
-  if (process.platform !== "linux") {
-    return;
-  }
   const dir = join(configHome, "pnpm");
   if (!(await ownInScratch(id, dir))) {
     console.warn(
@@ -4680,10 +4692,10 @@ const yarnGlobalFolder = (): string =>
   join(workspaceCacheDir(), "yarn", "berry");
 
 /**
- * Linux: `<data home>/yarn/berry`, a link to yarn's global folder in the
+ * `<data home>/yarn/berry`, a link to yarn's global folder in the
  * workspaces' cache. Yarn (2 and later) keeps every package as a zip in its
  * global cache (`enableGlobalCache`, true by default), inside `globalFolder`,
- * whose default is `$XDG_DATA_HOME/yarn/berry` (yarnpkg/berry
+ * whose default off Windows is `$XDG_DATA_HOME/yarn/berry` (yarnpkg/berry
  * folderUtils.ts `getDefaultGlobalFolder`): the workspace's own data home, so
  * every workspace fetched every package again into its scratch dir. Through
  * the link they share one cache, and Plug'n'Play, yarn's default linker,
@@ -4698,9 +4710,6 @@ const yarnGlobalFolder = (): string =>
  * ({@link makeDirs}); a `berry` the workspace made is its own to keep.
  */
 const linkYarnFolder = async (id: string, dataHome: string): Promise<void> => {
-  if (process.platform !== "linux") {
-    return;
-  }
   const dir = join(dataHome, "yarn");
   if (!(await ownInScratch(id, dir))) {
     console.warn(
