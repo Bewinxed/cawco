@@ -314,34 +314,18 @@ class CawcoTools {
   readonly #registered = new Map<string, ToolDefinition>();
   readonly #instanceId: string;
   readonly #credential: { value?: string };
-  /**
-   * The HTTP status of the provider's last answer since the turn's end was
-   * last read ({@link takeStatus}): pi's `after_provider_response`, fired for
-   * every answer before its stream is read. pi's own error message drops it.
-   */
-  #status: number | undefined;
 
   constructor(instanceId: string, credential: { value?: string }) {
     this.#instanceId = instanceId;
     this.#credential = credential;
   }
 
-  /** The inline extension: holds pi's API, registers the first list, and hears each answer's status. */
+  /** The inline extension: holds pi's API and registers the first list. */
   extension(first: ToolDefinition[]): ExtensionFactory {
     return (pi) => {
       this.#api = pi;
       this.#register(first);
-      pi.on("after_provider_response", (event) => {
-        this.#status = event.status;
-      });
     };
-  }
-
-  /** The status of the turn's last answer, cleared for the next turn's. */
-  takeStatus(): number | undefined {
-    const status = this.#status;
-    this.#status = undefined;
-    return status;
   }
 
   #register(tools: ToolDefinition[]): void {
@@ -370,6 +354,49 @@ class CawcoTools {
   }
 }
 
+/**
+ * The HTTP status of the provider's last answer to a session, read off the
+ * response itself: {@link fetch} is the fetch every request the session's
+ * agent streams is made with (pi-ai `StreamOptions.fetch`, "Defaults to
+ * `globalThis.fetch`"). An answer pi refuses passes through it too: pi-ai's
+ * OpenAI client throws on a 429 before pi's `onResponse`, so its
+ * `after_provider_response` is never heard for one, and its error message
+ * keeps the status only in words.
+ */
+class ProviderAnswers {
+  #status: number | undefined;
+
+  readonly fetch: typeof globalThis.fetch = Object.assign(
+    async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ): Promise<Response> => {
+      const response = await globalThis.fetch(input, init);
+      this.#status = response.status;
+      return response;
+    },
+    { preconnect: globalThis.fetch.preconnect }
+  );
+
+  /**
+   * The session's agent makes every request it streams with {@link fetch}:
+   * its stream function (pi-agent-core `Agent.streamFunction`, the one each
+   * run calls) is handed it in its options.
+   */
+  watch(agent: AgentSession["agent"]): void {
+    const stream = agent.streamFunction;
+    agent.streamFunction = (model, context, options) =>
+      stream(model, context, { ...options, fetch: this.fetch });
+  }
+
+  /** The status of the turn's last answer, cleared for the next turn's. */
+  take(): number | undefined {
+    const status = this.#status;
+    this.#status = undefined;
+    return status;
+  }
+}
+
 /** A send that is pi's `/compact`, with its optional focus text. */
 const COMPACT_COMMAND = /^\/compact(?:\s+([\s\S]*))?$/;
 
@@ -380,6 +407,8 @@ class PiSession implements HarnessSession {
   readonly #session: AgentSession;
   readonly #credential: { value?: string };
   readonly #tools: CawcoTools;
+  /** The status of each answer its provider gave. */
+  readonly #answers = new ProviderAnswers();
   /** The runtime the session runs on: its account's, or the machine's own. */
   readonly #runtime: ModelRuntime;
   /** Its shell commands, which a send moves to the background. */
@@ -475,6 +504,7 @@ class PiSession implements HarnessSession {
       ended: (end, output) => this.#shellEnded(end, output),
     };
     this.sessionId = session.sessionId;
+    this.#answers.watch(session.agent);
     session.subscribe((event) => this.#handle(event));
     ctx.session(session.sessionId);
     ctx.frame({
@@ -638,7 +668,7 @@ class PiSession implements HarnessSession {
         const failed = errors.length > 0;
         // A failed turn whose last answer was a 429 ended on its account's
         // limit (core `atProviderLimit`), whatever its error's words say.
-        const status = this.#tools.takeStatus();
+        const status = this.#answers.take();
         const leaf = this.#leaf();
         const context = this.#contextTokens();
         const turnUsage = usageByModel(this.#turnUsage);

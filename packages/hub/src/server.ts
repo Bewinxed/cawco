@@ -129,6 +129,7 @@ import {
   artifactCommentsNotice,
   artifactHandedNotice,
   artifactResponsesNotice,
+  atProviderLimit,
   attachedFileLine,
   attachedFileName,
   BOUNDARY_RELAUNCH,
@@ -5632,9 +5633,10 @@ export const createServer = (
 
   /**
    * Whether `neutral` is a session's account's limit refusing its turn, for a
-   * session the at-limit controller carries on: Claude Code's `rate_limit`
-   * answer, the result of a turn already marked refused, or a pi or OpenCode
-   * turn's error naming a ChatGPT limit CawCo reads.
+   * session the at-limit controller carries on: Claude Code's answer whose
+   * `error` is its limit, the result of a turn already marked refused, or a
+   * pi or OpenCode turn its agent marked `atLimit`. Each by core
+   * `atProviderLimit`, never by words.
    */
   const limitRefusesTurn = (
     instanceId: string,
@@ -5642,7 +5644,9 @@ export const createServer = (
   ): boolean => {
     let refused = false;
     if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
-      refused = (neutral as { error?: string }).error === "rate_limit";
+      refused = atProviderLimit({
+        type: (neutral as { error?: string }).error,
+      });
     } else if (neutral.type === "result") {
       const [row] = db.getInstancesByIds([instanceId]);
       const provider = row?.accountId

@@ -802,27 +802,31 @@ export type ProviderSigninResult =
 
 /**
  * A provider's refusal as its harness hands it over, structured: the HTTP
- * status of the answer (pi's `after_provider_response`, OpenCode's error
- * `status`), and OpenCode's own sort of the provider's answer (its error
- * `type`: `provider.quota` for a usage or quota limit, among them ChatGPT's
- * `usage_limit_reached` and OpenCode Go's `GoUsageLimitError`, and
- * `provider.rate-limit` for a 429 or a rate-limit code; OpenCode 2.0.29's
- * classifier, `QuotaExceeded` and `RateLimit`).
+ * status of the answer (pi's, read off the response by the fetch its
+ * requests are made with, agent pi-runtime.ts `ProviderAnswers`; OpenCode's
+ * error `status`), and the harness's own sort of the provider's answer:
+ * OpenCode's error `type` (`provider.quota` for a usage or quota limit,
+ * among them ChatGPT's `usage_limit_reached` and OpenCode Go's
+ * `GoUsageLimitError`, and `provider.rate-limit` for a 429 or a rate-limit
+ * code; OpenCode 2.0.29's classifier, `QuotaExceeded` and `RateLimit`), or
+ * Claude Code's assistant message `error` (agent SDK 0.3.302
+ * `SDKAssistantMessageError`, `rate_limit`).
  */
 export interface ProviderRefusal {
   status?: number;
   type?: string;
 }
 
-/** OpenCode's error types for a provider refusing at the account's limits. */
+/** The harnesses' sorts of a provider refusing at the account's limits: OpenCode's, then Claude Code's. */
 const LIMIT_TYPES: ReadonlySet<string> = new Set([
   "provider.quota",
   "provider.rate-limit",
+  "rate_limit",
 ]);
 
 /**
  * Whether a provider refused at its account's limit: a 429, or the limit
- * types OpenCode sorts the provider's answer into. The one test every
+ * sorts its harness put the provider's answer in. The one test every
  * harness's refusal goes through; its words are never read.
  */
 export const atProviderLimit = ({ status, type }: ProviderRefusal): boolean =>
