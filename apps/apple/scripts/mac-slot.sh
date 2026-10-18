@@ -13,8 +13,9 @@
 # sim: one of two simulator slots. It clones a simulator named "CawCo slot
 # <n>" from a settled template (below) and boots it (by default the newest
 # iPhone Pro whose runtime meets project.yml's iOS target, as build-both.sh
-# picks), runs the command with CAWCO_SIM_UDID set, then shuts the simulator
-# down and deletes it.
+# picks), waits until its Accessibility answers axe (90 s at most), runs the
+# command with CAWCO_SIM_UDID set, then shuts the simulator down and deletes
+# it.
 # A waiter prints "CAWCO-QUEUE wait <slot>: <who holds it, for how long>"
 # every 60 s, and "CAWCO-QUEUE held <slot>" once it holds the slot: the queue
 # marker (core harness.ts QUEUE_MARKER). A CawCo check's time limit stands
@@ -278,6 +279,26 @@ make_template() { # the new template's UDID
   xcrun simctl rename "$udid" "$TEMPLATE" || fail "cannot name $udid $TEMPLATE"
   echo "$udid"
 }
+# Waits until the booted simulator's Accessibility answers (`axe describe-ui`
+# succeeds), so a command's first axe call meets a warm simulator. axe opens
+# iOS 27's Accessibility through a remote automation session it gives a fixed
+# 5 s (its idb fork's bootstrapAccessibility, `timeout: 5`), and a cold one
+# misses that: on iOS 27.2 straight after boot (2026-10-18) the first three
+# calls failed with "Timed out creating the simulator remote automation
+# session" over 20 s, the fourth answered in 12.5 s, and every call after it
+# in 1.2 to 1.4 s.
+AXE=/opt/homebrew/bin/axe
+ACCESSIBILITY_LIMIT=90 # s
+accessibility_ready() { # <udid>
+  local started=$SECONDS said
+  until said=$("$AXE" describe-ui --udid "$1" 2>&1 >/dev/null); do
+    if ((SECONDS - started >= ACCESSIBILITY_LIMIT)); then
+      fail "the simulator's Accessibility did not answer in $ACCESSIBILITY_LIMIT s ($AXE describe-ui --udid $1): ${said:-no output}"
+    fi
+    sleep 2
+  done
+  echo "mac-slot: the simulator's Accessibility answered after $((SECONDS - started)) s" >&2
+}
 slot_sim() { # the slot's new simulator's UDID, cloned from its template
   local template= line out now next=0 waited=
   trap '[[ $(cat "$LOCKS/template" 2>/dev/null) != $$ ]] || rm -f "$LOCKS/template.owner" "$LOCKS/template"' EXIT
@@ -372,6 +393,7 @@ for r in json.load(sys.stdin)["runtimes"]:
   CAWCO_SIM_UDID=$(slot_sim 3>&- 4<&-) || exit 1
   xcrun simctl boot "$CAWCO_SIM_UDID" 3>&- 4<&-
   xcrun simctl bootstatus "$CAWCO_SIM_UDID" -b >/dev/null 3>&- 4<&-
+  accessibility_ready "$CAWCO_SIM_UDID" 3>&- 4<&- || exit 1
   echo "SIMULATOR CawCo slot $SLOT $CAWCO_SIM_UDID ($TYPE, $RUNTIME, cloned from $TEMPLATE)" >&2
   export CAWCO_SIM_UDID
 fi

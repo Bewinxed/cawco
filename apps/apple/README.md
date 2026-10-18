@@ -79,6 +79,8 @@ bash apps/apple/scripts/mac-slot.sh build -- bash apps/apple/scripts/mac-slot.sh
 ```
 
 The simulator ("CawCo slot 1" or "2") is cloned and booted for the command,
+which starts once its Accessibility answers `axe describe-ui` (90 s at most:
+axe gives a cold iOS 27 simulator's Accessibility a fixed 5 s), and is
 then shut down and deleted when it ends, or when its caller dies (SIGKILL
 too). It is a clone of a template ("CawCo template <device type> <runtime
 build> v<n>", kept shut down) that has already booted once and sat through
