@@ -214,7 +214,7 @@
     <!-- literal: 8px gap, 42px / 56px height, 0 6px 0 12px padding -->
     <div
       data-slot="row"
-      class="flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) pr-(--pr) pl-(--pl)"
+      class="flex min-h-(--h) max-phone:min-h-(--h-phone) items-center gap-(--gap) pe-(--pr) ps-(--pl)"
       style:--gap="8px"
       style:--h="42px"
       style:--h-phone="56px"
@@ -361,7 +361,7 @@
             {#if canGoUp}
               <!-- literal: 10px gap, 34px / 44px height, 8px inline padding -->
               <button
-                class="press-tint flex h-(--h) max-phone:h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) text-left font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
+                class="press-tint flex min-h-(--h) max-phone:min-h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) text-left font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
                 onclick={goUp}
                 style:--gap="10px"
                 style:--h="34px"
@@ -399,7 +399,7 @@
               {#each folders as folder (`${path}/${folder.name}`)}
                 <!-- literal: 10px gap, 34px / 44px height, 8px inline padding -->
                 <button
-                  class="press-tint flex h-(--h) max-phone:h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) text-left font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
+                  class="press-tint flex min-h-(--h) max-phone:min-h-(--h-phone) min-w-0 cursor-pointer items-center justify-start gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) text-left font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
                   onclick={() => enter(folder.name)}
                   style:--gap="10px"
                   style:--h="34px"
@@ -478,7 +478,7 @@
           <!-- literal: 8px gap, 42px / 46px height, 0 12px padding -->
           <div
             data-slot="row"
-            class="flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) pr-(--pad-x) pl-(--pad-x)"
+            class="flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) px-(--pad-x)"
             style:--gap="8px"
             style:--h="42px"
             style:--h-phone="46px"

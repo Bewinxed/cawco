@@ -118,7 +118,7 @@
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
       ? `, ${failed} refused`
       : ''}"
-    class="mark-line inline-flex h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:active:transform-(--tpress)"
+    class="mark-line inline-flex min-h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:active:transform-(--tpress)"
     data-fail={failed > 0 ? "" : undefined}
     motion="settle"
     style="--chip-gap: 5px; --chip-h: 26px; --chip-px: 8px; --tpress: scale(var(--press-scale))"
@@ -215,7 +215,7 @@
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   data-slot="sync"
-                  class="inline-flex h-(--sync-h) items-center gap-space-1 rounded-sm px-(--gutter) type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:transform-(--tpress)"
+                  class="inline-flex min-h-(--sync-h) items-center gap-space-1 rounded-sm px-(--gutter) type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:transform-(--tpress)"
                   disabled={!online}
                   onclick={whileIdle(
                     () => syncing,
