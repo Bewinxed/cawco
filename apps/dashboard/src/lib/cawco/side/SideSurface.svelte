@@ -193,7 +193,11 @@
     background: transparent;
     cursor: pointer;
     text-decoration: none;
-    font: inherit;
+    /* The UA's button face reset as longhands, not the `font` shorthand: a
+       control's own numeric variant (PreviewPane's Comments count) stands. */
+    font-family: inherit;
+    font-style: inherit;
+    line-height: inherit;
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     transition:
