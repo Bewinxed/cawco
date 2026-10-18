@@ -287,6 +287,11 @@
     max-inline-size: 780px;
     margin: 0;
   }
+  /* A phone frame's figure is the screen's width, so its caption wraps
+     under the screen, not past it. */
+  figure[data-kind="phone"] {
+    inline-size: min(390px, 100%);
+  }
   figcaption {
     max-inline-size: 72ch;
     font: var(--type-meta);

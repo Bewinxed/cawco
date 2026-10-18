@@ -34,8 +34,9 @@
   </DeskPlan>
   <figcaption class="caption">
     <span class="words">
-      Desk · Live: a sub-step ticks, a delegate's step arrives under the deposit
-      and folds open, then the to-do ticks and the ring moves on.
+      <span class="on-desk">Desk</span><span class="on-phone">Phone</span> ·
+      Live: a sub-step ticks, a delegate's step arrives under the deposit and
+      folds open, then the to-do ticks and the ring moves on.
       <span class="now" aria-live="polite"
         >Beat {beat + 1} of {LIVE_BEATS.length}: {LIVE_BEATS[beat]}</span
       >
@@ -83,9 +84,20 @@
     margin-block-start: var(--space-1);
     color: var(--ink-strong);
   }
+  /* The frame says where it is drawn: the desk's card, or on a phone's
+     page the same card at the phone's width. */
+  .on-phone {
+    display: none;
+  }
   @media (width < 700px) {
     .caption {
       padding-inline: var(--space-4);
+    }
+    .on-desk {
+      display: none;
+    }
+    .on-phone {
+      display: inline;
     }
   }
   /* Both words stand in one cell as wide as the wider, so the button never
