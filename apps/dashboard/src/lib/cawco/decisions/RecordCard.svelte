@@ -96,7 +96,9 @@
             >
           </span>
           {#if option.line}
-            <span class="type-meta min-w-0 text-ink-muted">{option.line}</span>
+            <span class="type-meta min-w-0 wrap-anywhere text-ink-muted"
+              >{option.line}</span
+            >
           {/if}
         </p>
       {/each}
@@ -216,7 +218,9 @@
         >
           <div class="flex flex-col gap-space-2 pt-space-3">
             {#if card.why}
-              <p data-slot="why" class="type-meta text-ink-muted">{card.why}</p>
+              <p data-slot="why" class="type-meta wrap-anywhere text-ink-muted">
+                {card.why}
+              </p>
             {/if}
             {#each others as option (option.id)}
               <p
@@ -236,7 +240,7 @@
                   >
                 {/if}
                 {#if option.line}
-                  <span class="type-meta min-w-0 text-ink-muted"
+                  <span class="type-meta min-w-0 wrap-anywhere text-ink-muted"
                     >{option.line}</span
                   >
                 {/if}

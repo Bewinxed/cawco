@@ -622,7 +622,7 @@
                           {#if plugin.description}
                             <span
                               data-slot="note"
-                              class="type-meta max-w-(--note-measure) text-ink-muted"
+                              class="type-meta max-w-(--note-measure) wrap-anywhere text-ink-muted"
                               >{plugin.description}</span
                             >
                           {/if}
