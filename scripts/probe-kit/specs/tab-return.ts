@@ -115,6 +115,13 @@ interface Back {
   /** The longest task from the reach to the window's end, CPU ms, and what it was. */
   longest: number;
   longestWhat: string;
+  /**
+   * Every task over two frames' budget on the slower CPU, each said as the
+   * longest is (`longestWhat`): what ran, its passes, what asked for them.
+   * The longest alone is often the parked page's `load`, which hides the
+   * tasks behind it.
+   */
+  over: string;
   psi: string;
   /** The longest task between the reach and the press, CPU ms. */
   reach: number;
@@ -388,33 +395,36 @@ async function measureBack(
   const [worst] = cost.frames
     .filter(([at]) => at >= madeAt)
     .sort((a, b) => b[1] - a[1]);
-  const after = longest
-    ? Math.round((longest.at - madeMark) / 1000)
-    : Number.NaN;
+  /** A task as the report says it: what ran, when, its passes, and what asked for them. */
+  const said = (task: MainTask) =>
+    `${task.ran}, ${Math.round((task.at - madeMark) / 1000)}ms after the press: ${task.restyled} elements in ${Math.round(task.styleMs)}ms of style, ${Math.round(task.layoutMs)}ms of layout [${task.passes
+      .filter((pass) => pass.ms >= 0.5)
+      .map(
+        (pass) =>
+          `${pass.name === "Layout" ? "layout" : "style"} ${pass.elements || ""} ${pass.ms.toFixed(1)}ms by ${pass.at}${pass.root ? ` from a ${pass.root} root` : ""}`
+      )
+      .join("; ")}]; asked for by ${
+      task.invalidated
+        .slice(0, 8)
+        .map(([what, n]) => `${what} ${n}x`)
+        .join("; ") || "nothing traced"
+    }; its other phases: ${
+      task.rendering
+        .map(([what, ms]) => `${what} ${ms.toFixed(1)}ms`)
+        .join("; ") || "none"
+    }`;
   return {
     held,
     inserted,
     input: press ?? "none reported",
     inputMs,
     longest: Math.round(longest?.cpu ?? 0),
-    longestWhat: longest
-      ? `${longest.ran}, ${after}ms after the press: ${longest.restyled} elements in ${Math.round(longest.styleMs)}ms of style, ${Math.round(longest.layoutMs)}ms of layout [${longest.passes
-          .filter((pass) => pass.ms >= 0.5)
-          .map(
-            (pass) =>
-              `${pass.name === "Layout" ? "layout" : "style"} ${pass.elements || ""} ${pass.ms.toFixed(1)}ms by ${pass.at}${pass.root ? ` from a ${pass.root} root` : ""}`
-          )
-          .join("; ")}]; asked for by ${
-          longest.invalidated
-            .slice(0, 8)
-            .map(([what, n]) => `${what} ${n}x`)
-            .join("; ") || "nothing traced"
-        }; its other phases: ${
-          longest.rendering
-            .map(([what, ms]) => `${what} ${ms.toFixed(1)}ms`)
-            .join("; ") || "none"
-        }`
-      : "nothing",
+    longestWhat: longest ? said(longest) : "nothing",
+    over:
+      own
+        .filter((task) => task.cpu * SLOWER > 2 * LONG_TASK_MS)
+        .map((task) => `${task.cpu.toFixed(0)}ms of CPU: ${said(task)}`)
+        .join(" || ") || "none",
     reach: Math.round(reach?.cpu ?? 0),
     heavy:
       own
@@ -548,7 +558,7 @@ const run = async (kit: Kit) => {
     const back: Back = { scene: name, psi, ...got.read };
     backs.push(back);
     kit.note(
-      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
+      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | every task over two frames' budget ${SLOWER}x slower: ${back.over} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
     );
   };
   await leg(
@@ -626,7 +636,7 @@ const run = async (kit: Kit) => {
     kit.check(
       `${back.scene}: no task longer than two frames' budget (${2 * LONG_TASK_MS}ms) on a CPU ${SLOWER}x slower`,
       back.longest * SLOWER <= 2 * LONG_TASK_MS,
-      `the longest ${back.longest}ms of CPU, ${back.longest * SLOWER}ms slower; ${back.longestWhat.slice(0, 300)}`
+      `the longest ${back.longest}ms of CPU, ${back.longest * SLOWER}ms slower; over the budget: ${back.over}`
     );
     kit.check(
       `${back.scene}: the press paints within ${INPUT_MS}ms`,
