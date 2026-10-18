@@ -80,7 +80,6 @@ import {
   inArray,
   isNotNull,
   isNull,
-  like,
   lt,
   lte,
   ne,
@@ -905,15 +904,13 @@ export interface DbShape {
     { apiKey: string; connectedAt: Date } | undefined;
   /** One rule, or nothing when it has been deleted out from under a caller. */
   readonly getRule: (id: string) => Rule | undefined;
-  /** The fleet's choices row (`supervisor_config`), or undefined while none is stored. */
-  readonly getSupervisorConfig: () =>
-    | {
-        deniedTools: string[] | null;
-        cawcoTodos: boolean;
-        choicesSetAt: Date | null;
-        updatedAt: Date;
-      }
-    | undefined;
+  /** The fleet's choices row (`supervisor_config`) and its tool denials. */
+  readonly getSupervisorConfig: () => {
+    deniedTools: string[];
+    cawcoTodos: boolean;
+    choicesSetAt: Date | null;
+    updatedAt: Date;
+  };
   readonly getWorkflow: (id: string) => WorkflowRow | undefined;
   /** One call's row in a run's log, by its effect sequence. */
   readonly getWorkflowLog: (
@@ -1637,13 +1634,12 @@ export interface DbShape {
     files?: SkillFile[];
   }) => FleetSkillMeta;
   /**
-   * Upserts the fleet's choices row (single-row table) and, with `denied`,
-   * changes its tool denials in the same transaction: `seed` first when they
-   * were never set, then `remove` and `add`, every other name where it was.
+   * Updates the fleet's choices row (single-row table) and, with `denied`,
+   * changes its tool denials in the same transaction: `remove`, then `add`,
+   * every other name where it was.
    */
   readonly putSupervisorConfig: (config: {
     denied?: {
-      seed: readonly string[];
       add: readonly string[];
       remove: readonly string[];
     };
@@ -1855,15 +1851,6 @@ export interface DbShape {
    * stays and the old one goes. Answers the plugin ids that moved, old → new.
    */
   readonly renameMarketplace: (from: string, to: string) => [string, string][];
-  /**
-   * Paths on `machineId` stored under `~` before every path on a machine was
-   * a {@link MachinePath} (a restored database, rows from older hubs):
-   * places, session directories, workspaces and repositories, resolved
-   * against the home it reported. A place that lands on one the project
-   * already has there is folded into it. Answers the projects whose places
-   * changed. Nothing while the machine's home is unknown.
-   */
-  readonly resolveHomePaths: (machineId: string) => string[];
   readonly restoreRemovedSessions: (
     machineId: string,
     held: string[],
@@ -2754,6 +2741,20 @@ const make = async (path: string): Promise<DbShape> => {
       .orderBy(sql`rowid`)
       .all()
       .map(({ tool }) => tool);
+  /** The fleet's choices row, which drizzle 0032 writes on every hub. */
+  const supervisorChoices = (): typeof supervisorConfig.$inferSelect => {
+    const row = db
+      .select()
+      .from(supervisorConfig)
+      .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+      .get();
+    if (!row) {
+      throw new Error(
+        `supervisor_config has no '${SUPERVISOR_CONFIG_ID}' row: drizzle 0032 writes it, so this database did not migrate`
+      );
+    }
+    return row;
+  };
   /** Dollars the project's booked Caw turns cost since `since` (ms epoch). */
   const cawSince = (projectId: string, since: number): number =>
     db
@@ -3038,115 +3039,6 @@ const make = async (path: string): Promise<DbShape> => {
             .all()
         )[0]
       : undefined;
-  };
-
-  /** `~` or `~/…` in a column: what only a row from before every path on a machine was a {@link MachinePath} holds. */
-  const underHome = (column: AnySQLiteColumn) =>
-    or(eq(column, "~"), like(column, "~/%"));
-
-  /** {@link DbShape.resolveHomePaths} for `machineId`'s session directories, workspaces and repositories. */
-  const resolveHomeDirs = (
-    tx: Tx,
-    machineId: string,
-    resolve: (raw: string) => MachinePath
-  ): void => {
-    for (const row of tx
-      .select({ id: instances.id, cwd: instances.cwd })
-      .from(instances)
-      .where(and(eq(instances.machineId, machineId), underHome(instances.cwd)))
-      .all()) {
-      tx.update(instances)
-        .set({ cwd: resolve(row.cwd) })
-        .where(eq(instances.id, row.id))
-        .run();
-    }
-    for (const row of tx
-      .select()
-      .from(workspaces)
-      .where(
-        and(
-          eq(workspaces.machineId, machineId),
-          or(underHome(workspaces.path), underHome(workspaces.repoRoot))
-        )
-      )
-      .all()) {
-      tx.update(workspaces)
-        .set({ path: resolve(row.path), repoRoot: resolve(row.repoRoot) })
-        .where(eq(workspaces.id, row.id))
-        .run();
-    }
-    for (const row of tx
-      .select()
-      .from(projectRepositories)
-      .where(
-        and(
-          eq(projectRepositories.machineId, machineId),
-          underHome(projectRepositories.path)
-        )
-      )
-      .all()) {
-      tx.update(projectRepositories)
-        .set({ path: resolve(row.path) })
-        .where(
-          and(
-            eq(projectRepositories.projectId, row.projectId),
-            eq(projectRepositories.machineId, machineId)
-          )
-        )
-        .run();
-    }
-  };
-
-  /**
-   * {@link DbShape.resolveHomePaths} for `machineId`'s places: one that lands
-   * on a folder its project already has there is folded into it, primary if
-   * either was. Answers the projects whose places changed.
-   */
-  const resolveHomePlaces = (
-    tx: Tx,
-    machineId: string,
-    resolve: (raw: string) => MachinePath
-  ): string[] => {
-    const changed = new Set<string>();
-    for (const place of tx
-      .select()
-      .from(projectPlaces)
-      .where(
-        and(
-          eq(projectPlaces.machineId, machineId),
-          underHome(projectPlaces.path)
-        )
-      )
-      .all()) {
-      const resolved = resolve(place.path);
-      const standing = tx
-        .select()
-        .from(projectPlaces)
-        .where(
-          and(
-            eq(projectPlaces.projectId, place.projectId),
-            eq(projectPlaces.machineId, machineId),
-            eq(projectPlaces.path, resolved)
-          )
-        )
-        .get();
-      if (standing) {
-        tx.delete(projectPlaces).where(eq(projectPlaces.id, place.id)).run();
-        if (place.isPrimary && !standing.isPrimary) {
-          tx.update(projectPlaces)
-            .set({ isPrimary: true })
-            .where(eq(projectPlaces.id, standing.id))
-            .run();
-        }
-      } else {
-        tx.update(projectPlaces)
-          .set({ path: resolved })
-          .where(eq(projectPlaces.id, place.id))
-          .run();
-      }
-      changed.add(place.projectId);
-    }
-    return [...changed];
   };
 
   /**
@@ -4702,22 +4594,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(removedMachines.machineId, machineId))
         .run();
     },
-    resolveHomePaths: (machineId) => {
-      const agent = db
-        .select({ home: agents.home, hostname: agents.hostname })
-        .from(agents)
-        .where(eq(agents.machineId, machineId))
-        .get();
-      const home = agent?.home;
-      if (!(agent && home)) {
-        return [];
-      }
-      const resolve = (raw: string) => machinePath(home, raw, agent.hostname);
-      return db.transaction((tx) => {
-        resolveHomeDirs(tx, machineId, resolve);
-        return resolveHomePlaces(tx, machineId, resolve);
-      });
-    },
     setAgentCapabilities: (machineId, machineCapabilities) => {
       db.update(agents)
         .set({ machineCapabilities })
@@ -5743,8 +5619,8 @@ const make = async (path: string): Promise<DbShape> => {
       return policy;
     },
     agentTools: toolsOf,
-    // A report with nothing in it says nothing: a daemon that predates the tool
-    // catalog must not read as a machine that has just lost every tool on it.
+    // The cells reported replace their own; a tool the report did not name
+    // keeps what it had.
     mergeAgentTools: (machineId, statuses) => {
       putToolCells(machineId, statuses);
     },
@@ -5972,37 +5848,17 @@ const make = async (path: string): Promise<DbShape> => {
                 }))
               : []
         ),
-        // Always an array, like `skills` above, never omitted: this hub is not
-        // one that predates hooks, so there is no version-skew reason to leave
-        // the field out the way an old daemon's absence is read. A disabled row
-        // is simply not one of them — the same rule a disabled MCP server or
-        // skill already follows.
+        // A disabled row is not one of them — the same rule a disabled MCP
+        // server or skill follows.
         hooks: db
           .select()
           .from(fleetHooks)
           .where(eq(fleetHooks.enabled, true))
           .all()
           .map(hookOf),
-        // The fleet's denied-tools list, from the supervisor_config single row,
-        // always sent: a machine spawns nothing until it has heard it. Before
-        // anyone set it, the baseline is the one the dashboard shows
-        // (fleet-choices.ts `readChoices`).
-        ...(() => {
-          const row = db
-            .select({
-              deniedSeeded: supervisorConfig.deniedSeeded,
-              cawcoTodos: supervisorConfig.cawcoTodos,
-            })
-            .from(supervisorConfig)
-            .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-            .get();
-          return {
-            deniedTools: row?.deniedSeeded
-              ? deniedToolNames()
-              : [...DEFAULT_DENIED_TOOLS],
-            cawcoTodos: row?.cawcoTodos ?? false,
-          };
-        })(),
+        // Always sent: a machine spawns nothing until it has heard it.
+        deniedTools: deniedToolNames(),
+        cawcoTodos: supervisorChoices().cawcoTodos,
       };
     },
     putMcpServer: ({ name, config, enabled, projectId, platforms }) => {
@@ -9241,69 +9097,43 @@ const make = async (path: string): Promise<DbShape> => {
     },
 
     getSupervisorConfig: () => {
-      const row = db
-        .select()
-        .from(supervisorConfig)
-        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-        .get();
-      return row
-        ? {
-            deniedTools: row.deniedSeeded ? deniedToolNames() : null,
-            cawcoTodos: row.cawcoTodos,
-            choicesSetAt: row.choicesSetAt,
-            updatedAt: row.updatedAt,
-          }
-        : undefined;
+      const row = supervisorChoices();
+      return {
+        deniedTools: deniedToolNames(),
+        cawcoTodos: row.cawcoTodos,
+        choicesSetAt: row.choicesSetAt,
+        updatedAt: row.updatedAt,
+      };
     },
     putSupervisorConfig: ({ denied, ...config }) => {
+      supervisorChoices();
       db.transaction((tx) => {
-        const stored = tx
-          .select()
-          .from(supervisorConfig)
-          .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-          .get();
-        const values = {
-          id: SUPERVISOR_CONFIG_ID,
-          deniedSeeded: Boolean(denied) || (stored?.deniedSeeded ?? false),
-          cawcoTodos: config.cawcoTodos ?? stored?.cawcoTodos ?? false,
-          choicesSetAt:
-            config.choicesSetAt === undefined
-              ? (stored?.choicesSetAt ?? null)
-              : config.choicesSetAt,
-          updatedAt: new Date(),
-        };
-        tx.insert(supervisorConfig)
-          .values(values)
-          .onConflictDoUpdate({
-            target: supervisorConfig.id,
-            set: {
-              deniedSeeded: values.deniedSeeded,
-              cawcoTodos: values.cawcoTodos,
-              choicesSetAt: values.choicesSetAt,
-              updatedAt: values.updatedAt,
-            },
+        tx.update(supervisorConfig)
+          .set({
+            ...(config.cawcoTodos === undefined
+              ? {}
+              : { cawcoTodos: config.cawcoTodos }),
+            ...(config.choicesSetAt === undefined
+              ? {}
+              : { choicesSetAt: config.choicesSetAt }),
+            updatedAt: new Date(),
           })
+          .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
           .run();
         if (!denied) {
           return;
-        }
-        const add = (names: readonly string[]) => {
-          if (names.length > 0) {
-            tx.insert(fleetDeniedTools)
-              .values(names.map((tool) => ({ tool })))
-              .onConflictDoNothing()
-              .run();
-          }
-        };
-        if (!stored?.deniedSeeded) {
-          add(denied.seed);
         }
         if (denied.remove.length > 0) {
           tx.delete(fleetDeniedTools)
             .where(inArray(fleetDeniedTools.tool, [...denied.remove]))
             .run();
         }
-        add(denied.add);
+        if (denied.add.length > 0) {
+          tx.insert(fleetDeniedTools)
+            .values(denied.add.map((tool) => ({ tool })))
+            .onConflictDoNothing()
+            .run();
+        }
       });
     },
     fleetWatchOn: () =>
@@ -9813,12 +9643,6 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
     },
   };
-  // A database from before every path on a machine was a MachinePath (an
-  // older hub's, a restored backup): its `~` rows take each machine's stored
-  // home now; a machine with none yet has them resolved at its register.
-  for (const { machineId } of store.listAgents()) {
-    store.resolveHomePaths(machineId);
-  }
   return store;
 };
 

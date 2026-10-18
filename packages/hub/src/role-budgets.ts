@@ -268,6 +268,7 @@ export const measureRoles = (): RoleSize[] => {
     launchDir: "known",
     sessionId: null,
     status: "running",
+    kind: "mainline",
     ...SAMPLES[role],
   }));
   // The server's sweeps start with it; closed below, through the one path.

@@ -20,9 +20,9 @@ import { speakerName } from "./transcript/speaker";
  * Nothing else may write the literal.
  */
 export const MODEL_STORAGE_PREFIX = "cawco-models";
-const RECENT_KEY = `${MODEL_STORAGE_PREFIX}:recent`;
+const RECENT_KEY = `${MODEL_STORAGE_PREFIX}:recent-by-harness`;
 
-/** How many typed-in model ids are remembered — a shortlist, not a history. */
+/** How many typed-in model ids are remembered per harness — a shortlist, not a history. */
 const RECENT_LIMIT = 5;
 
 /**
@@ -37,12 +37,13 @@ const store = $state({
    * claude's own catalog carries none. Keyed by wire id.
    */
   claudeWindows: {} as Record<string, number>,
-  recent: [] as string[],
+  /** Typed-in ids by the harness they were typed for, newest first. */
+  recent: {} as Record<string, string[]>,
 });
 
 // Read once as the module loads rather than from a getter — a read that
 // writes is a render that mutates. Nothing to read on the server.
-store.recent = readJson<string[]>(RECENT_KEY, []);
+store.recent = readJson<Record<string, string[]>>(RECENT_KEY, {});
 
 /**
  * What the machines themselves report they can run. A harness whose catalog
@@ -195,10 +196,12 @@ export const models = {
       machineIds
     ),
   unread,
-  /** Typed-in ids the offered list does not cover, newest first. */
-  get recent(): string[] {
-    const rows = catalog();
-    return store.recent.filter((id) => !rows.some((row) => covers(row, id)));
+  /** Ids typed in for `harness` that its offered list does not cover, newest first. */
+  recentFor: (harness: string): string[] => {
+    const rows = modelsForHarness(catalog(), harness);
+    return (store.recent[harness] ?? []).filter(
+      (id) => !rows.some((row) => covers(row, id))
+    );
   },
 };
 
@@ -270,20 +273,24 @@ export function modelLabel(model: string, harness?: string): string {
 export { providerOf } from "./provider";
 
 /**
- * Remembers an id the user typed, so the next session can pick it off a list.
- * A typed id is, by definition, one the catalog does not offer — that is the
- * whole reason it was typed — so nothing here checks it against the catalog.
- * `models.recent` hides any that the catalog later comes to cover, and the
- * shortlist is capped, so a typo costs one slot until it scrolls off.
+ * Remembers an id the user typed for `harness`, so its next session can pick
+ * it off a list. A typed id is, by definition, one the catalog does not offer
+ * — that is the whole reason it was typed — so nothing here checks it against
+ * the catalog. `models.recentFor` hides any that the catalog later comes to
+ * cover, and each harness's shortlist is capped, so a typo costs one slot
+ * until it scrolls off.
  */
-export function rememberModel(model: string): void {
+export function rememberModel(model: string, harness: string): void {
   const id = model.trim();
   if (!id) {
     return;
   }
-  store.recent = [id, ...store.recent.filter((seen) => seen !== id)].slice(
-    0,
-    RECENT_LIMIT
-  );
+  store.recent = {
+    ...store.recent,
+    [harness]: [
+      id,
+      ...(store.recent[harness] ?? []).filter((seen) => seen !== id),
+    ].slice(0, RECENT_LIMIT),
+  };
   writeJson(RECENT_KEY, store.recent);
 }

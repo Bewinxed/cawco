@@ -726,8 +726,7 @@ export interface RegisterPayload extends MachineIdentity {
    * When each of those conversations last changed, ms epoch, by session id.
    * The hub writes it onto the rows it is not being told are live, so a
    * sleeping session's age is when the session last said something rather than
-   * when this register ran. Absent alongside `resumable`, and separate from it
-   * so a hub that predates this field still reads the ids.
+   * when this register ran. Absent alongside `resumable`.
    */
   resumableAt?: Record<string, number>;
   sessionAddresses: import("@cawco/core").SessionAddress[];

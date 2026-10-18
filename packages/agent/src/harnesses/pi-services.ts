@@ -3,12 +3,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
   AuthState,
-  FleetConfig,
   FleetHoldings,
   FleetItemState,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessReport,
+  MachineFleetConfig,
   ModelInfo,
   NeutralAssistantBlock,
   NeutralContentBlock,
@@ -717,7 +717,7 @@ export class PiProfile {
     return method === CONTROL_MODEL_CATALOG ? await modelCatalog() : undefined;
   }
 
-  async syncFleet(config: FleetConfig): Promise<FleetSyncReport> {
+  async syncFleet(config: MachineFleetConfig): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(PI_SIDECAR);
     const report: FleetSyncReport = {
       mcp: {},
@@ -737,7 +737,7 @@ export class PiProfile {
     }
     const skills = await syncSkillFiles(
       PI_SKILLS,
-      config.skills ?? [],
+      config.skills,
       sidecar.skills,
       report.skills as NonNullable<FleetSyncReport["skills"]>
     );

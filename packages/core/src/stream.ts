@@ -249,9 +249,8 @@ export type StreamClientMessage =
  * Where a frame came from: the sessiond line it was derived from, named by the
  * daemon's per-boot `epoch` and that line's `srcSeq`.
  *
- * Additive on the `frames` message, exactly as this protocol requires of every
- * shape here: an agent that has no sessiond behind it (opencode, pi, a legacy
- * build) sends frames without it, and a hub that predates the field ignores it.
+ * Optional on the `frames` message: a frame that no sessiond line produced
+ * (opencode's and pi's) carries none.
  * The dashboard never sees `srcSeq` and sessiond never sees the hub's `seq` —
  * this is the only place the two sequences touch.
  */
@@ -320,14 +319,8 @@ export interface RegisterAckPayload {
    * held to it (OpenCode's MCP streams) went with it.
    */
   hubEpoch: string;
-  /**
-   * Per instance id. ABSENT from a hub that predates this — which is not an
-   * empty ledger: the difference is what stops an agent replaying a backlog
-   * into a hub that never asked for one. Both readings land on the same safe
-   * behaviour (follow from head), and {@link readIngested} keeps them apart
-   * anyway.
-   */
-  ingested?: Record<string, IngestMark>;
+  /** Per instance id: an instance with no mark follows from head. */
+  ingested: Record<string, IngestMark>;
   /**
    * The machine's credential for the hub's git remote (`/git/…`, HTTP Basic
    * `<machineId>:<credential>`), minted for this connection and replaced on
@@ -456,17 +449,12 @@ export const alreadyDelivered = (
   sent.seq <= mark.seq;
 
 /**
- * The ledger off a register ack. `undefined` when the hub said nothing — an
- * old-shape ack is tolerated, never fatal, and leaves every instance following
- * from head (design §7's honest-loss rule).
+ * The ledger off a register ack, each mark read off the wire: a malformed one
+ * is dropped, which leaves its instance following from head (design §7's
+ * honest-loss rule).
  */
-export const readIngested = (
-  payload: unknown
-): Record<string, IngestMark> | undefined => {
-  const marks = record(record(payload)?.ingested);
-  if (!marks) {
-    return undefined;
-  }
+export const readIngested = (payload: unknown): Record<string, IngestMark> => {
+  const marks = record(record(payload)?.ingested) ?? {};
   const read: Record<string, IngestMark> = {};
   for (const [instanceId, value] of Object.entries(marks)) {
     const mark = record(value);

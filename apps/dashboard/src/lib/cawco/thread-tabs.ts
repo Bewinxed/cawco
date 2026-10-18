@@ -90,6 +90,7 @@ export function threadRowOf(
     machineId: place?.machineId ?? "hub",
     cwd: place?.path ?? `projects/${project.id}`,
     launchDir: "known",
+    kind: "mainline",
     projectId: thread.projectId,
     sessionId: null,
     status: thread.status === "ready" ? "sleeping" : "running",

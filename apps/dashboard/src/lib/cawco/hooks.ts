@@ -46,7 +46,7 @@ export interface HookVersion {
 }
 
 /** A machine's per-hook convergence, by the same id the hub keeps hooks under.
- *  Absent from a daemon that predates the field — reads as "not reported". */
+ *  Absent until the machine's first sync — reads as "not reported". */
 export type HookFleetReport = Record<string, FleetItemState>;
 
 export const hooksOf = (machine: Machine): HookFleetReport | undefined =>

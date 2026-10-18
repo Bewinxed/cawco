@@ -17,7 +17,6 @@ import type {
   ControlPayload,
   DaemonPermissionRequestFrame,
   Envelope,
-  FleetConfig,
   FleetHoldings,
   FleetSyncReport,
   FramePayload,
@@ -27,6 +26,7 @@ import type {
   HarnessKind,
   IngestMark,
   LaunchGrant,
+  MachineFleetConfig,
   MoveEnded,
   NeutralMessage,
   NeutralResultMessage,
@@ -253,8 +253,8 @@ export interface SessiondAwareContext extends HarnessContext {
  * The frames an agent has to send. The hub's own registry news is not one.
  *
  * A frame read off a sessiond ring additionally carries the line it came from
- * ({@link FrameProvenance}, design §7) — additively, so the daemon's socket
- * writer and an older hub both pass it through untouched. It is the hub's only
+ * ({@link FrameProvenance}, design §7), which the daemon's socket writer
+ * passes through untouched. It is the hub's only
  * way to tell a replayed line it already has from one it does not.
  */
 export type FrameSink = (
@@ -3295,7 +3295,7 @@ export class SessionSupervisor {
     claude: Harness & SessiondAdoption,
     row: Claimed["row"],
     proc: Claimed["proc"],
-    ingested: Record<string, IngestMark> | undefined
+    ingested: Record<string, IngestMark>
   ): void {
     const { instanceId } = row;
     const stop = new AbortController();
@@ -3326,7 +3326,7 @@ export class SessionSupervisor {
     claude: Harness & SessiondAdoption,
     row: Claimed["row"],
     proc: Claimed["proc"],
-    ingested: Record<string, IngestMark> | undefined,
+    ingested: Record<string, IngestMark>,
     stopped: AbortSignal
   ): Promise<void> {
     const { instanceId } = row;
@@ -3455,7 +3455,7 @@ export class SessionSupervisor {
   async #adoptClaimed(
     claude: Harness & SessiondAdoption,
     { row, proc, running, settle }: Claimed,
-    ingested: Record<string, IngestMark> | undefined,
+    ingested: Record<string, IngestMark>,
     stopped?: AbortSignal
   ): Promise<void> {
     if (!(await isDirectory(row.cwd))) {
@@ -3472,7 +3472,7 @@ export class SessionSupervisor {
     // names lines that no longer exist, and one from an earlier process
     // under the same id names another ring. Disk transcripts cover the
     // middle.
-    const mark = ingested?.[row.instanceId];
+    const mark = ingested[row.instanceId];
     const cursor = resumeCursor(procEpoch(proc.epoch, proc.pid), mark);
     if (cursor !== undefined && mark) {
       this.#ingested.set(row.instanceId, mark);
@@ -4756,7 +4756,7 @@ export class SessionSupervisor {
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
   async #syncFleet(
-    incoming: FleetConfig | undefined,
+    incoming: MachineFleetConfig | undefined,
     which: "syncFleet" | "fleetStatus"
   ): Promise<FleetSyncReport> {
     // The daemon's connection names a hub reachable from this machine.
@@ -4809,13 +4809,12 @@ export class SessionSupervisor {
     const skills: Record<string, State> = {};
     // Merged rather than dropped. This rebuilds the machine's one word from
     // each harness's, and every field it does not name is a field the hub never
-    // hears about — which is how the memory documents, the memory hook, the
-    // hooks and (once it existed) `have` all went missing between a daemon that
+    // hears about — which is how the memory documents, the hooks and (once it
+    // existed) `have` all went missing between a daemon that
     // reported them and a hub that had nowhere to read them from.
     const memoryDocs: Record<string, State> = {};
     const hooks: Record<string, State> = {};
     let memory: FleetSyncReport["memory"];
-    let memoryHook: FleetSyncReport["memoryHook"];
     // Merged the same way, and it has to be: the toolchain is what attributes a
     // CLI failure to a binary, and a field this rebuild does not name is a field
     // the hub never hears about.
@@ -4838,7 +4837,7 @@ export class SessionSupervisor {
                   await adapter.syncFleet!(
                     (adapter.capabilities.mcpStatus
                       ? config
-                      : incoming) as FleetConfig
+                      : incoming) as MachineFleetConfig
                   )
                 : // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
                   await adapter.fleetStatus!();
@@ -4878,9 +4877,6 @@ export class SessionSupervisor {
       Object.assign(hooks, report.hooks ?? {});
       if (report.memory) {
         ({ memory } = report);
-      }
-      if (report.memoryHook) {
-        ({ memoryHook } = report);
       }
       if (report.toolchain) {
         toolchain = { ...toolchain, ...report.toolchain };
@@ -4931,7 +4927,6 @@ export class SessionSupervisor {
       memoryDocs,
       hooks,
       ...(memory ? { memory } : {}),
-      ...(memoryHook ? { memoryHook } : {}),
       ...(toolchain ? { toolchain } : {}),
       have: await this.#fleetHoldings(),
       at: Date.now(),
@@ -5027,7 +5022,7 @@ export class SessionSupervisor {
           );
         }
         const report = await this.#syncFleet(
-          args[0] as FleetConfig,
+          args[0] as MachineFleetConfig,
           "syncFleet"
         );
         this.#healFleetMcp([...this.#sessions.keys()]);

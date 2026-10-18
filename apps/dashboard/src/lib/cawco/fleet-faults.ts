@@ -38,7 +38,6 @@ export type FaultScope =
   | "skills"
   | "memory"
   | "memoryDocs"
-  | "memoryHook"
   | "hooks";
 
 /** The named causes. `unknown` is not a failure of this table — it is a fault we refuse to guess at. */
@@ -361,7 +360,6 @@ export function machineFaults(
     ...scan("memoryDocs", machineId, fleet.memoryDocs),
     ...scan("hooks", machineId, fleet.hooks),
     ...single("memory", fleet.memory),
-    ...single("memoryHook", fleet.memoryHook),
   ];
 }
 
@@ -414,7 +412,6 @@ export const SCOPE_NOUN: Record<FaultScope, string> = {
   skills: "skill",
   memory: "memory",
   memoryDocs: "memory document",
-  memoryHook: "model-memory hook",
   hooks: "hook",
 };
 
@@ -426,7 +423,6 @@ export const SCOPE_ANCHOR: Record<FaultScope, string> = {
   skills: "/config/skills",
   memory: "/config/memory",
   memoryDocs: "/config/memory",
-  memoryHook: "/config/memory",
   hooks: "/config/hooks",
 };
 

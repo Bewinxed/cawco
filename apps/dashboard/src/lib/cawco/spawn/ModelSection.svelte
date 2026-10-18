@@ -214,12 +214,13 @@
   });
 
   const catalog = $derived(models.forHarness(listHarness, machineIds));
+  const recent = $derived(models.recentFor(listHarness));
   const use = $derived.by<ModelUse>(() => ({
     lastSpawnAt: lastSpawnAt(listHarness),
     lastUsedAt: Object.fromEntries(
       [
         ...catalog.map((row) => row.resolvedModel ?? row.value),
-        ...models.recent,
+        ...recent,
       ].flatMap((id) => {
         const used = lastUsedAt(listHarness, id);
         return used ? [[id, used]] : [];
@@ -229,7 +230,7 @@
   const entries = $derived(deriveModelEntries(catalog, use));
   const q = $derived(query.trim().toLowerCase());
   const rows = $derived(
-    groupModelEntries(entries, use, models.recent).flatMap((group) =>
+    groupModelEntries(entries, use, recent).flatMap((group) =>
       group.entries.filter((entry) => !q || matchesQuery(entry, q))
     )
   );
@@ -241,7 +242,7 @@
       (entry) =>
         entry.id.toLowerCase() === q ||
         entry.aliases.some((alias) => alias.toLowerCase() === q)
-    ) || models.recent.some((id) => id.toLowerCase() === q)
+    ) || recent.some((id) => id.toLowerCase() === q)
   );
   const showCustomRow = $derived(
     q.length > 2 && !exact && isIdShaped(query.trim())
@@ -262,13 +263,13 @@
   );
   function pick(entry: ModelEntry) {
     if (entry.isCustom) {
-      rememberModel(entry.id);
+      rememberModel(entry.id, listHarness);
     }
     onmodel(entry.id);
   }
   function pickCustom() {
     const id = query.trim();
-    rememberModel(id);
+    rememberModel(id, listHarness);
     onmodel(id);
     query = "";
   }

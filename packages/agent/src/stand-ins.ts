@@ -167,66 +167,14 @@ const asMade = async ({ path, empty, found }: Found): Promise<boolean> => {
 };
 
 /**
- * OpenCode's own rewrite of the `{}` an earlier build stood in with: it writes
- * `$schema` into a config that has none (`loadConfig`, packages/opencode/src/
- * config/config.ts at v1.18.34: `text.replace(/^\s*\{/, '{\n  "$schema":
- * "https://opencode.ai/config.json",')`).
- */
-const OPENCODE_REWRITE =
-  '{\n  "$schema": "https://opencode.ai/config.json",}\n';
-
-/** OpenCode's config files and dir, by their path. */
-const OPENCODE_PATH = /\/(opencode\.jsonc?|\.opencode)$/;
-
-/** The empty JSON object an earlier build stood in with for OpenCode's config. */
-const EARLIER_JSON = "{}\n";
-
-/**
- * What OpenCode writes into a writable `.opencode` dir it loads, as an
- * earlier build's stand-in was (`ensureGitignore` and `npm.install` in the
- * same file).
- */
-const OPENCODE_FILLS = new Set([
-  ".gitignore",
-  "package.json",
-  "package-lock.json",
-  "bun.lock",
-  "node_modules",
-]);
-
-/**
- * Whether `found` is what CawCo made at `path` or what a harness makes of it:
- * its stand-in as made, an earlier build's (OpenCode's `{}`, a writable
- * `.opencode`), or OpenCode's own rewrite of either.
- */
-const knownForm = async (one: Found): Promise<boolean> => {
-  if (await asMade(one)) {
-    return true;
-  }
-  const { path, found } = one;
-  const opencode = OPENCODE_PATH.test(path);
-  if (!opencode) {
-    return false;
-  }
-  if (found.isDirectory()) {
-    const entries = await readdir(path).catch(() => ["?"]);
-    return entries.every((entry) => OPENCODE_FILLS.has(entry));
-  }
-  const text = found.isFile()
-    ? await readFile(path, "utf8").catch(() => undefined)
-    : undefined;
-  return text === EARLIER_JSON || text === OPENCODE_REWRITE;
-};
-
-/**
  * Lists the stand-ins in the clone that are CawCo's, each by its own anchored
  * line in CawCo's block of the clone's `info/exclude` (`excludeStandIns`), so
  * git never sees them, and a user's own untracked `.vscode` or `.mcp.json`
  * is never hidden. A deny path at the clone's root that git does not track is
  * CawCo's when it is missing and `willStandIn` (the boundary's host makes it
  * before the sandbox starts: Linux), a mount point a sandbox left, already
- * listed (a harness may have written it since), or in a form CawCo or a
- * harness makes ({@link knownForm}); else it is someone else's. The clone's
+ * listed (a harness may have written it since), or its stand-in as made
+ * ({@link asMade}); else it is someone else's. The clone's
  * `.git` dir is no part of its status.
  */
 export const listStandIns = async (
@@ -251,7 +199,7 @@ export const listStandIns = async (
       ? listed.has(name) ||
         leftMountPoint(found) ||
         // biome-ignore lint/performance/noAwaitInLoops: one path at a time
-        (await knownForm({ ...one, found }))
+        (await asMade({ ...one, found }))
       : willStandIn;
     if (ours) {
       own.push(name);

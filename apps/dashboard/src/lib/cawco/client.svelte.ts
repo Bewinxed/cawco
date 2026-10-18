@@ -8348,7 +8348,7 @@ export const cawco = {
   get machines() {
     return state.machines;
   },
-  /** What the hub is running, or `undefined` from a hub that predates C2. */
+  /** What the hub is running; `undefined` until its first frame. */
   get hubBuild() {
     return state.hubBuild;
   },

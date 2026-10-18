@@ -291,12 +291,6 @@
     })
   );
 
-  $effect(() => {
-    if (cawco.fleetRead) {
-      folderPrefs.migrateProjects(cawco.projects);
-    }
-  });
-
   const projectsOf = (row: InstanceRow): string[] =>
     projectsFor(cawco.projects, row).map((project) => project.id);
 

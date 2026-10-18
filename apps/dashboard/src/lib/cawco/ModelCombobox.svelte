@@ -31,7 +31,7 @@
   }: {
     /** The model in force, as the id it is known by. `''` is the SDK's own choice. */
     value: string;
-    harness?: string;
+    harness: string;
     /** Chosen. Rejections belong to the caller — it owns the slot they show in. */
     onchoose: (model: string) => void | Promise<void>;
     /** Whether "Default" is offered — it is, wherever no model at all is a choice. */
@@ -53,8 +53,7 @@
 
   const trimmed = $derived(typed.trim());
   const offered = $derived(models.forHarness(harness));
-  // Legacy recent ids have no harness provenance; keep them out of scoped pickers.
-  const recent = $derived(harness ? [] : models.recent);
+  const recent = $derived(models.recentFor(harness));
   /** A typed id nothing on the list already covers — the whole point of the field. */
   const custom = $derived(
     trimmed.length > 0 &&
@@ -95,7 +94,7 @@
   async function choose(model: string, remember = false) {
     closeAndFocusTrigger();
     if (remember) {
-      rememberModel(model);
+      rememberModel(model, harness);
     }
     if (!isCurrent(model)) {
       await onchoose(model);

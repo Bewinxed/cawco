@@ -38,18 +38,6 @@ export const UPSTREAM_POSTS_SCHEMA = t.Union([
   t.Literal("on"),
 ]);
 
-/**
- * The baseline before anyone set it: the agent's compiled default
- * (`DENIED_WEB_TOOLS` and `DENIED_NATIVE_SUBAGENT_TOOLS`), which the
- * migration seeded too.
- */
-export const DEFAULT_DENIED_TOOLS: readonly string[] = [
-  "WebSearch",
-  "WebFetch",
-  "Task",
-  "Agent",
-];
-
 /** What `GET /api/fleet/choices` answers. */
 export interface FleetChoices {
   /** Use delegates instead of each harness's subagents. */
@@ -72,33 +60,27 @@ export interface StoredChoices {
   cawcoTodos: boolean;
   /** When a PUT last set them; null while nobody has. */
   choicesSetAt: Date | null;
-  /** The baseline; null before anyone set it. */
-  deniedTools: string[] | null;
+  /** The baseline. */
+  deniedTools: string[];
   /** The upstream answer; null while nobody has given it. */
   upstreamPosts: UpstreamPosts | null;
 }
 
 /**
- * A change to the baseline (`fleet_denied_tools`): `seed` first when it was
- * never set, then the names removed and added; every other name stays where
- * it was.
+ * A change to the baseline (`fleet_denied_tools`): the names removed and
+ * added; every other name stays where it was.
  */
 export interface DeniedToolsChange {
   add: readonly string[];
   remove: readonly string[];
-  seed: readonly string[];
 }
 
 /** "Delegates" turned on or off: Claude Code's subagent tools added, or every harness's removed. */
 const delegatesChange = (on: boolean): DeniedToolsChange => {
   const names = NATIVE_TOOLS.subagents;
   return on
-    ? { seed: DEFAULT_DENIED_TOOLS, add: names.claude, remove: [] }
-    : {
-        seed: DEFAULT_DENIED_TOOLS,
-        add: [],
-        remove: [...names.claude, ...names.opencode],
-      };
+    ? { add: names.claude, remove: [] }
+    : { add: [], remove: [...names.claude, ...names.opencode] };
 };
 
 export const readChoices = ({
@@ -106,19 +88,16 @@ export const readChoices = ({
   cawcoTodos,
   choicesSetAt,
   upstreamPosts,
-}: StoredChoices): FleetChoices => {
-  const list = [...(deniedTools ?? DEFAULT_DENIED_TOOLS)];
-  return {
-    delegates: NATIVE_TOOLS.subagents.claude.every((name) =>
-      list.includes(name)
-    ),
-    todos: cawcoTodos,
-    setAt: choicesSetAt?.getTime() ?? null,
-    deniedTools: list,
-    tools: { delegates: NATIVE_TOOLS.subagents, todos: NATIVE_TOOLS.todos },
-    upstream: upstreamPosts,
-  };
-};
+}: StoredChoices): FleetChoices => ({
+  delegates: NATIVE_TOOLS.subagents.claude.every((name) =>
+    deniedTools.includes(name)
+  ),
+  todos: cawcoTodos,
+  setAt: choicesSetAt?.getTime() ?? null,
+  deniedTools,
+  tools: { delegates: NATIVE_TOOLS.subagents, todos: NATIVE_TOOLS.todos },
+  upstream: upstreamPosts,
+});
 
 /** Where the fleet's choices are kept, and how every machine hears them. */
 export interface FleetChoicesStore {

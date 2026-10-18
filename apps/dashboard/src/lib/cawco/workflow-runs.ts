@@ -94,6 +94,7 @@ export function runRowOf(run: WorkflowRun, name: string): InstanceRow {
     machineId: run.machineId,
     cwd: run.workspace,
     launchDir: "known",
+    kind: "mainline",
     sessionId: null,
     status: STATUS[run.status],
     title: name,

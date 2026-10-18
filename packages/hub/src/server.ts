@@ -131,7 +131,6 @@ import {
   attachedFileLine,
   attachedFileName,
   BOUNDARY_RELAUNCH,
-  BUCKET_MS,
   byPerson,
   CANCEL_BINARY_UPDATE,
   type ChoiceEntry,
@@ -1991,8 +1990,7 @@ const peekResumableAt = (
 
 /**
  * `register`'s word on the cawco the daemon is running (NEW.md §12). Absent
- * from a daemon that predates it and from the re-announce, and the row keeps
- * what it had either way.
+ * from the re-announce, and the row keeps what it had.
  */
 const peekBuild = (payload: unknown): BuildInfo | undefined => {
   if (typeof payload !== "object" || payload === null) {
@@ -2085,9 +2083,9 @@ const isToolStatus = (value: unknown): value is ToolStatus =>
 
 /**
  * The report beat's word on what the machine has of the tool catalog (NEW.md §10).
- * Empty from a daemon that predates the feature, which is not the same as a
- * machine with none of them — the difference is what stops the hub installing
- * the whole catalog onto a daemon that has never been asked.
+ * Empty from a beat sent before the machine's probe has asked its tools, which
+ * is not the same as a machine with none of them — the difference is what
+ * stops the hub installing the whole catalog onto a machine not yet probed.
  */
 const peekTools = (payload: unknown): ToolStatus[] => {
   if (typeof payload !== "object" || payload === null) {
@@ -2217,11 +2215,7 @@ const SKILL_NAME = /^[A-Za-z0-9._-]+$/;
 /** What a machine answered `readMemoryFile` with: its own memory set, or nothing. */
 type MachineMemory = MachineMemorySet | null;
 
-/**
- * The answer, read defensively — a daemon that predates the set answers with
- * the main file alone, and `docs` absent there is a machine that links none
- * rather than a machine that could not be read.
- */
+/** The answer, read off the wire: a malformed set is no set. */
 const peekMemoryFile = (result: unknown): MachineMemory => {
   if (typeof result !== "object" || result === null) {
     return null;
@@ -2231,28 +2225,25 @@ const peekMemoryFile = (result: unknown): MachineMemory => {
     hash?: unknown;
     docs?: unknown;
   };
-  if (typeof content !== "string" || typeof hash !== "string") {
+  if (
+    typeof content !== "string" ||
+    typeof hash !== "string" ||
+    !Array.isArray(docs)
+  ) {
     return null;
   }
-
-  const read = Array.isArray(docs)
-    ? docs.flatMap((doc: unknown) => {
-        if (typeof doc !== "object" || doc === null) {
-          return [];
-        }
-        const {
-          path,
-          content: text,
-          hash: of,
-        } = doc as Record<string, unknown>;
-        return typeof path === "string" &&
-          typeof text === "string" &&
-          typeof of === "string"
-          ? [{ path, content: text, hash: of }]
-          : [];
-      })
-    : undefined;
-  return { content, hash, ...(read ? { docs: read } : {}) };
+  const read = docs.flatMap((doc: unknown) => {
+    if (typeof doc !== "object" || doc === null) {
+      return [];
+    }
+    const { path, content: text, hash: of } = doc as Record<string, unknown>;
+    return typeof path === "string" &&
+      typeof text === "string" &&
+      typeof of === "string"
+      ? [{ path, content: text, hash: of }]
+      : [];
+  });
+  return { content, hash, docs: read };
 };
 
 /** A read of a machine's memory, or the status the route should answer with. */
@@ -2315,9 +2306,7 @@ const toSendRecord = (row: SentMessageRow): SendRecord => ({
   uuid: row.uuid,
   instanceId: row.instanceId,
   acceptedAt: row.acceptedAt.toISOString(),
-  // Written at accept for every record since bodies were kept; a record from
-  // before goes out only through the history route, which fills it first.
-  body: row.body as NeutralUserMessage,
+  body: row.body,
   mode: row.mode,
   state: row.state,
   ...(row.reason ? { reason: row.reason } : {}),
@@ -5869,11 +5858,9 @@ export const createServer = (
   };
 
   /**
-   * One stored entry, linked to the sends it is. A record from before the hub
-   * kept bodies takes the stored copy as its body — only an entry that is one
-   * send holds that send's words alone. A pending send in an entry its
-   * harness has taken up (not {@link SessionMessage.queued}) has been read:
-   * this is a read that a restart kept from being framed.
+   * One stored entry, linked to the sends it is. A pending send in an entry
+   * its harness has taken up (not {@link SessionMessage.queued}) has been
+   * read: this is a read that a restart kept from being framed.
    */
   const linkEntry = (
     entry: SessionMessage,
@@ -5883,22 +5870,9 @@ export const createServer = (
       return found;
     }
     entry.sends = found.map((send) => send.uuid);
-    return found.map((each) => {
-      let send = each;
-      // Historical sends may predate stored bodies.
-      if (!send.body && found.length === 1) {
-        send =
-          db.updateSend(send.uuid, {
-            body: {
-              type: "user",
-              message: entry.message as NeutralUserMessage["message"],
-            },
-          }) ?? send;
-      }
-      return send.state === "pending" && !entry.queued
-        ? readSend(send, false)
-        : send;
-    });
+    return found.map((send) =>
+      send.state === "pending" && !entry.queued ? readSend(send, false) : send
+    );
   };
 
   /**
@@ -10294,9 +10268,9 @@ export const createServer = (
     read: () => {
       const config = db.getSupervisorConfig();
       return {
-        deniedTools: config?.deniedTools ?? null,
-        cawcoTodos: config?.cawcoTodos ?? false,
-        choicesSetAt: config?.choicesSetAt ?? null,
+        deniedTools: config.deniedTools,
+        cawcoTodos: config.cawcoTodos,
+        choicesSetAt: config.choicesSetAt,
         upstreamPosts: db.upstreamPosts(),
       };
     },
@@ -11357,7 +11331,8 @@ export const createServer = (
    * capped and why a capped catalogue was never the thing to resolve
    * against). Each harness the machine reports is asked, because the control
    * goes to ONE adapter and only the one that wrote the transcript can find
-   * it; a daemon that predates harness reporting is asked about every kind.
+   * it; a machine whose harnesses have not reported yet is asked about every
+   * kind.
    *
    * The answer is kept, so a conversation is located once per hub lifetime
    * and every reader after the first is a map lookup. Deliberately in
@@ -15336,7 +15311,7 @@ export const createServer = (
    * looking for what is out of date.
    *
    * A machine that has reported nothing is left alone — an empty map is a
-   * daemon that predates the catalog, not a machine missing everything. So is
+   * machine whose probe has not asked yet, not one missing everything. So is
    * one whose cell says `failed` or `unsupported`: the daemon remembers its own
    * failures for the rest of its boot, so an install that will not work waits
    * for a click instead of going out on every reconnect.
@@ -15507,7 +15482,7 @@ export const createServer = (
             placedMcp: placedCopies(mcpRows, places, machineId),
             // A project's memory documents, likewise once per place.
             placedMemory: placedCopies(config.placedMemory, places, machineId),
-            pluginPayloads: config.pluginPayloads?.map((plugin) =>
+            pluginPayloads: config.pluginPayloads.map((plugin) =>
               // Keyed by the fleet's id: two marketplaces may each carry a
               // plugin of the same name, and a machine holds both.
               held.plugins?.[`${plugin.name}@${plugin.marketplace}`] ===
@@ -15641,9 +15616,10 @@ export const createServer = (
   };
 
   const sendFleetSync = (machineId: string, agent: HubSocket): void => {
-    // Fleet sync converges each harness's own files. A daemon that predates
-    // harness reporting is assumed to be claude (fleetable); only an explicit
-    // report with no fleet-capable harness is a machine with nothing to converge.
+    // Fleet sync converges each harness's own files. The register's sync goes
+    // before the machine's harnesses have reported (they follow on its first
+    // beat); only a report with no fleet-capable harness is a machine with
+    // nothing to converge.
     const reports = db
       .listAgents()
       .find((row) => row.machineId === machineId)?.harnesses;
@@ -16359,10 +16335,10 @@ export const createServer = (
       (projectId &&
         !hasProjectRows(
           [
-            ...(fleet.hooks ?? []),
+            ...fleet.hooks,
             ...fleet.mcp,
-            ...(fleet.skills ?? []),
-            ...(fleet.placedMemory ?? []),
+            ...fleet.skills,
+            ...fleet.placedMemory,
           ],
           projectId
         ))
@@ -16427,9 +16403,10 @@ export const createServer = (
    * whatever the call answers (a parked permission, a delegate's ask, a tool
    * cell, a fleet sync). Extracted for the same reason as {@link relaySend}.
    *
-   * `remember` is false for a command envelope: the reply to a command is that
-   * command's `applied` ack, and routing it as a legacy `control_result` too
-   * would report the same outcome twice in two dialects.
+   * `replyAsFrame`: a dashboard's `control` verb is answered with a
+   * `control_result` frame on its socket; a command envelope (stream.ts, the
+   * five control kinds a command carries) is answered by settling that
+   * command, and a frame too would report the same outcome twice.
    */
   /**
    * One answer transaction for dashboards, the app and parent tools. The
@@ -16574,7 +16551,7 @@ export const createServer = (
   const relayPermissionAnswer = (
     message: Envelope<ControlPayload>,
     dashboard: HubSocket,
-    legacy: boolean
+    replyAsFrame: boolean
   ): boolean => {
     const answer = peekAnswer(message.payload);
     if (message.payload.method !== RESOLVE_PERMISSION) {
@@ -16606,7 +16583,7 @@ export const createServer = (
     );
     const correlationId = message.requestId ?? message.payload.requestId;
     const reply = (frame: ControlResult): void => {
-      if (legacy) {
+      if (replyAsFrame) {
         sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
       } else {
         streams.settleCommand(correlationId, frame);
@@ -17101,7 +17078,7 @@ export const createServer = (
   const relayModelCrossing = (
     message: Envelope<ControlPayload>,
     dashboard: HubSocket,
-    remember: boolean
+    replyAsFrame: boolean
   ): boolean => {
     const { instanceId, payload } = message;
     const asked = payload.args?.[0];
@@ -17118,7 +17095,7 @@ export const createServer = (
     }
     const requestId = message.requestId ?? payload.requestId;
     const receipt = (frame: ControlResult): void => {
-      if (remember) {
+      if (replyAsFrame) {
         sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
       } else {
         streams.settleCommand(requestId, frame);
@@ -17160,15 +17137,15 @@ export const createServer = (
   const relayControl = (
     asked: Envelope<ControlPayload>,
     dashboard: HubSocket,
-    remember = true
+    replyAsFrame = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {
     const message = byIdNow(asked);
-    if (relayModelCrossing(message, dashboard, remember)) {
+    if (relayModelCrossing(message, dashboard, replyAsFrame)) {
       return true;
     }
     // The hub owns skill reloads: an unchanged catalog must retain the CLI's
-    // sent-skills record, including when an older dashboard asks to reload it.
+    // sent-skills record, whoever asks to reload it.
     // It owns every workspace control too: archive and a move to another
     // commit delete a clone's work, and only the hub reads it first. And
     // every stage control: only the hub resolves where a stage may run.
@@ -17181,14 +17158,14 @@ export const createServer = (
         ok: false,
         error: hubOwned,
       };
-      if (remember) {
+      if (replyAsFrame) {
         sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
       } else {
         streams.settleCommand(requestId, frame);
       }
       return true;
     }
-    if (relayPermissionAnswer(message, dashboard, remember)) {
+    if (relayPermissionAnswer(message, dashboard, replyAsFrame)) {
       return true;
     }
     const deleted = peekTranscriptDelete(message.payload);
@@ -17206,7 +17183,7 @@ export const createServer = (
           requestId,
           ok: true,
         };
-        if (remember) {
+        if (replyAsFrame) {
           sendFrame(dashboard, {
             ...message,
             verb: "frames",
@@ -17220,7 +17197,7 @@ export const createServer = (
     }
     const requestId = message.requestId ?? message.payload.requestId;
     const correlated = { ...message, requestId };
-    if (!forward(correlated, dashboard, remember)) {
+    if (!forward(correlated, dashboard, replyAsFrame)) {
       return false;
     }
     // A per-cell install or retry, clicked rather than swept: the chip
@@ -18928,7 +18905,7 @@ export const createServer = (
       tasks.touched(projectId);
       decisionsChanged(projectId);
     },
-    fleetChoicesSet: () => Boolean(db.getSupervisorConfig()?.choicesSetAt),
+    fleetChoicesSet: () => db.getSupervisorConfig().choicesSetAt !== null,
     upstreamAnswered: () => db.upstreamPosts() !== null,
     projectsChanged,
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
@@ -19064,14 +19041,11 @@ export const createServer = (
         default:
           throw unreachable(answer);
       }
-      // A machine on a build from before find answers a list of lines: named
-      // as one that did not answer, never read as one that found nothing.
+      // An answer with no conversations list is named as one that did not
+      // answer, never read as one that found nothing.
       const result = answer.value.result as Partial<TranscriptAnswer> | null;
       if (!(result && Array.isArray(result.conversations))) {
-        return {
-          error:
-            "it runs an older build, which can't answer this search until it updates",
-        };
+        return { error: "its answer to this search had no conversations" };
       }
       return result as TranscriptAnswer;
     },
@@ -24494,10 +24468,10 @@ export const createServer = (
             return status(404, machineFault(body.machineId, "offline"));
           }
           const config = db.fleetConfig();
-          const fleetCopy = config.skills?.find(
+          const fleetCopy = config.skills.find(
             (skill) => skill.name === params.name
           );
-          if (!(config.skills && fleetCopy)) {
+          if (!fleetCopy) {
             return status(404, `the fleet carries no skill ${params.name}`);
           }
 
@@ -24803,7 +24777,7 @@ export const createServer = (
               return status(400, problem);
             }
 
-            const theirs = (read.copy.docs ?? []).find(
+            const theirs = read.copy.docs.find(
               (entry) => entry.path === body.path
             );
             if (!theirs) {
@@ -24823,25 +24797,21 @@ export const createServer = (
           }
 
           keepReplacedMemory(read.copy.content);
-          // A daemon that predates the set answers without `docs`, and taking
-          // that for "this machine links none" would quietly empty the fleet's.
-          for (const doc of read.copy.docs ?? []) {
+          for (const doc of read.copy.docs) {
             if (memoryDocProblem(doc.path)) {
               continue;
             }
             keepReplacedDoc(doc.path, doc.content);
             db.putFleetMemoryDoc({ path: doc.path, content: doc.content });
           }
-          if (read.copy.docs) {
-            const theirs = new Set(read.copy.docs.map((doc) => doc.path));
-            for (const doc of db.listFleetMemoryDocs()) {
-              // A machine's `memories/` holds the linked documents alone.
-              if (theirs.has(doc.path) || doc.scope) {
-                continue;
-              }
-              keepRemovedMemory(doc);
-              db.deleteFleetMemoryDoc(doc.path);
+          const theirs = new Set(read.copy.docs.map((doc) => doc.path));
+          for (const doc of db.listFleetMemoryDocs()) {
+            // A machine's `memories/` holds the linked documents alone.
+            if (theirs.has(doc.path) || doc.scope) {
+              continue;
             }
+            keepRemovedMemory(doc);
+            db.deleteFleetMemoryDoc(doc.path);
           }
 
           const memory = db.setFleetMemory(read.copy.content);
@@ -24902,11 +24872,11 @@ export const createServer = (
           ) {
             kept(undefined, read.copy.hash, read.copy.content);
           }
-          for (const theirs of read.copy?.docs ?? []) {
+          for (const theirs of read.copy ? read.copy.docs : []) {
             if (forced !== undefined && theirs.path !== forced) {
               continue;
             }
-            const ours = config.memory.docs?.find(
+            const ours = config.memory.docs.find(
               (doc) => doc.path === theirs.path
             );
             if (ours && ours.hash !== theirs.hash) {
@@ -24919,15 +24889,11 @@ export const createServer = (
             memory: {
               ...config.memory,
               ...(forced === undefined ? { force: true } : {}),
-              ...(config.memory.docs
-                ? {
-                    docs: config.memory.docs.map((doc) =>
-                      forced === undefined || doc.path === forced
-                        ? { ...doc, force: true }
-                        : doc
-                    ),
-                  }
-                : {}),
+              docs: config.memory.docs.map((doc) =>
+                forced === undefined || doc.path === forced
+                  ? { ...doc, force: true }
+                  : doc
+              ),
             },
           });
           publishInstances(body.machineId);
@@ -25193,7 +25159,7 @@ export const createServer = (
           }
 
           const config = db.fleetConfig();
-          if (!config.hooks || config.hooks.length === 0) {
+          if (config.hooks.length === 0) {
             return status(400, "the fleet keeps no hooks to push");
           }
           if (
@@ -26803,11 +26769,6 @@ export const createServer = (
                 build: peekBuild(message.payload),
                 home: peekHome(message.payload),
               });
-              // Places filed under `~` before every place was absolute take
-              // the home this register reported.
-              for (const projectId of db.resolveHomePaths(message.machineId)) {
-                placesChanged(message.machineId, projectId);
-              }
               // A register from a daemon with nothing to say leaves standing what
               // the beats said — the same tolerance `build` gets on the row.
               const registered = peekBinaryUpdate(message.payload);
@@ -27446,18 +27407,9 @@ export const createServer = (
                 noteProviderReading(db, message.machineId, reading);
               }
               if (buckets && buckets.length > 0) {
-                // Quarter-hour buckets only: a daemon that still reports hour
-                // buckets predates them, and its spend is not stored until it
-                // is restarted on this build. Its limits still are.
-                if (buckets.every((bucket) => bucket.spanMs === BUCKET_MS)) {
-                  db.putUsageBuckets(message.machineId, buckets);
-                  // Spend moved: every capped project's state with it.
-                  caps.recheck();
-                } else {
-                  console.warn(
-                    `[hub] usage buckets from ${message.machineId} refused: its daemon reports hour buckets; restart it on this build`
-                  );
-                }
+                db.putUsageBuckets(message.machineId, buckets);
+                // Spend moved: every capped project's state with it.
+                caps.recheck();
               }
               if (openCodeGo !== undefined) {
                 db.putOpenCodeGoLimits(message.machineId, openCodeGo);

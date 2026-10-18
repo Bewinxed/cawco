@@ -764,42 +764,61 @@ export interface SessionInstruction {
  */
 export interface FleetMemory {
   content: string;
-  /**
-   * The linked documents. Absent from a hub that predates the set, which is a
-   * fleet of exactly one document — and a daemon that predates it ignores the
-   * field and still converges the main file, which is the whole of what it
-   * knew how to do.
-   */
-  docs?: FleetMemoryDoc[];
+  /** The linked documents. */
+  docs: FleetMemoryDoc[];
   /** Set on a targeted push only: overwrite a machine copy that drifted. */
   force?: boolean;
   /** sha256 hex of `content` (UTF-8) — what a machine compares before writing. */
   hash: string;
 }
 
-/** The whole desired state — what the hub sends a machine to converge on. */
+/** The fleet's desired state, as the hub keeps it. */
 export interface FleetConfig {
   /**
    * The fleet's "CawCo's to-dos" choice (§5.2). On, every session is denied
    * its harness's own list and plan mode ({@link cawcoTodosDenied}), the
    * machine's own `claude` too, and OpenCode's `plan` agent is disabled.
-   * Absent from a hub that predates it: off.
    */
-  cawcoTodos?: boolean;
+  cawcoTodos: boolean;
   /**
-   * Fleet-wide tool denials, always sent. A machine spawns nothing until a
-   * sync has carried them (agent `denied-tools.ts`).
+   * Fleet-wide tool denials. A machine spawns nothing until a sync has
+   * carried them (agent `denied-tools.ts`).
    */
   deniedTools: string[];
+  /** Hooks the fleet keeps. */
+  hooks: FleetHook[];
+  marketplaces: FleetMarketplace[];
+  mcp: FleetMcpServer[];
   /**
-   * Hooks the fleet keeps. Absent from a hub that predates them, and a daemon
-   * that predates them ignores the field — which for hooks matters more than
-   * it does for the rest: an old daemon that half-understood this would be an
-   * old daemon executing something. Absent means "converge nothing", never
-   * "remove everything", so the two directions of version skew both end in a
-   * machine that runs only what it already ran.
+   * The fleet's user-scope CLAUDE.md, or null when the fleet keeps none —
+   * which is what has a machine give back the copy cawco wrote it.
    */
-  hooks?: FleetHook[];
+  memory: FleetMemory | null;
+  /**
+   * The project-scoped memory documents ({@link MemoryScope} with a project
+   * and no role), one copy per place as {@link MachineFleetConfig.placedMcp}.
+   * None is none: every copy cawco placed before is taken back.
+   */
+  placedMemory: FleetPlacedMemoryDoc[];
+  /**
+   * Vendored plugins, files inline: the ones the hub could resolve. A daemon
+   * writes its own marketplace and installs from that directory, and reaches
+   * the network for nothing; a plugin the hub could not fetch is absent here,
+   * and the daemon installs it from its marketplace.
+   */
+  pluginPayloads: FleetPluginPayload[];
+  plugins: FleetPlugin[];
+  /**
+   * Directly-fetched skills, files inline (NEW.md §11). A daemon writes a
+   * skill's directory under `~/.claude/skills/` only when the hash differs
+   * from what its sidecar recorded. User-scope only: a project's skills are
+   * {@link MachineFleetConfig.placedSkills}.
+   */
+  skills: FleetSkillPayload[];
+}
+
+/** What the hub sends one machine to converge on: the fleet's state, placed for that machine. */
+export interface MachineFleetConfig extends FleetConfig {
   /**
    * The marketplaces, by name, whose source is a directory on the hub's own
    * machine, sent to a machine that is not that machine. Such a path names
@@ -814,52 +833,23 @@ export interface FleetConfig {
    * hub's `error`: the one case a machine is given that bookkeeping, because
    * it is the whole of what the machine's failure has to say.
    */
-  hubOnlyMarketplaces?: string[];
-  marketplaces: FleetMarketplace[];
-  mcp: FleetMcpServer[];
-  /**
-   * The fleet's user-scope CLAUDE.md, or null when the fleet keeps none —
-   * which is what has a machine give back the copy cawco wrote it.
-   */
-  memory?: FleetMemory | null;
-  /**
-   * Vendored plugins, files inline. Present when the hub could resolve them;
-   * a daemon that gets them writes its own marketplace and installs from that
-   * directory, and reaches the network for nothing. Absent from a hub that
-   * predates this, which is what has a daemon fall back to asking the CLI to
-   * fetch — the old behaviour, kept only for that skew.
-   */
+  hubOnlyMarketplaces: string[];
   /**
    * Project-bound MCP servers (Projects §5.1: "reach every place of the
    * project"), one copy per checkout and delegate workspace of the project on
    * this machine, each with that place's `cwd` and `placeId`. Written into
    * each `.claude.json`'s per-folder map (`projects["<cwd>"].mcpServers`),
    * which git never sees. Never in {@link mcp}, so no user-scope path takes
-   * them. Absent from a hub that predates them: converge nothing.
+   * them.
    */
-  placedMcp?: FleetMcpServer[];
-  /**
-   * The project-scoped memory documents ({@link MemoryScope} with a project
-   * and no role), one copy per place as {@link placedMcp}. Absent is none:
-   * every copy cawco placed before is taken back.
-   */
-  placedMemory?: FleetPlacedMemoryDoc[];
+  placedMcp: FleetMcpServer[];
   /**
    * Project-bound skills, one copy per place as {@link placedMcp}, files
    * always inline. Written into `<cwd>/.claude/skills/<name>/`, which Claude
    * Code and OpenCode both read, and kept out of the checkout's status
-   * through its `info/exclude`. Absent from a hub that predates them.
+   * through its `info/exclude`.
    */
-  placedSkills?: FleetSkillPayload[];
-  pluginPayloads?: FleetPluginPayload[];
-  plugins: FleetPlugin[];
-  /**
-   * Directly-fetched skills, files inline (NEW.md §11). A daemon writes a
-   * skill's directory under `~/.claude/skills/` only when the hash differs
-   * from what its sidecar recorded. Absent from a hub that predates them.
-   * User-scope only: a project's skills are {@link placedSkills}.
-   */
-  skills?: FleetSkillPayload[];
+  placedSkills: FleetSkillPayload[];
 }
 
 /**
@@ -953,7 +943,8 @@ export interface FleetSyncReport {
   };
   /**
    * The fleet's hooks, by the same id the hub keeps them under. Absent from a
-   * daemon that predates them. `failed` covers three different machine-local
+   * harness's own report when it converges none (OpenCode's, pi's); a
+   * machine's merged report always carries it. `failed` covers three different machine-local
    * facts — a hand-edited script, a validation the hub already passed but this
    * row failed again, or a project hook with no checkout here — and `detail`
    * is what tells them apart.
@@ -964,30 +955,30 @@ export interface FleetSyncReport {
   /** Per-harness runtime truth, before the machine row's worst-state aggregation. */
   mcpByHarness?: Partial<Record<HarnessKind, Record<string, FleetItemState>>>;
   /**
-   * The user-scope memory (CLAUDE.md). Absent from a daemon that predates it;
-   * `failed` is how a machine says its own copy was edited and was not
-   * overwritten.
+   * The user-scope memory (CLAUDE.md). Absent when neither the fleet nor this
+   * machine's record has one; `failed` is how a machine says its own copy was
+   * edited and was not overwritten.
    */
   memory?: FleetItemState;
   /**
    * The linked documents, by the same path the set keyed them under. Absent
-   * from a daemon that predates the set; one drifted document says so on its
-   * own row, with the main file still `applied` beside it.
+   * from a harness's own report when it converges none; one drifted document
+   * says so on its own row, with the main file still `applied` beside it.
    */
   memoryDocs?: Record<string, FleetItemState>;
   /**
-   * The model-memory SessionStart hook an earlier cawco registered, while a
-   * machine has not managed to take it back (agent fleet.ts
-   * `retireMemoryHook`): always `failed`, with why. Absent once it is gone.
+   * Never sent. The retired model-memory hook's row, kept in the wire schema
+   * only while an installable TestFlight build reads it (hub scripts
+   * wire-compat.ts); it goes with the last of them (20261018).
    */
   memoryHook?: FleetItemState;
   plugins: Record<string, FleetItemState>;
-  /** Absent from a daemon that predates directly-fetched skills. */
+  /** Absent from a harness's own report when it converges none. */
   skills?: Record<string, FleetItemState>;
   /**
    * The CLIs this sync leaned on, so a failure can be attributed to a binary
-   * rather than to the machine as a whole. Absent from a daemon that predates
-   * it, and from one that found nothing to report.
+   * rather than to the machine as a whole. Absent from a machine that found
+   * nothing to report.
    */
   toolchain?: FleetToolchain;
 }
@@ -1120,12 +1111,11 @@ export interface MachineMemoryDoc {
 /**
  * A machine's own memory set: the user CLAUDE.md and whatever is under
  * `~/.claude/memories/`. What {@link READ_MEMORY_FILE} answers with, and what a
- * peek and an adoption read. A daemon that predates the set answers without
- * `docs`, which reads as a machine that keeps none.
+ * peek and an adoption read.
  */
 export interface MachineMemorySet {
   content: string;
-  docs?: MachineMemoryDoc[];
+  docs: MachineMemoryDoc[];
   hash: string;
 }
 

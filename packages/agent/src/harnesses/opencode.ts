@@ -35,13 +35,13 @@ import {
 import { hostname } from "node:os";
 import { join } from "node:path";
 import type {
-  FleetConfig,
   FleetItemState,
   FleetMcpConfig,
   FleetMcpServer,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessReport,
+  MachineFleetConfig,
   ModelInfo,
   NeutralSessionInfo,
   SessionMessage,
@@ -652,17 +652,14 @@ type PlacedMcp = Record<string, { cwd: string; name: string; entry: unknown }>;
 
 /**
  * A project's MCP servers at each of its places on this machine
- * (`FleetConfig.placedMcp`), for OpenCode: {@link OPENCODE_PLACED_MCP}
+ * (`MachineFleetConfig.placedMcp`), for OpenCode: {@link OPENCODE_PLACED_MCP}
  * rewritten whole, which the plugin hands each location as it boots. Answers
  * each copy's state under `<name>@<place id>`, a copy no longer carried as
- * removed. A hub that predates placement sends no list, and the file is left.
+ * removed.
  */
 const placeOpencodeMcp = async (
-  desired: FleetMcpServer[] | undefined
+  desired: FleetMcpServer[]
 ): Promise<Record<string, FleetItemState>> => {
-  if (!desired) {
-    return {};
-  }
   const before = (await readJson<PlacedMcp>(OPENCODE_PLACED_MCP)) ?? {};
   const placed: PlacedMcp = {};
   const report: Record<string, FleetItemState> = {};
@@ -694,9 +691,8 @@ const placeOpencodeMcp = async (
 
 /**
  * OpenCode's `plan` agent under the fleet's "CawCo's to-dos" choice: on,
- * `agents.plan.disabled` (2.0's agent config); off, taken back only when
- * CawCo set it. 1.x's `agent.plan.disable` goes, as 2.0 reads that key too.
- * Answers whether CawCo holds the setting now, for the sidecar.
+ * `agents.plan.disabled`; off, taken back only when CawCo set it. Answers
+ * whether CawCo holds the setting now, for the sidecar.
  */
 const syncPlanAgent = async (
   todosOn: boolean,
@@ -704,22 +700,19 @@ const syncPlanAgent = async (
 ): Promise<boolean> => {
   const stored =
     (await readJson<Record<string, unknown>>(OPENCODE_CONFIG)) ?? {};
-  const legacy = recordOf(stored.agent);
-  const { plan: legacyPlan, ...legacyRest } = legacy;
   const agents = recordOf(stored.agents);
   const { disabled, ...planRest } = recordOf(agents.plan);
   const holds = disabled === true;
-  if (legacyPlan === undefined && (todosOn ? holds : !(ours && holds))) {
+  if (todosOn ? holds : !(ours && holds)) {
     return todosOn && ours;
   }
   const plan = todosOn ? { ...planRest, disabled: true } : planRest;
   const { plan: _plan, ...otherAgents } = agents;
   const nextAgents =
     Object.keys(plan).length > 0 ? { ...otherAgents, plan } : otherAgents;
-  const { agent: _agent, agents: _agents, ...rest } = stored;
+  const { agents: _agents, ...rest } = stored;
   await writeOpencodeConfig("fleet sync", {
     ...rest,
-    ...(Object.keys(legacyRest).length > 0 ? { agent: legacyRest } : {}),
     ...(Object.keys(nextAgents).length > 0 ? { agents: nextAgents } : {}),
   });
   return todosOn;
@@ -5023,7 +5016,7 @@ export class OpencodeHarness implements Harness {
     }
   }
 
-  async syncFleet(config: FleetConfig): Promise<FleetSyncReport> {
+  async syncFleet(config: MachineFleetConfig): Promise<FleetSyncReport> {
     this.#mutatingMcp += 1;
     try {
       return await this.#syncFleet(config);
@@ -5032,7 +5025,7 @@ export class OpencodeHarness implements Harness {
     }
   }
 
-  async #syncFleet(config: FleetConfig): Promise<FleetSyncReport> {
+  async #syncFleet(config: MachineFleetConfig): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(OPENCODE_SIDECAR);
     const report: FleetSyncReport = {
       mcp: {},
@@ -5047,7 +5040,7 @@ export class OpencodeHarness implements Harness {
       report.mcp
     );
     const planAgentDisabled = await syncPlanAgent(
-      config.cawcoTodos === true,
+      config.cawcoTodos,
       sidecar.planAgentDisabled === true
     );
     // Before the poke below: a placement that changed restarts the server as

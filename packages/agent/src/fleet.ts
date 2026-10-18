@@ -32,6 +32,7 @@ import type {
   FleetToolchain,
   HookEvent,
   HookHandler,
+  MachineFleetConfig,
   MachineHookScript,
   MachineMemoryDoc,
   MachineMemorySet,
@@ -159,9 +160,9 @@ interface Sidecar {
   /** The fleet's "CawCo's to-dos" choice, synced from `supervisor_config.cawco_todos`. */
   cawcoTodos?: boolean;
   /**
-   * The fleet's denied-tools list, synced from `supervisor_config.denied_tools`.
-   * Absent from a sidecar written before this field existed: the machine has
-   * not heard the list, and {@link readFleetDenials} says so.
+   * The fleet's denied-tools list, synced from `fleet_denied_tools`. None
+   * before the machine's first sync: the machine has not heard the list,
+   * and {@link readFleetDenials} says so.
    */
   deniedTools?: string[];
   /**
@@ -174,10 +175,10 @@ interface Sidecar {
   hooks: Record<string, ManagedHook>;
   /**
    * The fleet marketplaces this machine was told live on the hub's machine
-   * only ({@link FleetConfig.hubOnlyMarketplaces}). Nothing is linked for
+   * only ({@link MachineFleetConfig.hubOnlyMarketplaces}). Nothing is linked for
    * them, so a status reads their rows off their plugins, as the sync did.
    */
-  hubOnlyMarketplaces?: string[];
+  hubOnlyMarketplaces: string[];
   /**
    * The marketplaces cawco linked, by their one name: the `name` of their
    * own `marketplace.json`, which is the fleet row's (the hub links under it)
@@ -194,11 +195,6 @@ interface Sidecar {
    * holds up itself and leaves the rest of the set converging.
    */
   memoryDocs: Record<string, string>;
-  /**
-   * The model-memory SessionStart command an earlier cawco registered, until
-   * it is taken back ({@link retireMemoryHook}); only this one is removed.
-   */
-  memoryHook?: string;
   /**
    * A project's MCP servers cawco placed here, by `<name>@<place id>`: the
    * folder whose `.claude.json` map it went into, and the name, so a place
@@ -273,47 +269,27 @@ const writeJson = (path: string, value: unknown): Promise<void> =>
   writeAtomic(path, JSON.stringify(value, null, 2));
 
 /**
- * The names cawco linked, out of a sidecar from before a marketplace had one
- * name. That one kept `{ name, linkedAs }`: the hub's name and the CLI's.
- * What cawco linked is the CLI's, and the hub now links under that same name.
+ * What cawco put here last time; unreadable is the same as never written,
+ * and a machine that never synced manages nothing.
  */
-const linkedNames = (
-  stored: (string | { linkedAs: string })[] | undefined
-): string[] =>
-  (stored ?? []).map((one) => (typeof one === "string" ? one : one.linkedAs));
-
-/** What cawco put here last time; unreadable is the same as never written. */
 const readSidecar = async (): Promise<Sidecar> => {
-  // Typed to admit the two-name shape too: a sidecar on disk may predate the
-  // one name.
-  const stored = await readJson<
-    Partial<Omit<Sidecar, "marketplaces">> & {
-      marketplaces?: (string | { linkedAs: string })[];
-    }
-  >(SIDECAR);
+  const stored = await readJson<Partial<Sidecar>>(SIDECAR);
   return {
     mcp: stored?.mcp ?? [],
-    marketplaces: linkedNames(stored?.marketplaces),
+    marketplaces: stored?.marketplaces ?? [],
     hubOnlyMarketplaces: stored?.hubOnlyMarketplaces ?? [],
     plugins: stored?.plugins ?? [],
     // Read back like every other record: without it each sync starts from an
     // empty one, so it reinstalls every vendored plugin and never uninstalls a
     // plugin the fleet dropped.
     vendoredPlugins: stored?.vendoredPlugins ?? {},
-    // A sidecar written before skills existed names none, which is the truth.
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
-    // Likewise one written before the memory was a set: no linked document on
-    // this machine is cawco's, so none of them is cawco's to take away.
     memoryDocs: stored?.memoryDocs ?? {},
-    ...(stored?.memoryHook ? { memoryHook: stored.memoryHook } : {}),
-    // A sidecar written before denied-tools syncing names none: the machine
-    // has not heard the list, until this sync writes it.
+    // None until the first sync: the machine has not heard the list.
     ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
     ...(stored?.cawcoTodos ? { cawcoTodos: true } : {}),
-    // A sidecar written before hooks existed manages none, which is the truth.
     hooks: stored?.hooks ?? {},
-    // Likewise one written before a project's rows were placed: none was.
     placedMcp: stored?.placedMcp ?? {},
     placedMemory: stored?.placedMemory ?? {},
     placedSkills: stored?.placedSkills ?? {},
@@ -847,13 +823,13 @@ type PluginRecords = Pick<
  * idempotent, but neither is free, so what the CLI already lists is left alone.
  */
 const syncPlugins = async (
-  config: FleetConfig,
+  config: MachineFleetConfig,
   managed: Sidecar,
   report: FleetSyncReport
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: links every marketplace and installs every plugin the config wants, reporting each one's outcome
 ): Promise<PluginRecords> => {
   const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
-  const hubOnly = config.hubOnlyMarketplaces ?? [];
+  const hubOnly = config.hubOnlyMarketplaces;
   // The Claude Code sessions run: its plugins are the ones they load, and its
   // `claude plugin …` commands start it, so through the version gate.
   let bin: string;
@@ -936,7 +912,7 @@ const syncPlugins = async (
   // Whatever the hub resolved for itself is installed from the bytes it sent;
   // only what it could NOT resolve is left for the CLI to go and fetch, which
   // is the path that needs this machine to reach github on its own account.
-  const payloads = config.pluginPayloads ?? [];
+  const payloads = config.pluginPayloads;
   const vendored = await syncVendoredPlugins(
     bin,
     payloads,
@@ -1963,9 +1939,8 @@ const pruneEmptyDirs = async (): Promise<void> => {
  * is where "cawco overwrote what I wrote" is caught, and a decision that only
  * exists inside a filesystem walk is a decision nothing can ask about.
  *
- * A hub that predates the set sends no documents at all, which arrives here as
- * an empty `desired` — every managed document is then given back, exactly as
- * the fleet keeping no memory gives back the main file.
+ * A fleet that keeps no memory arrives here as an empty `desired`: every
+ * managed document is then given back, as the main file is.
  */
 export function memorySetPlan(
   desired: readonly { path: string; hash: string; force?: boolean }[],
@@ -2275,69 +2250,6 @@ export function withoutHooks(
     return kept.length > 0 ? [{ ...entry, hooks: kept }] : [];
   });
 }
-
-/**
- * Takes back the SessionStart hook earlier versions registered to show a
- * Claude session the `models/` document for its model. A document scoped by
- * model now reaches its sessions in their launch instructions (hub
- * memory-scopes.ts), on every harness and through a compaction; the hook's
- * output was "Context that hooks added earlier | Summarized with the rest of
- * the conversation" (code.claude.com/docs/en/context-window). The command
- * the sidecar names is the only one removed from the user's own
- * `~/.claude/settings.json`, and the file is written only when that changes
- * it. A machine it fails on keeps the name, says so in `memoryHook`, and is
- * tried again on the next sync.
- */
-const retireMemoryHook = async (
-  managed: string | undefined,
-  report: FleetSyncReport
-): Promise<string | undefined> => {
-  if (managed === undefined) {
-    return undefined;
-  }
-
-  const stored = await readJson<Record<string, unknown>>(SETTINGS_PATH);
-  // Nothing is written over a file that cannot be read: the rest of it is the
-  // user's permissions and plugins, and a rewrite would take them with it.
-  if (stored === undefined && (await Bun.file(SETTINGS_PATH).exists())) {
-    report.memoryHook = {
-      state: "failed",
-      detail: `could not parse ${SETTINGS_PATH}`,
-    };
-    return managed;
-  }
-
-  const root = stored ?? {};
-  const hooks = {
-    ...((root.hooks as Record<string, unknown> | undefined) ?? {}),
-  };
-  const starts = (hooks.SessionStart as HookMatcher[] | undefined) ?? [];
-  const next = withoutHooks(starts, [managed]);
-
-  if (next.length > 0) {
-    hooks.SessionStart = next;
-  } else {
-    // biome-ignore lint/performance/noDelete: an undefined-valued key would still count in the Object.keys(hooks) check just below
-    delete hooks.SessionStart;
-  }
-  const settings = { ...root };
-  if (Object.keys(hooks).length > 0) {
-    settings.hooks = hooks;
-  } else {
-    settings.hooks = undefined;
-  }
-
-  try {
-    if (JSON.stringify(settings) !== JSON.stringify(root)) {
-      await writeJson(SETTINGS_PATH, settings);
-    }
-    await rm(managed, { force: true });
-  } catch (error) {
-    report.memoryHook = { state: "failed", detail: tail(said(error)) };
-    return managed;
-  }
-  return undefined;
-};
 
 /** Where a hook's own script lands: `~/.claude/cawco-hooks/<id>.sh`. */
 const hookScriptPath = (id: string): string => join(HOOKS_DIR, `${id}.sh`);
@@ -2678,7 +2590,9 @@ const syncHooks = async (
   return written;
 };
 
-const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
+const converge = async (
+  config: MachineFleetConfig
+): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skillStates: Record<string, FleetItemState> = {};
   const docStates: Record<string, FleetItemState> = {};
@@ -2694,39 +2608,36 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   };
 
   const mcp = await syncMcp(config.mcp, managed.mcp, report.mcp);
-  // A hub that predates placement sends neither list: nothing placed is
-  // touched, as hooks are left alone by a hub that predates them.
-  const placedMcp = config.placedMcp
-    ? await syncPlacedMcp(config.placedMcp, managed.placedMcp, report.mcp)
-    : managed.placedMcp;
+  const placedMcp = await syncPlacedMcp(
+    config.placedMcp,
+    managed.placedMcp,
+    report.mcp
+  );
   const installed = await syncPlugins(config, managed, report);
   const skills = await syncSkillFiles(
-    config.skills ?? [],
+    config.skills,
     managed.skills,
     skillStates
   );
-  const placedSkills = config.placedSkills
-    ? await syncPlacedSkills(
-        config.placedSkills,
-        managed.placedSkills,
-        skillStates
-      )
-    : managed.placedSkills;
+  const placedSkills = await syncPlacedSkills(
+    config.placedSkills,
+    managed.placedSkills,
+    skillStates
+  );
   const memory = await syncMemory(config.memory, managed.memory, report);
-  // A hub that predates the set sends no `docs`, which reads as a fleet that
-  // links none — and the machine gives back the ones cawco wrote it.
-  const docs = config.memory?.docs ?? [];
-  const memoryDocs = await syncMemoryDocs(docs, managed.memoryDocs, docStates);
-  const memoryHook = await retireMemoryHook(managed.memoryHook, report);
+  // A fleet that keeps no memory links no documents either: the machine
+  // gives back the ones cawco wrote it.
+  const memoryDocs = await syncMemoryDocs(
+    config.memory?.docs ?? [],
+    managed.memoryDocs,
+    docStates
+  );
   const placedMemory = await syncPlacedMemory(
-    config.placedMemory ?? [],
+    config.placedMemory,
     managed.placedMemory,
     docStates
   );
-  // A hub that predates hooks sends no `hooks`, which reads the same way: a
-  // fleet that keeps none, and the machine gives back whatever cawco
-  // registered before this daemon knew what that field meant.
-  const hooks = await syncHooks(config.hooks ?? [], managed.hooks, hookStates);
+  const hooks = await syncHooks(config.hooks, managed.hooks, hookStates);
   // What the machine's own `claude` was denied for the fleet before this sync:
   // none of it, when the machine had not heard the list (cawco wrote nothing).
   const before = await readFleetDenials();
@@ -2737,11 +2648,9 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
     ...installed,
     skills,
     deniedTools: config.deniedTools,
-    // A hub that predates the flag sends none: the choice is off.
     ...(config.cawcoTodos ? { cawcoTodos: true } : {}),
     ...(memory ? { memory } : {}),
     memoryDocs,
-    ...(memoryHook ? { memoryHook } : {}),
     hooks,
     placedMcp,
     placedMemory,
@@ -2799,7 +2708,7 @@ export const inFleetQueue = <T>(work: () => Promise<T>): Promise<T> => {
  * same file and runs no CLI at all.
  */
 export const syncFleetConfig = (
-  config: FleetConfig
+  config: MachineFleetConfig
 ): Promise<FleetSyncReport> => inFleetQueue(() => converge(config));
 
 /**
@@ -2856,7 +2765,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
       : { state: "failed", detail: "not in installed_plugins.json" };
   }
   hubOnlyStates(
-    managed.hubOnlyMarketplaces ?? [],
+    managed.hubOnlyMarketplaces,
     report.plugins,
     report.marketplaces
   );
@@ -2918,12 +2827,6 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
             state: "failed",
             detail: fileHash === null ? `${file} is not on disk` : DRIFTED,
           };
-  }
-  if (managed.memoryHook !== undefined) {
-    report.memoryHook = {
-      state: "failed",
-      detail: `the retired model-memory hook ${managed.memoryHook} is still registered; the next sync takes it back`,
-    };
   }
   for (const [id, record] of Object.entries(managed.hooks)) {
     if (record.command.startsWith(HOOKS_DIR)) {

@@ -16,11 +16,11 @@
 import type {
   AuthState,
   Envelope,
-  FleetConfig,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessKind,
   HarnessReport,
+  MachineFleetConfig,
   MachineHarnessReport,
   MoveEnded,
   NeutralMessage,
@@ -432,7 +432,7 @@ export interface Harness {
   ): Promise<{ dir: string; spec: SpawnPayload }>;
   /** Applies the hub's fleet config to this harness's own files; reports per entry. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  syncFleet?(config: FleetConfig): Promise<FleetSyncReport>;
+  syncFleet?(config: MachineFleetConfig): Promise<FleetSyncReport>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   tagSession(
     sessionKey: string,

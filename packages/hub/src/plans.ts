@@ -107,7 +107,7 @@ export const createPlans = (deps: PlansDeps) => {
    */
   const keepsCawcoList = (row: InstanceRow): boolean =>
     (row.harness ?? "claude") !== "claude" ||
-    (db.getSupervisorConfig()?.cawcoTodos ?? false) ||
+    db.getSupervisorConfig().cawcoTodos ||
     (!!row.delegateType &&
       deps.typeTodos(row.delegateTypeProject ?? null, row.delegateType));
 

@@ -1220,8 +1220,8 @@ export interface InstanceRow {
   held?: { since: number; reason: string };
   id: string;
   keepAlive?: KeepAlive;
-  /** `scratch` for a spin-off; absent from a hub that predates the column. */
-  kind?: string;
+  /** `mainline`, `scratch` for a spin-off, or `summariser`, never on the board. */
+  kind: string;
   /** What killed the session, on a row the agent reported as `error`. */
   lastError?: string | null;
   lastRequestAt?: string | number | Date | null;

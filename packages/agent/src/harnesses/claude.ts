@@ -4447,7 +4447,7 @@ export class ClaudeHarness implements Harness {
     }
   }
 
-  syncFleet(config: import("@cawco/core").FleetConfig) {
+  syncFleet(config: import("@cawco/core").MachineFleetConfig) {
     return syncFleetConfig(config);
   }
 

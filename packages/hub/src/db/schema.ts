@@ -1724,12 +1724,8 @@ export const sentMessages = sqliteTable(
      * Claude send stored under its own uuid.
      */
     harnessId: text("harness_id"),
-    /**
-     * What the sender submitted, pictures as media references. Null only on a
-     * record from before the hub kept bodies, until a history read links it to
-     * its stored entry and fills it from there.
-     */
-    body: text("body", { mode: "json" }).$type<NeutralUserMessage>(),
+    /** What the sender submitted, pictures as media references. */
+    body: text("body", { mode: "json" }).$type<NeutralUserMessage>().notNull(),
     /** Records from before modes were kept were all ordinary turns to the reader. */
     mode: text("mode").$type<SendMode>().notNull().default("turn"),
     /**
@@ -2789,15 +2785,6 @@ export const fleetSkillHistory = sqliteTable("fleet_skill_history", {
 export const supervisorConfig = sqliteTable("supervisor_config", {
   /** Always `'supervisor'`: the hub has one, and a table with a key says so cheaply. */
   id: text("id").primaryKey(),
-  /**
-   * Whether the fleet's tool denials (`fleet_denied_tools`) are set. False
-   * only before the seeding migration or a fresh hub's first choice, when
-   * every daemon falls back to its compiled list; once set, the rows are the
-   * list, possibly none when the operator has removed all denials.
-   */
-  deniedSeeded: integer("denied_seeded", { mode: "boolean" })
-    .notNull()
-    .default(false),
   /**
    * The fleet's "CawCo's to-dos" choice (§5.2): every session is denied its
    * harness's own list and plan mode, added at spawn (`cawcoTodosDenied`),
