@@ -142,6 +142,8 @@ const BULK_LABEL = /^Label$/;
 /** The project head's More menu, and its stages picker. */
 const PROJECT_MORE = /More for cawco/;
 const PICK_STAGES = /Pick stages/;
+/** The stages picker's Outreach set (StagesControl `NAMES.outreach`, then its chain). */
+const OUTREACH_STAGES = /^Outreach/;
 /** A column's way to a new task (NewTaskForm, closed). */
 const ADD_TASK = /^Add task$/;
 /** The board's Archived rail, folded. */
@@ -189,8 +191,33 @@ const MORE_FOR_SKILL = /^More for tray-check$/;
 const MORE_FOR_MEMORY = /^More for .*CLAUDE\.md$/;
 /** What runs in a project, which its forget reads first (client.svelte.ts `projectRunning`). */
 const PROJECT_RUNNING = "**/api/projects/*/running";
+/** {@link PROJECT_RUNNING}'s path. */
+const PROJECT_RUNNING_PATH = /^\/api\/projects\/[^/]+\/running$/;
 /** An artifact's read, which a task's presented page finds its session by (ArtifactStage `findArtifact`). */
 const ARTIFACT_READ = "**/api/artifacts/*";
+/** {@link ARTIFACT_READ}'s path. */
+const ARTIFACT_READ_PATH = /^\/api\/artifacts\/[^/]+$/;
+
+/**
+ * What each page's acts hold back themselves (a route they never answer), by
+ * the request's URL: the walk's wait on the tape counts these answered
+ * (walk.ts `quiet`), as it does the tape's own holds. Unknown to it, each
+ * held a state for the 15 s `quiet` gives a page before reading it.
+ */
+export const actHolds = new WeakMap<Page, ((url: URL) => boolean)[]>();
+
+/** `pattern`'s requests on `page` never answered, and the walk told so (`actHolds`). */
+const neverAnswered = async (
+  page: Page,
+  pattern: string,
+  path: RegExp
+): Promise<void> => {
+  actHolds.set(page, [
+    ...(actHolds.get(page) ?? []),
+    (url) => path.test(url.pathname),
+  ]);
+  await page.route(pattern, () => undefined);
+};
 /** The decision page the cawco project's session made (its artifact's name). */
 const CHIP_DECISION = "chip-decision";
 /** A pairing's start (hub-auth.svelte.ts `startPairing`), not its polls. */
@@ -1245,7 +1272,7 @@ export const SURFACES: Surface[] = [
         // read: the tray's reading line. Last (its route stays).
         name: "forget-reading",
         act: async (page) => {
-          await page.route(PROJECT_RUNNING, () => undefined);
+          await neverAnswered(page, PROJECT_RUNNING, PROJECT_RUNNING_PATH);
           await fromMore("Forget project…")(page);
         },
         root: "body",
@@ -1301,6 +1328,23 @@ export const SURFACES: Surface[] = [
         root: LAYER,
         widths: ["desk"],
       },
+      {
+        // A set the tasks don't stand in (Outreach's stages are none of
+        // theirs): its ask under it in the picker, naming each task it would
+        // strand and where each stands (StagesControl, AskHere, AskItems).
+        name: "stages-ask",
+        act: async (page) => {
+          await press(PROJECT_MORE)(page);
+          await page.getByRole("menuitem", { name: PICK_STAGES }).click();
+          await page
+            .getByRole("button", { name: OUTREACH_STAGES })
+            .filter({ visible: true })
+            .first()
+            .click();
+        },
+        root: LAYER,
+        widths: ["desk"],
+      },
     ],
   },
   {
@@ -1344,7 +1388,9 @@ export const SURFACES: Surface[] = [
         // In review, its page not found yet: the stage's cover. Last (its route stays).
         name: "review-opening",
         route: (s) => `/project/${s.project}?task=${s.review}`,
-        act: reloadedWith((page) => page.route(ARTIFACT_READ, () => undefined)),
+        act: reloadedWith((page) =>
+          neverAnswered(page, ARTIFACT_READ, ARTIFACT_READ_PATH)
+        ),
         root: "body",
       },
     ],

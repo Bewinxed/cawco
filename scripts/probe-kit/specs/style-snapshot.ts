@@ -629,10 +629,21 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
     kit,
     surfaces.map((s) => ({ ...s, serve: "dev" as const })),
     PASSES.filter((p) => !p.reduced && p.theme === "light"),
-    async ({ page, state, surface }) => {
+    async ({ page, pass, state, surface }) => {
       const read = await page.evaluate(filesUnder, state.root);
       heard(seen, read.own, surface.name);
       heard(chained, read.chain, surface.name);
+      // Each state's own files and the page it read them on: which state
+      // leaves a file out, where the map says only which surface.
+      if (has("dump")) {
+        await writeFile(
+          join(
+            kit.out,
+            `${surface.name}-${state.name}-${pass.width}-${pass.theme}.json`
+          ),
+          `${JSON.stringify({ url: page.url(), ...read }, null, 2)}\n`
+        );
+      }
     },
     (what, why) => kit.note(`${what}: did not open (${why})`)
   );
