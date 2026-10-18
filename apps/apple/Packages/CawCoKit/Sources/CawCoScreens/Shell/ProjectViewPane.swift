@@ -4,18 +4,12 @@ import OSLog
 import UIKit
 import WebKit
 
-/// One of a project's custom views (routes/project/[id]/+page.svelte, the
-/// `view:` pane): a draft's bar, what it is and its two answers, Keep and
-/// Discard, over the view itself. The view is drawn by the dashboard's own
-/// renderer in a web view (PRD §5.2: OpenUI has no Swift renderer), on its
-/// chromeless route `/project/<id>/view/<name>` at the address the hub gives
-/// for the dashboard (`/health` `dashboard`); its data are the route's own
-/// same-origin reads, which the dashboard hands to the hub, as the hub's API
-/// is reached from this app with no credential of its own. A task tapped in
-/// the view opens the app's task sheet: the route posts `cawco:open-task`
-/// to the `cawco` handler here. A link to a file of the project's folder
-/// (the project page's `?file=`) opens the app's file sheet.
-final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandler {
+/// One of a project's custom views on its own tab (routes/project/[id]/+page.svelte,
+/// the `view:` pane): over the view, a draft's bar (what it is and its two
+/// answers, Keep and Discard), or a kept view's head (its glyph, its title,
+/// its ⋯, which places it on a page as a block). The view is the dashboard's
+/// own route in a web view (ViewWeb).
+final class ProjectViewPane: UIView {
     /// A task tapped in the view.
     var onOpenTask: (String) -> Void = { _ in }
     /// A link to a file of the project's folder, by its path.
@@ -23,41 +17,51 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
     /// Keep and Discard: the hub's refusal is thrown back, and said under the bar.
     var keep: (String) async throws -> Void = { _ in }
     var discard: (String) async throws -> Void = { _ in }
+    /// The kept view placed on a page, as a block there.
+    var place: (String, BlockPage) -> Void = { _, _ in }
 
-    private let hub: HubConnection
-    private var web: WKWebView!
+    private let page: ViewWeb
+    private var web: WKWebView { page.web }
     /// The draft's bar (`.draft-bar`): `surface-band`, a hairline inside, `radius-lg`.
     private let bar = UIView()
     private let barLine = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
     private var keepButton: UIButton!
     private var discardButton: UIButton!
+    /// A kept view's head (`.view-head`): Block.svelte's head, without the drag.
+    private let viewHead = UIStackView()
+    private let viewTitle = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+    private var viewMore: UIButton!
     private let refusal = KitAlert(tone: .destructive)
     private let cover = UIView()
     private let failure: KitAlert
-    private var retry: UIButton!
-    private var barTop: NSLayoutConstraint!
     private var webTop: NSLayoutConstraint!
     private var edges: [NSLayoutConstraint] = []
 
-    /// What the pane shows, and what its web view last loaded.
+    /// What the pane shows.
     private(set) var view: ProjectView?
     private var projectId = ""
-    private var loaded: URL?
-    /// The dashboard's address, once the hub has said it.
-    private var dashboard: URL?
     private var keeping = false
     private var discarding = false
 
     init(hub: HubConnection) {
-        self.hub = hub
-        let retry = KitButton.make("Retry", variant: .outline, height: .sm) {}
+        page = ViewWeb(hub: hub, block: false)
+        let retry = KitButton.make(Words.Views.retry, variant: .outline, height: .sm) {}
         retry.setContentHuggingPriority(.required, for: .horizontal)
         failure = KitAlert(tone: .destructive, under: [retry])
         super.init(frame: .zero)
-        self.retry = retry
         retry.addAction(UIAction { [weak self] _ in self?.load(again: true) }, for: .primaryActionTriggered)
         translatesAutoresizingMaskIntoConstraints = false
         build()
+        page.onOpenTask = { [weak self] id in self?.onOpenTask(id) }
+        page.onOpenFile = { [weak self] path in self?.onOpenFile(path) }
+        page.onLoaded = { [weak self] in
+            guard let self else { return }
+            Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = 0 }.startAnimation()
+            #if DEBUG
+            startReading()
+            #endif
+        }
+        page.onFailed = { [weak self] reason in self?.failed(reason) }
     }
 
     @available(*, unavailable)
@@ -66,20 +70,6 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
     }
 
     private func build() {
-        // The web view: its own data store, so nothing the dashboard keeps in
-        // a browser (its theme, its rail) reaches here; its scheme follows the app's.
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.userContentController.add(PaneMessages(self), name: "cawco")
-        web = WKWebView(frame: .zero, configuration: configuration)
-        web.navigationDelegate = self
-        web.isOpaque = false
-        web.backgroundColor = Palette.surfaceRecess
-        web.allowsLinkPreview = false
-        // The route pads itself by the safe area (`--safe-bottom`).
-        web.scrollView.contentInsetAdjustmentBehavior = .never
-        web.translatesAutoresizingMaskIntoConstraints = false
-        web.isInspectable = true
         addSubview(web)
 
         cover.backgroundColor = Palette.surfaceRecess
@@ -95,8 +85,8 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
         bar.layer.cornerCurve = .continuous
         bar.layer.borderWidth = 1
         bar.translatesAutoresizingMaskIntoConstraints = false
-        keepButton = KitButton.make("Keep", variant: .outline, height: .sm) { [weak self] in self?.answer(keeping: true) }
-        discardButton = KitButton.make("Discard", variant: .ghost, height: .sm) { [weak self] in self?.answer(keeping: false) }
+        keepButton = KitButton.make(Words.Views.keep, variant: .outline, height: .sm) { [weak self] in self?.answer(keeping: true) }
+        discardButton = KitButton.make(Words.Views.discard, variant: .ghost, height: .sm) { [weak self] in self?.answer(keeping: false) }
         for button in [keepButton!, discardButton!] {
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -109,21 +99,50 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
         row.alignment = .center
         row.translatesAutoresizingMaskIntoConstraints = false
         bar.addSubview(row)
+
+        // `.view-head`: the 16pt glyph in muted ink, the title in label, the ⋯ at its end.
+        viewTitle.lineBreakMode = .byTruncatingTail
+        viewTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        viewTitle.setContentHuggingPriority(.init(1), for: .horizontal)
+        viewTitle.accessibilityTraits = .header
+        viewMore = KitButton.make("", glyph: .more, variant: .ghost, height: .sm) {}
+        viewMore.showsMenuAsPrimaryAction = true
+        // Set once and made as it opens: a refresh that set a new menu while a
+        // tap was opening this one cancelled it, and the menu never came.
+        // The pages under their heading, each one tap: the web's submenu, as a short list reads on a touch screen.
+        viewMore.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
+            guard let self, let name = view?.name else { return done([]) }
+            #if DEBUG
+            ViewsProbe.say("views menu open view=\(name)")
+            #endif
+            done([UIMenu(title: Words.Blocks.placeOnPage, options: .displayInline, children: BlockPage.allCases.map { target in
+                UIAction(title: target.title, image: Glyph.dataLayers.image) { [weak self] _ in self?.place(name, target) }
+            })])
+        }])
+        viewMore.setContentHuggingPriority(.required, for: .horizontal)
+        for part in [GlyphView(.artifactSheet, size: Size.iconMd, tint: Palette.inkMuted), viewTitle, viewMore!] as [UIView] {
+            viewHead.addArrangedSubview(part)
+        }
+        viewHead.spacing = Space.space2
+        viewHead.alignment = .center
+        viewHead.isLayoutMarginsRelativeArrangement = true
+        viewHead.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: Space.space1, bottom: 0, trailing: Space.space1)
+        viewHead.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHSm).isActive = true
+
         refusal.isHidden = true
         failure.isHidden = true
-        let head = UIStackView(arrangedSubviews: [bar, refusal, failure])
+        let head = UIStackView(arrangedSubviews: [bar, viewHead, refusal, failure])
         head.axis = .vertical
         head.spacing = Space.space2
         head.translatesAutoresizingMaskIntoConstraints = false
         addSubview(head)
 
-        barTop = head.topAnchor.constraint(equalTo: topAnchor)
         // The route pads its top `space-4`: the page's edge stands that much
-        // above where the view starts, so the view starts where the board does,
-        // `space-3` under the bar when there is one (`.view-pane` gap).
-        webTop = web.topAnchor.constraint(equalTo: head.bottomAnchor)
+        // above where the view starts, so the view starts `space-3` under the
+        // head (`.view-pane` gap).
+        webTop = web.topAnchor.constraint(equalTo: head.bottomAnchor, constant: Space.space3 - Space.space4)
         NSLayoutConstraint.activate([
-            barTop,
+            head.topAnchor.constraint(equalTo: topAnchor),
             row.topAnchor.constraint(equalTo: bar.topAnchor, constant: Space.space2),
             row.bottomAnchor.constraint(equalTo: bar.bottomAnchor, constant: -Space.space2),
             row.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: Space.space3),
@@ -149,7 +168,7 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
         bar.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
     }
 
-    /// The page's gutters: the bar keeps them; the web view stands `space-4`
+    /// The page's gutters: the head keeps them; the web view stands `space-4`
     /// outside them, which the route pads back, so the view lines up with the strip.
     func inset(leading: Double, trailing: Double) {
         NSLayoutConstraint.deactivate(edges)
@@ -164,14 +183,23 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
 
     // MARK: Showing
 
-    /// The view as the hub lists it now: a draft wears its bar; another view
-    /// (or another project's) loads afresh, and the same one keeps its page.
+    /// The view as the hub lists it now: a draft wears its bar, a kept view
+    /// its head; another view (or another project's) loads afresh, and the
+    /// same one keeps its page.
     func show(_ next: ProjectView, projectId: String) {
+        // The same view as it stands: nothing to draw again under a menu a tap is opening.
+        if next == view, projectId == self.projectId {
+            paintActs()
+            return
+        }
         let draft = next.draft
         let arriving = view?.name != next.name || self.projectId != projectId
         view = next
         self.projectId = projectId
-        barLine.text = "Caw drafted the \(TaskWords.stage(next.name)) view"
+        let label = TaskWords.stage(next.name)
+        barLine.text = Words.Views.drafted(view: label)
+        viewTitle.text = label
+        viewMore.accessibilityLabel = Words.Blocks.more(title: label)
         if arriving {
             refusal.isHidden = true
             keeping = false
@@ -182,10 +210,10 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
         let place: @MainActor @Sendable () -> Void = {
             self.bar.isHidden = !draft
             self.bar.alpha = draft ? 1 : 0
-            self.webTop.constant = (draft || !self.refusal.isHidden || !self.failure.isHidden ? Space.space3 : 0) - Space.space4
+            self.viewHead.isHidden = draft
             self.layoutIfNeeded()
         }
-        // Kept, the bar leaves as the web's does (`out:crossOut`), and the view takes its room.
+        // Kept, the bar leaves as the web's does (`out:crossOut`), and the head takes its place.
         if barGoes, window != nil, !UIAccessibility.isReduceMotionEnabled {
             Motion.easeOut.animator(Motion.durFade, animations: place).startAnimation()
         } else {
@@ -198,54 +226,25 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
     }
 
     private func paintActs() {
-        KitButton.setTitle(keeping ? "Keeping…" : "Keep", of: keepButton, variant: .outline, height: .sm)
-        KitButton.setTitle(discarding ? "Discarding…" : "Discard", of: discardButton, variant: .ghost, height: .sm)
+        KitButton.setTitle(keeping ? Words.Views.keeping : Words.Views.keep, of: keepButton, variant: .outline, height: .sm)
+        KitButton.setTitle(discarding ? Words.Views.discarding : Words.Views.discard, of: discardButton, variant: .ghost, height: .sm)
         keepButton.configuration?.showsActivityIndicator = keeping
         discardButton.configuration?.showsActivityIndicator = discarding
         keepButton.isEnabled = !keeping && !discarding
         discardButton.isEnabled = !keeping && !discarding
     }
 
-    /// The route for the view, at the dashboard's address; the cover stands until it has loaded.
+    /// The route for the view; the cover stands until it has loaded.
     private func load(again: Bool) {
         guard let view else { return }
-        let name = view.name
-        let project = projectId
         failure.isHidden = true
         cover.alpha = 1
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                let address: URL
-                if let dashboard, !again {
-                    address = dashboard
-                } else {
-                    address = try await hub.dashboardAddress()
-                    dashboard = address
-                }
-                guard self.view?.name == name, self.projectId == project else { return }
-                let url = address.appending(path: "project").appending(path: project).appending(path: "view").appending(path: name)
-                loaded = url
-                #if DEBUG
-                ViewsProbe.say("views load \(url.absoluteString)")
-                #endif
-                // The dashboard reads the person's cookie, as it does a paired browser's.
-                if let pass = hub.passCookie(on: url) {
-                    await web.configuration.websiteDataStore.httpCookieStore.setCookie(pass)
-                }
-                guard self.view?.name == name, self.projectId == project else { return }
-                web.load(URLRequest(url: url))
-            } catch {
-                guard self.view?.name == name else { return }
-                failed(error.localizedDescription)
-            }
-        }
+        page.load(projectId: projectId, name: view.name, again: again)
     }
 
     private func failed(_ reason: String) {
-        failure.label.text = "The view didn't open: \(reason)"
+        failure.label.text = Words.Views.didntOpen(reason: reason)
         failure.isHidden = false
-        webTop.constant = Space.space3 - Space.space4
         UIAccessibility.post(notification: .announcement, argument: failure.label.text)
         #if DEBUG
         ViewsProbe.say("views failed \(reason)")
@@ -284,60 +283,17 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
         }
     }
 
-    // MARK: The page
-
-    func webView(_: WKWebView, didFinish _: WKNavigation!) {
-        Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = 0 }.startAnimation()
-        #if DEBUG
-        startReading()
-        #endif
-    }
-
-    func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
-        failed(error.localizedDescription)
-    }
-
-    func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: any Error) {
-        failed(error.localizedDescription)
-    }
-
-    /// The page stays on its view: a link to the project's page on a task or
-    /// a file of its folder opens the app's sheet, and nothing else leaves
-    /// the route.
-    func webView(_: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        // Only the page itself is held to its route; a frame inside it is the page's own business.
-        guard action.targetFrame?.isMainFrame != false else { return decisionHandler(.allow) }
-        guard let url = action.request.url, let loaded else { return decisionHandler(.cancel) }
-        if url.host() == loaded.host(), url.port == loaded.port {
-            if url.path() == loaded.path() { return decisionHandler(.allow) }
-            if url.path() == "/project/\(projectId)" {
-                let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-                if let file = query.first(where: { $0.name == "file" })?.value, !file.isEmpty {
-                    onOpenFile(file)
-                } else if let task = query.first(where: { $0.name == "task" })?.value {
-                    onOpenTask(task)
-                }
-            }
-        }
-        decisionHandler(.cancel)
-    }
-
-    /// What the route posts: a task to open. The page is the dashboard's, and its fields are still checked.
-    func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any], body["type"] as? String == "cawco:open-task",
-              let task = body["task"] as? String, !task.isEmpty, task.count <= 200 else { return }
-        onOpenTask(task)
-    }
-
     #if DEBUG
     // MARK: The simulator probe (scripts/probe-kit/specs/ios-views.ts)
 
-    /// The bar as it stands: whether it shows, its words, and where Keep and Discard are in the window.
+    /// The bar as it stands: whether it shows, its words, and where Keep and
+    /// Discard are in the window; a kept view's ⋯.
     private func sayPane() {
         guard ViewsProbe.on, let view else { return }
         layoutIfNeeded()
         let bar = self.bar.isHidden ? "none" : "\(barLine.text ?? "")|keep=\(ViewsProbe.centre(keepButton))|discard=\(ViewsProbe.centre(discardButton))"
-        ViewsProbe.say("views pane name=\(view.name) draft=\(view.draft) bar=\(bar)")
+        let more = viewHead.isHidden ? "none" : ViewsProbe.centre(viewMore)
+        ViewsProbe.say("views pane name=\(view.name) draft=\(view.draft) bar=\(bar) more=\(more)")
     }
 
     private var reading: Timer?
@@ -372,15 +328,6 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
     #endif
 }
 
-/// Holds the pane weakly: a content controller retains its handlers.
-private final class PaneMessages: NSObject, WKScriptMessageHandler {
-    weak var target: (any WKScriptMessageHandler)?
-    init(_ target: any WKScriptMessageHandler) { self.target = target }
-    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        target?.userContentController(controller, didReceive: message)
-    }
-}
-
 #if DEBUG
 /// `-views-probe`: the project page's strip, its ⋯ menu's view list, a view's
 /// pane and its page, said in the log for scripts/probe-kit/specs/ios-views.ts.
@@ -400,13 +347,34 @@ enum ViewsProbe {
     }
 
     /// What a touch at a view's centre lands on: `self` when the view or one
-    /// inside it takes it, else the taker and its two nearest holders by type.
+    /// inside it takes it, else the taker and every holder up to the window
+    /// by type (a web view with its frame in the window and its address).
     static func hit(_ view: UIView) -> String {
         guard let window = view.window else { return "none" }
         let box = view.convert(view.bounds, to: nil)
-        guard let taker = window.hitTest(CGPoint(x: box.midX, y: box.midY), with: nil) else { return "nothing" }
+        let point = CGPoint(x: box.midX, y: box.midY)
+        guard let taker = window.hitTest(point, with: nil) else { return "nothing" }
         if taker.isDescendant(of: view) { return "self" }
-        return sequence(first: taker, next: \.superview).prefix(3).map { String(describing: type(of: $0)) }.joined(separator: "<")
+        let took = sequence(first: taker, next: \.superview).map { holder in
+            let name = String(describing: type(of: holder))
+            guard let web = holder as? WKWebView else { return name }
+            let at = web.convert(web.bounds, to: nil).integral
+            return "\(name)[\(Int(at.minX)),\(Int(at.minY)) \(Int(at.width))x\(Int(at.height)) \(web.url?.absoluteString ?? "no url") hidden=\(web.isHidden)]"
+        }.joined(separator: "<")
+        // The holders of the view that turn the touch away, and why.
+        let refused = sequence(first: view, next: \.superview).compactMap { holder -> String? in
+            var why: [String] = []
+            if holder.isHidden { why.append("hidden") }
+            if holder.alpha < 0.01 { why.append("alpha") }
+            if !holder.isUserInteractionEnabled { why.append("touch-off") }
+            let inside = holder.convert(point, from: nil)
+            if !holder.point(inside: inside, with: nil) {
+                let at = holder.convert(holder.bounds, to: nil).integral
+                why.append("outside[\(Int(at.minX)),\(Int(at.minY)) \(Int(at.width))x\(Int(at.height))]")
+            }
+            return why.isEmpty ? nil : "\(type(of: holder)):\(why.joined(separator: ","))"
+        }.joined(separator: " ")
+        return "\(took) refused-by=\(refused.isEmpty ? "none" : refused)"
     }
 
     /// The route's words, its address, and its first task link's centre in

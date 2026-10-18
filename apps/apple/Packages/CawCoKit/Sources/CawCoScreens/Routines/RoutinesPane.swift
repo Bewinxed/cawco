@@ -352,7 +352,10 @@ enum RoutinesProbe {
         said = line
         ViewsProbe.say(line)
         for routine in page.routines {
-            if let menu = pane.menu(of: routine.id) { ViewsProbe.say("routines hit \(routine.name)=\(ViewsProbe.hit(menu))") }
+            if let menu = pane.menu(of: routine.id) {
+                let shown = pane.superview?.subviews.filter { !$0.isHidden }.map { "\(type(of: $0))" }.joined(separator: ",") ?? "none"
+                ViewsProbe.say("routines hit \(routine.name)=\(ViewsProbe.hit(menu)) panes-shown=\(shown)")
+            }
         }
         BlocksProbe.page(pane.blocksPage)
     }

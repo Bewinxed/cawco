@@ -43,14 +43,30 @@ struct BlockItem {
 /// placing write the page's arrangement to the hub, and the grid reflows
 /// when it answers. Hidden blocks wait at the page's end, each shown again
 /// from there; a refused write is said there in the hub's words.
-final class BlockPageView: UIView {
+///
+/// A block moves by its head (block-dnd.svelte.ts): the platform lifts it
+/// after a held press, its head alone under the finger; its box stays as its
+/// slot, and the drop indicator stands on the edge of the block nearest the
+/// finger, in the gap between blocks; nothing else moves until the hub
+/// answers the drop.
+final class BlockPageView: UIView, UIDragInteractionDelegate, UIDropInteractionDelegate {
     let page: BlockPage
     private let blocks: ProjectBlocks
     private var items: [String: BlockItem] = [:]
+    /// The page's visible height (`--block-fill`), which a board's body fills less its head.
+    var fill: Double = 0 {
+        didSet { if fill != oldValue { frames.values.forEach { $0.fill = fill } } }
+    }
+
+    private let dropMark = DropMark()
+    /// The block the finger is nearest while one is in the air, and the edge a drop would take.
+    private var over: (block: String, edge: DropEdge)?
     private let rows = UIStackView()
     private let end = UIStackView()
     private let refused = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
     private var hiddenButton: UIButton!
+    /// The hidden blocks, by id and title, which its menu lists as it opens.
+    private var hiddenNow: [(block: String, title: String)] = []
     private var frames: [String: BlockFrameView] = [:]
     /// What the grid was last laid out as: its columns, and each shown block's place and span.
     private var laid = ""
@@ -67,6 +83,12 @@ final class BlockPageView: UIView {
         hiddenButton = KitButton.make("", glyph: .chevronDown, variant: .ghost, height: .sm) {}
         hiddenButton.configuration?.imagePlacement = .trailing
         hiddenButton.showsMenuAsPrimaryAction = true
+        // Set once and made as it opens, as a block's ⋯ is.
+        hiddenButton.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
+            done((self?.hiddenNow ?? []).map { block, title in
+                UIAction(title: Words.Blocks.show(title: title), image: Glyph.eye.image) { [weak self] _ in self?.change(block, hidden: false) }
+            })
+        }])
         hiddenButton.setContentHuggingPriority(.required, for: .horizontal)
         refused.wrap = .pretty
         let gap = UIView()
@@ -87,6 +109,9 @@ final class BlockPageView: UIView {
             column.leadingAnchor.constraint(equalTo: leadingAnchor),
             column.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
+        dropMark.isHidden = true
+        addSubview(dropMark)
+        addInteraction(UIDropInteraction(delegate: self))
     }
 
     @available(*, unavailable)
@@ -173,16 +198,135 @@ final class BlockPageView: UIView {
         refused.isHidden = refusal == nil
         hiddenButton.isHidden = hidden.isEmpty
         KitButton.setTitle("\(Words.Blocks.hidden) \(hidden.count)", of: hiddenButton, variant: .ghost, height: .sm)
-        hiddenButton.menu = UIMenu(children: hidden.map { place in
-            UIAction(title: Words.Blocks.show(title: items[place.block]?.title ?? place.block), image: Glyph.eye.image) { [weak self] _ in
-                self?.change(place.block, hidden: false)
-            }
-        })
+        hiddenNow = hidden.map { ($0.block, items[$0.block]?.title ?? $0.block) }
         end.isHidden = hidden.isEmpty && refusal == nil
         if animated, window != nil, !UIAccessibility.isReduceMotionEnabled {
             Motion.easeDrawer.animator(Motion.durMorph) { self.superview?.layoutIfNeeded() }.startAnimation()
         }
+        #if DEBUG
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            // Said where the blocks now stand: the new order, never with the frames of the old one.
+            window?.layoutIfNeeded()
+            BlocksProbe.page(self)
+        }
+        #endif
         return true
+    }
+
+    // MARK: Moving a block by its head
+
+    private func frame(of head: UIView?) -> BlockFrameView? {
+        frames.values.first { $0.head === head }
+    }
+
+    func dragInteraction(_ interaction: UIDragInteraction, itemsForBeginning session: any UIDragSession) -> [UIDragItem] {
+        guard let frame = frame(of: interaction.view), !frame.isControl(at: session.location(in: frame.head)) else { return [] }
+        let item = UIDragItem(itemProvider: NSItemProvider())
+        item.localObject = frame.id
+        session.localContext = page.rawValue
+        return [item]
+    }
+
+    func dragInteraction(_: UIDragInteraction, previewForLifting item: UIDragItem, session _: any UIDragSession) -> UITargetedDragPreview? {
+        guard let id = item.localObject as? String, let frame = frames[id] else { return nil }
+        // The head's glyph, title and count, on its own surface.
+        let parameters = UIDragPreviewParameters()
+        parameters.visiblePath = UIBezierPath(roundedRect: frame.face, cornerRadius: Radius.radiusMd)
+        parameters.backgroundColor = Palette.surfaceRaised
+        return UITargetedDragPreview(view: frame.head, parameters: parameters)
+    }
+
+    func dragInteraction(_: UIDragInteraction, sessionWillBegin session: any UIDragSession) {
+        for item in session.items {
+            if let id = item.localObject as? String { frames[id]?.lifted = true }
+        }
+    }
+
+    func dragInteraction(_: UIDragInteraction, session _: any UIDragSession, didEndWith _: UIDropOperation) {
+        frames.values.forEach { $0.lifted = false }
+        point(nil)
+    }
+
+    /// The block in the air, when it is this page's.
+    private func dragged(_ session: any UIDropSession) -> String? {
+        guard let local = session.localDragSession, local.localContext as? String == page.rawValue else { return nil }
+        return local.items.first?.localObject as? String
+    }
+
+    func dropInteraction(_: UIDropInteraction, canHandle session: any UIDropSession) -> Bool {
+        dragged(session) != nil
+    }
+
+    func dropInteraction(_: UIDropInteraction, sessionDidUpdate session: any UIDropSession) -> UIDropProposal {
+        guard let id = dragged(session) else { return UIDropProposal(operation: .cancel) }
+        point(target(at: session.location(in: self), moving: id))
+        return UIDropProposal(operation: .move)
+    }
+
+    func dropInteraction(_: UIDropInteraction, sessionDidExit _: any UIDropSession) {
+        point(nil)
+    }
+
+    func dropInteraction(_: UIDropInteraction, sessionDidEnd _: any UIDropSession) {
+        point(nil)
+        frames.values.forEach { $0.lifted = false }
+    }
+
+    /// A drop is a request: the arrangement is written, and the blocks reflow when the hub answers.
+    func dropInteraction(_: UIDropInteraction, performDrop session: any UIDropSession) {
+        let target = over
+        point(nil)
+        guard let id = dragged(session), let target,
+              let to = Self.placeAt(blocks.placesOf(page).map(\.block), id, onto: target.block, edge: target.edge) else { return }
+        write { await self.blocks.move(self.page, id, to: to) }
+    }
+
+    /// The shown block under the finger, or the nearest, and its edge nearest
+    /// it: top and bottom on one column, and its sides as well on more.
+    private func target(at point: CGPoint, moving id: String) -> (block: String, edge: DropEdge)? {
+        let placed = frames.values.filter { $0.window != nil && !$0.isHidden }.map { ($0.id, $0.convert($0.bounds, to: self)) }
+        guard let nearest = placed.min(by: { Self.distance(point, $0.1) < Self.distance(point, $1.1) }), nearest.0 != id else { return nil }
+        let (block, box) = nearest
+        var edges: [(DropEdge, Double)] = [(.top, abs(point.y - box.minY)), (.bottom, abs(point.y - box.maxY))]
+        if columns > 1 { edges += [(.left, abs(point.x - box.minX)), (.right, abs(point.x - box.maxX))] }
+        return edges.min { $0.1 < $1.1 }.map { (block, $0.0) }
+    }
+
+    private static func distance(_ point: CGPoint, _ box: CGRect) -> Double {
+        let dx = max(box.minX - point.x, 0, point.x - box.maxX)
+        let dy = max(box.minY - point.y, 0, point.y - box.maxY)
+        return dx * dx + dy * dy
+    }
+
+    /// The indicator on the edge the drop would take, in the gap between blocks.
+    private func point(_ next: (block: String, edge: DropEdge)?) {
+        over = next
+        guard let next, let frame = frames[next.block] else {
+            dropMark.isHidden = true
+            return
+        }
+        let box = frame.convert(frame.bounds, to: self)
+        let line = Size.cBlockDropLine
+        let gap = Space.spaceGroup
+        dropMark.frame = switch next.edge {
+        case .top: CGRect(x: box.minX, y: box.minY - gap / 2 - line / 2, width: box.width, height: line)
+        case .bottom: CGRect(x: box.minX, y: box.maxY + gap / 2 - line / 2, width: box.width, height: line)
+        case .left: CGRect(x: box.minX - gap / 2 - line / 2, y: box.minY, width: line, height: box.height)
+        case .right: CGRect(x: box.maxX + gap / 2 - line / 2, y: box.minY, width: line, height: box.height)
+        }
+        dropMark.isHidden = false
+        bringSubviewToFront(dropMark)
+    }
+
+    /// Where `block` lands, dropped at `onto`'s `edge`: before the target
+    /// (its top or leading side) or after it, counted in the order `block`
+    /// has already left. Nil when it would not move (block-dnd `placeAt`).
+    static func placeAt(_ order: [String], _ block: String, onto: String, edge: DropEdge) -> Int? {
+        guard let from = order.firstIndex(of: block), let at = order.firstIndex(of: onto) else { return nil }
+        var to = edge == .top || edge == .left ? at : at + 1
+        if from < to { to -= 1 }
+        return to == from ? nil : to
     }
 
     /// Each laid block's face and body as its item says now: a count, an
@@ -195,6 +339,13 @@ final class BlockPageView: UIView {
             guard let frame = frames[place.block] else { continue }
             let item = items[place.block] ?? stranger(place.block)
             frame.show(item, place: place, columns: columns, first: index == 0, last: index == shown.count - 1)
+            frame.fill = fill
+            if !frame.head.interactions.contains(where: { $0 is UIDragInteraction }) {
+                // On a phone too, where a drag waits to be let.
+                let drag = UIDragInteraction(delegate: self)
+                drag.isEnabled = true
+                frame.head.addInteraction(drag)
+            }
             frame.onMove = { [weak self] step in self?.move(place, step: step) }
             frame.onWidth = { [weak self] wide in self?.change(place.block, wide: wide) }
             frame.onHide = { [weak self] in self?.change(place.block, hidden: true) }
@@ -264,6 +415,40 @@ final class BlockPageView: UIView {
     #endif
 }
 
+/// Which edge of a block a drop takes.
+enum DropEdge { case top, bottom, left, right }
+
+/// The drop indicator (Block.svelte `.drop`): a `cBlockDropLine` rule in
+/// the brand's solid ink across the target's edge, a `cBlockDropDot` dot at
+/// its start.
+private final class DropMark: UIView {
+    private let dot = UIView()
+
+    init() {
+        super.init(frame: .zero)
+        isUserInteractionEnabled = false
+        backgroundColor = Palette.brandSolid
+        layer.cornerRadius = Radius.radiusHair
+        dot.backgroundColor = Palette.brandSolid
+        dot.layer.cornerRadius = Size.cBlockDropDot / 2
+        addSubview(dot)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("DropMark is built in code")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let side = Size.cBlockDropDot
+        // Across a top or bottom edge, the dot at its leading end; down a side, at its top.
+        dot.frame = bounds.width >= bounds.height
+            ? CGRect(x: -side / 2, y: (bounds.height - side) / 2, width: side, height: side)
+            : CGRect(x: (bounds.width - side) / 2, y: -side / 2, width: side, height: side)
+    }
+}
+
 /// One row of the grid: its blocks at their columns, align-items start, as tall as its tallest.
 private final class GridRow: UIView {
     private let columns: Int
@@ -306,7 +491,8 @@ private final class GridRow: UIView {
 /// down; Narrow or Wide, which on one column still sets the desk's; Hide; for
 /// a custom view, Show as a tab), 44pt tall under a finger. The body is the
 /// block's content as its card or bare; a list stands at most
-/// `cBlockBodyMax` tall on a desk and scrolls inside.
+/// `cBlockBodyMax` tall on a desk and scrolls inside; the board fills the
+/// page's height less its head. The head is the block's drag handle.
 final class BlockFrameView: UIView {
     var onMove: (Int) -> Void = { _ in }
     var onWidth: (Bool) -> Void = { _ in }
@@ -320,11 +506,32 @@ final class BlockFrameView: UIView {
     private let meta = UIStackView()
     private let tools = UIStackView()
     private(set) var moreButton: UIButton!
+    /// The block as last shown, which its ⋯ menu is made from as it opens.
+    private var shown: (item: BlockItem, place: BlockPlace, columns: Int, first: Bool, last: Bool)?
+    /// The drag handle: glyph, title, count, and its tools, which are their own.
+    private(set) var head: UIStackView!
+    private let column = UIStackView()
     private let body = UIView()
     private let scroller = UIScrollView()
     private var content: UIView?
     private var cap: NSLayoutConstraint!
     private var capped = false
+    private var filling = false
+    /// The page's height, which a board's body fills less the head (`--block-fill`).
+    var fill: Double = 0 {
+        didSet { if fill != oldValue, filling { setNeedsLayout() } }
+    }
+
+    /// In the air: its box stays as its slot, dashed, the block not drawn twice.
+    var lifted = false {
+        didSet {
+            guard lifted != oldValue else { return }
+            column.alpha = lifted ? 0 : 1
+            paint()
+        }
+    }
+
+    private let slot = CAShapeLayer()
 
     init(id: String) {
         self.id = id
@@ -336,19 +543,27 @@ final class BlockFrameView: UIView {
         meta.alignment = .center
         moreButton = KitButton.make("", glyph: .more, variant: .ghost, height: .sm) {}
         moreButton.showsMenuAsPrimaryAction = true
+        // Set once and made as it opens, from the block as last shown: a refresh
+        // that set a new menu while a tap was opening this one cancelled it.
+        moreButton.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
+            guard let self, let shown else { return done([]) }
+            done(menu(shown.item, place: shown.place, columns: shown.columns, first: shown.first, last: shown.last).children)
+        }])
         tools.spacing = Space.space2
         tools.alignment = .center
         tools.addArrangedSubview(moreButton)
         let gap = UIView()
         gap.setContentHuggingPriority(.init(1), for: .horizontal)
         let head = UIStackView(arrangedSubviews: [glyph, title, meta, gap, tools])
+        self.head = head
         head.spacing = Space.space2
         head.alignment = .center
         head.isLayoutMarginsRelativeArrangement = true
         head.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: Space.space1, bottom: 0, trailing: Space.space1)
+        head.layer.cornerRadius = Radius.radiusMd
+        head.layer.cornerCurve = .continuous
         // 44pt under a finger, the small button's height under a pointer (`--block-head-h`).
-        let coarse = traitCollection.userInterfaceIdiom != .mac
-        head.heightAnchor.constraint(greaterThanOrEqualToConstant: coarse ? Size.cBtnHLg : Size.cBtnHSm).isActive = true
+        head.heightAnchor.constraint(greaterThanOrEqualToConstant: headHeight).isActive = true
         for part in [meta, tools] {
             part.setContentHuggingPriority(.required, for: .horizontal)
             part.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -356,7 +571,12 @@ final class BlockFrameView: UIView {
         scroller.translatesAutoresizingMaskIntoConstraints = false
         scroller.alwaysBounceVertical = false
         body.addSubview(scroller)
-        let column = UIStackView(arrangedSubviews: [head, body])
+        slot.fillColor = nil
+        slot.lineWidth = 1
+        slot.lineDashPattern = [3, 3]
+        layer.addSublayer(slot)
+        column.addArrangedSubview(head)
+        column.addArrangedSubview(body)
         column.axis = .vertical
         column.spacing = Space.space2
         column.translatesAutoresizingMaskIntoConstraints = false
@@ -382,6 +602,21 @@ final class BlockFrameView: UIView {
 
     private var card = false
 
+    /// `--block-head-h`: 44pt under a finger, the small button's height under a pointer.
+    private var headHeight: Double { traitCollection.userInterfaceIdiom == .mac ? Size.cBtnHSm : Size.cBtnHLg }
+
+    /// What a lifted head shows under the finger: its glyph, title and count, not its tools.
+    var face: CGRect {
+        let end = meta.isHidden ? title.frame.maxX : meta.frame.maxX
+        return CGRect(x: 0, y: 0, width: min(head.bounds.width, end + Space.space1), height: head.bounds.height)
+    }
+
+    /// Whether a press at a point in the head is one of its controls' (its action, its ⋯), never a drag.
+    func isControl(at point: CGPoint) -> Bool {
+        guard let hit = head.hitTest(point, with: nil) else { return false }
+        return sequence(first: hit, next: \.superview).prefix { $0 !== head }.contains { $0 is UIControl }
+    }
+
     func show(_ item: BlockItem, place: BlockPlace, columns: Int, first: Bool, last: Bool) {
         glyph.glyph = item.glyph
         title.text = item.title
@@ -398,9 +633,10 @@ final class BlockFrameView: UIView {
             if let next = item.action { tools.insertArrangedSubview(next, at: 0) }
         }
         moreButton.accessibilityLabel = Words.Blocks.more(title: item.title)
-        moreButton.menu = menu(item, place: place, columns: columns, first: first, last: last)
-        if content !== item.content {
-            content?.removeFromSuperview()
+        shown = (item, place, columns, first, last)
+        // Its content, again when it was taken elsewhere in between (the board, back on its own pane).
+        if content !== item.content || item.content.superview !== scroller {
+            if let content, content !== item.content, content.superview === scroller { content.removeFromSuperview() }
             content = item.content
             item.content.translatesAutoresizingMaskIntoConstraints = false
             scroller.addSubview(item.content)
@@ -411,13 +647,19 @@ final class BlockFrameView: UIView {
                 item.content.trailingAnchor.constraint(equalTo: scroller.contentLayoutGuide.trailingAnchor),
                 item.content.widthAnchor.constraint(equalTo: scroller.frameLayoutGuide.widthAnchor),
             ])
-            // At its content's height, unless the cap holds it shorter.
-            let natural = scroller.heightAnchor.constraint(equalTo: item.content.heightAnchor)
-            natural.priority = .defaultHigh
-            natural.isActive = true
+            if item.body == .fill {
+                // The board stands at the body's height and scrolls its own columns.
+                item.content.heightAnchor.constraint(equalTo: scroller.frameLayoutGuide.heightAnchor).isActive = true
+            } else {
+                // At its content's height, unless the cap holds it shorter.
+                let natural = scroller.heightAnchor.constraint(equalTo: item.content.heightAnchor)
+                natural.priority = .defaultHigh
+                natural.isActive = true
+            }
         }
         card = item.card
         capped = item.body == .capped
+        filling = item.body == .fill
         paint()
         setNeedsLayout()
     }
@@ -428,12 +670,18 @@ final class BlockFrameView: UIView {
         // up) and scrolls inside; on a phone the page itself scrolls.
         let desk = (window?.bounds.width ?? bounds.width) >= 640
         let holds = capped && desk
-        if cap.isActive != holds { cap.isActive = holds }
-        if holds, let content {
+        // The board's body: the page's height less the head and the gap under it.
+        let fills = filling && fill > 0
+        if cap.isActive != (holds || fills) { cap.isActive = holds || fills }
+        if fills {
+            cap.constant = max(0, fill - headHeight - Space.space2)
+        } else if holds, let content {
             cap.constant = min(Size.cBlockBodyMax, content.systemLayoutSizeFitting(CGSize(width: bounds.width, height: 0),
                 withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height)
         }
         scroller.isScrollEnabled = holds
+        slot.frame = bounds
+        slot.path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), cornerRadius: Radius.radiusLg).cgPath
     }
 
     private func paint() {
@@ -444,6 +692,12 @@ final class BlockFrameView: UIView {
         scroller.layer.cornerRadius = card ? Radius.radiusLg : 0
         scroller.layer.cornerCurve = .continuous
         scroller.clipsToBounds = card || capped
+        // The slot it leaves while in the air: the recess, a dashed control edge, radius-lg.
+        layer.cornerRadius = Radius.radiusLg
+        layer.cornerCurve = .continuous
+        backgroundColor = lifted ? Palette.surfaceRecess : .clear
+        slot.strokeColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
+        slot.isHidden = !lifted
     }
 
     /// The kit menu: Move up, Move down; Narrow or Wide (and on one column
@@ -473,11 +727,17 @@ final class BlockFrameView: UIView {
 /// `-views-probe`: a page of blocks, said in the log for scripts/probe-kit/specs/ios-views.ts (leg c).
 @MainActor
 enum BlocksProbe {
+    private static var said: [BlockPage: String] = [:]
+
+    /// Said again only when what stands where changed.
     static func page(_ view: BlockPageView) {
         guard ViewsProbe.on, view.window != nil else { return }
         view.superview?.layoutIfNeeded()
         let blocks = view.probeBlocks.map { "\($0.id)/\($0.span)@\($0.more)" }.joined(separator: ";")
-        ViewsProbe.say("blocks page=\(view.page.rawValue) blocks=\(blocks)")
+        let line = "blocks page=\(view.page.rawValue) blocks=\(blocks)"
+        guard said[view.page] != line else { return }
+        said[view.page] = line
+        ViewsProbe.say(line)
     }
 }
 #endif

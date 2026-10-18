@@ -57,7 +57,8 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { seedDecisions } from "../../decisions-preview/seed";
@@ -67,6 +68,16 @@ import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
+/** The paired captures of the board's page with a view placed on it, by device. */
+const CAPTURES = join(
+  homedir(),
+  ".cawco",
+  "workspace-cache",
+  "xdg",
+  "cawco-captures",
+  "prd-parity",
+  "blocks"
+);
 /** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 const DEVICES = [
@@ -84,6 +95,8 @@ const TITLES = ["Probe alpha", "Probe beta", "Probe gamma"];
 const KEPT = "probe-week";
 const KEEP = "probe-draft";
 const SCRAP = "probe-scrap";
+/** The kept view as its tab and its block name it. */
+const WEEK_LABEL = "Probe week";
 /** The kept view: the tasks' count and a table of them, each title a link to its task. */
 const WEEK = `root = Column([title, figures, table])
 tasks = Query("tasks", {}, {rows: []})
@@ -122,7 +135,8 @@ const STRIP_LINE =
 /** How far inside the strip's room a tab's centre must stand for a touch to land on it. */
 const ROOM_MARGIN = 24;
 const PAGE_LINE = /views page name=(\S+) href=(\S*) task=(\S+) text=(.*)$/;
-const PANE_LINE = /views pane name=(\S+) draft=(true|false) bar=(.*)$/;
+const PANE_LINE =
+  /views pane name=(\S+) draft=(true|false) bar=(.*?) more=(\S+)$/;
 const OPEN_TASK = /views open-task (\S+)/;
 /** `<links>@<x>,<y>`: how many task links the page has, and the first one's centre in the window. */
 const LINK = /^(\d+)@(\d+),(\d+)$/;
@@ -484,17 +498,24 @@ async function taskOpens(
   device: Device,
   project: Project
 ): Promise<void> {
-  let since = device.heard.length;
   await device.pick("Probe week");
+  // The pane keeps a view's page while the view is the same, and loads it
+  // again when it comes back as a tab: the page on screen is the one said
+  // after the view's last load, whenever that was.
+  await Bun.sleep(1500);
+  // The tab's own load: a block on a page loads the same view in a web view of its own.
+  const loaded = device.heard.findLastIndex(
+    (line) => line.includes("views load tab") && line.includes(`/view/${KEPT}`)
+  );
   const page = await pageSince(
     device,
     KEPT,
-    since,
+    Math.max(0, loaded),
     (text) => TITLES.every((title) => text.includes(title)),
     "Probe week's page again"
   ).catch(() => undefined);
   const link = page ? LINK.exec(page.task) : null;
-  since = device.heard.length;
+  const since = device.heard.length;
   if (link) {
     await device.tap([Number(link[2]), Number(link[3])]);
   }
@@ -612,11 +633,19 @@ async function launch(
         await tap(item.at);
         return;
       }
-      // Past the right edge the strip is pulled left, past the left edge right.
+      // Past the right edge the strip is pulled left, past the left edge
+      // right: by as far as the tab stands from the room's middle (no more
+      // than the room holds), as a finger drags it, in fine steps at an even
+      // pace: a quick fling carried the strip past the room, and a slow one
+      // in coarse steps read as a press on the tab and did not scroll it.
+      const middle = (left + right) / 2;
+      const reach = Math.min(Math.abs(x - middle), right - left - 32);
       const [from, to] =
-        x > right ? [right - 16, left + 16] : [left + 16, right - 16];
+        x > middle
+          ? [right - 16, right - 16 - reach]
+          : [left + 16, left + 16 + reach];
       await sh(
-        `${AXE} swipe --start-x ${from} --start-y ${y} --end-x ${to} --end-y ${y} --duration 0.5 --udid ${udid}`
+        `${AXE} swipe --start-x ${Math.round(from)} --start-y ${y} --end-x ${Math.round(to)} --end-y ${y} --duration 0.8 --delta 8 --udid ${udid}`
       );
       // A strip the swipe left where it was says nothing new: the next pass reads it again.
       await next(
@@ -679,10 +708,21 @@ async function launch(
     let seen: string[] = [];
     /** Where the row stood at the last read: a menu still opening moves it, and takes no tap. */
     let was = "";
+    /** Each read's nodes of that label, with their frames: present but narrow, moving, or absent. */
+    const sightings: string[] = [];
     const entry = await until<Node | undefined>(
       `${tag}: ${label} in the open menu, at rest`,
       async () => {
         const nodes = await tree();
+        sightings.push(
+          nodes
+            .filter((node) => node.label === label && node.frame)
+            .map(
+              (node) =>
+                `${centre(node.frame as NonNullable<Node["frame"]>).join(",")}/${Math.round(node.frame?.width ?? 0)}`
+            )
+            .join(" ") || "none"
+        );
         seen = nodes.flatMap((node) =>
           node.label && node.frame
             ? [
@@ -696,7 +736,18 @@ async function launch(
             node.label === label &&
             (narrow || node.frame.width > 120)
         );
-        const at = found?.frame ? JSON.stringify(found.frame) : "";
+        // At rest to the point: a frame read twice can differ past the
+        // decimal point and still be the same place under a finger.
+        const at = found?.frame
+          ? [
+              found.frame.x,
+              found.frame.y,
+              found.frame.width,
+              found.frame.height,
+            ]
+              .map(Math.round)
+              .join(",")
+          : "";
         const still = at !== "" && at === was;
         was = at;
         return still ? found : undefined;
@@ -705,7 +756,7 @@ async function launch(
       15_000
     ).catch((error: unknown) => {
       throw new Error(
-        `${error}; axe's last refusal: ${axeRefused}; on screen: ${seen.slice(-30).join(" | ")}`
+        `${error}; axe's last refusal: ${axeRefused}; ${label} at each read: ${sightings.join(" ; ")}; on screen: ${seen.slice(-30).join(" | ")}`
       );
     });
     await tap(centre(entry?.frame as NonNullable<Node["frame"]>));
@@ -720,6 +771,174 @@ async function launch(
     device: { tag, heard, next, pick, relaunch, tap, choose, type },
     stream,
   };
+}
+
+// ── blocks: a kept view placed on a page, moved there, made a tab again ──
+const VIEW_BLOCK = /views block name=(\S+) height=(\d+)/;
+
+interface Block {
+  id: string;
+  more: [number, number] | null;
+}
+
+const blocksOf = (said: string): Block[] =>
+  said
+    .split(";")
+    .filter(Boolean)
+    .map((part) => {
+      const [id = "", at = "none"] = part.split("@");
+      const point = POINT.exec(at);
+      return {
+        id: id.split("/")[0] ?? "",
+        more: point ? [Number(point[1]), Number(point[2])] : null,
+      };
+    });
+
+/** A page's blocks as the app laid them, once `accept` takes them. */
+const pageBlocks = (
+  device: Device,
+  page: string,
+  since: number,
+  accept: (blocks: Block[]) => boolean,
+  what: string
+) =>
+  device.next(what, since, (line) => {
+    const match = BLOCKS_PAGE.exec(line);
+    if (match?.[1] !== page) {
+      return;
+    }
+    const blocks = blocksOf(match[2] ?? "");
+    // A page said in its new order with its old frames is not arranged yet:
+    // the ⋯s read in order, top to bottom and, on a row, left to right.
+    const points = blocks.flatMap((one) => (one.more ? [one.more] : []));
+    const inOrder = points.every(
+      ([x, y], at) =>
+        at === 0 ||
+        y > (points[at - 1]?.[1] ?? 0) + 1 ||
+        (Math.abs(y - (points[at - 1]?.[1] ?? 0)) <= 1 &&
+          x > (points[at - 1]?.[0] ?? 0))
+    );
+    return inOrder && accept(blocks) ? blocks : undefined;
+  });
+
+interface Arrangement {
+  pages: Record<string, { block: string; hidden: boolean }[] | undefined>;
+}
+
+async function blocksLeg(
+  kit: Kit,
+  device: Device,
+  project: Project,
+  read: <T>(path: string) => Promise<T>
+): Promise<void> {
+  const block = `view:${KEPT}`;
+  const hubBoard = async () =>
+    (
+      (await read<Arrangement>(`/api/projects/${project.id}/blocks`)).pages
+        .board ?? []
+    ).map((one) => one.block);
+  let since = device.heard.length;
+  await device.pick(WEEK_LABEL);
+  const more = await device
+    .next(`${KEPT}'s head with its ⋯`, since, (line) => {
+      const match = PANE_LINE.exec(line);
+      const point = match?.[1] === KEPT ? POINT.exec(match[4] ?? "") : null;
+      return point
+        ? ([Number(point[1]), Number(point[2])] as [number, number])
+        : undefined;
+    })
+    .catch(() => undefined);
+  if (!(
+    kit.check(
+      `${device.tag} blocks: a kept view's tab wears its head, its ⋯ placing it on a page`,
+      more !== undefined,
+      more ? `⋯ at ${more.join(",")}` : device.heard.slice(-3).join(" / ")
+    ) && more
+  )) {
+    return;
+  }
+  // ⋯, Place on a page: Board. The view leaves the strip, and the board's page holds it.
+  since = device.heard.length;
+  await device.tap(more);
+  await device.choose("Board");
+  const strip = await stripSince(
+    device,
+    since,
+    (one) =>
+      one.chosen === "Board" &&
+      !one.items.some((item) => item.label === WEEK_LABEL),
+    "the strip on Board, the view gone from it"
+  ).catch(() => undefined);
+  const placed = await pageBlocks(
+    device,
+    "board",
+    since,
+    (blocks) =>
+      blocks.map((one) => one.id).join(",") === `board,${block}` &&
+      blocks.every((one) => one.more),
+    "the board's page with the view's block after the board"
+  ).catch(() => undefined);
+  const drawn = await device
+    .next("the view's block drawn at its height", since, (line) => {
+      const match = VIEW_BLOCK.exec(line);
+      return match?.[1] === KEPT && Number(match[2]) > 0
+        ? Number(match[2])
+        : undefined;
+    })
+    .catch(() => undefined);
+  const afterPlace = await hubBoard();
+  if (!(
+    kit.check(
+      `${device.tag} blocks: Place on a page › Board takes the view off the strip and onto the board's page, as the hub keeps it`,
+      strip !== undefined &&
+        placed !== undefined &&
+        drawn !== undefined &&
+        afterPlace.includes(block),
+      `strip ${labelsOf(strip)}; page ${placed?.map((one) => one.id).join(",")}; view drawn ${drawn}pt; hub board ${afterPlace.join(",")}`
+    ) && placed
+  )) {
+    return;
+  }
+  // The board's ⋯ › Move down: the view's block stands first, as the hub answers.
+  const boardMore = placed.find((one) => one.id === "board")?.more;
+  since = device.heard.length;
+  if (boardMore) {
+    await device.tap(boardMore);
+    await device.choose("Move down");
+  }
+  const moved = await pageBlocks(
+    device,
+    "board",
+    since,
+    (blocks) => blocks.map((one) => one.id).join(",") === `${block},board`,
+    "the board's page with the view's block first"
+  ).catch(() => undefined);
+  const afterMove = await hubBoard();
+  kit.check(
+    `${device.tag} blocks: Move down moves the board after the view, as the hub keeps it`,
+    moved !== undefined && afterMove.join(",") === `${block},board`,
+    `page ${moved?.map((one) => one.id).join(",")}; hub board ${afterMove.join(",")}`
+  );
+  // The view's ⋯ › Show as a tab: back on the strip, off the page.
+  const viewMore = moved?.find((one) => one.id === block)?.more;
+  if (!viewMore) {
+    return;
+  }
+  since = device.heard.length;
+  await device.tap(viewMore);
+  await device.choose("Show as a tab");
+  const back = await stripSince(
+    device,
+    since,
+    (one) => one.items.some((item) => item.label === WEEK_LABEL),
+    "the strip with the view's tab again"
+  ).catch(() => undefined);
+  const afterTab = await hubBoard();
+  kit.check(
+    `${device.tag} blocks: Show as a tab puts the view back on the strip and off the page, as the hub keeps it`,
+    back !== undefined && !afterTab.includes(block),
+    `strip ${labelsOf(back)}; hub board ${afterTab.join(",")}`
+  );
 }
 
 // ── routines: the tab's three blocks, a routine, Run now ─────────────────
@@ -777,8 +996,11 @@ async function askViewLeg(
   read: <T>(path: string) => Promise<T>
 ): Promise<void> {
   const words = `A view of the routines, asked from the ${device.tag}`;
+  // From the project's page, whatever the leg before left open (Made ends on a task).
+  const from = device.heard.length;
+  await device.relaunch(projectId);
   const strip = await device
-    .next("a strip line", 0, stripOf)
+    .next("a strip line", from, stripOf)
     .catch(() => undefined);
   let since = device.heard.length;
   // From the strip wider than a phone; from the head's ⋯ on one.
@@ -802,7 +1024,7 @@ async function askViewLeg(
   ) {
     return;
   }
-  await device.choose("Message Caw", true);
+  // The popover opens with Caw's field taking the keyboard: the words go straight in.
   await device.type(words);
   since = device.heard.length;
   await device.choose("Send message", true);
@@ -1198,8 +1420,43 @@ async function run(kit: Kit): Promise<void> {
     fetch(`${fleet.base}${at}/folder/file?path=${encodeURIComponent(path)}`, {
       method: "DELETE",
     });
-  /** One kept view and two drafts, whatever the device before left. */
+  /** Every page as it ships: no view placed, nothing moved or hidden. */
+  const clearPages = async () => {
+    for (const page of ["board", "table", "pipeline", "routines"]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page's arrangement at a time
+      const cleared = await fetch(`${fleet.base}${at}/blocks/${page}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ blocks: [] }),
+      });
+      if (!cleared.ok) {
+        throw new Error(
+          `clearing ${page}: ${cleared.status} ${await cleared.text()}`
+        );
+      }
+    }
+  };
+  /** The board's page with the kept view placed after the board, as Place on a page leaves it. */
+  const placeOnBoard = async () => {
+    const placed = await fetch(`${fleet.base}${at}/blocks/board`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        blocks: [
+          { block: "board", width: "wide", hidden: false },
+          { block: `view:${KEPT}`, width: "wide", hidden: false },
+        ],
+      }),
+    });
+    if (!placed.ok) {
+      throw new Error(
+        `placing ${KEPT}: ${placed.status} ${await placed.text()}`
+      );
+    }
+  };
+  /** One kept view and two drafts, every page as it ships, whatever the device before left. */
   const reset = async () => {
+    await clearPages();
     await remove(`views/${KEEP}.oui`);
     await remove(`views/drafts/${SCRAP}.oui`);
     await put(`views/${KEPT}.oui`, WEEK);
@@ -1235,22 +1492,67 @@ async function run(kit: Kit): Promise<void> {
         fleet.base,
         project.id
       ));
+      const on = device;
+      /** A leg that throws says so as its own failure, and the next leg still runs. */
+      const leg = async (what: string, steps: () => Promise<void>) => {
+        try {
+          await steps();
+        } catch (error) {
+          kit.check(
+            `${tag} ${what}: runs to its end`,
+            false,
+            String(error).slice(0, 900)
+          );
+        }
+      };
       if (await theStrip(kit, device)) {
         await theKeptView(kit, device, project);
         await keepInPlace(kit, device, project);
         await discardInPlace(kit, device, project);
+        await leg("blocks", () =>
+          blocksLeg(kit, on, project, (path) => fleet.api(path))
+        );
+        // Whatever the leg left placed goes back: the next leg opens the view on its tab.
+        await clearPages();
         await taskOpens(kit, device, project);
       }
-      await decisionsLeg(kit, device, decisions.projectId, (path) =>
-        fleet.api(path)
+      await leg("decisions", () =>
+        decisionsLeg(kit, on, decisions.projectId, (path) => fleet.api(path))
       );
-      await routinesLeg(kit, device, decisions.projectId, (path) =>
-        fleet.api(path)
+      await leg("routines", () =>
+        routinesLeg(kit, on, decisions.projectId, (path) => fleet.api(path))
       );
-      await madeLeg(kit, device, madeTask.id);
-      await askViewLeg(kit, device, decisions.projectId, (path) =>
-        fleet.api(path)
+      await leg("made", () => madeLeg(kit, on, madeTask.id));
+      await leg("ask", () =>
+        askViewLeg(kit, on, decisions.projectId, (path) => fleet.api(path))
       );
+      // The board's page with the view placed on it: the app's and the
+      // dashboard's, light and dark, for the paired review (prd-parity/blocks).
+      const { udid } = sim;
+      await leg("captures", async () => {
+        await placeOnBoard();
+        const folder = join(CAPTURES, tag);
+        await mkdir(folder, { recursive: true });
+        for (const appearance of ["light", "dark"] as const) {
+          // biome-ignore lint/performance/noAwaitInLoops: one appearance after the other, on one simulator
+          await sh(`xcrun simctl ui ${udid} appearance ${appearance}`);
+          await on.relaunch(project.id);
+          await Bun.sleep(5000);
+          await sh(
+            `xcrun simctl io ${udid} screenshot "${join(folder, `app-blocks-${appearance}.png`)}"`
+          );
+          await sh(
+            `xcrun simctl openurl ${udid} "${dashboard}/project/${project.id}"`
+          );
+          await Bun.sleep(6000);
+          await sh(
+            `xcrun simctl io ${udid} screenshot "${join(folder, `web-blocks-${appearance}.png`)}"`
+          );
+        }
+        await sh(`xcrun simctl ui ${udid} appearance light`);
+        await clearPages();
+        console.log(`  ${tag}: captures in ${folder}`);
+      });
     } finally {
       await writeFile(
         join(kit.out, `${tag}.log`),

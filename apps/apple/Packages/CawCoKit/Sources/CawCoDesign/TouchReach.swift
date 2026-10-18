@@ -94,6 +94,20 @@ public final class ReachWindow: UIWindow {
             super.hitTest(at, with: event)
         }
     }
+
+    #if DEBUG
+    /// Under a probe, each touch as the window sends it on: where it went.
+    public static var touched: ((UITouch) -> Void)?
+
+    override public func sendEvent(_ event: UIEvent) {
+        if let touched = Self.touched, event.type == .touches {
+            for touch in event.allTouches ?? [] where touch.phase == .began || touch.phase == .ended || touch.phase == .cancelled {
+                touched(touch)
+            }
+        }
+        super.sendEvent(event)
+    }
+    #endif
 }
 
 /// A control that answers only its drawn box, where its reach would take a

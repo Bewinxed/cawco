@@ -1556,6 +1556,26 @@ public enum Words {
 
         /// The ask's composer, a view in a sentence.
         public static let placeholder = "A view of what is scheduled this week…"
+
+        /// A draft's bar, over the view, with its two answers.
+        public static func drafted(view: String) -> String {
+            "Caw drafted the \(view) view"
+        }
+
+        public static let keep = "Keep"
+
+        public static let keeping = "Keeping…"
+
+        public static let discard = "Discard"
+
+        public static let discarding = "Discarding…"
+
+        /// A view whose route didn't load, with why.
+        public static func didntOpen(reason: String) -> String {
+            "The view didn't open: \(reason)"
+        }
+
+        public static let retry = "Retry"
     }
 
     public enum Made {

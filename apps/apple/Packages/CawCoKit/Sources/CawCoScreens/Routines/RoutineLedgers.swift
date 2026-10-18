@@ -190,7 +190,15 @@ final class RoutinesLedger: UIView {
         LedgerParts.tip(row.next, next.title)
 
         row.menu.accessibilityLabel = Words.Blocks.more(title: routine.name)
-        row.menu.menu = menuOf(routine)
+        // Set once and made as it opens, from the routine as it stands then: a
+        // refresh that set a new menu while a tap was opening this one cancelled it.
+        if row.menu.menu == nil {
+            let id = routine.id
+            row.menu.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
+                guard let self, let now = routines.first(where: { $0.id == id }) else { return done([]) }
+                done(menuOf(now).children)
+            }])
+        }
         row.opener.accessibilityLabel = [routine.name, schedule.words, last.said, last.text, next.text].compactMap(\.self).joined(separator: ", ")
         row.opener.accessibilityValue = open ? "expanded" : "collapsed"
         row.hairline?.isHidden = first

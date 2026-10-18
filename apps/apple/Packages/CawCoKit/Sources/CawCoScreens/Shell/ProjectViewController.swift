@@ -30,6 +30,16 @@ final class ProjectViewController: ObservedViewController {
 
         static let fixed: [Tab] = [.board, .table, .pipeline, .routines, .decisions]
 
+        /// A page that holds blocks, as its tab.
+        init(_ page: BlockPage) {
+            self = switch page {
+            case .board: .board
+            case .table: .table
+            case .pipeline: .pipeline
+            case .routines: .routines
+            }
+        }
+
         /// The tab's name (`viewLabel`: a view's name as a stage's is said).
         var label: String {
             switch self {
@@ -83,6 +93,8 @@ final class ProjectViewController: ObservedViewController {
 
     // Notices, the strip and the pane.
     private let notices = UIStackView()
+    /// The head, the notices and the strip, over the pane.
+    private let page = UIStackView()
     private let strip = UIStackView()
     private let tabsScroll = UIScrollView()
     private let tabs = SegmentedTabs(Tab.fixed.map { SegmentedTabs.Item($0.label) })
@@ -110,6 +122,18 @@ final class ProjectViewController: ObservedViewController {
     private var routinesPane: RoutinesPane!
     /// The Made tab: each task's outputs.
     private var madePane: MadePane!
+    /// A task view's page with views placed beside its view.
+    private let blocksPane = BlocksPane()
+    /// Board, Table and Pipeline as pages of blocks, made as one is framed.
+    private var taskPages: [BlockPage: BlockPageView] = [:]
+    /// Each task view block's count of the tasks it shows.
+    private var taskCounts: [BlockPage: KitLabel] = [:]
+    /// The table's block: the new task's tile over the table.
+    private let tableBlock = UIStackView()
+    /// Each view placed on a page, its block's body by name, kept while it is placed.
+    private var viewBlocks: [String: ViewBlockView] = [:]
+    /// The page's leading gutter, which the board scrolls to the edge from.
+    private var gutter = 0.0
     private let tableAdd = UIView()
     private var boardForm: NewTaskForm!
     private var tableForm: NewTaskForm!
@@ -137,9 +161,36 @@ final class ProjectViewController: ObservedViewController {
         buildHead()
         buildStrip()
         buildPane()
+        #if DEBUG
+        // Under the probe, each touch, where it landed and what took it, and the gestures that held it.
+        if ViewsProbe.on {
+            ReachWindow.touched = { touch in
+                let at = touch.location(in: nil)
+                let phase = switch touch.phase {
+                case .began: "began"
+                case .ended: "ended"
+                default: "cancelled"
+                }
+                let chain = sequence(first: touch.view, next: { $0?.superview }).prefix(4).compactMap { $0.map { "\(type(of: $0))" } }.joined(separator: "<")
+                let gestures = (touch.gestureRecognizers ?? []).map { "\(type(of: $0)):\($0.state.rawValue)" }.joined(separator: ",")
+                ViewsProbe.say("views touch \(phase) \(Int(at.x)),\(Int(at.y)) view=\(chain) gestures=\(gestures)")
+                // A press on a menu's button: whether a menu stands once it has had time to open, and whether it stays.
+                guard touch.phase == .ended, touch.view is UIButton else { return }
+                for wait in [0.8, 2.0, 4.0] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+                        func menus(_ view: UIView) -> Bool {
+                            "\(type(of: view))".contains("ContextMenu") || view.subviews.contains(where: menus)
+                        }
+                        ViewsProbe.say("views menu after \(Int(at.x)),\(Int(at.y)) +\(wait)s shown=\(windows.contains { menus($0) })")
+                    }
+                }
+            }
+        }
+        #endif
 
         let safe = view.safeAreaLayoutGuide
-        let page = UIStackView(arrangedSubviews: [head, notices, strip])
+        for part in [head, notices, strip] { page.addArrangedSubview(part) }
         page.axis = .vertical
         page.translatesAutoresizingMaskIntoConstraints = false
         notices.axis = .vertical
@@ -149,9 +200,12 @@ final class ProjectViewController: ObservedViewController {
         view.addSubview(pane)
         // The head and the strip stand at their content's height: the pane,
         // which has none of its own, takes the rest. Without this pull the
-        // board's pane left the head free to stretch.
+        // board's pane left the head free to stretch; it gives way only to
+        // the page's own content (compression resists at 750), never to a
+        // pane's content hugging its height (250), which pushed the strip
+        // 470pt down the phone's screen.
         let snug = page.heightAnchor.constraint(equalToConstant: 0)
-        snug.priority = .fittingSizeLevel
+        snug.priority = .defaultHigh - 1
         snug.isActive = true
         headTop = page.topAnchor.constraint(equalTo: safe.topAnchor, constant: Space.space6)
         headLeading = page.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space7)
@@ -372,6 +426,7 @@ final class ProjectViewController: ObservedViewController {
             try await store.discardView(name)
             choose(.board)
         }
+        custom.place = { [weak self] name, page in self?.placeView(name, on: page) }
         custom.isHidden = true
         pane.addSubview(custom)
 
@@ -391,19 +446,29 @@ final class ProjectViewController: ObservedViewController {
 
         // A block naming a view no longer kept is dropped from its page.
         blocks.kept = { [weak self] in self?.store.views.map { $0.filter { !$0.draft }.map(\.name) } }
+        // A view placed or made a tab elsewhere moves the strip: the views are read with the arrangement.
+        blocks.onChanged = { [weak self] in
+            guard let self else { return }
+            Task { await self.store.readViews() }
+        }
         routinesPane = RoutinesPane(hub: context.hub, projectId: projectId, blocks: blocks)
         routinesPane.onChange = { [weak self] in self?.requestRefresh() }
         routinesPane.openThread = { [weak self] id in self?.context.openSession(ThreadTabs.tabId(id)) }
+        routinesPane.viewItems = { [weak self] in self?.viewItems(on: .routines) ?? [:] }
         routinesPane.isHidden = true
         pane.addSubview(routinesPane)
+
+        tableBlock.axis = .vertical
+        tableBlock.spacing = Space.space3
+        blocksPane.isHidden = true
+        pane.addSubview(blocksPane)
 
         madePane = MadePane(hub: context.hub, projectId: projectId)
         madePane.onOpenTask = { [weak self] id in self?.open(id) }
         madePane.isHidden = true
         pane.addSubview(madePane)
 
-        board.translatesAutoresizingMaskIntoConstraints = false
-        pane.addSubview(board)
+        mountBoard()
         scroller.translatesAutoresizingMaskIntoConstraints = false
         scroller.alwaysBounceVertical = true
         pane.addSubview(scroller)
@@ -428,10 +493,10 @@ final class ProjectViewController: ObservedViewController {
             madePane.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
             madePane.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
             madePane.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
-            board.topAnchor.constraint(equalTo: pane.topAnchor),
-            board.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
-            board.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
-            board.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
+            blocksPane.topAnchor.constraint(equalTo: pane.topAnchor),
+            blocksPane.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
+            blocksPane.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
+            blocksPane.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
             scroller.topAnchor.constraint(equalTo: pane.topAnchor),
             scroller.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
             scroller.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
@@ -523,6 +588,93 @@ final class ProjectViewController: ObservedViewController {
         KitPopover.present(ViewAskController(hub: context.hub, projectId: projectId), from: source, in: self, align: .end)
     }
 
+    // MARK: Pages of blocks
+
+    /// The board on the pane, edge to edge, as it stands with no view beside it.
+    private func mountBoard() {
+        guard board.superview !== pane else { return }
+        board.removeFromSuperview()
+        board.translatesAutoresizingMaskIntoConstraints = false
+        pane.addSubview(board)
+        NSLayoutConstraint.activate([
+            board.topAnchor.constraint(equalTo: pane.topAnchor),
+            board.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
+            board.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
+            board.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
+        ])
+    }
+
+    /// A task view's page of blocks, made the first time a view is placed beside it.
+    private func taskPage(_ page: BlockPage) -> BlockPageView {
+        if let made = taskPages[page] { return made }
+        let made = BlockPageView(page: page, blocks: blocks)
+        taskPages[page] = made
+        return made
+    }
+
+    /// A task view's page (`taskPageItems`): the view itself, spanning the
+    /// row, counting the tasks it shows, the board filling the page's height;
+    /// then the views placed on it.
+    private func taskItems(_ page: BlockPage, content: UIView, count: Int) -> [String: BlockItem] {
+        let counted = taskCounts[page] ?? {
+            // `.block-count`: meta type, subtle ink, tabular.
+            let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkSubtle)
+            label.tabular = true
+            taskCounts[page] = label
+            return label
+        }()
+        counted.text = "\(count)"
+        let glyph: Glyph = switch page {
+        case .board: .columns
+        case .table: .fileTable
+        default: .workflow
+        }
+        var items = viewItems(on: page)
+        items[page.rawValue] = BlockItem(title: page.title, glyph: glyph, meta: counted, content: content, measure: Size.cBlockView,
+                                         hideable: false, body: page == .board ? .fill : .natural, card: false, wideOnly: true, alone: true)
+        return items
+    }
+
+    /// The kept views placed on a page, each a block there drawn as its tab draws it (`viewItemsOf`).
+    private func viewItems(on page: BlockPage) -> [String: BlockItem] {
+        var items: [String: BlockItem] = [:]
+        for place in blocks.placesOf(page) {
+            guard let name = place.view, views.contains(where: { $0.name == name && !$0.draft }) else { continue }
+            let body = viewBlocks[name] ?? {
+                let made = ViewBlockView(hub: context.hub, projectId: projectId, name: name)
+                made.onOpenTask = { [weak self] id in self?.open(id) }
+                made.onOpenFile = { [weak self] path in self?.openFile(path) }
+                viewBlocks[name] = made
+                return made
+            }()
+            items[place.block] = BlockItem(title: TaskWords.stage(name), glyph: .artifactSheet, content: body, measure: Size.cBlockView,
+                                           hideable: true, body: .natural, card: false, view: name)
+        }
+        return items
+    }
+
+    /// A view's block no page holds now goes, its web view with it.
+    private func dropUnplacedViews() {
+        let placed = Set(BlockPage.allCases.flatMap { blocks.placesOf($0).compactMap(\.view) })
+        for name in viewBlocks.keys where !placed.contains(name) {
+            viewBlocks[name]?.removeFromSuperview()
+            viewBlocks[name] = nil
+        }
+    }
+
+    /// A kept view placed on a page: it leaves the strip, and the page shows
+    /// it. Refused, the view stays on its tab, the hub's words said over it.
+    private func placeView(_ name: String, on page: BlockPage) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if await blocks.place(name, on: page) {
+                choose(Tab(page))
+            } else {
+                Toast.error(blocks.refused[page] ?? Words.Blocks.notPlaced, in: view.window)
+            }
+        }
+    }
+
     /// You can talk to Caw, on or off: only a reason he cannot start (no machine) stops it.
     private var canTalk: Bool { lead.view != nil && lead.view?.problem == nil }
 
@@ -561,7 +713,9 @@ final class ProjectViewController: ObservedViewController {
     private func showStrip() {
         // What the project's tasks made, while one has made something.
         let made: [Tab] = store.tasks.contains { !$0.outputs.isEmpty } ? [.made] : []
-        stripTabs = Tab.fixed + made + views.map { Tab.custom($0.name) }
+        // A view placed on a page stands there as a block, and is no tab.
+        let tabbed = views.filter { $0.draft || blocks.pageOfView($0.name) == nil }
+        stripTabs = Tab.fixed + made + tabbed.map { Tab.custom($0.name) }
         let waitingPages = decisionsPane.decisions.waiting
         let items = stripTabs.map { tab in
             if case let .custom(name) = tab, views.first(where: { $0.name == name })?.draft == true {
@@ -601,6 +755,7 @@ final class ProjectViewController: ObservedViewController {
         let shownTasks = filtering ? store.needsYou : tasks
         let shownStages = filtering ? stages.filter { $0.kind == .you } : stages
         column.arrangedSubviews.forEach { column.removeArrangedSubview($0); $0.removeFromSuperview() }
+        dropUnplacedViews()
         /// Which of the pane's three surfaces shows: the board, the column (the
         /// table, the pipeline, a state), or a project's own view.
         var surface: UIView = scroller
@@ -642,6 +797,8 @@ final class ProjectViewController: ObservedViewController {
             column.addArrangedSubview(KitEmptyState(icon: .toolTodo, title: "Nothing on the board yet",
                                                     line: "Add a task, or turn Caw on to plan it with him.", action: first))
         } else {
+            // A task view with views placed beside it is a page of blocks.
+            let framed = { (page: BlockPage) in self.blocks.placesOf(page).count > 1 }
             switch shownTab {
             case .board, .custom, .decisions, .routines:
                 what = "board"
@@ -651,20 +808,45 @@ final class ProjectViewController: ObservedViewController {
                 let kinds = Dictionary(tasks.map { ($0.id, $0.kind) }, uniquingKeysWith: { first, _ in first })
                 board.show(stages: shownStages, tasks: shownTasks, newIn: store.newIn, foot: boardForm, kindOf: kinds,
                            moving: Set(store.moving.keys), refused: refusals.mapValues(\.reason))
+                if framed(.board) {
+                    what = "blocks:board"
+                    surface = blocksPane
+                    board.inset = 0
+                    blocksPane.show(taskPage(.board), items: taskItems(.board, content: board, count: shownTasks.count))
+                } else {
+                    mountBoard()
+                    board.inset = gutter
+                }
             case .table:
                 what = "table"
                 if adding {
                     tableForm.stage = store.newIn ?? ""
                     tableForm.stages = stages
-                    column.addArrangedSubview(tableAdd)
                 }
                 tableForm.setOpen(adding, announce: false)
                 table.show(stages: stages, tasks: shownTasks)
-                column.addArrangedSubview(table)
+                let parts: [UIView] = adding ? [tableAdd, table] : [table]
+                if framed(.table) {
+                    what = "blocks:table"
+                    surface = blocksPane
+                    if tableBlock.arrangedSubviews != parts {
+                        tableBlock.arrangedSubviews.forEach { $0.removeFromSuperview() }
+                        parts.forEach(tableBlock.addArrangedSubview)
+                    }
+                    blocksPane.show(taskPage(.table), items: taskItems(.table, content: tableBlock, count: shownTasks.count))
+                } else {
+                    parts.forEach(column.addArrangedSubview)
+                }
             case .pipeline:
                 what = "pipeline"
                 pipeline.show(stages: stages, tasks: shownTasks, phone: phone)
-                column.addArrangedSubview(pipeline)
+                if framed(.pipeline) {
+                    what = "blocks:pipeline"
+                    surface = blocksPane
+                    blocksPane.show(taskPage(.pipeline), items: taskItems(.pipeline, content: pipeline, count: shownTasks.count))
+                } else {
+                    column.addArrangedSubview(pipeline)
+                }
             case .made:
                 what = "made"
                 surface = madePane
@@ -677,7 +859,12 @@ final class ProjectViewController: ObservedViewController {
             shown = what
             let showing = surface
             let place: @MainActor @Sendable () -> Void = {
-                for each in [self.board, self.scroller, self.custom!, self.decisionsPane!, self.routinesPane!, self.madePane!] as [UIView] { each.isHidden = each !== showing }
+                for each in [self.board, self.scroller, self.custom!, self.decisionsPane!, self.routinesPane!, self.madePane!, self.blocksPane] as [UIView] {
+                    each.isHidden = each !== showing
+                }
+                #if DEBUG
+                ViewsProbe.say("views panes \(what) shown=" + self.pane.subviews.filter { !$0.isHidden }.map { "\(type(of: $0))" }.joined(separator: ","))
+                #endif
             }
             if !first, view.window != nil, !UIAccessibility.isReduceMotionEnabled {
                 UIView.transition(with: pane, duration: Motion.durFade, options: [.transitionCrossDissolve, .allowUserInteraction], animations: place)
@@ -723,8 +910,11 @@ final class ProjectViewController: ObservedViewController {
         strip.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: Space.space4, trailing: 0)
         // The pane keeps the page's gutters: the board scrolls to the edge from them.
         let leading = wide ? Space.space7 : Space.space5, trailing = wide ? Space.space6 : Space.space5
-        board.inset = leading
+        gutter = leading
+        // In a block the board stands inside the gutters already.
+        board.inset = board.superview === pane ? leading : 0
         custom.inset(leading: leading, trailing: trailing)
+        blocksPane.inset(leading: leading, trailing: trailing)
         decisionsPane.inset(leading: leading, trailing: trailing)
         routinesPane.inset(leading: leading, trailing: trailing)
         madePane.inset(leading: leading, trailing: trailing)

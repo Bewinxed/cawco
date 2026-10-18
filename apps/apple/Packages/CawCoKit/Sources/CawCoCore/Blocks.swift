@@ -46,6 +46,8 @@ public final class ProjectBlocks {
     @ObservationIgnored private let hub: HubConnection
     /// The project's kept views by name, once read: a block naming one gone is dropped.
     @ObservationIgnored public var kept: () -> [String]? = { nil }
+    /// The hub said the arrangement changed (here, or on another screen): it is read again, and this is told.
+    @ObservationIgnored public var onChanged: () -> Void = {}
 
     /// As the hub last answered it, page by page; nil until the first read lands.
     public private(set) var pages: [BlockPage: [BlockPlace]]?
@@ -195,10 +197,12 @@ public final class ProjectBlocks {
                 guard let self else { return }
                 let changes = hub.blocksChanged[projectId] ?? 0
                 let connected = hub.state == .connected
-                let reread = changes != seen || (connected && !wasConnected)
+                let moved = changes != seen
+                let reread = moved || (connected && !wasConnected)
                 seen = changes
                 wasConnected = connected
                 if connected, reread { Task { await self.read() } }
+                if connected, moved { onChanged() }
                 watch()
             }
         }

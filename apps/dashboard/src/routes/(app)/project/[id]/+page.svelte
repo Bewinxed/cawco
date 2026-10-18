@@ -28,8 +28,10 @@
    * stands beside the view at a time.
    */
   import {
+    BLOCK_PAGE_TITLES,
     BLOCK_PAGES,
     type BlockPage as BlockPageId,
+    blocksWords,
     madeWords,
     type ProjectView,
     viewOfBlock,
@@ -1047,12 +1049,6 @@
 
   // --- the pages' blocks ----------------------------------------------------------
 
-  const PAGE_LABELS: Record<BlockPageId, string> = {
-    board: "Board",
-    table: "Table",
-    pipeline: "Pipeline",
-    routines: "Routines",
-  };
   const TASK_GLYPHS = {
     board: IconColumns,
     table: IconFileTable,
@@ -1099,7 +1095,7 @@
   ): Record<string, BlockItem> {
     return {
       [view]: {
-        title: PAGE_LABELS[view],
+        title: BLOCK_PAGE_TITLES[view],
         glyph: TASK_GLYPHS[view],
         meta: taskCount,
         content,
@@ -1131,7 +1127,7 @@
       remember();
     } else {
       // Refused, the view stays where it is: its tab, which says why.
-      toast.error(blocks.refused[on] ?? "The hub did not place the view.");
+      toast.error(blocks.refused[on] ?? blocksWords.notPlaced);
     }
   }
 
@@ -1655,22 +1651,22 @@
                offers the two answers, kept together on one row. -->
           <div class="draft-bar" out:crossOut>
             <span class="draft-line"
-              >Caw drafted the {viewLabel(view.name)} view</span
+              >{viewsWords.drafted(viewLabel(view.name))}</span
             >
             <div class="draft-acts">
               <Button
-                label="Keep"
+                label={viewsWords.keep}
                 onclick={() => keep(view.name)}
                 pending={keeping === view.name}
-                pendingLabel="Keeping…"
+                pendingLabel={viewsWords.keeping}
                 size="sm"
                 variant="outline"
               />
               <Button
-                label="Discard"
+                label={viewsWords.discard}
                 onclick={() => discard(view.name)}
                 pending={discarding === view.name}
-                pendingLabel="Discarding…"
+                pendingLabel={viewsWords.discarding}
                 size="sm"
                 variant="ghost"
               />
@@ -1698,13 +1694,13 @@
                   <DropdownMenu.Sub>
                     <DropdownMenu.SubTrigger>
                       <IconLayers />
-                      <span>Place on a page</span>
+                      <span>{blocksWords.placeOnPage}</span>
                     </DropdownMenu.SubTrigger>
                     <DropdownMenu.SubContent class="w-auto min-w-40">
                       {#each BLOCK_PAGES as target (target)}
                         <DropdownMenu.Item
                           onSelect={() => placeView(view.name, target)}
-                          >{PAGE_LABELS[target]}</DropdownMenu.Item
+                          >{BLOCK_PAGE_TITLES[target]}</DropdownMenu.Item
                         >
                       {/each}
                     </DropdownMenu.SubContent>
