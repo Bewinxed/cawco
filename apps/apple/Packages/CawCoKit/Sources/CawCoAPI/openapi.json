@@ -33662,6 +33662,22 @@
           },
           "name": {
             "type": "string"
+          },
+          "readOnly": {
+            "description": "Why the inspector can't write this story's args, when it can't; null\nwhen it can. `read` false: the story file builds it with code the\nreader can't follow (an imported helper, a computed value), so\n`component` and `args` say nothing of it, though it mounts all the same;\n`reason` says \"args not readable here\" and why. `read` true: its\ncomponent and args were read through a spread or a local helper,\nshared code that is edited in the file.",
+            "type": "object",
+            "properties": {
+              "read": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "read",
+              "reason"
+            ]
           }
         },
         "required": [

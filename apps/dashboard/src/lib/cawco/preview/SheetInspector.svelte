@@ -172,7 +172,11 @@
       .map((prop, at) => ({
         prop,
         at,
-        rank: RANK[inspector.code(prop) === null ? controlOf(prop) : "code"],
+        rank: RANK[
+          inspector.code(prop) === null && !inspector.readOnly
+            ? controlOf(prop)
+            : "code"
+        ],
       }))
       .sort((a, b) => a.rank - b.rank || a.at - b.at)
       .map((one) => one.prop);
@@ -278,7 +282,12 @@
       </div>
       <AskHere asker={asks} at="remove-story" />
 
-      {#if component}
+      {#if inspector.readOnly}
+        <p class="note" data-slot="read-only">{inspector.readOnly.reason}</p>
+      {/if}
+      {#if inspector.readOnly?.read === false}
+        <!-- No controls: the file builds this story's component and args in code the reader can't follow. -->
+      {:else if component}
         <p class="where">
           {component.name} · <code>{component.file}</code>
         </p>
@@ -288,7 +297,9 @@
         <ul class="props">
           {#each ordered(component.props) as prop (prop.name)}
             {@const control =
-              inspector.code(prop) === null ? controlOf(prop) : "code"}
+              inspector.code(prop) === null && !inspector.readOnly
+                ? controlOf(prop)
+                : "code"}
             {@const value = inspector.value(prop)}
             <li class="prop" data-prop={prop.name}>
               <div class="prop-head">
@@ -403,7 +414,12 @@
                 </p>
               {:else}
                 <p data-slot="code" class="code" id={fieldId(prop)}>
-                  <code>{inspector.code(prop) ?? prop.type.raw}</code>
+                  <code
+                    >{inspector.code(prop) ??
+                      (inspector.readOnly && value !== undefined
+                        ? JSON.stringify(value)
+                        : prop.type.raw)}</code
+                  >
                   <span
                     >{inspector.code(prop) === null
                       ? words.setInFile

@@ -68,6 +68,18 @@
  *     width leaves the story file passing the project's `prettier --check`,
  *     and changes nothing outside that story's statement.
  *
+ * Then back in the first session's folder, a story file that builds its
+ * stories four ways: a literal, a spread of a local object, a call of a
+ * local helper, and a spread of an imported helper's call.
+ *
+ * 16. `artifact_create(kind: "sheet")` of it answers an id and its stage
+ *     `live`.
+ * 17. `artifact_read` of it lists each readable story's own component and
+ *     args (the literal writable, the spread and the helper call read-only
+ *     as shared code) and the imported one "args not readable here", with
+ *     its export name and the reason, its component and args empty rather
+ *     than the meta's.
+ *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
@@ -90,6 +102,8 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const STORY = "src/Card.stories.js";
+/** A story file whose stories are built four ways (legs 16 and 17). */
+const MIXED = "src/Mixed.stories.js";
 const REFUSAL = "this session runs in no workspace";
 
 /** The project in the session's folder: plain Vite and Svelte, the dashboard's packages linked in. */
@@ -120,6 +134,23 @@ export default { plugins: [svelte()], server: { fs: { strict: false } } };
 export default { component: Card, args: { title: "Hello" } };
 
 export const One = { args: {} };
+`,
+  "src/fixture.js":
+    "export const fixture = (title) => ({ args: { title } });\n",
+  [MIXED]: `import Card from "./Card.svelte";
+import { fixture } from "./fixture.js";
+
+export default { component: Card, args: { title: "Meta" } };
+
+const shared = { args: { title: "Shared" } };
+function card(title) {
+  return { component: Card, args: { title } };
+}
+
+export const Literal = { args: { title: "Literal" } };
+export const Spread = { parameters: {}, ...shared };
+export const Helper = card("Helper");
+export const Imported = { ...fixture("Imported") };
 `,
 };
 
@@ -207,6 +238,44 @@ const respond = (request: Seen): Reply => {
 };
 
 const STATUS = /"status":"(\w+)"/;
+
+/** A story as `artifact_read` lists it (core stage.ts `Story`), as far as legs 16 and 17 read it. */
+interface ListedStory {
+  args: Record<string, unknown>;
+  component: string | null;
+  name: string;
+  readOnly: { read: boolean; reason: string } | null;
+}
+
+/** The `stories` array of the sheet an `artifact_read` answered, its JSON scanned out of the answer's text; empty when it has none. */
+const storiesIn = (said: string): ListedStory[] => {
+  const start = said.indexOf("[", said.indexOf('"stories":'));
+  if (said.indexOf('"stories":') < 0 || start < 0) {
+    return [];
+  }
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let at = start; at < said.length; at += 1) {
+    const char = said[at];
+    if (escaped) {
+      escaped = false;
+    } else if (quoted) {
+      escaped = char === "\\";
+      quoted = char !== '"';
+    } else if (char === '"') {
+      quoted = true;
+    } else if (char === "[" || char === "{") {
+      depth += 1;
+    } else if (char === "]" || char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return JSON.parse(said.slice(start, at + 1)) as ListedStory[];
+      }
+    }
+  }
+  return [];
+};
 const ERRORS = /"errors":(\[[^\]]*\])/;
 const ID = /"id":"([0-9a-f-]{36})"/;
 const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 500);
@@ -513,6 +582,55 @@ const run = async (kit: Kit) => {
   );
 
   await scopedAndStyled(kitCreated.match(ID)?.[1]);
+  await builtStories();
+
+  /** Legs 16 and 17, in the first session's folder: a sheet whose stories are built by spreads and helpers. */
+  async function builtStories(): Promise<void> {
+    // 16. The sheet made.
+    const mixed = await call("16", "mcp__cawco__artifact_create", {
+      kind: "sheet",
+      name: "mixed",
+      file: MIXED,
+    });
+    const mixedId = mixed.match(ID)?.[1];
+    kit.check(
+      "16: artifact_create(kind: sheet) of the story file built four ways answers an id and its stage live",
+      !!mixedId && mixed.match(STATUS)?.[1] === "live",
+      short(mixed)
+    );
+
+    // 17. Each story as the file builds it.
+    const read = mixedId
+      ? await call("17", "mcp__cawco__artifact_read", { id: mixedId })
+      : "no sheet from leg 16";
+    const stories = storiesIn(read);
+    const one = (name: string) => stories.find((story) => story.name === name);
+    const said = (name: string) => JSON.stringify(one(name) ?? null);
+    const titled = (name: string, title: string) =>
+      JSON.stringify(one(name)?.args) === JSON.stringify({ title });
+    const imported = one("Imported");
+    kit.check(
+      "17: artifact_read lists the literal, spread and helper stories' own component and args, and the imported one read-only with its name and why",
+      titled("Literal", "Literal") &&
+        one("Literal")?.readOnly === null &&
+        titled("Spread", "Shared") &&
+        one("Spread")?.readOnly?.read === true &&
+        titled("Helper", "Helper") &&
+        one("Helper")?.component === "src/Card.svelte" &&
+        one("Helper")?.readOnly?.read === true &&
+        imported?.readOnly?.read === false &&
+        imported.readOnly.reason.startsWith(
+          "Imported: args not readable here"
+        ) &&
+        imported.readOnly.reason.includes("./fixture.js") &&
+        imported.component === null &&
+        JSON.stringify(imported.args) === "{}",
+      ["Literal", "Spread", "Helper", "Imported"]
+        .map((name) => `${name} ${said(name)}`)
+        .join("; ")
+        .slice(0, 1500) || short(read)
+    );
+  }
 
   /** Legs 13 to 15, in the SvelteKit checkout of legs 6 to 8 (its session `kitSession`), on the sheet leg 7 made (`kitId`). */
   async function scopedAndStyled(kitId: string | undefined): Promise<void> {

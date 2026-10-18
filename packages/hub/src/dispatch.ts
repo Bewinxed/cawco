@@ -158,7 +158,8 @@ export interface DispatchDeps {
   >;
   /**
    * The brief's `## Design system` section, read from the attempt's clone
-   * (design-system.ts `designSection`): "" when the clone holds no design/.
+   * (design-system.ts `designSection`): "" when the clone's design/ holds
+   * no guide (SKILL.md or DESIGN.md).
    * Asked only for a task that needs the system (design-offers.ts
    * `needsDesignSystem`).
    */

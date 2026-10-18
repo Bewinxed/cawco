@@ -85,8 +85,16 @@ export class SheetInspector {
     return this.sheet?.stories.find((one) => one.name === this.chosen) ?? null;
   }
 
-  /** The component the chosen story mounts: its own, else the meta's. */
+  /** Why the chosen story's args are read-only here (story-file.ts `storyRead`); null when the controls write them. */
+  get readOnly(): Story["readOnly"] {
+    return this.story?.readOnly ?? null;
+  }
+
+  /** The component the chosen story mounts: its own, else the meta's; none when the reader couldn't follow the story, whose component the file builds in code. */
   get component(): ComponentDoc | null {
+    if (this.readOnly && !this.readOnly.read) {
+      return null;
+    }
     const file = this.story?.component ?? this.sheet?.meta.component;
     return this.sheet?.components.find((one) => one.file === file) ?? null;
   }
@@ -151,7 +159,7 @@ export class SheetInspector {
   /** The person set prop `prop` of the chosen story: mounted again at once, saved by Save. */
   set(prop: PropMeta, value: unknown): void {
     const name = this.chosen;
-    if (!name) {
+    if (!name || this.readOnly) {
       return;
     }
     this.problem = null;
@@ -169,7 +177,7 @@ export class SheetInspector {
   /** Prop `prop` back to the meta's or the component's default: the story's own arg dropped on Save. */
   reset(prop: PropMeta): void {
     const { chosen: name, story } = this;
-    if (!(name && story)) {
+    if (!(name && story) || this.readOnly) {
       return;
     }
     const { [prop.name]: _gone, ...edits } = this.edits[name] ?? {};

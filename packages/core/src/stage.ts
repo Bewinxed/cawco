@@ -173,6 +173,16 @@ export interface Story {
   component: string | null;
   line: number;
   name: string;
+  /**
+   * Why the inspector can't write this story's args, when it can't; null
+   * when it can. `read` false: the story file builds it with code the
+   * reader can't follow (an imported helper, a computed value), so
+   * `component` and `args` say nothing of it, though it mounts all the same;
+   * `reason` says "args not readable here" and why. `read` true: its
+   * component and args were read through a spread or a local helper,
+   * shared code that is edited in the file.
+   */
+  readOnly: { read: boolean; reason: string } | null;
 }
 
 /** What a story file's default export says every story shares: its args, and the component each mounts unless it names its own. */
