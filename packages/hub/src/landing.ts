@@ -54,15 +54,16 @@ import { CommandStopped, WouldWait } from "./machine-pause";
 
 /**
  * Why git turned a landing down: the step it was on, the end of what git
- * said, and `cause` when the words name it. `auth` is the remote refusing the
- * login (no credential reached git, or a bad one); `race` is a push that was
- * still behind the branch after every try, someone else pushing between the
- * hub's fetch and its push each time; `cut-off`, a push the workspace's
- * boundary stopped before it answered ({@link CUT_OFF}), the branch read once
- * after it and not holding the commit.
+ * said, and `cause` when the state after it names one, never git's words.
+ * `race` is a push that was still behind the branch after every try, the
+ * branch on origin having moved on from what each push was rebased onto (or,
+ * for a leased push, from what its lease named), read after it; `cut-off`, a
+ * push the workspace's boundary stopped before it answered ({@link CUT_OFF}),
+ * the branch read once after it and not holding the commit. Any other
+ * refusal (the remote turning the login down among them) is git's words alone.
  */
 export interface Refusal {
-  cause?: "auth" | "race" | "cut-off";
+  cause?: "race" | "cut-off";
   detail: string;
   kind: "refused";
   /**
@@ -276,15 +277,6 @@ const LOCAL_MS = 60_000;
  * does not.
  */
 const CUT_OFF = 137;
-/** Pushes that lost a race, as git words them. */
-const LOST_RACE = /non-fast-forward|\[rejected\]|fetch first|stale info/;
-/**
- * A remote that refused the login, as git and GitHub word it: no credential
- * reached git (it then asks a terminal that is not there), or one it turned
- * down.
- */
-const NOT_AUTHORISED =
-  /could not read (Username|Password)|terminal prompts disabled|Authentication failed|No anonymous write access|Invalid username or password|Permission denied \(publickey|Permission to \S+ denied|Write access to repository not granted|returned error: 40[13]/i;
 const CONFLICT_MARK = "cawco-conflict";
 /**
  * Tries when someone else pushes between our fetch and our push. Each try
@@ -293,13 +285,12 @@ const CONFLICT_MARK = "cawco-conflict";
  */
 const ATTEMPTS = 3;
 
-/** A command git refused at `step`, its words and, when they name it, the cause. */
-const refusal = (step: Refusal["step"], result: CommandResult): Refusal => {
-  const detail = detailOf(result);
-  return NOT_AUTHORISED.test(`${result.stderr}\n${result.stdout}`)
-    ? { kind: "refused", step, detail, cause: "auth" }
-    : { kind: "refused", step, detail };
-};
+/** A command git refused at `step`, in its words. */
+const refusal = (step: Refusal["step"], result: CommandResult): Refusal => ({
+  kind: "refused",
+  step,
+  detail: detailOf(result),
+});
 
 /** One shell word, whatever the branch is called. */
 export const quote = (word: string): string =>
@@ -566,6 +557,25 @@ async function holds(
 }
 
 /**
+ * Whether a push to `base` that failed lost a race: origin's branch, fetched
+ * again, is no longer the commit the push was rebased onto, so someone
+ * pushed in between. Unmoved, or unreadable, the push was refused for
+ * another reason, and git's words on it are the landing's.
+ */
+async function movedOn(
+  run: LandingDeps<unknown>["run"],
+  base: string,
+  onto: string
+): Promise<boolean> {
+  const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
+  if (fetched.exitCode !== 0) {
+    return false;
+  }
+  const now = await run(`git rev-parse ${quote(`origin/${base}`)}`, LOCAL_MS);
+  return now.exitCode === 0 && now.stdout.trim() !== onto;
+}
+
+/**
  * A push its boundary cut off ({@link CUT_OFF}) whose branch, read once
  * after it, does not hold the commit: refused, in words saying so.
  */
@@ -615,8 +625,10 @@ async function attempt<F>(
   if (pushed.exitCode === CUT_OFF) {
     return cutOff(pushed, base, after);
   }
-  const said = `${pushed.stderr}\n${pushed.stdout}`;
-  if (!(LOST_RACE.test(said) && !NOT_AUTHORISED.test(said))) {
+  // Read in the turn, as the push was: a command that would wait steps out.
+  const inTurn: LandingDeps<F>["run"] = (cmd, timeoutMs) =>
+    deps.run(cmd, timeoutMs, true);
+  if (!(await movedOn(inTurn, base, onto))) {
     return refusal("push", pushed);
   }
   return n < ATTEMPTS
@@ -771,8 +783,13 @@ async function leasedPush(
   if (pushed.exitCode === CUT_OFF) {
     return cutOff(pushed, ref, sha);
   }
-  const said = `${pushed.stderr}\n${pushed.stdout}`;
-  if (!(LOST_RACE.test(said) && !NOT_AUTHORISED.test(said))) {
+  // Lost to someone who pushed in between when the ref no longer holds what
+  // the lease named; holding it still, the push was refused otherwise.
+  const again = await run(`git ls-remote origin ${quote(ref)}`, NETWORK_MS);
+  if (
+    again.exitCode !== 0 ||
+    (again.stdout.trim().split(SPACE)[0] ?? "") === held
+  ) {
     return refusal("push", pushed);
   }
   return n < ATTEMPTS
