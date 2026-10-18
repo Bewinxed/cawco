@@ -60,6 +60,7 @@ import {
 import { dirname, join } from "node:path";
 import type { AuthContext } from "ssh2";
 import type { SshJoinJob } from "../../../packages/core/src/join";
+import { listedPid, signal } from "../../../packages/core/src/signal";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import {
@@ -99,12 +100,33 @@ const groupOf = (pid: number): number | null => {
   }
 };
 
-/** Every live process whose argv holds all of `parts`, or whose group is `group`. */
-const processes = (match: { parts: string[] } | { group: number }): number[] =>
+/** Whether `pid`'s environment holds `entry` (`NAME=value`), read from /proc. */
+const environHolds = (pid: number, entry: string): boolean => {
+  try {
+    return readFileSync(`/proc/${pid}/environ`, "utf8")
+      .split("\0")
+      .includes(entry);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Every live process whose argv holds all of `parts`, or whose group is
+ * `group`; with `run`, only those whose environment holds it (leg (l)'s
+ * {@link RUN_ENV} marker, so a process an earlier run left behind is never
+ * read as this run's).
+ */
+const processes = (
+  match: ({ parts: string[] } | { group: number }) & { run?: string }
+): number[] =>
   readdirSync("/proc")
     .filter((entry) => PROCESS_ID.test(entry))
     .map(Number)
     .filter((pid) => {
+      if (match.run !== undefined && !environHolds(pid, match.run)) {
+        return false;
+      }
       if ("group" in match) {
         return groupOf(pid) === match.group;
       }
@@ -115,6 +137,13 @@ const processes = (match: { parts: string[] } | { group: number }): number[] =>
         return false;
       }
     });
+
+/**
+ * The variable leg (l)'s sshd sets on every session (`SetEnv`), with a value
+ * of its own run: every process of the session inherits it, an orphan the
+ * watchdog failed to end included, and nothing an earlier run left holds it.
+ */
+const RUN_ENV = "CAWCO_PROBE_RUN";
 
 /** Every process's argv and environment that holds `secret`, read from /proc. */
 const holders = (secret: string): string[] => {
@@ -190,7 +219,10 @@ const installed = (job: SshJoinJob): boolean => {
  * only, the scratch target's `authorized_keys`, which holds the hub's key
  * by now; its sessions given the scratch HOME and {@link machineBin}'s PATH by
  * `SetEnv`): Stop ends what the add runs on the machine, not only the
- * hub's `ssh`, and an add that runs to its end leaves nothing behind.
+ * hub's `ssh`, and an add that runs to its end leaves nothing behind. Every
+ * process it reads is this run's own ({@link RUN_ENV}), and whatever of this
+ * run still lives at the end is killed, so a failure here never fails the
+ * next run.
  */
 async function realSshd(
   kit: Kit,
@@ -205,11 +237,12 @@ async function realSshd(
   });
   const { port } = lease;
   lease.stop(true);
+  const marker = `${RUN_ENV}=${crypto.randomUUID()}`;
   const config = join(dir, "sshd_config");
   await Bun.$`ssh-keygen -q -t ed25519 -N "" -f ${join(dir, "sshd_host_key")}`.quiet();
   writeFileSync(
     config,
-    `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(dir, "sshd_host_key")}\nPidFile ${join(dir, "sshd.pid")}\nAuthorizedKeysFile ${machine.authorized}\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\nStrictModes no\nSetEnv HOME=${machine.home} PATH=${machine.bin}\n`
+    `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(dir, "sshd_host_key")}\nPidFile ${join(dir, "sshd.pid")}\nAuthorizedKeysFile ${machine.authorized}\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\nStrictModes no\nSetEnv HOME=${machine.home} PATH=${machine.bin} ${marker}\n`
   );
   const sshd = Bun.spawn(
     ["/usr/sbin/sshd", "-D", "-f", config, "-E", join(dir, "sshd.log")],
@@ -222,8 +255,10 @@ async function realSshd(
       port,
     });
   const read = (id: string) => fleet.api<SshJoinJob>(`/api/machines/ssh/${id}`);
-  const holding = () => processes({ parts: HELD });
-  const watchdogs = () => processes({ parts: ["while ps -p"] });
+  const holding = () => processes({ parts: HELD, run: marker });
+  const watchdogs = () => processes({ parts: ["while ps -p"], run: marker });
+  const inGroup = (group: number | null) =>
+    group === null ? [] : processes({ group, run: marker });
   const hold = join(machine.home, ".hold");
   try {
     await until(
@@ -245,8 +280,7 @@ async function realSshd(
     const gone = await until(
       "the machine's step and its group gone",
       () =>
-        holding().length === 0 &&
-        processes({ group: stepGroup ?? -1 }).length === 0
+        holding().length === 0 && inGroup(stepGroup).length === 0
           ? true
           : undefined,
       Boolean,
@@ -255,7 +289,7 @@ async function realSshd(
     kit.check(
       "l: on a real sshd, Stop ends what the add runs on the machine: its held step and every process of that group are gone within 10 s",
       stopped.job?.state === "stopped" && step !== undefined && gone === true,
-      `stop answered ${stopped.said}; machine's step ${step} (group ${stepGroup}); left ${JSON.stringify(holding())} and in the group ${JSON.stringify(processes({ group: stepGroup ?? -1 }))}`
+      `stop answered ${stopped.said}; machine's step ${step} (group ${stepGroup}); left ${JSON.stringify(holding())} and in the group ${JSON.stringify(inGroup(stepGroup))}`
     );
     rmSync(hold, { force: true });
     const ran = await begin();
@@ -278,6 +312,11 @@ async function realSshd(
     );
   } finally {
     sshd.kill();
+    // Whatever of this run still lives (a watchdog that failed, its step):
+    // it goes, by the pid /proc lists now.
+    for (const pid of processes({ parts: [], run: marker })) {
+      signal(listedPid(pid), "SIGKILL");
+    }
   }
 }
 
