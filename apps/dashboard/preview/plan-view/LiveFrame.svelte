@@ -61,20 +61,20 @@
     flex-direction: column;
     gap: var(--space-3);
     min-inline-size: 0;
+    max-inline-size: 100%;
     margin: 0;
   }
+  /* The caption's words, then the demo's control on a row of its own. */
   .caption {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: start;
-    justify-content: space-between;
-    gap: var(--space-2) var(--space-4);
-    max-inline-size: 780px;
+    gap: var(--space-2);
+    max-inline-size: 72ch;
     font: var(--type-meta);
     color: var(--ink-muted);
   }
   .words {
-    flex: 1 1 320px;
     min-inline-size: 0;
     text-wrap: pretty;
   }
@@ -83,7 +83,7 @@
     margin-block-start: var(--space-1);
     color: var(--ink-strong);
   }
-  @media (width < 640px) {
+  @media (width < 700px) {
     .caption {
       padding-inline: var(--space-4);
     }
