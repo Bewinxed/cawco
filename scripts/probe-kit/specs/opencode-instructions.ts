@@ -22,6 +22,10 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  CLAUDE_DIR_NAME,
+  USER_LAYER_LABEL,
+} from "../../../packages/core/src/claude-dirs";
 import { until } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 
@@ -68,7 +72,7 @@ const spec: Spec = {
 
     // (b) Claude Code's files, each with a word OpenCode must never see.
     await writeFile(
-      join(fleet.home, ".claude", "CLAUDE.md"),
+      join(fleet.home, CLAUDE_DIR_NAME, "CLAUDE.md"),
       `# Claude\n\n${words.claudeGlobal}\n`
     );
     await writeFile(
@@ -107,7 +111,7 @@ const spec: Spec = {
       bodies.includes(words.agents)
     );
     kit.check(
-      "(b) no ~/.claude/CLAUDE.md word reaches the model",
+      `(b) no ${USER_LAYER_LABEL}/CLAUDE.md word reaches the model`,
       !bodies.includes(words.claudeGlobal)
     );
     kit.check(
