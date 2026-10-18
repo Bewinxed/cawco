@@ -1790,6 +1790,36 @@ export function personWords(entry: SessionMessage): string | null {
   return said.length ? said.join("\n") : null;
 }
 
+/** A `workflow_run` call, whichever harness named the tool (`mcp__cawco__…`, `cawco_…`). */
+const RUN_TOOL = /(?:^|_)workflow_run$/;
+
+/**
+ * The run a `workflow_run` call started, off its result: the hub's own
+ * answer, `{"runId": …}` as JSON (hub delegation-tools.ts), as a string or
+ * its first text block. Undefined for a result that is not that answer.
+ */
+const startedRun = (result: unknown): string | undefined => {
+  const text =
+    typeof result === "string"
+      ? result
+      : Array.isArray(result)
+        ? (result as { type?: unknown; text?: unknown }[]).find(
+            (block) => block.type === "text" && typeof block.text === "string"
+          )?.text
+        : undefined;
+  if (typeof text !== "string") {
+    return;
+  }
+  try {
+    const answer: unknown = JSON.parse(text);
+    const runId = (answer as { runId?: unknown } | null)?.runId;
+    return typeof runId === "string" ? runId : undefined;
+  } catch {
+    // Not the hub's answer (a refusal in words): it started no run.
+    return;
+  }
+};
+
 /** Folds a tool result into the `tool.use` it answers; returns the block it changed. */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one dispatch over every tool-result shape a `tool.use` can be answered by
 export function applyToolResult(
@@ -1846,9 +1876,15 @@ export function applyToolResult(
     }
   }
 
+  const runId =
+    !isError && RUN_TOOL.test(target.metadata?.toolName ?? "")
+      ? startedRun(result)
+      : undefined;
+
   target.metadata = {
     ...target.metadata,
     toolResult: result,
+    ...(runId ? { workflowRunId: runId } : {}),
     ...(target.metadata?.toolName === "apply_patch" &&
     typeof structuredContent?.diff === "string"
       ? { toolDiff: structuredContent.diff }
