@@ -939,22 +939,26 @@ export function namesAmong(
 /** A machine's state that keeps a request from it. */
 export type MachineFault = "offline" | "silent" | "unknown";
 
-const MACHINE_FAULT_WORDS: Record<MachineFault, string> = {
-  offline: "isn't connected. Try again once it's back.",
-  silent: "didn't answer in time. Try again in a moment.",
-  unknown: "isn't on this hub any more. Pick another machine.",
+const MACHINE_FAULT_WORDS: Record<MachineFault, [string, string]> = {
+  offline: ["isn't connected.", "Try again once it's back."],
+  silent: ["didn't answer in time.", "Try again in a moment."],
+  unknown: ["isn't on this hub any more.", "Pick another machine."],
 };
 
 /**
  * Why a machine could not take a request, as the person reads it (WORDS.md's
  * error formula): the machine by its name, never its id; what to do. `name`
  * is its {@link namedAmong}, undefined when the hub doesn't know the machine.
+ * `next: false`, the cause alone, for a reader that says its own next step
+ * (a preview pane that tries again by itself).
  */
 export function machineFaultWords(
   name: string | undefined,
-  fault: MachineFault
+  fault: MachineFault,
+  { next = true }: { next?: boolean } = {}
 ): string {
-  return `${name ?? "That machine"} ${MACHINE_FAULT_WORDS[fault]}`;
+  const [cause, step] = MACHINE_FAULT_WORDS[fault];
+  return `${name ?? "That machine"} ${cause}${next ? ` ${step}` : ""}`;
 }
 
 /**

@@ -3391,14 +3391,19 @@ export const createServer = (
   /**
    * Why a machine could not take a request, as a client reads it (core
    * `machineFaultWords`): by its name, and a machine not on this hub as
-   * `unknown` whatever the fault.
+   * `unknown` whatever the fault. `next: false`, the cause alone (core
+   * `machineFaultWords`).
    */
-  const machineFault = (machineId: string, fault: MachineFault): string => {
+  const machineFault = (
+    machineId: string,
+    fault: MachineFault,
+    words: { next?: boolean } = {}
+  ): string => {
     const agents = db.listAgents();
     const machine = agents.find((each) => each.machineId === machineId);
     return machine
-      ? machineFaultWords(namedAmong(machine, agents), fault)
-      : machineFaultWords(undefined, "unknown");
+      ? machineFaultWords(namedAmong(machine, agents), fault, words)
+      : machineFaultWords(undefined, "unknown", words);
   };
   /** {@link machineFault} for an ask the machine did not answer: not connected, or silent. */
   const unansweredFault = (machineId: string, answer: Unanswered): string =>
@@ -9644,7 +9649,9 @@ export const createServer = (
       return Promise.resolve({
         ok: false,
         down: "machine",
-        error: machineFault(target.machineId, "offline"),
+        // The cause alone: its readers are the hub's own lines and the
+        // preview ping, whose pane says its own next step (it tries again).
+        error: machineFault(target.machineId, "offline", { next: false }),
       });
     }
     const reach = (async (): Promise<PreviewReach> => {
