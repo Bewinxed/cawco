@@ -1,29 +1,57 @@
 /**
- * One account signing in on one machine with its provider's device code:
- * the machine starts the provider's own sign-in and answers a code, the
- * person enters it on any device, and the hub waits (a minute at a time)
- * for the machine to say who it signed in as. A code is only ever minted by
- * a press: nothing starts on open. The setup's machine rows and the account
+ * One account signing in on one machine through its provider's own sign-in:
+ * the machine starts it and answers what it shows the person first. A
+ * question it asks (its sign-in methods, Copilot's GitHub Enterprise domain)
+ * is answered here and the machine answers the next step; a device code is
+ * entered on any device while the hub waits (a minute at a time) for the
+ * machine to say who it signed in as; a link is opened and the code or
+ * address it ends on is pasted back. A sign-in is only ever started by a
+ * press: nothing starts on open. The setup's machine rows and the account
  * page's popover both draw this (DevicePanel).
  */
-import { accountsWords, type ProviderSigninChallenge } from "@cawco/core";
+import type {
+  ProviderSigninChallenge,
+  ProviderSigninPrompt,
+} from "@cawco/core";
 import { failureWords } from "#lib/cawco/hub-read.js";
-import { awaitDeviceSignin, beginDeviceSignin } from "../client.svelte";
+import {
+  answerDeviceSignin,
+  awaitDeviceSignin,
+  beginDeviceSignin,
+} from "../client.svelte";
 
 export type DevicePhase =
-  "idle" | "starting" | "waiting" | "expired" | "signed-in" | "mismatch";
+  | "idle"
+  | "starting"
+  | "asking"
+  | "answering"
+  | "waiting"
+  | "linked"
+  | "checking"
+  | "expired"
+  | "signed-in"
+  | "mismatch";
 
-const deviceCode = (
-  challenge: ProviderSigninChallenge
-): challenge is Extract<ProviderSigninChallenge, { userCode: string }> =>
-  "userCode" in challenge;
+/** The phases a sign-in is under way in: Start does nothing then. */
+const UNDER_WAY: readonly DevicePhase[] = [
+  "starting",
+  "asking",
+  "answering",
+  "waiting",
+  "linked",
+  "checking",
+];
 
 export class DeviceFlow {
   phase = $state<DevicePhase>("idle");
+  /** The question the sign-in asks now. */
+  prompt = $state<ProviderSigninPrompt | null>(null);
+  /** The device code to enter. */
   code = $state<string | null>(null);
+  /** Where to enter the code, or the link to sign in at. */
   url = $state<string | null>(null);
-  /** When the code lapses, epoch ms. */
-  expiresAt = $state(0);
+  /** When the code lapses, epoch ms; null when the provider gave no expiry. */
+  expiresAt = $state<number | null>(null);
   /** Who the machine signed in as, once it has. */
   email = $state<string | null>(null);
   /** The hub's refusal, in its own words. */
@@ -42,51 +70,107 @@ export class DeviceFlow {
     this.#machineId = machineId;
   }
 
-  /** Mints a code on the machine and waits for it to be entered. */
+  /** Starts the sign-in on the machine and shows what it asks first. */
   async start(): Promise<void> {
-    if (this.phase === "starting" || this.phase === "waiting") {
+    if (UNDER_WAY.includes(this.phase)) {
       return;
     }
     this.#round += 1;
     const round = this.#round;
     this.phase = "starting";
     this.problem = null;
+    await this.#step(round, async (id) =>
+      beginDeviceSignin(id, this.#machineId)
+    );
+  }
+
+  /** Answers the question it asks: an option's id, or the text typed. */
+  async answer(value: string): Promise<void> {
+    if (this.phase !== "asking") {
+      return;
+    }
+    const round = this.#round;
+    this.phase = "answering";
+    this.problem = null;
+    await this.#step(round, async (id) =>
+      answerDeviceSignin(id, this.#machineId, value)
+    );
+  }
+
+  /** Sends the code or address the link's page ended on. */
+  async paste(pasted: string): Promise<void> {
+    const code = pasted.trim();
+    if (this.phase !== "linked" || code === "") {
+      return;
+    }
+    const round = this.#round;
+    this.phase = "checking";
+    this.problem = null;
     try {
       const id = await this.#account();
-      const challenge = await beginDeviceSignin(id, this.#machineId);
+      await this.#wait(id, round, code);
+    } catch (error) {
+      this.#failed(round, error);
+    }
+  }
+
+  /** Asks the machine for the next step and shows it; a device code is then waited on. */
+  async #step(
+    round: number,
+    ask: (id: string) => Promise<ProviderSigninChallenge>
+  ): Promise<void> {
+    try {
+      const id = await this.#account();
+      const challenge = await ask(id);
       if (round !== this.#round) {
         return;
       }
-      if (!deviceCode(challenge)) {
-        this.phase = "idle";
-        this.problem = accountsWords.device.notACode;
+      if ("prompt" in challenge) {
+        this.prompt = challenge.prompt;
+        this.phase = "asking";
+        return;
+      }
+      this.prompt = null;
+      if ("url" in challenge) {
+        this.code = null;
+        this.url = challenge.url;
+        this.expiresAt = null;
+        this.phase = "linked";
         return;
       }
       this.code = challenge.userCode;
       this.url = challenge.verificationUrl;
       this.expiresAt = challenge.expiresAt;
       this.phase = "waiting";
-      this.#clock(true);
+      this.#clock(challenge.expiresAt !== null);
       await this.#wait(id, round);
     } catch (error) {
-      if (round === this.#round) {
-        this.#clock(false);
-        this.code = null;
-        this.phase = "idle";
-        this.problem = failureWords(error);
-      }
+      this.#failed(round, error);
     }
   }
 
-  async #wait(id: string, round: number): Promise<void> {
+  #failed(round: number, error: unknown): void {
+    if (round !== this.#round) {
+      return;
+    }
+    this.#clock(false);
+    this.prompt = null;
+    this.code = null;
+    this.phase = "idle";
+    this.problem = failureWords(error);
+  }
+
+  async #wait(id: string, round: number, pasted?: string): Promise<void> {
+    let code = pasted;
     while (round === this.#round) {
       // biome-ignore lint/performance/noAwaitInLoops: one wait at a time, each a minute long on the hub
-      const result = await awaitDeviceSignin(id, this.#machineId);
+      const result = await awaitDeviceSignin(id, this.#machineId, code);
+      code = undefined;
       if (round !== this.#round) {
         return;
       }
       if (result.state === "pending") {
-        if (Date.now() >= this.expiresAt) {
+        if (this.expiresAt !== null && Date.now() >= this.expiresAt) {
           this.#end("expired");
           return;
         }
@@ -100,7 +184,7 @@ export class DeviceFlow {
     }
   }
 
-  #end(phase: Exclude<DevicePhase, "idle" | "starting" | "waiting">): void {
+  #end(phase: "expired" | "signed-in" | "mismatch"): void {
     this.#clock(false);
     this.phase = phase;
   }
@@ -112,7 +196,11 @@ export class DeviceFlow {
       this.now = Date.now();
       this.#tick = setInterval(() => {
         this.now = Date.now();
-        if (this.phase === "waiting" && this.now >= this.expiresAt) {
+        if (
+          this.phase === "waiting" &&
+          this.expiresAt !== null &&
+          this.now >= this.expiresAt
+        ) {
           this.#round += 1;
           this.#end("expired");
         }

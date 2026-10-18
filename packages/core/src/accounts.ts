@@ -704,6 +704,9 @@ export interface AccountBorrowFrame {
  *
  * - Begin (args: account id, provider) starts pi-ai's own OAuth sign-in for
  *   the provider into the account's store and answers a
+ *   {@link ProviderSigninChallenge}: the first thing it shows the person.
+ * - Answer (args: account id, answer) answers the question the sign-in asks
+ *   now (an option's id, or the text typed) and answers the next
  *   {@link ProviderSigninChallenge}.
  * - Complete (args: code or null, account id, the identity the account
  *   already has or null) answers a {@link ProviderSigninResult}: a code
@@ -717,6 +720,7 @@ export interface AccountBorrowFrame {
  *   own refresh when it is near its expiry; the only writer of the store.
  */
 export const CONTROL_BEGIN_PROVIDER_LOGIN = "beginProviderLogin";
+export const CONTROL_ANSWER_PROVIDER_PROMPT = "answerProviderPrompt";
 export const CONTROL_COMPLETE_PROVIDER_LOGIN = "completeProviderLogin";
 export const CONTROL_SET_PROVIDER_KEY = "setProviderKey";
 export const CONTROL_FORGET_PROVIDER_ACCOUNT = "forgetProviderAccount";
@@ -758,14 +762,31 @@ export interface AccountSigninResult {
 }
 
 /**
- * A provider sign-in begun: a device code to enter on any device, where, and
- * until when (`expiresAt` from the provider's own device-code expiry); or,
- * for a provider with no device code, a link to authorise at, after which
- * the person pastes the code or redirect URL it ends on.
+ * A question a provider's sign-in asks the person, as pi-ai asks it: one of
+ * its options (answered with the option's id), or a line of text (`secret`:
+ * not shown as typed; an empty answer takes the provider's own default).
+ */
+export type ProviderSigninPrompt =
+  | {
+      kind: "select";
+      message: string;
+      options: { id: string; label: string; description?: string }[];
+    }
+  | { kind: "text"; message: string; placeholder?: string; secret: boolean };
+
+/**
+ * What a provider sign-in shows the person next: a device code to enter on
+ * any device, where, and until when (`expiresAt` from the provider's own
+ * device-code expiry; null when the provider gave none, and the code waits
+ * until it is entered or the sign-in is started again); a link to authorise
+ * at, after which the person pastes the code or redirect URL it ends on; or
+ * a question it asks first ({@link ProviderSigninPrompt}), whose answer
+ * (`CONTROL_ANSWER_PROVIDER_PROMPT`) shows the next step.
  */
 export type ProviderSigninChallenge =
-  | { expiresAt: number; userCode: string; verificationUrl: string }
-  | { url: string };
+  | { expiresAt: number | null; userCode: string; verificationUrl: string }
+  | { url: string }
+  | { prompt: ProviderSigninPrompt };
 
 /**
  * How a provider sign-in (or a key) ended. `signed-in`: as `identity` (its

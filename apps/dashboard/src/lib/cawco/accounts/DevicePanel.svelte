@@ -1,10 +1,13 @@
 <script lang="ts">
   /**
-   * A device-code sign-in on one machine (device.svelte.ts). Before: Start
-   * sign-in, which mints the one code (the button runs pending meanwhile).
-   * Waiting: the code in a well, Copy code, Open sign-in link, and how long
-   * is left to enter it. Expired: the well dims and Start again mints a new
-   * one. Signed in: a check draws itself beside who it signed in as.
+   * A provider sign-in on one machine (device.svelte.ts). Before: Start
+   * sign-in (the button runs pending meanwhile). Asking: the provider's own
+   * question, its options as buttons or a field and Continue. Waiting: the
+   * code in a well, Copy code, Open sign-in link, and how long is left to
+   * enter it (when the provider said). Linked: Open sign-in link, a field
+   * for what the page ends on, and Done. Expired: the well dims and Start
+   * again starts a new one. Signed in: a check draws itself beside who it
+   * signed in as.
    *
    * The well arrives as a transcript row does: its place opens, then its
    * content fades up 3px into it.
@@ -14,6 +17,7 @@
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import { IconArrowUpRight, IconWarningTriangle } from "#lib/icons.js";
   import Check from "./Check.svelte";
   import type { DeviceFlow } from "./device.svelte";
@@ -26,11 +30,30 @@
 
   const words = accountsWords.device;
 
+  /** What the person typed for a question, or pasted from a link's page. */
+  let typed = $state("");
+  const asking = $derived(
+    flow.phase === "asking" || flow.phase === "answering"
+  );
+  const linked = $derived(flow.phase === "linked" || flow.phase === "checking");
+
+  /** Sends what was typed; the field starts empty for the next step. */
+  function answer(): void {
+    const value = typed.trim();
+    typed = "";
+    flow.answer(value);
+  }
+  function paste(): void {
+    const value = typed;
+    typed = "";
+    flow.paste(value);
+  }
+
   /** The code as it is read out: in fours. */
   const groups = $derived(
     (flow.code ?? "").replace(/[^\da-z]/gi, "").match(/.{1,4}/g) ?? []
   );
-  const left = $derived(Math.max(0, flow.expiresAt - flow.now));
+  const left = $derived(Math.max(0, (flow.expiresAt ?? 0) - flow.now));
   const clock = $derived(
     words.countdown(
       Math.floor(left / 60_000),
@@ -76,6 +99,82 @@
         <b>{flow.email ?? accountsWords.signin.theAccount}</b></span
       >
     </p>
+  {:else if asking && flow.prompt}
+    <p class="line">{flow.prompt.message}</p>
+    <div data-slot="row" class="row">
+      {#if flow.prompt.kind === "select"}
+        {#each flow.prompt.options as option (option.id)}
+          <Button
+            disabled={flow.phase === "answering"}
+            label={option.label}
+            onclick={() => flow.answer(option.id)}
+            size="sm"
+            title={option.description}
+            variant="outline"
+          />
+        {/each}
+      {:else}
+        <Input
+          aria-label={flow.prompt.message}
+          autocomplete="off"
+          class="h-[30px]"
+          disabled={flow.phase === "answering"}
+          onkeydown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              answer();
+            }
+          }}
+          placeholder={flow.prompt.placeholder}
+          spellcheck="false"
+          type={flow.prompt.secret ? "password" : "text"}
+          bind:value={typed}
+        />
+        <Button
+          label={words.answer}
+          onclick={answer}
+          pending={flow.phase === "answering"}
+          pendingLabel={words.answering}
+          size="sm"
+        />
+      {/if}
+    </div>
+  {:else if linked}
+    <div data-slot="row" class="row">
+      <Button
+        href={flow.url ?? undefined}
+        icon={IconArrowUpRight}
+        label={accountsWords.signin.openLink}
+        rel="noopener noreferrer"
+        size="sm"
+        target="_blank"
+        variant="outline"
+      />
+      <Input
+        aria-label={accountsWords.signin.codeLabel}
+        autocomplete="off"
+        class="h-[30px]"
+        disabled={flow.phase === "checking"}
+        onkeydown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            paste();
+          }
+        }}
+        placeholder={accountsWords.signin.codePlaceholder}
+        spellcheck="false"
+        bind:value={typed}
+      />
+      <Button
+        disabled={typed.trim() === "" && flow.phase !== "checking"}
+        label={accountsWords.signin.done}
+        onclick={paste}
+        pending={flow.phase === "checking"}
+        pendingLabel={accountsWords.signin.checking}
+        size="sm"
+      />
+    </div>
+    <p class="line">{words.linked}</p>
   {:else}
     {#if shown}
       <div
@@ -118,7 +217,7 @@
         />
       {/if}
     </div>
-    {#if flow.phase === "waiting"}
+    {#if flow.phase === "waiting" && flow.expiresAt !== null}
       <p class="line">
         {words.enterWithin}
         <span data-slot="num" class="num">{clock}</span>

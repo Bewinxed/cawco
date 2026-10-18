@@ -138,6 +138,7 @@ import {
   COMPACTION_ORIGIN,
   CONFIGURE_BINARY_UPDATES,
   CONTROL_ACCOUNT_LENT,
+  CONTROL_ANSWER_PROVIDER_PROMPT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
@@ -25677,6 +25678,45 @@ export const createServer = (
                 : status(
                     422,
                     answer.value.error ?? "The sign-in did not start."
+                  );
+            default:
+              throw unreachable(answer);
+          }
+        }
+      )
+      // A provider's sign-in asked the person something (its sign-in
+      // methods, Copilot's GitHub Enterprise domain): their answer, an
+      // option's id or the text typed, relayed to the machine, which answers
+      // what the sign-in shows next.
+      .post(
+        "/api/accounts/:id/machines/:machineId/signin/answer",
+        { body: t.Object({ answer: t.String() }) },
+        async ({ params, body, status }) => {
+          const account = db.accounts.get(params.id);
+          if (!account) {
+            return status(404, `There is no account ${params.id}.`);
+          }
+          if (account.provider === CLAUDE_PROVIDER) {
+            return status(
+              400,
+              `${accountName(account)} signs in with Claude Code, which asks nothing here.`
+            );
+          }
+          const answer = await callAgent(
+            params.machineId,
+            CONTROL_ANSWER_PROVIDER_PROMPT,
+            [account.id, body.answer],
+            SIGNIN_TIMEOUT_MS
+          );
+          switch (answer.kind) {
+            case "unanswered":
+              return status(503, awayWords(params.machineId, answer));
+            case "answered":
+              return answer.value.ok
+                ? (answer.value.result as ProviderSigninChallenge)
+                : status(
+                    422,
+                    answer.value.error ?? "The sign-in did not go on."
                   );
             default:
               throw unreachable(answer);

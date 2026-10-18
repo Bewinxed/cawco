@@ -2396,8 +2396,9 @@ export const completeSignin = (
   accountsWrite(`${signinUrl(id, machineId)}/complete`, "POST", { code });
 
 /**
- * Starts a provider's own OAuth sign-in for the account on a machine: a
- * device code to enter on any device, where, and until when.
+ * Starts a provider's own OAuth sign-in for the account on a machine: what
+ * it shows first, a question it asks, a device code to enter on any device,
+ * or a link to sign in at.
  */
 export const beginDeviceSignin = (
   id: string,
@@ -2405,15 +2406,29 @@ export const beginDeviceSignin = (
 ): Promise<ProviderSigninChallenge> =>
   accountsWrite(signinUrl(id, machineId), "POST");
 
+/** Answers the question a provider's sign-in asks; the machine answers its next step. */
+export const answerDeviceSignin = (
+  id: string,
+  machineId: string,
+  answer: string
+): Promise<ProviderSigninChallenge> =>
+  accountsWrite(`${signinUrl(id, machineId)}/answer`, "POST", { answer });
+
 /**
- * Waits up to a minute for the device code to be entered: signed in, as
- * someone else, expired, or still pending (ask again).
+ * Sends the code a link's page ended on, if any, and waits up to a minute
+ * for the sign-in to finish: signed in, as someone else, expired, or still
+ * pending (ask again).
  */
 export const awaitDeviceSignin = (
   id: string,
-  machineId: string
+  machineId: string,
+  code?: string
 ): Promise<ProviderSigninResult> =>
-  accountsWrite(`${signinUrl(id, machineId)}/complete`, "POST", {});
+  accountsWrite(
+    `${signinUrl(id, machineId)}/complete`,
+    "POST",
+    code ? { code } : {}
+  );
 
 /**
  * Signs an account out on one machine and drops its store there; the hub

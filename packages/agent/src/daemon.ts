@@ -26,6 +26,7 @@ import {
   CAWCO_HUB_PORT,
   CONFIGURE_BINARY_UPDATES,
   CONTROL_ACCOUNT_LENT,
+  CONTROL_ANSWER_PROVIDER_PROMPT,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
   CONTROL_CANCEL_COMMAND,
@@ -161,6 +162,7 @@ import { probesStarted } from "./probe-count";
 import { parseProcId, procIdFor, SESSION_PROC_KINDS } from "./proc-id";
 import {
   accountLent,
+  answerProviderPrompt,
   beginProviderLogin,
   borrowAccount,
   completeProviderLogin,
@@ -538,6 +540,10 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
   supervisor.registerDaemonFunction(
     CONTROL_BEGIN_PROVIDER_LOGIN,
     (id, provider) => beginProviderLogin(id as string, provider as string)
+  );
+  supervisor.registerDaemonFunction(
+    CONTROL_ANSWER_PROVIDER_PROMPT,
+    (id, answer) => answerProviderPrompt(id as string, answer as string)
   );
   supervisor.registerDaemonFunction(
     CONTROL_COMPLETE_PROVIDER_LOGIN,

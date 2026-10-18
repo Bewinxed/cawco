@@ -671,28 +671,56 @@ export const lendAccount = async (accountId: string): Promise<LentAccess> => {
 // ── Signing in ───────────────────────────────────────────────────────────
 
 const COMPLETE_WAIT_MS = 60_000;
-/** A sign-in method that asks for a device code, by its id or its label. */
-const DEVICE_OPTION = /device/i;
-const DEVICE_LABEL = /device|headless/i;
 /** A pi key resolved at request time (`!command`, `$VAR`): not a key to move. */
 const RESOLVED_KEY = /^[!$]/;
-const DEVICE_FLOW_TIMED_OUT = /Device flow timed out|expired/i;
+
+/** What a running sign-in waits on the person for, as it goes. */
+interface SignInState {
+  /** A code the sign-in asked to have pasted, when it asks for one. */
+  code?: (code: string) => void;
+  /** The device code's own expiry, once it showed one that has one. */
+  expiresAt: number | null;
+  /** Answers the question it asks now, while it asks one. */
+  reply?: (answer: string) => void;
+}
 
 interface SignIn {
   readonly abort: AbortController;
-  /** A code the sign-in asked to have pasted, when it asks for one. */
-  code?: (code: string) => void;
   readonly done: Promise<"done" | "expired" | Error>;
-  readonly expiresAt: number | null;
+  /** The next thing it shows the person, or how it ended first. */
+  readonly next: () => Promise<
+    ProviderSigninChallenge | { ended: "done" | "expired" | Error }
+  >;
   readonly provider: string;
+  readonly state: SignInState;
 }
 
 const signIns = new Map<string, SignIn>();
 
 /**
- * Starts pi-ai's own OAuth sign-in for `provider` into the account's store:
- * its device-code method where it has one, so the person can finish it on
- * any device; else its link, after which they paste the code it ends on.
+ * A step a sign-in showed, as the person is given it: the step itself, or
+ * the end it came to before showing anything more.
+ */
+const shownOrEnded = async (
+  signIn: SignIn
+): Promise<ProviderSigninChallenge> => {
+  const step = await signIn.next();
+  if (!("ended" in step)) {
+    return step;
+  }
+  throw step.ended instanceof Error
+    ? step.ended
+    : new Error(
+        `${signIn.provider}'s sign-in ended before it showed anything more.`
+      );
+};
+
+/**
+ * Starts pi-ai's own OAuth sign-in for `provider` into the account's store
+ * and answers the first thing it shows the person: a question it asks (its
+ * sign-in methods, Copilot's GitHub Enterprise domain), which
+ * {@link answerProviderPrompt} answers; a device code to enter on any
+ * device; or a link, after which they paste the code it ends on.
  */
 export const beginProviderLogin = async (
   accountId: string,
@@ -708,70 +736,115 @@ export const beginProviderLogin = async (
   }
   const runtime = await runtimeOf(accountId, provider);
   const abort = new AbortController();
-  let shown: (challenge: ProviderSigninChallenge) => void = () => undefined;
-  const challenge = new Promise<ProviderSigninChallenge>((resolve) => {
-    shown = resolve;
-  });
-  const signIn: { code?: (code: string) => void } = {};
-  const login = runtime.login(provider, "oauth", {
-    signal: abort.signal,
-    prompt: (prompt) => {
-      if (prompt.type === "select") {
-        const device = prompt.options.find(
-          (option) =>
-            DEVICE_OPTION.test(option.id) || DEVICE_LABEL.test(option.label)
-        );
-        return Promise.resolve((device ?? prompt.options[0])?.id ?? "");
-      }
-      if (prompt.type === "manual_code") {
-        return new Promise<string>((resolve) => {
-          signIn.code = resolve;
-        });
-      }
-      // A question the sign-in asks with a default (Copilot's enterprise
-      // domain): the default.
-      return Promise.resolve("");
-    },
-    notify: (event) => {
-      if (event.type === "device_code") {
-        shown({
-          verificationUrl: event.verificationUri,
-          userCode: event.userCode,
-          expiresAt: Date.now() + (event.expiresInSeconds ?? 900) * 1000,
-        });
-      } else if (event.type === "auth_url") {
-        shown({ url: event.url });
-      }
-    },
-  });
-  const done = login.then(
-    () => "done" as const,
-    (error: unknown) => {
-      const failed = error instanceof Error ? error : new Error(String(error));
-      return DEVICE_FLOW_TIMED_OUT.test(failed.message)
-        ? ("expired" as const)
-        : failed;
+  // What it shows, in order, for whoever asks next.
+  const shown: ProviderSigninChallenge[] = [];
+  let waiting: ((step: ProviderSigninChallenge) => void) | undefined;
+  const show = (step: ProviderSigninChallenge): void => {
+    const taker = waiting;
+    waiting = undefined;
+    if (taker) {
+      taker(step);
+    } else {
+      shown.push(step);
     }
-  );
-  const first = await Promise.race([
-    challenge,
-    done.then((ended) => ({ ended })),
-  ]);
-  if ("ended" in first) {
-    throw first.ended instanceof Error
-      ? first.ended
-      : new Error(`${provider}'s sign-in ended before it showed anything.`);
-  }
-  signIns.set(accountId, {
+  };
+  // Made before the sign-in starts: pi-ai may ask its first question
+  // before `login` returns.
+  const state: SignInState = { expiresAt: null };
+  const done = runtime
+    .login(provider, "oauth", {
+      signal: abort.signal,
+      prompt: (prompt) => {
+        if (prompt.type === "manual_code") {
+          // Asked beside the link it showed: what the person pastes there.
+          return new Promise<string>((resolve) => {
+            state.code = resolve;
+          });
+        }
+        show({
+          prompt:
+            prompt.type === "select"
+              ? {
+                  kind: "select",
+                  message: prompt.message,
+                  options: prompt.options.map((option) => ({ ...option })),
+                }
+              : {
+                  kind: "text",
+                  message: prompt.message,
+                  ...(prompt.placeholder
+                    ? { placeholder: prompt.placeholder }
+                    : {}),
+                  secret: prompt.type === "secret",
+                },
+        });
+        return new Promise<string>((resolve) => {
+          state.reply = resolve;
+        });
+      },
+      notify: (event) => {
+        if (event.type === "device_code") {
+          state.expiresAt =
+            event.expiresInSeconds === undefined
+              ? null
+              : Date.now() + event.expiresInSeconds * 1000;
+          show({
+            verificationUrl: event.verificationUri,
+            userCode: event.userCode,
+            expiresAt: state.expiresAt,
+          });
+        } else if (event.type === "auth_url") {
+          show({ url: event.url });
+        }
+      },
+    })
+    .then(
+      () => "done" as const,
+      (error: unknown) => {
+        // pi-ai names no error by type: a sign-in that failed once its
+        // device code's own expiry passed is that code expiring.
+        if (state.expiresAt !== null && Date.now() >= state.expiresAt) {
+          return "expired" as const;
+        }
+        return error instanceof Error ? error : new Error(String(error));
+      }
+    );
+  const signIn: SignIn = {
     abort,
-    done,
     provider,
-    expiresAt: "expiresAt" in first ? first.expiresAt : null,
-    get code() {
-      return signIn.code;
-    },
-  });
+    state,
+    done,
+    next: () =>
+      Promise.race([
+        shown.length > 0
+          ? Promise.resolve(shown.shift() as ProviderSigninChallenge)
+          : new Promise<ProviderSigninChallenge>((resolve) => {
+              waiting = resolve;
+            }),
+        done.then((ended) => ({ ended })),
+      ]),
+  };
+  const first = await shownOrEnded(signIn);
+  signIns.set(accountId, signIn);
   return first;
+};
+
+/**
+ * Answers the question a sign-in asks now (an option's id, or the text the
+ * person typed) and answers the next thing it shows them.
+ */
+export const answerProviderPrompt = async (
+  accountId: string,
+  answer: string
+): Promise<ProviderSigninChallenge> => {
+  const signIn = signIns.get(accountId);
+  const reply = signIn?.state.reply;
+  if (!(signIn && reply)) {
+    throw new Error("This sign-in is not asking anything now. Start it again.");
+  }
+  signIn.state.reply = undefined;
+  reply(answer);
+  return await shownOrEnded(signIn);
 };
 
 /** A sign-in finished: who it is, kept or signed straight out as someone else's. */
@@ -820,7 +893,7 @@ export const completeProviderLogin = async (
     return { state: "expired" };
   }
   if (code) {
-    signIn.code?.(code.trim());
+    signIn.state.code?.(code.trim());
   }
   const read = await readWithin(COMPLETE_WAIT_MS, () => signIn.done);
   let outcome: Awaited<typeof signIn.done>;
@@ -830,7 +903,8 @@ export const completeProviderLogin = async (
       break;
     case "unanswered":
       // Not finished yet: the sign-in still waits for the person.
-      return signIn.expiresAt === null || Date.now() < signIn.expiresAt
+      return signIn.state.expiresAt === null ||
+        Date.now() < signIn.state.expiresAt
         ? { state: "pending" }
         : { state: "expired" };
     default: {

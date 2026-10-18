@@ -165,8 +165,6 @@ export const accountsWords = {
     expired: "Code expired.",
     mismatch: (machine: string, who: string | null) =>
       `${machine} signed in as ${who ?? "another account"}, so it signed out again.`,
-    notACode:
-      "The machine answered a sign-in link, not a code. Update CawCo on it, then start again.",
     /** The text answer to a question the provider's sign-in asks. */
     answer: "Continue",
     answering: "Continuing…",
