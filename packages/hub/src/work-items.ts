@@ -1731,8 +1731,9 @@ const gateFailedText = (run: GateRun, where: string): string => {
 
 /**
  * A refused landing's line, its first sentence what failed: the step git was
- * on, from which machine, and a branch that moved before every push when it
- * did. Then git's words, and where the commits are.
+ * on, from which machine, and the cause when git's words name one (the remote
+ * refusing the login; a branch that moved before every push). Then git's
+ * words, and where the commits are.
  */
 const refusedLine = (
   refusal: Refusal,
@@ -1749,7 +1750,9 @@ const refusedLine = (
     "pull request": "opening the pull request",
   };
   let said = `${step[refusal.step]} on ${machine} failed`;
-  if (refusal.cause === "race") {
+  if (refusal.cause === "auth") {
+    said = `${step[refusal.step]} from ${machine} wasn't authorised by origin`;
+  } else if (refusal.cause === "race") {
     said = `${target} moved on origin before each of the hub's ${refusal.tries} pushes, so every one was turned down as behind it`;
   } else if (refusal.cause === "cut-off") {
     said = `${step.push} was cut off, and ${target} does not hold the commits`;
@@ -5985,7 +5988,10 @@ export const createWorkItems = ({
       runIn(workspace, item)
     );
     if (pr.kind === "refused") {
-      const why = `gh on ${machineName(workspace.machineId)} did not open the pull request`;
+      const why =
+        pr.cause === "auth"
+          ? `gh on ${machineName(workspace.machineId)} wasn't authorised to open the pull request`
+          : "the pull request was not opened";
       return {
         kind: "refused",
         gate,
