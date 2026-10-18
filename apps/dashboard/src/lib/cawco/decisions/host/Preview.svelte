@@ -39,9 +39,20 @@
   }
   $effect(() => () => watch?.disconnect());
 
-  /** How often, and how many times, an embed's origin is asked whether it serves yet. Our call: a dev server's start. */
+  /**
+   * How often, and how many times, an embed's origin is asked whether it
+   * serves yet: once a second for 30 seconds. Our call: long enough for a
+   * dev server's cold start, short enough that a dead one is said.
+   */
   const PING_MS = 1000;
   const PINGS = 30;
+  /** `--dur-wait-grace` in ms, from the kit's tokens: a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
+  const grace = () =>
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue(
+        "--dur-wait-grace"
+      )
+    ) || 0;
   /**
    * An embed's address once its origin serves it: its ping (core
    * `PREVIEW_PING_PATH`, open to any page) answers ok when the machine's
@@ -50,14 +61,20 @@
    */
   let ready = $state<string | null>(null);
   let waited = $state(false);
+  /** The wait has outlasted `--dur-wait-grace`: its line may show. */
+  let slow = $state(false);
   $effect(() => {
     const embed = held?.embed;
     ready = null;
     waited = false;
+    slow = false;
     if (!embed) {
       return;
     }
     let gone = false;
+    const after = setTimeout(() => {
+      slow = true;
+    }, grace());
     const ping = new URL("/__cawco/ping", embed).href;
     (async () => {
       for (let tries = 0; tries < PINGS && !gone; tries += 1) {
@@ -80,7 +97,18 @@
     })();
     return () => {
       gone = true;
+      clearTimeout(after);
     };
+  });
+
+  /** What the embed's status says: nothing until the wait outlasts its grace, nothing once it serves. */
+  const waitLine = $derived.by(() => {
+    if (!held?.embed || ready || !slow) {
+      return "";
+    }
+    return waited
+      ? `The ${held.kind} ${held.name} isn't answering; reload the page once it runs.`
+      : `Opening the ${held.kind} ${held.name}…`;
   });
 </script>
 
@@ -95,14 +123,12 @@
       style:block-size={tall === null ? undefined : `${tall}px`}
       title={held.name}
     ></iframe>
-  {:else if held?.embed && ready}
-    <iframe class="frame screen" src={ready} title={held.name}></iframe>
   {:else if held?.embed}
-    <p class="gone" role="status">
-      {waited
-        ? `The ${held.kind} ${held.name} isn't answering; reload the page once it runs.`
-        : `Opening the ${held.kind} ${held.name}…`}
-    </p>
+    {#if ready}
+      <iframe class="frame screen" src={ready} title={held.name}></iframe>
+    {/if}
+    <!-- The live region stands from the start; its words come only once the wait has lasted. -->
+    <p class="gone" role="status">{waitLine}</p>
   {:else}
     <p class="gone">
       {held

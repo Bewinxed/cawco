@@ -1057,6 +1057,87 @@ const dialChecks = async (on: On, frame: Frame) => {
   return again;
 };
 
+/** The Preview's status lines the plan card's embed said, as a page recorded them from its first paint. */
+const RECORD_STATUS = () => {
+  const seen: string[] = [];
+  (window as unknown as { kitStatusSeen: string[] }).kitStatusSeen = seen;
+  new MutationObserver(() => {
+    for (const line of document.querySelectorAll(
+      '#decision-plan p[role="status"]'
+    )) {
+      const words = line.textContent?.trim() ?? "";
+      if (words && !seen.includes(words)) {
+        seen.push(words);
+      }
+    }
+  }).observe(document, { childList: true, subtree: true, characterData: true });
+};
+
+/**
+ * The Real Wait Rule on Preview's embed: an origin that answers within
+ * `--dur-wait-grace` shows the frame and no line; one whose ping is held past
+ * it says "Opening the preview launch-site…" until it answers.
+ */
+const waitChecks = async (on: On) => {
+  const { base, kit, writer } = on;
+  const quick = await kit.page("desk", {
+    theme: "light",
+    init: [RECORD_STATUS],
+  });
+  await open(quick, `${base}/session/${writer}`, '[data-slot="pane"]');
+  const quickFrame = await frameWith(quick, 4);
+  await until(
+    "the embed framed",
+    () => quickFrame.locator("#decision-plan iframe.screen").count(),
+    (count) => count > 0,
+    30_000
+  ).catch(() => 0);
+  const quickSaw = await quickFrame.evaluate(
+    () =>
+      (window as unknown as { kitStatusSeen?: string[] }).kitStatusSeen ?? []
+  );
+  kit.check(
+    "Preview: an embed that answers within --dur-wait-grace shows its frame and no wait line",
+    quickSaw.length === 0,
+    JSON.stringify(quickSaw)
+  );
+  await quick.close();
+
+  const held = await kit.page("desk", {
+    theme: "light",
+    init: [RECORD_STATUS],
+  });
+  await held.route("**/__cawco/ping", async (route) => {
+    const at = new URL(route.request().url());
+    if (at.port !== "" && route.request().frame() !== held.mainFrame()) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+    }
+    await route.continue();
+  });
+  await open(held, `${base}/session/${writer}`, '[data-slot="pane"]');
+  const heldFrame = await frameWith(held, 4);
+  await until(
+    "the embed framed after its held ping",
+    () => heldFrame.locator("#decision-plan iframe.screen").count(),
+    (count) => count > 0,
+    30_000
+  ).catch(() => 0);
+  const heldSaw = await heldFrame.evaluate(
+    () =>
+      (window as unknown as { kitStatusSeen?: string[] }).kitStatusSeen ?? []
+  );
+  const lineNow = await heldFrame
+    .locator('#decision-plan p[role="status"]')
+    .textContent();
+  kit.check(
+    "Preview: an embed whose ping is held past --dur-wait-grace says it is opening, then shows its frame and clears the line",
+    heldSaw.includes("Opening the preview launch-site…") &&
+      (lineNow ?? "").trim() === "",
+    JSON.stringify({ saw: heldSaw, now: lineNow })
+  );
+  await held.close();
+};
+
 /** Canvas: Open to draw brings the canvas to the front of the panel. */
 const openToDraw = async (on: On) => {
   const { desk, fleet, kit } = on;
@@ -1095,6 +1176,7 @@ const run = async (kit: Kit) => {
   await dialChecks(on, await frameWith(on.desk, 3));
   const first = await marks(on, await frameWith(on.desk, 3));
   await insertAhead(on, first);
+  await waitChecks(on);
   await graphChecks(on);
   await makeTasks(on);
   await htmlPage(on);
