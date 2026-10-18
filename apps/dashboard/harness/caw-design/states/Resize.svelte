@@ -9,13 +9,12 @@
    * drag; a double press on a grip comes back to 380 × 640.
    *
    * - `grip` (A): the house's corner grip at the bottom-trailing corner, a
-   *   24px zone (WCAG 2.5.8's least target) that stays clear of the
-   *   composer's corner, an L of 12px legs in a 1.5px control line, 6px
-   *   inside.
+   *   24px zone (WCAG 2.5.8's least target), an L of 12px legs in a 1.5px
+   *   control line standing in the gutter between the panel's edge and the
+   *   message box, clear of the box's corner.
    * - `wide` (B): a "Wide panel" item in the head's More menu, 380 ↔ 560.
-   *   A menu item, not a button in the bar: the bar's title is centred
-   *   between two equal sides, and a worded button there leaves the title
-   *   no room on a 380px panel.
+   *   A menu item, not a button in the head: a worded button there leaves
+   *   the thread's name no room on a 380px panel.
    * - `edges` (C): a handle on the trailing edge and one on the bottom.
    */
   import { store } from "#lib/cawco/storage.js";
@@ -184,7 +183,15 @@
 {/if}
 
 <style>
+  /* The house corner grip (DESIGN.md's tokens: c-corner-grip-leg,
+     c-corner-grip-stroke, border-control), in a 24px zone (WCAG 2.5.8's
+     least target) at the bottom-trailing corner. Its L stands in the
+     gutter between the panel's drawn edge and the message box's (the
+     panel's --space-2 inset), centred across it and concentric with the
+     panel's radius, so it never touches the box's corner. */
   .grip {
+    --in: calc((var(--space-2) - var(--c-corner-grip-stroke)) / 2);
+
     position: absolute;
     inset-block-end: 0;
     inset-inline-end: 0;
@@ -193,20 +200,16 @@
     block-size: 24px;
     cursor: nwse-resize;
     touch-action: none;
-    --leg: 12px;
-    --in: 6px;
   }
-  /* An L in the control line, inside the corner and concentric with the
-     panel's radius. */
   .grip::after {
     content: "";
     position: absolute;
     inset-block-end: var(--in);
     inset-inline-end: var(--in);
-    inline-size: var(--leg);
-    block-size: var(--leg);
-    border-inline-end: 1.5px solid var(--border-control);
-    border-block-end: 1.5px solid var(--border-control);
+    inline-size: var(--c-corner-grip-leg);
+    block-size: var(--c-corner-grip-leg);
+    border-inline-end: var(--c-corner-grip-stroke) solid var(--border-control);
+    border-block-end: var(--c-corner-grip-stroke) solid var(--border-control);
     border-end-end-radius: calc(var(--radius-lg) - var(--in));
     transition: border-color var(--dur-control) var(--ease-out);
   }

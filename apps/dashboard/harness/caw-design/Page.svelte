@@ -15,6 +15,7 @@
    */
   import type { ThreadMessage } from "@cawco/core";
   import type { Snippet } from "svelte";
+  import Caw from "#lib/cawco/home/Caw.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -32,6 +33,7 @@
     fixtureOf,
     MACHINES,
     PROJECT_ID,
+    PROJECT_NAME,
     READ_RAW,
     SUGGESTED_MANY,
   } from "./states/fixtures";
@@ -55,8 +57,8 @@
   /** While no machine can run him, the box keeps your words for him. */
   const KEPT = { placeholder: "Caw reads it when a machine is back" };
   const READ = {
-    title: "This thread couldn't be read",
-    line: "The hub couldn't open its history. Your messages are kept.",
+    title: "The hub couldn't open this thread",
+    line: "Your messages are kept.",
   };
   const START = {
     title: "Caw can't start",
@@ -239,6 +241,12 @@
       form={drawn}
       {threads}
     >
+      <div class="greet" data-design-greeting>
+        <span class="greet-caw" data-caw-status="ready"
+          ><Caw size={48} status="ready" /></span
+        >
+        <p class="greet-words">What's next for {PROJECT_NAME}?</p>
+      </div>
       <div class="starters">
         {#if id === "chips"}
           <StarterChips
@@ -252,17 +260,6 @@
           />
         {/if}
       </div>
-    </Panel>
-  {:else if choice === "composer"}
-    <Panel
-      composer={COMPOSER}
-      {current}
-      end={48}
-      foot={id === "overlay" ? "overlay" : "dock"}
-      form={drawn}
-      {threads}
-    >
-      {@render thread(longer)}
     </Panel>
   {:else if choice === "phone-frame"}
     <Panel
@@ -323,7 +320,7 @@
     <header class="intro">
       <h1 class="h1">Caw's panel</h1>
       <p class="lede">
-        Seven choices, the board you decided, then what changed from your pins.
+        Six choices, the board you decided, then what changed from your pins.
         Every panel is at its real size, as a desk or a phone draws it. Each
         choice changes one part; the rest of every panel is drawn as
         recommended.
@@ -348,6 +345,7 @@
         <header class="head">
           <h2 class="h2">{decision.question}</h2>
           <p class="why">{decision.differs}</p>
+          {#if decision.note}<p class="note">{decision.note}</p>{/if}
         </header>
         <div class="row" data-design-row data-form={drawn}>
           {#each decision.options as one (one.id)}
@@ -422,8 +420,28 @@
       <header class="head">
         <h2 class="h2">Fixed from your pins</h2>
       </header>
+      {#each FIXES.filter((one) => one.shows) as fix (fix.changed)}
+        <div class="row" data-design-fix={fix.shows} data-form={form}>
+          <figure class="frame" data-design-frame={form}>
+            <figcaption class="caption">
+              <span class="name"
+                ><span class="form">{formWords(form)}</span> · decided</span
+              >
+            </figcaption>
+            <div class="frames" data-design-option="decided">
+              <Panel composer={COMPOSER} {current} end={48} {form} {threads}>
+                {@render thread(longer)}
+              </Panel>
+            </div>
+          </figure>
+          <div class="fix beside">
+            {@render his(fix.said)}
+            <p class="changed">{fix.changed}</p>
+          </div>
+        </div>
+      {/each}
       <ul class="notes">
-        {#each FIXES as fix (fix.changed)}
+        {#each FIXES.filter((one) => !one.shows) as fix (fix.changed)}
           <li class="fix">
             {@render his(fix.said)}
             <p class="changed">{fix.changed}</p>
@@ -475,11 +493,16 @@
     text-wrap: balance;
   }
   .lede,
-  .why {
+  .why,
+  .note {
     margin: 0;
     font: var(--type-body);
     color: var(--ink-muted);
     text-wrap: pretty;
+  }
+  /* The decision's one plain line on why its options stand as they do. */
+  .note {
+    color: var(--ink-strong);
   }
   .part {
     display: flex;
@@ -511,9 +534,25 @@
     &[data-form="phone"] {
       --frame-w: 390px;
     }
+    /* A window a phone's width: the row runs the window edge to edge, so a
+       390px phone frame snaps to its start whole, every frame at x 0, and
+       the captions keep the page's inset. */
     @media (width < 640px) {
       column-gap: var(--space-4);
+      margin-inline: calc(var(--pad) * -1);
+      padding-inline: 0;
+
+      & .caption {
+        padding-inline: var(--pad);
+      }
     }
+  }
+  /* A decided fix beside its frame: his words and what changed. */
+  .beside {
+    grid-row: 1 / span 2;
+    align-self: start;
+    inline-size: min(48ch, 80vw);
+    padding-block-start: calc(var(--c-btn-h-sm) + var(--space-3));
   }
   .frame {
     display: grid;
@@ -559,10 +598,13 @@
     display: flex;
     gap: var(--space-4);
   }
+  /* Each state snaps to the row's start on its own, so a phone's window
+     shows either whole. */
   .state {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    scroll-snap-align: start;
   }
   .state-name {
     margin: 0;
@@ -573,6 +615,24 @@
   .words-col {
     min-inline-size: 0;
     padding-inline: var(--space-3);
+  }
+  /* An empty thread opens on his greeting, from the top: Caw beside the
+     words as he stands beside a notice's, the line in the title role. */
+  .greet {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-3);
+    padding-inline: var(--space-3);
+  }
+  .greet-caw {
+    display: block;
+  }
+  .greet-words {
+    margin: 0;
+    font: var(--type-title);
+    color: var(--ink-strong);
+    text-wrap: balance;
   }
   /* The starters stand at the foot of an empty thread, on the message
      box. */

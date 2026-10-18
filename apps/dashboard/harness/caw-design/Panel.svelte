@@ -6,31 +6,30 @@
    *
    * - `desk`: the kit popover at --c-panel-w by --c-caw-panel-h, its
    *   content 7px in from its drawn edge (DESIGN.md, Caw's panel).
-   * - `phone`, `frame` (E): a 390 × 844 phone's screen with the panel as
-   *   DESIGN.md's Drawer (`sheet`: full-bleed, flush on the screen's foot,
-   *   85% tall, 12px top corners, a hairline on the top edge only, over the
-   *   scrim, its content 16px in and 16px plus the safe area over the foot)
-   *   or hanging from his tucked tab under the top bar (`hang`: DESIGN.md,
-   *   Caw's panel on the phone).
-   * - `head` (A): HeadBar's A1 or A2; with A2 the thread is the body's
-   *   first row (ThreadSwitch `row`).
-   * - `foot` (D): `dock`, the message box as the panel's last grid row, an
-   *   opaque shell (no glass: nothing passes under it) the inset in from the
-   *   panel's edge, the body ending against it with the house's 40px edge
-   *   fade while more is below; or `overlay`, the box floating on its glass
-   *   over the body, which scrolls under it (its padding the box's height
-   *   and its 14px lift, so the last row ends at the box's top).
+   * - `phone`, `frame` (E): a phone's screen (PhoneScreen) with the panel
+   *   as DESIGN.md's Drawer (`sheet`: full-bleed, flush on the screen's
+   *   foot, 85% tall, 12px top corners, a hairline on the top edge only,
+   *   over the scrim, its content 16px in and 16px plus the safe area over
+   *   the foot) or hanging from his tucked glass under the top bar (`hang`:
+   *   DESIGN.md, Caw's panel on the phone).
+   * - `head` (A): HeadBar's A1 or A2; with A2 the thread is the
+   *   conversation's first line (ThreadSwitch `row`).
+   * - The message box (decided: the panel's last row): the real Composer as
+   *   the panel's last grid row, an opaque shell (no glass: nothing passes
+   *   under it) the inset in from the panel's edge at every window width,
+   *   the body ending against it with the house's 40px edge fade at its
+   *   head and foot while more is past them.
    * - `notice` stands in the foot over the message box (a can't-start row).
    * - `end`: the body scrolled this far short of its end, so its foot is
    *   drawn mid-scroll; unset, it rests at its top.
    */
   import type { ThreadSummary } from "@cawco/core";
   import type { Snippet } from "svelte";
-  import CawFace from "#lib/cawco/home/CawFace.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import type { Form } from "./form";
   import { lead } from "./lead.svelte";
+  import PhoneScreen from "./PhoneScreen.svelte";
   import { PROJECT_NAME } from "./states/fixtures";
   import HeadBar from "./states/HeadBar.svelte";
   import ThreadSwitch from "./states/ThreadSwitch.svelte";
@@ -39,7 +38,6 @@
     form,
     frame = "sheet",
     head = "who",
-    foot = "dock",
     threads,
     current = "",
     children,
@@ -56,8 +54,6 @@
     frame?: "sheet" | "hang";
     /** The head (A). */
     head?: "who" | "name";
-    /** Where the message box stands (D). */
-    foot?: "dock" | "overlay";
     threads: ThreadSummary[];
     current?: string;
     children?: Snippet;
@@ -97,21 +93,6 @@
   });
 </script>
 
-{#snippet box()}
-  <Composer
-    agentName="Caw"
-    commands={[]}
-    {draft}
-    mentionsFrom={null}
-    oninterruptsend={() => undefined}
-    onmenu={() => undefined}
-    onstop={() => undefined}
-    onsubmit={() => undefined}
-    placeholder={composer?.placeholder ?? ""}
-    recallOf="caw-design"
-  />
-{/snippet}
-
 {#snippet inside()}
   <HeadBar
     {current}
@@ -123,7 +104,7 @@
     {threads}
     {wide}
   />
-  <div class={["body", { overlaid: foot === "overlay" && composer }]}>
+  <div class="body">
     <div
       bind:this={scroller}
       class="scroll kit-edge-fade-block"
@@ -136,43 +117,36 @@
         {@render children?.()}
       </div>
     </div>
-    {#if foot === "overlay" && composer}
-      <div class="overlay" data-design-composer="overlay">
-        {@render box()}
-      </div>
-    {/if}
   </div>
-  {#if notice || (foot === "dock" && composer)}
+  {#if notice || composer}
     <div class="foot" data-design-foot>
       {@render notice?.()}
-      {#if foot === "dock" && composer}
-        <div class="docked" data-design-composer="dock">{@render box()}</div>
+      {#if composer}
+        <div class="docked" data-design-composer="dock">
+          <Composer
+            agentName="Caw"
+            commands={[]}
+            {draft}
+            mentionsFrom={null}
+            oninterruptsend={() => undefined}
+            onmenu={() => undefined}
+            onstop={() => undefined}
+            onsubmit={() => undefined}
+            placeholder={composer.placeholder}
+            recallOf="caw-design"
+          />
+        </div>
       {/if}
     </div>
   {/if}
 {/snippet}
 
 {#if phone}
-  <div
-    class={["screen", { hang }]}
-    data-design-form="phone"
-    data-design-frame-kind={hang ? "hang" : "sheet"}
-    data-design-screen
-  >
-    {#if hang}
-      <!-- The phone's top bar, drawn only as far as the hang needs: the
-           project's name at its start and his tucked glass at its end. -->
-      <div class="bar" aria-hidden="true">
-        <span class="project">{PROJECT_NAME}</span>
-      </div>
-      <span class="glass" aria-hidden="true" data-design-tab
-        ><CawFace size={24} status="ready" /></span
-      >
-    {/if}
+  <PhoneScreen {hang}>
     <div class="panel phone-panel" data-caw-panel data-design-panel>
       {@render inside()}
     </div>
-  </div>
+  </PhoneScreen>
 {:else}
   <div
     class="kit-pop caw-float-pop panel desk"
@@ -203,28 +177,6 @@
     inline-size: var(--c-panel-w);
     block-size: var(--c-caw-panel-h);
   }
-  /* A 390 × 844 phone's screen (a device's size, not a design length):
-     its status bar's 47px over the content, its home indicator's 34px
-     under it. */
-  .screen {
-    --status-bar: 47px;
-    --home-bar: 34px;
-
-    container: screen / size;
-    position: relative;
-    inline-size: 390px;
-    block-size: 844px;
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-page);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-  }
-  .screen:not(.hang)::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: var(--scrim);
-  }
   /* DESIGN.md, Drawer: full-bleed, flush on the screen's foot, 12px top
      corners, the hairline on the top edge only, 85% tall; its content 16px
      in from the sides, 16px plus the safe area over the foot. */
@@ -242,51 +194,10 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-drawer);
   }
-  /* The top bar under the status bar, its floor a hairline. */
-  .bar {
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: var(--status-bar);
-    display: flex;
-    align-items: center;
-    block-size: var(--c-top-bar-h);
-    padding-inline: var(--c-bar-phone-edge);
-    border-block-end: 1px solid var(--border-hairline);
-    background: var(--surface-raised);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  /* His glass, round at its leading side and square at the screen's edge,
-     taking the panel's material while it hangs and running down into the
-     panel's top edge, its foot open onto it. */
-  .glass {
-    position: absolute;
-    z-index: 1;
-    inset-inline-end: 0;
-    inset-block-start: calc(
-      var(--status-bar) + (var(--c-top-bar-h) - var(--c-bar-caw-glass-phone)) /
-        2
-    );
-    display: grid;
-    place-items: center;
-    inline-size: calc(var(--c-bar-caw-glass-phone) + var(--space-3));
-    block-size: calc(
-      var(--c-top-bar-h) - (var(--c-top-bar-h) - var(--c-bar-caw-glass-phone)) /
-        2 + 1px
-    );
-    padding-block-end: calc(
-      (var(--c-top-bar-h) - var(--c-bar-caw-glass-phone)) / 2
-    );
-    border: 1px solid var(--border-control);
-    border-block-end: 0;
-    border-inline-end: 0;
-    border-start-start-radius: var(--radius-lg);
-    background: var(--surface-raised);
-  }
   /* Hanging (DESIGN.md, Caw's panel): its top edge on the bar's floor, its
      trailing side the screen's edge with no edge drawn there, its leading
      side the 12px margin; never taller than the room over the home bar. */
-  .hang .phone-panel {
+  :global(.hang) .phone-panel {
     --safe: 0px;
 
     inset-inline: var(--c-bar-phone-edge) 0;
@@ -323,28 +234,7 @@
     padding: var(--space-4) var(--inset) var(--space-2);
     min-inline-size: 0;
   }
-  /* D2: the body runs under the floating box, its padding the box's height
-     and its lift, so the last row ends at the box's top and the rows
-     before it pass under the glass. */
-  .overlaid .column {
-    padding-block-end: calc(
-      var(--c-composer-panel) + var(--space-4) + var(--safe)
-    );
-  }
-  /* Composer's dock stands on this box's foot; the phone's home bar is
-     under it. */
-  .overlay {
-    position: absolute;
-    inset: 0 0 var(--safe);
-    z-index: 1;
-    pointer-events: none;
-  }
-  /* On a phone the box runs the room less --space-3 a side (Composer's own
-     under 900px, which reads the window, not this frame). */
-  .phone-panel .overlay {
-    --c-composer-w: calc(100% - var(--space-3) * 2);
-  }
-  /* D1: the foot, a grid row of the panel on the body's field. */
+  /* The foot, a grid row of the panel on the body's field. */
   .foot {
     display: flex;
     flex-direction: column;
@@ -364,6 +254,12 @@
     position: static;
     inset: auto;
     z-index: auto;
+  }
+  /* Composer's own narrow-window margins (max-width 900px reads the
+     window, not this frame) would stand it off the panel's inset. */
+  .docked :global([data-slot="composer"]) {
+    margin-inline: 0;
+    width: 100%;
   }
   .docked :global([data-slot="lift"]),
   .docked :global([data-slot="dock"] > .prompts) {

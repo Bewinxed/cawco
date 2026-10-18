@@ -6,9 +6,10 @@
    * - `line` (A1): the head's second line, "Caw" over it: the two lines
    *   are one menu button, the thread's name in the meta role with a linear
    *   chevron, stepping to `ink-strong` under the pointer.
-   * - `row` (A2): the body's first row, on the panel's row grid (a 16px
-   *   glyph in the 28px lead column, the name on the text column), 44px
-   *   tall, the hover ghost under it; it scrolls away with the thread.
+   * - `row` (A2): the conversation's first line, not a second toolbar: a
+   *   16px glyph, the thread's name and its chevron beside it, as wide as
+   *   its words on the prose's text column, with no seam under it; the
+   *   hover ghost round it; it scrolls away with the thread.
    *
    * With one thread there is nothing to switch to: the name stands as text.
    */
@@ -51,7 +52,7 @@
       >
     </span>
   {:else}
-    <span class="mark glyph"><IconChat aria-hidden="true" /></span>
+    <span class="glyph mark-cell"><IconChat aria-hidden="true" /></span>
     <span class="name row-name">{title}</span>
     {#if threads.length > 1}<IconChevronDown
         aria-hidden="true"
@@ -163,20 +164,20 @@
     color: var(--ink-strong);
   }
 
-  /* A2: the body's first row, flush under the head and as wide as the
-     panel, its lead column on the head's (the panel's --head-inset), its
-     hover ghost under it. */
+  /* A2: the conversation's first line: as wide as its words, its glyph on
+     the prose's text column (the ghost's own inset taken back), the
+     chevron beside the name, the hover ghost round it, no seam. */
   .row {
-    grid-template-columns: var(--lead-col) minmax(0, 1fr) auto;
-    min-block-size: var(--c-btn-h-lg);
-    margin-block-start: calc(var(--space-4) * -1);
-    margin-inline: calc(var(--inset) * -1);
-    padding-inline: var(--head-inset);
-    border-block-end: 1px solid var(--border-hairline);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    align-self: flex-start;
+    max-inline-size: 100%;
+    min-block-size: var(--c-btn-h-sm);
+    margin-inline-start: calc(var(--space-3) - var(--space-2));
+    padding-inline: var(--space-2);
   }
   button.row {
-    border-radius: 0;
-
     @media (prefers-reduced-motion: no-preference) {
       transition: background-color var(--dur-control) var(--ease-out);
     }
@@ -192,6 +193,9 @@
   .glyph :global(svg) {
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
+  }
+  .glyph :global(svg [opacity]) {
+    opacity: var(--glyph-duo-status-opacity);
   }
   .row-name {
     font: var(--type-label);

@@ -8,18 +8,26 @@
  * 2. Each decision (`data-cawco-choice`) holds its options in one row, their
  *    captions and their panels each on one top, each option with one Pick
  *    (`data-option`), no two alike.
- * 3. A phone's head has Close as its last control, its glyph's ink on the
- *    head's trailing edge (the panel's edge less the head's inset), and
- *    under a finger its hit area is 44px each way.
- * 4. The message box as the panel's last row (composer › foot): no leaf of
- *    the body shows under it; floating (overlay), some row does.
- * 5. Chips sized to their words (suggestions › chips): each chip narrower
- *    than the column, and a one-line chip as wide as its glyph, words,
- *    gap, padding and edge.
- * 6. No console error and no page error.
+ * 3. At a 390 window every phone frame, scrolled to, stands whole at x 0.
+ * 4. A phone's head has Close as its last control, its glyph's ink on the
+ *    head's trailing edge, and under a finger its hit area is 44px each way.
+ *    Every head row is 44px tall.
+ * 5. The decided message box (the panel's last row): no leaf of the body
+ *    shows under it, and the body scrolled from its top fades its top edge.
+ * 6. The alert row: Caw beside the words, the title, line and buttons on
+ *    one start edge; the title and the line hold 4.5:1 on the tint and the
+ *    way out's edge 3:1 against it.
+ * 7. Chips: each narrower than its column and, on one line, as wide as its
+ *    glyph, words, gap, padding and edge; at least two share a line; the
+ *    first starts on the message box's edge.
+ * 8. No task id (`hb-12`, `tsk-12`) in any proposal.
+ * 9. The 12px meta lines (the thread's name in the head, the filed tasks'
+ *    head and descriptions) hold 4.5:1 on their ground.
+ * 10. No console error and no page error.
  *
- * Captures of every option, for a reviewer, go to $TMPDIR/caps/ at 1440
- * (both forms, both themes) and at 390 (the phone form, both themes).
+ * Captures of every option's panels (each state of a two-state option on
+ * its own), for a reviewer, go to $TMPDIR/caps/round2/ at 1440 (both forms,
+ * both themes) and at 390 (the phone form, both themes).
  *
  *   bun scripts/probe-kit/run.ts web caw-design
  */
@@ -27,6 +35,7 @@
 import { mkdir } from "node:fs/promises";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
+import { contrast, type Rgb } from "../../ink";
 import {
   type Kit,
   open,
@@ -39,13 +48,17 @@ import {
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const DIST = join(DASHBOARD, "dist-harness", "caw-design");
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
+const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round2");
 const FORMS = ["desk", "phone"] as const;
 const LEGS: { name: string; view: View; size?: { w: number; h: number } }[] = [
   { name: "1440", view: "desk" },
   { name: "1920", view: "desk", size: { w: 1920, h: 1080 } },
   { name: "390", view: "phone" },
 ];
+/** A task's id as the hub writes it. */
+const TASK_ID = /\b(?:hb|tsk)-\d+\b/;
+const NOT_LETTERS = /[^a-z]+/g;
+const TRAILING_DASH = /-$/;
 
 /** Builds the page, as its folder's README says. */
 async function build(): Promise<void> {
@@ -86,48 +99,112 @@ function serve() {
   };
 }
 
+/** A text and its ground, as the screen composites them. */
+interface Pair {
+  bg: Rgb;
+  fg: Rgb;
+  what: string;
+}
+
 interface Read {
   captions: { text: string; form: string }[];
   chips: {
-    text: string;
-    w: number;
+    box: number;
     column: number;
+    left: number;
     lines: number;
     natural: number;
-    left: number;
-    start: number;
+    text: string;
+    top: number;
+    w: number;
   }[];
   closes: {
     choice: string;
-    option: string;
-    last: boolean;
-    inkEnd: number;
     edge: number;
-    hitW: number;
     hitH: number;
+    hitW: number;
+    inkEnd: number;
+    last: boolean;
+    option: string;
   }[];
-  dockFoot: number[];
-  foot: { option: string; under: string[] }[];
+  fade: number;
   heads: number[];
+  ids: string[];
+  meta: Pair[];
   notices: {
-    caw: { left: number; top: number; right: number };
-    title: { left: number; top: number };
-    line: number;
+    act: Pair;
+    caw: { left: number; right: number; top: number };
     foot: number;
+    h: number;
+    line: Pair & { left: number };
+    title: Pair & { left: number; top: number };
   }[];
   rows: {
-    choice: string;
     captionTops: number[];
+    choice: string;
     frameTops: number[];
     options: string[];
     picks: number[];
   }[];
+  under: string[];
 }
 
 /** What the assertions read, from the engine. */
 const read = (page: Page): Promise<Read> =>
-  page.evaluate(() => {
+  page.evaluate((idSource) => {
     const r = (el: Element) => el.getBoundingClientRect();
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext("2d", {
+      willReadFrequently: true,
+    }) as CanvasRenderingContext2D;
+    /** The colours as drawn, the top one last, composited on the canvas. */
+    const paint = (layers: string[]): [number, number, number] => {
+      ctx.clearRect(0, 0, 1, 1);
+      for (const layer of layers) {
+        ctx.fillStyle = "#000";
+        ctx.fillStyle = layer;
+        ctx.fillRect(0, 0, 1, 1);
+      }
+      const [red = 0, green = 0, blue = 0] = ctx.getImageData(0, 0, 1, 1).data;
+      return [red, green, blue];
+    };
+    const opaque = (c: string) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = "#000";
+      ctx.fillStyle = c;
+      ctx.fillRect(0, 0, 1, 1);
+      return (ctx.getImageData(0, 0, 1, 1).data[3] ?? 0) === 255;
+    };
+    /** Every background under an element, the opaque one first. */
+    const grounds = (el: Element) => {
+      const layers: string[] = [];
+      for (let at: Element | null = el; at; at = at.parentElement) {
+        const bg = getComputedStyle(at).backgroundColor;
+        // biome-ignore lint/performance/useTopLevelRegex: runs in the page, which receives this function's source alone
+        const alpha = bg.match(/\/\s*([\d.]+)\)|rgba\([^)]*,\s*([\d.]+)\)/);
+        if (alpha && Number(alpha[1] ?? alpha[2]) === 0) {
+          continue;
+        }
+        layers.unshift(bg);
+        if (opaque(bg)) {
+          break;
+        }
+      }
+      return layers;
+    };
+    /** A text on its ground, or (`own`) a control's edge on what it stands on. */
+    const pair = (el: Element, what: string, own = false) => {
+      const under = grounds(own ? (el.parentElement ?? el) : el);
+      const style = getComputedStyle(el);
+      return {
+        what,
+        bg: paint(under),
+        fg: paint([...under, own ? style.borderTopColor : style.color]),
+      };
+    };
+
     const captions = [...document.querySelectorAll("figcaption.caption")].map(
       (one) => ({
         text: (one.textContent ?? "").trim(),
@@ -171,19 +248,20 @@ const read = (page: Page): Promise<Read> =>
         const controls = [...row.querySelectorAll("button")];
         const glyph = close?.querySelector("svg");
         const after = close ? getComputedStyle(close, "::after") : null;
-        const head = getComputedStyle(row);
         return {
           choice:
             panel
               .closest("[data-cawco-choice]")
-              ?.getAttribute("data-cawco-choice") ?? "",
+              ?.getAttribute("data-cawco-choice") ?? "fix",
           option:
             panel
               .closest("[data-design-option]")
               ?.getAttribute("data-design-option") ?? "",
           last: !!close && controls.at(-1) === close,
           inkEnd: glyph ? r(glyph).right : Number.NaN,
-          edge: r(row).right - Number.parseFloat(head.paddingRight),
+          edge:
+            r(row).right -
+            Number.parseFloat(getComputedStyle(row).paddingRight),
           hitW:
             after && after.content !== "none"
               ? Number.parseFloat(after.width)
@@ -194,51 +272,46 @@ const read = (page: Page): Promise<Read> =>
               : 0,
         };
       });
-    const visible = (el: Element, port: DOMRect) => {
-      const b = r(el);
-      const top = Math.max(b.top, port.top);
-      const bottom = Math.min(b.bottom, port.bottom);
-      const left = Math.max(b.left, port.left);
-      const right = Math.min(b.right, port.right);
-      return bottom - top > 0.5 && right - left > 0.5
-        ? { top, bottom, left, right }
-        : null;
-    };
-    const foot = [
-      ...document.querySelectorAll(
-        '[data-cawco-choice="composer"] [data-design-option]'
-      ),
-    ].map((option) => {
-      const room = option.querySelector("[data-design-room]") as HTMLElement;
-      const shell = option.querySelector(
-        "[data-design-composer] .kit-dock-shell"
-      ) as HTMLElement;
-      const port = r(room);
-      const box = r(shell);
-      const leaves = [...room.querySelectorAll("*")].filter(
+    const decided = document.querySelector('[data-design-fix="composer"]');
+    const room = decided?.querySelector("[data-design-room]") as HTMLElement;
+    const shell = decided?.querySelector(
+      "[data-design-composer] .kit-dock-shell"
+    ) as HTMLElement;
+    const port = r(room);
+    const box = r(shell);
+    const under = [...room.querySelectorAll("*")]
+      .filter(
         (el) => el.children.length === 0 && (el.textContent ?? "").trim() !== ""
-      );
-      const under = leaves
-        .map((el) => ({ el, seen: visible(el, port) }))
-        .filter(
-          ({ seen }) =>
-            seen &&
-            seen.bottom > box.top + 0.5 &&
-            seen.top < box.bottom - 0.5 &&
-            seen.right > box.left + 0.5 &&
-            seen.left < box.right - 0.5
-        )
-        .map(({ el }) => (el.textContent ?? "").trim().slice(0, 40));
-      return { option: option.getAttribute("data-design-option") ?? "", under };
-    });
+      )
+      .filter((el) => {
+        const b = r(el);
+        const top = Math.max(b.top, port.top);
+        const bottom = Math.min(b.bottom, port.bottom);
+        return (
+          bottom - top > 0.5 &&
+          bottom > box.top + 0.5 &&
+          top < box.bottom - 0.5 &&
+          b.right > box.left + 0.5 &&
+          b.left < box.right - 0.5
+        );
+      })
+      .map((el) => (el.textContent ?? "").trim().slice(0, 40));
+    const fade =
+      room.scrollTop > 0
+        ? Number.parseFloat(
+            getComputedStyle(room).getPropertyValue("--fade-start")
+          )
+        : -1;
+
     const chips = [
       ...document.querySelectorAll(
         '[data-cawco-choice="suggestions"] [data-design-option="chips"] .kit-chip'
       ),
     ].map((chip) => {
+      const panel = chip.closest("[data-design-panel]") as HTMLElement;
       const column = chip.closest("[data-design-column]") as HTMLElement;
       const cs = getComputedStyle(column);
-      const words = chip.querySelector("span:not([data-box])") as HTMLElement;
+      const words = chip.querySelector("span") as HTMLElement;
       const glyph = chip.querySelector("svg") as SVGElement;
       const range = document.createRange();
       range.selectNodeContents(words);
@@ -246,25 +319,29 @@ const read = (page: Page): Promise<Read> =>
         [...range.getClientRects()].map((one) => Math.round(one.top))
       ).size;
       const own = getComputedStyle(chip);
-      const natural =
-        Number.parseFloat(own.paddingLeft) +
-        Number.parseFloat(own.paddingRight) +
-        Number.parseFloat(own.borderLeftWidth) +
-        Number.parseFloat(own.borderRightWidth) +
-        r(glyph).width +
-        Number.parseFloat(own.columnGap) +
-        range.getBoundingClientRect().width;
       return {
         text: (words.textContent ?? "").trim(),
         w: r(chip).width,
+        top: Math.round(r(chip).top),
+        left: r(chip).left,
+        box: r(
+          panel.querySelector(
+            "[data-design-composer] .kit-dock-shell"
+          ) as Element
+        ).left,
         column:
           column.clientWidth -
           Number.parseFloat(cs.paddingLeft) -
           Number.parseFloat(cs.paddingRight),
         lines,
-        natural,
-        left: r(chip).left,
-        start: r(column).left + Number.parseFloat(cs.paddingLeft),
+        natural:
+          Number.parseFloat(own.paddingLeft) +
+          Number.parseFloat(own.paddingRight) +
+          Number.parseFloat(own.borderLeftWidth) +
+          Number.parseFloat(own.borderRightWidth) +
+          r(glyph).width +
+          Number.parseFloat(own.columnGap) +
+          range.getBoundingClientRect().width,
       };
     });
     const heads = [
@@ -273,26 +350,155 @@ const read = (page: Page): Promise<Read> =>
     const notices = [...document.querySelectorAll("[data-design-notice]")].map(
       (one) => {
         const caw = r(one.querySelector("[data-caw-status]") as Element);
-        const title = r(
-          one.querySelector('[data-slot="alert-title"]') as Element
-        );
+        const title = one.querySelector(
+          "[data-design-notice-title]"
+        ) as Element;
+        const line = one.querySelector("[data-design-notice-line]") as Element;
+        const act = one.querySelector("[data-design-notice-act]") as Element;
         return {
           caw: { left: caw.left, top: caw.top, right: caw.right },
-          title: { left: title.left, top: title.top },
-          line: r(
-            one.querySelector('[data-slot="alert-description"]') as Element
-          ).left,
-          foot: r(
-            one.querySelector("[data-design-notice-foot] button") as Element
-          ).left,
+          title: {
+            ...pair(title, "title"),
+            left: r(title).left,
+            top: r(title).top,
+          },
+          line: { ...pair(line, "line"), left: r(line).left },
+          act: pair(act, "way out", true),
+          foot: r(act).left,
+          h: r(one).height,
         };
       }
     );
-    const dockFoot = [
-      ...document.querySelectorAll('[data-design-composer="dock"]'),
-    ].map((dock) => r(dock.closest("[data-design-foot]") as Element).height);
-    return { captions, rows, closes, foot, chips, heads, notices, dockFoot };
-  });
+    const idPattern = new RegExp(idSource);
+    const ids = [...document.querySelectorAll("[data-design-option]")]
+      .filter(
+        (option) =>
+          !option.closest('[data-cawco-choice="filed-tasks"]') ||
+          option.getAttribute("data-design-option") !== "today"
+      )
+      .flatMap((option) => {
+        const walker = document.createTreeWalker(option, NodeFilter.SHOW_TEXT);
+        const found: string[] = [];
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const text = node.textContent ?? "";
+          if (
+            idPattern.test(text) &&
+            !node.parentElement?.closest("[data-design-details]")
+          ) {
+            found.push(text.trim().slice(0, 40));
+          }
+        }
+        return found;
+      });
+    const meta = [
+      ...[
+        ...document.querySelectorAll(
+          '[data-design-thread-switch="line"] .which'
+        ),
+      ]
+        .slice(0, 1)
+        .map((el) => pair(el, "the thread's name in the head")),
+      ...[...document.querySelectorAll("[data-design-filed] .head")]
+        .slice(0, 1)
+        .map((el) => pair(el, "the filed tasks' head")),
+      ...[...document.querySelectorAll('[data-design-filed="rows"] .summary')]
+        .slice(0, 1)
+        .map((el) => pair(el, "a filed task's description")),
+    ];
+    return {
+      captions,
+      rows,
+      closes,
+      under,
+      fade,
+      chips,
+      heads,
+      notices,
+      ids,
+      meta,
+    };
+  }, TASK_ID.source);
+
+/** Every capture unit: each state of a two-state option, else the option. */
+const UNITS =
+  "[data-design-option]:not(:has(.state)), [data-design-option] .state";
+
+/**
+ * Scrolls each unit's row so the unit starts at the row's start, then reads
+ * where each phone screen stands: the 390 window's check.
+ */
+const placed = (page: Page) =>
+  page.evaluate((units) => {
+    const out: { left: number; right: number; what: string }[] = [];
+    for (const unit of document.querySelectorAll(units)) {
+      const row = unit.closest("[data-design-row], .row") as HTMLElement;
+      row.style.scrollSnapType = "none";
+      row.scrollLeft +=
+        unit.getBoundingClientRect().left - row.getBoundingClientRect().left;
+      for (const screen of unit.querySelectorAll("[data-design-screen]")) {
+        const box = screen.getBoundingClientRect();
+        out.push({
+          what: `${unit.closest("[data-cawco-choice]")?.getAttribute("data-cawco-choice") ?? "fix"}/${unit.closest("[data-design-option]")?.getAttribute("data-design-option")}`,
+          left: box.left,
+          right: box.right,
+        });
+      }
+      row.style.scrollSnapType = "";
+    }
+    return out;
+  }, UNITS);
+
+/** At a 390 window, every phone frame scrolled to stands whole at x 0. */
+async function assertPlaced(kit: Kit, page: Page, at: string): Promise<void> {
+  const screens = await placed(page);
+  const out = screens.filter(
+    (one) => Math.abs(one.left) > 0.5 || one.right > 390.5
+  );
+  kit.check(
+    `${at}: every phone frame (${screens.length}), scrolled to, stands whole at x 0 in the 390 window`,
+    screens.length > 0 && out.length === 0,
+    out
+      .map(
+        (one) => `${one.what}: ${one.left.toFixed(1)}–${one.right.toFixed(1)}`
+      )
+      .join("; ")
+  );
+}
+
+/** Each unit, scrolled to its row's start, captured whole. */
+async function capture(page: Page, name: string): Promise<void> {
+  const units = await page.locator(UNITS).all();
+  for (const [at, unit] of units.entries()) {
+    const label = await unit.evaluate((el, n) => {
+      const row = el.closest("[data-design-row], .row") as HTMLElement;
+      row.style.scrollSnapType = "none";
+      row.scrollLeft +=
+        el.getBoundingClientRect().left - row.getBoundingClientRect().left;
+      const choice =
+        el.closest("[data-cawco-choice]")?.getAttribute("data-cawco-choice") ??
+        "fixed";
+      const option =
+        el
+          .closest("[data-design-option]")
+          ?.getAttribute("data-design-option") ?? "";
+      const state = el.classList.contains("state")
+        ? (el.querySelector(".state-name")?.textContent ?? String(n))
+        : "";
+      return { choice, option, state };
+    }, at);
+    const slug = label.state
+      ? `-${label.state.toLowerCase().replace(NOT_LETTERS, "-").replace(TRAILING_DASH, "")}`
+      : "";
+    await unit.screenshot({
+      path: join(CAPS, `${name}-${label.choice}-${label.option}${slug}.png`),
+    });
+    await unit.evaluate((el) => {
+      (
+        el.closest("[data-design-row], .row") as HTMLElement
+      ).style.scrollSnapType = "";
+    });
+  }
+}
 
 /** Every assertion on one form of one leg. */
 function assertForm(
@@ -307,21 +513,12 @@ function assertForm(
     (one) => !one.text.startsWith(one.form === "phone" ? "Phone" : "Desk")
   );
   kit.check(
-    `${at}: every caption (${seen.captions.length}) starts with its form`,
-    seen.captions.length > 0 && off.length === 0,
+    `${at}: every caption (${seen.captions.length}) starts with its form, and the switch draws all but the phone's own decision as ${word}`,
+    seen.captions.length > 0 &&
+      off.length === 0 &&
+      seen.captions.filter((one) => one.form === form).length >=
+        seen.captions.length - 2,
     off.map((one) => `"${one.text.slice(0, 40)}"`).join("; ")
-  );
-  kit.check(
-    `${at}: the page's switch draws every frame but the phone's own decision as ${word}`,
-    seen.captions
-      .filter(
-        (one) =>
-          !(
-            one.text.includes("A sheet from the foot") ||
-            one.text.includes("Hanging from his tab")
-          )
-      )
-      .every((one) => one.text.startsWith(word))
   );
 
   for (const row of seen.rows) {
@@ -337,16 +534,15 @@ function assertForm(
     );
   }
 
-  const phoneHeads = seen.closes;
-  const wrong = phoneHeads.filter(
+  const wrong = seen.closes.filter(
     (one) =>
       !one.last ||
       Math.abs(one.inkEnd - one.edge) > 1 ||
       (coarse && (one.hitW < 43.5 || one.hitH < 43.5))
   );
   kit.check(
-    `${at}: every phone head (${phoneHeads.length}) ends with Close, its ink on the trailing edge${coarse ? ", 44px under a finger" : ""}`,
-    phoneHeads.length > 0 && wrong.length === 0,
+    `${at}: every phone head (${seen.closes.length}) ends with Close, its ink on the trailing edge${coarse ? ", 44px under a finger" : ""}`,
+    seen.closes.length > 0 && wrong.length === 0,
     wrong
       .slice(0, 3)
       .map(
@@ -355,44 +551,26 @@ function assertForm(
       )
       .join("; ")
   );
-
-  const dock = seen.foot.find((one) => one.option === "foot");
-  const floating = seen.foot.find((one) => one.option === "overlay");
-  kit.check(
-    `${at}: as the panel's last row, no leaf of the body shows under the message box`,
-    !!dock && dock.under.length === 0,
-    dock?.under.join(" | ")
-  );
-  kit.check(
-    `${at}: floating, the conversation runs under the message box`,
-    !!floating && floating.under.length > 0
-  );
-
-  const loose = seen.chips.filter(
-    (one) =>
-      one.w >= one.column - 0.5 ||
-      (one.lines === 1 && Math.abs(one.w - one.natural) > 1)
-  );
-  kit.check(
-    `${at}: each of ${seen.chips.length} chips is narrower than its column (${Math.round(seen.chips[0]?.column ?? 0)}px) and as wide as its words`,
-    seen.chips.length > 0 && loose.length === 0,
-    loose
-      .map(
-        (one) =>
-          `"${one.text}": ${one.w.toFixed(1)} vs words ${one.natural.toFixed(1)}, ${one.lines} lines`
-      )
-      .join("; ")
-  );
-
   const tall = seen.heads.filter((h) => Math.abs(h - 44) > 0.5);
   kit.check(
     `${at}: every head row (${seen.heads.length}) is 44px tall`,
     seen.heads.length > 0 && tall.length === 0,
     tall.map((h) => h.toFixed(1)).join(",")
   );
+
+  kit.check(
+    `${at}: the decided message box: no leaf of the body shows under it`,
+    seen.under.length === 0,
+    seen.under.join(" | ")
+  );
+  kit.check(
+    `${at}: the decided panel, scrolled, fades its top edge (${seen.fade}px)`,
+    seen.fade > 0
+  );
+
   const skew = seen.notices.filter(
     (one) =>
-      Math.abs(one.title.left - one.line) > 0.5 ||
+      Math.abs(one.title.left - one.line.left) > 0.5 ||
       Math.abs(one.title.left - one.foot) > 0.5 ||
       one.caw.right > one.title.left ||
       Math.abs(one.caw.top - one.title.top) > 3
@@ -400,39 +578,59 @@ function assertForm(
   kit.check(
     `${at}: in every alert row (${seen.notices.length}) the title, line and buttons share one start edge, Caw beside them from the title's top`,
     seen.notices.length > 0 && skew.length === 0,
-    seen.notices
+    skew
       .map(
         (one) =>
-          `caw ${one.caw.left.toFixed(0)}–${one.caw.right.toFixed(0)} top ${one.caw.top.toFixed(0)}; title ${one.title.left.toFixed(1)} top ${one.title.top.toFixed(0)}, line ${one.line.toFixed(1)}, foot ${one.foot.toFixed(1)}`
+          `caw ${one.caw.left.toFixed(0)}–${one.caw.right.toFixed(0)}; title ${one.title.left.toFixed(1)}, line ${one.line.left.toFixed(1)}, foot ${one.foot.toFixed(1)}`
       )
       .join("; ")
   );
-  const [first] = seen.chips;
-  kit.check(
-    `${at}: the chips start on the panel's start edge`,
-    !!first && Math.abs(first.left - first.start) < 0.5,
-    first ? `${first.left.toFixed(1)} vs ${first.start.toFixed(1)}` : "none"
-  );
   kit.note(
-    `${at}: the docked foot is ${[...new Set(seen.dockFoot.map((h) => h.toFixed(1)))].join(", ")}px tall`
+    `${at}: the alert rows stand ${seen.notices.map((one) => one.h.toFixed(1)).join(", ")}px tall`
   );
-}
-
-/** Each option's panels, captured for the reviewer. */
-async function capture(page: Page, name: string): Promise<void> {
-  for (const option of await page
-    .locator("[data-cawco-choice] [data-design-option]")
-    .all()) {
-    const choice = await option.evaluate(
-      (el) =>
-        el.closest("[data-cawco-choice]")?.getAttribute("data-cawco-choice") ??
-        ""
+  for (const one of seen.notices) {
+    const title = contrast(one.title.fg, one.title.bg);
+    const line = contrast(one.line.fg, one.line.bg);
+    const act = contrast(one.act.fg, one.act.bg);
+    kit.check(
+      `${at}: an alert row's title holds ${title.toFixed(2)}:1 and its line ${line.toFixed(2)}:1 on the tint (4.5:1), its way out's edge ${act.toFixed(2)}:1 against it (3:1)`,
+      title >= 4.5 && line >= 4.5 && act >= 3,
+      `tint rgb(${one.title.bg.join(",")})`
     );
-    const id = await option.getAttribute("data-design-option");
-    await option.screenshot({
-      path: join(CAPS, `${name}-${choice}-${id}.png`),
-      animations: "disabled",
-    });
+  }
+
+  const loose = seen.chips.filter(
+    (one) =>
+      one.w >= one.column - 0.5 ||
+      (one.lines === 1 && Math.abs(one.w - one.natural) > 1)
+  );
+  const [first] = seen.chips;
+  const lines = new Map<number, number>();
+  for (const one of seen.chips) {
+    lines.set(one.top, (lines.get(one.top) ?? 0) + 1);
+  }
+  const shared = Math.max(0, ...lines.values());
+  kit.check(
+    `${at}: ${seen.chips.length} chips, each narrower than its column (${Math.round(first?.column ?? 0)}px) and as wide as its words, ${shared} on one line, the first on the message box's edge`,
+    seen.chips.length > 0 &&
+      loose.length === 0 &&
+      shared >= 2 &&
+      !!first &&
+      Math.abs(first.left - first.box) < 0.5,
+    `${loose.map((one) => `"${one.text}": ${one.w.toFixed(1)} vs ${one.natural.toFixed(1)}`).join("; ")}; first ${first?.left.toFixed(1)} vs box ${first?.box.toFixed(1)}`
+  );
+
+  kit.check(
+    `${at}: no task id in any proposal`,
+    seen.ids.length === 0,
+    seen.ids.join(" | ")
+  );
+  for (const one of seen.meta) {
+    const ratio = contrast(one.fg, one.bg);
+    kit.check(
+      `${at}: ${one.what} holds ${ratio.toFixed(2)}:1 on its ground (4.5:1)`,
+      ratio >= 4.5
+    );
   }
 }
 
@@ -468,9 +666,10 @@ const spec: Spec = {
               "[data-cawco-choice]"
             );
             await settle(page, 400);
-            const seen = await read(page);
-
-            assertForm(kit, seen, at, form, coarse);
+            assertForm(kit, await read(page), at, form, coarse);
+            if (leg.name === "390") {
+              await assertPlaced(kit, page, at);
+            }
             if (
               leg.name === "1440" ||
               (leg.name === "390" && form === "phone")

@@ -18,6 +18,8 @@ export interface Decision {
   /** What differs between the options, in one line. */
   differs: string;
   id: string;
+  /** Why the options stand as they do, one plain line, where he asked. */
+  note?: string;
   options: Option[];
   /** Drawn in the phone's form whatever the page's switch says. */
   phoneOnly?: boolean;
@@ -44,6 +46,7 @@ export const DECISIONS: Decision[] = [
     question: "How does the panel say what's stopping Caw?",
     differs:
       "The app's alert row with Caw beside the words, tinted by how bad it is, or Caw saying it in the conversation. Each shows a thread that can't be read and Caw unable to start.",
+    note: "Caw stands beside the words, as an avatar does beside a message, so the title, the line and the buttons keep one edge.",
     options: [
       { id: "alert-row", name: "An alert row with Caw", recommended: true },
       { id: "caw-says", name: "Caw says it" },
@@ -57,16 +60,6 @@ export const DECISIONS: Decision[] = [
     options: [
       { id: "chips", name: "Chips sized to their words", recommended: true },
       { id: "rows", name: "A list of rows" },
-    ],
-  },
-  {
-    id: "composer",
-    question: "Where does the message box stand?",
-    differs:
-      "As the panel's last row, the conversation ending at it, or floating over the conversation as it scrolls under the glass. Both are scrolled a little short of the end.",
-    options: [
-      { id: "foot", name: "The panel's last row", recommended: true },
-      { id: "overlay", name: "Floating over the conversation" },
     ],
   },
   {
@@ -119,6 +112,8 @@ export interface Fix {
   changed: string;
   /** His words, verbatim, one per pin it answers. */
   said: string[];
+  /** The state drawn for it, where it is decided and shown. */
+  shows?: "composer";
 }
 
 export const FIXES: Fix[] = [
@@ -148,10 +143,18 @@ export const FIXES: Fix[] = [
   {
     said: [
       "the composer is obscuring the page, also each suggestion is a screen-wide card even though it takes up 20% of it sspace, and its as wide as the screen, lazy iplementation",
+      "this page is completely broken, the composer is over everything",
+    ],
+    changed:
+      "Decided: the message box is the panel's last row. The conversation ends at it and nothing passes under it, so it has no glass; what runs past the panel's edge fades. Every panel on this page draws it so.",
+    shows: "composer",
+  },
+  {
+    said: [
       "these have no silhoette, what the fuck are you doing? confusing ui",
     ],
     changed:
-      "Each suggestion is a chip as wide as its own words, and the message box is the panel's last row, so the conversation ends at it. See the third and fourth decisions.",
+      "Each suggestion is a chip carrying a short label, as wide as its words, so chips stand side by side. See the third decision.",
   },
   {
     said: ["wtf is this gradient?", "why is this all the way to the left"],
@@ -162,11 +165,6 @@ export const FIXES: Fix[] = [
     said: ["wrong pose"],
     changed:
       "When the thread can't be read or Caw can't start, he shows he needs you.",
-  },
-  {
-    said: ["this page is completely broken, the composer is over everything"],
-    changed:
-      "Nothing stands under the message box unless you pick the floating one, where the conversation scrolls under it on purpose.",
   },
   {
     said: ["these look terrible on wide screen"],
@@ -182,7 +180,7 @@ export const FIXES: Fix[] = [
   {
     said: ["no typographic weight to indicate this does anything"],
     changed:
-      "Each filed task's title is the strongest line under the reply, with its id in link colour, underlined under the pointer.",
+      "Each filed task's title is the strongest line under the reply, underlined under the pointer; no id.",
   },
   {
     said: [

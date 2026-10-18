@@ -569,6 +569,20 @@ export const SUGGESTED_MANY: Suggestion[] = [
     sources: [],
   },
 ];
+/**
+ * PROPOSED: each starter's short label, three to five words, as a chip
+ * carries it (the full sentence stands in its tooltip and goes into the
+ * message box). The hub's ProjectStarter has only the sentence today; a
+ * label beside it is the change the chips ask for.
+ */
+export const STARTER_LABELS: Record<string, string> = {
+  "Find what's broken on the booking page": "Fix the booking page",
+  "Draft Friday's launch email": "Draft the launch email",
+  "Break the launch into tasks": "Plan the launch",
+  "Check the site's copy for anything that reads off": "Check the site copy",
+  "Write a README for the repository": "Write a README",
+  "Move the review tasks along": "Move review tasks",
+};
 /** Before and after the project changed: two swap, one leaves, one arrives, a reason morphs. */
 export const REFRESH_BEFORE: Suggestion[] = [
   SUGGESTED[0],

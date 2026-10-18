@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * PROPOSED (pin 1): the tasks Caw filed under his reply. Each says what it
-   * is (title, its id trailing on the same line), what it holds (the task
+   * is (its title), what it holds (the task
    * file's first body line) and why he filed it, the line that waits on
    * you marked with the house's needs-you glyph. Three lines at most; a
    * task with nothing to say past its title is one (The Idle Has No Fill
@@ -20,11 +20,10 @@
    *
    * Each task reads as the link it is. Its title is the row's name at the
    * top of the house's scale (label, 500, `ink-strong`: The 500 Ceiling
-   * Rule makes the ink the step left); its id is its handle, in the link's
-   * own ink (`link-ink`); under the pointer or the focus ring the title
-   * takes the link's underline (from the font, its colour fading in, as a
-   * named link's does, SystemLine `.aname`) and the id deepens to
-   * `brand-ink-strong`, brand ink under the pointer.
+   * Rule makes the ink the step left); under the pointer or the focus ring
+   * it takes the link's underline (from the font, its colour fading in, as
+   * a named link's does, SystemLine `.aname`). No id: the owner reads
+   * titles, and the task opens from its row.
    */
   import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import { IconNeedsYou } from "#lib/icons.js";
@@ -72,11 +71,6 @@
             <span
               class="title text-[var(--ink-strong)] underline decoration-transparent decoration-from-font transition-[text-decoration-color] duration-(--dur-control) ease-(--ease-out) [text-underline-position:from-font] group-hover/task:decoration-[color-mix(in_oklab,currentColor_35%,transparent)] group-focus-visible/task:decoration-[color-mix(in_oklab,currentColor_35%,transparent)]"
               >{task.title}</span
-            >
-            <!-- Its handle, in the link's own ink: what the row opens. -->
-            <span
-              class="id text-link transition-colors duration-(--dur-control) ease-(--ease-out) group-hover/task:text-[var(--brand-ink-strong)] group-focus-visible/task:text-[var(--brand-ink-strong)]"
-              >{task.id}</span
             >
           </span>
           {#if extra.summary}
@@ -148,12 +142,6 @@
     overflow-wrap: anywhere;
     text-wrap: pretty;
   }
-  .id {
-    flex: none;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    font-variant-ligatures: none;
-  }
   .summary,
   .why-words {
     min-inline-size: 0;
@@ -174,10 +162,17 @@
     min-inline-size: 0;
     font: var(--type-meta);
   }
+  /* The needs-you hand beside meta words: 12px (DESIGN.md, the Solar
+     Duotone Rule's sizes), in the needs-you ink with its second layer at
+     the status glyphs' weight, so it reads as a mark on a disc, not a
+     yellow blob. */
   .why :global(.attn) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--status-attn-glyph);
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+    color: var(--status-attn-ink);
+  }
+  .why :global(.attn [opacity]) {
+    opacity: var(--glyph-duo-status-opacity);
   }
 
   /* A: the TaskCard recipe, in columns by the room the reply has. */
@@ -214,14 +209,16 @@
     }
   }
 
-  /* B: one list in the reply's column, rows on the transcript's own ground. */
+  /* B: one list in the reply's column, rows on the transcript's own
+     ground, a hairline between each; the hover reaches --space-2 past the
+     words on each side as a shadow, which takes no room. */
   .rows {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
 
-    /* The words stand on the transcript's text column; the hover reaches
-       --space-2 past it on each side as a shadow, which takes no room. */
+    & .item + .item {
+      border-block-start: 1px solid var(--border-hairline);
+    }
     & .task {
       padding-block: var(--space-2);
       border-radius: var(--radius-sm);

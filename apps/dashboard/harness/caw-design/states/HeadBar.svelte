@@ -21,7 +21,10 @@
    * - Phone: DESIGN.md's Drawer, the sheet's 100×6 grabber over the row and
    *   Close last at the trailing edge, a 28px ghost with a 16px glyph and
    *   44px under a finger. Hanging from his tab (`grabber` off) it is the
-   *   same row with Close and no grabber.
+   *   same row with Close and no grabber. Three 44px controls leave the
+   *   thread's name too little room at 390, so New thread goes into More
+   *   first (the artifact panel head's overflow rule), leaving More and
+   *   Close.
    * - More holds Caw's session (his lead session's card) and Open as a tab.
    */
   import {
@@ -134,12 +137,14 @@
       </div>
     {/if}
     <div class="trail" data-design-trail>
-      <Button
-        aria-label="New thread"
-        icon={IconPlus}
-        size="icon-sm"
-        variant="ghost"
-      />
+      {#if !phone}
+        <Button
+          aria-label="New thread"
+          icon={IconPlus}
+          size="icon-sm"
+          variant="ghost"
+        />
+      {/if}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
@@ -154,6 +159,13 @@
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" class="min-w-44">
+          {#if phone}
+            <DropdownMenu.Item>
+              <IconPlus aria-hidden="true" />
+              <span>New thread</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Separator />
+          {/if}
           {#if leadId}
             <DropdownMenu.Item
               onSelect={() => {
