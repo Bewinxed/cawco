@@ -197,6 +197,13 @@ export const probeRelay = (
 };
 
 /** The relay's machine's answer, or its refusal in its own words. */
+/** Each outcome a call asks for, as the act it names. */
+const ACT: Record<string, string> = {
+  started: "start",
+  stopped: "stop",
+  renewed: "renewal",
+};
+
 const answered = <T>(
   read: Bounded<{ ok: boolean; result?: unknown; error?: string }>,
   machine: string,
@@ -206,8 +213,8 @@ const answered = <T>(
     throw new RelayRefusal(
       503,
       read.reason === "dead"
-        ? `${machine} is not connected, so the relay was not ${what}.`
-        : `${machine} did not say in time whether the relay ${what === "started" ? "started" : `was ${what}`}; Settings › Browsers shows what it says next.`
+        ? `The relay was not ${what} on ${machine}: ${machine} is not connected. ${what === "started" ? `It starts when ${machine} connects again.` : `Try again once ${machine} is back.`}`
+        : `The relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. Settings › Browsers shows what it says next.`
     );
   }
   if (!read.value.ok) {
@@ -249,7 +256,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     if (!relay.secret) {
       throw new RelayRefusal(
         409,
-        "The relay's secret no longer opens under the hub's key: remove the relay and set it up again."
+        "The relay could not start: its secret no longer opens under the hub's key. Remove the relay and set it up again."
       );
     }
     return {
@@ -262,7 +269,12 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
   };
 
   const send = async (relay: StoredRelay): Promise<void> => {
-    db.update({ wanted: true, state: "starting", why: null });
+    db.update({
+      wanted: true,
+      state: "starting",
+      why: null,
+      whyCommand: null,
+    });
     const read = await call(
       relay.machineId,
       RELAY_START,
@@ -295,6 +307,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       state: frame.state,
       ports: frame.ports,
       why: frame.why ?? null,
+      whyCommand: frame.command ?? null,
     });
   };
 
@@ -337,6 +350,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     state: relay.state,
     ports: relay.ports,
     why: relay.why,
+    whyCommand: relay.whyCommand,
     health: relay.health,
     checkedAt: relay.checkedAt,
     certificateEndsAt: relay.certificateEndsAt,
@@ -375,7 +389,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       if (name && !DNS_NAME.test(name)) {
         throw new RelayRefusal(
           400,
-          `${name} is not a DNS name: give a name like relay.example.com, or leave the field empty.`
+          `The relay was not set up: ${name} is not a DNS name. Give a name like relay.example.com, or leave the field empty, then start it again.`
         );
       }
       const machine = deps
@@ -388,7 +402,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       if (!candidate) {
         throw new RelayRefusal(
           409,
-          `${machine.name} has no public address, so nothing outside reaches a relay there.`
+          `The relay was not set up on ${machine.name}: it has no public address, so nothing outside would reach the relay there. Pick a machine that has one.`
         );
       }
       const before = db.read();

@@ -3634,6 +3634,8 @@ export const streamRelay = sqliteTable("stream_relay", {
   /** What its machine has bound, as its last frame said. */
   ports: text("ports", { mode: "json" }).$type<RelayPorts>(),
   why: text("why"),
+  /** The command `why` names as its fix, word for word inside it (shown as code). */
+  whyCommand: text("why_command"),
   /** Each port's last STUN answer. */
   health: text("health", { mode: "json" })
     .$type<RelayPortHealth[]>()

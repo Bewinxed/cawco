@@ -32505,6 +32505,13 @@
               "null",
               "string"
             ]
+          },
+          "whyCommand": {
+            "description": "The command `why` names as its fix, word for word inside it: shown as code.",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
@@ -32517,7 +32524,8 @@
           "machineName",
           "state",
           "urls",
-          "why"
+          "why",
+          "whyCommand"
         ]
       },
       "RelayPortHealth": {
@@ -54944,6 +54952,10 @@
         "description": "Daemon-originated: the stream relay on this machine, whole, on each change.",
         "type": "object",
         "properties": {
+          "command": {
+            "description": "The command `why` names as its fix, word for word inside it: shown as code.",
+            "type": "string"
+          },
           "hostname": {
             "description": "The DNS name its certificate is for, while one stands.",
             "type": "string"
@@ -54980,7 +54992,7 @@
             "$ref": "#/components/schemas/StreamRelayState"
           },
           "why": {
-            "description": "Why it is `failed`, one sentence with the fix.",
+            "description": "Why it is `failed`, in WORDS.md's error formula ({@link RELAY_FAILURES}).",
             "type": "string"
           }
         },

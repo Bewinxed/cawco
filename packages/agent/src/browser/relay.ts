@@ -27,7 +27,11 @@ import type {
   RelayRenewed,
   RelayStartArgs,
 } from "@cawco/core/stream-relay";
-import { STREAM_RELAY_PORTS } from "@cawco/core/stream-relay";
+import {
+  RELAY_FAILURES,
+  type RelayFailure,
+  STREAM_RELAY_PORTS,
+} from "@cawco/core/stream-relay";
 import type Docker from "dockerode";
 import { browserRuntime } from "./browsers";
 import { pullImage } from "./image";
@@ -109,6 +113,15 @@ const tell = (next: Omit<RelayFrame, "kind" | "machineId">): void => {
 
 const why = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/** A relay failure thrown: its sentence as the message, its command kept beside it. */
+export class RelayFailed extends Error {
+  readonly command: string | undefined;
+  constructor(failure: RelayFailure) {
+    super(failure.why);
+    this.command = failure.command;
+  }
+}
 
 /** Runs `work` after every relay command before it. */
 const serial = <T>(work: () => Promise<T>): Promise<T> => {
@@ -300,8 +313,8 @@ const runOnce = async (
     );
     if (ended.kind === "unanswered") {
       await container.kill().catch(() => undefined);
-      throw new Error(
-        `certbot did not finish within ${CERTBOT_MS / 1000} s on ${hostname()}.`
+      throw new RelayFailed(
+        RELAY_FAILURES.certbotSlow(hostname(), CERTBOT_MS / 1000)
       );
     }
     return { code: ended.value.StatusCode, said: await logsOf(container) };
@@ -350,19 +363,19 @@ const certbotWords = (said: string): string => {
   return (errors.length > 0 ? errors : lines.slice(-4)).join(" ");
 };
 
-/** Port 80 free for certbot's challenge, or the start fails naming who holds it. */
-const port80Free = async (): Promise<void> => {
+/** Port 80 free for certbot's challenge, or the failure `refusal` words, naming who holds it. */
+const port80Free = async (
+  refusal: (held: string) => RelayFailure
+): Promise<void> => {
   const [held] = await heldPorts([{ proto: "tcp", port: HTTP_PORT }]);
   if (held) {
-    throw new Error(
-      `${held.said} on ${hostname()}, and the certificate is issued over it: free it, then start the relay again.`
-    );
+    throw new RelayFailed(refusal(held.said));
   }
 };
 
 /** `name`'s certificate issued (or kept, when one stands and is not due), standalone over port 80. */
 const issue = async (docker: Docker, name: string): Promise<void> => {
-  await port80Free();
+  await port80Free((held) => RELAY_FAILURES.port80(hostname(), held));
   const { code, said } = await runOnce(docker, CERTBOT_IMAGE, [
     "certonly",
     "--standalone",
@@ -375,8 +388,8 @@ const issue = async (docker: Docker, name: string): Promise<void> => {
     name,
   ]);
   if (code !== 0) {
-    throw new Error(
-      `Let's Encrypt did not issue a certificate for ${name}: ${certbotWords(said)}`
+    throw new RelayFailed(
+      RELAY_FAILURES.certificate(hostname(), name, certbotWords(said))
     );
   }
 };
@@ -458,8 +471,12 @@ const waitLive = async (docker: Docker, tls: boolean): Promise<RelayPorts> => {
       const said = await logsOf(docker.getContainer(RELAY_CONTAINER)).catch(
         () => ""
       );
-      throw new Error(
-        `coturn stopped as it started (exit ${inspected?.State.ExitCode ?? "unknown"}): ${said.trim().split("\n").slice(-4).join(" ")}`
+      throw new RelayFailed(
+        RELAY_FAILURES.coturnExited(
+          hostname(),
+          String(inspected?.State.ExitCode ?? "unknown"),
+          said.trim().split("\n").slice(-4).join(" ")
+        )
       );
     }
     ports = await boundNow(tls);
@@ -473,9 +490,9 @@ const waitLive = async (docker: Docker, tls: boolean): Promise<RelayPorts> => {
     ports.tcp3478 ? null : "TCP 3478",
     ports.tcp443 ? null : "TCP 443",
     !tls || ports.tls ? null : "TCP 5349",
-  ].filter(Boolean);
-  throw new Error(
-    `coturn did not bind ${missing.join(", ")} on ${hostname()} within ${LIVE_MS / 1000} s.`
+  ].filter((port): port is string => port !== null);
+  throw new RelayFailed(
+    RELAY_FAILURES.coturnUnbound(hostname(), missing, LIVE_MS / 1000)
   );
 };
 
@@ -486,14 +503,12 @@ const waitLive = async (docker: Docker, tls: boolean): Promise<RelayPorts> => {
 /** The runtime, on a machine where the relay can run, or the sentence that says why not. */
 const relayRuntime = async (): Promise<Runtime> => {
   if (platform() !== "linux") {
-    throw new Error(
-      `The stream relay runs on a Linux machine with a public address: on ${hostname()} the container runtime's host network is its VM's, which nothing outside reaches.`
-    );
+    throw new RelayFailed(RELAY_FAILURES.notLinux(hostname()));
   }
   const found = await browserRuntime(true);
   if ("missing" in found) {
-    throw new Error(
-      `The stream relay runs in a container, and ${hostname()} has no container runtime: install one (\`${runtimeInstallCommand()}\`), then start the relay again.`
+    throw new RelayFailed(
+      RELAY_FAILURES.noRuntime(hostname(), runtimeInstallCommand())
     );
   }
   return found;
@@ -509,7 +524,7 @@ const relayRuntime = async (): Promise<Runtime> => {
 export const lowPortsRefusal = async (
   runtime: Pick<Runtime, "rootless">,
   withCertificate: boolean
-): Promise<string | undefined> => {
+): Promise<RelayFailure | undefined> => {
   if (!runtime.rootless) {
     return;
   }
@@ -518,11 +533,11 @@ export const lowPortsRefusal = async (
   if (start <= lowest) {
     return;
   }
-  return `Port ${lowest} needs \`sudo sysctl -w net.ipv4.ip_unprivileged_port_start=${lowest}\` (and the same line in /etc/sysctl.d/) on ${hostname()}, or a root container runtime.`;
+  return RELAY_FAILURES.lowPort(hostname(), lowest);
 };
 
-/** The relay's listening ports held by another process, in one sentence; undefined when every one is free. */
-const portsRefusal = async (): Promise<string | undefined> => {
+/** The relay's listening ports held by another process, as its failure; undefined when every one is free. */
+const portsRefusal = async (): Promise<RelayFailure | undefined> => {
   const held = await heldPorts([
     ...STREAM_RELAY_PORTS.udp.map((port) => ({ proto: "udp" as const, port })),
     ...STREAM_RELAY_PORTS.tcp.map((port) => ({ proto: "tcp" as const, port })),
@@ -530,7 +545,10 @@ const portsRefusal = async (): Promise<string | undefined> => {
   if (held.length === 0) {
     return;
   }
-  return `${held.map((one) => one.said).join("; ")} on ${hostname()}: the stream relay listens there, so free ${held.length === 1 ? "it" : "them"}, then start the relay again.`;
+  return RELAY_FAILURES.held(
+    hostname(),
+    held.map((one) => one.said)
+  );
 };
 
 /* ------------------------------------------------------------------ */
@@ -538,7 +556,14 @@ const portsRefusal = async (): Promise<string | undefined> => {
 /* ------------------------------------------------------------------ */
 
 const failed = (error: unknown): never => {
-  tell({ state: "failed", ports: NO_PORTS, why: why(error) });
+  tell({
+    state: "failed",
+    ports: NO_PORTS,
+    why: why(error),
+    ...(error instanceof RelayFailed && error.command
+      ? { command: error.command }
+      : {}),
+  });
   console.warn(`[relay] failed: ${why(error)}`);
   throw error;
 };
@@ -546,12 +571,12 @@ const failed = (error: unknown): never => {
 /** The relay's settings checked and the machine's leave read: its runtime, or the refusal thrown. */
 const readyToStart = async (args: RelayStartArgs): Promise<Runtime> => {
   if (args.hostname && !DNS_NAME.test(args.hostname)) {
-    throw new Error(`${args.hostname} is not a DNS name.`);
+    throw new RelayFailed(RELAY_FAILURES.notDnsName(hostname(), args.hostname));
   }
   const runtime = await relayRuntime();
   const lowPorts = await lowPortsRefusal(runtime, !!args.hostname);
   if (lowPorts) {
-    throw new Error(lowPorts);
+    throw new RelayFailed(lowPorts);
   }
   return runtime;
 };
@@ -609,7 +634,7 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
       await removeRelayContainer(docker);
       const refused = await portsRefusal();
       if (refused) {
-        throw new Error(refused);
+        throw new RelayFailed(refused);
       }
       tell({ state: "pulling", ports: NO_PORTS });
       await pullImage(docker, RELAY_IMAGE, (progress) =>
@@ -711,12 +736,12 @@ export const renewRelay = (): Promise<RelayRenewed> =>
     const kept = await relayContainer(docker);
     const name = kept?.Config.Labels?.[HOSTNAME_LABEL];
     if (!(kept && name)) {
-      throw new Error(
-        `The stream relay on ${hostname()} has no certificate to renew.`
-      );
+      throw new RelayFailed(RELAY_FAILURES.renewNone(hostname()));
     }
     const before = await certificateEnd(docker, name);
-    await port80Free();
+    await port80Free((held) =>
+      RELAY_FAILURES.renewPort80(hostname(), name, held)
+    );
     const { code, said } = await runOnce(docker, CERTBOT_IMAGE, [
       "renew",
       "--non-interactive",
@@ -726,8 +751,8 @@ export const renewRelay = (): Promise<RelayRenewed> =>
       DEPLOY_HOOK,
     ]);
     if (code !== 0) {
-      throw new Error(
-        `Let's Encrypt did not renew the certificate for ${name}: ${certbotWords(said)}`
+      throw new RelayFailed(
+        RELAY_FAILURES.renewRefused(hostname(), name, certbotWords(said))
       );
     }
     const after = await certificateEnd(docker, name);
@@ -770,7 +795,14 @@ export const watchRelay = async (): Promise<void> => {
       const ports = await waitLive(docker, !!name);
       tell({ state: "live", ports, ...(name ? { hostname: name } : {}) });
     } catch (error) {
-      tell({ state: "failed", ports: NO_PORTS, why: why(error) });
+      tell({
+        state: "failed",
+        ports: NO_PORTS,
+        why: why(error),
+        ...(error instanceof RelayFailed && error.command
+          ? { command: error.command }
+          : {}),
+      });
     }
   });
 };

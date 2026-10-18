@@ -48,6 +48,8 @@ export interface RelayPorts {
 
 /** Daemon-originated: the stream relay on this machine, whole, on each change. */
 export interface RelayFrame {
+  /** The command `why` names as its fix, word for word inside it: shown as code. */
+  command?: string;
   /** The DNS name its certificate is for, while one stands. */
   hostname?: string;
   kind: "stream_relay";
@@ -56,7 +58,7 @@ export interface RelayFrame {
   /** How far an image pull is, while `state` is `pulling`. */
   progress?: { done: number; total: number };
   state: StreamRelayState;
-  /** Why it is `failed`, one sentence with the fix. */
+  /** Why it is `failed`, in WORDS.md's error formula ({@link RELAY_FAILURES}). */
   why?: string;
 }
 
@@ -160,6 +162,8 @@ export interface StreamRelayView {
   state: StreamRelayState;
   urls: string[];
   why: string | null;
+  /** The command `why` names as its fix, word for word inside it: shown as code. */
+  whyCommand: string | null;
 }
 
 /** What `GET /api/stream-relay` answers. */
@@ -168,6 +172,84 @@ export interface StreamRelayAnswer {
   candidates: RelayCandidate[];
   relay: StreamRelayView | null;
 }
+
+/** A relay failure: its sentence, and the command inside it a person runs, when it names one. */
+export interface RelayFailure {
+  command?: string;
+  why: string;
+}
+
+const couldNotStart = (machine: string): string =>
+  `The relay could not start on ${machine}:`;
+const notRenewed = (machine: string, name: string): string =>
+  `The relay's certificate for ${name} on ${machine} was not renewed:`;
+const renewNext =
+  "The hub asks again tomorrow, and the certificate standing serves until it ends.";
+
+/**
+ * Every failure the relay's machine reports, in WORDS.md's error formula:
+ * what happened, why, how to fix it, what happens next. The agent throws
+ * these (agent browser/relay.ts) and Settings › Browsers shows them, a
+ * `command` in code type.
+ */
+export const RELAY_FAILURES = {
+  notLinux: (machine: string): RelayFailure => ({
+    why: `${couldNotStart(machine)} it runs on the host network, and on a Mac that is the container runtime's VM, which nothing outside reaches. Run the relay on a Linux machine with a public address.`,
+  }),
+  noRuntime: (machine: string, install: string): RelayFailure => ({
+    why: `${couldNotStart(machine)} it runs in a container, and this machine has no container runtime. Install one with ${install}, then start the relay again.`,
+    command: install,
+  }),
+  notDnsName: (machine: string, name: string): RelayFailure => ({
+    why: `${couldNotStart(machine)} ${name} is not a DNS name. Give a name like relay.example.com, or none, then start the relay again.`,
+  }),
+  lowPort: (machine: string, port: number): RelayFailure => {
+    const command = `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=${port}`;
+    return {
+      why: `${couldNotStart(machine)} port ${port} is below the range this machine lets a rootless container runtime bind. Run ${command} there (and the same line in /etc/sysctl.d/), or use a root container runtime, then start the relay again.`,
+      command,
+    };
+  },
+  held: (machine: string, held: readonly string[]): RelayFailure => ({
+    why: `${couldNotStart(machine)} ${held.join("; ")}, and the relay listens there. Free ${held.length === 1 ? "it" : "them"}, then start the relay again.`,
+  }),
+  port80: (machine: string, held: string): RelayFailure => ({
+    why: `${couldNotStart(machine)} ${held}, and its certificate is issued over port 80. Free it, then start the relay again.`,
+  }),
+  certificate: (machine: string, name: string, said: string): RelayFailure => ({
+    why: `${couldNotStart(machine)} Let's Encrypt did not issue a certificate for ${name} (${said}). Point ${name} at this machine and let port 80 reach it, then start the relay again.`,
+  }),
+  certbotSlow: (machine: string, seconds: number): RelayFailure => ({
+    why: `${couldNotStart(machine)} certbot did not finish within ${seconds} s. Check that port 80 reaches this machine, then start the relay again.`,
+  }),
+  coturnExited: (
+    machine: string,
+    exit: string,
+    said: string
+  ): RelayFailure => ({
+    why: `${couldNotStart(machine)} coturn stopped as it started (exit ${exit}${said ? `: ${said}` : ""}). Start the relay again; if it stops again, its words here say why.`,
+  }),
+  coturnUnbound: (
+    machine: string,
+    ports: readonly string[],
+    seconds: number
+  ): RelayFailure => ({
+    why: `${couldNotStart(machine)} coturn did not bind ${ports.join(", ")} within ${seconds} s. Check that nothing else holds ${ports.length === 1 ? "it" : "them"}, then start the relay again.`,
+  }),
+  renewNone: (machine: string): RelayFailure => ({
+    why: `The relay's certificate on ${machine} was not renewed: the relay there has no certificate. Give it a DNS name in Settings › Browsers to have one issued.`,
+  }),
+  renewPort80: (machine: string, name: string, held: string): RelayFailure => ({
+    why: `${notRenewed(machine, name)} ${held}, and renewal runs over port 80. Free it. ${renewNext}`,
+  }),
+  renewRefused: (
+    machine: string,
+    name: string,
+    said: string
+  ): RelayFailure => ({
+    why: `${notRenewed(machine, name)} Let's Encrypt refused (${said}). Check that ${name} points at this machine and port 80 reaches it. ${renewNext}`,
+  }),
+} as const;
 
 /** The relay step's words: the onboarding card and Settings › Browsers say them alike (Readout register, WORDS.md). */
 export const STREAM_RELAY_WORDS = {

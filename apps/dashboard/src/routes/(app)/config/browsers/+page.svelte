@@ -231,44 +231,58 @@
                 >{/if}
             </p>
           </div>
-          <div class={CONTROLS}>
-            {#if view.state === "stopped" || view.state === "failed"}
-              <Button
-                aria-expanded={asking("relay-start")}
-                disabled={asking("relay-start")}
-                label={words.start}
-                onclick={() => askStartAgain(view)}
-                size="sm"
-                variant="outline"
-              />
-            {:else}
-              <!-- The machine runs one relay command at a time: a stop sent
+          <div
+            class="flex min-w-0 flex-col gap-(--space-1) max-sm:justify-self-start sm:items-end"
+          >
+            <div class="flex flex-wrap items-center gap-(--space-4)">
+              {#if view.state === "stopped" || view.state === "failed"}
+                <Button
+                  aria-expanded={asking("relay-start")}
+                  disabled={asking("relay-start")}
+                  label={words.start}
+                  onclick={() => askStartAgain(view)}
+                  size="sm"
+                  variant="outline"
+                />
+              {:else}
+                <!-- The machine runs one relay command at a time: a stop sent
                    while it starts would wait out the start. Remove still
                    goes (the hub forgets the relay at once).
                    A ghost's ink starts inside its box (1px edge, 11px
                    padding): wrapped under the words it hangs back by that
                    much, so its first letter stands on their edge. -->
+                <Button
+                  aria-describedby={busy ? "relay-stop-wait" : undefined}
+                  aria-expanded={asking("relay-stop")}
+                  class="max-sm:-ms-3"
+                  data-relay-stop
+                  disabled={asking("relay-stop") || busy}
+                  label={words.stop}
+                  onclick={() => askStop(view)}
+                  size="sm"
+                  variant="ghost"
+                />
+              {/if}
               <Button
-                aria-expanded={asking("relay-stop")}
-                class="max-sm:-ms-3"
-                data-relay-stop
-                disabled={asking("relay-stop") || busy}
-                label={words.stop}
-                onclick={() => askStop(view)}
+                aria-expanded={asking("relay-remove")}
+                data-relay-remove
+                disabled={asking("relay-remove")}
+                label={words.remove}
+                onclick={() => askRemove(view)}
                 size="sm"
-                title={busy ? words.stopWhileStarting : undefined}
-                variant="ghost"
+                variant="destructive"
               />
+            </div>
+            <!-- Why Stop waits, in words a touch screen shows too. -->
+            {#if busy}
+              <p
+                class="text-meta text-(--ink-muted) text-pretty sm:text-end"
+                data-relay-wait
+                id="relay-stop-wait"
+              >
+                {words.stopWhileStarting}
+              </p>
             {/if}
-            <Button
-              aria-expanded={asking("relay-remove")}
-              data-relay-remove
-              disabled={asking("relay-remove")}
-              label={words.remove}
-              onclick={() => askRemove(view)}
-              size="sm"
-              variant="destructive"
-            />
           </div>
         </div>
         {#if view.state === "live" && view.health.length > 0}
@@ -302,7 +316,14 @@
             class="mt-(--space-2) max-w-[72ch] text-meta text-(--status-fail-ink) [overflow-wrap:anywhere]"
             data-relay-why
           >
-            {view.why}
+            {#if view.whyCommand && view.why.includes(view.whyCommand)}
+              {@const at = view.why.indexOf(view.whyCommand)}
+              {view.why.slice(0, at)}<code class="font-mono text-(--ink-strong)"
+                >{view.whyCommand}</code
+              >{view.why.slice(at + view.whyCommand.length)}
+            {:else}
+              {view.why}
+            {/if}
           </p>
         {/if}
         <AskHere asker={asks} at="relay-start" />

@@ -36,7 +36,10 @@ import type {
   RelayCandidate,
   StreamRelayAnswer,
 } from "../../../../packages/core/src/stream-relay";
-import { STREAM_RELAY_WORDS } from "../../../../packages/core/src/stream-relay";
+import {
+  RELAY_FAILURES,
+  STREAM_RELAY_WORDS,
+} from "../../../../packages/core/src/stream-relay";
 import type { Kit, Spec, View } from "../../kit";
 import { open, ROOT, settle, type Theme } from "../../kit";
 
@@ -96,6 +99,7 @@ const live: StreamRelayAnswer = {
     state: "live",
     ports: { udp3478: true, tcp3478: true, tcp443: true, tls: true },
     why: null,
+    whyCommand: null,
     health: [
       { port: "udp 3478", up: true },
       { port: "tcp 3478", up: true },
@@ -122,10 +126,12 @@ const relayAs = (
   },
 });
 
-const SYSCTL_WHY =
-  "Port 443 needs `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443` (and the same line in /etc/sysctl.d/) on relay, or a root container runtime.";
-const HELD_WHY =
-  "TCP 3478 is held by cawco (pid 4242); UDP 443 is held by caddy (pid 917) on relay: the stream relay listens there, so free them, then start the relay again.";
+/** The failures as the agent words them (core RELAY_FAILURES), on a machine named relay. */
+const SYSCTL = RELAY_FAILURES.lowPort("relay", 443);
+const HELD = RELAY_FAILURES.held("relay", [
+  "TCP 3478 is held by cawco (pid 4242)",
+  "UDP 443 is held by caddy (pid 917)",
+]);
 
 /** Each state the relay's own row can be in, what it must say, and which controls it offers. */
 const STATES: {
@@ -137,6 +143,7 @@ const STATES: {
   /** The controls shown but held, with the reason in their title. */
   held?: string[];
   why?: string;
+  command?: string;
 }[] = [
   {
     name: "pulling",
@@ -163,19 +170,25 @@ const STATES: {
   },
   {
     name: "failed-sysctl",
-    answer: relayAs({ state: "failed", why: SYSCTL_WHY, hostname: null }),
+    answer: relayAs({
+      state: "failed",
+      why: SYSCTL.why,
+      whyCommand: SYSCTL.command ?? null,
+      hostname: null,
+    }),
     badge: "Failed",
     tint: "status-fail",
     controls: [STREAM_RELAY_WORDS.start, STREAM_RELAY_WORDS.remove],
-    why: SYSCTL_WHY,
+    why: SYSCTL.why,
+    command: SYSCTL.command,
   },
   {
     name: "failed-held",
-    answer: relayAs({ state: "failed", why: HELD_WHY }),
+    answer: relayAs({ state: "failed", why: HELD.why }),
     badge: "Failed",
     tint: "status-fail",
     controls: [STREAM_RELAY_WORDS.start, STREAM_RELAY_WORDS.remove],
-    why: HELD_WHY,
+    why: HELD.why,
   },
 ];
 
@@ -725,9 +738,17 @@ const relayRead = (page: Page) =>
         )
         .map((button) => ({
           words: button.textContent?.trim(),
-          title: button.getAttribute("title"),
+          describedBy: button.getAttribute("aria-describedby"),
         })),
-      why: why?.textContent?.trim() ?? null,
+      why: why?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+      whyCode: why?.querySelector("code")?.textContent ?? null,
+      backtick: document
+        .querySelector("[data-stream-relay]")
+        ?.textContent?.includes("`"),
+      wait: (() => {
+        const line = document.querySelector<HTMLElement>("[data-relay-wait]");
+        return line ? { id: line.id, words: line.textContent?.trim() } : null;
+      })(),
       whyInside: why ? why.scrollWidth <= why.clientWidth : null,
       whyLines: lines(why),
       chips: document.querySelectorAll("[data-relay-port]").length,
@@ -742,7 +763,7 @@ const states = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
     const read = await relayRead(page);
     const scroll = await sideways(page);
     kit.check(
-      `${leg.name} ${state.name}: badge "${state.badge}" (${state.tint}), line "${one.address}${state.answer.relay?.hostname ? " · relay.example.com" : ""}", controls ${state.controls.join(" and ")}${state.held ? ` (${state.held.join(", ")} held: "${STREAM_RELAY_WORDS.stopWhileStarting}")` : ""}${state.why ? `, the why whole in ${read.whyLines} lines` : ", no why"}, no chips, nothing sideways`,
+      `${leg.name} ${state.name}: badge "${state.badge}" (${state.tint}), line "${one.address}${state.answer.relay?.hostname ? " · relay.example.com" : ""}", controls ${state.controls.join(" and ")}${state.held ? ` (${state.held.join(", ")} held, described by the wait line "${read.wait?.words}" under the buttons)` : ", no wait line"}${state.why ? `, the why whole in ${read.whyLines} lines` : ", no why"}${state.command ? `, its command in code ("${read.whyCode}")` : ""}, no backtick, no chips, nothing sideways`,
       read.badge === state.badge &&
         read.badgeClass.includes(state.tint) &&
         read.line ===
@@ -750,9 +771,13 @@ const states = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
         JSON.stringify(read.controls) === JSON.stringify(state.controls) &&
         JSON.stringify(read.held.map((button) => button.words)) ===
           JSON.stringify(state.held ?? []) &&
-        read.held.every(
-          (button) => button.title === STREAM_RELAY_WORDS.stopWhileStarting
-        ) &&
+        (state.held
+          ? read.wait !== null &&
+            read.wait.words === STREAM_RELAY_WORDS.stopWhileStarting &&
+            read.held.every((button) => button.describedBy === read.wait?.id)
+          : read.wait === null) &&
+        read.backtick === false &&
+        read.whyCode === (state.command ?? null) &&
         (state.why
           ? read.why === state.why &&
             read.whyInside === true &&
@@ -1077,9 +1102,75 @@ const hover = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
   await capture(page, `hover-pick-${leg.name}`);
 };
 
+/**
+ * Every relay failure the agent or the hub's renewal words (core
+ * RELAY_FAILURES), on sample values: it says what happened first (the
+ * clause before its first colon), then the fix; a command it names sits in
+ * its sentence word for word; no backtick anywhere.
+ */
+/** A relay failure's first clause: what happened, up to its first colon. */
+const HAPPENED =
+  /^The relay(?:'s certificate[^:]*?)? (?:could not start|was not renewed)[^:]*:/;
+/** The verb its fix opens with. */
+const FIX = /\b(?:Run|Install|Free|Give|Point|Check|Start|Try|Pick)\b/;
+
+const failures = (kit: Kit): void => {
+  const samples = {
+    notLinux: RELAY_FAILURES.notLinux("relay"),
+    noRuntime: RELAY_FAILURES.noRuntime("relay", "sudo apt install podman"),
+    notDnsName: RELAY_FAILURES.notDnsName("relay", "relay_example"),
+    lowPort: RELAY_FAILURES.lowPort("relay", 443),
+    held: HELD,
+    port80: RELAY_FAILURES.port80("relay", "TCP 80 is held by nginx (pid 12)"),
+    certificate: RELAY_FAILURES.certificate(
+      "relay",
+      "relay.example.com",
+      "Detail: DNS problem: NXDOMAIN looking up A for relay.example.com"
+    ),
+    certbotSlow: RELAY_FAILURES.certbotSlow("relay", 180),
+    coturnExited: RELAY_FAILURES.coturnExited(
+      "relay",
+      "1",
+      "bind: Permission denied"
+    ),
+    coturnUnbound: RELAY_FAILURES.coturnUnbound("relay", ["TCP 443"], 20),
+    renewNone: RELAY_FAILURES.renewNone("relay"),
+    renewPort80: RELAY_FAILURES.renewPort80(
+      "relay",
+      "relay.example.com",
+      "TCP 80 is held by nginx (pid 12)"
+    ),
+    renewRefused: RELAY_FAILURES.renewRefused(
+      "relay",
+      "relay.example.com",
+      "Detail: too many certificates already issued"
+    ),
+  };
+  const read = Object.entries(samples).map(([name, failure]) => {
+    const head = HAPPENED.exec(failure.why)?.[0] ?? "";
+    const fixAt = failure.why.search(FIX);
+    return {
+      name,
+      head,
+      ordered: head.length > 0 && fixAt > head.length,
+      command:
+        failure.command === undefined || failure.why.includes(failure.command),
+      backtick: failure.why.includes("`"),
+    };
+  });
+  kit.check(
+    `every relay failure (${read.length}) says what happened first ("The relay could not start on relay:" / "…was not renewed:"), then the fix; a named command inside its sentence; no backtick`,
+    read.every((row) => row.ordered && row.command && !row.backtick),
+    JSON.stringify(
+      read.filter((row) => !(row.ordered && row.command) || row.backtick)
+    )
+  );
+};
+
 const spec: Spec = {
   name: "stream-relay-step",
   run: async (kit: Kit) => {
+    failures(kit);
     const base = await kit.built();
     for (const leg of LEGS) {
       // biome-ignore lint/performance/noAwaitInLoops: one width at a time, each state on its own page

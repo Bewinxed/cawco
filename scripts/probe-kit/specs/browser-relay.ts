@@ -36,7 +36,10 @@ import { hostname as machineHostname } from "node:os";
 import { connect as tlsConnect } from "node:tls";
 import { connect, getPublicIP } from "turn-server";
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
-import type { RelayStartArgs } from "../../../packages/core/src/stream-relay";
+import type {
+  RelayFailure,
+  RelayStartArgs,
+} from "../../../packages/core/src/stream-relay";
 import { STREAM_RELAY_PORTS } from "../../../packages/core/src/stream-relay";
 import type { Kit, Spec } from "../kit";
 
@@ -50,7 +53,7 @@ const TURN_MS = 8000;
 const PRIVATE_PEER = "10.0.0.5";
 /** The fix the relay's refusal names. */
 const SYSCTL =
-  /sudo sysctl -w net\.ipv4\.ip_unprivileged_port_start=(?:443|80)/;
+  /^sudo sysctl -w net\.ipv4\.ip_unprivileged_port_start=(?:443|80)$/;
 
 const flag = (name: string): string | undefined => {
   const at = process.argv.indexOf(`--${name}`);
@@ -255,14 +258,17 @@ const refusedLegs = async (
   relay: Relay,
   runtime: Runtime,
   args: RelayStartArgs,
-  refusal: string
+  refusal: RelayFailure
 ): Promise<void> => {
   const start = await (
     await import("node:fs/promises")
   ).readFile("/proc/sys/net/ipv4/ip_unprivileged_port_start", "utf8");
   const thrown = await relay.startRelay(args).then(
-    () => "started",
-    (error: unknown) => said(error)
+    () => ({ said: "started", command: undefined }),
+    (error: unknown) => ({
+      said: said(error),
+      command: error instanceof relay.RelayFailed ? error.command : undefined,
+    })
   );
   const made = await runtime.docker
     .getContainer(relay.RELAY_CONTAINER)
@@ -272,8 +278,11 @@ const refusedLegs = async (
       () => false
     );
   kit.check(
-    `rootless with ip_unprivileged_port_start=${start.trim()}: failed with the sysctl sentence, no container started ("${thrown}")`,
-    thrown === refusal && !made && SYSCTL.test(thrown),
+    `rootless with ip_unprivileged_port_start=${start.trim()}: failed with the sysctl sentence, its command beside it, no container started ("${thrown.said}"; command "${thrown.command}")`,
+    thrown.said === refusal.why &&
+      thrown.command === refusal.command &&
+      SYSCTL.test(thrown.command ?? "") &&
+      !made,
     `container ${relay.RELAY_CONTAINER} ${made ? "exists" : "absent"}`
   );
   const where = ` (443 refused here: coturn started by this spec with the relay's arguments, its second plain port on ${MOVED_ALT})`;

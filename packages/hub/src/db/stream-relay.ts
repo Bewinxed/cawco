@@ -21,6 +21,8 @@ export interface StoredRelay {
   state: StreamRelayState;
   wanted: boolean;
   why: string | null;
+  /** The command `why` names as its fix, word for word inside it. */
+  whyCommand: string | null;
 }
 
 /** What a change to the record names; the rest stays. */
@@ -30,6 +32,7 @@ export type RelayChange = Partial<
     | "state"
     | "ports"
     | "why"
+    | "whyCommand"
     | "health"
     | "checkedAt"
     | "certificateEndsAt"
@@ -82,6 +85,7 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
           state: row.state,
           ports: row.ports,
           why: row.why,
+          whyCommand: row.whyCommand,
           health: row.health,
           checkedAt: time(row.checkedAt),
           certificateEndsAt: time(row.certificateEndsAt),
@@ -99,6 +103,7 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
       state: "starting" as const,
       ports: null,
       why: null,
+      whyCommand: null,
       health: [],
       checkedAt: null,
       certificateEndsAt: null,
