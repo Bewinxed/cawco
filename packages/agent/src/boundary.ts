@@ -69,6 +69,7 @@ import {
   access,
   chmod,
   copyFile,
+  lstat,
   mkdir,
   readdir,
   readFile,
@@ -4374,15 +4375,29 @@ exit "$status"
  * XDG homes and Maestro's home in it, and the caches it writes. Never nested in one another
  * (srt #446), but for the XDG homes, which are only the scratch dir's
  * contents. A HOME so long that a browser's socket in the scratch dir cannot
- * fit is said in the log: everything else in the workspace still runs.
+ * fit is said in the log: everything else in the workspace still runs. The
+ * workspace writes its scratch dir, so a folder of it that a link the
+ * workspace planted leads out of it ({@link ownInScratch}) is never made
+ * through or written into, and the log says so; the git config link and the
+ * bunfig go only into a config home of the scratch dir's own.
  */
-const makeDirs = async (id: string): Promise<void> => {
+export const makeDirs = async (id: string): Promise<void> => {
   const tooLong = scratchSocketProblem(id);
   if (tooLong) {
     console.warn(`[workspace] ${id}: ${tooLong}`);
   }
   await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
   const xdg = workspaceXdgDirs(id);
+  const inScratch = [xdg.config, xdg.data, xdg.state, workspaceMaestroHome(id)];
+  const own = await Promise.all(
+    inScratch.map((path) => ownInScratch(id, path))
+  );
+  const planted = inScratch.filter((_, at) => !own[at]);
+  if (planted.length > 0) {
+    console.warn(
+      `[workspace] ${id}: ${planted.join(", ")} lead out of its scratch dir through a link in it, so nothing was made or written there`
+    );
+  }
   await Promise.all(
     [
       stateDir(id),
@@ -4390,17 +4405,38 @@ const makeDirs = async (id: string): Promise<void> => {
       gitTemplateOf(id),
       ghConfigOf(id),
       scratchOf(id),
-      xdg.config,
-      xdg.data,
-      xdg.state,
-      workspaceMaestroHome(id),
+      ...inScratch.filter((path) => !planted.includes(path)),
       ...workspaceCaches(),
     ].map((path) => mkdir(path, { recursive: true }))
   );
-  await linkGitConfig(xdg.config);
-  await writeBunConfig(id, xdg.config);
+  if (!planted.includes(xdg.config)) {
+    await linkGitConfig(xdg.config);
+    await writeBunConfig(xdg.config);
+  }
   // Its `TMPDIR`'s short name on macOS, made again after a restart cleared it.
   linkWorkspaceTmp(id);
+};
+
+/**
+ * Whether `path`, in workspace `id`'s scratch dir, is reached from the
+ * scratch dir through folders of its own: no entry on the way down is a
+ * link (or anything but a folder), each looked at without following it.
+ * One not there yet is the scratch dir's own: `mkdir` makes it there.
+ */
+const ownInScratch = async (id: string, path: string): Promise<boolean> => {
+  let at = scratchOf(id);
+  for (const part of relative(at, path).split("/")) {
+    at = join(at, part);
+    // biome-ignore lint/performance/noAwaitInLoops: each entry is looked at before the one inside it
+    const found = await lstat(at).catch(() => undefined);
+    if (!found) {
+      return true;
+    }
+    if (!found.isDirectory()) {
+      return false;
+    }
+  }
+  return true;
 };
 
 /** The global bunfig {@link writeBunConfig} writes: bun's global virtual store on. */
@@ -4429,27 +4465,13 @@ globalStore = true
  * whose packages import what they never declare (they no longer reach its
  * root `node_modules` from the store) says `globalStore = false` in its own
  * (bun.com/docs/runtime/bunfig: "keys set in the local file override the
- * same keys in the global file"). Written only as a new file in a config
- * home that is a folder of the scratch dir's own (the workspace writes the
- * scratch dir, and a link it planted there is never followed); one there
- * already is the workspace's to keep. On macOS bun clones files inside its
- * boundary already: Seatbelt makes no mounts.
+ * same keys in the global file"). Written only as a new file, in a config
+ * home of the scratch dir's own ({@link makeDirs}); one there already is
+ * the workspace's to keep. On macOS bun clones files inside its boundary
+ * already: Seatbelt makes no mounts.
  */
-const writeBunConfig = async (
-  id: string,
-  configHome: string
-): Promise<void> => {
+const writeBunConfig = async (configHome: string): Promise<void> => {
   if (process.platform !== "linux") {
-    return;
-  }
-  const own = join(
-    await realpath(scratchOf(id)),
-    relative(scratchOf(id), configHome)
-  );
-  if ((await realpath(configHome)) !== own) {
-    console.warn(
-      `[workspace] ${id}: its config home ${configHome} leads elsewhere through a link, so no bunfig was written there: its bun installs copy from the workspaces' cache`
-    );
     return;
   }
   try {
@@ -4467,8 +4489,9 @@ const writeBunConfig = async (
  * `<config home>/git`, a link to the user's own git config dir: git reads
  * `$XDG_CONFIG_HOME/git/config` and `…/ignore` (git-config(1) "FILES",
  * gitignore(5) `core.excludesFile`), so with the workspace's own config home
- * it reads the user's, as it did before. A link the workspace replaced is
- * its own to keep.
+ * it reads the user's, as it did before. Made only in a config home of the
+ * scratch dir's own ({@link makeDirs}); a link the workspace replaced is its
+ * own to keep.
  */
 const linkGitConfig = async (configHome: string): Promise<void> => {
   try {
