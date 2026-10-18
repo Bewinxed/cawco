@@ -23,8 +23,15 @@ export interface PopoverMember {
   readonly rows?: string;
   readonly trapFocus: boolean;
   readonly trigger: HTMLElement | null;
-  readonly width: number;
+  readonly width: PopoverWidth;
 }
+
+/** A surface's width: pixels, or a CSS length such as a token's `var(--c-…)`. */
+export type PopoverWidth = number | string;
+
+/** `width` as the surface's `--ns-pop-width` value. */
+export const popoverWidth = (width: PopoverWidth): string =>
+  typeof width === "number" ? `${width}px` : width;
 
 export class PopoverGroup {
   members = $state.raw<PopoverMember[]>([]);

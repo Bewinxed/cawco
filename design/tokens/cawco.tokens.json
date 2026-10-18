@@ -3960,6 +3960,14 @@
       },
       "$description": "A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line (\"back in 4h 50m\", 82px in meta) stands on one line."
     },
+    "c-signin-pop-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 340,
+        "unit": "px"
+      },
+      "$description": "The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next."
+    },
     "c-caw-panel-h": {
       "$type": "dimension",
       "$value": {

@@ -20,6 +20,7 @@
   import {
     type PopoverMember,
     popoverGroup,
+    popoverWidth,
     providePopoverGroup,
   } from "./popover-group.svelte";
 
@@ -131,7 +132,7 @@
           }}
           side="bottom"
           sideOffset={6}
-          style={`--ns-pop-width:${shown.width}px`}
+          style={`--ns-pop-width:${popoverWidth(shown.width)}`}
           trapFocus={shown.trapFocus}
         >
           {#snippet child({ props, wrapperProps, open })}

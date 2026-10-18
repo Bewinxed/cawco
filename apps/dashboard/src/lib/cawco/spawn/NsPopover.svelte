@@ -11,7 +11,12 @@
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
-  import { type PopoverMember, popoverGroup } from "./popover-group.svelte";
+  import {
+    type PopoverMember,
+    type PopoverWidth,
+    popoverGroup,
+    popoverWidth,
+  } from "./popover-group.svelte";
 
   let {
     id,
@@ -42,7 +47,8 @@
     onclosefocus?: () => boolean;
     trigger?: Snippet;
     children: Snippet;
-    width?: number;
+    /** Pixels, or a CSS length such as a token's `var(--c-…)`. */
+    width?: PopoverWidth;
     gap?: number;
     align?: "start" | "end" | "center";
     trapFocus?: boolean;
@@ -169,7 +175,7 @@
         }}
         side="bottom"
         sideOffset={6}
-        style={`--ns-pop-width:${width}px;--ns-pop-gap:${gap}px`}
+        style={`--ns-pop-width:${popoverWidth(width)};--ns-pop-gap:${gap}px`}
         {trapFocus}
       >
         {#snippet child({ props, wrapperProps, open })}

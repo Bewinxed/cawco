@@ -533,6 +533,8 @@ public enum Size {
     public static let cFindW: Double = 520
     /// A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line.
     public static let cPanelW: Double = 380
+    /// The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next.
+    public static let cSigninPopW: Double = 340
     /// Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters and earlier threads; shorter where the room under his seat is less.
     public static let cCawPanelH: Double = 640
     /// The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top.

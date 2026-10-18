@@ -291,6 +291,7 @@ export type TokenSize =
   | "size.c-toolbar-ctl"
   | "size.c-find-w"
   | "size.c-panel-w"
+  | "size.c-signin-pop-w"
   | "size.c-caw-panel-h"
   | "size.c-top-bar-h"
   | "size.c-bar-toggle-glyph"
