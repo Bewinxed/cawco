@@ -61,7 +61,7 @@ import {
   type PermissionResult,
   type WorkspaceRef,
 } from "@cawco/core";
-import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { DbShape, WorkItemRow } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { DesignProposalFile } from "./db/schema";
@@ -845,7 +845,7 @@ const folderStore = (
         "--",
         `${DESIGN_DIR}/${MANIFEST}`,
       ],
-      { cwd: projectRoot(projectId) }
+      { cwd: projectRoot(projectId), env: { ...process.env, ...GIT_LOCALE } }
     );
     if (read.exitCode !== 0) {
       // A folder git has no history for yet holds no system.
@@ -862,7 +862,12 @@ const folderStore = (
   // Every folder write is its own commit already.
   commit: () =>
     Promise.resolve(
-      Bun.spawnSync(["git", "-C", projectRoot(projectId), "rev-parse", "HEAD"])
+      Bun.spawnSync(
+        ["git", "-C", projectRoot(projectId), "rev-parse", "HEAD"],
+        {
+          env: { ...process.env, ...GIT_LOCALE },
+        }
+      )
         .stdout.toString()
         .trim()
     ),
@@ -1093,16 +1098,19 @@ export const createDesignSystem = (deps: {
     }
     const folder = projectRoot(projectId);
     if (existsSync(join(folder, DESIGN_DIR))) {
-      const read = Bun.spawnSync([
-        "git",
-        "-C",
-        folder,
-        "status",
-        "--porcelain",
-        "--untracked-files=all",
-        "--",
-        DESIGN_DIR,
-      ]);
+      const read = Bun.spawnSync(
+        [
+          "git",
+          "-C",
+          folder,
+          "status",
+          "--porcelain",
+          "--untracked-files=all",
+          "--",
+          DESIGN_DIR,
+        ],
+        { env: { ...process.env, ...GIT_LOCALE } }
+      );
       const line = uncommittedLine(
         "the project's folder",
         read.stdout.toString()

@@ -50,6 +50,7 @@ import {
   workspaceReadOnlyDir,
 } from "@cawco/core/paths";
 import {
+  GIT_LOCALE,
   repositoryConfigProblem,
   SAFE_GIT_ENV,
   safeGitArgv,
@@ -465,6 +466,7 @@ export const hostGithubGitEnv = async (): Promise<Record<string, string>> => {
   ];
   return {
     ...(hostEnvironment() as Record<string, string>),
+    ...GIT_LOCALE,
     GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_COUNT: String(first + pairs.length),
     ...Object.fromEntries(

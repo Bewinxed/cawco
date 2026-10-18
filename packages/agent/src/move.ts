@@ -43,6 +43,7 @@ import {
   type MoveSnapshotResult,
 } from "@cawco/core";
 import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
+import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
@@ -267,6 +268,7 @@ export const hubGitEnv = (
   const lfs = lfsEndpointOf(repo);
   return {
     ...hostEnvironment(),
+    ...GIT_LOCALE,
     GIT_TERMINAL_PROMPT: "0",
     ...configEnv([
       [`http.${repo}.extraHeader`, `Authorization: Basic ${basicOf()}`],
@@ -286,6 +288,7 @@ export const hubGitEnv = (
 const plainEnv = (extra: [string, string][] = []): Record<string, string> =>
   ({
     ...hostEnvironment(),
+    ...GIT_LOCALE,
     GIT_TERMINAL_PROMPT: "0",
     GIT_OPTIONAL_LOCKS: "0",
     ...configEnv(extra),

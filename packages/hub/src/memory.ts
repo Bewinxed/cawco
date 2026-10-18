@@ -97,6 +97,7 @@ import {
   type PermissionResult,
   type ThreadNote,
 } from "@cawco/core";
+import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import type {
   JevChoiceAnswer,
@@ -980,6 +981,7 @@ const mergeThree = async (
     const child = Bun.spawn(["git", "merge-file", "-p", ours, from, theirs], {
       env: {
         PATH: process.env.PATH ?? "",
+        ...GIT_LOCALE,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_CONFIG_GLOBAL: devNull,
       },

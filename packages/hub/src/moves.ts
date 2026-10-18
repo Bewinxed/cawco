@@ -57,6 +57,7 @@ import {
   MachinePathRefused,
   machinePath,
 } from "@cawco/core/machine-path";
+import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hubRemoteIdentity, normaliseRemote } from "@cawco/core/upstream-guard";
 import { checkoutOf, type DbShape, type MoveRow, type ProjectRow } from "./db";
 import { bareRepoPath } from "./git-remote";
@@ -269,6 +270,7 @@ const errorOf = (stage: MoveStep, error: unknown): MoveError => {
 
 const runGit = async (args: string[]): Promise<string | null> => {
   const child = Bun.spawn(["git", ...args], {
+    env: { ...process.env, ...GIT_LOCALE },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",

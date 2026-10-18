@@ -23,6 +23,7 @@ import {
   type ProjectSettingChange,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { GIT_LOCALE } from "@cawco/core/safe-git";
 import type { Connections } from "./connections";
 import type { ProjectRow } from "./db";
 import type { PlaceRepos } from "./place-repo";
@@ -163,6 +164,7 @@ export const createRepoPublish = ({
           env: {
             PATH: process.env.PATH ?? "/usr/bin:/bin",
             HOME: process.env.HOME ?? "/",
+            ...GIT_LOCALE,
             GIT_TERMINAL_PROMPT: "0",
             GIT_CONFIG_COUNT: "1",
             GIT_CONFIG_KEY_0: "http.extraHeader",
