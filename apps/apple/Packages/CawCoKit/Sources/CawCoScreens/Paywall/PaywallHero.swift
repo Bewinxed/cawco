@@ -30,7 +30,7 @@ struct HeroBanner: Equatable {
             let row = fleet.byId[ask.instanceId]
             let machine = row.map { fleet.machineName($0.machineId) } ?? first
             let line = ask.summary.split(separator: "\n").first.map(String.init) ?? ask.summary
-            let harness = row?.harness.rawValue ?? exampleHarness
+            let harness = row?.harness?.rawValue ?? exampleHarness
             return HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(harness), machine: machine), body: line)
         }
         let pair = home.working.lazy.compactMap(\.session).first.map { (harness: $0.harness.rawValue, machine: fleet.machineName($0.machineId)) }

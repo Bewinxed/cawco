@@ -213,7 +213,7 @@ final class PaneHost {
             }
             return name
         }
-        return names[id] ?? title(id) ?? row.map(fleet.title)
+        return names[id] ?? title(id) ?? row.map { fleet.title($0) }
             ?? hub.needs.parked[id]?.lazy.compactMap(HomeModel.asker).first ?? String(id.prefix(8))
     }
 
