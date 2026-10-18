@@ -117,8 +117,12 @@
   /**
    * The list has drawn this row where it stands: virtua has measured it, so
    * its item is no longer hidden. From then on its item ignores virtua's
-   * hiding and inherits the list's visibility (Transcript's `[data-drawn]`),
-   * so a hidden page or pane above still hides it. virtua keeps sizes by index and
+   * hiding and inherits the list's visibility (Transcript's `[data-drawn]`,
+   * written on the item here: asked as `:has()` of the row, every node put
+   * in anywhere under the row walked up and restyled its item, Chromium
+   * copying that walk's flag to each inserted element and never resetting
+   * it, has_invalidation_flags.h, style_engine.cc `ForInsertion`), so a
+   * hidden page or pane above still hides it. virtua keeps sizes by index and
    * hides an item at an index it has no size for, so a row drawn long ago
    * that a row put in above moves down an index was hidden and shown again
    * in the same frame, as virtua measured it there. Visibility inherits, so
@@ -133,7 +137,9 @@
    * list held hidden) asked for ever: seven such rows made every frame of
    * the page a main-thread frame, 435 callbacks a second at rest.
    */
-  let drawn = $state(false);
+  /** The item marked drawn: it stays marked for as long as this row lives. */
+  let drawnOn: HTMLElement | null = null;
+  $effect(() => () => drawnOn?.removeAttribute("data-drawn"));
   $effect(() => {
     const row = node;
     if (!(row && rowKey !== undefined)) {
@@ -154,7 +160,11 @@
         return;
       }
       styled.disconnect();
-      drawn = true;
+      if (drawnOn !== item) {
+        drawnOn?.removeAttribute("data-drawn");
+        drawnOn = item;
+      }
+      item?.setAttribute("data-drawn", "");
     };
     frame = requestAnimationFrame(look);
     return () => {
@@ -454,7 +464,6 @@
   data-slot="row"
   data-continues={continues || undefined}
   class="flow-root data-marked:relative"
-  data-drawn={drawn || undefined}
   data-marked={marked}
   data-row={rowKey}
   bind:this={node}
