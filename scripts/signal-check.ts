@@ -45,10 +45,6 @@ const KNOWN = new Map<string, string>([
   ["packages/hub/src/join.ts", "the SSH leaf converts it"],
   ["packages/hub/src/ssh-tunnels.ts", "the SSH leaf converts it"],
   ["scripts/probe-kit/specs/ssh-reach.ts", "the SSH leaf converts it"],
-  [
-    "site/scripts/deploy.mjs",
-    "it runs under node, which cannot load core's module (it reads the kernel through bun:ffi): it raises its child's signal on its own pid again",
-  ],
 ]);
 
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/;

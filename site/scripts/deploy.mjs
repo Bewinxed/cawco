@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { constants, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,7 +9,8 @@ process.chdir(fileURLToPath(new URL('..', import.meta.url)));
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { stdio: 'inherit', ...options });
   if (result.error) throw result.error;
-  if (result.signal) process.kill(process.pid, result.signal);
+  // A child ended by a signal exits as the shell reports one: 128 plus its number.
+  if (result.signal) process.exit(128 + constants.signals[result.signal]);
   if (result.status !== 0) process.exit(result.status);
 }
 
