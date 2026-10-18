@@ -77,6 +77,7 @@
     joinArtifact,
     sendArtifact,
   } from "./artifact-doc";
+  import CanvasView from "./CanvasView.svelte";
   import { loadedPanes } from "./loaded.svelte";
   import PinCard from "./PinCard.svelte";
   import PinList from "./PinList.svelte";
@@ -1816,6 +1817,10 @@
       target="_blank"
       title="Open in new tab"><IconExternal /></a
     >
+  {/if}
+  {#if isSheet}
+    <!-- A component canvas's view: its frames' scheme, widths, motion and zoom. -->
+    <CanvasView {instanceId} {post} ready={connected} />
   {/if}
   {#if inspector}
     <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->

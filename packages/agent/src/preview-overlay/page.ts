@@ -912,6 +912,8 @@ function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
   };
 }
 const FRAME_INTERACTIONS = ["rest", "hover", "focus", "pressed"];
+/** The widest frame a pane may ask a canvas for, px. Ours: past a desk's. */
+const CANVAS_WIDTH_MAX = 3840;
 
 function reactSource(
   el: Element
@@ -1859,6 +1861,39 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       dispatchEvent(
         new CustomEvent("cawco:story-select", {
           detail: { story: message.story },
+        })
+      );
+    },
+    // A component canvas's view from the pane's head: scheme, widths, motion, every permutation, zoom.
+    "cawco:canvas-view": (message) => {
+      const view = message.view as Record<string, unknown> | undefined;
+      if (!view || typeof view !== "object") {
+        return;
+      }
+      const widths = Array.isArray(view.widths)
+        ? view.widths.filter(
+            (one): one is number =>
+              typeof one === "number" && one > 0 && one <= CANVAS_WIDTH_MAX
+          )
+        : null;
+      dispatchEvent(
+        new CustomEvent("cawco:canvas-view", {
+          detail: {
+            ...(["light", "dark", "both", "page"].includes(String(view.scheme))
+              ? { scheme: view.scheme }
+              : {}),
+            ...("widths" in view
+              ? { widths: widths?.length ? widths : null }
+              : {}),
+            ...(view.motion === "on" || view.motion === "reduce"
+              ? { motion: view.motion }
+              : {}),
+            ...(typeof view.all === "boolean" ? { all: view.all } : {}),
+            ...(view.zoom === "fit" ||
+            (typeof view.zoom === "number" && view.zoom > 0 && view.zoom <= 4)
+              ? { zoom: view.zoom }
+              : {}),
+          },
         })
       );
     },
