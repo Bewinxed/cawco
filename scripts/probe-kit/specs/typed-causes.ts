@@ -31,9 +31,17 @@
  *
  *   bun scripts/probe-kit/run.ts typed-causes
  */
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { SshJoinJob } from "../../../packages/core/src/join";
 import { until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -477,6 +485,170 @@ const trailerless = async (kit: Kit, scratch: string): Promise<void> => {
   );
 };
 
+/**
+ * ssh, its stderr in German, and its known hosts read from
+ * `PROBE_KNOWN_HOSTS` alone: a stand-in for an ssh with a German catalog
+ * (OpenSSH has none) under a hub user whose known_hosts is the probe's.
+ */
+const GERMAN_SSH = String.raw`#!/bin/sh
+err=$(mktemp)
+/usr/bin/ssh -o UserKnownHostsFile="$PROBE_KNOWN_HOSTS" -o GlobalKnownHostsFile=/dev/null "$@" 2>"$err"
+code=$?
+sed -e 's/Connection refused/Verbindung abgelehnt/' \
+  -e 's/Could not resolve hostname/Hostname konnte nicht aufgelöst werden/' \
+  -e 's/Name or service not known/Name oder Dienst nicht bekannt/' \
+  -e 's/Temporary failure in name resolution/Vorübergehender Fehler bei der Namensauflösung/' \
+  -e 's/Permission denied/Zugriff verweigert/' \
+  -e 's/REMOTE HOST IDENTIFICATION HAS CHANGED/IDENTIFIKATION DES ENTFERNTEN HOSTS HAT SICH GEÄNDERT/' \
+  -e 's/Host key verification failed/Überprüfung des Host-Schlüssels fehlgeschlagen/' \
+  "$err" >&2
+rm -f "$err"
+exit $code
+`;
+
+/** A loopback port nothing listens on: one the kernel handed out, closed again. */
+const closedPort = (): number => {
+  const server = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: { data: () => undefined },
+  });
+  const { port } = server;
+  server.stop(true);
+  return port;
+};
+
+/**
+ * F: an SSH add's failures, measured, while ssh speaks German: a port that
+ * refuses, a name that does not resolve, a machine whose host key is not the
+ * one the hub knows, and a sign-in the machine refuses. The add is a scratch
+ * hub's (`POST /api/machines/ssh`, the job's poll), its PATH leading with the
+ * German `ssh` ({@link GERMAN_SSH}), over a real `sshd` on the loopback with
+ * a host key of its own. `ssh-keyscan` runs from a copy of the host's on
+ * that PATH: the workspace boundary execs `/usr/bin/ssh-keyscan` with its
+ * stdout closed (fd 1 free at its first `openat`), and the same binary
+ * elsewhere prints as it should.
+ */
+const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
+  const dir = join(scratch, "ssh");
+  const bin = join(dir, "bin");
+  await mkdir(bin, { recursive: true });
+  await writeFile(join(bin, "ssh"), GERMAN_SSH);
+  await chmod(join(bin, "ssh"), 0o755);
+  const keyscan = Bun.which("ssh-keyscan");
+  if (keyscan) {
+    await copyFile(keyscan, join(bin, "ssh-keyscan"));
+    await chmod(join(bin, "ssh-keyscan"), 0o755);
+  }
+  const knownHosts = join(dir, "known_hosts");
+  await writeFile(knownHosts, "");
+  const hostKey = join(dir, "host_key");
+  const otherKey = join(dir, "other_key");
+  for (const key of [hostKey, otherKey]) {
+    // biome-ignore lint/performance/noAwaitInLoops: two keys, made one at a time
+    await shell(
+      dir,
+      process.env as Record<string, string>,
+      `ssh-keygen -q -t ed25519 -N '' -f '${key}'`
+    );
+  }
+  const port = closedPort();
+  await writeFile(
+    join(dir, "sshd_config"),
+    [
+      `Port ${port}`,
+      "ListenAddress 127.0.0.1",
+      `HostKey ${hostKey}`,
+      "PidFile none",
+      "UsePAM no",
+      "StrictModes no",
+      "AuthorizedKeysFile none",
+      "",
+    ].join("\n")
+  );
+  const server = Bun.spawn(
+    ["/usr/sbin/sshd", "-D", "-e", "-f", join(dir, "sshd_config")],
+    { stdout: "ignore", stderr: "ignore" }
+  );
+  try {
+    await until(
+      "F: sshd listening",
+      () =>
+        shell(
+          dir,
+          process.env as Record<string, string>,
+          `'${join(bin, "ssh-keyscan")}' -T 2 -p ${port} 127.0.0.1`
+        ).then((scan) => scan.stdout.includes("ssh-ed25519")),
+      Boolean,
+      10_000
+    );
+    const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
+    fleet.launch("hub", [], {
+      PATH: `${bin}:${fleet.env.PATH}`,
+      PROBE_KNOWN_HOSTS: knownHosts,
+    });
+    await fleet.hubUp();
+    /** One add through the hub's route, polled until it is not running. */
+    const add = async (target: string, at: number) => {
+      const started = await fleet.api<SshJoinJob>("/api/machines/ssh", {
+        target,
+        port: at,
+      });
+      return await until(
+        `F: the add to ${target}`,
+        () => fleet.api<SshJoinJob>(`/api/machines/ssh/${started.id}`),
+        (job) => job.state !== "running",
+        60_000
+      );
+    };
+    const said = (job: SshJoinJob) =>
+      job.lines.slice(-3).join(" | ").slice(0, 200);
+
+    const refused = await add("probe@127.0.0.1", closedPort());
+    kit.check(
+      "F: an SSH add to a port that refuses is unreachable by the hub's TCP connect's errno, whatever ssh says",
+      refused.problem?.kind === "unreachable" &&
+        refused.problem.detail === "connection refused",
+      `${JSON.stringify(refused.problem)}; ssh said ${said(refused)}`
+    );
+
+    const unnamed = await add("probe@cawco-probe-nowhere.invalid", 22);
+    kit.check(
+      "F: an SSH add to a name that does not resolve is unreachable by getaddrinfo's error, whatever ssh says",
+      unnamed.problem?.kind === "unreachable" &&
+        unnamed.problem.detail ===
+          "the name cawco-probe-nowhere.invalid did not resolve",
+      `${JSON.stringify(unnamed.problem)}; ssh said ${said(unnamed)}`
+    );
+
+    const other = (await Bun.file(`${otherKey}.pub`).text())
+      .trim()
+      .split(" ")
+      .slice(0, 2)
+      .join(" ");
+    await writeFile(knownHosts, `[127.0.0.1]:${port} ${other}\n`);
+    const changed = await add("probe@127.0.0.1", port);
+    kit.check(
+      "F: an SSH add whose machine offers none of the host keys the hub knows it by is host-key, by ssh-keyscan against ssh-keygen -F",
+      changed.problem?.kind === "host-key",
+      `${JSON.stringify(changed.problem)}; ssh said ${said(changed)}`
+    );
+
+    await writeFile(knownHosts, "");
+    const denied = await add("probe@127.0.0.1", port);
+    kit.check(
+      "F: an SSH add whose sign-in ssh refused is the sign-in step, with ssh's own words shown under it",
+      denied.problem?.kind === "step" &&
+        denied.problem.step === "signing in over SSH" &&
+        denied.lines.some((line) => line.includes("Zugriff verweigert")),
+      `${JSON.stringify(denied.problem)}; ssh said ${said(denied)}`
+    );
+  } finally {
+    server.kill();
+    await server.exited;
+  }
+};
+
 const spec: Spec = {
   name: "typed-causes",
   run: async (kit: Kit) => {
@@ -489,6 +661,7 @@ const spec: Spec = {
       await germanPlace(kit, scratch);
       await germanRace(kit, scratch);
       await trailerless(kit, scratch);
+      await sshJoin(kit, scratch);
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }

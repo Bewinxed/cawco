@@ -24,8 +24,8 @@
  * the hub's port, without installing a build on this host.
  *
  * (a) Before any password, a key add is refused: the machine does not trust
- *     the hub's key yet.
- * (b) A wrong password is refused, classified as `password`, nothing added.
+ *     the hub's key yet. It fails on the sign-in step, ssh's words below it.
+ * (b) A wrong password is refused on the sign-in step, nothing added.
  * (c) The right password: the target's `authorized_keys` holds the hub's key
  *     once (`.ssh` 700, the file 600), and the install ran with that key,
  *     through the port the hub's connection carries.
@@ -36,7 +36,7 @@
  *     `ssh` and every process of its group are gone, and a fresh add works.
  * (h) A wrong password the machine answers with silence (as a firewall that
  *     bans the address after a failed password) ends the add within
- *     {@link SILENT_MS}, as a machine that stopped answering.
+ *     {@link SILENT_MS}, on the sign-in step: the hub reached its port.
  * (l) On a real OpenSSH sshd, Stop ends the command on the machine too
  *     (sshd signals none started without a terminal), and an add that runs
  *     to its end leaves no watchdog behind.
@@ -160,6 +160,16 @@ const modesOf = (dir: string, file: string): string =>
     : "none";
 
 const OVER_SSH = /Over SSH/;
+
+/** The step an add fails on when ssh ended before the machine ran anything (hub join.ts `SIGN_IN_STEP`). */
+const SIGN_IN = "signing in over SSH";
+
+/** An add ssh ended before its remote command spoke: the sign-in step, no step line of the machine's. */
+const refusedSignIn = (job: SshJoinJob): boolean =>
+  job.state === "failed" &&
+  job.problem?.kind === "step" &&
+  job.problem.step === SIGN_IN &&
+  !job.lines.some((line) => line.startsWith("cawco-install: "));
 
 /**
  * The install ran on the machine through the hub's connection: the hub's
@@ -438,17 +448,17 @@ async function run(kit: Kit): Promise<void> {
     // (a) The hub's key is not trusted yet.
     const before = await add();
     kit.check(
-      "a: before a password, the machine refuses the hub's key",
-      before.problem?.kind === "key" && keyLines().length === 0,
+      "a: before a password, the machine refuses the hub's key: the sign-in step, ssh's words below it",
+      refusedSignIn(before) && keyLines().length === 0,
       seen(before)
     );
 
     // (b) A wrong password.
     const { job: wrong, ms: wrongMs } = await timedAdd(WRONG);
     kit.check(
-      `b: a wrong password is refused within ${REFUSED_MS / 1000} s and classified as the password (asked, beside a null problem while the bridge stands), and nothing is added`,
-      wrong.problem === null &&
-        wrong.passwordProblem?.asked === true &&
+      `b: a wrong password is refused within ${REFUSED_MS / 1000} s on the sign-in step, and nothing is added`,
+      refusedSignIn(wrong) &&
+        wrong.passwordProblem === undefined &&
         wrongMs < REFUSED_MS &&
         triedPasswords.includes(WRONG) &&
         keyLines().length === 0,
@@ -523,11 +533,8 @@ async function run(kit: Kit): Promise<void> {
     // (h) A wrong password met with silence: the add ends, it never spins.
     const { job: silent, ms: silentMs } = await timedAdd(SILENCED);
     kit.check(
-      `h: a sign-in the machine stops answering ends within ${SILENT_MS / 1000} s, as a machine that did not answer (timed out)`,
-      silent.state === "failed" &&
-        silent.problem?.kind === "unreachable" &&
-        silent.problem.detail.includes("timed out") &&
-        silentMs < SILENT_MS,
+      `h: a sign-in the machine stops answering ends within ${SILENT_MS / 1000} s, on the sign-in step: the hub reached its port`,
+      refusedSignIn(silent) && silentMs < SILENT_MS,
       `${seen(silent)}; ended after ${silentMs} ms`
     );
 
