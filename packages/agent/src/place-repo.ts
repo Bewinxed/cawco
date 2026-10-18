@@ -64,14 +64,20 @@ class GitFailed extends Error {
 }
 
 /**
- * The nearest `.git` at `root` or above it, when one is there: git's 128
- * there is a repository it would not read (a damaged one, someone else's),
- * never a folder in none.
+ * The nearest `.git` at `root` or above it on its filesystem, when one is
+ * there: git's 128 there is a repository it would not read (a damaged one,
+ * someone else's), never a folder in none. Discovery stops where git's does,
+ * at a filesystem boundary (`GIT_DISCOVERY_ACROSS_FILESYSTEM` unset): a
+ * `.git` past it is one git rightly does not look for.
  */
 const gitAbove = async (root: string): Promise<string | undefined> => {
+  const device = (await stat(root)).dev;
   for (let at = root; ; at = dirname(at)) {
-    const dotGit = join(at, ".git");
     // biome-ignore lint/performance/noAwaitInLoops: nearest first, and each step depends on the last
+    if ((await stat(at).catch(() => undefined))?.dev !== device) {
+      return;
+    }
+    const dotGit = join(at, ".git");
     if (await lstat(dotGit).then(Boolean, () => false)) {
       return dotGit;
     }
