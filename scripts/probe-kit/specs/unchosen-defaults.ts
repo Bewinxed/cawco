@@ -24,6 +24,16 @@
  *    pairing is turned on from another device: its socket opens again, is
  *    refused as unpaired, and the tab says the pairing sentence and opens no
  *    socket again.
+ * 8a. A dashboard spawn on Claude Code that names no permission mode is
+ *    refused in words saying one must be chosen, and no session is made.
+ * 8b. A session started on a chosen mode (acceptEdits), stopped, its row's
+ *    mode then gone: a person's send revives it on the mode the person last
+ *    chose for Claude Code on that machine, not on Bypass.
+ * 9. A page's `cawco.pickPlace()` opens on no machine, its machine online:
+ *    the select says "Choose a machine".
+ * 10. An artifact's own tab whose panel is closed while the artifact lives
+ *    says so in words with Show it again, which opens the page there again.
+ * 11. Fleet's count in the rail is centred on its nav row (±1px).
  *
  * On a second fleet, whose Claude Code signs in but starts no session:
  * 7. New Session on Claude, whose account's models the hub could not read,
@@ -34,15 +44,21 @@
 import { join } from "node:path";
 import { $ } from "bun";
 import type { Page } from "playwright-core";
-import { machineLabel } from "../../../packages/core/src";
+import { machineLabel, placePickWords } from "../../../packages/core/src";
 import { readWithin } from "../../../packages/core/src/bounded";
 import {
   ARTIFACT_GONE,
   ARTIFACT_SESSION_PATH,
 } from "../../../packages/core/src/frames";
 import { PAIRING_REQUIRED } from "../../../packages/core/src/hub-auth";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, ROOT, type Spec } from "../kit";
+import {
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
+import { type Kit, type KitFleet, open, ROOT, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -97,6 +113,20 @@ const respond = (request: Seen): Reply => {
 
 const pageOf = (heading: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${heading}</title></head><body><h1>${heading}</h1></body></html>`;
+
+/** A page whose one button asks `cawco.pickPlace()` (check 9). */
+const PICK_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Place</title></head><body><h1>Place</h1><button type="button" data-pick>Choose a machine and folder</button><script>document.querySelector("[data-pick]").addEventListener("click", () => window.cawco.pickPlace().catch(() => null));</script></body></html>`;
+/** The artifact tab's words while its panel is closed (check 10). */
+const CLOSED_TITLE = "This artifact's panel is closed";
+const SHOW_AGAIN = "Show it again";
+/** The hub's address scheme, swapped for its socket's. */
+const HTTP = /^http/;
+
+/** The hub's online word on the fleet's machine. */
+const machineOnline = async (fleet: KitFleet): Promise<boolean> =>
+  (
+    await fleet.api<{ machineId: string; status: string }[]>("/api/agents")
+  ).find((row) => row.machineId === MACHINE)?.status === "online";
 
 /** A port nothing listens on yet. */
 const freePort = (): number => {
@@ -344,11 +374,128 @@ const form = async (kit: Kit, fleet: KitFleet, base: string) => {
   );
 };
 
+/** A spawn on the dashboard's socket, as a form sends one: the hub's refusal in its words, or undefined when none came within 20 s. */
+const spawnRefusal = async (
+  fleet: KitFleet,
+  payload: object
+): Promise<{ instanceId: string; words: string | undefined }> => {
+  const socket = new WebSocket(
+    `${fleet.base.replace(HTTP, "ws")}/ws/dashboard`
+  );
+  await new Promise<void>((done, fail) => {
+    socket.onopen = () => done();
+    socket.onerror = () => fail(new Error("the dashboard socket did not open"));
+  });
+  const instanceId = crypto.randomUUID();
+  const requestId = crypto.randomUUID();
+  const words = readWithin(
+    20_000,
+    () =>
+      new Promise<string | undefined>((resolve) => {
+        socket.addEventListener("message", (event) => {
+          const heard = JSON.parse(String(event.data)) as {
+            payload?: { kind?: string; message?: string };
+            requestId?: string;
+          };
+          if (
+            heard.requestId === requestId &&
+            heard.payload?.kind === "error"
+          ) {
+            resolve(heard.payload.message);
+          }
+        });
+      })
+  );
+  socket.send(
+    JSON.stringify({
+      verb: "spawn",
+      machineId: MACHINE,
+      instanceId,
+      requestId,
+      payload: { instanceId, ...payload },
+    })
+  );
+  const said = await words;
+  socket.close();
+  return {
+    instanceId,
+    words: said.kind === "answered" ? said.value : undefined,
+  };
+};
+
+/** The mode a session's row records. */
+const rowMode = (fleet: KitFleet, instanceId: string) =>
+  fleet.query<{ permission_mode: string | null }>(
+    "SELECT permission_mode FROM instances WHERE id = ?",
+    instanceId
+  )[0]?.permission_mode;
+
+/** Checks 8a and 8b: the hub's own rule for a spawn's permission mode. */
+const modes = async (kit: Kit, fleet: KitFleet) => {
+  // 8a. No mode named.
+  const bare = await spawnRefusal(fleet, {
+    cwd: fleet.repo,
+    harness: "claude",
+    model: MODEL.claude,
+    title: "No mode",
+  });
+  kit.check(
+    "8a: a Claude Code spawn that names no permission mode is refused in words saying one must be chosen, and no session is made",
+    bare.words?.includes("A permission mode must be chosen") === true &&
+      fleet.instance(bare.instanceId) === undefined,
+    `said ${bare.words ?? "nothing"}; row ${JSON.stringify(fleet.instance(bare.instanceId) ?? null)}`
+  );
+
+  // 8b. A revive of a row whose mode is gone.
+  const chosen = await fleet.spawn("claude", "Chosen mode", fleet.repo, {
+    permissionMode: "acceptEdits",
+  });
+  await fleet.send(chosen, "hello");
+  await until(
+    "its conversation",
+    () =>
+      fleet.query<{ session_id: string | null }>(
+        "SELECT session_id FROM instances WHERE id = ?",
+        chosen
+      )[0]?.session_id,
+    Boolean,
+    120_000
+  );
+  await fleet.stopSession(chosen);
+  await until(
+    "the session stopped",
+    () => fleet.instance(chosen),
+    (row) => row?.status === "stopped",
+    60_000
+  );
+  fleet.write(
+    "UPDATE instances SET permission_mode = NULL WHERE id = ?",
+    chosen
+  );
+  await fleet.send(chosen, "again");
+  const woke = await until(
+    "the session woken",
+    () => fleet.instance(chosen),
+    (row) => row?.status === "running",
+    120_000
+  ).catch(() => fleet.instance(chosen));
+  const revived = rowMode(fleet, chosen);
+  kit.check(
+    "8b: a revive of a row with no mode runs on the mode the person last chose for Claude Code on its machine (acceptEdits), not Bypass",
+    woke?.status === "running" && revived === "acceptEdits",
+    `status ${woke?.status}; mode ${revived}; ${woke?.last_error ?? ""}`
+  );
+  await fleet.stopSession(chosen);
+};
+
 /** Checks 5 and 6: an artifact's own tab. */
 const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
   const session = await fleet.spawn("claude", "Artifact tab", fleet.repo);
   let sent = 0;
-  const create = async (heading: string): Promise<string | undefined> => {
+  const create = async (
+    heading: string,
+    html = pageOf(heading)
+  ): Promise<string | undefined> => {
     sent += 1;
     const marker = String(sent);
     asks.set(marker, {
@@ -356,7 +503,7 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
       input: {
         kind: "page",
         name: heading.toLowerCase(),
-        html: pageOf(heading),
+        html,
       },
     });
     await fleet.send(session, `PROBE-CALL:${marker}`);
@@ -404,6 +551,91 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
     await tab.page.waitForTimeout(QUIET_MS);
     return { shown, again: tab.opened.filter((when) => when > at).length };
   };
+
+  // 9. A page's pickPlace, its machine online: the picker names none.
+  const place = await create("Place", PICK_PAGE);
+  if (!place) {
+    kit.check("9: artifact_create answers an id", false, "no id");
+    return;
+  }
+  const placeTab = await tabOn(place);
+  await settle(placeTab.page);
+  await placeTab.page
+    .frameLocator('iframe[title="Preview"]')
+    .locator("[data-pick]")
+    .click();
+  const picker = placeTab.page.getByRole("form", {
+    name: placePickWords.title,
+  });
+  const pickerOpened = await picker
+    .waitFor({ timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  const select = pickerOpened
+    ? (await picker.locator('[data-slot="select-trigger"]').innerText()).trim()
+    : "no picker";
+  const online = await machineOnline(fleet);
+  kit.check(
+    `9: a page's pickPlace opens on no machine with its machine online: the select says "${placePickWords.chooseMachine}"`,
+    online && select === placePickWords.chooseMachine,
+    `machine online ${online}; select ${select}`
+  );
+  if (pickerOpened) {
+    await picker.getByRole("button", { name: placePickWords.cancel }).click();
+    await picker.waitFor({ state: "detached", timeout: 5000 });
+  }
+
+  // 10. Its panel closed while the artifact lives.
+  const closed = await fetch(`${fleet.base}/api/instances/${session}/preview`, {
+    method: "DELETE",
+  });
+  const closedWords = await until(
+    "the tab saying its panel is closed",
+    () => placeTab.page.getByText(CLOSED_TITLE).count(),
+    (count) => count > 0,
+    30_000
+  ).catch(() => 0);
+  const again = placeTab.page.getByRole("button", { name: SHOW_AGAIN });
+  const offered = await again.count();
+  if (offered > 0) {
+    await again.click();
+  }
+  const reopened = await placeTab.page
+    .locator('iframe[title="Preview"]')
+    .waitFor({ timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  kit.check(
+    `10: a tab whose panel is closed while its artifact lives says "${CLOSED_TITLE}", and ${SHOW_AGAIN} opens the page there again`,
+    closed.ok && closedWords > 0 && offered > 0 && reopened,
+    `close ${closed.status}; words ${closedWords}; ${SHOW_AGAIN} ${offered}; page again ${reopened}`
+  );
+
+  // 11. Fleet's count, centred on its nav row.
+  const board = await kit.page("desk");
+  await open(board, `${base}/session`, '[data-slot="sidebar-menu-badge"]');
+  const centres = await board.evaluate(() => {
+    const badge = document.querySelector('[data-slot="sidebar-menu-badge"]');
+    const row = badge?.parentElement?.querySelector(
+      '[data-sidebar="menu-button"]'
+    );
+    if (!(badge && row)) {
+      return null;
+    }
+    const of = (box: DOMRect) => box.top + box.height / 2;
+    const rowBox = row.getBoundingClientRect();
+    return {
+      badge: of(badge.getBoundingClientRect()),
+      row: of(rowBox),
+      height: rowBox.height,
+    };
+  });
+  kit.check(
+    "11: Fleet's count in the rail is centred on its nav row (±1px)",
+    centres !== null && Math.abs(centres.badge - centres.row) <= 1,
+    JSON.stringify(centres)
+  );
+  await board.close();
 
   // 5. The artifact deleted under its open tab.
   const doomed = await create("Doomed");
@@ -467,6 +699,7 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const base = await fleet.dashboard();
   await form(kit, fleet, base);
+  await modes(kit, fleet);
   await tabs(kit, fleet, base);
   for (const role of ["agent", "hub", "sessiond"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: the fleet stops in order, its agent first

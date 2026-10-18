@@ -10,9 +10,9 @@ import UIKit
 /// (DirectoryPickerView). "Use this place" answers the page with the
 /// machine, its label (`Naming.machineLabel`, the name every surface shows
 /// it by) and the folder; Cancel answers nothing. Until the person chooses,
-/// the select offers the first machine online now, so one heard after it
-/// opened is offered at once; a machine they chose that goes offline reads
-/// as none online, never swapped for another.
+/// the select names no machine ("Choose a machine"), as New Session opens on
+/// none; a machine they chose that goes offline reads as none, never swapped
+/// for another.
 final class PlacePickView: UIView {
     /// The place the person picked: the machine, its label, the folder.
     struct Place {
@@ -103,9 +103,9 @@ final class PlacePickView: UIView {
         hub.fleet.machines.filter { $0.status == "online" }
     }
 
-    /// Their choice while it is online; until they choose, the first machine online now.
+    /// Their choice while it is online; none until they choose, as New Session opens on none.
     private var machine: Components.Schemas.AgentRow? {
-        guard let chosen else { return online.first }
+        guard let chosen else { return nil }
         return online.first { $0.machineId == chosen }
     }
 
@@ -120,8 +120,12 @@ final class PlacePickView: UIView {
 
     private func paintMachines() {
         let machine = machine
-        machineSelect.setValue(machine.map { Words.PlacePick.machineOption(label: $0.name, os: $0.os) } ?? Words.PlacePick.noMachines)
         let rows = online
+        if let machine {
+            machineSelect.setValue(Words.PlacePick.machineOption(label: machine.name, os: machine.os))
+        } else {
+            machineSelect.setValue(rows.isEmpty ? Words.PlacePick.noMachines : Words.PlacePick.chooseMachine, placeholder: true)
+        }
         machineSelect.menu = UIMenu(children: rows.isEmpty
             ? [UIAction(title: Words.PlacePick.noMachines, attributes: .disabled) { _ in }]
             : rows.map { row in
@@ -160,8 +164,10 @@ final class PlacePickView: UIView {
     }
 
     #if DEBUG
-    /// `-place-pick <path>`: the folder typed and Use this place pressed, as the person's would.
-    func pickForProbe(_ path: String) {
+    /// `-place-pick <machineId> <path>`: the machine chosen from the select, the folder typed and Use this place pressed, as the person's would.
+    func pickForProbe(machineId: String, path: String) {
+        chosen = machineId
+        paintMachines()
         folderField.text = path
         submit()
     }

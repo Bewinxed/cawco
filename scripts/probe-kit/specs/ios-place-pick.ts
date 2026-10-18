@@ -11,10 +11,11 @@
  * mock model) and the built app on an iPhone simulator of its own. A
  * session makes a page whose button calls `cawco.pickPlace()` on load. Then:
  *
- * 1. The app, opened on the session with `-place-pick <the repo's folder>`,
- *    opens its picker on the page's ask (`place pick opened`), the first
- *    online machine chosen (`place pick machine=`), and Use this place
- *    answers it (`place pick answered`).
+ * 1. The app, opened on the session with `-place-pick <machine> <the repo's
+ *    folder>`, opens its picker on the page's ask (`place pick opened`) on no
+ *    machine (`place pick machine=-`, its machine online), and once the
+ *    machine is chosen from the select (`place pick machine=<it>`), Use this
+ *    place answers it (`place pick answered`).
  * 2. The page received `{ machineId, label, path }`: the hub's read of the
  *    page holds it under `place` (the page stores what it was answered),
  *    the fleet's machine, its label as `machineLabel` names it, and the
@@ -260,16 +261,19 @@ const run = async (kit: Kit) => {
     await sh(`xcrun simctl ui ${udid} appearance light`);
     console.log(`  captures: ${keep}`);
 
-    // 1. The picker, the first online machine, Use this place.
+    // 1. The picker on no machine, the machine chosen, Use this place.
     const opened = said("place pick opened").length;
-    await launch(`-place-pick ${fleet.repo}`);
+    const painted = said("place pick machine=").length;
+    await launch(`-place-pick ${MACHINE} ${fleet.repo}`);
     const answer = await until(
       "the picker's answer",
       () => said("place pick answered").at(-1),
       Boolean,
       120_000
     ).catch(() => undefined);
-    const chosen = said("place pick machine=").at(-1);
+    const lines = said("place pick machine=").slice(painted);
+    const [unchosen] = lines;
+    const chosen = lines.at(-1);
     const sent = (() => {
       try {
         return JSON.parse(
@@ -280,14 +284,16 @@ const run = async (kit: Kit) => {
       }
     })();
     kit.check(
-      "1: the page's ask opens the app's picker, the first online machine chosen, and Use this place answers it",
+      "1: the page's ask opens the app's picker on no machine with its machine online, and once that machine is chosen, Use this place answers it",
       said("place pick opened").length > opened &&
+        unchosen?.startsWith("place pick machine=- ") === true &&
+        lines.includes(`place pick machine=- online=${MACHINE}`) &&
         chosen?.startsWith(`place pick machine=${MACHINE}:${want.label} `) ===
           true &&
         sent?.machineId === want.machineId &&
         sent.label === want.label &&
         sent.path === want.path,
-      `opened ${said("place pick opened").length - opened}; ${chosen}; ${answer ?? "no answer"}`
+      `opened ${said("place pick opened").length - opened}; first ${unchosen}; last ${chosen}; ${answer ?? "no answer"}`
     );
 
     // 1b. In the phone's drawer the picker is the house sheet, as tall as its form under its head.

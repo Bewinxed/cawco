@@ -20,6 +20,7 @@ import type {
   FleetSkillMeta,
   FleetSyncReport,
   FleetWatchNotice,
+  HarnessKind,
   HarnessReport,
   HookEvent,
   HookHandler,
@@ -27,6 +28,7 @@ import type {
   MemoryScope,
   OnCap,
   OpenCodeGoLimits,
+  PermissionMode,
   PlanStep,
   Rule,
   RuleState,
@@ -124,6 +126,7 @@ import {
   artifacts,
   capabilityUsageDaily,
   cawTurns,
+  chosenModes,
   claudeContextWindows,
   completedTurns,
   connectionProjects,
@@ -669,6 +672,17 @@ export interface DbShape {
    * reading ({@link DbShape.noteInstanceEffort}).
    */
   readonly chooseEffort: (id: string, effort: EffortLevel) => void;
+  /** Files `mode` as the one the person last chose for `harness` on `machineId`. */
+  readonly chooseMode: (
+    machineId: string,
+    harness: HarnessKind,
+    mode: PermissionMode
+  ) => void;
+  /** The permission mode the person last chose for `harness` on `machineId` (schema `chosenModes`); none when never. */
+  readonly chosenMode: (
+    machineId: string,
+    harness: string
+  ) => PermissionMode | undefined;
   /** Claims one harness completion before any turn-end side effect. */
   readonly claimCompletedTurn: (
     instanceId: string,
@@ -3267,6 +3281,7 @@ const make = async (path: string): Promise<DbShape> => {
     ["usage_limits", "machine_id", "keyed"],
     ["machine_keys", "machine_id", "keyed"],
     ["ssh_machines", "machine_id"],
+    ["chosen_modes", "machine_id", "keyed"],
   ];
   /** How many rows moved, by what they are: what a re-key answers. */
   type Moved = (what: string, count: number) => void;
@@ -4247,6 +4262,32 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
     },
     agentHarnesses: (machineId) => harnessesByMachine(machineId).get(machineId),
+    chosenMode: (machineId, harness) =>
+      db
+        .select({ mode: chosenModes.permissionMode })
+        .from(chosenModes)
+        .where(
+          and(
+            eq(chosenModes.machineId, machineId),
+            eq(chosenModes.harness, harness as HarnessKind)
+          )
+        )
+        .get()?.mode,
+    chooseMode: (machineId, harness, mode) => {
+      const row = {
+        machineId,
+        harness,
+        permissionMode: mode,
+        chosenAt: new Date(),
+      };
+      db.insert(chosenModes)
+        .values(row)
+        .onConflictDoUpdate({
+          target: [chosenModes.machineId, chosenModes.harness],
+          set: { permissionMode: mode, chosenAt: row.chosenAt },
+        })
+        .run();
+    },
     listBoardInstances: () =>
       db
         .select(boardColumns)

@@ -12,6 +12,8 @@ export const placePickWords = {
   machine: "Machine",
   /** A machine as the select lists it: its label, then its OS. */
   machineOption: (label: string, os: string) => `${label} · ${os}`,
+  /** The select before the person has chosen one: no machine is offered for them. */
+  chooseMachine: "Choose a machine",
   noMachines: "No machines online",
   folder: "Folder",
   folderPlaceholder: "/home/you/project",

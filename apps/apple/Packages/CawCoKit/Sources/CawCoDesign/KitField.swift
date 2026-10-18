@@ -89,8 +89,10 @@ public final class KitSelect: UIButton {
         fatalError("KitSelect is built in code")
     }
 
-    public func setValue(_ text: String) {
-        configuration?.attributedTitle = AttributedString(text, attributes: TypeScale.typeBody.container(color: Palette.inkStrong))
+    /// `placeholder`: nothing is chosen, and `text` says so in the muted ink the web's trigger takes then (`data-placeholder`).
+    public func setValue(_ text: String, placeholder: Bool = false) {
+        let ink = placeholder ? Palette.mutedForeground : Palette.inkStrong
+        configuration?.attributedTitle = AttributedString(text, attributes: TypeScale.typeBody.container(color: ink))
         configuration?.titleLineBreakMode = .byTruncatingTail
         accessibilityValue = text
         setNeedsLayout()

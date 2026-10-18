@@ -83,6 +83,7 @@
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { sameRow } from "./same-row";
+  import { NAV_BADGE } from "./sidebar-rows";
   import { newSession } from "./spawn/new-session.svelte";
   import { stored } from "./storage";
   import { inLists, isThreadTab } from "./thread-tabs";
@@ -905,9 +906,12 @@
                  the kit's active and hover inks are for a plain count, and
                  on the live fill the active one reads 3.3:1. -->
             <Sidebar.MenuBadge
-              class={cawco.blockedCount > 0
-                ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]!"
-                : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]!"}
+              class={[
+                NAV_BADGE,
+                cawco.blockedCount > 0
+                  ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]!"
+                  : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]!",
+              ].join(" ")}
               data-flip="pop box"
             >
               <MorphText text={String(fleetCount)} />

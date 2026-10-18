@@ -9,21 +9,27 @@
  * session's panel on the desk, read from the hub's own record of the page's
  * state and the card's words:
  *
- * A. The machine online: the picker opens with it, a folder typed, a click on
- *    Use this place: the hub holds the place (the machine, its label and the
- *    folder), and the card reads "<label> — <path>" from what pickPlace
- *    answered, the label the dashboard names the machine by (core
- *    `machineLabel`, the picker's select included).
- * B. The picker opened while the only machine is offline, which then comes
- *    back: the picker offers it as soon as it is online, and the same typed
- *    folder and click send the place. (Main seeded the machine once, as the
- *    picker mounted: a machine heard after that was never the pick, and every
- *    click stopped at "Choose a machine that is online.")
+ * A. The machine online: the picker opens on no machine ("Choose a machine":
+ *    nothing goes back to the page that nobody chose), the machine chosen
+ *    from its select, a folder typed, a click on Use this place: the hub
+ *    holds the place (the machine, its label and the folder), and the card
+ *    reads "<label> — <path>" from what pickPlace answered, the label the
+ *    dashboard names the machine by (core `machineLabel`, the picker's select
+ *    included).
+ * B. The picker opened while the only machine is offline ("No machines
+ *    online"), which then comes back: the select lists it as soon as it is
+ *    online, and the same choice, typed folder and click send the place.
+ *    (Main once seeded the machine as the picker mounted: a machine heard
+ *    after that could never be the pick, and every click stopped at "Choose
+ *    a machine that is online.")
  *
  *   bun scripts/probe-kit/run.ts place-pick
  */
 import type { Page } from "playwright-core";
-import { machineLabel } from "../../../packages/core/src/index";
+import {
+  machineLabel,
+  placePickWords as pickWords,
+} from "../../../packages/core/src/index";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
@@ -128,14 +134,17 @@ const machinesTone = (page: Page): Promise<string | null> =>
   page.locator("[data-machines]").getAttribute("data-tone");
 
 /**
- * Opens the picker from the page's card, types `folder` into it and clicks
- * Use this place; `between` runs once the picker is open, before the typing.
- * Answers what the hub then holds under `place`, and the card's words.
+ * Opens the picker from the page's card, chooses the machine named `label`
+ * from its select, types `folder` and clicks Use this place; `between` runs
+ * once the picker is open, before the choice. Answers what the hub then holds
+ * under `place`, the card's words, and the select's words as it opened
+ * (`opened`) and once chosen (`trigger`).
  */
 const pick = async (
   page: Page,
   fleet: KitFleet,
   read: () => Promise<Placed | undefined>,
+  label: string,
   folder: string,
   between: () => Promise<void> = async () => undefined
 ) => {
@@ -145,14 +154,21 @@ const pick = async (
   await frame.locator("[data-pick]").click();
   const form = page.getByRole("form", { name: "Pick a machine and folder" });
   await form.waitFor({ timeout: 15_000 });
+  const select = form.locator('[data-slot="select-trigger"]');
+  const opened = (await select.innerText()).trim();
   await between();
+  await select.click();
+  await page
+    .getByRole("option")
+    .filter({ hasText: `${label} · ` })
+    .first()
+    .click();
+  await settle(page);
   const field = form.getByLabel("Folder");
   await field.click();
   await field.pressSequentially(folder, { delay: 5 });
   await settle(page);
-  const trigger = (
-    await form.locator('[data-slot="select-trigger"]').innerText()
-  ).trim();
+  const trigger = (await select.innerText()).trim();
   await form.getByRole("button", { name: "Use this place" }).click();
   const held = await until(
     "the place on the hub",
@@ -174,7 +190,14 @@ const pick = async (
     await form.waitFor({ state: "detached", timeout: 5000 });
   }
   const card = (await frame.locator("[data-place]").innerText()).trim();
-  return { held, card, trigger, problem, online: await machineOnline(fleet) };
+  return {
+    held,
+    card,
+    opened,
+    trigger,
+    problem,
+    online: await machineOnline(fleet),
+  };
 };
 
 const run = async (kit: Kit) => {
@@ -236,12 +259,12 @@ const run = async (kit: Kit) => {
     picked.trigger.startsWith(`${label} · `) &&
     picked.problem === null;
 
-  // A. The machine online, a folder typed, a real click.
+  // A. The machine online: no machine until it is chosen, then a folder typed, a real click.
   const first = `${fleet.repo}/a`;
-  const a = await pick(page, fleet, read, first);
+  const a = await pick(page, fleet, read, label, first);
   kit.check(
-    `A: with the machine online, a typed folder and a click on Use this place send the place with the machine's label; the card reads "${label} — <path>"`,
-    whole(a, first),
+    `A: with the machine online, the picker opens on no machine ("${pickWords.chooseMachine}"); once it is chosen, a typed folder and a click on Use this place send the place with the machine's label; the card reads "${label} — <path>"`,
+    a.opened === pickWords.chooseMachine && whole(a, first),
     JSON.stringify(a)
   );
 
@@ -260,7 +283,7 @@ const run = async (kit: Kit) => {
     (tone) => tone === "fail",
     60_000
   );
-  const b = await pick(page, fleet, read, second, async () => {
+  const b = await pick(page, fleet, read, label, second, async () => {
     fleet.launch("agent");
     await fleet.agentUp();
     await until(
@@ -271,8 +294,8 @@ const run = async (kit: Kit) => {
     );
   });
   kit.check(
-    `B: a picker opened while the machine was offline sends the place once it is back, with the machine's label: a typed folder and a click on Use this place; the card reads "${label} — <path>"`,
-    b.online && whole(b, second),
+    `B: a picker opened while the machine was offline ("${pickWords.noMachines}") lists it once it is back, and choosing it, a typed folder and a click on Use this place send the place with the machine's label; the card reads "${label} — <path>"`,
+    b.online && b.opened === pickWords.noMachines && whole(b, second),
     JSON.stringify(b)
   );
 };

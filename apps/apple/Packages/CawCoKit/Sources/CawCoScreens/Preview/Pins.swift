@@ -896,11 +896,11 @@ enum PreviewProbe {
         guard let at = arguments.firstIndex(of: "-thread-carry"), arguments.indices.contains(at + 1) else { return nil }
         return arguments[at + 1]
     }()
-    /// `-place-pick <path>`: a page's `cawco.pickPlace()` picker takes the folder `path` and Use this place, as the person's would.
-    static let placePick: String? = {
+    /// `-place-pick <machineId> <path>`: a page's `cawco.pickPlace()` picker is given the machine, then the folder `path`, and Use this place, as the person's would.
+    static let placePick: (machineId: String, path: String)? = {
         let arguments = ProcessInfo.processInfo.arguments
-        guard let flag = arguments.firstIndex(of: "-place-pick"), arguments.indices.contains(flag + 1) else { return nil }
-        return arguments[flag + 1]
+        guard let flag = arguments.firstIndex(of: "-place-pick"), arguments.indices.contains(flag + 2) else { return nil }
+        return (arguments[flag + 1], arguments[flag + 2])
     }()
     /// `-menu-remove <name>`: once the page is ready, the title menu opens and its row `name` is removed.
     static let menuRemove: String? = {

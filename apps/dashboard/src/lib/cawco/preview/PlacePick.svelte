@@ -41,13 +41,11 @@
   let problem = $state<string | null>(null);
 
   /**
-   * Their choice while it is online; until they choose, the first machine
-   * online now, so one heard after the picker opened is offered at once.
+   * Their choice while it is online; none until they choose, as New Session
+   * opens on none: no machine goes back to the page that nobody chose.
    */
   const machine = $derived(
-    chosen === null
-      ? (onlineMachines[0] ?? null)
-      : (onlineMachines.find((row) => row.machineId === chosen) ?? null)
+    onlineMachines.find((row) => row.machineId === chosen) ?? null
   );
   const folder = $derived(path.trim().replace(TRAILING_SLASHES, ""));
 
@@ -111,9 +109,12 @@
         class="w-full text-foreground"
         size="sm"
       >
-        {machine
-          ? words.machineOption(machineLabel(machine.hostname), machine.os)
-          : words.noMachines}
+        {#if machine}
+          {words.machineOption(machineLabel(machine.hostname), machine.os)}
+        {:else}
+          <!-- Unchosen, the trigger reads as its placeholder (data-placeholder). -->
+          {onlineMachines.length > 0 ? words.chooseMachine : words.noMachines}
+        {/if}
       </Select.Trigger>
       <Select.Content>
         {#each onlineMachines as row (row.machineId)}

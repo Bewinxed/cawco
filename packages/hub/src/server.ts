@@ -1276,9 +1276,9 @@ const continueBody = t.Object({
       ])
     ),
     // The mode the new session is asked to run in, and the one it takes when
-    // none is asked (the caller's own, else bypassPermissions). A harness with
-    // modes gets an explicit mode; one with none (pi) records none and
-    // refuses one asked of it. The hub's `settleMode` decides.
+    // none is asked (the caller's own). A harness with modes gets an
+    // explicit mode, and with neither nothing starts; one with none (pi)
+    // records none and refuses one asked of it. The hub's `settleMode` decides.
     permissionMode: t.Optional(permissionModeSchema),
     fallbackPermissionMode: t.Optional(permissionModeSchema),
     scratch: t.Optional(
@@ -6406,13 +6406,16 @@ export const createServer = (
    * The one rule for the permission mode a spawn runs in and records, applied
    * where every spawn leaves the hub (dashboard, delegate, start_session,
    * workflow, continuation, revive, restore). A harness that reports modes
-   * runs in one it offers: the one asked for, else `fallback` — what the hub
-   * picks when nobody asked (a work item's bypass, the caller's or the tree's
-   * own mode, the row's last) — else explicit `bypassPermissions`, never the
-   * machine's default. A harness that reports none (pi) records
+   * runs in one it offers: the one asked for, else `fallback` — the mode its
+   * starter declared (a work item's, a workflow's, Caw's, the caller's or the
+   * tree's own), or for a revive the row's last, else the one the person last
+   * chose for that harness on that machine ({@link reviveMode}). With neither
+   * nothing starts, and the refusal says a mode must be chosen: no mode goes
+   * out that nobody chose. A harness that reports none (pi) records
    * none: a fallback is dropped, and a mode asked of it is refused. A machine
-   * that has not reported the harness is taken at its word. Its directory is
-   * settled here too, for the same every spawn: `cwd` as a path on the
+   * that has not reported the harness is taken at its word on a mode named;
+   * with none named it is refused, as its modes are not known. Its directory
+   * is settled here too, for the same every spawn: `cwd` as a path on the
    * machine (core `machinePath`), or the refusal saying why it is none.
    */
   const settleMode = (
@@ -6447,7 +6450,10 @@ export const createServer = (
           }
         : { payload: rest, permissionMode: null };
     }
-    const mode = asked ?? fallback ?? "bypassPermissions";
+    const mode = asked ?? fallback;
+    if (!mode) {
+      return { refusal: unchosenMode(machineId, harness) };
+    }
     const unfit = modeRefusal(machineId, harness, mode);
     return unfit
       ? { refusal: `${unfit} Nothing was started.` }
@@ -6456,6 +6462,28 @@ export const createServer = (
           permissionMode: mode,
         };
   };
+
+  /** Why a spawn that names no permission mode does not start ({@link settleMode}). */
+  const unchosenMode = (machineId: string, harness: string): string =>
+    `A permission mode must be chosen for a ${harness} session on ${machineName(machineId)}, and none was. Choose one, then start it again. Nothing was started.`;
+
+  /**
+   * The mode a revive, restore or relaunch runs on: the row's own, else the
+   * one the person last chose for its harness on its machine (db
+   * `chosenMode`); none when neither is, and {@link settleMode} refuses it.
+   * No row, no mode: a new session's is its starter's to name.
+   */
+  const reviveMode = (
+    row:
+      Pick<InstanceRow, "harness" | "machineId" | "permissionMode"> | undefined
+  ): string | undefined =>
+    row &&
+    (row.permissionMode ??
+      db.chosenMode(row.machineId, row.harness ?? "claude"));
+
+  /** The hub's row for `instanceId`, when it names one the hub has. */
+  const rowNamed = (instanceId: string | undefined) =>
+    instanceId ? db.getInstancesByIds([instanceId])[0] : undefined;
 
   /** Why `harness` on `machineId` cannot run in `mode`, or nothing when it can (or has not said). */
   const modeRefusal = (
@@ -6614,7 +6642,7 @@ export const createServer = (
     const settled = settleMode(
       machineId,
       revivePayloadOf(row, plan, relaunch),
-      row.permissionMode
+      reviveMode(row)
     );
     if ("refusal" in settled) {
       console.warn(`[hub] not waking ${instanceId}: ${settled.refusal}`);
@@ -13876,7 +13904,7 @@ export const createServer = (
       refuse(unsigned);
       return;
     }
-    const settled = settleMode(row.machineId, asked, row.permissionMode);
+    const settled = settleMode(row.machineId, asked, reviveMode(row));
     if ("refusal" in settled) {
       refuse(settled.refusal);
       return;
@@ -14459,7 +14487,16 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
     rowsChanged: (machineId) => publishInstances(machineId),
     placesChanged,
+    // A move is a New session the person started on another place: its mode
+    // is the one the form chose.
     spawn: async (machineId, payload) => {
+      if (payload.permissionMode) {
+        db.chooseMode(
+          machineId,
+          payload.harness ?? "claude",
+          payload.permissionMode
+        );
+      }
       await spawnSession(machineId, payload);
     },
     send: (envelope) => {
@@ -18626,8 +18663,8 @@ export const createServer = (
         projectStarters.threadAnswered(payload.threadId);
       }
     },
-    spawn: async (machineId, payload) => {
-      await spawnSession(machineId, payload);
+    spawn: async (machineId, payload, mode) => {
+      await spawnSession(machineId, payload, mode);
     },
     // Turning Caw off stops what he started the way a forget stops a
     // project's sessions: each row confirmed as its machine ends it.
@@ -18795,8 +18832,8 @@ export const createServer = (
     send: (envelope) => {
       deliverSend(envelope);
     },
-    spawn: async (machineId, payload) => {
-      await spawnSession(machineId, payload);
+    spawn: async (machineId, payload, mode) => {
+      await spawnSession(machineId, payload, mode);
     },
     stop: (instanceId) =>
       endSession(instanceId, "stop", {
@@ -21512,6 +21549,22 @@ export const createServer = (
   };
 
   /**
+   * Files a dashboard start's mode as the person's choice for its harness on
+   * `machineId` when it is one: a new session's form (`known` false), or a
+   * relaunch to switch it. A revive or a rewind that carries the row's own
+   * is no choice.
+   */
+  const noteChosenMode = (
+    machineId: string,
+    asked: SpawnPayload,
+    known: boolean
+  ): void => {
+    if (asked.permissionMode && !(known && !asked.relaunch)) {
+      db.chooseMode(machineId, asked.harness ?? "claude", asked.permissionMode);
+    }
+  };
+
+  /**
    * A dashboard's start, from its permission mode on: launch directory,
    * account, the row, and the start itself ({@link sendDashboardStart}).
    */
@@ -21525,7 +21578,10 @@ export const createServer = (
       sendFrame(ws, failure(message, asked.refusal));
       return;
     }
-    const settled = settleMode(message.machineId, asked);
+    // A session the hub has a row for is started again (a relaunch, a
+    // rewind): one that names no mode runs on its own, else the person's last.
+    const before = rowNamed(message.instanceId);
+    const settled = settleMode(message.machineId, asked, reviveMode(before));
     if ("refusal" in settled) {
       console.warn(`[hub] refused spawn: ${settled.refusal}`);
       sendFrame(ws, failure(message, settled.refusal));
@@ -21560,8 +21616,8 @@ export const createServer = (
     // open are settled by its teardown and must not replay. What no process
     // was ever handed (owed) goes to the new one, and what the old one was
     // handed and never read its machine hands back for it ({@link takeBack}).
-    const [before] = db.getInstancesByIds([message.instanceId]);
     forgetPending(message.instanceId, UNREAD.restarted, false, "all");
+    noteChosenMode(message.machineId, asked, before !== undefined);
     // A session whose harness never began a conversation comes back fresh
     // under its id (core `relaunchOf`), and its transcript says so.
     if (
@@ -28994,8 +29050,9 @@ export const createServer = (
               // A spawn that names no model runs on its harness's own default
               // (Claude Code's, for its account): "no model picked" is the
               // field's absence, never an empty string. Its permission mode is
-              // the one rule's (`settleMode`): explicit bypass when omitted for
-              // a harness with modes, and none for one that has none.
+              // the one rule's (`settleMode`): one the person chose for a
+              // harness with modes, refused when omitted, and none for one
+              // that has none.
               // Whether it may delegate is never the client's to say: only
               // `delegate` makes a leaf, and a leaf stays one whatever brings
               // it back, so its row's word goes to its machine (as `restore`

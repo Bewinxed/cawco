@@ -2616,10 +2616,10 @@ extension PreviewController {
         }
         #if DEBUG
         PreviewProbe.say("place pick opened \(ask.json) as=\(drawer ? "sheet" : "well")")
-        if let path = PreviewProbe.placePick {
+        if let placed = PreviewProbe.placePick {
             Task { @MainActor [weak pick] in
                 try? await Task.sleep(for: .seconds(1))
-                pick?.pickForProbe(path)
+                pick?.pickForProbe(machineId: placed.machineId, path: placed.path)
             }
         }
         #endif

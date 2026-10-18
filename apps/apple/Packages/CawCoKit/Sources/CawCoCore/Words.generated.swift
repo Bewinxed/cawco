@@ -864,6 +864,9 @@ public enum Words {
             "\(label) · \(os)"
         }
 
+        /// The select before the person has chosen one: no machine is offered for them.
+        public static let chooseMachine = "Choose a machine"
+
         public static let noMachines = "No machines online"
 
         public static let folder = "Folder"

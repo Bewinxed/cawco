@@ -36,6 +36,7 @@ import type {
   NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
+  PermissionMode,
   RoutineMadeEvent,
   RuleMatchKind,
   RuleScope,
@@ -452,6 +453,23 @@ export const agentHarnesses = sqliteTable(
       .references(() => agents.machineId, { onDelete: "cascade" }),
     harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
     report: text("report", { mode: "json" }).$type<HarnessReport>().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.machineId, table.harness] })]
+);
+
+/**
+ * The permission mode the person last chose for a harness on a machine: the
+ * mode a start from the dashboard's or the app's form went out on, written
+ * as it goes. A revive of a session whose row records no mode runs on it
+ * (server.ts `settleMode`); with none here it is refused.
+ */
+export const chosenModes = sqliteTable(
+  "chosen_modes",
+  {
+    machineId: text("machine_id").notNull(),
+    harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
+    permissionMode: text("permission_mode").$type<PermissionMode>().notNull(),
+    chosenAt: timestamp("chosen_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.machineId, table.harness] })]
 );

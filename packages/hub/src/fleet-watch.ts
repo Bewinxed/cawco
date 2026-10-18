@@ -54,6 +54,7 @@ import {
   fleetWatchNudge,
   type InstanceRow,
   type NeutralMessage,
+  type PermissionMode,
   type SendPayload,
   type SpawnPayload,
   signalLine,
@@ -247,8 +248,12 @@ export interface FleetWatchDeps {
   push: (notice: FleetWatchNotice) => void;
   /** Delivers one message to a session through the hub's one send path. */
   send: (envelope: Envelope<SendPayload>) => void;
-  /** Starts a session, resolved once its machine has it. */
-  spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
+  /** Starts a session in `mode` where its harness has modes, resolved once its machine has it. */
+  spawn: (
+    machineId: string,
+    payload: SpawnPayload,
+    mode: PermissionMode
+  ) => Promise<void>;
   /** Stops a session's process. */
   stop: (instanceId: string) => void;
   /** Wakes a project's Caw with an event (caw.ts `wake`); false when he is off. */
@@ -654,16 +659,22 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     const brief = briefOf(row, triage, seen);
     log(row, row.id, `triage started (${id}) on ${harness}`);
     deps
-      .spawn(row.machineId, {
-        instanceId: id,
-        cwd: row.cwd,
-        harness,
-        ...(model ? { model } : {}),
-        ...(row.projectId ? { projectId: row.projectId } : {}),
-        title: `Triage · ${deps.name(row)}`,
-        role: "overseer",
-        requestId: crypto.randomUUID(),
-      })
+      .spawn(
+        row.machineId,
+        {
+          instanceId: id,
+          cwd: row.cwd,
+          harness,
+          ...(model ? { model } : {}),
+          ...(row.projectId ? { projectId: row.projectId } : {}),
+          title: `Triage · ${deps.name(row)}`,
+          role: "overseer",
+          requestId: crypto.randomUUID(),
+        },
+        // The hub's own reader, which nobody watches: it never parks on a
+        // permission prompt, as workflow steps and summarisers never do.
+        "bypassPermissions"
+      )
       .then(() => {
         deps.send({
           verb: "send",

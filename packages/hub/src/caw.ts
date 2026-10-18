@@ -73,6 +73,7 @@ import {
   type InstanceRow,
   type ItemEnd,
   type NeutralOrigin,
+  type PermissionMode,
   type PermissionRequestFrame,
   type PermissionResult,
   type ProjectSpend,
@@ -663,8 +664,12 @@ export interface CawDeps {
   readonly refreshPlace: (lead: InstanceRow) => Promise<void>;
   /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
   readonly send: (envelope: Envelope<SendPayload>) => boolean;
-  /** Starts a session, resolved once its machine says it is in place. */
-  readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
+  /** Starts a session in `mode` where its harness has modes, resolved once its machine says it is in place. */
+  readonly spawn: (
+    machineId: string,
+    payload: SpawnPayload,
+    mode: PermissionMode
+  ) => Promise<void>;
   /**
    * A project's forget stop path (project-stops.ts): its running sessions as
    * a tree, and their stop, each end reported as `project.stop` once its
@@ -1246,16 +1251,22 @@ export const createCaw = ({
       );
     const instanceId = crypto.randomUUID();
     cawDenied(project.cawHarness);
-    await spawn(place.machineId, {
-      instanceId,
-      cwd: place.cwd,
-      harness: project.cawHarness,
-      ...(project.cawModel ? { model: project.cawModel } : {}),
-      projectId: project.id,
-      title: "Caw",
-      role: "lead",
-      requestId: crypto.randomUUID(),
-    });
+    await spawn(
+      place.machineId,
+      {
+        instanceId,
+        cwd: place.cwd,
+        harness: project.cawHarness,
+        ...(project.cawModel ? { model: project.cawModel } : {}),
+        projectId: project.id,
+        title: "Caw",
+        role: "lead",
+        requestId: crypto.randomUUID(),
+      },
+      // Caw's own mode: no tool ask parks for a person, as every shell and
+      // edit call of his is put to the hub's gate instead (lead-gate.ts).
+      "bypassPermissions"
+    );
     db.setProjectCaw(project.id, { leadInstanceId: instanceId });
     // A Claude lead's context is the project's whole history, and an idle
     // hour costs it a full rewrite: kept warm, under keep-alive's cap of one
