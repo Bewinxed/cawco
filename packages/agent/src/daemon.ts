@@ -204,6 +204,7 @@ import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
 import {
+  closingStages,
   ensureServed,
   ensureStage,
   networkOf,
@@ -211,9 +212,9 @@ import {
   setStageSink,
   stageComponents,
   stopServed,
-  stopStages,
   writeSheet,
 } from "./stage";
+import { setStageCloneSink } from "./stage-clone";
 import { makeUpstreamPost } from "./upstream-posts";
 
 /** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */
@@ -1956,7 +1957,8 @@ const attach = (
         frame.kind === "move_progress" ||
         frame.kind === "command_queue" ||
         frame.kind === "stage" ||
-        frame.kind === "browsers"
+        frame.kind === "browsers" ||
+        frame.kind === "stage-clone"
       ) {
         return false;
       }
@@ -2939,16 +2941,22 @@ export const startDaemon = (rediscover = false) =>
       CONTROL_WORKSPACE_BOUNDARY,
       workspaceBoundary
     );
-    // An archive ends the workspace's stage first: nothing of it is left to serve.
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_ARCHIVE, (ref) => {
-      stopStages((ref as { id?: string } | null)?.id);
-      return archiveWorkspace(ref);
-    });
+    // An archive ends the workspace's stage first: nothing of it is left to
+    // serve. A place's stage clone waits for its stage to sleep (stage.ts
+    // `closingStages`).
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_ARCHIVE, (ref) =>
+      closingStages(
+        ref as { id?: string; path?: string; skip?: string[] } | null,
+        archiveWorkspace
+      )
+    );
     // An archive whose unlanded work a person let go: a carry first.
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_DISCARD, (ref) => {
-      stopStages((ref as { id?: string } | null)?.id);
-      return discardWorkspace(ref);
-    });
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_DISCARD, (ref) =>
+      closingStages(
+        ref as { id?: string; path?: string; skip?: string[] } | null,
+        discardWorkspace
+      )
+    );
     // A post to another person's repository the person approved, made once
     // with this machine's GitHub sign-in (upstream-posts.ts).
     supervisor.registerDaemonFunction(CONTROL_UPSTREAM_POST, (id, post) => {
@@ -2984,6 +2992,9 @@ export const startDaemon = (rediscover = false) =>
     );
     // Live components: a workspace's stage, started or woken, and a sheet's stories (stage.ts).
     setStageSink((frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    setStageCloneSink((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
     supervisor.registerDaemonFunction(STAGE_ENSURE, (ref, file) =>

@@ -3283,6 +3283,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "browsers") {
     return;
   }
+  // A place's stage clone travels machine → hub only; the hub files it as a workspace.
+  if (frame.kind === "stage-clone") {
+    return;
+  }
 
   const target = session(frame.instanceId);
 

@@ -104,10 +104,10 @@ export const STAGE_READY_MS = 60_000;
 /** How long a place's stage clone's git may take, each cut or step (agent `stage-clone.ts`). Ours: a one-commit fetch from the same disk. */
 export const STAGE_CLONE_GIT_MS = 60_000;
 
-/** How long a place's stage clone's install inside its boundary may take (agent `stage-clone.ts` `installInside`). Ours. */
+/** How long a place's stage clone's install inside its boundary may take (agent `stage-clone.ts` `installAt`). Ours. */
 export const STAGE_CLONE_INSTALL_MS = 180_000;
 
-/** How long a place's stage clone may take before its stage starts (agent `stage-clone.ts`): its git, then its install. */
+/** How long a place's stage clone may take before its stage starts (agent `stage-clone.ts`): its git, then its project's install (`installStage`). */
 export const STAGE_CLONE_MS = STAGE_CLONE_GIT_MS + STAGE_CLONE_INSTALL_MS;
 
 /** How often the daemon asks a running stage whether it serves. The spec's number. */
@@ -320,6 +320,26 @@ export interface StageFrame {
   port: number;
   state: StageState;
   workspace: string;
+}
+
+/**
+ * The daemon's word that a place's stage clone (agent `stage-clone.ts`) is
+ * cut and in step, sent on each use: the hub files it as a workspace of the
+ * stage kind (schema `workspaces.stageFor`), which its retire sweep settles
+ * once the place's stage sleeps.
+ */
+export interface StageCloneFrame {
+  /** The clone's workspace id (core workspace-policy.ts `stageCloneId`). */
+  id: string;
+  kind: "stage-clone";
+  /** The clone's root. */
+  path: string;
+  /** The place whose sheets' stage runs in it. */
+  place: string;
+  /** The repository root of the checkout it was cut from. */
+  repoRoot: string;
+  /** Its scratch dir, its commands' `TMPDIR`. */
+  tmp: string;
 }
 
 /** The daemon's answer to {@link STAGE_ENSURE}: the stage's port, root and state, and the sheet as it reads. */

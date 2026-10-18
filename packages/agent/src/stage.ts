@@ -74,7 +74,7 @@ import {
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import {
   BUN_SCRIPT_ENV,
   bunScriptRuntime,
@@ -86,8 +86,10 @@ import { closeBridge, reachWorkspace } from "./preview-bridge";
 import {
   copyBack,
   inCloneTurn,
+  installStage,
+  isStageClone,
   MIRROR_MS,
-  stageCloneId,
+  sameAsCheckout,
   stageCloneOf,
   syncStageClone,
 } from "./stage-clone";
@@ -240,6 +242,64 @@ const treeOf = async (workspace: WorkspaceRef): Promise<Tree> =>
   isPlace(workspace.id)
     ? { ref: workspace, ...(await stageCloneOf(workspace)) }
     : { ref: workspace, folder: workspace.path, boundary: workspace };
+
+/**
+ * A place's project, the one of the toolchain root at or above `from`,
+ * installed in its stage clone by its own package manager (stage-clone.ts
+ * `installStage`) before the stage reads what is installed. A workspace's
+ * is its delegate's to install.
+ */
+const installedFor = async (tree: Tree, from: string): Promise<void> => {
+  if (!isPlace(tree.ref.id)) {
+    return;
+  }
+  const root = upFrom(from, tree.folder).find(toolchainAt);
+  if (root) {
+    await installStage(tree.ref, tree, root);
+  }
+};
+
+/**
+ * Whether a sheet stage runs in place stage clone `id` (starting, waking or
+ * serving): its retirement waits (the hub's `stageRuns` says the same, as
+ * its frames had it).
+ */
+const stageIn = (id: string): Stage | undefined =>
+  [...stages.values()].find(
+    (stage) =>
+      stage.boundary.id === id &&
+      (stage.status === "starting" ||
+        stage.status === "waking" ||
+        stage.status === "live")
+  );
+
+/**
+ * An archive or discard of workspace `request.id` (workspace.ts `close`), a
+ * place's stage clone in its clone's turn: refused while a stage runs in it,
+ * and passing over every change that stands as in its checkout
+ * (stage-clone.ts `sameAsCheckout`), so only what the checkout lacks holds
+ * it. Any other workspace's stages end first: nothing of it is left to serve.
+ */
+export const closingStages = <T>(
+  request: { id?: string; path?: string; skip?: string[] } | null,
+  close: (request: unknown) => Promise<T>
+): Promise<T> => {
+  const id = request?.id;
+  if (!(id && isStageClone(id))) {
+    stopStages(id);
+    return close(request);
+  }
+  return inCloneTurn(id, async () => {
+    const running = stageIn(id);
+    if (running) {
+      throw new Error(
+        `Workspace ${id} was not archived: ${stageWords(running)} runs in it (${running.status}), so nothing was deleted.`
+      );
+    }
+    const same = request?.path ? await sameAsCheckout(id, request.path) : [];
+    return close({ ...request, skip: [...(request?.skip ?? []), ...same] });
+  });
+};
 
 /**
  * The workspace whose network a preview's port is in: a place's sheet stage
@@ -465,7 +525,7 @@ function stageFor(
     throw new StageRefusal(
       tree.folder === tree.ref.path
         ? missing
-        : `${missing} The stage runs in a clone of your checkout, ${root}, whose dependencies install inside its own boundary from the checkout's lockfile.`
+        : `${missing} The stage runs in a clone of your checkout, ${root}, whose dependencies install inside its own boundary by the project's own package manager.`
     );
   }
   // Every stage runs on the agent's own bun, whatever the lockfile: Vite's
@@ -731,6 +791,16 @@ const healthy = (stage: Stage, waitMs: number): Promise<Bounded<boolean>> =>
     stage.runs.kind === "serve" ? { redirect: "manual" } : {}
   ).catch(() => ({ kind: "answered", value: false }) as const);
 
+/**
+ * How long a stage runs with no viewer and no use before it sleeps: core's
+ * {@link STAGE_IDLE_MS}, unless a probe's scratch fleet names a shorter one
+ * in `CAWCO_STAGE_IDLE_MS` (session-sheet watches a stage clone retire once
+ * its stage sleeps). Read once, as the daemon starts.
+ */
+const IDLE_MS = process.env.CAWCO_STAGE_IDLE_MS
+  ? Number(process.env.CAWCO_STAGE_IDLE_MS)
+  : STAGE_IDLE_MS;
+
 /** Its health look and its sleep, every {@link STAGE_HEALTH_MS} while it is live. */
 function watch(stage: Stage): void {
   clearInterval(stage.health);
@@ -738,7 +808,7 @@ function watch(stage: Stage): void {
     if (stage.status !== "live") {
       return;
     }
-    if (stage.viewers === 0 && Date.now() - stage.lastUse > STAGE_IDLE_MS) {
+    if (stage.viewers === 0 && Date.now() - stage.lastUse > IDLE_MS) {
       sleep(stage);
       return;
     }
@@ -928,10 +998,12 @@ const servesBy = async (
 async function start(stage: Stage): Promise<void> {
   stage.stopping = false;
   if (stage.runs.kind === "sheet") {
-    // A place's stage starts on its checkout as it is now: one woken after
-    // its sleep has missed every edit since.
+    // A place's stage starts on its checkout as it is now, installed: one
+    // woken after its sleep has missed every edit since, and its clone may
+    // have retired meanwhile (stage-clone.ts), which this cuts again.
     if (isPlace(stage.workspace.id)) {
-      await syncStageClone(stage.workspace);
+      const clone = await stageCloneOf(stage.workspace);
+      await installStage(stage.workspace, clone, stage.root);
     }
     await writeHost(stage);
   } else if (!(await letGo(stage, SERVE_LET_GO_MS))) {
@@ -1089,6 +1161,7 @@ export async function ensureStage(
 ): Promise<StageOpened> {
   const tree = await treeOf(workspace);
   const story = storyPath(tree, file);
+  await installedFor(tree, dirname(story));
   const stage = await stageAtRoot(stageFor(tree, story), "a sheet's read");
   const rel = relative(stage.root, story);
   const [sheet, weight] = await Promise.all([
@@ -1139,6 +1212,7 @@ export async function writeSheet(
 ): Promise<SheetWritten> {
   const tree = await treeOf(workspace);
   const story = storyPath(tree, write.file);
+  await installedFor(tree, dirname(story));
   const stage = await stageAtRoot(stageFor(tree, story), "a write");
   const rel = relative(stage.root, story);
   const written = () =>
@@ -1177,6 +1251,7 @@ export async function stageComponents(
         : `${workspace.path} has no vite.config, astro.config or nuxt.config, so it has no components a sheet shows. ${AS_PAGE}`
     );
   }
+  await installedFor(tree, root);
   // The stage is found from a file of the root: a file in it stands in for a story.
   const stage = await stageAtRoot(
     stageFor(tree, join(root, "package.json"), true),

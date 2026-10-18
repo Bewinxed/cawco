@@ -33,6 +33,7 @@
  *   dirs, with every daemon's socket, and the journal.
  */
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import {
@@ -222,6 +223,23 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
  */
 export const PLACE_SUFFIX = "-caw";
 export const isPlace = (id: string): boolean => id.endsWith(PLACE_SUFFIX);
+
+/**
+ * The workspace id of place `placeId`'s stage clone (agent stage-clone.ts),
+ * as its machine and the hub both name it: a workspace id of its own, never
+ * a place's, its first 8 characters its own hash, so its scratch and door
+ * dirs are its own and not the place's.
+ */
+export const stageCloneId = (placeId: string): string => {
+  const hex = createHash("sha256").update(`stage\0${placeId}`).digest("hex");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join("-");
+};
 
 /** The most `find` writes about a place: every path it names, NUL-separated. */
 const FIND_OUTPUT_MAX = 64 * 1024 * 1024;

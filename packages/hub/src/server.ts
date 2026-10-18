@@ -341,13 +341,16 @@ import {
   STAGE_CLONE_MS,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
+  STAGE_IDLE_MS,
   STAGE_READY_MS,
   STAGE_SERVE,
   STAGE_UNSERVE,
   STAGE_WRITE,
+  type StageCloneFrame,
   type StageFrame,
   type StageOpened,
   type StageState,
+  type StageStatus,
 } from "@cawco/core/stage";
 import {
   otherWrite,
@@ -17977,10 +17980,50 @@ export const createServer = (
       lead?.notice(projectId, threadId, note);
     },
   });
+  /** Each place's sheet stages as their machines last said, by port, and when: what holds its stage clone (work-items.ts `stageRuns`). */
+  const placeStages = new Map<
+    string,
+    Map<number, { at: number; status: StageStatus }>
+  >();
+  /** A stage in one of these runs in its clone. */
+  const STAGE_RUNNING: ReadonlySet<StageStatus> = new Set([
+    "starting",
+    "waking",
+    "live",
+  ]);
+  /**
+   * Why a place's stage holds its clone, in words: one runs, or one failed
+   * less than {@link STAGE_IDLE_MS} ago (the person is likely fixing what
+   * failed, and a clone archived now installs all over again). Asleep, it
+   * holds nothing: it slept for want of use.
+   */
+  const stageHold = (placeId: string): string | undefined => {
+    for (const { at, status } of placeStages.get(placeId)?.values() ?? []) {
+      if (STAGE_RUNNING.has(status)) {
+        return `its sheet stage is ${status === "live" ? "serving" : status}`;
+      }
+      if (status === "error" && Date.now() - at < STAGE_IDLE_MS) {
+        return "its sheet stage failed a short while ago";
+      }
+    }
+  };
+  /** A place's stage frame kept; one that fell asleep settles the place's stage clone. */
+  const stageHeard = (frame: StageFrame): void => {
+    if (!isPlace(frame.workspace)) {
+      return;
+    }
+    const ports = placeStages.get(frame.workspace) ?? new Map();
+    ports.set(frame.port, { status: frame.state.status, at: Date.now() });
+    placeStages.set(frame.workspace, ports);
+    if (frame.state.status === "asleep") {
+      workItems.settleStagesOf(frame.workspace);
+    }
+  };
   const workItems = createWorkItems({
     beforeCut: (projectId, machineId, cwd) =>
       placeRepos.beforeCut(projectId, machineId, cwd),
     db,
+    stageRuns: stageHold,
     // The design check (design-verify.ts), made further down; nothing
     // finishes an item before the hub is up.
     designHold: (item, submission) => designVerify.hold(item, submission),
@@ -26998,9 +27041,31 @@ export const createServer = (
               }
               // A workspace's stage changed: each of its sheets keeps the state.
               if (kind === "stage") {
-                artifacts.staged(
-                  message.machineId,
-                  message.payload as StageFrame
+                const frame = message.payload as StageFrame;
+                artifacts.staged(message.machineId, frame);
+                stageHeard(frame);
+                break;
+              }
+              // A place's stage clone is cut and in step: filed as a workspace.
+              if (kind === "stage-clone") {
+                const frame = message.payload as StageCloneFrame;
+                const by = db
+                  .listInstances()
+                  .find(
+                    (one) =>
+                      one.machineId === message.machineId &&
+                      stagePlaceRef(one).id === frame.place &&
+                      !workItems.workspaceOf(one)
+                  );
+                if (!by) {
+                  console.warn(
+                    `[workspaces] ${message.machineId}: a stage clone of place ${frame.place} that no session there names was not filed`
+                  );
+                  break;
+                }
+                detach(
+                  workItems.fileStageClone(message.machineId, frame, by.id),
+                  `file the stage clone ${frame.id}`
                 );
                 break;
               }

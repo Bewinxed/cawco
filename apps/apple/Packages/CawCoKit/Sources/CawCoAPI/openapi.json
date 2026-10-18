@@ -28921,6 +28921,12 @@
               "string"
             ]
           },
+          "stageFor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "holding": {
             "$ref": "#/components/schemas/WorkspaceHolding"
           },
@@ -28951,6 +28957,7 @@
           "path",
           "ports",
           "repoRoot",
+          "stageFor",
           "state",
           "tmp"
         ]
@@ -30139,6 +30146,9 @@
             "$ref": "#/components/schemas/StageFrame"
           },
           {
+            "$ref": "#/components/schemas/StageCloneFrame"
+          },
+          {
             "$ref": "#/components/schemas/FleetMcpFrame"
           },
           {
@@ -30279,6 +30289,7 @@
           "mapping": {
             "hub_auth": "#/components/schemas/HubAuthFrame",
             "stage": "#/components/schemas/StageFrame",
+            "stage-clone": "#/components/schemas/StageCloneFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
             "preview": "#/components/schemas/PreviewFrame",
             "frame": "#/components/schemas/MessageFrame",
@@ -50243,6 +50254,46 @@
           "port",
           "state",
           "workspace"
+        ]
+      },
+      "StageCloneFrame": {
+        "description": "The daemon's word that a place's stage clone (agent `stage-clone.ts`) is\ncut and in step, sent on each use: the hub files it as a workspace of the\nstage kind (schema `workspaces.stageFor`), which its retire sweep settles\nonce the place's stage sleeps.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "The clone's workspace id (core workspace-policy.ts `stageCloneId`).",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stage-clone"
+            ]
+          },
+          "path": {
+            "description": "The clone's root.",
+            "type": "string"
+          },
+          "place": {
+            "description": "The place whose sheets' stage runs in it.",
+            "type": "string"
+          },
+          "repoRoot": {
+            "description": "The repository root of the checkout it was cut from.",
+            "type": "string"
+          },
+          "tmp": {
+            "description": "Its scratch dir, its commands' `TMPDIR`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "path",
+          "place",
+          "repoRoot",
+          "tmp"
         ]
       },
       "FleetMcpFrame": {

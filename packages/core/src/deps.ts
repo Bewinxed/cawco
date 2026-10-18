@@ -1,8 +1,8 @@
 /**
  * A checkout's JavaScript dependencies, installed from its root lockfile:
- * what a place's stage clone installs inside its boundary (agent
- * stage-clone.ts `installInside`) and what the repository's own scripts load
- * before they import anything a dependency provides (scripts/lib/deps.ts). A
+ * what the repository's own scripts load before they import anything a
+ * dependency provides (scripts/lib/deps.ts); a place's stage clone installs
+ * by its project's own manager instead (agent stage-clone.ts `installAt`). A
  * workspace's cut installs nothing: its delegate runs its project's install.
  * The landing gate installs nothing of its own: a project declares its
  * install as a step of its gate (hub gate-file.ts).
