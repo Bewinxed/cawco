@@ -12,7 +12,7 @@
  */
 import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { constants, homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   type Browser,
@@ -335,6 +335,23 @@ interface Served {
 /** How many of a lost server's last lines, of each stream, its loss says. */
 const LOST_LINES = 15;
 
+/**
+ * How a server's process ended, a signal by its name: the one it took
+ * itself, or the one its server took under it. `bunx` runs vite as a child
+ * and exits 128 plus the number of the signal that ended it, and a SIGKILL
+ * leaves nothing in the server's own stderr.
+ */
+const endOf = (code: number | null, signal: string | null): string => {
+  if (signal) {
+    return `signal ${signal}`;
+  }
+  const taken =
+    code !== null && code > 128
+      ? Object.entries(constants.signals).find(([, n]) => n === code - 128)?.[0]
+      : undefined;
+  return taken ? `exit ${code}: signal ${taken}` : `exit ${code}`;
+};
+
 /** A log's last lines, indented under the line that says them; none when it can't be read. */
 const tailOf = async (file: string): Promise<string> => {
   const text = await Bun.file(file)
@@ -402,7 +419,7 @@ async function serve(
     const err = await tailOf(`${log}.err.log`);
     const out = await tailOf(`${log}.out.log`);
     lost(
-      `vite ${how} at ${base} ended (${child.signalCode ?? `exit ${code}`}) before its run was done with it; every page after it is refused (${log}.err.log, .out.log):\n  ${err}\n  ${out}`
+      `vite ${how} at ${base} ended (${endOf(code, child.signalCode)}) before its run was done with it; every page after it is refused (${log}.err.log, .out.log):\n  ${err}\n  ${out}`
     );
   };
   child.exited.then(ended).catch(() => undefined);
