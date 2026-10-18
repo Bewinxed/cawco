@@ -39,6 +39,7 @@ typeOverrides:
     CawHarness: OpenEnums.CawHarness
     CawNotWokenReason: OpenEnums.CawNotWokenReason
     CawRunningKind: OpenEnums.CawRunningKind
+    ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage
     ComponentDocTypes: OpenEnums.ComponentDocTypes
@@ -67,7 +68,7 @@ typeOverrides:
     FindField: OpenEnums.FindField
     FindLiveState: OpenEnums.FindLiveState
     FleetChoicesUpstream: OpenEnums.FleetChoicesUpstream
-    FleetItemStateState: OpenEnums.FleetItemStateState
+    FleetFaultCause: OpenEnums.FleetFaultCause
     FleetMcpServerMode: OpenEnums.FleetMcpServerMode
     FleetMcpServerState: OpenEnums.FleetMcpServerState
     FleetScope: OpenEnums.FleetScope
@@ -77,6 +78,7 @@ typeOverrides:
     GetApiInstances200Kind: OpenEnums.GetApiInstances200Kind
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
     HarnessKind: OpenEnums.HarnessKind
+    HarnessNoteKind: OpenEnums.HarnessNoteKind
     HomeCredentialKind: OpenEnums.HomeCredentialKind
     HomeStore: OpenEnums.HomeStore
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell

@@ -1283,6 +1283,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ClaudeLimitsErrorKind`.
+    public enum ClaudeLimitsErrorKind: OpenEnum {
+        case noReading
+        case notSignedIn
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "no-reading": self = .noReading
+            case "not-signed-in": self = .notSignedIn
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .noReading: "no-reading"
+            case .notSignedIn: "not-signed-in"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.noReading, .notSignedIn]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/CommandAckOutcome`.
     public enum CommandAckOutcome: OpenEnum {
         case started
@@ -2482,40 +2520,58 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/FleetItemStateState`.
-    public enum FleetItemStateState: OpenEnum {
-        case applied
-        case disabled
-        case failed
-        case needsAuth
-        case pending
-        case removed
-        case unsupported
+    /// `#/components/schemas/FleetFaultCause`.
+    public enum FleetFaultCause: OpenEnum {
+        case absent
+        case cliMissing
+        case cliTooOld
+        case drifted
+        case hubOnly
+        case marketplaceUnlinked
+        case missingBytes
+        case noCheckout
+        case timedOut
+        case unknown
+        case unparsable
+        case unsafePath
+        case unwritable
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
         public init(rawValue: String) {
             switch rawValue {
-            case "applied": self = .applied
-            case "disabled": self = .disabled
-            case "failed": self = .failed
-            case "needs-auth": self = .needsAuth
-            case "pending": self = .pending
-            case "removed": self = .removed
-            case "unsupported": self = .unsupported
+            case "absent": self = .absent
+            case "cli-missing": self = .cliMissing
+            case "cli-too-old": self = .cliTooOld
+            case "drifted": self = .drifted
+            case "hub-only": self = .hubOnly
+            case "marketplace-unlinked": self = .marketplaceUnlinked
+            case "missing-bytes": self = .missingBytes
+            case "no-checkout": self = .noCheckout
+            case "timed-out": self = .timedOut
+            case "unknown": self = .unknown
+            case "unparsable": self = .unparsable
+            case "unsafe-path": self = .unsafePath
+            case "unwritable": self = .unwritable
             default: self = .unrecognized(rawValue)
             }
         }
 
         public var rawValue: String {
             switch self {
-            case .applied: "applied"
-            case .disabled: "disabled"
-            case .failed: "failed"
-            case .needsAuth: "needs-auth"
-            case .pending: "pending"
-            case .removed: "removed"
-            case .unsupported: "unsupported"
+            case .absent: "absent"
+            case .cliMissing: "cli-missing"
+            case .cliTooOld: "cli-too-old"
+            case .drifted: "drifted"
+            case .hubOnly: "hub-only"
+            case .marketplaceUnlinked: "marketplace-unlinked"
+            case .missingBytes: "missing-bytes"
+            case .noCheckout: "no-checkout"
+            case .timedOut: "timed-out"
+            case .unknown: "unknown"
+            case .unparsable: "unparsable"
+            case .unsafePath: "unsafe-path"
+            case .unwritable: "unwritable"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -2524,7 +2580,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.applied, .disabled, .failed, .needsAuth, .pending, .removed, .unsupported]
+        public static let allCases: [Self] = [.absent, .cliMissing, .cliTooOld, .drifted, .hubOnly, .marketplaceUnlinked, .missingBytes, .noCheckout, .timedOut, .unknown, .unparsable, .unsafePath, .unwritable]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -2903,6 +2959,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.claude, .opencode, .pi]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/HarnessNoteKind`.
+    public enum HarnessNoteKind: OpenEnum {
+        case systemReminder
+        case taskNotification
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "system-reminder": self = .systemReminder
+            case "task-notification": self = .taskNotification
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .systemReminder: "system-reminder"
+            case .taskNotification: "task-notification"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.systemReminder, .taskNotification]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
