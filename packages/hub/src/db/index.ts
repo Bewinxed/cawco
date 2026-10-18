@@ -26,6 +26,7 @@ import type {
   HookHandler,
   McpPlatform,
   MemoryScope,
+  NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
   PermissionMode,
@@ -130,6 +131,7 @@ import {
   connectionProjects,
   connectorPolls,
   continuations,
+  dataMigrations,
   delegateEvents,
   eventRoutes,
   fleetAgents,
@@ -840,6 +842,16 @@ export interface DbShape {
     /** Whether a send that failed for `reason` failed only because a process went away. */
     owedAgain: (reason: string) => boolean
   ) => FoldedSession[];
+  /**
+   * Runs the one-time migration `name` over every stored send, in one
+   * transaction, unless it has run (`data_migrations`): `rewrite` answers a
+   * send's message as it is to be kept, or null to leave it as it is. How
+   * many sends it changed; null when it had run already.
+   */
+  readonly migrateSendsOnce: (
+    name: string,
+    rewrite: (body: NeutralUserMessage) => NeutralUserMessage | null
+  ) => number | null;
   /**
    * Folds a duplicate project into the one it duplicates (project-merge.ts),
    * in one transaction: its checkout and workspace places join `keepId`'s
@@ -5115,6 +5127,34 @@ const make = async (path: string): Promise<DbShape> => {
           queuedStarts,
           asks,
         };
+      }),
+    migrateSendsOnce: (name, rewrite) =>
+      db.transaction((tx) => {
+        if (
+          tx
+            .select()
+            .from(dataMigrations)
+            .where(eq(dataMigrations.name, name))
+            .get()
+        ) {
+          return null;
+        }
+        let changed = 0;
+        for (const send of tx
+          .select({ uuid: sentMessages.uuid, body: sentMessages.body })
+          .from(sentMessages)
+          .all()) {
+          const body = send.body ? rewrite(send.body) : null;
+          if (body) {
+            tx.update(sentMessages)
+              .set({ body })
+              .where(eq(sentMessages.uuid, send.uuid))
+              .run();
+            changed += 1;
+          }
+        }
+        tx.insert(dataMigrations).values({ name, at: new Date() }).run();
+        return changed;
       }),
     foldFormerSessions: (owedAgain) => {
       const open = db

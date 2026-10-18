@@ -1,5 +1,6 @@
 import { type MemoryRole, modelMatches } from "./fleet";
 import type { HarnessKind } from "./harness";
+import { markerTag, readMarkerTag } from "./injected";
 
 /**
  * Rules: standing instructions the hub enforces on every session, without the
@@ -413,29 +414,37 @@ export function ruleInScope(scope: RuleScope, facts: RuleFacts): boolean {
   return modelMatches(scope.model, facts.model);
 }
 
+/** The words a rule's message opens with, for the session that reads it. */
+const ruleLine = (name: string): string => `[Rule: ${name}]\n\n`;
+
 /**
- * The first line of every message a rule sends, followed by a blank line:
- * `[Rule: <name>]`. Storage strips a message's origin, so this line is what
- * lets a transcript read back off disk render the message as the rule that
- * sent it rather than as the reader's own turn. Hub and dashboard share it.
+ * What every message a rule sends opens with: its tag (injected.ts
+ * `markerTag`), then `[Rule: <name>]` and a blank line. Storage strips a
+ * message's origin, so this is what lets a transcript read back off disk
+ * render the message as the rule that sent it rather than as the reader's
+ * own turn. Hub and dashboard share it.
  */
-export const ruleMarker = (name: string): string => `[Rule: ${name}]\n\n`;
-
-const RULE_MARKER = /^\[Rule: (.+?)\]\n\n/;
+export const ruleMarker = (name: string): string =>
+  `${markerTag("rule", { name })}${ruleLine(name)}`;
 
 /**
- * A rule message read back into its rule's name and the reply itself, with the
- * marker line dropped. Null when the text does not open with {@link ruleMarker}.
+ * A rule message read back into its rule's name and the reply itself, off
+ * its tag. Null when the text does not open with {@link ruleMarker}.
  */
 export function parseRuleMarker(
   text: string
 ): { name: string; body: string } | null {
-  const marker = RULE_MARKER.exec(text);
-  if (!marker) {
+  const tag = readMarkerTag(text);
+  if (tag?.kind !== "rule") {
     return null;
   }
+  const name = tag.fields.name ?? "";
+  const line = ruleLine(name).trimEnd();
   return {
-    name: marker[1],
-    body: text.slice(marker[0].length).trim(),
+    name,
+    body: (tag.rest.startsWith(line)
+      ? tag.rest.slice(line.length)
+      : tag.rest
+    ).trim(),
   };
 }

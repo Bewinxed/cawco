@@ -185,6 +185,12 @@ export interface BlockMetadata {
   trigger?: "manual" | "auto";
   /** Set when a `user.peer` is a workflow's notice: what happened, e.g. `step Build failed`. */
   workflowEvent?: string;
+  /**
+   * The workflow run a block is about, as its producer stamped it: a
+   * workflow's notice, by its tag; a `workflow_run` call, by the run its
+   * result started.
+   */
+  workflowRunId?: string;
 }
 
 /** One row of a transcript, as the hub built it. */

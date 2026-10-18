@@ -1694,7 +1694,11 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
       ...base,
       type: "user.peer",
       content: notice.body,
-      metadata: { peerName: notice.workflow, workflowEvent: notice.event },
+      metadata: {
+        peerName: notice.workflow,
+        workflowEvent: notice.event,
+        ...(notice.runId ? { workflowRunId: notice.runId } : {}),
+      },
     };
   }
   const handoff = parseHandoffMarker(text);

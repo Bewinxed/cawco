@@ -487,6 +487,7 @@ import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import type { LimitCompaction } from "./db/at-limit";
 import type { PriorConversation, TrashKind } from "./db/schema";
+import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { undoable } from "./db/trash";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import {
@@ -948,6 +949,11 @@ const foldFormerSessions = (db: DbShape): string[] => {
  * image no longer stored, failed as it can no longer be sent.
  */
 const keepSendsAtStart = (db: DbShape): void => {
+  // Once: the sends stored before a marker carried its tag are given theirs.
+  const tagged = db.migrateSendsOnce(TAG_MARKERS, tagStoredSend);
+  if (tagged !== null) {
+    console.info(`[hub] ${tagged} stored send(s) given their marker's tag`);
+  }
   const owedAgain = foldFormerSessions(db);
   keepPendingWhole(db);
   for (const uuid of owedAgain) {

@@ -3075,6 +3075,16 @@ export const instanceAliases = sqliteTable("instance_aliases", {
 });
 
 /**
+ * The hub's one-time migrations over the rows it keeps, by name, once each
+ * has run (db/tag-markers.ts): a row here is its rows migrated, and it never
+ * runs again.
+ */
+export const dataMigrations = sqliteTable("data_migrations", {
+  name: text("name").primaryKey(),
+  at: timestamp("at").notNull(),
+});
+
+/**
  * Project moves (moves.ts, core move.ts): the one record of each, so a hub
  * that restarts mid-way carries the job on from its stage rather than
  * forgetting it. A started or cancelled job is kept a while so a screen that

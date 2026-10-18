@@ -9,30 +9,123 @@
  * user turn. The marker is the part that survives, so the hub builds it here
  * and the dashboard parses it here, and a stored copy renders exactly as the
  * live one did — never as the reader's own words.
+ *
+ * Every marker is two parts: one machine tag, `[cawco:<kind> key=value …]`
+ * on the message's first line ({@link markerTag}), each value
+ * URI-encoded, and then the line its reader (a model, a person) reads, as it
+ * always was. Only the tag is ever parsed ({@link readMarkerTag}); the line a
+ * reader reads is built from the tag's fields again and passed over, never
+ * read. Messages stored before the tag were given it once, by the hub's
+ * migration over its stored sends (hub db/tag-markers.ts).
  */
 import type { ArtifactKind } from "./index";
+
+/** One marker's tag, read: its kind, its fields, and the text after the tag's line. */
+export interface MarkerTag {
+  fields: Readonly<Record<string, string>>;
+  kind: string;
+  rest: string;
+}
+
+/**
+ * The tag a marker opens with: `[cawco:<kind> key=value …]` and a line
+ * break, each value URI-encoded (so it holds no space, `=` or `]`); a field
+ * that is undefined is left out.
+ */
+export const markerTag = (
+  kind: string,
+  fields: Readonly<Record<string, string | number | undefined>>
+): string =>
+  `[cawco:${kind}${Object.entries(fields)
+    .flatMap(([key, value]) =>
+      value === undefined ? [] : [` ${key}=${encodeURIComponent(String(value))}`]
+    )
+    .join("")}]\n`;
+
+/**
+ * A tag's line: its kind, its fields, and the one whitespace after it (a
+ * line break as written, a space where a harness catalog folded a first
+ * prompt onto one line).
+ */
+const TAG = /^\[cawco:([a-z-]+)((?: [a-z]+=[^\s\]]*)*)\]\s/;
+const FIELD = / ([a-z]+)=([^\s\]]*)/g;
+
+/** The tag `text` opens with, read; null when it opens with none, or one that does not decode. */
+export function readMarkerTag(text: string): MarkerTag | null {
+  const tag = TAG.exec(text);
+  if (!tag) {
+    return null;
+  }
+  const fields: Record<string, string> = {};
+  try {
+    for (const [, key, value] of tag[2].matchAll(FIELD)) {
+      fields[key] = decodeURIComponent(value);
+    }
+  } catch {
+    return null;
+  }
+  return { kind: tag[1], fields, rest: text.slice(tag[0].length) };
+}
+
+/**
+ * The text after the line a reader reads (`line`, built again from the tag's
+ * fields), trimmed: that line is passed over, never parsed. A line whose
+ * break a harness catalog folded to spaces is passed over all the same.
+ */
+const afterLine = (rest: string, line: string): string => {
+  const head = line.trimEnd();
+  return (rest.startsWith(head) ? rest.slice(head.length) : rest).trim();
+};
+
+/** The tag `text` opens with when it is of `kind`, else null. */
+const tagOf = (text: string, kind: string): MarkerTag | null => {
+  const tag = readMarkerTag(text);
+  return tag?.kind === kind ? tag : null;
+};
+
+/**
+ * The words a hand-off opens with, for the session that reads it; one
+ * stored before a hand-off named its sender's id has no `#<short>`.
+ */
+const handoffLine = (from: string, short: string): string =>
+  `[Hand-off from the ${from}${short ? `#${short}` : ""} session — another agent, not the user]\n\n`;
+
+/** The words a workflow step's brief opens with. */
+const stepLine = (workflow: string, step: string): string =>
+  `[Hand-off from the ${workflow} workflow — step ${step}, not the user]\n\n`;
 
 /**
  * A hand-off from another session, named `<name>#<first 8 of its id>` as a
  * report names its delegate, so a reader can link, mark and relate the sender.
  */
 export const handoffMarker = (from: string, id: string): string =>
-  `[Hand-off from the ${from}#${id.slice(0, 8)} session — another agent, not the user]\n\n`;
+  `${markerTag("handoff", { from, short: id.slice(0, 8) })}${handoffLine(from, id.slice(0, 8))}`;
 
 /** A workflow step's brief, handed to the session that runs the step. */
 export const workflowStepMarker = (workflow: string, step: string): string =>
-  `[Hand-off from the ${workflow} workflow — step ${step}, not the user]\n\n`;
+  `${markerTag("workflow-step", { workflow, step })}${stepLine(workflow, step)}`;
 
 /**
- * The marker and the break after it, however that break was kept: written as
- * a blank line, and folded to spaces in a harness catalog's first prompt.
+ * Where a hand-off's marker ends, its tag and its line and the whitespace
+ * after them; 0 for text that opens with none.
  */
-const HANDOFF =
-  /^\[Hand-off from the (?:(.+?)(?:#([0-9a-f]{8}))? session — another agent|(.+?) workflow — step (.+?)), not the user\]\s+/;
+const handoffEnd = (text: string): number => {
+  const tag = readMarkerTag(text);
+  if (!(tag?.kind === "handoff" || tag?.kind === "workflow-step")) {
+    return 0;
+  }
+  const { from = "", short = "", workflow = "", step = "" } = tag.fields;
+  const line = (
+    tag.kind === "handoff" ? handoffLine(from, short) : stepLine(workflow, step)
+  ).trimEnd();
+  const lineAt = text.length - tag.rest.length;
+  const end = tag.rest.startsWith(line) ? lineAt + line.length : lineAt;
+  return end + (/^\s*/.exec(text.slice(end))?.[0].length ?? 0);
+};
 
 /** `text` with `line` right after any hand-off marker it opens with. */
 const afterMarker = (text: string, line: string): string => {
-  const at = HANDOFF.exec(text)?.[0].length ?? 0;
+  const at = handoffEnd(text);
   return `${text.slice(0, at)}${line}\n\n${text.slice(at)}`;
 };
 
@@ -162,22 +255,33 @@ export const withInputsLine = (
  * A hand-off read back into who sent it and what it says. `from` names the
  * sending session, or the workflow and step for a step's brief; `short` is the
  * sending session's 8-character short id, which consumers pair with its full
- * id by prefix (none for a workflow's brief, nor a marker written before the
- * id was).
+ * id by prefix (none for a workflow's brief).
  */
 export function parseHandoffMarker(
   text: string
 ): { from: string; short?: string; body: string } | null {
-  const marker = HANDOFF.exec(text);
-  if (!marker) {
-    return null;
+  const tag = readMarkerTag(text);
+  if (tag?.kind === "handoff") {
+    const { from = "", short = "" } = tag.fields;
+    return {
+      from,
+      ...(short ? { short } : {}),
+      body: afterLine(tag.rest, handoffLine(from, short)),
+    };
   }
-  const [line, session, short, workflow, step] = marker;
-  const body = text.slice(line.length).trim();
-  return workflow === undefined
-    ? { from: session, ...(short ? { short } : {}), body }
-    : { from: `${workflow} workflow · ${step}`, body };
+  if (tag?.kind === "workflow-step") {
+    const { workflow = "", step = "" } = tag.fields;
+    return {
+      from: `${workflow} workflow · ${step}`,
+      body: afterLine(tag.rest, stepLine(workflow, step)),
+    };
+  }
+  return null;
 }
+
+/** The words an undelivered notice opens with, before its reason. */
+const undeliveredLine = (to: string): string =>
+  `[CawCo] Your message to ${to} was not delivered: `;
 
 /**
  * The hub telling a session a message it sent another never reached it:
@@ -185,19 +289,18 @@ export function parseHandoffMarker(
  * titled by who it was for, the reason under it).
  */
 export const undeliveredNotice = (to: string, reason: string): string =>
-  `[CawCo] Your message to ${to} was not delivered: ${reason}`;
-
-const UNDELIVERED = /^\[CawCo\] Your message to (.+?) was not delivered: /;
+  `${markerTag("undelivered", { to })}${undeliveredLine(to)}${reason}`;
 
 /** An undelivered notice read back into who it was for and why. */
 export function parseUndelivered(
   text: string
 ): { to: string; reason: string } | null {
-  const marker = UNDELIVERED.exec(text);
-  if (!marker) {
+  const tag = tagOf(text, "undelivered");
+  if (!tag) {
     return null;
   }
-  return { to: marker[1], reason: text.slice(marker[0].length).trim() };
+  const { to = "" } = tag.fields;
+  return { to, reason: afterLine(tag.rest, undeliveredLine(to)) };
 }
 
 /**
@@ -222,23 +325,16 @@ export const artifactResponsesNotice = ({
   name,
   since,
 }: ArtifactResponses): string =>
-  `[CawCo] The ${kind} "${name}" has new responses since ${since}. Read them with artifact_read({ id: "${id}", since: ${since} }).`;
-
-const ARTIFACT_RESPONSES_LINE =
-  /^\[CawCo\] The (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: \d+ \}\)/;
+  `${markerTag("artifact-responses", { id, kind, name, since })}[CawCo] The ${kind} "${name}" has new responses since ${since}. Read them with artifact_read({ id: "${id}", since: ${since} }).`;
 
 /** An artifact's responses notice read back into what it names. */
 export function parseArtifactResponses(text: string): ArtifactResponses | null {
-  const line = ARTIFACT_RESPONSES_LINE.exec(text);
-  if (!line) {
+  const tag = tagOf(text, "artifact-responses");
+  if (!tag) {
     return null;
   }
-  return {
-    kind: line[1] as ArtifactKind,
-    name: line[2],
-    since: Number(line[3]),
-    id: line[4],
-  };
+  const { id = "", kind = "", name = "", since = "" } = tag.fields;
+  return { id, kind: kind as ArtifactKind, name, since: Number(since) };
 }
 
 /**
@@ -256,11 +352,15 @@ export interface ArtifactComments {
   name: string;
 }
 
+/** The words a comments notice opens with, before its sections. */
+const commentsLine = ({ id, kind, name }: ArtifactComments): string =>
+  `[CawCo] The person commented on the ${kind} "${name}" (artifact ${id}). Answer each pin in its thread with comment_reply({ pin, text }), and comment_resolve once a change settles it; comment_read has the history.\n\n`;
+
 export const artifactCommentsNotice = (
-  { id, kind, name }: ArtifactComments,
+  artifact: ArtifactComments,
   sections: string[]
 ): string =>
-  `[CawCo] The person commented on the ${kind} "${name}" (artifact ${id}). Answer each pin in its thread with comment_reply({ pin, text }), and comment_resolve once a change settles it; comment_read has the history.\n\n${sections.join("\n\n")}`;
+  `${markerTag("artifact-comments", { id: artifact.id, kind: artifact.kind, name: artifact.name })}${commentsLine(artifact)}${sections.join("\n\n")}`;
 
 /**
  * A sheet's compile errors from its stage (live components, core
@@ -272,7 +372,7 @@ export const artifactErrorsNotice = (
   { id, kind, name }: ArtifactComments,
   sections: string[]
 ): string =>
-  `[CawCo] The ${kind} "${name}" (artifact ${id}) does not compile on its stage; the panel shows the last good render under the error. Fix each at its file:line:column; artifact_read lists the errors standing, and none once it compiles.\n\n${sections.join("\n\n")}`;
+  `${markerTag("artifact-errors", { id, kind, name })}[CawCo] The ${kind} "${name}" (artifact ${id}) does not compile on its stage; the panel shows the last good render under the error. Fix each at its file:line:column; artifact_read lists the errors standing, and none once it compiles.\n\n${sections.join("\n\n")}`;
 
 /**
  * What the person saved from a sheet's inspector (live components spec §5):
@@ -283,7 +383,7 @@ export const artifactSavesNotice = (
   { id, kind, name }: ArtifactComments,
   sections: string[]
 ): string =>
-  `[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
+  `${markerTag("artifact-saves", { id, kind, name })}[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
 
 /**
  * A delegate put an artifact in its parent's panel (hub artifacts/service.ts
@@ -304,58 +404,43 @@ export const artifactHandedNotice = ({
   kind,
   name,
 }: ArtifactHanded): string =>
-  `[CawCo] ${from} put the ${kind} "${name}" in your panel (artifact ${id}). The person's picks and pins on it come to you; artifact_read reads it.`;
-
-const ARTIFACT_HANDED_LINE =
-  /^\[CawCo\] (.+) put the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" in your panel \(artifact ([0-9a-f-]{36})\)\./;
+  `${markerTag("artifact-handed", { from, id, kind, name })}[CawCo] ${from} put the ${kind} "${name}" in your panel (artifact ${id}). The person's picks and pins on it come to you; artifact_read reads it.`;
 
 /** A handed-up artifact's notice read back into who handed what. */
 export function parseArtifactHanded(text: string): ArtifactHanded | null {
-  const line = ARTIFACT_HANDED_LINE.exec(text);
-  if (!line) {
+  const tag = tagOf(text, "artifact-handed");
+  if (!tag) {
     return null;
   }
-  return {
-    from: line[1],
-    kind: line[2] as ArtifactKind,
-    name: line[3],
-    id: line[4],
-  };
+  const { from = "", id = "", kind = "", name = "" } = tag.fields;
+  return { from, id, kind: kind as ArtifactKind, name };
 }
-
-const ARTIFACT_COMMENTS_LINE =
-  /^\[CawCo\] The person commented on the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\)\.[^\n]*\n\n/;
 
 /** An artifact's comments notice read back into what it names, and its sections as one text. */
 export function parseArtifactComments(
   text: string
 ): (ArtifactComments & { sections: string }) | null {
-  const line = ARTIFACT_COMMENTS_LINE.exec(text);
-  if (!line) {
+  const tag = tagOf(text, "artifact-comments");
+  if (!tag) {
     return null;
   }
-  return {
-    kind: line[1] as ArtifactKind,
-    name: line[2],
-    id: line[3],
-    sections: text.slice(line[0].length),
-  };
+  const named = namedOf(tag);
+  return { ...named, sections: afterLine(tag.rest, commentsLine(named)) };
 }
 
-const ARTIFACT_ERRORS_LINE =
-  /^\[CawCo\] The (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\) does not compile on its stage;/;
+/** What a notice's tag names: its artifact's id, kind and name. */
+const namedOf = ({ fields }: MarkerTag): ArtifactComments => ({
+  id: fields.id ?? "",
+  kind: (fields.kind ?? "") as ArtifactKind,
+  name: fields.name ?? "",
+});
 
-const ARTIFACT_SAVES_LINE =
-  /^\[CawCo\] The person changed the (page|canvas|preview|sheet) "([a-z0-9][a-z0-9-]{0,62})" \(artifact ([0-9a-f-]{36})\) from its inspector,/;
-
-/** What a notice's opening line names, for the notices whose line is `kind`, `name`, `id` in that order. */
+/** What a notice of `kind` names, read off its tag. */
 const namedBy =
-  (line: RegExp) =>
+  (kind: string) =>
   (text: string): ArtifactComments | null => {
-    const found = line.exec(text);
-    return found
-      ? { kind: found[1] as ArtifactKind, name: found[2], id: found[3] }
-      : null;
+    const tag = tagOf(text, kind);
+    return tag ? namedOf(tag) : null;
   };
 
 /** Every notice CawCo sends a session on the artifact origin, by kind. */
@@ -395,12 +480,12 @@ export const ARTIFACT_NOTICES: readonly {
   },
   {
     notice: "errors",
-    read: namedBy(ARTIFACT_ERRORS_LINE),
+    read: namedBy("artifact-errors"),
     lead: () => "Compile errors on",
   },
   {
     notice: "saves",
-    read: namedBy(ARTIFACT_SAVES_LINE),
+    read: namedBy("artifact-saves"),
     lead: () => "Changes saved to",
   },
   {
@@ -427,26 +512,31 @@ export function parseArtifactNotice(text: string): ArtifactNotice | null {
   return null;
 }
 
+/** The words a fleet-watch nudge opens with. */
+const fleetWatchLine = (line: string): string => `[Fleet watch] ${line}\n\n`;
+
 /**
  * Fleet watch's nudge to a session's lead (packages/hub `fleet-watch.ts`):
  * the line, then what the lead reads. A transcript draws it as the same
  * fleet-watch note the watched session's transcript has.
  */
 export const fleetWatchNudge = (line: string, body: string): string =>
-  `[Fleet watch] ${line}\n\n${body}`;
-
-const FLEET_WATCH_NUDGE = /^\[Fleet watch\] (.+)\n\n/;
+  `${markerTag("fleet-watch", { line })}${fleetWatchLine(line)}${body}`;
 
 /** A fleet-watch nudge read back into its line and what it says. */
 export function parseFleetWatchNudge(
   text: string
 ): { line: string; body: string } | null {
-  const marker = FLEET_WATCH_NUDGE.exec(text);
-  if (!marker) {
+  const tag = tagOf(text, "fleet-watch");
+  if (!tag) {
     return null;
   }
-  return { line: marker[1], body: text.slice(marker[0].length).trim() };
+  const { line = "" } = tag.fields;
+  return { line, body: afterLine(tag.rest, fleetWatchLine(line)) };
 }
+
+/** The words a fork's notice opens with. */
+const forkLine = (line: string): string => `[Fork] ${line}\n\n`;
 
 /**
  * The hub's word to a fork, ahead of its first turn (packages/hub
@@ -454,44 +544,69 @@ export function parseFleetWatchNudge(
  * transcript draws it as a note, never as the person's words.
  */
 export const forkNotice = (line: string, body: string): string =>
-  `[Fork] ${line}\n\n${body}`;
-
-const FORK_NOTICE = /^\[Fork\] (.+)\n\n/;
+  `${markerTag("fork", { line })}${forkLine(line)}${body}`;
 
 /** A fork's notice read back into its line and what it says. */
 export function parseForkNotice(
   text: string
 ): { line: string; body: string } | null {
-  const marker = FORK_NOTICE.exec(text);
-  if (!marker) {
+  const tag = tagOf(text, "fork");
+  if (!tag) {
     return null;
   }
-  return { line: marker[1], body: text.slice(marker[0].length).trim() };
+  const { line = "" } = tag.fields;
+  return { line, body: afterLine(tag.rest, forkLine(line)) };
 }
+
+/** The words a workflow's notice opens with. */
+const workflowNoticeLine = (workflow: string, event: string): string =>
+  `[Workflow ${workflow} — ${event}]\n\n`;
 
 /**
  * A workflow telling its supervising session what happened: a step passed or
- * failed, the run finished, a question or checkpoint came up.
+ * failed, the run finished, a question or checkpoint came up. `runId` is the
+ * run it is about, which its reader links the note to.
  */
-export const workflowNoticeMarker = (workflow: string, event: string): string =>
-  `[Workflow ${workflow} — ${event}]\n\n`;
+export const workflowNoticeMarker = (
+  workflow: string,
+  event: string,
+  runId: string
+): string =>
+  `${markerTag("workflow-notice", { workflow, event, run: runId })}${workflowNoticeLine(workflow, event)}`;
 
-const WORKFLOW_NOTICE = /^\[Workflow (.+?) — (.+?)\]\n\n/;
-
-/** A workflow notice read back into the workflow, the event and the detail. */
-export function parseWorkflowNotice(
-  text: string
-): { workflow: string; event: string; body: string } | null {
-  const marker = WORKFLOW_NOTICE.exec(text);
-  if (!marker) {
+/**
+ * A workflow notice read back into the workflow, the event, its run and the
+ * detail. `runId` is absent on one stored before a notice named its run.
+ */
+export function parseWorkflowNotice(text: string): {
+  workflow: string;
+  event: string;
+  runId?: string;
+  body: string;
+} | null {
+  const tag = tagOf(text, "workflow-notice");
+  if (!tag) {
     return null;
   }
+  const { workflow = "", event = "", run } = tag.fields;
   return {
-    workflow: marker[1],
-    event: marker[2],
-    body: text.slice(marker[0].length).trim(),
+    workflow,
+    event,
+    ...(run ? { runId: run } : {}),
+    body: afterLine(tag.rest, workflowNoticeLine(workflow, event)),
   };
 }
+
+/** How a report's turn ended, as its tag says it. */
+type ReportOutcome = "complete" | "failed" | "notice";
+
+/** The words a report opens with, and its headline line under them. */
+const reportLine = (
+  label: string,
+  outcome: ReportOutcome,
+  headline: string | undefined
+): string =>
+  `[Report from delegate ${label} — ${outcome === "notice" ? "notice" : `turn ${outcome}`}]\n${headline ? `Headline: ${headline}\n` : ""}\n`;
 
 /**
  * The header of a delegate's report to its parent, written when the
@@ -506,17 +621,24 @@ export const reportMarker = (
   notice = false,
   headline?: string
 ): string => {
-  const said = headline?.replace(/\s+/g, " ").trim();
-  return `[Report from delegate ${label} — ${notice ? "notice" : `turn ${failed ? "failed" : "complete"}`}]\n${said ? `Headline: ${said}\n` : ""}\n`;
+  const said = headline?.replace(/\s+/g, " ").trim() || undefined;
+  let outcome: ReportOutcome = failed ? "failed" : "complete";
+  if (notice) {
+    outcome = "notice";
+  }
+  const at = label.lastIndexOf("#");
+  return `${markerTag("report", {
+    name: at < 0 ? label : label.slice(0, at),
+    short: at < 0 ? "" : label.slice(at + 1),
+    outcome,
+    headline: said,
+  })}${reportLine(label, outcome, said)}`;
 };
-
-const REPORT =
-  /^\[Report from delegate (.+?)#([0-9a-f]{8}) — (turn complete|turn failed|notice)\]\n(?:Headline: ([^\n]+)\n)?\n/;
 
 /**
  * A report read back. Only the 8-character short id survives, so consumers
  * pair it with the delegate's full id by prefix. `headline` is absent on a
- * report without one (a turn's own words, a hub notice, one stored before).
+ * report without one (a turn's own words, a hub notice).
  */
 export function parseReportMarker(text: string): {
   name: string;
@@ -525,23 +647,30 @@ export function parseReportMarker(text: string): {
   headline?: string;
   body: string;
 } | null {
-  const marker = REPORT.exec(text);
-  if (!marker) {
+  const tag = tagOf(text, "report");
+  if (!tag) {
     return null;
   }
+  const { name = "", short = "", outcome = "", headline } = tag.fields;
   return {
-    name: marker[1],
-    short: marker[2],
-    failed: marker[3] === "turn failed",
-    ...(marker[4] ? { headline: marker[4].trim() } : {}),
-    body: text.slice(marker[0].length).trim(),
+    name,
+    short,
+    failed: outcome === "failed",
+    ...(headline ? { headline } : {}),
+    body: afterLine(
+      tag.rest,
+      reportLine(`${name}#${short}`, outcome as ReportOutcome, headline)
+    ),
   };
 }
 
+/** The words a delegate's ask opens with. */
+const askLine = (label: string): string => `[Delegate ask from ${label}]\n\n`;
+
 /**
- * A delegate's permission ask, routed to its parent: an opening line naming
- * the delegate, the ask itself, then the tag line carrying the ids the
- * parent's `answer_delegate` call copies, then how to answer.
+ * A delegate's permission ask, routed to its parent: its tag, an opening
+ * line naming the delegate, the ask itself, then the line carrying the ids
+ * the parent's `answer_delegate` call copies, then how to answer.
  */
 export const delegateAskText = (ask: {
   label: string;
@@ -550,27 +679,31 @@ export const delegateAskText = (ask: {
   request: string;
   instruction: string;
 }): string =>
-  `[Delegate ask from ${ask.label}]\n\n${ask.body}\n\n[delegate-ask instance=${ask.instance} request=${ask.request}]\n\n${ask.instruction}`;
+  `${markerTag("delegate-ask", { label: ask.label, instance: ask.instance, request: ask.request })}${askLine(ask.label)}${ask.body}${askIds(ask.instance, ask.request)}${ask.instruction}`;
 
-const ASK_OPENING = /^\[Delegate ask from (.+?)\]\n\n/;
-const ASK_TAG = /\n\n\[delegate-ask instance=([0-9a-f-]{36}) request=(\S+)\]/;
+/** The line an ask's parent copies its ids from, as its `answer_delegate` call names them. */
+const askIds = (instance: string, request: string): string =>
+  `\n\n[delegate-ask instance=${instance} request=${request}]\n\n`;
 
-/** An ask read back: who asked, its ids, and the ask alone (no tag, no instruction). */
+/** An ask read back: who asked, its ids, and the ask alone (no ids, no instruction). */
 export function parseDelegateAsk(text: string): {
   label: string;
   instance: string;
   request: string;
   body: string;
 } | null {
-  const opening = ASK_OPENING.exec(text);
-  const tag = opening ? ASK_TAG.exec(text) : null;
-  if (!(opening && tag)) {
+  const tag = tagOf(text, "delegate-ask");
+  if (!tag) {
     return null;
   }
+  const { label = "", instance = "", request = "" } = tag.fields;
+  const asked = afterLine(tag.rest, askLine(label));
+  const ids = askIds(instance, request).trim();
+  const at = asked.indexOf(ids);
   return {
-    label: opening[1],
-    instance: tag[1],
-    request: tag[2],
-    body: text.slice(opening[0].length, tag.index).trim(),
+    label,
+    instance,
+    request,
+    body: (at < 0 ? asked : asked.slice(0, at)).trim(),
   };
 }
