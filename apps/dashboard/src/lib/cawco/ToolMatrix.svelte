@@ -298,7 +298,7 @@
   <div
     class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
   >
-    <Table.Root class="border-collapse text-left">
+    <Table.Root class="border-collapse text-start">
       <Table.Header>
         <Table.Row class="align-top">
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->

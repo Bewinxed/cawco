@@ -381,7 +381,7 @@
         <span class="flex flex-none overflow-hidden">
           <Button
             data-primary
-            class="h-c-composer-field"
+            class="min-h-c-composer-field"
             {failed}
             label={primary.label}
             onclick={() => act(primary.act)}

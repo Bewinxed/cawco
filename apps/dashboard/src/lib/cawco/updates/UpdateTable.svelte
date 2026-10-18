@@ -44,7 +44,7 @@
     style:--matrix-ring="inset 0 0 0 1px var(--border-hairline)"
     style:--phone-cols="minmax(0, 1fr) auto"
   >
-    <Table.Root class="border-collapse text-left max-phone:block">
+    <Table.Root class="border-collapse text-start max-phone:block">
       <Table.Header class="max-phone:hidden">
         <Table.Row
           class="align-top max-phone:grid max-phone:grid-cols-(--phone-cols) max-phone:items-center"

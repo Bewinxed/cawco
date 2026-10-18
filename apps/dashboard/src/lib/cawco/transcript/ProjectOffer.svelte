@@ -89,7 +89,7 @@
     </p>
     <div data-slot="actions" class="flex gap-space-2 ms-auto">
       <Button
-        class="h-space-8 coarse:h-(--btn-h-coarse)"
+        class="min-h-space-8 coarse:min-h-(--btn-h-coarse)"
         fit="prompt"
         style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         href="/project/{encodeURIComponent(joined.project.id)}"
@@ -97,7 +97,7 @@
       >
       <Button
         aria-label="Put this away"
-        class="h-space-8 coarse:h-(--btn-h-coarse)"
+        class="min-h-space-8 coarse:min-h-(--btn-h-coarse)"
         fit="prompt"
         style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         icon={IconClose}
@@ -128,7 +128,7 @@
     </p>
     <div data-slot="actions" class="flex gap-space-2 ms-auto">
       <Button
-        class="h-space-8 coarse:h-(--btn-h-coarse)"
+        class="min-h-space-8 coarse:min-h-(--btn-h-coarse)"
         fit="prompt"
         style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         disabled={pending !== null}
@@ -138,7 +138,7 @@
         variant="ghost"
       />
       <Button
-        class="h-space-8 coarse:h-(--btn-h-coarse)"
+        class="min-h-space-8 coarse:min-h-(--btn-h-coarse)"
         fit="prompt"
         style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         disabled={pending !== null}
