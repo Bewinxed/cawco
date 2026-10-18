@@ -1507,8 +1507,13 @@
   /* bits-ui places every floating wrapper by `transform` and, at a device
      pixel ratio of 1.5 or more, gives it `will-change: transform` inline
      for as long as it is mounted (bits-ui 2.19.5, the latest,
-     internal/floating-svelte/use-floating.svelte.js), so a card kept
-     mounted while shut (Caw's panel) held a layer for good. Placed on whole
+     internal/floating-svelte/use-floating.svelte.js:43; Floating UI's
+     `transform` option, on by default, :9, which bits-ui's floating layer
+     never passes, so nothing turns it off from outside), and a card kept
+     mounted while shut (Caw's panel) held a layer for good. No bits-ui
+     issue names it; WordPress/gutenberg#76899 ("remove the CSS
+     `will-change: transform` … it stops being blurry") is the same layer
+     on its popovers, its fix the same reset at rest. Placed on whole
      device pixels (its `roundByDPR`), a wrapper needs none at rest; one that
      follows its anchor frame by frame takes one while it moves
      (`data-follows`, PaneTabs `followLayer`: an attribute, since bits-ui
