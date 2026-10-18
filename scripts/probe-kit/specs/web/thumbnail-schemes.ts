@@ -5,14 +5,17 @@
  *
  *   bun scripts/probe-kit/run.ts thumbnail-schemes
  *
- * A scratch fleet, the built dashboard at the desk, the theme on "system"
- * with the OS by day. Each session makes a page with `artifact_create`; its
- * card stands in the transcript and its pane opens, so the pane asks the
- * overlay for the thumbnail once.
+ * A scratch fleet, the built dashboard at the desk, its theme Light, the
+ * OS's scheme left as the browser has it (no emulation: Playwright's
+ * emulated `prefers-color-scheme` is forced into every frame, which would
+ * hide what a frame's element passes down). Each session makes a page with
+ * `artifact_create`; its card stands in the transcript and its pane opens,
+ * so the pane asks the overlay for the thumbnail once. Night is the
+ * dashboard's own theme switch (the sidebar's), the OS still light.
  *
  * 1. A page with light and dark styles (`light-dark()`): one capture brings
- *    two pictures; the card shows the light one by day, and, the OS turned
- *    dark (`html.dark`, no new capture), the dark one. Read as the mean
+ *    two pictures; the card shows the light one by day, and, the dashboard
+ *    turned dark (`html.dark`, no new capture), the dark one. Read as the mean
  *    luminance of the picture the card's <img> holds.
  * 2. Through that capture the live page's root never changed (a
  *    MutationObserver on its attributes, in the page's frame): the other
@@ -25,8 +28,19 @@
  * 5. A custom element the page hides until its script defines it: the
  *    copy, which runs no script, still draws it (the night picture is lit
  *    by it, not all ground).
+ * 6. A page styled only by `prefers-color-scheme`: its pane frame's
+ *    `color-scheme` is the dashboard's theme, so at night the page hears
+ *    dark and draws its dark background (read in the frame), and its two
+ *    pictures follow as in 1. 6b: the theme turns with the frame open and
+ *    the page hears it in place (the same document). 6c: the copy's dark
+ *    picture, drawn by day, matches the page's own dark drawing at night.
+ * 7. A preview (someone's own app) styled the same way: its frame stays
+ *    `color-scheme: light`, the page hears light at night too, and its one
+ *    picture is flagged single.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, in order
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { type Kit, open, type Spec } from "../../kit";
@@ -53,7 +67,11 @@ const QUIRKS = BOTH.replace("<!doctype html>", "").replace(
 const DEFINED = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Defined</title><style>html,body{margin:0;background:light-dark(#fff,#000)}x-card{display:block;block-size:70vh;background:light-dark(#000,#fff)}x-card:not(:defined){visibility:hidden}</style></head><body><x-card></x-card><script>customElements.define("x-card",class extends HTMLElement{})</script></body></html>`;
 /** The share of the night picture the defined card must light, at least. Our call: it is 70% of the viewport. */
 const CARD_LIGHT = 0.4;
+/** The copy's dark picture against the page's own, mean absolute difference at most. Our call: the same layout and colours, antialiasing apart. */
+const LIVE_DIFF = 0.02;
 /** A page whose colours are fixed: it looks the same in both schemes. */
+/** A page that styles dark only by `prefers-color-scheme`, as a page written for any browser does. */
+const PREFERS = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Prefers</title><style>body{margin:0;padding:24px;background:#fafafa;color:#111;font:16px/1.5 system-ui}@media (prefers-color-scheme: dark){body{background:#121212;color:#eee}}</style></head><body>${CONTENT}</body></html>`;
 const LIGHT_ONLY = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Light only</title><style>html{background:#fafafa}body{margin:0;padding:24px;background:#fafafa;color:#111;font:16px/1.5 system-ui}</style></head><body>${CONTENT}</body></html>`;
 
 const asks = new Map<string, { input: object; name: string }>();
@@ -93,23 +111,75 @@ const respond = (request: Seen): Reply => {
     : text(`${ask.name} is not offered`);
 };
 
-/** Counts the overlay's `cawco:capture` answers the dashboard hears. */
+/** Counts the overlay's `cawco:capture` answers the dashboard hears, and keeps the last one's picture and scheme. */
 function countCaptures(): void {
   if (window.top !== window) {
     return;
   }
-  const seen = { captures: 0 };
+  const seen = { captures: 0, png: "", scheme: "" };
   (window as unknown as { __thumbs: typeof seen }).__thumbs = seen;
   addEventListener(
     "message",
     (event) => {
-      if ((event.data as { type?: unknown } | null)?.type === "cawco:capture") {
+      const data = event.data as {
+        png?: unknown;
+        scheme?: unknown;
+        type?: unknown;
+      } | null;
+      if (data?.type === "cawco:capture") {
         seen.captures += 1;
+        seen.png = typeof data.png === "string" ? data.png : "";
+        seen.scheme = typeof data.scheme === "string" ? data.scheme : "";
       }
     },
     true
   );
 }
+
+/** The last capture the dashboard heard: its picture as a data URL, and the scheme it was drawn in. */
+const lastCapture = (page: Page) =>
+  page.evaluate(() => {
+    const seen = (
+      window as unknown as { __thumbs: { png: string; scheme: string } }
+    ).__thumbs;
+    return { src: `data:image/png;base64,${seen.png}`, scheme: seen.scheme };
+  });
+
+/** Two pictures' sizes and their mean absolute difference over RGB, 0 (the same) to 1. */
+const pictureDiff = (page: Page, a: string, b: string) =>
+  page.evaluate(
+    async ([one, other]) => {
+      const pixels = async (src: string) => {
+        const picture = new Image();
+        picture.src = src;
+        await picture.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = picture.naturalWidth;
+        canvas.height = picture.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(picture, 0, 0);
+        return {
+          size: `${canvas.width}x${canvas.height}`,
+          data: ctx?.getImageData(0, 0, canvas.width, canvas.height).data,
+        };
+      };
+      const [x, y] = [await pixels(one), await pixels(other)];
+      if (!(x.data && y.data) || x.size !== y.size) {
+        return { sizes: `${x.size} / ${y.size}`, diff: 1 };
+      }
+      let sum = 0;
+      for (let i = 0; i < x.data.length; i += 4) {
+        for (let c = 0; c < 3; c += 1) {
+          sum += Math.abs((x.data[i + c] ?? 0) - (y.data[i + c] ?? 0));
+        }
+      }
+      return {
+        sizes: `${x.size} / ${y.size}`,
+        diff: sum / ((x.data.length / 4) * 3) / 255,
+      };
+    },
+    [a, b] as const
+  );
 
 const capturesOf = (page: Page) =>
   page.evaluate(
@@ -181,6 +251,26 @@ const pageFrame = (page: Page): Frame | undefined =>
         frame.parentFrame() === page.mainFrame()
     );
 
+/** The OS's scheme as the dashboard hears it, the pane frame's `color-scheme`, and what the page in it draws now: its `prefers-color-scheme` and its body's computed background. */
+const frameDrawn = async (page: Page, frame: Frame | undefined) => ({
+  osDark: await page.evaluate(
+    () => matchMedia("(prefers-color-scheme: dark)").matches
+  ),
+  scheme: await page
+    .locator('iframe[title="Preview"][data-ready]')
+    .first()
+    .evaluate((el) => getComputedStyle(el).colorScheme)
+    .catch(() => "unread"),
+  page: await (frame
+    ?.evaluate(() => ({
+      prefersDark: matchMedia("(prefers-color-scheme: dark)").matches,
+      background: getComputedStyle(document.body).backgroundColor,
+      // The document's start: the same one by day and at night is no reload.
+      born: performance.timeOrigin,
+    }))
+    .catch(() => null) ?? Promise.resolve(null)),
+});
+
 const said = (one: Awaited<ReturnType<typeof shownThumb>>) =>
   one
     ? `scheme ${one.scheme}, html.dark ${one.dark}, single ${one.single}, padding ${one.padding}, luminance ${one.luminance.toFixed(3)}, well ${one.background} edged ${one.border} (main's recess ${one.main.background} edged ${one.main.border})`
@@ -198,13 +288,24 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const base = await fleet.dashboard();
 
-  /** A session that makes page `html` (call `marker`), opened at the desk on "system" by day; its card's first thumbnail. */
-  const leg = async (marker: string, name: string, html: string) => {
+  /**
+   * A session that makes page `html` (or a preview of folder `dir`) with
+   * call `marker`, opened at the desk with the theme Light; its card's
+   * first thumbnail, then the dashboard's own switch to Dark, the OS left
+   * as it was. At night the page is asked for a
+   * capture again, drawn live in the dark scheme, to set beside the copy's
+   * dark picture.
+   */
+  const leg = async (
+    marker: string,
+    name: string,
+    made: string | { dir: string }
+  ) => {
     const id = await fleet.spawn("claude", name, fleet.repo);
     const desk = await kit.page("desk", { init: [countCaptures] });
     await desk.addInitScript(
       ([tab]) => {
-        localStorage.setItem("cawco-theme", "system");
+        localStorage.setItem("cawco-theme", "light");
         localStorage.setItem(
           "cawco-workspace",
           JSON.stringify({
@@ -222,9 +323,16 @@ const run = async (kit: Kit) => {
       },
       [id] as const
     );
-    await desk.emulateMedia({ colorScheme: "light" });
+    // No emulated scheme: an emulated one is forced into every frame alike.
+    await desk.emulateMedia({ colorScheme: null });
     await open(desk, `${base}/session/${id}`, '[data-slot="pane"]');
-    asks.set(marker, { name: CREATE, input: { kind: "page", name, html } });
+    asks.set(marker, {
+      name: CREATE,
+      input:
+        typeof made === "string"
+          ? { kind: "page", name, html: made }
+          : { kind: "preview", name, dir: made.dir },
+    });
     await fleet.send(id, `PROBE-CALL:${marker}`);
     await until("the page made", () => answered.get(marker), Boolean, 180_000);
     // The page's root watched from its ready on: the capture must not touch it.
@@ -269,7 +377,12 @@ const run = async (kit: Kit) => {
       )
       .catch(() => null);
     const day = await shownThumb(desk);
-    await desk.emulateMedia({ colorScheme: "dark" });
+    const frameDay = await frameDrawn(desk, frame);
+    // Night: the dashboard's own theme switch (the sidebar's), pressed as a person does.
+    await desk
+      .getByRole("button", { name: "Light mode" })
+      .first()
+      .evaluate((el) => (el as HTMLElement).click());
     await until(
       "the card in the night scheme",
       () => shownThumb(desk),
@@ -277,9 +390,42 @@ const run = async (kit: Kit) => {
       10_000
     ).catch(() => null);
     const night = await shownThumb(desk);
+    const frameNight = await frameDrawn(desk, frame);
     const captures = await capturesOf(desk);
+    // The page's own dark drawing, asked of its frame as the pane asks, beside the copy's.
+    const live = await desk
+      .locator('iframe[title="Preview"][data-ready]')
+      .first()
+      .evaluate((el) => {
+        const frameEl = el as HTMLIFrameElement;
+        frameEl.contentWindow?.postMessage(
+          { type: "cawco:capture" },
+          new URL(frameEl.src).origin
+        );
+      })
+      .then(() =>
+        until(
+          "the page's live capture at night",
+          () => capturesOf(desk),
+          (n) => n > captures,
+          30_000
+        )
+      )
+      .then(() => lastCapture(desk))
+      .catch(() => null);
+    const darkAgainstLive =
+      live && night ? await pictureDiff(desk, night.src, live.src) : null;
     await desk.close();
-    return { day, night, captures, rootChanges, modes };
+    return {
+      day,
+      night,
+      captures,
+      rootChanges,
+      modes,
+      frameDay,
+      frameNight,
+      live: live ? { scheme: live.scheme, ...darkAgainstLive } : null,
+    };
   };
 
   // 1, 2. A page with dark styles of its own.
@@ -327,6 +473,55 @@ const run = async (kit: Kit) => {
       defined.night.luminance > CARD_LIGHT &&
       (defined.day?.luminance ?? 1) < 1 - CARD_LIGHT,
     `captures ${defined.captures}; day: ${said(defined.day)}; night: ${said(defined.night)}`
+  );
+
+  // 6. A page styled only by prefers-color-scheme follows the dashboard's theme in the pane, and so do its thumbnails.
+  const prefers = await leg("5", "prefers", PREFERS);
+  kit.check(
+    "6: a page styled only by prefers-color-scheme: its pane frame hears the dashboard's theme, not the OS's (the OS light throughout), so it draws dark at night (body background read in the frame), and its card shows the light picture by day, the dark one at night",
+    prefers.frameDay.osDark === false &&
+      prefers.frameNight.osDark === false &&
+      prefers.frameDay.scheme === "light" &&
+      prefers.frameDay.page?.prefersDark === false &&
+      prefers.frameDay.page.background === "rgb(250, 250, 250)" &&
+      prefers.frameNight.scheme === "dark" &&
+      prefers.frameNight.page?.prefersDark === true &&
+      prefers.frameNight.page.background === "rgb(18, 18, 18)" &&
+      prefers.captures === 1 &&
+      !prefers.day?.single &&
+      (prefers.day?.luminance ?? 0) > DAY_ABOVE &&
+      prefers.night?.scheme === "dark" &&
+      prefers.night.luminance < NIGHT_BELOW,
+    `frame by day ${JSON.stringify(prefers.frameDay)}, at night ${JSON.stringify(prefers.frameNight)}; captures ${prefers.captures}; day: ${said(prefers.day)}; night: ${said(prefers.night)}`
+  );
+  kit.check(
+    "6b: the theme turned while the page's frame stood open: the page heard it in place, with no reload (the same document by day and at night)",
+    !!prefers.frameDay.page &&
+      prefers.frameDay.page.born === prefers.frameNight.page?.born,
+    `document by day ${prefers.frameDay.page?.born}, at night ${prefers.frameNight.page?.born}`
+  );
+  kit.check(
+    `6c: the copy's dark thumbnail (drawn by day, the page's dark rule applied) matches the page's own dark drawing at night: same size, mean difference under ${LIVE_DIFF}`,
+    prefers.live?.scheme === "dark" && (prefers.live.diff ?? 1) < LIVE_DIFF,
+    `live capture ${JSON.stringify(prefers.live)}`
+  );
+
+  // 7. A preview (someone's own app) keeps its own light, whatever the dashboard's theme.
+  const previewDir = join(kit.out, "prefers-preview");
+  await mkdir(previewDir, { recursive: true });
+  await writeFile(join(previewDir, "index.html"), PREFERS);
+  const preview = await leg("6", "prefers-preview", { dir: previewDir });
+  kit.check(
+    "7: a preview styled by prefers-color-scheme: the dashboard turned dark, its frame stays color-scheme light and the page hears light by day and at night, one picture, flagged single",
+    preview.night?.dark === true &&
+      preview.frameDay.scheme === "light" &&
+      preview.frameNight.scheme === "light" &&
+      preview.frameDay.page?.prefersDark === false &&
+      preview.frameNight.page?.prefersDark === false &&
+      preview.frameNight.page.background === "rgb(250, 250, 250)" &&
+      !!preview.day?.single &&
+      !!preview.night?.single,
+    `frame by day ${JSON.stringify(preview.frameDay)}, at night ${JSON.stringify(preview.frameNight)}; day: ${said(preview.day)}; night: ${said(preview.night)}`
   );
 
   // 3. A page that looks the same in both schemes.

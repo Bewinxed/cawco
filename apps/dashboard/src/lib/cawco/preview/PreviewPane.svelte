@@ -832,6 +832,12 @@
     store("local", inspectKey, open ? "open" : "shut");
   }
   const isSheet = $derived(artifact?.kind === "sheet");
+  /**
+   * A page or a sheet draws in the dashboard's theme (the overlay's
+   * `themed`): its frame's `color-scheme` is that theme too, so a page that
+   * styles dark by `prefers-color-scheme` hears it. A preview is its own app.
+   */
+  const themedFrame = $derived(artifact?.kind === "page" || isSheet);
   const inspector = $derived.by(() => {
     const id = artifactId;
     const session = instanceId;
@@ -1890,6 +1896,7 @@
           }
         }}
         src={byHost ? entries[key]?.src : `${paneOrigin}${framePlace}`}
+        data-scheme={themedFrame ? theme.resolved : undefined}
         style:width={inspecting && inspectorLayout === "panel"
           ? "calc(100% - var(--c-sheet-inspector-w))"
           : undefined}
@@ -2192,7 +2199,10 @@
       pointer-events: auto;
     }
   }
-  /* The replacement's load releases the old paint independently of the overlay. */
+  /* The replacement's load releases the old paint independently of the overlay.
+     A frame's `prefers-color-scheme` follows its element's `color-scheme`: a
+     page or sheet hears the dashboard's theme (`data-scheme`), a preview
+     the light it always had. */
   iframe {
     position: absolute;
     inset: 0;
@@ -2204,6 +2214,10 @@
     border: 0;
     opacity: 0;
     transition: opacity var(--dur-control) var(--ease-out);
+
+    &[data-scheme="dark"] {
+      color-scheme: dark;
+    }
   }
   iframe.ready {
     opacity: 1;

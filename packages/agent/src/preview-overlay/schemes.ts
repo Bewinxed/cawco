@@ -93,18 +93,20 @@ const inView = (el: Element) => {
   );
 };
 
-/** The sandboxed, unpainted frame the copy stands in, this viewport's size, ready to write. */
-function blankFrame(into: ParentNode): Promise<HTMLIFrameElement> {
+/** The sandboxed, unpainted frame the copy stands in, this viewport's size, ready to write, hearing `scheme`. */
+function blankFrame(
+  into: ParentNode,
+  scheme: Scheme
+): Promise<HTMLIFrameElement> {
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.setAttribute("sandbox", "allow-same-origin");
   frame.tabIndex = -1;
   // `prefers-color-scheme` in a frame follows its element's `color-scheme`:
-  // the copy hears what this page hears.
-  const prefers = matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-  frame.style.cssText = `position:fixed;left:0;top:0;inline-size:${innerWidth}px;block-size:${innerHeight}px;border:0;margin:0;padding:0;visibility:hidden;pointer-events:none;color-scheme:${prefers}`;
+  // the host's frame of a page in its theme is that theme (the dashboard's
+  // PreviewPane `data-scheme`, the app's web view its trait), so the copy
+  // hears the scheme it is drawn in.
+  frame.style.cssText = `position:fixed;left:0;top:0;inline-size:${innerWidth}px;block-size:${innerHeight}px;border:0;margin:0;padding:0;visibility:hidden;pointer-events:none;color-scheme:${scheme}`;
   // The copy lays out in this page's mode, at its base URL: a page with no
   // doctype in the frame's first about:blank document (quirks, there at
   // once), any other in a srcdoc one (always no-quirks).
@@ -246,31 +248,80 @@ function carryState(pairs: Pairs) {
 const DEFINED = ":is(:defined, [data-cawco-defined])";
 const DEFINED_MARK = "data-cawco-defined";
 
-/** `rules` and every rule nested in them, `:defined` read as {@link DEFINED}; by shape, as they are another window's. */
-function defineIn(rules: CSSRuleList) {
+/** A `prefers-color-scheme` feature in a media query. */
+const PREFERS = /\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)/gi;
+/** Media features that always hold, and never do (range syntax: a width is never negative). */
+const ALWAYS = "(width >= 0px)";
+const NEVER = "(width < 0px)";
+
+/** `media` with each `prefers-color-scheme` feature settled for `scheme`; null when it names none. */
+function settledMedia(media: string, scheme: Scheme): string | null {
+  PREFERS.lastIndex = 0;
+  if (!PREFERS.test(media)) {
+    return null;
+  }
+  return media.replace(PREFERS, (_, said: string) =>
+    said.toLowerCase() === scheme ? ALWAYS : NEVER
+  );
+}
+
+/**
+ * `rules` and every rule nested in them, as the copy reads them in
+ * `scheme`: `:defined` as {@link DEFINED}, and a media query asking
+ * `prefers-color-scheme` answered for `scheme`. By shape, as they are
+ * another window's.
+ */
+function settleRules(rules: CSSRuleList, scheme: Scheme) {
   for (const rule of Array.from(rules)) {
     const styled = rule as Partial<CSSStyleRule>;
     if (styled.selectorText?.includes(":defined")) {
       styled.selectorText = styled.selectorText.replaceAll(":defined", DEFINED);
     }
+    const { media } = rule as Partial<CSSMediaRule>;
+    const answered = media ? settledMedia(media.mediaText, scheme) : null;
+    if (media && answered !== null) {
+      media.mediaText = answered;
+    }
     const nested = (rule as Partial<CSSGroupingRule>).cssRules;
     if (nested) {
-      defineIn(nested);
+      settleRules(nested, scheme);
+    }
+    const imported = (rule as Partial<CSSImportRule>).styleSheet;
+    if (imported) {
+      settleSheet(imported, scheme);
     }
   }
 }
 
+function settleSheet(sheet: CSSStyleSheet, scheme: Scheme) {
+  try {
+    settleRules(sheet.cssRules, scheme);
+  } catch {
+    // Another origin's sheet keeps its rules as they are.
+  }
+}
+
 /**
- * The page's custom elements as defined as they are on the page. The copy
- * runs no script, so its registry is empty and `:defined` would match none
- * of them (a page hiding them until defined drew them hidden): each one the
- * page has defined is marked, and every sheet the copy reads, in the
- * document and in its shadow roots, reads `:defined` as the mark too.
+ * The copy read as the page reads itself in `scheme`. Its custom elements
+ * as defined as they are on the page: the copy runs no script, so its
+ * registry is empty and `:defined` would match none of them (a page hiding
+ * them until defined drew them hidden), so each one the page has defined is
+ * marked and `:defined` reads the mark too. And `prefers-color-scheme` as
+ * the host's frame answers it in `scheme` (PreviewPane's `data-scheme`):
+ * every media query and `media` attribute asking it is settled, so the copy
+ * draws the page's own rule for that scheme whatever its frame's element
+ * passes down. Every sheet the copy reads, in the document and in its
+ * shadow roots, is read so.
  */
-function carryDefined(doc: Document, pairs: Pairs) {
+function settleCopy(doc: Document, pairs: Pairs, scheme: Scheme) {
   for (const [one, copy] of pairs) {
     if (one.localName.includes("-") && customElements.get(one.localName)) {
       copy.setAttribute(DEFINED_MARK, "");
+    }
+    const media = copy.getAttribute("media");
+    const answered = media ? settledMedia(media, scheme) : null;
+    if (answered !== null) {
+      copy.setAttribute("media", answered);
     }
   }
   const roots: (Document | ShadowRoot)[] = [doc];
@@ -281,11 +332,7 @@ function carryDefined(doc: Document, pairs: Pairs) {
   }
   for (const root of roots) {
     for (const sheet of Array.from(root.styleSheets)) {
-      try {
-        defineIn(sheet.cssRules);
-      } catch {
-        // Another origin's sheet keeps its rules as they are.
-      }
+      settleSheet(sheet, scheme);
     }
   }
 }
@@ -374,7 +421,7 @@ export async function drawInScheme(
     theme: (root: HTMLElement, scheme: Scheme) => void;
   }
 ): Promise<{ same: true } | { same: false; png: string | null }> {
-  const frame = await blankFrame(into);
+  const frame = await blankFrame(into, scheme);
   try {
     const view = frame.contentWindow;
     const doc = frame.contentDocument;
@@ -385,7 +432,7 @@ export async function drawInScheme(
     const pairs = copyInto(doc);
     theme(doc.documentElement, scheme);
     await settled(doc);
-    carryDefined(doc, pairs);
+    settleCopy(doc, pairs, scheme);
     view.scrollTo(scrollX, scrollY);
     carryState(pairs);
     if (sameColours(view, pairs)) {
