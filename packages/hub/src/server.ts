@@ -263,6 +263,7 @@ import {
   pauseClock,
   providerChoices,
   providerLimitRefused,
+  pushOnlyProvider,
   QUESTION_DISMISSED,
   QUEUE_WAIT_MAX_MS,
   questionsOf,
@@ -19177,6 +19178,23 @@ export const createServer = (
     lifetime,
     hubOrigin: hubHttpUrl,
     projectExists: (id) => Boolean(db.project(id)),
+    // A push-only service connected (§5.5): each project with no relay for
+    // its provider has its Caw woken to offer one (caw.ts `offerRelay`).
+    pushOnlyConnected: (connection, projects) => {
+      const provider = pushOnlyProvider(connection.service);
+      if (!provider) {
+        return;
+      }
+      for (const projectId of projects) {
+        if (
+          !db.relays
+            .ofProject(projectId)
+            .some((open) => open.provider === provider && open.state !== "off")
+        ) {
+          caw.offerRelay(projectId, connection, provider);
+        }
+      }
+    },
     trash: (name) =>
       db.trash.put({ kind: "connection", key: name }, Date.now()),
     typeConnections: (row) =>

@@ -65,6 +65,7 @@ import {
   type CawNotWokenReason,
   type CawRunning,
   type CawView,
+  type ConnectionView,
   CURATOR_DENIED_TOOLS,
   type Envelope,
   type EventThreadMessage,
@@ -78,6 +79,7 @@ import {
   type ProjectStopFrame,
   type ProjectView,
   questionsOf,
+  type RelayProvider,
   type SendPayload,
   type SpawnPayload,
   type ThreadAnswer,
@@ -2246,6 +2248,27 @@ export const createCaw = ({
     wake,
     wakeOnce,
     view,
+
+    /**
+     * §5.5: "Caw offers the relay when you connect a push-only service". The
+     * project now has `connection` signed in, whose service pushes its
+     * events and is never polled, and no relay for `provider`: an event wake
+     * (so only while he is on) on the project's newest conversation, whose
+     * words ask him to offer one with relay_create. It carries no note: he
+     * makes the offer there himself, as his question card.
+     */
+    offerRelay(
+      projectId: string,
+      connection: Pick<ConnectionView, "account" | "name" | "service">,
+      provider: RelayProvider
+    ): void {
+      const threadId = db.newestConversation(projectId)?.id;
+      wakeQuietly(projectId, {
+        by: "event",
+        ...(threadId ? { threadId } : {}),
+        text: `Event connection: the person signed in the connection “${connection.name}” (${connection.service}, ${connection.account}) for this project. ${connection.service} pushes its events instead of being polled, so none of them reach the project until it has a relay. Offer one: ask the person with AskUserQuestion${threadId ? ` in thread ${threadId}` : ""} whether to open a public webhook path for it. On yes, call relay_create({ provider: "${provider}" }), which puts the opening in front of them as an Approve card, then tell them in the thread what to register at ${connection.service}. On no, leave it: polling stays as it is.`,
+      });
+    },
 
     /**
      * Whose turn the project's Caw `instanceId` is in, for what he starts in

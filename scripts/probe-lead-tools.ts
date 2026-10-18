@@ -20,6 +20,12 @@
  *    `delegates/editor.md`, declined: no commit touches it and the catalog
  *    has no `editor`. A file that makes no type is refused with why, and
  *    parks nothing.
+ * 3. Relay offer (§5.5: "Caw offers the relay when you connect a push-only
+ *    service"): a stand-in Stripe connection (its MCP server in this
+ *    process, signed in with no key) made with no project wakes no one; once
+ *    it is granted to the project, Caw is woken exactly once, with words
+ *    naming relay_create and the stripe provider. A connection to a service
+ *    that is polled (`x`), granted the same way, wakes no one.
  *
  * Caw's session runs inside his place's boundary, so this runs where a
  * boundary can start: the host, outside every workspace.
@@ -34,7 +40,9 @@ import type { Reply, Seen } from "./scratch-fleet";
 
 // The dependencies first (lib/deps.ts): the fleet loads after them.
 await ensureDeps();
-const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");
+const { MACHINE, delay, scratchFleet, until } = await import("./scratch-fleet");
+/** How long a probe waits for a wake that must not come. */
+const QUIET_MS = 15_000;
 
 const keep = process.argv.includes("--keep");
 const LOGGED = /caw|decisions|lead|boundary|error/i;
@@ -59,10 +67,17 @@ const issued = new Set<string>();
 /** What each numbered message's tool answered: the next request's last user text. */
 const answered = new Map<string, string>();
 const COMMAND = /PROBE-CALL:(\d+)/g;
+/** The words of each wake Caw read that offers a relay (caw.ts `offerRelay`). */
+const relayWakes: string[] = [];
+const RELAY_WAKE = "Event connection:";
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
+  }
+  if (request.last.includes(RELAY_WAKE) && !request.afterTool) {
+    relayWakes.push(request.last);
+    return text("noted");
   }
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? toCall.get(marker) : undefined;
@@ -106,6 +121,47 @@ const PAGE = `<!doctype html><html><head><title>Launch</title></head><body>
 </div></article>
 </body></html>
 `;
+
+/** A stand-in for a service's MCP server: one read tool, enough to sign in by. */
+const rpc = (id: unknown, result: unknown) =>
+  Response.json({ jsonrpc: "2.0", id, result });
+const service = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  async fetch(request) {
+    if (request.method !== "POST") {
+      return new Response(null, { status: 405 });
+    }
+    const message = (await request.json()) as { id?: unknown; method?: string };
+    if (message.id === undefined) {
+      return new Response(null, { status: 202 });
+    }
+    switch (message.method) {
+      case "initialize":
+        return rpc(message.id, {
+          protocolVersion: "2025-06-18",
+          capabilities: { tools: {} },
+          serverInfo: { name: "probe-service", version: "1" },
+        });
+      case "tools/list":
+        return rpc(message.id, {
+          tools: [
+            {
+              name: "balance",
+              description: "Reads the balance.",
+              inputSchema: { type: "object", properties: {} },
+            },
+          ],
+        });
+      default:
+        return Response.json({
+          jsonrpc: "2.0",
+          id: message.id,
+          error: { code: -32_601, message: "no such method" },
+        });
+    }
+  },
+});
 
 const fleet = await scratchFleet({ name: "probe-lead-tools", respond });
 const send = async (method: string, path: string, body?: unknown) => {
@@ -380,6 +436,58 @@ try {
       `commits ${JSON.stringify(declined)}; catalog ${JSON.stringify(after.map((type) => type.name))}`
     );
   });
+
+  // ── 3: a push-only service connected, and Caw woken once to offer a relay ─
+  await section("3: relay offer", async () => {
+    const made = await ok<{ state: string }>("POST", "/api/connections", {
+      name: "stripe-shop",
+      service: "stripe",
+      account: "@shop",
+      transport: "http",
+      url: `http://127.0.0.1:${service.port}/mcp`,
+      auth: "none",
+      projects: [],
+    });
+    await delay(QUIET_MS);
+    check(
+      "3a: a Stripe connection signed in with no project wakes no one",
+      made.state === "signed-in" && relayWakes.length === 0,
+      `state ${made.state}; wakes ${relayWakes.length}`
+    );
+    await ok("PATCH", "/api/connections/stripe-shop", {
+      projects: [projectId],
+    });
+    await until(
+      "Caw woken to offer a relay",
+      () => relayWakes.length,
+      (count) => count > 0,
+      120_000
+    );
+    await delay(QUIET_MS);
+    const [words = ""] = relayWakes;
+    check(
+      "3b: granted to the project, it wakes Caw exactly once, naming relay_create and the stripe provider",
+      relayWakes.length === 1 &&
+        words.includes("stripe-shop") &&
+        words.includes('relay_create({ provider: "stripe" })'),
+      `wakes ${relayWakes.length}: ${words.slice(0, 400)}`
+    );
+    await ok("POST", "/api/connections", {
+      name: "x-brand",
+      service: "x",
+      account: "@brand",
+      transport: "http",
+      url: `http://127.0.0.1:${service.port}/mcp`,
+      auth: "none",
+      projects: [projectId],
+    });
+    await delay(QUIET_MS);
+    check(
+      "3c: a polled service's connection, granted the same way, wakes no one",
+      relayWakes.length === 1,
+      `wakes ${relayWakes.length}`
+    );
+  });
 } catch (error) {
   check(
     "the run",
@@ -401,6 +509,7 @@ try {
     }
   }
   await fleet.close();
+  service.stop(true);
   await fleet.clean(keep || failed);
 }
 
