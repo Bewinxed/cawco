@@ -41,7 +41,10 @@ const spec: Spec = {
         harness: string | null;
         session_id: string | null;
         status: string;
-      }>("SELECT harness, session_id, status FROM instances WHERE id = ?", id)[0];
+      }>(
+        "SELECT harness, session_id, status FROM instances WHERE id = ?",
+        id
+      )[0];
 
     const instanceId = await fleet.spawn("opencode", "Stored");
     await fleet.send(instanceId, FIRST);
@@ -86,8 +89,7 @@ const spec: Spec = {
     kit.note(`after: ${JSON.stringify(after)}`);
     check(
       "the woken session's row still names opencode and the same conversation",
-      after?.harness === "opencode" &&
-        after.session_id === before?.session_id,
+      after?.harness === "opencode" && after.session_id === before?.session_id,
       `before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`
     );
     check(
@@ -128,8 +130,7 @@ const spec: Spec = {
     );
     check(
       "a start of the row on claude is refused, and the row keeps opencode",
-      row(instanceId)?.harness === "opencode" &&
-        claudeTurns() === claudeBefore,
+      row(instanceId)?.harness === "opencode" && claudeTurns() === claudeBefore,
       JSON.stringify(row(instanceId))
     );
   },
