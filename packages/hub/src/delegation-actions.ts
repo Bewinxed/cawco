@@ -828,6 +828,7 @@ export interface HandoffActions {
     summarizer_model?: string;
     target_harness: "claude" | "opencode" | "pi";
     target_model: string;
+    target_permission_mode?: Exclude<PermissionMode, "fullSend">;
     note?: string;
   }) => Promise<{
     summariserInstanceId: string | null;
@@ -1534,6 +1535,9 @@ export const handoffActions = ({
           target: {
             harness: input.target_harness,
             model: input.target_model,
+            ...(input.target_permission_mode
+              ? { permissionMode: input.target_permission_mode }
+              : {}),
             ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
           },
           askedBy: instanceId,

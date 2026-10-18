@@ -460,6 +460,7 @@ export function handoffTools(deps: HandoffDeps) {
         "It runs on the harness, model and effort of a delegate type — `type`, the same catalog delegate uses, " +
         "'medium' when omitted; a named type's denied tools apply too — and answers tool permissions in `permissionMode`, this session's own mode when omitted, " +
         "where its harness has permission modes (pi has none, and refuses one). " +
+        "A session with no mode of its own (a pi session) must name `permissionMode` for a harness that has modes: with neither, nothing starts, and the refusal says a mode must be chosen. " +
         "Nothing is left to the machine's defaults. " +
         "It runs on this session's machine unless `machine` names another one of the fleet. " +
         "Use it when the user asks you to spin something off, or when work " +
@@ -522,7 +523,7 @@ export function handoffTools(deps: HandoffDeps) {
           ])
           .optional()
           .describe(
-            "How the new session answers tool permissions. Default: this session's own mode. Omit it for a harness without permission modes (pi)."
+            "How the new session answers tool permissions. Default: this session's own mode; when this session has none (pi), it must be named for a harness with modes, or nothing starts. Omit it for a harness without permission modes (pi)."
           ),
       },
       async ({
@@ -823,7 +824,9 @@ export function handoffTools(deps: HandoffDeps) {
     tool(
       "continue_session",
       "Continue another session (a stuck delegate) in a new one, from a summary by a model you choose; the " +
-        "named one is only read. Never this session: if your context is too big, say so.",
+        "named one is only read. Never this session: if your context is too big, say so. " +
+        "The new session answers tool permissions in `target_permission_mode`, this session's own mode when omitted; " +
+        "when this session has none (pi) and the target harness has modes, it must be named, or nothing starts.",
       {
         session: z
           .string()
@@ -853,6 +856,20 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .min(1)
           .describe("The model the new session runs on."),
+        // Never `fullSend`: only the owner puts a session in Full Send.
+        target_permission_mode: z
+          .enum([
+            "default",
+            "acceptEdits",
+            "bypassPermissions",
+            "plan",
+            "dontAsk",
+            "auto",
+          ])
+          .optional()
+          .describe(
+            "How the new session answers tool permissions. Default: this session's own mode; when this session has none (pi), it must be named for a target harness with modes, or nothing starts. Omit it for a target without permission modes (pi)."
+          ),
         note: z
           .string()
           .optional()

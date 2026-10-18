@@ -266,7 +266,8 @@
   let harness = $state<HarnessKind>(spawnPrefs.harness);
   let model = $state("");
   let effort = $state<EffortLevel | null>(null);
-  let permissionMode = $state<PermissionMode>(spawnPrefs.permissionMode);
+  /** None until the person picks one, when no start of theirs is remembered: Start waits for it. */
+  let permissionMode = $state<PermissionMode | null>(spawnPrefs.permissionMode);
   /**
    * Full Send came with the form (the last start's mode, or a failed
    * continuation's) rather than from a pick in it: the warning says where
@@ -562,7 +563,7 @@
    * the machine reports its harness, or the person picks a mode it takes.
    */
   const modeRefused = $derived(
-    machineId && !modeless
+    machineId && !modeless && permissionMode !== null
       ? modeRefusal(
           machine?.hostname ?? machineId,
           harness,
@@ -928,6 +929,8 @@
     estimate = null;
     loadEstimate(continueFrom.instanceId, submission);
   }
+  /** A harness with modes and none picked: Start waits for the person's pick. */
+  const modeUnchosen = $derived(!modeless && permissionMode === null);
   /** The last start failed: the footer shows no check. */
   const startFailed = $derived(error !== "");
   /** The line under the chips says why Start can't go: it stays on step 2 too. */
@@ -937,6 +940,7 @@
       continueBlocked ||
       placementRefusal !== null ||
       modeRefused !== null ||
+      modeUnchosen ||
       cawco.hub !== "connected" ||
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
@@ -1491,7 +1495,9 @@
       prompt: draft.prompt,
       extras: draft.extras,
       harness: draft.harness,
-      ...(modeless ? {} : { permissionMode: draft.permissionMode }),
+      ...(modeless || draft.permissionMode === null
+        ? {}
+        : { permissionMode: draft.permissionMode }),
       ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
       ...(draft.effort ? { effort: draft.effort } : {}),
       scratch: draft.scratch,
@@ -1640,7 +1646,9 @@
         ...(ask.key ? { approved: ask.key } : {}),
         spawn: {
           harness: draft.harness,
-          ...(modeless ? {} : { permissionMode: draft.permissionMode }),
+          ...(modeless || draft.permissionMode === null
+            ? {}
+            : { permissionMode: draft.permissionMode }),
           ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
           ...(draft.effort ? { effort: draft.effort } : {}),
           ...(draft.account ? { account: draft.account } : {}),
@@ -1722,7 +1730,9 @@
         cwd: draft.cwd,
         harness: draft.harness,
         ...(draft.usedModel ? { model: draft.usedModel } : {}),
-        ...(modeless ? {} : { permissionMode: draft.permissionMode }),
+        ...(modeless || draft.permissionMode === null
+          ? {}
+          : { permissionMode: draft.permissionMode }),
         ...(draft.effort ? { effort: draft.effort } : {}),
         ...(draft.scratch ? { scratch: draft.scratch } : {}),
         ...(draft.repo === undefined

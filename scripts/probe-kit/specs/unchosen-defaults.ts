@@ -34,6 +34,8 @@
  * 10. An artifact's own tab whose panel is closed while the artifact lives
  *    says so in words with Show it again, which opens the page there again.
  * 11. Fleet's count in the rail is centred on its nav row (±1px).
+ * 12. New Session with no mode remembered opens on no mode ("Choose a
+ *    mode"), Start disabled; picking one lets Start go.
  *
  * On a second fleet, whose Claude Code signs in but starts no session:
  * 7. New Session on Claude, whose account's models the hub could not read,
@@ -371,6 +373,30 @@ const form = async (kit: Kit, fleet: KitFleet, base: string) => {
     "4: a remembered mode the machine does not take stays chosen, and the form says why",
     mode?.startsWith("Permission mode: dontAsk") === true && why > 0,
     `mode chip ${mode}; reasons shown ${why}`
+  );
+
+  // 12. No mode remembered: none chosen, and Start waits for the person's pick.
+  const unpicked = await dialogWith(page, base, {
+    "cawco-spawn-machine": MACHINE,
+  });
+  const chip = unpicked.getByRole("button", { name: PERMISSION }).first();
+  // Start, which the pick alone then lets go: nothing else holds it.
+  const startButton = unpicked.locator("#session-start");
+  const unchosen = await chip.getAttribute("aria-label").catch(() => null);
+  const waits = await startButton.isDisabled().catch(() => false);
+  await chip.click();
+  // The picker's popover stands outside the dialog's subtree.
+  await page.locator('[data-perm="acceptEdits"]').first().click();
+  await page.waitForTimeout(1000);
+  const picked = await chip.getAttribute("aria-label").catch(() => null);
+  const goes = await startButton.isEnabled().catch(() => false);
+  kit.check(
+    '12: with no mode remembered, New Session opens on no mode ("Choose a mode") and Start waits until the person picks one',
+    unchosen === "Permission mode: Choose a mode" &&
+      waits &&
+      picked?.startsWith("Permission mode: Accept") === true &&
+      goes,
+    `chip ${unchosen}, Start disabled ${waits}; after the pick: chip ${picked}, Start enabled ${goes}`
   );
 };
 
