@@ -861,12 +861,21 @@ const run = async (kit: Kit) => {
 
   // 3. The footprint, before and after: P's boundary and W's stay.
   const after = await footprint(fleet);
+  // Whose each boundary still running is: a delegate's tag, or its proc id.
+  const left = (await fleet.heldProcs())
+    .filter((proc) => proc.procId.startsWith("boundary-"))
+    .map((proc) => {
+      const owner = [...idle, p, w].find((one) =>
+        isBoundaryOf(proc.procId, one.workspaceId)
+      );
+      return `${owner?.tag ?? "another workspace"} ${proc.procId}@${proc.pid}`;
+    });
   kit.check(
     "3: closing the idle boundaries takes their processes and inotify instances",
     after.processes < before.processes &&
       after.inotify < before.inotify &&
       after.boundaries === 2,
-    `before: ${before.words}; after: ${after.words}`
+    `before: ${before.words}; after: ${after.words}; running: ${left.join(", ") || "none"}`
   );
   kit.note(
     `3: footprint with ${IDLE} idle workspaces, P and W: before ${before.words}; after the closes ${after.words}`
