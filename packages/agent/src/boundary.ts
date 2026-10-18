@@ -2279,8 +2279,10 @@ const LAUNCH = [
 /**
  * The runner inside the boundary: takes each request off the FIFO and runs
  * it. A `cancel <pgid>` ends that command's group; a pgid of 0, 1 or with a
- * leading zero is never one its launch made, and `kill -- -0` or `-1` would
- * be its own group or every process it may signal, so it is no request.
+ * leading zero is never one its launch made, and a group of 0 or -1 would
+ * be its own group or every process it may signal, so it is no request. The
+ * group follows the signal with no `--`, a form every shell's `kill` reads
+ * (dash refuses `--`).
  *
  * A command's stdout and stderr are anonymous pipes, each copied by a `cat`
  * into its request's FIFO (`$req/out`, `$req/err`), never those FIFOs opened
@@ -2316,8 +2318,8 @@ while :; do
       "cancel "*)
         pid=\${req#cancel }
         case $pid in ''|*[!0-9]*|0*|1) continue ;; esac
-        kill -TERM -- "-$pid" 2>/dev/null
-        ( sleep 4; kill -KILL -- "-$pid" 2>/dev/null ) &
+        kill -TERM "-$pid" 2>/dev/null
+        ( sleep 4; kill -KILL "-$pid" 2>/dev/null ) &
         continue ;;
     esac
     (

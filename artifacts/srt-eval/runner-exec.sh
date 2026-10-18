@@ -50,7 +50,7 @@ printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
 export -p > "$req/env"
 mkfifo "$req/out" "$req/err"
-trap 'kill -TERM -- "-$(cat "$req/pid" 2>/dev/null)" 2>/dev/null; rm -rf "$req"; exit 143' TERM INT HUP
+trap 'g=$(cat "$req/pid" 2>/dev/null); [ "$g" -gt 1 ] 2>/dev/null && kill -TERM "-$g" 2>/dev/null; rm -rf "$req"; exit 143' TERM INT HUP
 printf '%s\n' "$req" > "$fifo"
 cat "$req/out" & out=$!
 cat "$req/err" >&2 & err=$!

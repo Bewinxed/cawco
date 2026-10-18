@@ -171,15 +171,17 @@ WAIT_PID=
 BUILD_PID=
 GO=
 # The build runs in its own process group (leader BUILD_PID): TERM the whole
-# group, then KILL whatever is left after the grace period.
+# group, then KILL whatever is left after the grace period. Only a pid above
+# 1 (-1 is every process, 0 our own group), and the group named after the
+# signal with no `--`, a form every shell's `kill` reads (dash refuses `--`).
 stop_build() {
-  [[ -n $BUILD_PID ]] || return 0
-  kill -TERM -- "-$BUILD_PID" 2>/dev/null || kill -TERM "$BUILD_PID" 2>/dev/null || true
+  [ "$BUILD_PID" -gt 1 ] 2>/dev/null || { BUILD_PID=; return 0; }
+  kill -TERM "-$BUILD_PID" 2>/dev/null || kill -TERM "$BUILD_PID" 2>/dev/null || true
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-    kill -0 -- "-$BUILD_PID" 2>/dev/null || kill -0 "$BUILD_PID" 2>/dev/null || break
+    kill -0 "-$BUILD_PID" 2>/dev/null || kill -0 "$BUILD_PID" 2>/dev/null || break
     sleep 0.5
   done
-  kill -KILL -- "-$BUILD_PID" 2>/dev/null || kill -KILL "$BUILD_PID" 2>/dev/null || true
+  kill -KILL "-$BUILD_PID" 2>/dev/null || kill -KILL "$BUILD_PID" 2>/dev/null || true
   BUILD_PID=
 }
 release_locks() {

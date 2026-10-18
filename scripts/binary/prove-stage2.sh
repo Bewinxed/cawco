@@ -2721,7 +2721,7 @@ keeper_children_capped_on() {
   [[ $ack == *'"stage":"applied"'* ]]
   forker=$(child_pids "$c" cg-forker)
   echo "forker: $forker"
-  [[ -n $forker ]]
+  [[ $forker =~ ^[0-9]+$ ]] && (( forker > 1 ))
   wait_until 60 '(( $(counter_on "$c" "'"$group"'/pids.events" max) > 0 ))'
   # The most the children ever held, pids.peak, never pids.current, which a refused fork lifts past the cap for an
   # instant (see "one session's runaway is its own" above).
@@ -2736,7 +2736,7 @@ keeper_children_capped_on() {
   echo "spawn cg-refused: $ack"
   [[ $ack == *'"stage":"failed"'* && $ack == *'"reason":"process-limit: '* ]]
   # Once the forker and all it started are gone, a child starts again.
-  as_user "$c" kill -KILL -- "-$forker"
+  as_user "$c" kill -KILL "-$forker"
   wait_until 60 '(( $(as_user "$c" cat "$group/pids.current") <= 2 ))'
   ack=$(keeper_spawn "$c" cg-after sleep '["3000"]')
   echo "spawn cg-after: $ack"

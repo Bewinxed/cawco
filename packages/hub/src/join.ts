@@ -370,13 +370,16 @@ const trustCommand = (key: string): string | null => {
  * leads (sshd's session process makes a new session for the login shell,
  * whose place `sh` takes), named by `sh`'s own pid `$$`, an integer above 1
  * checked first, never `kill 0`, which signals whatever group the watchdog
- * finds itself in. The command
+ * finds itself in. No `--` before the group: dash's `kill` (Debian's and
+ * Ubuntu's `sh`) refuses it ("Illegal number: -") and sends nothing, while a
+ * signal named first already makes `-$$` a pid for dash, bash and busybox.
+ * The command
  * ends the watchdog when it finishes, and exits with the command's status.
  * Measured against OpenSSH 10.2's sshd: a silent remote command outlived a
  * killed `ssh`; under the watchdog it was gone within 4 s.
  */
 const remoteCommand = (body: string): string =>
-  `exec sh -c 'p=$PPID; ( while ps -p "$p" >/dev/null 2>&1; do sleep 1; done; [ "$$" -gt 1 ] && kill -TERM -- "-$$" ) >/dev/null 2>&1 & w=$!; ${body}; s=$?; kill "$w" 2>/dev/null; exit $s'`;
+  `exec sh -c 'p=$PPID; ( while ps -p "$p" >/dev/null 2>&1; do sleep 1; done; [ "$$" -gt 1 ] && kill -TERM "-$$" ) >/dev/null 2>&1 & w=$!; ${body}; s=$?; kill "$w" 2>/dev/null; exit $s'`;
 
 /**
  * The step an add fails on when `ssh` ended before the remote command said
