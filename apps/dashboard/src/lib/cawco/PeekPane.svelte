@@ -169,11 +169,15 @@
 
   const cwd = $derived(session?.cwd || row?.cwd || "");
 
-  /** The SDK session a fork branches from. */
-  const forkable = $derived(session?.sessionId ?? row?.sessionId ?? null);
+  /** The harness that owns the conversation a fork branches from. */
+  const forkHarness = $derived(row?.harness ?? session?.harness ?? null);
+  /** The SDK session a fork branches from, once its harness is known. */
+  const forkable = $derived(
+    forkHarness ? (session?.sessionId ?? row?.sessionId ?? null) : null
+  );
 
   async function fork() {
-    if (!(forkable && machine)) {
+    if (!(forkable && machine && forkHarness)) {
       return;
     }
     // The item stays "Forking…" until the hub has made the fork, then the
@@ -183,7 +187,7 @@
       machineId: machine.machineId,
       cwd,
       sessionId: forkable,
-      harness: session?.harness ?? "claude",
+      harness: forkHarness,
     });
     const instanceId = answeredOr(
       machine.machineId,

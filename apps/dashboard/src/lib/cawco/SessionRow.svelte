@@ -73,10 +73,11 @@
   import { shownAccount } from "./accounts/switch.svelte";
   import { STOPPING_LABEL } from "./activity";
   import { Asker, type AskHereRequest } from "./ask-here.svelte";
-  import type { InstanceRow } from "./client.svelte";
+  import type { BoardRow } from "./client.svelte";
   import { openPeek, peekable, peekTipOff } from "./home/peek.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
+  import { isSessionRow } from "./links";
   import { unfold } from "./motion/fold.svelte";
   import RowFault from "./RowFault.svelte";
   import SessionMark from "./SessionMark.svelte";
@@ -112,7 +113,7 @@
     fold = null,
     onarchive,
   }: {
-    instance?: InstanceRow | null;
+    instance?: BoardRow | null;
     info?: NeutralSessionInfo | null;
     machineId: string;
     title: string;
@@ -418,7 +419,7 @@
               ? {
                   machine: machineId,
                   cwd: info.cwd ?? "",
-                  harness: info.harness ?? "claude",
+                  harness: info.harness,
                 }
               : null,
         }}
@@ -469,7 +470,7 @@
   <!-- A workflow run, or a thread, takes no session commands; archive is on
        the row. -->
   {@render body({})}
-{:else if instance}
+{:else if instance && isSessionRow(instance)}
   <LiveSessionMenu asker={asks} {instance} {onarchive} onrename={editTitle}>
     {#snippet children(trigger)}
       {@render body(trigger)}

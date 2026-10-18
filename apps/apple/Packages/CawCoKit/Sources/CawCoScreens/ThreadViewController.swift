@@ -774,7 +774,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
 
     /// Stop interrupts the lead's turn.
     private func stopTurn() {
-        guard let lead = caw?.leadInstanceId, let row = hub.fleet.byId[lead] else { return }
+        guard let lead = caw?.leadInstanceId, let row = hub.fleet.byId[lead]?.session else { return }
         _ = hub.sessions.stop(row)
     }
 

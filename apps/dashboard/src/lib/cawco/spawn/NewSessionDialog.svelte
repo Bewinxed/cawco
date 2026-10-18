@@ -998,8 +998,9 @@
     }
     lastMachine = id;
     untrack(() => {
-      if (!installed.includes(harness)) {
-        chooseHarness(installed[0] ?? "claude");
+      const [first] = installed;
+      if (first && !installed.includes(harness)) {
+        chooseHarness(first);
       }
     });
   });

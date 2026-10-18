@@ -11,9 +11,13 @@ struct HeroBanner: Equatable {
     let title: String
     let body: String
 
+    /// The example card's harness, where the fleet has no session to name.
+    private static let exampleHarness = "claude"
+
     /// The hero's one card: the ask waiting (`held`, the one just answered,
-    /// first), else the fleet's first live harness-and-machine pair with the
-    /// example ask, else the first machine with Claude Code.
+    /// first) on its session's harness, else the fleet's first live
+    /// harness-and-machine pair with the example ask, else the first machine
+    /// with Claude Code.
     @MainActor
     static func card(hub: HubConnection, home: HomeModel, held: ParkedAsk? = nil) -> HeroBanner {
         let fleet = hub.fleet
@@ -26,9 +30,11 @@ struct HeroBanner: Equatable {
             let row = fleet.byId[ask.instanceId]
             let machine = row.map { fleet.machineName($0.machineId) } ?? first
             let line = ask.summary.split(separator: "\n").first.map(String.init) ?? ask.summary
-            return HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(row?.harness ?? "claude"), machine: machine), body: line)
+            let harness = row?.harness.rawValue ?? exampleHarness
+            return HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(harness), machine: machine), body: line)
         }
-        let pair = home.working.first.map { (harness: $0.harness ?? "claude", machine: fleet.machineName($0.machineId)) } ?? (harness: "claude", machine: first)
+        let pair = home.working.first.map { (harness: $0.harness.rawValue, machine: fleet.machineName($0.machineId)) }
+            ?? (harness: exampleHarness, machine: first)
         return HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(pair.harness), machine: pair.machine), body: PaywallCopy.bannerExample)
     }
 }

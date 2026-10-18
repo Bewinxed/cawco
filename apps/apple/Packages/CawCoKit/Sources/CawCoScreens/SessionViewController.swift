@@ -1389,13 +1389,13 @@ final class SessionViewController: ObservedViewController {
     }
 
     func stopTurn() {
-        guard canStop, let row = hub.fleet.byId[sessionId] else { return }
+        guard canStop, let row = hub.fleet.byId[sessionId]?.session else { return }
         sent = hub.sessions.stop(row)
         requestRefresh()
     }
 
     private func send(_ words: String, _ attachments: [ComposerAttachment]) {
-        guard canSend, let row = hub.fleet.byId[sessionId] else { return }
+        guard canSend, let row = hub.fleet.byId[sessionId]?.session else { return }
         editNote = nil
         // The composer sends nothing while a pick is being read or a file is not on the hub.
         guard let carried = ComposerAttacher.carried(attachments) else { return }
@@ -1409,7 +1409,7 @@ final class SessionViewController: ObservedViewController {
 
     /// The harness the session runs.
     private var harness: String? {
-        hub.fleet.byId[sessionId]?.harness ?? transcript.facts?.harness ?? transcript.location?.harness
+        hub.fleet.byId[sessionId]?.harness.rawValue ?? transcript.facts?.harness ?? transcript.location?.harness.rawValue
     }
 
     /// client.svelte.ts `canWithdraw`: a send still waiting to be read, on
@@ -1437,7 +1437,7 @@ final class SessionViewController: ObservedViewController {
     /// Read first, the edit stays the reader's, as a draft, and the
     /// composer's error line says why.
     private func replaceQueued(_ id: String, with text: String) {
-        guard let row = hub.fleet.byId[sessionId], canWithdraw(id) else {
+        guard let row = hub.fleet.byId[sessionId]?.session, canWithdraw(id) else {
             let note = SentMessages.isQueued(id, in: transcript)
                 ? "Couldn't edit your queued message: the session can't be reached. Your edit is back in the composer."
                 : "Claude Code had already read your queued message, so it went as it was. Your edit is back in the composer."

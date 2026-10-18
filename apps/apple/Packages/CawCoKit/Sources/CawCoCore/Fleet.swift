@@ -12,7 +12,7 @@ public typealias BuildInfo = Components.Schemas.BuildInfo
 /// One approved action as the hub answers it (hub actions.ts `ApprovedActionView`).
 public typealias ApprovedAction = Components.Schemas.ApprovedActionView
 
-extension Components.Schemas.InstanceRow: TreeRow {}
+extension Components.Schemas.InstanceRow: TreeRow, ListedRow {}
 
 /// The upstream choice's answer as this device holds it (core
 /// upstream-guard.ts `UpstreamPosts`, client.svelte.ts `fleetUpstream`).
@@ -65,7 +65,12 @@ public extension Components.Schemas.UsageRowMachine {
     var name: String { Naming.machineLabel(hostname) }
 }
 
-extension Components.Schemas.InstanceRow {
+/// A row a list stands on its status: a session's, a workflow run's or a Caw thread's.
+public protocol ListedRow {
+    var status: Components.Schemas.InstanceStatus { get }
+}
+
+extension ListedRow {
     /// Only a session the hub can still reach is live; the rest is history. A
     /// session its project is moving for (`moving`) is live work the hub carries.
     public var isLive: Bool { status == .running || status == .starting || status == .moving }
@@ -84,9 +89,6 @@ extension Components.Schemas.InstanceRow {
     /// Its machine cannot be reached, so the hub does not know what it is doing.
     public var isStale: Bool { status == .unknown }
     public var isFailed: Bool { status == .error }
-    /// A stopped or stopping session with a conversation comes back on it: a
-    /// resume replaces the process its machine is ending.
-    public var isResumable: Bool { status == .sleeping || ((status == .stopping || status == .stopped) && sessionId != nil) }
     /// The word an ended session says where its activity's would stand
     /// (SessionMark.svelte `statusWord`): "Stopping…" from the moment its end
     /// is recorded until its machine confirms the process gone, then
@@ -98,6 +100,74 @@ extension Components.Schemas.InstanceRow {
         default: nil
         }
     }
+}
+
+extension Components.Schemas.InstanceRow {
+    /// A stopped or stopping session with a conversation comes back on it: a
+    /// resume replaces the process its machine is ending.
+    public var isResumable: Bool { status == .sleeping || ((status == .stopping || status == .stopped) && sessionId != nil) }
+}
+
+/// What a workflow run or a Caw thread is drawn by in a list: the fields every
+/// list reads of any row (workflow-runs.ts `runRowOf`, thread-tabs.ts `threadRowOf`).
+public struct DrawnRow: Equatable, Sendable {
+    public let id: String
+    public let cwd: String
+    public let machineId: String
+    public let projectId: String?
+    public let parentInstanceId: String?
+    public let status: Components.Schemas.InstanceStatus
+    public let title: String?
+    public let lastError: String?
+    /// When it last moved, ms epoch.
+    public let updatedMs: Double
+    /// When the owner last looked at it or archived it, ms epoch; 0 when never.
+    public let seenMs: Double
+}
+
+/// A row the lists draw (dashboard links.ts `BoardRow`): a session's, or a
+/// workflow run or a Caw thread drawn as one. A run or a thread is no session:
+/// it runs on no harness of its own, so what only a session has is read
+/// through `session`, never assumed of the others.
+public enum BoardRow: TreeRow, ListedRow, Equatable, Sendable {
+    case session(InstanceRow)
+    case run(DrawnRow)
+    case thread(DrawnRow)
+
+    /// The session it is; nil for a run or a thread.
+    public var session: InstanceRow? {
+        if case let .session(row) = self { row } else { nil }
+    }
+
+    /// The harness its session runs on; none for a run or a thread.
+    public var harness: Components.Schemas.HarnessKind? { session?.harness }
+
+    private var drawn: DrawnRow? {
+        switch self {
+        case .session: nil
+        case let .run(row), let .thread(row): row
+        }
+    }
+
+    public var id: String { session?.id ?? drawn?.id ?? "" }
+    public var cwd: String { session?.cwd ?? drawn?.cwd ?? "" }
+    public var machineId: String { session?.machineId ?? drawn?.machineId ?? "" }
+    public var projectId: String? { session.map(\.projectId) ?? drawn?.projectId }
+    public var parentInstanceId: String? { session.map(\.parentInstanceId) ?? drawn?.parentInstanceId }
+    public var status: Components.Schemas.InstanceStatus {
+        switch self {
+        case let .session(row): row.status
+        case let .run(row), let .thread(row): row.status
+        }
+    }
+    public var title: String? { session.map(\.title) ?? drawn?.title }
+    public var lastError: String? { session.map(\.lastError) ?? drawn?.lastError }
+    /// When it last moved, ms epoch (0 when the hub never said).
+    public var updatedMs: Double { session?.updatedMs ?? drawn?.updatedMs ?? 0 }
+    /// When the owner last looked at it or archived it, ms epoch; 0 when never.
+    public var seenMs: Double { session?.seenMs ?? drawn?.seenMs ?? 0 }
+    /// A session that comes back on its conversation; a run or a thread never does.
+    public var isResumable: Bool { session?.isResumable ?? false }
 }
 
 /// What a session is doing now, in the fleet view's three words.
@@ -215,10 +285,10 @@ public final class FleetStore {
     /// session of its own: a project's Caw is its threads. `byId` still
     /// holds his session.
     public private(set) var rows: [InstanceRow] = []
-    /// Every workflow run as a session row (`runRowOf`).
-    public private(set) var runRows: [InstanceRow] = []
-    /// Every thread with a project's Caw as a session row (thread-tabs.ts `threadRowOf`).
-    public private(set) var threadRows: [InstanceRow] = []
+    /// Every workflow run as a list draws it (`runRowOf`).
+    public private(set) var runRows: [BoardRow] = []
+    /// Every thread with a project's Caw as a list draws it (thread-tabs.ts `threadRowOf`).
+    public private(set) var threadRows: [BoardRow] = []
     /// Each thread by its id, as the hub last said (ThreadsStore).
     private var threads: [Components.Schemas.ThreadSummary] = []
 
@@ -406,7 +476,8 @@ public final class FleetStore {
     /// The socket's own snapshot of the board (`instances`) arrived.
     public internal(set) var liveRead = false
 
-    public internal(set) var byId: [String: InstanceRow] = [:]
+    /// Every row a list draws, by id: the sessions (Caw's own among them), the runs and the threads.
+    public internal(set) var byId: [String: BoardRow] = [:]
     /// The session rows by the harness session each runs, in `rows` order.
     /// A stored transcript is matched to its rows here: the lists that walk
     /// every catalog entry would otherwise scan every row for each one.
@@ -451,8 +522,8 @@ public final class FleetStore {
         threadRows = threads.sorted { $0.lastAt > $1.lastAt }.compactMap { thread in
             places[thread.projectId].map { threadRow(thread, project: $0) }
         }
-        var index: [String: InstanceRow] = [:]
-        for row in all + runRows + threadRows {
+        var index: [String: BoardRow] = [:]
+        for row in all.map(BoardRow.session) + runRows + threadRows {
             index[row.id] = row
         }
         byId = index
@@ -474,23 +545,24 @@ public final class FleetStore {
         return row
     }
 
-    /// A thread as a session row under its project (thread-tabs.ts
+    /// A thread as a list draws it, under its project (thread-tabs.ts
     /// `threadRowOf`): running while Caw works on it or waits on you in it,
     /// at rest otherwise, at the project's primary checkout, else its folder
     /// on the hub; its age its newest message's.
-    private func threadRow(_ thread: Components.Schemas.ThreadSummary, project: Components.Schemas.GetApiProjects200Payload) -> InstanceRow {
+    private func threadRow(_ thread: Components.Schemas.ThreadSummary, project: Components.Schemas.GetApiProjects200Payload) -> BoardRow {
         let place = project.primaryPlace ?? project.places.first
-        return InstanceRow(
-            cwd: place?.path ?? "projects/\(project.id)",
+        return .thread(DrawnRow(
             id: ThreadTabs.tabId(thread.id),
-            kind: "mainline",
-            launchDir: .known,
+            cwd: place?.path ?? "projects/\(project.id)",
             machineId: place?.machineId ?? "hub",
             projectId: thread.projectId,
+            parentInstanceId: nil,
             status: thread.status == .ready ? .sleeping : .running,
             title: thread.title,
-            updatedAt: .init(value1: Date(timeIntervalSince1970: thread.lastAt / 1000))
-        )
+            lastError: nil,
+            updatedMs: thread.lastAt,
+            seenMs: 0
+        ))
     }
 
     /// The thread a row is, when it is one.
@@ -512,22 +584,21 @@ public final class FleetStore {
         return row
     }
 
-    /// A run as a session row: its parent the run it is a child of, else the
+    /// A run as a list draws it: its parent the run it is a child of, else the
     /// session that supervises it; its folder the workspace it runs in.
-    private func runRow(_ run: BoardRun) -> InstanceRow {
-        InstanceRow(
-            cwd: run.workspace,
+    private func runRow(_ run: BoardRun) -> BoardRow {
+        .run(DrawnRow(
             id: run.rowId,
-            kind: "mainline",
-            lastError: run.failure,
-            launchDir: .known,
+            cwd: run.workspace,
             machineId: run.machineId,
+            projectId: nil,
             parentInstanceId: run.parentRunId.map { BoardRun.prefix + $0 } ?? run.supervisorInstanceId,
-            seenAt: run.seenAt > 0 ? .init(value1: Date(timeIntervalSince1970: run.seenAt / 1000)) : nil,
             status: run.rowStatus,
             title: workflowNames[run.workflowId] ?? "Workflow",
-            updatedAt: .init(value1: Date(timeIntervalSince1970: run.movedAt / 1000))
-        )
+            lastError: run.failure,
+            updatedMs: run.movedAt,
+            seenMs: run.seenAt
+        ))
     }
 
     /// The run a row is, when it is one.
@@ -623,6 +694,11 @@ public final class FleetStore {
         Naming.sessionTitle(title: row.titleSource?.isUnrecognized == true ? row.derivedTitle : row.title, cwd: row.cwd, id: row.id)
     }
 
+    /// A drawn row's title: a session's as above, a run's its workflow's, a thread's its own.
+    public func title(_ row: BoardRow) -> String {
+        row.session.map { title($0) } ?? Naming.sessionTitle(title: row.title, cwd: row.cwd, id: row.id)
+    }
+
     /// links.ts `conversationHref`: a known instance's id, otherwise the
     /// stored transcript's bare session key. There is no machine-prefixed id.
     public func conversationId(sessionKey: String, machineId: String, cwd: String?) -> String {
@@ -662,6 +738,11 @@ public final class FleetStore {
             return run.movedAt
         }
         return pulse(row.id)?.at ?? row.updatedMs
+    }
+
+    /// When a drawn row last moved: a run's when it last moved, else its pulse, else the hub's update time.
+    public func lastAt(_ row: BoardRow) -> Double {
+        run(row.id)?.movedAt ?? pulse(row.id)?.at ?? row.updatedMs
     }
 
     /// When a session last pulsed, ms epoch; a run's is when it last moved.

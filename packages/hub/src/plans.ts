@@ -106,7 +106,7 @@ export const createPlans = (deps: PlansDeps) => {
    * makes at spawn. OpenCode 2.0 and pi have no list of their own.
    */
   const keepsCawcoList = (row: InstanceRow): boolean =>
-    (row.harness ?? "claude") !== "claude" ||
+    row.harness !== "claude" ||
     db.getSupervisorConfig().cawcoTodos ||
     (!!row.delegateType &&
       deps.typeTodos(row.delegateTypeProject ?? null, row.delegateType));

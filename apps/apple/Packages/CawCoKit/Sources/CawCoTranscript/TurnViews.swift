@@ -602,7 +602,7 @@ final class UserTurnView: UIView, Recycled, FitsWidth, FrameRow, UIGestureRecogn
     /// words, texts, files and pictures, as a new send that `replaces` this
     /// one, so the hub retires this row as the retry is taken.
     private func tryAgain() {
-        guard retrying == nil, let block, let hub = env.hub, hub.state == .connected, let row = hub.fleet.byId[env.sessionId], row.isListed else { return }
+        guard retrying == nil, let block, let hub = env.hub, hub.state == .connected, let row = hub.fleet.byId[env.sessionId]?.session, row.isListed else { return }
         // One the hub refused before keeping a record goes again from this device, under its own id, on this row.
         if block.state == "refused" {
             hub.sessions.resend(block.id)

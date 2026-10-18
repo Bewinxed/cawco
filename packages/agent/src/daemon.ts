@@ -8,7 +8,6 @@ import type {
   AuthState,
   BuildInfo,
   Envelope,
-  HarnessKind,
   HeartbeatAckPayload,
   HeartbeatPayload,
   LaunchAsk,
@@ -16,6 +15,7 @@ import type {
   LentAccess,
   MachineHarnessReport,
   MachineProviderLists,
+  NamedSpawn,
   RegisterAckPayload,
   SessionCustody,
   SpawnPayload,
@@ -1156,14 +1156,13 @@ const closed = (socket: WebSocket, url: string) =>
  */
 export const adoptable = (
   payload: SpawnPayload | undefined
-): payload is SpawnPayload =>
+): payload is NamedSpawn =>
   payload !== undefined &&
   typeof payload.instanceId === "string" &&
   payload.instanceId.length > 0 &&
   typeof payload.cwd === "string" &&
   payload.cwd.length > 0 &&
-  (payload.harness === undefined ||
-    SESSION_PROC_KINDS.some((kind) => kind === payload.harness)) &&
+  SESSION_PROC_KINDS.some((kind) => kind === payload.harness) &&
   payload.bootstrap === undefined &&
   payload.scratch === undefined;
 
@@ -2007,7 +2006,7 @@ const attach = (
      * operator's spawn, a delegate's, and every later `reannounce` ack go
      * straight through.
      */
-    const heldSpawns: Envelope[] = [];
+    const heldSpawns: Envelope<NamedSpawn>[] = [];
     /** The hub holds this connection until the person admits the machine ({@link admission}). */
     let waitingAdmission = false;
     /**
@@ -2090,14 +2089,15 @@ const attach = (
      * OpenCode reattach is no unit of it: it is its own session's
      * ({@link reattaching}).
      */
-    const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
+    const takeCustody = (
+      ackPayload: unknown,
+      spawns: Envelope<NamedSpawn>[]
+    ): void => {
       clearTimeout(registrationDeadline);
-      const harnessOf = (envelope: Envelope): HarnessKind =>
-        (envelope.payload as SpawnPayload).harness ?? "claude";
       const units = new Map(
         spawns.map((envelope) => [
-          (envelope.payload as SpawnPayload).instanceId,
-          harnessOf(envelope),
+          envelope.payload.instanceId,
+          envelope.payload.harness,
         ])
       );
       custodyEpoch = supervisor.beginCustody([...units.keys()]);
@@ -2278,7 +2278,7 @@ const attach = (
       void Promise.all(
         SESSION_PROC_KINDS.flatMap((kind) => {
           const mine = spawns.filter(
-            (envelope) => harnessOf(envelope) === kind
+            (envelope) => envelope.payload.harness === kind
           );
           if (mine.length === 0) {
             return [];
@@ -2448,7 +2448,7 @@ const attach = (
       const opencodeSpawn = spawn?.harness === "opencode";
       const instanceId = spawn?.instanceId;
       if (adoptable(spawn)) {
-        heldSpawns.push(envelope);
+        heldSpawns.push({ ...envelope, payload: spawn });
         undecided.set(spawn.instanceId, undecided.get(spawn.instanceId) ?? []);
         return true;
       }

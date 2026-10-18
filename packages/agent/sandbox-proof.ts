@@ -99,6 +99,7 @@ const TIMEOUT = 180_000;
 const spawned = await claudeHarness.spawn(
   {
     instanceId: "sandbox-proof",
+    harness: "claude",
     cwd: PROOF_DIR,
     permissionMode: "bypassPermissions",
     persistSession: false,

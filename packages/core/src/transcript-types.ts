@@ -12,6 +12,7 @@
  * flight — is {@link TranscriptTail}, and is all that moves between frames.
  */
 import type {
+  HarnessKind,
   NeutralStatus,
   PermissionMode,
   SendRecord,
@@ -370,7 +371,7 @@ export interface TranscriptPage {
 /** Where a transcript was found: the machine, folder, key and harness. */
 export interface TranscriptWhere {
   cwd: string;
-  harness: string;
+  harness: HarnessKind;
   machineId: string;
   sessionKey: string;
 }

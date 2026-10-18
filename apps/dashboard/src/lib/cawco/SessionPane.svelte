@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PermissionResult } from "@cawco/core";
+  import type { HarnessKind, PermissionResult } from "@cawco/core";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer, grown into any parked permission
@@ -114,7 +114,8 @@
     viewId: string;
     browsing: string | null;
     browsingCwd: string;
-    browsingHarness: string;
+    /** The stored conversation's harness; its address is none without it. */
+    browsingHarness: HarnessKind | undefined;
     visible: boolean;
     /** Its group's active tab (PaneHost). */
     active: boolean;
@@ -333,7 +334,8 @@
     const id = viewId;
     const cwd = browsingCwd;
     const harness = browsingHarness;
-    const hint = browsing ? { machineId: browsing, cwd, harness } : null;
+    const hint =
+      browsing && harness ? { machineId: browsing, cwd, harness } : null;
     const running = isLive;
     // biome-ignore lint/complexity/noVoid: read-only dependency — Retry bumps `attempt` purely to re-run this effect
     void attempt;

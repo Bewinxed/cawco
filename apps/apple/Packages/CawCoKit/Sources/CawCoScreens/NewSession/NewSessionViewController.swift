@@ -573,7 +573,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         if machineId != lastMachine {
             lastMachine = machineId
             let has = installed
-            if !has.contains(harness) { chooseHarness(has.first ?? "claude") }
+            if let first = has.first, !has.contains(harness) { chooseHarness(first) }
         }
         if let effort, !efforts.contains(effort) { self.effort = nil }
         // Step 2 holds only while the move it asks about can run.

@@ -48,6 +48,7 @@ import type {
   InputsRead,
   InstanceRow,
   LandsMode,
+  NamedSpawn,
   NeutralOrigin,
   PermissionMode,
   PlanStep,
@@ -55,7 +56,6 @@ import type {
   SendPayload,
   SendRefusal,
   SessionRole,
-  SpawnPayload,
   WorkItemSummary,
   WorkspaceArchive,
   WorkspaceArchived,
@@ -184,13 +184,13 @@ export const LEAF_DELEGATE_REFUSAL =
 /**
  * Who an item is started for: the session that delegated it, or, for a
  * routine's run, the routine ({@link routineParent}). What starting an item
- * reads of its parent and no more.
+ * reads of its parent and no more. A routine or a design check runs on no
+ * harness: its `harness` is null.
  */
 export type Parent = Pick<
   InstanceRow,
   | "canDelegate"
   | "cwd"
-  | "harness"
   | "id"
   | "launchDir"
   | "machineId"
@@ -198,7 +198,7 @@ export type Parent = Pick<
   | "projectId"
   | "sessionId"
   | "title"
->;
+> & { harness: HarnessKind | null };
 
 /** What a routine's runs name as their parent: `routine:<id>`, which no session's row has. */
 const ROUTINE_PARENT = "routine:";
@@ -243,7 +243,7 @@ export const verifierParent = (builder: {
   cwd: builder.cwd,
   title: "Design check",
   launchDir: "unknown",
-  harness: "verifier",
+  harness: null,
   model: null,
   sessionId: null,
   // The hub starts it: its own session is the leaf (its request's canDelegate).
@@ -267,7 +267,7 @@ export const routineParent = (routine: {
   cwd: routine.cwd,
   title: routine.name,
   launchDir: "unknown",
-  harness: "routine",
+  harness: null,
   model: null,
   sessionId: null,
   canDelegate: true,
@@ -845,7 +845,7 @@ export interface WorkItemDeps {
    */
   readonly placeAhead: (
     machineId: string,
-    session: Omit<SpawnPayload, "cwd">,
+    session: Omit<NamedSpawn, "cwd">,
     task: { projectId: string | null; taskId?: string }
   ) => ItemPlacement;
   /**
@@ -897,7 +897,7 @@ export interface WorkItemDeps {
    */
   readonly spawn: (
     machineId: string,
-    payload: SpawnPayload,
+    payload: NamedSpawn,
     workItemId: string,
     fallbackMode: PermissionMode,
     placed?: { accountId?: string }
@@ -1031,7 +1031,7 @@ const spawnOf = (
   parent: Parent,
   workspace: WorkspaceRow,
   settings: Settings
-): SpawnPayload => ({
+): NamedSpawn => ({
   ...sessionOf(instanceId, title, parent, settings),
   cwd: workspace.path,
   workspace: refOf(workspace),
@@ -1043,7 +1043,7 @@ const sessionOf = (
   title: string,
   parent: Parent,
   { account, canDelegate, forkOf, harness, model, role, skills, type }: Settings
-): Omit<SpawnPayload, "cwd"> => ({
+): Omit<NamedSpawn, "cwd"> => ({
   instanceId,
   harness,
   ...(account ? { account } : {}),
@@ -4129,13 +4129,13 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     parent: Parent
   ): Pick<Settings, "forkOf" | "harness" | "model"> => {
-    if (!parent.sessionId) {
+    const { harness } = parent;
+    if (!(parent.sessionId && harness)) {
       throw new WorkItemRefusal(
         409,
         "This session has not named its conversation yet, so there is nothing to fork. Delegate without fork."
       );
     }
-    const harness = parent.harness as HarnessKind;
     const model = parent.model ?? undefined;
     if (request.account) {
       throw new WorkItemRefusal(

@@ -8,6 +8,7 @@
  * on the hub: it is a record of what *this* reader has been looking at, not a
  * property of the fleet.
  */
+import { type HarnessKind, harnessNamed } from "@cawco/core";
 import { store, stored } from "./storage";
 import { workspace } from "./workspace/workspace.svelte";
 
@@ -46,7 +47,7 @@ export interface Visit {
 /** The last-known machine, folder and harness of a stored session's tab. */
 export interface VisitContext {
   cwd: string;
-  harness: string;
+  harness: HarnessKind;
   machine: string;
 }
 
@@ -75,16 +76,18 @@ const save = () => {
 
 export const workingSet = {
   /** Where a stored session's tab last knew it to live, or null for a live
-      session, whose row on the hub answers instead. */
+      session, whose row on the hub answers instead, and for one remembered
+      without its harness. */
   contextOf(id: string): VisitContext | null {
     const visit = visits.find((v) => v.id === id);
-    if (!visit?.machine) {
+    const harness = harnessNamed(visit?.harness);
+    if (!(visit?.machine && harness)) {
       return null;
     }
     return {
       machine: visit.machine,
       cwd: visit.cwd ?? "",
-      harness: visit.harness ?? "claude",
+      harness,
     };
   },
 
@@ -92,7 +95,7 @@ export const workingSet = {
       was last known to live so its tab can be named before the fleet answers. */
   visit(
     id: string,
-    ctx?: { machine?: string | null; cwd?: string; harness?: string }
+    ctx?: { machine?: string | null; cwd?: string; harness?: HarnessKind }
   ): void {
     if (!id) {
       return;

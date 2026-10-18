@@ -259,12 +259,13 @@ export interface RoleSize {
   tools: number;
 }
 
-/** Each role's listed tools, their count and size against its budget. */
+/** Each role's listed tools, their count and size against its budget, on Claude Code. */
 export const measureRoles = (): RoleSize[] => {
   const rows = SESSION_ROLES.map((role): InstanceRow => ({
     id: role,
     machineId: "machine",
     cwd: "/",
+    harness: "claude",
     launchDir: "known",
     sessionId: null,
     status: "running",

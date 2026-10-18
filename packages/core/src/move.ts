@@ -185,12 +185,23 @@ export interface MoveRequest {
   spawn: {
     account?: string;
     effort?: EffortLevel;
+    /**
+     * The harness the moved session starts on; the hub refuses a move that
+     * names none. Optional on the wire only until TestFlight 20261015,
+     * 20261015.3, 20261017 and 20261018 are expired (the app they hold
+     * declares it optional); then it is required here.
+     */
     harness?: HarnessKind;
     model?: string;
     permissionMode?: PermissionMode;
     title?: string;
   };
 }
+
+/** A move the hub took: its session's harness named. What a move's record keeps. */
+export type NamedMoveRequest = MoveRequest & {
+  spawn: MoveRequest["spawn"] & { harness: HarnessKind };
+};
 
 // ── Hub ↔ machine ──────────────────────────────────────────────────────────
 

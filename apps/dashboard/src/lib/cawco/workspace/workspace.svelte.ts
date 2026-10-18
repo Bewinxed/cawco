@@ -17,10 +17,11 @@
  * is open. `workingSet` only remembers what a conversation is called and
  * where a stored one lives.
  */
+import { type HarnessKind, harnessNamed } from "@cawco/core";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
-import { conversationHref } from "../links";
+import { conversationHref, isSessionRow } from "../links";
 import { keepPrefs } from "../prefs";
 import { store, stored as storedIn } from "../storage";
 import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
@@ -54,11 +55,18 @@ export interface LeafNode {
 
 export type PaneNode = BranchNode | LeafNode;
 
-/** How a stored conversation is addressed: which machine, which folder. */
+/** How a stored conversation is addressed: which machine, which folder, which harness. */
 export interface SessionContext {
   cwd: string;
-  harness: string;
+  harness: HarnessKind;
   machine: string;
+}
+
+/** A tab's address as it is handed over: machine and harness both named, or it is no address. */
+export interface AskedContext {
+  cwd?: string;
+  harness?: HarnessKind;
+  machine?: string | null;
 }
 
 export interface WorkspaceV1 {
@@ -374,18 +382,15 @@ function settle(): void {
    builds, so a projected URL and a copied link are the same string. */
 
 /** Records how a conversation is addressed, if this is news. */
-function remember(
-  sessionId: string,
-  ctx?: { machine?: string | null; cwd?: string; harness?: string }
-): void {
-  if (!ctx?.machine) {
+function remember(sessionId: string, ctx?: AskedContext): void {
+  if (!(ctx?.machine && ctx.harness)) {
     return;
   }
   held.ctx ??= {};
   held.ctx[sessionId] = {
     machine: ctx.machine,
     cwd: ctx.cwd ?? "",
-    harness: ctx.harness ?? "claude",
+    harness: ctx.harness,
   };
 }
 
@@ -408,11 +413,11 @@ function remember(
  */
 export function contextOf(sessionId: string): SessionContext | null {
   const instance = cawco.instanceIndex.byId.get(sessionId);
-  if (instance?.machineId) {
+  if (instance?.machineId && isSessionRow(instance)) {
     return {
       machine: instance.machineId,
       cwd: instance.cwd ?? "",
-      harness: instance.harness ?? "claude",
+      harness: instance.harness,
     };
   }
   for (const machine of cawco.machines) {
@@ -426,7 +431,7 @@ export function contextOf(sessionId: string): SessionContext | null {
       return {
         machine: machine.machineId,
         cwd: stored.cwd ?? "",
-        harness: stored.harness ?? "claude",
+        harness: stored.harness,
       };
     }
   }
@@ -574,11 +579,7 @@ export const workspace = {
    * the transcript answers, not an address: the URL is the bare id either
    * way, and the hub resolves it.
    */
-  open(
-    sessionId: string,
-    ctx?: { machine?: string | null; cwd?: string; harness?: string },
-    into?: string
-  ): void {
+  open(sessionId: string, ctx?: AskedContext, into?: string): void {
     remember(sessionId, ctx);
     if (ctx) {
       workingSet.visit(sessionId, ctx);
@@ -594,10 +595,7 @@ export const workspace = {
    * but it never writes the URL back: the URL is already what it is, and
    * projecting it again would push a duplicate history entry.
    */
-  reveal(
-    sessionId: string | null,
-    ctx?: { machine?: string | null; cwd?: string; harness?: string }
-  ): void {
+  reveal(sessionId: string | null, ctx?: AskedContext): void {
     if (sessionId) {
       remember(sessionId, ctx);
       if (ctx) {
@@ -655,7 +653,7 @@ export const workspace = {
         ? {
             machine,
             cwd: url.searchParams.get("cwd") ?? "",
-            harness: url.searchParams.get("harness") ?? "claude",
+            harness: harnessNamed(url.searchParams.get("harness")),
           }
         : undefined
     );

@@ -60,6 +60,10 @@ export interface SessionCredentialInstall {
 
 export const HARNESSES: readonly HarnessKind[] = ["claude", "opencode", "pi"];
 
+/** The harness a value off the wire, a URL or storage names, when it names one CawCo runs. */
+export const harnessNamed = (value: unknown): HarnessKind | undefined =>
+  HARNESSES.find((harness) => harness === value);
+
 /**
  * How a session answers tool permissions. The union is Claude Code's, plus
  * `fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host

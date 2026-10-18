@@ -751,7 +751,7 @@ final class SidebarViewController: ObservedViewController {
         if rowInputs != drawnInputs || projects != listProjects || pins != listPins || sort != listSort || delegates != listDelegates {
             #if DEBUG
             if let pair = zip(drawnInputs, rowInputs).first(where: { $0 != $1 }) {
-                Self.performance.debug("rail input first \(pair.0.id, privacy: .public) -> \(pair.1.id, privacy: .public), status \(pair.0.status, privacy: .public) -> \(pair.1.status, privacy: .public), activity \(pair.0.activity.rawValue, privacy: .public) -> \(pair.1.activity.rawValue, privacy: .public), time changed \(pair.0.updatedDate != pair.1.updatedDate || pair.0.updatedText != pair.1.updatedText), recent changed \(pair.0.recent != pair.1.recent)")
+                Self.performance.debug("rail input first \(pair.0.id, privacy: .public) -> \(pair.1.id, privacy: .public), status \(pair.0.status, privacy: .public) -> \(pair.1.status, privacy: .public), activity \(pair.0.activity.rawValue, privacy: .public) -> \(pair.1.activity.rawValue, privacy: .public), time changed \(pair.0.updated != pair.1.updated), recent changed \(pair.0.recent != pair.1.recent)")
             }
             #endif
             drawnInputs = rowInputs
@@ -952,8 +952,9 @@ final class SidebarViewController: ObservedViewController {
         // is; a rail row archives nothing (Sidebar.svelte's SessionRow).
         let id = node.row.id
         row.menu = { [weak self] copy in
-            guard let self, let context = host?.sessionMenus.at(askPlace), BoardRun.runId(of: id) == nil,
-                  let now = hub.fleet.byId[id] else { return nil }
+            // A workflow run or a thread takes no session commands.
+            guard let self, let context = host?.sessionMenus.at(askPlace),
+                  let now = hub.fleet.byId[id]?.session else { return nil }
             return SessionMenus.live(now, context: context, copy: copy)
         }
         var parts: [UIView] = [row]

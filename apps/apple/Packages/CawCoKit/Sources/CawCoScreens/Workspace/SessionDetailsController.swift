@@ -203,11 +203,11 @@ public final class SessionDetailsController: ObservedViewController {
     // MARK: Derived (SessionDetails.svelte)
 
     private var fleet: FleetStore { hub.fleet }
-    private var row: InstanceRow? { fleet.byId[sessionId] }
+    private var row: InstanceRow? { fleet.byId[sessionId]?.session }
     private var facts: Components.Schemas.TranscriptFacts? { hub.sessions.transcripts[sessionId]?.facts }
     private var machineId: String? { row?.machineId }
     private var machine: MachineRow? { machineId.flatMap { id in fleet.machines.first { $0.machineId == id } } }
-    private var harness: String? { row?.harness ?? facts?.harness }
+    private var harness: String? { row?.harness.rawValue ?? facts?.harness }
     private var report: Components.Schemas.HarnessReport? { harness.flatMap { kind in machine?.harnesses?.first { $0.harness.rawValue == kind } } }
     private var cwd: String { row?.cwd ?? "" }
     private var model: String? { (facts?.model ?? row?.model).flatMap { $0.isEmpty ? nil : $0 } }

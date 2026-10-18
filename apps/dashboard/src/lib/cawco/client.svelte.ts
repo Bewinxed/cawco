@@ -43,6 +43,7 @@ import type {
   LawBroken,
   McpServerStatus,
   MoveJob,
+  NamedSpawn,
   NeutralSessionInfo,
   NeutralStatus,
   OnCap,
@@ -73,7 +74,7 @@ import type {
   SlashCommand,
   SpawnPayload,
   StarterPlace,
-  StopPayload,
+  StopRequest,
   StreamHeartbeat,
   SupportedCommands,
   TailnetHttps,
@@ -147,6 +148,7 @@ import {
 } from "./hub-read";
 import { newId } from "./id";
 import {
+  type BoardRow,
   indexInstances,
   instanceForSession,
   resolveSessionTitle,
@@ -247,6 +249,7 @@ export type Machine = AgentRow;
 
 /** A session the hub knows about (`GET /api/instances`, and `instances` frames). */
 export type { InstanceRow } from "@cawco/core";
+export type { BoardRow } from "./links";
 
 /**
  * Where a project's files are (WORDS.md: place): a checkout on a machine, a
@@ -340,7 +343,7 @@ export function ahead(deadline: number): boolean {
  * Only a session the hub can still reach is live; the rest is history. A
  * session its project is moving for (`moving`) is live work the hub carries.
  */
-const isLive = (row: InstanceRow): boolean =>
+const isLive = (row: BoardRow): boolean =>
   row.status === "running" ||
   row.status === "starting" ||
   row.status === "moving";
@@ -357,7 +360,7 @@ const isLive = (row: InstanceRow): boolean =>
  * are (Finished until seen, Recent, its project's tree). A `stopping` one has
  * ended too, its machine yet to confirm the process gone, and is listed so.
  */
-const isListed = (row: InstanceRow): boolean =>
+const isListed = (row: BoardRow): boolean =>
   isLive(row) ||
   row.status === "error" ||
   row.status === "sleeping" ||
@@ -372,7 +375,7 @@ const isListed = (row: InstanceRow): boolean =>
  * machine; the hub genuinely does not know, which is a different claim from
  * every other status and must never be flattened into "idle".
  */
-export const isStale = (row: InstanceRow): boolean => row.status === "unknown";
+export const isStale = (row: BoardRow): boolean => row.status === "unknown";
 
 /**
  * A session whose process is gone but whose conversation is not: sleeping, not
@@ -384,7 +387,7 @@ export const isStale = (row: InstanceRow): boolean => row.status === "unknown";
  * deliberately ended, but nothing stops it being picked back up; so is a
  * `stopping` one, whose resume replaces the process its machine is ending.
  */
-export const isResumable = (row: InstanceRow): boolean =>
+export const isResumable = (row: BoardRow): boolean =>
   row.status === "sleeping" ||
   ((row.status === "stopping" || row.status === "stopped") &&
     Boolean(row.sessionId));
@@ -395,7 +398,7 @@ export const isResumable = (row: InstanceRow): boolean =>
  * whenever the hub asserts it — so there is no longer a resumable marker to
  * carve back out of it.
  */
-export const isFailed = (row: InstanceRow): boolean => row.status === "error";
+export const isFailed = (row: BoardRow): boolean => row.status === "error";
 
 /**
  * A spin-off is history nobody asked for until they keep it, and the agent
@@ -552,8 +555,11 @@ export interface SessionState {
    * sends no effort. `null` until the first reading lands.
    */
   effort: SessionEffort | null;
-  /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
-  harness: HarnessKind;
+  /**
+   * Which harness owns {@link sessionId} — what a resume and a catalog read
+   * route on. Null until its row, its spawn or its stored listing names it.
+   */
+  harness: HarnessKind | null;
   /**
    * The hub read the stored transcript again (a transcript `reset`): the rows
    * held may say something else now, so the next read reads every page back
@@ -1185,7 +1191,7 @@ export function blankSession(instanceId: string): SessionState {
     machineId: "",
     cwd: "",
     sessionId: null,
-    harness: "claude",
+    harness: null,
     blocks: [],
     queued: [],
     rev: 0,
@@ -1917,8 +1923,7 @@ function hydrate(target: SessionState): void {
   }
   target.machineId = known.machineId;
   target.cwd = known.cwd;
-  // biome-ignore lint/suspicious/noUnnecessaryConditions: the cast doesn't make the field non-nullish at runtime — older rows really can lack a harness
-  target.harness = (known.harness as HarnessKind) ?? "claude";
+  target.harness = known.harness;
   target.scratch = known.kind === "scratch";
 }
 
@@ -1933,7 +1938,7 @@ function hydrate(target: SessionState): void {
  * therefore only ever fills a blank: it can be older than what the session has
  * since said, and a broadcast must not walk a live value back to it.
  */
-function adoptSettings(target: SessionState, row: InstanceRow): void {
+function adoptSettings(target: SessionState, row: BoardRow): void {
   // Only a spawn, a confirmed switch or an init ever wrote the column, so its
   // word on a mode is the SDK's — which is wider than the picker's four.
   if (target.permissionMode === null && row.permissionMode) {
@@ -4221,13 +4226,14 @@ export type HarnessCapability = {
  * `.map` threw on it).
  */
 export const harnessCan = (
-  where: { harness?: string | null; machineId: string },
+  where: { harness: HarnessKind | null; machineId: string },
   capability: HarnessCapability
 ): boolean =>
   cawco.machines
     .find((entry) => entry.machineId === where.machineId)
-    ?.harnesses?.find((entry) => entry.harness === (where.harness ?? "claude"))
-    ?.capabilities[capability] === true;
+    ?.harnesses?.find((entry) => entry.harness === where.harness)?.capabilities[
+    capability
+  ] === true;
 
 /** One action table for every surface that draws the reader's own turns. */
 export function userTurnActions(message: Message): {
@@ -5159,8 +5165,8 @@ function whenTrue(ready: () => boolean, ms: number): Promise<Bounded<void>> {
  */
 async function explicit(
   machineId: string,
-  payload: SpawnPayload
-): Promise<SpawnPayload> {
+  payload: NamedSpawn
+): Promise<NamedSpawn> {
   await whenTrue(
     () =>
       state.fleetRead &&
@@ -5168,7 +5174,7 @@ async function explicit(
         undefined,
     CONTROL_TIMEOUT_MS
   );
-  const harness = payload.harness ?? "claude";
+  const { harness } = payload;
   const report = state.machines
     .find((row) => row.machineId === machineId)
     ?.harnesses?.find((entry) => entry.harness === harness);
@@ -5198,7 +5204,7 @@ async function explicit(
 async function start({
   machineId,
   ...spawn
-}: Omit<SpawnPayload, "instanceId"> & {
+}: Omit<NamedSpawn, "instanceId"> & {
   machineId: string;
 }): Promise<Bounded<SessionState>> {
   const instanceId = newId();
@@ -5226,7 +5232,7 @@ async function start({
   const created = session(instanceId);
   created.machineId = machineId;
   created.cwd = payload.cwd;
-  created.harness = payload.harness ?? "claude";
+  created.harness = payload.harness;
   created.permissionMode = payload.permissionMode ?? null;
   // What was sent, so the header shows it during the wait for the first
   // init — which then corrects it to whatever the harness resolved it to.
@@ -5259,7 +5265,7 @@ export async function spawnSession({
   prompt?: string;
   /** What rides the first message besides its words: its attachments and images, as a send carries them. */
   extras?: SendExtras;
-  harness?: HarnessKind;
+  harness: HarnessKind;
   permissionMode?: PermissionMode;
   model?: string;
   effort?: EffortLevel;
@@ -5319,13 +5325,13 @@ export async function forkSession({
   machineId,
   cwd,
   sessionId,
-  harness = "claude",
+  harness,
   at,
 }: {
   machineId: string;
   cwd: string;
   sessionId: string;
-  harness?: HarnessKind;
+  harness: HarnessKind;
   at?: string;
 }): Promise<Bounded<string>> {
   // The branch runs on what its source runs on, never on the machine's
@@ -5441,6 +5447,19 @@ function resumeKeyFor(instanceId: string): string | null {
   return state.sessions[instanceId]?.sessionId ?? null;
 }
 
+/** The harness a session's conversation is one of: its row's, else its view's; a throw while neither has said. */
+function harnessOfSession(instanceId: string): HarnessKind {
+  const harness =
+    instanceIndex.byId.get(instanceId)?.harness ??
+    state.sessions[instanceId]?.harness;
+  if (!harness) {
+    throw new Error(
+      "This session has not said what runs it yet. Try again in a moment."
+    );
+  }
+  return harness;
+}
+
 /** Revives `instanceId` when its process is dead; `unanswered` when the revive got no answer in time. */
 export async function ensureAlive(
   instanceId: string,
@@ -5469,7 +5488,7 @@ export async function ensureAlive(
     const payload = await explicit(machineId, {
       instanceId,
       cwd: target.cwd,
-      harness: target.harness,
+      harness: harnessOfSession(instanceId),
       ...(plan.kind === "resume"
         ? { resume: { sessionKey: plan.sessionKey } }
         : {}),
@@ -5525,7 +5544,7 @@ export async function stopSession(
   machineId: string
 ): Promise<Bounded<void>> {
   const requestId = newId();
-  const payload: StopPayload = { instanceId, requestId };
+  const payload: StopRequest = { instanceId, requestId };
   try {
     const stopped = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () =>
       send({ verb: "stop", machineId, instanceId, requestId, payload })
@@ -5557,7 +5576,7 @@ export async function discardSession(
   machineId: string
 ): Promise<Bounded<void>> {
   const requestId = newId();
-  const payload: StopPayload = { instanceId, discard: true, requestId };
+  const payload: StopRequest = { instanceId, discard: true, requestId };
   try {
     const discarded = await ask<void>(requestId, DISCARD_TIMEOUT_MS, () =>
       send({ verb: "stop", machineId, instanceId, requestId, payload })
@@ -5732,7 +5751,7 @@ export async function keepSession(instanceId: string): Promise<Bounded<void>> {
       "tagSession",
       [target.sessionId, null, { dir: target.cwd || undefined }],
       CONTROL_TIMEOUT_MS,
-      target.harness
+      harnessOfSession(instanceId)
     );
     await loadCatalog(target.machineId);
     return untagged;
@@ -7854,7 +7873,7 @@ export async function relaunchSession(
   const payload = await explicit(machineId, {
     instanceId,
     cwd: target.cwd,
-    harness: target.harness,
+    harness: harnessOfSession(instanceId),
     ...(plan.kind === "resume"
       ? { resume: { sessionKey: plan.sessionKey } }
       : {}),
@@ -8021,7 +8040,7 @@ export async function forkFrom(
     machineId: target.machineId,
     cwd: target.cwd,
     sessionId: sessionKey,
-    harness: target.harness,
+    harness: harnessOfSession(instanceId),
     at: point,
   });
 }
@@ -8065,7 +8084,7 @@ export async function editAndResend(
   const payload = await explicit(machineId, {
     instanceId,
     cwd: target.cwd,
-    harness: target.harness,
+    harness: harnessOfSession(instanceId),
     resume: { sessionKey, atMessage: point },
     // What a relaunch carries: a rewind changes what the session has said, not
     // what it is. Its effort is the one chosen for it, which the hub supplies.
@@ -8434,11 +8453,11 @@ export const cawco = {
    * Every workflow run as a session row (workflow-runs.ts), for the lists
    * that show runs the way they show sessions: Working, Finished, projects.
    */
-  get runRows(): InstanceRow[] {
+  get runRows(): BoardRow[] {
     return boardRuns;
   },
   /** Every thread with a project's Caw, as session rows (thread-tabs.ts). */
-  get threadRows(): InstanceRow[] {
+  get threadRows(): BoardRow[] {
     return threadRows;
   },
   /** The thread a `thread:` id names, when this browser has it. */

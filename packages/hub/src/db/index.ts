@@ -948,7 +948,7 @@ export interface DbShape {
     machineId: string;
     cwd: MachinePath;
     projectId: string;
-    harness?: string;
+    harness: HarnessKind;
     model?: string;
     permissionMode?: string;
     title?: string;
@@ -1262,13 +1262,12 @@ export interface DbShape {
    * The SDK session an `init` frame named, so the row can be read back from —
    * with the directory it really opened in, which is the agent's word on where
    * the spawn's `cwd` resolved to, and the MCP servers and tools it announced
-   * when it announced any.
+   * when it announced any. Its harness is its spawn's ({@link openInstance}).
    */
   readonly noteInstanceSession: (
     id: string,
     sessionId: string,
     cwd?: MachinePath,
-    harness?: string,
     tooling?: SessionTooling
   ) => void;
   /** Keeps a line its machine said on the session's row, the last {@link LIMIT_NOTES_KEPT} of its kind; false when one under its id is already kept. */
@@ -1329,7 +1328,7 @@ export interface DbShape {
     machineId: string;
     cwd: MachinePath;
     sessionId?: string;
-    harness?: string;
+    harness: HarnessKind;
     projectId?: string;
     parentInstanceId?: string;
     parentToolUseId?: string;
@@ -1882,7 +1881,7 @@ export interface DbShape {
   }[];
   readonly runningDelegateCounts: () => Map<string, number>;
   /** The listed sessions of one harness that are running. */
-  readonly runningInstancesOf: (harness: string) => PublicInstanceRow[];
+  readonly runningInstancesOf: (harness: HarnessKind) => PublicInstanceRow[];
   /** One send's record, by its uuid. */
   readonly sendRecord: (uuid: string) => SentMessageRow | undefined;
   /**
@@ -2173,7 +2172,7 @@ export interface DbShape {
   /** A machine's rows from before `cwd` was pinned whose launch directory is still to be read. */
   readonly unreadLaunchDirs: (
     machineId: string
-  ) => { id: string; sessionId: string; harness: string | null }[];
+  ) => { id: string; sessionId: string; harness: HarnessKind }[];
   /**
    * Enabled plugins with no resolved files, whether never tried or failed —
    * what a resolve at boot is for. A failed one is tried again so its sentence
@@ -3279,7 +3278,7 @@ const make = async (path: string): Promise<DbShape> => {
           ? [
               {
                 sessionId: member.sessionId,
-                harness: member.harness ?? "claude",
+                harness: member.harness,
                 model: member.model,
                 accountId: member.accountId,
                 endedAt: member.updatedAt.getTime(),
@@ -4779,7 +4778,7 @@ const make = async (path: string): Promise<DbShape> => {
             ...(cleanSessionId ? { sessionId: cleanSessionId } : {}),
             // A start with no conversation to resume begins one from nothing.
             ...(cleanSessionId ? {} : { modelUsageSeen: {} }),
-            ...(harness ? { harness } : {}),
+            harness,
             ...(projectId ? { projectId } : {}),
             ...(parentInstanceId ? { parentInstanceId } : {}),
             ...(parentToolUseId ? { parentToolUseId } : {}),
@@ -5181,7 +5180,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
-    noteInstanceSession: (id, sessionId, cwd, harness, tooling) => {
+    noteInstanceSession: (id, sessionId, cwd, tooling) => {
       // A harness key naming the row itself is confusion, never identity: hub
       // ids are hub-minted, harness sids are harness-minted, and the two only
       // meet when a caller echoed the instance id back as the session key
@@ -5208,7 +5207,6 @@ const make = async (path: string): Promise<DbShape> => {
                 cwd: sql`CASE WHEN ${instances.sessionId} IS NULL THEN ${cwd} ELSE ${instances.cwd} END`,
               }
             : {}),
-          ...(harness ? { harness } : {}),
           ...(tooling ? { tooling } : {}),
         })
         .where(eq(instances.id, id))
@@ -5317,7 +5315,7 @@ const make = async (path: string): Promise<DbShape> => {
             and(
               eq(instances.machineId, machineId),
               eq(instances.machineRemoved, false),
-              or(eq(instances.harness, "claude"), isNull(instances.harness)),
+              eq(instances.harness, "claude"),
               isNotNull(instances.sessionId),
               notInArray(instances.status, [
                 "stopping",
@@ -6611,7 +6609,7 @@ const make = async (path: string): Promise<DbShape> => {
           and(
             listedInstances(),
             eq(instances.machineId, machineId),
-            or(isNull(instances.harness), eq(instances.harness, "claude")),
+            eq(instances.harness, "claude"),
             isNotNull(instances.sessionId)
           )
         )

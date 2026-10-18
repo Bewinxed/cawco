@@ -46,6 +46,7 @@ import {
   type MovesFrame,
   moveBranch,
   moveSize,
+  type NamedMoveRequest,
   type PermissionResult,
   type SendPayload,
   type SpawnPayload,
@@ -989,8 +990,21 @@ export const createMoves = (deps: MovesDeps) => {
   /** A move: `POST /api/projects/:id/moves`. Answers the job once it is recorded. */
   const start = async (
     projectId: string,
-    request: MoveRequest
+    asked: MoveRequest
   ): Promise<MoveJob> => {
+    // Its session starts on the harness it names, and nothing stands in for
+    // one it left out.
+    const { harness } = asked.spawn;
+    if (!harness) {
+      throw new MoveRefused(
+        400,
+        "A move names the harness its session starts on. Pick one, then move it again."
+      );
+    }
+    const request: NamedMoveRequest = {
+      ...asked,
+      spawn: { ...asked.spawn, harness },
+    };
     const planned = movable(
       await plan(projectId, request.machineId, request.path),
       request

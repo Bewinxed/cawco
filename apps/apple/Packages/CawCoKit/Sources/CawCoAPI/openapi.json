@@ -26432,10 +26432,7 @@
                 ]
               },
               "harness": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "$ref": "#/components/schemas/HarnessKind"
               },
               "accountId": {
                 "type": [
@@ -26672,10 +26669,7 @@
                   ]
                 },
                 "harness": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
+                  "$ref": "#/components/schemas/HarnessKind"
                 },
                 "accountId": {
                   "type": [
@@ -30279,7 +30273,7 @@
         }
       },
       "SpawnPayload": {
-        "description": "`spawn`: start a session on a harness. `harness` chooses the adapter (absent\nmeans `claude`, for every caller written before harnesses existed); `options`\nrides through to that adapter verbatim — only the callbacks the agent must own\nitself (`canUseTool`/permission hooks, abort) are filled in on arrival, since\nfunctions do not survive the wire. `resume` is the harness-neutral way to\nre-open or fork a stored session; `persistSession: false` asks for a session\nthat is never stored (a spin-off's transcript).",
+        "description": "`spawn`: start a session on a harness. `harness` chooses the adapter; `options`\nrides through to that adapter verbatim — only the callbacks the agent must own\nitself (`canUseTool`/permission hooks, abort) are filled in on arrival, since\nfunctions do not survive the wire. `resume` is the harness-neutral way to\nre-open or fork a stored session; `persistSession: false` asks for a session\nthat is never stored (a spin-off's transcript).",
         "type": "object",
         "properties": {
           "account": {
@@ -30364,7 +30358,7 @@
             "type": "boolean"
           },
           "harness": {
-            "description": "Which harness runs the session. Absent = `claude`.",
+            "description": "Which harness runs the session. Every start names it: the hub refuses one\nthat does not (`enforceRowSessionKey`), and the agent starts none without\nit. Optional on the wire only until TestFlight 20261015, 20261015.3,\n20261017 and 20261018 are expired (the app they hold declares it\noptional); then it is required here.",
             "enum": [
               "claude",
               "opencode",
@@ -30558,7 +30552,7 @@
         ]
       },
       "StopPayload": {
-        "description": "`stop`: interrupt and close a live session.",
+        "description": "`stop`: interrupt and close a live session, as the hub sends it to its machine.",
         "type": "object",
         "properties": {
           "claimedSessionIds": {
@@ -30580,7 +30574,7 @@
             "type": "string"
           },
           "harness": {
-            "description": "Row-owned coordinates for ending server custody without adoption.",
+            "description": "The row's harness, which ends its process and its server custody without\nadoption. The hub names it on every stop it sends a machine, and the\nagent ends nothing without it; a dashboard's or an app's ask is a\n{@link StopRequest}. Optional on the wire only until TestFlight 20261015,\n20261015.3, 20261017 and 20261018 are expired (the app they hold sends\nthis type); then it is required here.",
             "enum": [
               "claude",
               "opencode",
@@ -43613,7 +43607,7 @@
             "type": "string"
           },
           "harness": {
-            "type": "string"
+            "$ref": "#/components/schemas/HarnessKind"
           },
           "machineId": {
             "type": "string"
@@ -50866,11 +50860,8 @@
             "description": "The effort the session actually sends, as its agent last read it back from\nthe harness ({@link import (\"./harness\").EFFORT_READ}): a level, `none` when\nit sends no effort, null until the first reading lands. What its chip\nshows; never what a launch of it asks for ({@link chosenEffort})."
           },
           "harness": {
-            "description": "Which harness owns {@link sessionId} — what a resume and a catalog read route on.",
-            "type": [
-              "null",
-              "string"
-            ]
+            "$ref": "#/components/schemas/HarnessKind",
+            "description": "Which harness owns {@link sessionId} — what a resume and a catalog read route on."
           },
           "held": {
             "description": "First-hand custody on the current agent connection, never stored liveness.",
@@ -51075,6 +51066,7 @@
         },
         "required": [
           "cwd",
+          "harness",
           "id",
           "launchDir",
           "machineId",

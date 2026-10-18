@@ -208,8 +208,7 @@ export interface Envelope<T = unknown> {
 }
 
 /**
- * `spawn`: start a session on a harness. `harness` chooses the adapter (absent
- * means `claude`, for every caller written before harnesses existed); `options`
+ * `spawn`: start a session on a harness. `harness` chooses the adapter; `options`
  * rides through to that adapter verbatim — only the callbacks the agent must own
  * itself (`canUseTool`/permission hooks, abort) are filled in on arrival, since
  * functions do not survive the wire. `resume` is the harness-neutral way to
@@ -289,7 +288,13 @@ export interface SpawnPayload {
    * never taken from a caller.
    */
   fence?: true;
-  /** Which harness runs the session. Absent = `claude`. */
+  /**
+   * Which harness runs the session. Every start names it: the hub refuses one
+   * that does not (`enforceRowSessionKey`), and the agent starts none without
+   * it. Optional on the wire only until TestFlight 20261015, 20261015.3,
+   * 20261017 and 20261018 are expired (the app they hold declares it
+   * optional); then it is required here.
+   */
   harness?: import("./harness").HarnessKind;
   /**
    * The machine's own Claude Code login is moving into this account
@@ -654,7 +659,26 @@ export interface SessionLimits {
   memoryPercent?: number;
 }
 
-/** `stop`: interrupt and close a live session. */
+/** A start that names its harness: what the hub builds and sends a machine. */
+export type NamedSpawn = SpawnPayload & {
+  harness: import("./harness").HarnessKind;
+};
+
+/** A stop that names its row's harness: what the hub sends a machine. */
+export type NamedStop = StopPayload & {
+  harness: import("./harness").HarnessKind;
+};
+
+/**
+ * A `stop` a dashboard or a fleet session asks the hub for: the hub sends the
+ * machine the {@link NamedStop} the session's row names.
+ */
+export type StopRequest = Pick<
+  StopPayload,
+  "discard" | "from" | "instanceId" | "requestId"
+>;
+
+/** `stop`: interrupt and close a live session, as the hub sends it to its machine. */
 export interface StopPayload {
   /** Addresses claimed by other rows; only unclaimed server runners make a legacy read ambiguous. */
   claimedSessionIds?: string[];
@@ -663,7 +687,14 @@ export interface StopPayload {
   discard?: boolean;
   /** The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
-  /** Row-owned coordinates for ending server custody without adoption. */
+  /**
+   * The row's harness, which ends its process and its server custody without
+   * adoption. The hub names it on every stop it sends a machine, and the
+   * agent ends nothing without it; a dashboard's or an app's ask is a
+   * {@link StopRequest}. Optional on the wire only until TestFlight 20261015,
+   * 20261015.3, 20261017 and 20261018 are expired (the app they hold sends
+   * this type); then it is required here.
+   */
   harness?: import("./harness").HarnessKind;
   instanceId: string;
   /** The row's launch identity, including a held process not yet attached. */
@@ -1215,7 +1246,7 @@ export interface InstanceRow {
    */
   effort?: import("./harness").SessionEffort | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
-  harness?: string | null;
+  harness: import("./harness").HarnessKind;
   /** First-hand custody on the current agent connection, never stored liveness. */
   held?: { since: number; reason: string };
   id: string;

@@ -20,7 +20,6 @@
 </script>
 
 <script lang="ts">
-  import type { HarnessKind } from "@cawco/core";
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
@@ -128,7 +127,6 @@
   interface Tab {
     activity: Activity;
     failed: boolean;
-    harness: string;
     href: string;
     id: string;
     /** The tab's key in the strip: its id and which arrival of that id it is (`arrivals`). */
@@ -162,7 +160,6 @@
 
   function resolve(id: string): Tab {
     const row = cawco.instanceIndex.byId.get(id);
-    const view = cawco.session(id);
     const ctx = contextOf(id);
     const thread = cawco.threadOf(id);
     const { label, named } = isThreadTab(id)
@@ -192,7 +189,6 @@
         cwd: ctx?.cwd,
       }),
       label,
-      harness: ctx?.harness || row?.harness || view?.harness || "claude",
       named,
       activity,
       failed,
@@ -748,7 +744,7 @@
       newSession(ctx?.machine ? { machineId: ctx.machine } : undefined);
       return;
     }
-    const harness = ctx.harness as HarnessKind;
+    const { harness } = ctx;
     const same = spawnPrefs.harness === harness;
     const projectId = cawco.instanceIndex.byId.get(here)?.projectId;
     starting = true;

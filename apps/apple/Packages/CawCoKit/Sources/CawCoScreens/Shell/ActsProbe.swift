@@ -196,7 +196,7 @@ enum ActsProbe {
         for id in ["p-fork", "p-arch-ok", "p-arch-busy", "p-del"] { say("finished", id, shell) }
         Task {
             await SessionMenus.runPending(.fork, id: "p-fork", host: host, hub: hub, work: {
-                try await hub.fork(machineId: "probe-mac", cwd: "/tmp/probe", sessionKey: "s-fork")
+                try await hub.fork(machineId: "probe-mac", cwd: "/tmp/probe", sessionKey: "s-fork", harness: .claude)
             }, then: { _ in })
         }
         await wait(0.3)

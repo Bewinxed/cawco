@@ -1,9 +1,9 @@
 /** Stored decisions own lifetime; connection-local work is only delivery. */
 import type {
   InstanceRow,
+  NamedStop,
   SessionCustody,
   SessionEndIntent,
-  StopPayload,
 } from "@cawco/core";
 import type { DbShape } from "./db";
 
@@ -14,7 +14,7 @@ interface Snapshot {
 
 export const createSessionLifecycle = (ports: {
   db: DbShape;
-  send: (machineId: string, payload: StopPayload) => boolean;
+  send: (machineId: string, payload: NamedStop) => boolean;
   restore: (row: InstanceRow) => void;
   deleteTranscript: (row: InstanceRow) => Promise<boolean>;
   confirmed: (row: ReturnType<DbShape["sessionOwnership"]>[number]) => void;
@@ -154,9 +154,7 @@ export const createSessionLifecycle = (ports: {
               ? { scratchWorktree: row.scratchWorktree }
               : {}),
             processGeneration: generation(row),
-            ...(row.harness
-              ? { harness: row.harness as StopPayload["harness"] }
-              : {}),
+            harness: row.harness,
             ...(row.sessionId ? { sessionId: row.sessionId } : {}),
             cwd: row.cwd,
             ...(row.harness === "opencode"
@@ -267,7 +265,7 @@ export const createSessionLifecycle = (ports: {
     const row = ports.db.ownedInstance(id, machineId);
     if (
       !(row?.endIntent && payload.ended?.resourcesClosed) ||
-      payload.ended.harness !== (row.harness ?? "claude") ||
+      payload.ended.harness !== row.harness ||
       payload.processGeneration !== generation(row) ||
       (row.endIntent === "discard" &&
         row.status !== "discarded" &&

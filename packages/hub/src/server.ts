@@ -53,6 +53,7 @@ import type {
   MoveEnded,
   MoveProgressFrame,
   MoveRequest,
+  NamedSpawn,
   NeutralAssistantMessage,
   NeutralOrigin,
   NeutralResultMessage,
@@ -218,6 +219,7 @@ import {
   type HomeLogin,
   type HomeLoginMoved,
   type HomeStore,
+  harnessNamed,
   hookProblem,
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
@@ -1354,6 +1356,9 @@ const moveBody = t.Object({
   machineId: t.String({ minLength: 1 }),
   path: t.Optional(t.String({ pattern: "^(/|~/)" })),
   spawn: t.Object({
+    // Refused when absent (moves.ts `refusal`); optional on the wire only
+    // until TestFlight 20261015, 20261015.3, 20261017 and 20261018 are
+    // expired, then required (core move.ts MoveRequest).
     harness: t.Optional(harnessSchema),
     model: t.Optional(t.String({ minLength: 1 })),
     effort: t.Optional(
@@ -1602,16 +1607,20 @@ const peekResume = (payload: unknown): string | undefined => {
  * client sent: the dashboard once resumed two opencode sessions under their
  * cawco instance ids, the harness rejected both, and the rows went `error`.
  * A row that never reported a key has nothing to resume, and a key the
- * client made up for it is refused rather than tried. Mutates `payload` in
- * place; returns the reason the spawn must be refused, or `undefined` when
- * it may go out.
+ * client made up for it is refused rather than tried. A start of an existing
+ * row names the row's harness: its key is that harness's. Mutates `payload`
+ * in place; returns the reason the spawn must be refused, or `undefined`
+ * when it may go out.
  */
 const enforceRowSessionKey = (
   row: InstanceRow | undefined,
-  payload: unknown
+  payload: NamedSpawn
 ): string | undefined => {
   if (!row) {
     return undefined;
+  }
+  if (payload.harness !== row.harness) {
+    return `instance ${row.id} runs on ${row.harness}; refusing to start it on ${payload.harness}`;
   }
   const asked = peekResume(payload);
   if (asked === undefined) {
@@ -1630,6 +1639,24 @@ const enforceRowSessionKey = (
   return undefined;
 };
 
+/** Why a start that names no harness is refused. */
+const HARNESS_UNNAMED = `A start names the harness it runs on (${HARNESSES.join(", ")}).`;
+
+/**
+ * `payload` as a {@link NamedSpawn}, or why it is none: every start names a
+ * harness CawCo runs, and nothing stands in for one it left out.
+ */
+const namedSpawn = (
+  payload: SpawnPayload
+): NamedSpawn | { refusal: string } => {
+  const harness = harnessNamed(payload.harness);
+  return harness
+    ? { ...payload, harness }
+    : {
+        refusal: `${HARNESS_UNNAMED} This one named ${peek(payload, "harness") ?? "none"}.`,
+      };
+};
+
 /** A spawn asking for scratch isolation, or for a session that is never stored. */
 const peekKind = (payload: unknown): InstanceKind => {
   if (typeof payload !== "object" || payload === null) {
@@ -1641,10 +1668,6 @@ const peekKind = (payload: unknown): InstanceKind => {
   };
   return scratch || persistSession === false ? "scratch" : "mainline";
 };
-
-/** Which harness a spawn names; absent reads as claude. */
-const peekHarness = (payload: unknown): string | undefined =>
-  peek(payload, "harness");
 
 /** The session that started a spawn (`SpawnPayload.parent`), so its row nests under it. */
 const peekParent = (
@@ -3198,7 +3221,7 @@ export const createServer = (
       !row.endConfirmedAt &&
       !(row.endIntent && !row.sessionId);
     if (acknowledged) {
-      db.noteInstanceSession(row.id, claim.sessionId, undefined, "opencode");
+      db.noteInstanceSession(row.id, claim.sessionId);
       if (db.ownedInstance(row.id, machineId)?.sessionId !== claim.sessionId) {
         return;
       }
@@ -3641,8 +3664,8 @@ export const createServer = (
    */
   const piDefaultFor = async (
     machineId: string,
-    payload: SpawnPayload
-  ): Promise<SpawnPayload | { refusal: string }> => {
+    payload: NamedSpawn
+  ): Promise<NamedSpawn | { refusal: string }> => {
     if (!asksPiDefault(payload)) {
       return payload;
     }
@@ -3801,7 +3824,7 @@ export const createServer = (
     why: string
   ): void => {
     const [row] = db.getInstancesByIds([rowId]);
-    if (row && (row.harness ?? "claude") === "claude" && row.sessionId) {
+    if (row && row.harness === "claude" && row.sessionId) {
       launchClaims.set(rowId, { accountId, at: Date.now() });
       console.log(
         `[hub] ${rowId} launches on ${accountId} (${why}); its row says so once its conversation is there`
@@ -3820,7 +3843,7 @@ export const createServer = (
   const claimAccount = (
     machineId: string,
     row: {
-      harness?: string | null;
+      harness: HarnessKind;
       id: string;
       model?: string | null;
       projectId?: string | null;
@@ -3834,7 +3857,7 @@ export const createServer = (
     // account since, runs on that account ({@link repinMovedFrom}); the
     // launch carries its data there.
     const moved =
-      (row.harness ?? "claude") === "claude" && movedFrom().has(row.id)
+      row.harness === "claude" && movedFrom().has(row.id)
         ? homeMovedAccountOn(machineId)
         : undefined;
     if (moved) {
@@ -3851,7 +3874,7 @@ export const createServer = (
       {
         instanceId: row.id,
         cwd: "",
-        harness: (row.harness ?? "claude") as HarnessKind,
+        harness: row.harness,
         ...(row.model ? { model: row.model } : {}),
       },
       { projectId: row.projectId },
@@ -3887,14 +3910,14 @@ export const createServer = (
     machineId: string,
     row: {
       accountId?: string | null;
-      harness?: string | null;
+      harness: HarnessKind;
       id?: string;
       model?: string | null;
       projectId?: string | null;
     },
     session: string
   ): { accountId?: string } | { refusal: string; cause: SendRefusal } => {
-    const harness = row.harness ?? "claude";
+    const { harness } = row;
     // A row on an account stays on it (nothing moves it on its own); one
     // with none is placed when its model is an account provider's here.
     const provider = row.accountId
@@ -4005,7 +4028,7 @@ export const createServer = (
     machineId: string,
     row: { accountId?: string | null; harness?: string | null }
   ) =>
-    (row.harness ?? "claude") === "claude"
+    row.harness === "claude"
       ? movingLogins().find(
           (move) =>
             move.store === "claude" &&
@@ -4035,11 +4058,11 @@ export const createServer = (
    */
   const movingFor = (row: {
     accountId?: string | null;
-    harness?: string | null;
+    harness: HarnessKind;
     machineId: string;
     model?: string | null;
   }) => {
-    const harness = row.harness ?? "claude";
+    const { harness } = row;
     if (harness === "claude") {
       return homeLoginMoveOf(row.machineId, row);
     }
@@ -4416,7 +4439,7 @@ export const createServer = (
     const accountId = row?.accountId;
     if (
       !(word && row && accountId) ||
-      (row.harness ?? "claude") !== "claude" ||
+      row.harness !== "claude" ||
       generation !== processGeneration(row) ||
       homeLoginMoveOf(machineId, row) ||
       movedFrom().has(row.id)
@@ -4966,7 +4989,7 @@ export const createServer = (
       CONTROL_GET_SESSION_MESSAGES,
       [row.sessionId, { dir: row.cwd || undefined, tail: STORED_TAIL }],
       READ_TIMEOUT_MS,
-      (row.harness || undefined) as HarnessKind | undefined
+      row.harness
     );
     switch (answer.kind) {
       case "unanswered":
@@ -6158,7 +6181,10 @@ export const createServer = (
       };
     }
     if (!launch) {
-      launchGoes({ instanceId: read.id, cwd: read.cwd }, read);
+      launchGoes(
+        { instanceId: read.id, cwd: read.cwd, harness: read.harness },
+        read
+      );
     }
     return read;
   };
@@ -6317,7 +6343,7 @@ export const createServer = (
   const bounded = (
     payload: SpawnPayload,
     knownRow?: InstanceRow
-  ): SpawnPayload => {
+  ): NamedSpawn => {
     const {
       scratchWorktree: _callerWorktree,
       account: _pick,
@@ -6335,7 +6361,9 @@ export const createServer = (
     const stored = payload.reattachOnly ? read : takeOwedMove(read);
     const row = knownRow ?? stored;
     const workspace = row ? sessionWorkspace(row) : undefined;
-    const harness = payload.harness ?? row?.harness ?? "claude";
+    // The row's harness, on every launch it sends: its conversation is that
+    // harness's ({@link enforceRowSessionKey} refused any other).
+    const { harness } = read;
     // A launch carries no credential and no account: its machine asks for
     // both as it starts it ({@link grantLaunch}). It is refused here when it
     // may run nowhere, before it goes. A reattach launches nothing: it is
@@ -6356,6 +6384,7 @@ export const createServer = (
       // call put to the hub's gate (lead-gate.ts): every spawn of his row —
       // the first, and each revive, restore and relaunch — says so.
       ...withCawDenials(asked, row, harness),
+      harness,
       ...effort,
       ...(owned?.scratchWorktree
         ? { scratchWorktree: owned.scratchWorktree }
@@ -6367,8 +6396,8 @@ export const createServer = (
     };
   };
 
-  /** A spawn as it leaves the hub ({@link settleMode}): every folder it names a path on its machine. */
-  type SettledSpawn = SpawnPayload & {
+  /** A spawn as it leaves the hub ({@link settleMode}): its harness named, and every folder it names a path on its machine. */
+  type SettledSpawn = NamedSpawn & {
     cwd: MachinePath;
     bootstrap?: { repo: string; baseDir: MachinePath };
     scratch?: { worktree?: boolean; baseCwd?: MachinePath };
@@ -6428,12 +6457,12 @@ export const createServer = (
    */
   const settleMode = (
     machineId: string,
-    payload: SpawnPayload,
+    payload: NamedSpawn,
     fallback?: string | null
   ):
     | { payload: SettledSpawn; permissionMode: string | null }
     | { refusal: string } => {
-    const harness = payload.harness ?? "claude";
+    const { harness } = payload;
     let paths: Pick<SettledSpawn, "cwd" | "bootstrap" | "scratch">;
     try {
       paths = spawnPaths(machineId, payload);
@@ -6514,9 +6543,7 @@ export const createServer = (
     mode: string
   ): string | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
-    return row
-      ? modeRefusal(row.machineId, row.harness ?? "claude", mode)
-      : undefined;
+    return row ? modeRefusal(row.machineId, row.harness, mode) : undefined;
   };
 
   /**
@@ -6607,10 +6634,10 @@ export const createServer = (
     row: ReturnType<typeof db.getInstancesByIds>[number],
     plan: Relaunch,
     relaunch: boolean
-  ): SpawnPayload => ({
+  ): NamedSpawn => ({
     instanceId: row.id,
     cwd: row.cwd,
-    ...(row.harness ? { harness: row.harness as HarnessKind } : {}),
+    harness: row.harness,
     ...(plan.kind === "resume"
       ? { resume: { sessionKey: plan.sessionKey } }
       : {}),
@@ -6670,7 +6697,7 @@ export const createServer = (
       // Its own launch directory (revivePayloadOf): a revive never moves it.
       cwd: row.cwd,
       sessionId: row.sessionId ?? undefined,
-      harness: row.harness ?? undefined,
+      harness: row.harness,
       kind: row.kind ?? undefined,
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
@@ -7138,7 +7165,7 @@ export const createServer = (
       .filter(
         (row) =>
           row.machineId === move.machineId &&
-          (row.harness ?? "claude") === "claude" &&
+          row.harness === "claude" &&
           row.accountId !== move.accountId &&
           !(row.accountId && placedOn(move.machineId, row.accountId))
       );
@@ -7209,11 +7236,7 @@ export const createServer = (
   ): Promise<void> => {
     const [row] = db.getInstancesByIds([instanceId]);
     const into = homeMovedAccountOn(machineId);
-    if (
-      !(row && into) ||
-      (row.harness ?? "claude") !== "claude" ||
-      row.accountId === into
-    ) {
+    if (!(row && into) || row.harness !== "claude" || row.accountId === into) {
       db.accounts.removeMovedFrom(instanceId);
       return;
     }
@@ -8343,7 +8366,7 @@ export const createServer = (
   const moveRowsToAccount = async (
     machineId: string,
     rows: readonly {
-      harness?: string | null;
+      harness: HarnessKind;
       id: string;
       sessionId?: string | null;
     }[],
@@ -8351,7 +8374,7 @@ export const createServer = (
     stop = false
   ): Promise<{ kept: Map<string, Kept>; moved: string[] }> => {
     const requests: CarrySessionRequest[] = rows.flatMap((row) =>
-      (row.harness ?? "claude") === "claude" && row.sessionId
+      row.harness === "claude" && row.sessionId
         ? [
             {
               instanceId: row.id,
@@ -8704,7 +8727,7 @@ export const createServer = (
             CONTROL_GET_SESSION_INFO,
             [row.sessionId],
             READ_TIMEOUT_MS,
-            (row.harness as HarnessKind | null) ?? "claude"
+            row.harness
           );
           // Unanswered or refused: the launch dir stays unread (nothing is
           // written), and the machine is asked again at its next register.
@@ -11364,7 +11387,7 @@ export const createServer = (
         machineId: row.machineId,
         sessionId: row.sessionId,
         cwd: row.cwd ?? "",
-        harness: (row.harness as HarnessKind | undefined) ?? "claude",
+        harness: row.harness,
       };
       locations.set(id, found);
       return { kind: "found", at: found };
@@ -11404,9 +11427,7 @@ export const createServer = (
                 return null;
               }
               const info = answer.value.result as
-                | { sessionId?: string; cwd?: string; harness?: string }
-                | undefined
-                | null;
+                { sessionId?: string; cwd?: string } | undefined | null;
               return info?.sessionId
                 ? { harness, sessionId: info.sessionId, info }
                 : null;
@@ -11431,7 +11452,7 @@ export const createServer = (
         machineId: agent.machineId,
         sessionId: hit.sessionId,
         cwd: hit.info.cwd ?? "",
-        harness: (hit.info.harness as HarnessKind | undefined) ?? hit.harness,
+        harness: hit.harness,
       };
       locations.set(id, found);
       return { kind: "found", at: found };
@@ -11557,13 +11578,13 @@ export const createServer = (
 
   const placementInput = (
     machineId: string,
-    payload: SpawnPayload,
+    payload: NamedSpawn,
     task: { projectId?: string | null; taskId?: string | null },
     fork: { accountId: string | null } | undefined
   ): PlacementInput | undefined => {
     const provider = accountProviderFor(
       machineId,
-      payload.harness ?? "claude",
+      payload.harness,
       payload.model
     );
     if (!provider) {
@@ -11693,7 +11714,7 @@ export const createServer = (
     placed: { accountId?: string }
   ): { accountId?: string } => {
     if (
-      (payload.harness ?? "claude") !== "claude" ||
+      payload.harness !== "claude" ||
       !payload.resume ||
       payload.resume.fork ||
       !placed.accountId
@@ -11720,7 +11741,7 @@ export const createServer = (
    */
   const placeSpawn = (
     machineId: string,
-    payload: SpawnPayload,
+    payload: NamedSpawn,
     task: { projectId?: string | null; taskId?: string | null } = {}
   ): { accountId?: string } | { refusal: string; status?: 404 } => {
     // Checked here, in the same synchronous step as the row's write that
@@ -11734,7 +11755,7 @@ export const createServer = (
     // A machine's agent registers before it reads its harnesses: until a
     // harness has reported, nothing says it is installed there or who is
     // signed in to it, so nothing starts on it.
-    const harness = payload.harness ?? "claude";
+    const { harness } = payload;
     if (!harnessReportOf(machineId, harness)) {
       return {
         refusal: unreportedHarnessRefusal(machineName(machineId), harness),
@@ -11800,32 +11821,44 @@ export const createServer = (
     return placed.accountId ? { accountId: placed.accountId } : {};
   };
 
-  /** A start as the placement explain query describes it, for placement to read. */
-  const askedStart = (query: {
+  /**
+   * A start as the placement explain query describes it, for placement to
+   * read, with pi's `default` named as its machine answers it in `cwd`; or
+   * why there is none: a 400 for a harness CawCo does not run, a 503 for a
+   * machine that could not say pi's default.
+   */
+  const askedStart = async (query: {
     account?: string;
+    cwd?: string;
     harness: string;
     kind?: "yours" | "delegates";
+    machineId: string;
     model?: string;
     projectId?: string;
     type?: string;
-  }): SpawnPayload => {
+  }): Promise<NamedSpawn | { refusal: string; status: 400 | 503 }> => {
+    const harness = harnessNamed(query.harness);
+    if (!harness) {
+      return { refusal: HARNESS_UNNAMED, status: 400 };
+    }
     const { projectId } = query;
-    return {
+    const asked = await piDefaultFor(query.machineId, {
       instanceId: "",
-      cwd: "",
-      harness: query.harness as HarnessKind,
+      cwd: query.cwd ?? "",
+      harness,
       model: query.model,
       projectId,
       account: query.account,
       ...(query.type ? { delegateType: { name: query.type, projectId } } : {}),
       ...(query.kind === "delegates" ? { spawnedBy: { instanceId: "" } } : {}),
-    };
+    });
+    return "refusal" in asked ? { ...asked, status: 503 } : asked;
   };
 
   /** {@link placeSpawn} for a path that refuses by throwing: its refusal is a 400, a deleted project's a 404. */
   const placedOrRefused = (
     machineId: string,
-    payload: SpawnPayload,
+    payload: NamedSpawn,
     task?: { projectId?: string | null; taskId?: string | null }
   ): { accountId?: string } => {
     const placed = placeSpawn(machineId, payload, task);
@@ -11846,11 +11879,11 @@ export const createServer = (
    */
   const placeItem = (
     machineId: string,
-    session: Omit<SpawnPayload, "cwd">,
+    session: Omit<NamedSpawn, "cwd">,
     task: { projectId: string | null; taskId?: string }
   ): ItemPlacement => {
     const placed = placedOrRefused(machineId, { ...session, cwd: "" }, task);
-    if ((session.harness ?? "claude") !== "claude") {
+    if (session.harness !== "claude") {
       return placed;
     }
     const launch = launchAccount(
@@ -11907,7 +11940,7 @@ export const createServer = (
   /** A hub-issued spawn's mode (`settleMode`) and directory (`atLaunchDir`), or the first refusal. */
   const settleSpawn = (
     machineId: string,
-    asked: SpawnPayload,
+    asked: NamedSpawn,
     fallbackMode?: string | null
   ):
     | { payload: SettledSpawn; permissionMode: string | null }
@@ -11934,7 +11967,7 @@ export const createServer = (
    */
   const spawnPlacement = (
     machineId: string,
-    payload: SpawnPayload,
+    payload: NamedSpawn,
     workItemId: string | undefined,
     placedAhead: { accountId?: string } | undefined
   ): { accountId?: string } => {
@@ -11951,7 +11984,7 @@ export const createServer = (
   /** Sends a spawn and opens its row, on the account {@link spawnPlacement} gives. */
   const issueSpawn = (
     machineId: string,
-    asked: SpawnPayload,
+    asked: NamedSpawn,
     workItemId?: string,
     fallbackMode?: string | null,
     placedAhead?: { accountId?: string }
@@ -12022,7 +12055,7 @@ export const createServer = (
    */
   const relaySpawn = async (
     machineId: string,
-    asked: SpawnPayload,
+    asked: NamedSpawn,
     fallbackMode?: string
   ): Promise<{ code: number; message: string } | undefined> => {
     const payload = await piDefaultFor(machineId, asked);
@@ -12069,18 +12102,22 @@ export const createServer = (
     payload: SpawnPayload,
     fallbackMode?: string
   ): Promise<MachinePath> => {
+    const named = namedSpawn(payload);
+    if ("refusal" in named) {
+      throw new WorkItemRefusal(400, named.refusal);
+    }
     const listed = (id: string) => db.listedInstancesByIds([id])[0];
-    const refusal = enforceRowSessionKey(listed(payload.instanceId), payload);
+    const refusal = enforceRowSessionKey(listed(named.instanceId), named);
     if (refusal) {
       throw new WorkItemRefusal(409, refusal);
     }
     if (!registry.agent(machineId)) {
       throw new WorkItemRefusal(404, machineFault(machineId, "offline"));
     }
-    const { parentInstanceId } = peekParent(payload);
+    const { parentInstanceId } = peekParent(named);
     const refused = await relaySpawn(
       machineId,
-      payload,
+      named,
       fallbackMode ??
         (parentInstanceId
           ? resolveDelegatePermissionMode(listed, parentInstanceId)
@@ -12106,7 +12143,7 @@ export const createServer = (
    */
   const spawnFromHub = async (
     machineId: string,
-    asked: SpawnPayload,
+    asked: NamedSpawn,
     kind: InstanceKind,
     fallbackMode?: string,
     /** The work item its row names from its first listing on: a continuation's, taken on from its source. */
@@ -12393,7 +12430,7 @@ export const createServer = (
   /** A session's stored transcript, as its machine looks it up. */
   const lookupTranscript = (row: {
     cwd: string;
-    harness?: string | null;
+    harness: HarnessKind;
     machineId: string;
     sessionId?: string | null;
   }) =>
@@ -12402,7 +12439,7 @@ export const createServer = (
       CONTROL_GET_SESSION_INFO,
       [row.sessionId, row.cwd],
       READ_TIMEOUT_MS,
-      row.harness as HarnessKind | undefined
+      row.harness
     );
   /**
    * Whether a transcript whose deletion did not say it went is gone after
@@ -12576,7 +12613,7 @@ export const createServer = (
         "deleteSession",
         [row.sessionId, row.cwd],
         READ_TIMEOUT_MS,
-        row.harness as HarnessKind | undefined
+        row.harness
       );
       let failed: string;
       switch (result.kind) {
@@ -12898,7 +12935,12 @@ export const createServer = (
         id,
         prompt,
         // Its transcript was just read on its machine, in this directory.
-        { id: source.instanceId, cwd: source.cwd, launchDir: "known" },
+        {
+          id: source.instanceId,
+          cwd: source.cwd,
+          harness: source.harness,
+          launchDir: "known",
+        },
         crypto.randomUUID()
       );
       await answered;
@@ -13843,9 +13885,7 @@ export const createServer = (
         row.targetInstanceId,
         source?.projectId ?? request.target.projectId,
         source?.parentInstanceId,
-        source && (source.harness ?? "claude") === request.target.harness
-          ? source.chosenEffort
-          : null
+        source?.harness === request.target.harness ? source.chosenEffort : null
       ),
       request.target.scratch ? "scratch" : "mainline",
       request.target.fallbackPermissionMode,
@@ -13896,6 +13936,7 @@ export const createServer = (
       {
         id: row.prepared.source.instanceId,
         cwd: row.prepared.source.cwd,
+        harness: row.prepared.source.harness,
         launchDir: "known",
       },
       row.openingUuid,
@@ -13985,7 +14026,7 @@ export const createServer = (
      * another.
      */
     sourceEffort: EffortLevel | null | undefined
-  ): SpawnPayload => {
+  ): NamedSpawn => {
     const effort = target.effort ?? sourceEffort;
     return {
       ...(parent ? { parent: { instanceId: parent } } : {}),
@@ -14116,9 +14157,7 @@ export const createServer = (
         : {}),
       ...(reattachOnly ? { reattachOnly } : {}),
       ...(row.sessionId ? { resume: { sessionKey: row.sessionId } } : {}),
-      ...(row.harness
-        ? { harness: row.harness as SpawnPayload["harness"] }
-        : {}),
+      harness: row.harness,
       ...(row.model ? { model: row.model } : {}),
       ...(row.permissionMode
         ? {
@@ -14132,12 +14171,12 @@ export const createServer = (
       // delegate the `delegate` tool back.
       ...(row.canDelegate === false ? { canDelegate: false } : {}),
       ...typeSettingsOf(row),
-    } satisfies SpawnPayload);
+    } satisfies NamedSpawn);
     if ("refusal" in launched) {
       console.warn(`[hub] not restored: ${launched.refusal}`);
       return;
     }
-    const asked: SpawnPayload = launched.payload;
+    const asked: NamedSpawn = launched.payload;
     // Adopt the stored mode without revalidating a new launch; custody must not be skipped.
     if (reattachOnly) {
       lifecycle.restoring(row.id);
@@ -14194,7 +14233,7 @@ export const createServer = (
       machineId: row.machineId,
       cwd: payload.cwd,
       sessionId: row.sessionId ?? undefined,
-      harness: row.harness ?? undefined,
+      harness: row.harness,
       projectId: row.projectId ?? undefined,
       kind: row.kind === "scratch" ? "scratch" : "mainline",
       permissionMode: settled.permissionMode,
@@ -16672,7 +16711,7 @@ export const createServer = (
     row: StoredRow,
     account: Account
   ): string | undefined => {
-    const harness = row.harness ?? "claude";
+    const { harness } = row;
     const provider = row.accountId
       ? db.accounts.get(row.accountId)?.provider
       : accountProvidersOf(
@@ -17036,8 +17075,8 @@ export const createServer = (
   const crossesProvider = (
     row: InstanceRow | undefined,
     model: string
-  ): row is InstanceRow & { harness: string } => {
-    if (!row?.harness || row.harness === "claude") {
+  ): row is InstanceRow => {
+    if (!row || row.harness === "claude") {
       return false;
     }
     const current = row.accountId
@@ -17334,7 +17373,7 @@ export const createServer = (
       machineId: row.machineId,
       sessionKey: row.sessionId ?? fork?.sessionKey ?? "",
       cwd: row.cwd || "",
-      harness: row.harness || "claude",
+      harness: row.harness,
     };
     return { where, cut: fork?.at, row };
   };
@@ -17365,7 +17404,7 @@ export const createServer = (
       CONTROL_GET_SESSION_MESSAGES,
       [where.sessionKey, { dir: where.cwd || undefined }],
       READ_TIMEOUT_MS,
-      where.harness as HarnessKind
+      where.harness
     );
     // The history fault's own words for no answer (transcripts.ts): "offline", "timeout".
     switch (answer.kind) {
@@ -21104,7 +21143,7 @@ export const createServer = (
     transcripts.ingest(row.id, {
       kind: "frame",
       instanceId: row.id,
-      harness: (row.harness ?? "claude") as HarnessKind,
+      harness: row.harness,
       message: freshStartLine(row, at),
     });
   };
@@ -21170,7 +21209,7 @@ export const createServer = (
     transcripts.ingest(row.id, {
       kind: "frame",
       instanceId: row.id,
-      harness: (row.harness ?? "claude") as HarnessKind,
+      harness: row.harness,
       message: watchLine(row, line),
     });
   };
@@ -21187,7 +21226,7 @@ export const createServer = (
     transcripts.ingest(instanceId, {
       kind: "frame",
       instanceId,
-      harness: (row.harness ?? "claude") as HarnessKind,
+      harness: row.harness,
       message: movedHereLine(row, line),
     });
   };
@@ -21196,7 +21235,7 @@ export const createServer = (
   const noteAtLimit = (
     row: {
       derivedTitle?: string | null;
-      harness: string | null;
+      harness: HarnessKind;
       id: string;
       sessionId: string | null;
       title?: string | null;
@@ -21212,7 +21251,7 @@ export const createServer = (
     transcripts.ingest(row.id, {
       kind: "frame",
       instanceId: row.id,
-      harness: (row.harness ?? "claude") as HarnessKind,
+      harness: row.harness,
       message: limitLine(row, event),
     });
     // The transcript's own words: its line, then the detail under it.
@@ -21344,7 +21383,7 @@ export const createServer = (
     const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
     if (
       !from ||
-      (row.harness ?? "claude") !== "claude" ||
+      row.harness !== "claude" ||
       !LIMITED_PROVIDERS.includes(from.provider) ||
       row.forkedFrom !== null ||
       relaunchAtTurnEnd.has(row.id) ||
@@ -21835,7 +21874,7 @@ export const createServer = (
   const startFromDashboard = (
     ws: HubSocket,
     message: Envelope,
-    asked: SpawnPayload | { refusal: string }
+    asked: NamedSpawn | { refusal: string }
   ): void => {
     if ("refusal" in asked) {
       console.warn(`[hub] refused spawn: ${asked.refusal}`);
@@ -21898,7 +21937,7 @@ export const createServer = (
       machineId: message.machineId,
       cwd: payload.cwd,
       sessionId: peekResume(message.payload),
-      harness: peekHarness(message.payload),
+      harness: payload.harness,
       projectId: peek(message.payload, "projectId"),
       title: peek(message.payload, "title"),
       kind: peekKind(message.payload),
@@ -22853,7 +22892,7 @@ export const createServer = (
             CONTROL_GET_SESSION_INFO,
             [row.sessionId, row.cwd || undefined],
             READ_TIMEOUT_MS,
-            (row.harness || undefined) as HarnessKind | undefined
+            row.harness
           );
           switch (stored.kind) {
             case "unanswered":
@@ -23159,13 +23198,22 @@ export const createServer = (
         async ({ body }) => {
           const asked = new Map<
             string,
-            { id: string; machine?: string; cwd?: string; harness?: string }
+            {
+              id: string;
+              machine?: string;
+              cwd?: string;
+              harness?: HarnessKind;
+            }
           >();
           for (const ask of body.ids) {
             const one =
               typeof ask === "string"
                 ? { id: ask }
-                : { ...ask, machine: ask.machine ?? undefined };
+                : {
+                    ...ask,
+                    machine: ask.machine ?? undefined,
+                    harness: harnessNamed(ask.harness),
+                  };
             if (!one.id || asked.has(one.id)) {
               continue;
             }
@@ -23215,14 +23263,14 @@ export const createServer = (
                 ({ machineId } = row);
                 sessionKey = row.sessionId;
                 cwd = row.cwd || undefined;
-                harness = (row.harness || undefined) as HarnessKind | undefined;
+                ({ harness } = row);
               } else {
                 machineId = ask.machine;
                 sessionKey = ask.id;
                 cwd = ask.cwd || undefined;
-                harness = (ask.harness || undefined) as HarnessKind | undefined;
+                ({ harness } = ask);
               }
-              if (!(machineId && registry.agent(machineId))) {
+              if (!(machineId && harness && registry.agent(machineId))) {
                 return { id: ask.id, title: null };
               }
 
@@ -23948,10 +23996,12 @@ export const createServer = (
         return {
           activity: states.map((state) => {
             const row = named.get(state.instanceId);
+            // Null once its session is gone; the app reads it as a plain name.
+            const harness: string | null = row?.harness ?? null;
             return {
               ...state,
               where: row ? sessionLabel(row).name : "a session that is gone",
-              harness: row?.harness ?? null,
+              harness,
             };
           }),
         };
@@ -26229,12 +26279,9 @@ export const createServer = (
           }),
         },
         async ({ query, status }) => {
-          const asked = await piDefaultFor(query.machineId, {
-            ...askedStart(query),
-            ...(query.cwd ? { cwd: query.cwd } : {}),
-          });
+          const asked = await askedStart(query);
           if ("refusal" in asked) {
-            return status(503, asked.refusal);
+            return status(asked.status, asked.refusal);
           }
           const input = placementInput(
             query.machineId,
@@ -27968,7 +28015,6 @@ export const createServer = (
                     named.cwd
                       ? reportedMachinePath(message.machineId, named.cwd)
                       : undefined,
-                    peek(message.payload, "harness"),
                     named.tooling
                   );
                   if (named.init) {
@@ -29303,8 +29349,15 @@ export const createServer = (
               if (resumeFormer(ws, message)) {
                 break;
               }
-              // One launch at a time ({@link launches}); then the row's key,
-              // not the client's — see `enforceRowSessionKey`.
+              // A start names its harness; one launch at a time
+              // ({@link launches}); then the row's key, not the client's —
+              // see `enforceRowSessionKey`.
+              const start = namedSpawn(message.payload as SpawnPayload);
+              if ("refusal" in start) {
+                console.warn(`[hub] refused spawn: ${start.refusal}`);
+                sendFrame(ws, failure(message, start.refusal));
+                break;
+              }
               const refusal =
                 (message.instanceId
                   ? inFlightRefusal(message.instanceId)
@@ -29313,7 +29366,7 @@ export const createServer = (
                   message.instanceId
                     ? db.getInstancesByIds([message.instanceId])[0]
                     : undefined,
-                  message.payload
+                  start
                 );
               if (refusal) {
                 console.warn(`[hub] refused spawn: ${refusal}`);
@@ -29331,15 +29384,11 @@ export const createServer = (
               // it back, so its row's word goes to its machine (as `restore`
               // sends it). A relaunch without it gave an OpenCode or pi leaf
               // its spawning tools back while its row stayed a leaf.
-              const {
-                model: named,
-                canDelegate: _asked,
-                ...rest
-              } = message.payload as SpawnPayload;
+              const { model: named, canDelegate: _asked, ...rest } = start;
               const [known] = message.instanceId
                 ? db.getInstancesByIds([message.instanceId])
                 : [];
-              const spawning: SpawnPayload = {
+              const spawning: NamedSpawn = {
                 ...rest,
                 ...(named ? { model: named } : {}),
                 ...(known?.canDelegate === false ? { canDelegate: false } : {}),

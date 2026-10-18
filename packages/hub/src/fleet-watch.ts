@@ -587,10 +587,12 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     if (project) {
       return { harness: project.cawHarness, model: project.cawModel };
     }
-    const own = row.harness ?? "";
+    const own = row.harness;
     return {
-      harness: (CAW_HARNESSES as readonly string[]).includes(own)
-        ? (own as SpawnPayload["harness"])
+      harness: (CAW_HARNESSES as readonly SpawnPayload["harness"][]).includes(
+        own
+      )
+        ? own
         : "claude",
       model: null,
     };

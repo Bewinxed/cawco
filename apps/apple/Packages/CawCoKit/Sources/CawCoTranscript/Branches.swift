@@ -607,7 +607,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
 
     private func facts(_ block: Block) -> (phase: Phase, report: Report?, asks: [String], failure: String, row: InstanceRow?) {
         let id = block.string("delegateInstanceId")
-        let row = id.flatMap { env.hub?.fleet.byId[$0] }
+        let row = id.flatMap { env.hub?.fleet.byId[$0]?.session }
         let parent = env.parentBlocks()
         // Its reports and asks, read back out of this transcript's own peer lines.
         let peers = id.map { id in parent.filter { $0.type == "user.peer" && $0.meta["reportKind"] != nil && Self.matches($0.string("peerSession"), id) } } ?? []
@@ -737,7 +737,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
             body.setCustomSpacing(0, after: briefBox)
         }
         guard open else { return shown }
-        let builder = Builder(agentName: f.row?.harness ?? (block.toolInput["harness"] as? String) ?? "delegate", cache: env.cache)
+        let builder = Builder(agentName: f.row?.harness.rawValue ?? (block.toolInput["harness"] as? String) ?? "delegate", cache: env.cache)
         if let id, let transcript = env.delegateTranscript(id) {
             let blocks = transcript.blocks.compactMap(Block.init)
             var branches: [String: Branch] = [:]

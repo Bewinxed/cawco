@@ -13,7 +13,7 @@
 import { type Account, machineLabel, type SendRefusal } from "@cawco/core";
 import { nameOf, signinState } from "../accounts/model.svelte";
 import { signedInHere } from "../accounts/switch.svelte";
-import { cawco, type InstanceRow } from "../client.svelte";
+import { type BoardRow, cawco } from "../client.svelte";
 import { conversationHref } from "../links";
 
 /** One way back, as a row action draws it. */
@@ -41,7 +41,7 @@ const accountOf = (accountId: string): Account | undefined =>
 
 function signedOut(
   refusal: Extract<SendRefusal, { kind: "account-signed-out" }>,
-  session: InstanceRow
+  session: BoardRow
 ): SendRecovery {
   const machine = machineOf(refusal.machineId);
   const account = accountOf(refusal.accountId);
@@ -87,7 +87,7 @@ function signedOut(
  */
 export function recoveryOf(
   refusal: SendRefusal,
-  session: InstanceRow
+  session: BoardRow
 ): SendRecovery | null {
   switch (refusal.kind) {
     case "account-signed-out":

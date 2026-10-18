@@ -150,7 +150,7 @@ final class PeekController: ObservedViewController {
 
     private var followsPlan = false
 
-    private var row: InstanceRow? { hub.fleet.byId[target.viewId] }
+    private var row: BoardRow? { hub.fleet.byId[target.viewId] }
 
     private func refreshContext() {
         guard let row, row.isLive else { return }
@@ -288,14 +288,15 @@ final class PeekController: ObservedViewController {
         let id = target.viewId
         let status = row?.status.rawValue
         let machine = row.flatMap { row in hub.fleet.machines.first { $0.machineId == row.machineId } }
-        let forkable = row?.sessionId
+        // Only a session has a conversation to branch from.
+        let session = row?.session
+        let forkable = session?.sessionId
         var first: [UIMenuElement] = [
             UIAction(title: "Open", image: Glyph.external.image) { [weak self] _ in self?.onOpen() },
             SessionMenus.pending("Fork", running: "Forking…", image: Glyph.fork.image, verb: .fork, id: id, status: status,
                                  host: host, hub: hub, enabled: forkable != nil && machine != nil) { [hub] in
-                guard let row, let key = forkable else { return nil }
-                return try await hub.fork(machineId: row.machineId, cwd: row.cwd, sessionKey: key,
-                                          harness: row.harness.flatMap { .init(rawValue: $0) } ?? .claude)
+                guard let session, let key = forkable else { return nil }
+                return try await hub.fork(machineId: session.machineId, cwd: session.cwd, sessionKey: key, harness: session.harness)
             } then: { [weak self] forked in
                 if let forked { self?.onDive(forked) }
             },

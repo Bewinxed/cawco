@@ -131,7 +131,7 @@ enum ParityProbe {
                 let attached = row.interactions.contains { $0 is UIContextMenuInteraction }
                 log.notice("rail menu [\(del, privacy: .public)] attached: \(attached ? "yes" : "no", privacy: .public) | items: \(items.joined(separator: ", "), privacy: .public)")
                 // Delete transcript, as its item asks it (SessionMenus `ask`).
-                if let live = hub.fleet.byId[del], let question = SessionMenus.deleteQuestion(live, context: shell.sessionMenus.at(rail.probeAskPlace)) {
+                if let live = hub.fleet.byId[del]?.session, let question = SessionMenus.deleteQuestion(live, context: shell.sessionMenus.at(rail.probeAskPlace)) {
                     shell.sessionAsks.ask(question.request, at: question.at)
                     await wait(1.5)
                     railSay("rail delete asked")

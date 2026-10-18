@@ -22,6 +22,7 @@ import type {
   FleetMcpConfig,
   FleetScope,
   FleetSyncReport,
+  HarnessKind,
   HarnessReport,
   HomeStore,
   HookEvent,
@@ -31,8 +32,8 @@ import type {
   McpPlatform,
   MemoryRole,
   ModelInfo,
-  MoveRequest,
   MoveStage,
+  NamedMoveRequest,
   NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
@@ -132,7 +133,7 @@ const sealedJson = <T>(column: string) =>
 export interface PriorConversation {
   accountId: string | null;
   endedAt: number;
-  harness: string;
+  harness: HarnessKind;
   model: string | null;
   /** The `limit_events` id drawn after it. */
   next: string | null;
@@ -1017,7 +1018,7 @@ export const instances = sqliteTable("instances", {
   /** SDK session id, absent until the first init frame arrives. */
   sessionId: text("session_id"),
   /** Which harness owns `sessionId` — what a resume and a catalog read route on. */
-  harness: text("harness"),
+  harness: text("harness").$type<HarnessKind>().notNull(),
   /**
    * The account the session runs on, chosen by placement when it started (a
    * fork's is its origin's). Every later spawn of the row runs on it, until
@@ -3035,7 +3036,7 @@ export const instanceConversations = sqliteTable(
     /** Its place, oldest first. */
     ord: integer("ord").notNull(),
     sessionId: text("session_id").notNull(),
-    harness: text("harness").notNull(),
+    harness: text("harness").$type<HarnessKind>().notNull(),
     model: text("model"),
     /** The account it ran on; null once that account is removed. */
     accountId: text("account_id").references(() => accounts.id, {
@@ -3103,8 +3104,10 @@ export const moves = sqliteTable(
     targetMachineId: text("target_machine_id").notNull(),
     /** A Cancel the machine running its step has not heard yet: told at its register. */
     stopOn: text("stop_on"),
-    /** The request as asked: the target and the spawn New session sent. */
-    request: text("request", { mode: "json" }).$type<MoveRequest>().notNull(),
+    /** The request as asked: the target and the spawn New session sent, its harness named. */
+    request: text("request", { mode: "json" })
+      .$type<NamedMoveRequest>()
+      .notNull(),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },

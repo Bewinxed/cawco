@@ -146,10 +146,11 @@ extension HubConnection {
         _ = await observedUntil(.now + Self.controlTimeout) {
             fleet.fleetRead && fleet.machines.first { $0.machineId == machineId }?.harnesses != nil
         }
-        let harness = payload.harness ?? .claude
+        var payload = payload
+        // A start names its harness, and the hub refuses one that does not: nothing here names one for it.
+        guard let harness = payload.harness else { return payload }
         let machine = fleet.machines.first { $0.machineId == machineId }
         let report = machine?.harnesses?.first { $0.harness.rawValue == harness.rawValue }
-        var payload = payload
         // A harness with no permission modes is sent none, whatever the caller carried.
         if report?.capabilities.permissionModes.isEmpty == true {
             payload.permissionMode = nil

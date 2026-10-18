@@ -1394,7 +1394,7 @@ public final class HubConnection {
             line = AskEnd.withdrawn(question: question, reason: settled.reason)
         case .answered?:
             guard let ask, let answer = settled.answer else { return }
-            let said = AskEnd.answered(ask, answer, harness: AskEnd.harnessName(fleet.byId[settled.instanceId]?.harness))
+            let said = AskEnd.answered(ask, answer, harness: AskEnd.harnessName(fleet.byId[settled.instanceId]?.harness.rawValue))
             // With an answer of this device's still out, the winner may be that
             // answer or another device's: the line waits for the hub's word on
             // ours, said if it refused it (NeedsYouStore `holdAnswered`).

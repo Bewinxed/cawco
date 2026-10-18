@@ -65,7 +65,7 @@ export interface RuleScope {
 /** The instance facts a {@link RuleScope} is tested against. */
 export interface RuleFacts {
   delegateType: string | null;
-  harness: string | null;
+  harness: HarnessKind;
   machineId: string;
   model: string | null;
   projectId: string | null;

@@ -65,9 +65,9 @@ export const continuing = $state<{
   restore: null,
 });
 
-/** Opens the New Session dialog continuing `source`, with `restore`'s form when given. */
+/** Opens the New Session dialog continuing `source`, with `restore`'s form when given; none opens nothing. */
 export function continueInNewSession(
-  source: ContinueSource,
+  source: ContinueSource | null,
   restore?: SessionDraft
 ): void {
   continuing.source = source;
@@ -210,24 +210,26 @@ followContinuations(settleDetached);
 /**
  * A dashboard session as a continuation source, found the way the session
  * details card finds it: the live view, then the instance row, then the
- * workspace's remembered context.
+ * workspace's remembered context. Its harness is its row's, else its stored
+ * address's. Null when nothing says where it lives or what runs it.
  */
 export function continueSourceOf(
   sessionId: string,
   title: string
-): ContinueSource {
+): ContinueSource | null {
   const session = cawco.session(sessionId);
   const row = cawco.instanceIndex.byId.get(sessionId);
   const context = contextOf(sessionId);
+  const machineId = session?.machineId || row?.machineId || context?.machine;
+  const harness = row?.harness ?? context?.harness ?? session?.harness;
+  if (!(machineId && harness)) {
+    return null;
+  }
   return {
     instanceId: sessionId,
-    machineId: (session?.machineId ||
-      row?.machineId ||
-      context?.machine) as string,
+    machineId,
     cwd: session?.cwd || row?.cwd || context?.cwd || "",
-    harness: (session?.harness ||
-      row?.harness ||
-      context?.harness) as HarnessKind,
+    harness,
     model: session?.model ?? undefined,
     title,
   };

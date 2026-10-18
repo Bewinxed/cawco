@@ -41,15 +41,26 @@ extension HubConnection {
         return try await spawn(machineId: machineId, payload: payload)
     }
 
+    /// A harness as a request names it, refused in words when this build's
+    /// payloads do not know it (a newer hub's): nothing stands in for it.
+    func requested<Named: RawRepresentable>(_ harness: Components.Schemas.HarnessKind) throws -> Named
+    where Named.RawValue == String {
+        guard let named = Named(rawValue: harness.rawValue) else {
+            throw ControlError(message: "This app can't reach a \(harness.rawValue) session. Update it, then try again.")
+        }
+        return named
+    }
+
+    /// Branches the conversation `sessionKey` on its own harness (the source row's, or its catalog entry's).
     @discardableResult
     public func fork(machineId: String, cwd: String, sessionKey: String,
-        harness: Components.Schemas.SpawnPayload.HarnessPayload = .claude, at: String? = nil) async throws -> String {
+        harness: Components.Schemas.HarnessKind, at: String? = nil) async throws -> String {
         let sourceId = fleet.conversationId(sessionKey: sessionKey, machineId: machineId, cwd: cwd)
-        let source = fleet.byId[sourceId]
+        let source = fleet.byId[sourceId]?.session
         let payload = Components.Schemas.SpawnPayload(
             cwd: cwd,
             effort: source?.effort.flatMap { .init(rawValue: $0.rawValue) },
-            harness: harness,
+            harness: try requested(harness) as Components.Schemas.SpawnPayload.HarnessPayload,
             instanceId: UUID().uuidString.lowercased(),
             model: source?.model.flatMap { $0.isEmpty ? nil : $0 },
             // A branch is a new session nobody picked a mode for, so a Full
@@ -192,13 +203,13 @@ extension HubConnection {
 
     public func keepSession(id: String) async throws {
         try await updateSession(id: id, body: .init(kind: .mainline), action: "keep")
-        guard var row = fleet.byId[id] else { return }
+        guard var row = fleet.byId[id]?.session else { return }
         row.kind = "mainline"
         fleet.patch(upserts: [row], removed: [])
         if let sessionKey = row.sessionId, !sessionKey.isEmpty, !row.machineId.isEmpty {
             try await tagSession(machineId: row.machineId, sessionKey: sessionKey, tag: nil,
                 dir: row.cwd.isEmpty ? nil : row.cwd,
-                harness: row.harness.flatMap { .init(rawValue: $0) })
+                harness: row.harness)
             try await reloadCatalog(row.machineId)
         }
     }
@@ -253,13 +264,16 @@ extension HubConnection {
         }
         throw ControlError(message: await Wire.words(body) ?? "")
     }
+    /// A stored conversation's catalog calls go to the harness that keeps it.
     public func deleteSession(machineId: String, sessionKey: String, dir: String? = nil,
-        harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws {
-        _ = try await control(machineId, harness: harness, method: "deleteSession", args: [sessionKey, directory(dir)])
+        harness: Components.Schemas.HarnessKind) async throws {
+        let named: Components.Schemas.ControlPayload.HarnessPayload = try requested(harness)
+        _ = try await control(machineId, harness: named, method: "deleteSession", args: [sessionKey, directory(dir)])
     }
     public func tagSession(machineId: String, sessionKey: String, tag: String?, dir: String? = nil,
-        harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws {
-        _ = try await control(machineId, harness: harness, method: "tagSession", args: [sessionKey, tag, directory(dir)])
+        harness: Components.Schemas.HarnessKind) async throws {
+        let named: Components.Schemas.ControlPayload.HarnessPayload = try requested(harness)
+        _ = try await control(machineId, harness: named, method: "tagSession", args: [sessionKey, tag, directory(dir)])
     }
     private func directory(_ dir: String?) -> [String: String] { dir.map { ["dir": $0] } ?? [:] }
     public func repositories(machineId: String) async throws -> Components.Schemas.ReposResult {

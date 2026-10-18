@@ -2294,10 +2294,10 @@ export class SessionSupervisor {
     }
   }
 
-  #adapter(kind: HarnessKind | undefined): Harness {
-    const adapter = harnessOf(kind ?? "claude");
+  #adapter(kind: HarnessKind): Harness {
+    const adapter = harnessOf(kind);
     if (!adapter) {
-      throw new Error(`no harness adapter for ${kind ?? "claude"}`);
+      throw new Error(`no harness adapter for ${kind}`);
     }
     return adapter;
   }
@@ -2575,6 +2575,11 @@ export class SessionSupervisor {
     if (payload.title) {
       this.#titles.set(instanceId, payload.title);
     }
+    if (!kind) {
+      throw new Error(
+        "A start names the harness it runs on; this one named none."
+      );
+    }
     const adapter = this.#adapter(kind);
     if (payload.resume && !payload.resume.fork) {
       this.#resumable.set(instanceId, {
@@ -2717,7 +2722,7 @@ export class SessionSupervisor {
       // workspace's: its boundary reads that project's folder.
       const boundary = await boundaryFor(
         place,
-        (spec.harness ?? "claude") === "claude"
+        spec.harness === "claude"
           ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
           : undefined,
         spec.workspace ? spec.projectId : undefined,
@@ -3460,7 +3465,7 @@ export class SessionSupervisor {
   ): Promise<void> {
     if (!(await isDirectory(row.cwd))) {
       this.#recoveryUnavailable(
-        { ...row, reattachOnly: true },
+        { ...row, harness: claude.kind, reattachOnly: true },
         "The recovery directory is no longer available."
       );
       return;
@@ -4225,7 +4230,12 @@ export class SessionSupervisor {
       if (session) {
         this.#ending.add(session);
       }
-      const kind = harness ?? session?.harness;
+      if (!harness) {
+        throw new Error(
+          "A stop names its session's harness; this one named none."
+        );
+      }
+      const kind = harness;
       let ended: Extract<FramePayload, { kind: "stopped" }>["ended"];
       let sharedConversation = false;
       if (kind === "opencode") {
@@ -4316,7 +4326,7 @@ export class SessionSupervisor {
       }
       if (kind !== "opencode") {
         await this.#endHeld(instanceId);
-        ended = { harness: kind ?? "claude", resourcesClosed: true };
+        ended = { harness: kind, resourcesClosed: true };
       }
       this.#resumable.delete(instanceId);
       this.#handed.delete(instanceId);
@@ -4330,7 +4340,7 @@ export class SessionSupervisor {
           this.#spinOffs.set(instanceId, {
             dir: cwd,
             sessionId,
-            harness: harness ?? "claude",
+            harness,
           });
         }
         if (!(sessionId && claimedSessionIds.includes(sessionId))) {
@@ -5036,6 +5046,11 @@ export class SessionSupervisor {
       }
 
       if (CATALOG_METHODS.has(method)) {
+        if (!kind) {
+          throw new Error(
+            `${method} names no harness: a session key is one harness's`
+          );
+        }
         const adapter = this.#adapter(kind);
         switch (method) {
           case "getSessionInfo":

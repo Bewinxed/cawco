@@ -59,6 +59,7 @@ import {
   DESIGN_PROPOSAL_TOOL,
   type Envelope,
   type FleetWatchNotice,
+  type HarnessKind,
   MEMORY_PROPOSAL_TOOL,
   machineLabel,
   type PairingRequest,
@@ -599,8 +600,8 @@ export interface PushServices {
   ) => Promise<{ kind: string | null; title: string } | undefined>;
 }
 
-/** Each harness as the operator knows it; a row without one is Claude Code. */
-const HARNESS_NAMES: Record<string, string> = {
+/** Each harness as the operator knows it. */
+const HARNESS_NAMES: Record<HarnessKind, string> = {
   claude: "Claude Code",
   opencode: "OpenCode",
   pi: "pi",
@@ -1166,7 +1167,7 @@ export const createPush = ({
     if (owned) {
       return owned;
     }
-    const harness = HARNESS_NAMES[row.harness ?? "claude"] ?? row.harness;
+    const harness = HARNESS_NAMES[row.harness];
     const host = db
       .listAgents()
       .find((agent) => agent.machineId === row.machineId)?.hostname;

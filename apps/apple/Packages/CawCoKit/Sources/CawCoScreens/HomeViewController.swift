@@ -469,7 +469,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.row.configure(content)
             // LiveSessionMenu, read from the fleet as it opens; a workflow run takes no session commands.
             cell.row.menu = { [weak self] copy in
-                guard let self, let context = sessionMenus?()?.at(workPlace), BoardRun.runId(of: id) == nil, !ThreadTabs.isThread(id), let now = hub.fleet.byId[id] else { return nil }
+                guard let self, let context = sessionMenus?()?.at(workPlace), let now = hub.fleet.byId[id]?.session else { return nil }
                 let archive: (() -> Void)? = content.archives ? { [weak self] in
                     guard let self else { return }
                     home.archive(home.treeOf(id))
@@ -1031,7 +1031,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     /// A session's status, one rule for every row that draws its mark
     /// (SessionMark.svelte `sessionStatus`); `done`: the row is listed as finished.
-    static func status(_ row: InstanceRow?, home: HomeModel, done: Bool = false) -> MarkStatus {
+    static func status<Row: ListedRow & TreeRow>(_ row: Row?, home: HomeModel, done: Bool = false) -> MarkStatus {
         guard let row else {
             return .idle
         }

@@ -1355,7 +1355,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// thread, else a new one, so what is said there reaches the thread the
     /// web shows.
     static func tabId(_ id: String, hub: HubConnection) -> String {
-        guard let row = hub.fleet.byId[id], row.role == .lead, let projectId = row.projectId else { return id }
+        guard let row = hub.fleet.byId[id]?.session, row.role == .lead, let projectId = row.projectId else { return id }
         return hub.threads.of(projectId).first.map { ThreadTabs.tabId($0.id) } ?? ThreadTabs.newTabId(projectId)
     }
 

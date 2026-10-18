@@ -65,7 +65,7 @@
   import { page } from "$app/state";
   import StructureOn from "~icons/solar/structure-bold";
   import Structure from "~icons/solar/structure-bold-duotone";
-  import { cawco, type InstanceRow, isFailed } from "../client.svelte";
+  import { type BoardRow, cawco, isFailed } from "../client.svelte";
   import { conversationHref } from "../links";
   import { nestFrom } from "../motion/branch.svelte";
   import { crossIn, crossOut, dur, motionOk } from "../motion/curves.svelte";
@@ -160,14 +160,14 @@
   const BOXES = ":scope > .group";
 
   /** Every session a tab could list, delegates included. */
-  const allOf = (tab: WorkTab): InstanceRow[] =>
+  const allOf = (tab: WorkTab): BoardRow[] =>
     tab === "working" ? home.working : home.finished;
   /**
    * A tab's own rows, by the Delegates switch: the home's one rule for it
    * (home-state `workingListed`, `finishedListed`), which Recent reads too,
    * so a session a tab leaves out is one Recent holds.
    */
-  const rowsOf = (tab: WorkTab): InstanceRow[] =>
+  const rowsOf = (tab: WorkTab): BoardRow[] =>
     tab === "working" ? home.workingListed : home.finishedListed;
   /**
    * What a tab with no rows says of the delegates it leaves out: with the
@@ -182,7 +182,7 @@
     return `${count} delegates ${tab === "working" ? "are working" : "have finished"}. Their sessions are not listed here.`;
   };
   /** A session the tab does not list, to stand in for a delegate's parent. */
-  const known = (id: string): InstanceRow | undefined =>
+  const known = (id: string): BoardRow | undefined =>
     cawco.instanceIndex.byId.get(id);
   /**
    * Each tab as its tree (tree.ts): every session followed by its
@@ -212,9 +212,9 @@
   const olderOf = (tab: WorkTab, id: string) => views[tab].olderOf(id);
   const under = (
     tab: WorkTab,
-    rows: InstanceRow[],
+    rows: BoardRow[],
     parent: string | null
-  ): InstanceRow[] => views[tab].under(rows, parent);
+  ): BoardRow[] => views[tab].under(rows, parent);
   /**
    * Takes a finished row off the list, and with a parent its whole tree,
    * the rows the Delegates switch hides too. Offered only on a row
@@ -242,9 +242,9 @@
     return ids;
   }
 
-  type Group = MachineGroup<InstanceRow>;
+  type Group = MachineGroup<BoardRow>;
   /** A line that is leaving: a machine's header, or one of its rows. */
-  interface Line extends RelayLine<InstanceRow> {
+  interface Line extends RelayLine<BoardRow> {
     tab: WorkTab;
   }
   /** One change of the rows in flight: what leaves, what arrives, when. */
@@ -282,7 +282,7 @@
     const at = new Map(
       tops.map((group) => [
         group.machineId,
-        { ...group, rows: [] as InstanceRow[] },
+        { ...group, rows: [] as BoardRow[] },
       ])
     );
     let top = "";
@@ -311,7 +311,7 @@
       return group;
     }
     let room = MORE_AT;
-    const rows: InstanceRow[] = [];
+    const rows: BoardRow[] = [];
     for (const row of group.rows) {
       if (shapeOf(tab, row.id)?.depth === 0) {
         if (room === 0) {
@@ -332,11 +332,11 @@
    * A machine's trees past its first MORE_AT; none when only one is, since
    * a "Show 1 more" line costs the height of the row it hides.
    */
-  function beyondCap(tab: WorkTab, group: Group): TreeLine<InstanceRow>[] {
+  function beyondCap(tab: WorkTab, group: Group): TreeLine<BoardRow>[] {
     const hidden = (
       group.rows
         .map((row) => shapeOf(tab, row.id))
-        .filter((line) => line?.depth === 0) as TreeLine<InstanceRow>[]
+        .filter((line) => line?.depth === 0) as TreeLine<BoardRow>[]
     ).slice(MORE_AT);
     return hidden.length > 1 ? hidden : [];
   }
@@ -385,7 +385,7 @@
    * the Delegates switch shows (owner: "the working count shouldn't count
    * delegates").
    */
-  const topOf = (tab: WorkTab): InstanceRow[] =>
+  const topOf = (tab: WorkTab): BoardRow[] =>
     allOf(tab).filter((row) => !isDelegate(row));
   /** Whether a top-level session listed as finished failed: its count says so. */
   const finishedFailed = $derived(topOf("finished").some(isFailed));
@@ -598,26 +598,26 @@
   };
 
   /** A working row's line: its project, then what it is doing now. */
-  function workingLine(row: InstanceRow): string {
+  function workingLine(row: BoardRow): string {
     const tool = cawco.currentToolOf(row.id);
     const doing = tool ? `${tool.name} ${tool.glance}`.trim() : "";
     return [projectOfRow(row), doing].filter(Boolean).join(" · ");
   }
   /** A finished row's line: its project, and why, if it failed. */
-  function finishedLine(row: InstanceRow): string {
+  function finishedLine(row: BoardRow): string {
     const why = isFailed(row)
       ? `failed${row.lastError ? `: ${row.lastError}` : ""}`
       : "";
     return [projectOfRow(row), why].filter(Boolean).join(" · ");
   }
   /** The row's meta line, naming its machine when it is not its group's. */
-  function metaLine(row: InstanceRow, tab: WorkTab, group: string): string {
+  function metaLine(row: BoardRow, tab: WorkTab, group: string): string {
     const said = tab === "working" ? workingLine(row) : finishedLine(row);
     return row.machineId === group
       ? said
       : `${machineName(row.machineId)} · ${said}`;
   }
-  function age(row: InstanceRow, tab: WorkTab): string {
+  function age(row: BoardRow, tab: WorkTab): string {
     if (tab === "working") {
       const since = cawco.turnSince(row.id);
       return since ? span(clock.now - since) : "";
@@ -653,7 +653,7 @@
   </h3>
 {/snippet}
 
-{#snippet sessionRow(row: InstanceRow, tab: WorkTab, group: string)}
+{#snippet sessionRow(row: BoardRow, tab: WorkTab, group: string)}
   {@const context = shapeOf(tab, row.id)?.context ?? false}
   <!-- A context line is the parent of delegates listed here, not one of
        the tab's own: its state and name, quietly, and nothing else. -->
@@ -684,7 +684,7 @@
        leaves on the row's exit, in the row's frames (`--leave`). -->
   <li data-slot="tree-node" class="tree-node" style={leaveLine(line.key)}>
     <div data-slot="tree-line" class="tree-line" style={leaveAnim(line.key)}>
-      {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
+      {@render sessionRow(line.row as BoardRow, line.tab, line.machineId)}
     </div>
     {#if kids.length > 0}
       <ul
@@ -845,7 +845,7 @@
                 {/if}
                 <!-- Each tree is the shared one (SessionTree), drawing this
                      tab's row; the relay gives each line its motion. -->
-                {#snippet line(row: InstanceRow)}
+                {#snippet line(row: BoardRow)}
                   {@render sessionRow(row, shown, id)}
                 {/snippet}
                 <ul class="session-tree">

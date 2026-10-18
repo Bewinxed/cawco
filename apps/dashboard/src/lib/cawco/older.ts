@@ -13,7 +13,7 @@
  * (DELEGATE_WINDOW): one session starts a hundred in a day, and a day's
  * worth listed whole is the four thousand pixels of rail the fold is for.
  */
-import { cawco, type InstanceRow } from "./client.svelte";
+import { type BoardRow, cawco } from "./client.svelte";
 import { sessionStatus } from "./session-status";
 
 /** A project lists every session that moved in the last day. */
@@ -26,7 +26,7 @@ export const OLDER_ROWS = 6;
 /** What the rule reads of the fleet, read once by the list that asks. */
 export interface Reading {
   /** When a row last moved. */
-  lastAt: (row: InstanceRow) => number;
+  lastAt: (row: BoardRow) => number;
   now: number;
   /** The rows running now ({@link runningIds}). */
   running: ReadonlySet<string>;
@@ -48,15 +48,15 @@ export const runningIds = (): Set<string> =>
  * on the side its top row is on and nothing running is ever folded away.
  */
 export function listedOf(
-  rows: InstanceRow[],
-  under: (row: InstanceRow) => readonly InstanceRow[],
+  rows: BoardRow[],
+  under: (row: BoardRow) => readonly BoardRow[],
   { lastAt, now, running }: Reading,
   window: number
 ): Set<string> {
-  const pressing = (row: InstanceRow): boolean =>
+  const pressing = (row: BoardRow): boolean =>
     running.has(row.id) || cawco.activityOf(row.id) === "blocked";
   const listed = new Set<string>();
-  const rest: InstanceRow[] = [];
+  const rest: BoardRow[] = [];
   for (const row of rows) {
     if (
       pressing(row) ||
@@ -80,7 +80,7 @@ export function listedOf(
  * How many of these rows failed: the status SessionMark draws the red dot
  * for, so the count and the dot are one rule.
  */
-export const failedIn = (rows: Iterable<InstanceRow>): number => {
+export const failedIn = (rows: Iterable<BoardRow>): number => {
   let failed = 0;
   for (const row of rows) {
     if (sessionStatus(row) === "fail") {
