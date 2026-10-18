@@ -2,8 +2,8 @@
   /**
    * The plan-view preview: what the plan panel would draw under the
    * advisor's one model, state by state, each on the desk's side card beside
-   * the conversation and on the phone's bottom sheet; the task and delegate
-   * states with today's panel beside them on the same rows; then live.
+   * the conversation and on the phone's bottom sheet; under the task and
+   * delegate states, today's panel on the same rows; then live.
    */
   import DeskPlan from "./DeskPlan.svelte";
   import {
@@ -27,14 +27,15 @@
     { id: "plain", head: "A session's own plan" },
     { id: "task", head: "On a task" },
     { id: "delegates", head: "Steps that delegates carry" },
+    { id: "task-today", head: "Today, for comparison" },
     { id: "spec", head: "The spec" },
     { id: "live", head: "Live" },
   ];
 </script>
 
-{#snippet desk(plan: PlanFixture, caption: string, toEnd = false)}
-  <figure>
-    <DeskPlan {plan} {toEnd}>
+{#snippet desk(plan: PlanFixture, caption: string, toEnd = false, fit = false)}
+  <figure data-kind="desk">
+    <DeskPlan {fit} {plan} {toEnd}>
       <ProposedPlan {loaded} {plan} />
     </DeskPlan>
     <figcaption>Desk · {caption}</figcaption>
@@ -42,7 +43,7 @@
 {/snippet}
 
 {#snippet phone(plan: PlanFixture, caption: string, toEnd = false)}
-  <figure>
+  <figure data-kind="phone">
     <PhonePlan {plan} {toEnd}>
       <ProposedPlan {loaded} {plan} />
     </PhonePlan>
@@ -55,8 +56,10 @@
     <h1>The plan, redesigned</h1>
     <p class="what">
       A preview of the plan panel, on the desk beside a conversation and on the
-      phone as a sheet, with today's panel beside it on the same plan. Nothing
-      here is built yet.
+      phone as a sheet. Nothing here is built yet. Each state is drawn as
+      proposed, on the desk and on the phone; under the task and the delegates
+      states, Today draws the same plan as the panel draws it now, for
+      comparison.
     </p>
     <p>
       The plan is one list of what a session is doing. Each step says its state,
@@ -93,66 +96,82 @@
 
   <section id="task" aria-labelledby="task-head" class="state">
     <h2 id="task-head">On a task</h2>
-    <h3 class="pair">Proposed</h3>
-    <div class="frames">
-      {@render desk(
-        attempt,
-        "On a task, the plan is the task's to-dos, the session's steps under them, one to-do moved to a task of its own, one proposed"
-      )}
-      {@render phone(
-        attempt,
-        "On a task: the task's to-dos, ticked from their marks, the task's name and stage under the title"
-      )}
+    <div class="pair">
+      <p class="pair-head">Proposed, on the desk and the phone</p>
+      <div class="frames">
+        {@render desk(
+          attempt,
+          "On a task, the plan is the task's to-dos, the session's steps under them, one to-do moved to a task of its own, one proposed"
+        )}
+        {@render phone(
+          attempt,
+          "On a task: the task's to-dos, ticked from their marks, the task's name and stage under the title"
+        )}
+      </div>
     </div>
-    <h3 class="pair">Today, for comparison</h3>
-    <div class="frames">
-      <figure>
-        <DeskPlan plan={attempt} today>
-          <TodayPlan plan={attempt} />
-        </DeskPlan>
-        <figcaption>
-          Desk · Today: the same task as the panel draws it now, steps with
-          their to-do ids in the words, the spec, then the to-dos again
-        </figcaption>
-      </figure>
-      <figure>
-        <PhonePlan plan={attempt} today>
-          <TodayPlan plan={attempt} sheet />
-        </PhonePlan>
-        <figcaption>
-          Phone · Today: the same task as the sheet draws it now
-        </figcaption>
-      </figure>
+    <div id="task-today" class="pair">
+      <p class="pair-head">
+        Today, for comparison: the same task, as the panel draws it now
+      </p>
+      <div class="frames">
+        <figure data-kind="desk">
+          <DeskPlan plan={attempt} today>
+            <TodayPlan plan={attempt} />
+          </DeskPlan>
+          <figcaption>
+            Desk · Today: the same task, steps with their to-do ids in the
+            words, the spec, then the to-dos again
+          </figcaption>
+        </figure>
+        <figure data-kind="phone">
+          <PhonePlan plan={attempt} today>
+            <TodayPlan plan={attempt} sheet />
+          </PhonePlan>
+          <figcaption>
+            Phone · Today: the same task as the sheet draws it now
+          </figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
   <section id="delegates" aria-labelledby="delegates-head" class="state">
     <h2 id="delegates-head">Steps that delegates carry</h2>
-    <h3 class="pair">Proposed</h3>
-    <div class="frames">
-      {@render desk(
-        delegates,
-        "The same task with its delegates out: one working with its steps open, Fable waiting on you, one queued for a build slot, one failed with its report"
-      )}
-      {@render phone(
-        delegates,
-        "The same task with its delegates out, in the sheet"
-      )}
+    <div class="pair">
+      <p class="pair-head">Proposed, on the desk and the phone</p>
+      <div class="frames">
+        {@render desk(
+          delegates,
+          "The same task with its delegates out, each under the to-do it carries: one working with its steps open, Fable waiting on you, one queued for a build slot, one failed with its report",
+          false,
+          true
+        )}
+        {@render phone(
+          delegates,
+          "The same task with its delegates out, the sheet scrolled down to the queued and the failed one",
+          true
+        )}
+      </div>
     </div>
-    <h3 class="pair">Today, for comparison</h3>
-    <div class="frames">
-      <figure>
-        <DeskPlan plan={delegates} today>
-          {#snippet conversation()}
-            <TodayCards />
-          {/snippet}
-          <TodayPlan plan={delegates} />
-        </DeskPlan>
-        <figcaption>
-          Desk · Today: the same delegates as cards in the conversation, and in
-          the plan only as lines of words
-        </figcaption>
-      </figure>
+    <div id="delegates-today" class="pair">
+      <p class="pair-head">
+        Today, for comparison: the same delegates, as the conversation and the
+        panel draw them now
+      </p>
+      <div class="frames">
+        <figure data-kind="desk">
+          <DeskPlan plan={delegates} today>
+            {#snippet conversation()}
+              <TodayCards />
+            {/snippet}
+            <TodayPlan plan={delegates} />
+          </DeskPlan>
+          <figcaption>
+            Desk · Today: the same delegates as cards in the conversation, and
+            in the plan only as lines of words
+          </figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
@@ -241,7 +260,7 @@
   .state {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-5);
     scroll-margin-block-start: var(--space-5);
     padding-block-start: var(--space-6);
     border-block-start: 1px solid var(--border-hairline);
@@ -252,8 +271,15 @@
       font-weight: var(--weight-strong);
     }
   }
+  /* A pair: the same state on the desk and the phone, named over both. */
   .pair {
-    margin: var(--space-2) 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    scroll-margin-block-start: var(--space-5);
+  }
+  .pair-head {
+    margin: 0;
     font: var(--type-label);
     color: var(--ink-muted);
   }
@@ -277,20 +303,30 @@
     color: var(--ink-muted);
     text-wrap: pretty;
   }
-  @media (width < 640px) {
+  /* A phone's page: the frames stack at the page's width, the phone's
+     sheet first; a desk frame scrolls sideways in its own box. */
+  @media (width < 700px) {
     .page {
       padding: var(--space-6) 0 64px;
     }
     .intro,
     .page > :global(.key),
     .state > h2,
-    .pair,
+    .pair-head,
     figcaption {
       padding-inline: var(--space-4);
     }
     .frames {
       flex-direction: column;
+      align-items: stretch;
       gap: var(--space-7);
+    }
+    figure {
+      inline-size: 100%;
+      max-inline-size: 100%;
+    }
+    figure[data-kind="phone"] {
+      order: -1;
     }
   }
 </style>
