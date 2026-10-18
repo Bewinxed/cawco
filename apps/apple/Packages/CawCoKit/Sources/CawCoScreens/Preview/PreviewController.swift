@@ -123,6 +123,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// comment; Draw, a finger inks. A pencil inks in every mode.
     private enum Mode: String, CaseIterable {
         case interact, comment, draw
+
+        var name: String {
+            switch self {
+            case .interact: "Interact"
+            case .comment: "Comment"
+            case .draw: "Draw"
+            }
+        }
+
+        var glyph: Glyph {
+            switch self {
+            case .interact: .toolScreen
+            case .comment: .comment
+            case .draw: .pen
+            }
+        }
     }
 
     /// The mode, which the person chooses and nothing else does: kept for
@@ -255,7 +271,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             guard let self, inspectOpen, inspection != nil else { return }
             button.configuration?.background.backgroundColor = Palette.surfaceFill
         }
-        inspectButton.isHidden = true
         inspectOpen = UserDefaults.standard.string(forKey: inspectKey) == "open"
         sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
         pinsButton = KitButton.make("Comments", glyph: .chat, variant: .ghost, height: .sm) { [weak self] in self?.openList() }
@@ -269,7 +284,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         pinsButton.addSubview(pinsBadge)
         // The mode as the person left it for this session; Interact the first time.
         mode = UserDefaults.standard.string(forKey: modeKey).flatMap(Mode.init(rawValue:)) ?? .interact
-        modes = KitSegmented(["Interact", "Comment", "Draw"], glyphs: [.toolScreen, .comment, .pen],
+        modes = KitSegmented(Mode.allCases.map(\.name), glyphs: Mode.allCases.map(\.glyph),
                              selected: Mode.allCases.firstIndex(of: mode))
         modes.accessibilityLabel = "Preview mode"
         modes.addAction(UIAction { [weak self] _ in
@@ -289,7 +304,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         expandButton = KitButton.make("", glyph: .maximize, variant: .ghost, height: .sm) { [weak self] in self?.onExpand() }
         expandButton.accessibilityLabel = "Expand"
         expandButton.toolTip = "Expand"
-        expandButton.isHidden = ownTab
         closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in
             guard let self else { return }
             if ownTab { onBackToSession() } else { close() }
@@ -299,7 +313,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         newCanvasButton = KitButton.make("", glyph: .plus, variant: .ghost, height: .sm) { [weak self] in self?.newCanvas() }
         newCanvasButton.accessibilityLabel = "New canvas"
         newCanvasButton.toolTip = "New canvas"
-        newCanvasButton.isHidden = ownTab
         // The same artifact, its doc and its tools, in a tab of its own.
         openTabButton = KitButton.make("", glyph: .external, variant: .ghost, height: .sm) { [weak self] in
             guard let self, let id = artifactId else { return }
@@ -307,23 +320,51 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
         openTabButton.accessibilityLabel = "Open in new tab"
         openTabButton.toolTip = "Open in new tab"
-        openTabButton.isHidden = ownTab
         // A canvas here goes back to the composer (`giveBack(false)`).
         undockButton = KitButton.make("", glyph: .undock, variant: .ghost, height: .sm) { [weak self] in self?.giveBack(folded: false) }
         undockButton.accessibilityLabel = "Undock"
         undockButton.toolTip = "Undock"
-        undockButton.isHidden = true
-        let head = UIStackView(arrangedSubviews: [identity, sendButton, newCanvasButton, undockButton, openTabButton, inspectButton, modes,
-                                                  pinsButton, reload, expandButton, closeButton])
-        head.spacing = Space.space1
+        // Glyph-only segments, each a touch target's width.
+        modes.segmentMinWidth = Self.target
+        // More: what the head has no room for, in the head's order (HIG Toolbars, "Add a More menu").
+        moreButton = KitButton.make("", glyph: .more, variant: .ghost, height: .sm) {}
+        moreButton.accessibilityLabel = "More"
+        moreButton.toolTip = "More"
+        moreButton.showsMenuAsPrimaryAction = true
+        moreButton.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
+            MainActor.assumeIsolated { done(self?.overflowMenu() ?? []) }
+        }])
+        // What More holds of Comments, its open count, stays on More (the pins' badge recipe).
+        moreBadge.isUserInteractionEnabled = false
+        moreBadge.isAccessibilityElement = false
+        moreBadge.tabular = true
+        moreBadge.translatesAutoresizingMaskIntoConstraints = false
+        moreButton.addSubview(moreBadge)
+        NSLayoutConstraint.activate([
+            moreBadge.centerYAnchor.constraint(equalTo: moreButton.topAnchor, constant: Space.space1),
+            moreBadge.leadingAnchor.constraint(equalTo: moreButton.centerXAnchor, constant: Space.space1),
+        ])
+        // The mode where its three segments have no room: the chosen one's glyph, a pick of three.
+        modePick = KitButton.make("", glyph: mode.glyph, variant: .ghost, height: .sm) {}
+        modePick.showsMenuAsPrimaryAction = true
+        modePick.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
+            MainActor.assumeIsolated { done(self.map { [$0.modeMenu()] } ?? []) }
+        }])
+        let controls: [(HeadItem, UIView)] = [
+            (.send, sendButton), (.newCanvas, newCanvasButton), (.undock, undockButton), (.openTab, openTabButton),
+            (.inspect, inspectButton), (.mode, modes), (.modePick, modePick), (.comments, pinsButton), (.reload, reload),
+            (.expand, expandButton),
+        ]
+        for (item, control) in controls { slots[item] = HeadSlot(control) }
+        moreSlot = HeadSlot(moreButton)
+        moreSlot.isHidden = true
+        let closeSlot = HeadSlot(closeButton)
+        let head = HeadRow(arrangedSubviews: [identity] + controls.compactMap { slots[$0.0] } + [moreSlot, closeSlot])
+        head.name = titleButton
         head.alignment = .center
         head.translatesAutoresizingMaskIntoConstraints = false
         dragArea = head
-        for control in [sendButton!, newCanvasButton!, undockButton!, openTabButton!, inspectButton!, modes!, pinsButton!, reload,
-                        expandButton!, closeButton!] as [UIView] {
-            control.setContentHuggingPriority(.required, for: .horizontal)
-            control.setContentCompressionResistancePriority(.required, for: .horizontal)
-        }
+        for slot in slots.values { slot.isHidden = true }
         pinsBadge.tabular = true
         pinsBadge.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -389,7 +430,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // The grabber, `space-1` from the top, centred, 100×6 in the control
         // edge; its hit area is 44pt tall about it (vaul's handle hit area),
         // over the header, which yields to the header's actions.
-        grabArea.yields = [titleButton, sendButton, inspectButton, modes, pinsButton, reload, expandButton, closeButton]
+        grabArea.yields = [titleButton] + head.arrangedSubviews.dropFirst()
         grabber.translatesAutoresizingMaskIntoConstraints = false
         grabber.backgroundColor = Palette.borderControl
         grabber.layer.cornerRadius = 3
@@ -686,10 +727,175 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             paintMode()
             paintPins()
         }
+        placeHeadItems()
         placeCard()
         #if DEBUG
         probeLayout()
         #endif
+    }
+
+    // MARK: The head's room (HIG Toolbars: "Prioritize only the most important items", the rest in a More menu)
+
+    /// The head's controls after the name, in DESIGN.md §5.10's order.
+    /// The head's controls after the name, in DESIGN.md §5.10's order;
+    /// `modePick` is the mode where its three segments have no room.
+    private enum HeadItem: String, CaseIterable {
+        case send, newCanvas, undock, openTab, inspect, mode, modePick, comments, reload, expand
+    }
+
+    /// Who keeps a place in the head when it is short of room, first to last:
+    /// the key action, then what a person reaches for on every page (its mode,
+    /// its Comments), then the panel's own (Expand, Reload), then what is
+    /// done now and then. The web's head has no such order (its only narrow
+    /// rule is Comments' word going under 640px): it is the app's own.
+    private static let priority: [HeadItem] = [.send, .mode, .comments, .expand, .reload, .inspect, .undock, .openTab, .newCanvas]
+    /// A touch target's side (HIG Layout: "44x44 pt").
+    private static let target = 44.0
+    /// The narrowest the artifact's name stands while controls go to More: its glyph and a dozen letters.
+    private static let nameFloor = 120.0
+
+    private var slots: [HeadItem: HeadSlot] = [:]
+    private var moreButton: UIButton!
+    private var moreSlot: HeadSlot!
+    private let moreBadge = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+    private var modePick: UIButton!
+    /// The page holds picks the session has not heard, or they are going (Send picks stands).
+    private var sendWanted = false
+    /// What is on show is a canvas: its own tools, no mode or Comments, and Undock.
+    private var canvasShown = false
+    /// The controls the head has no room for, in its order: More holds them.
+    private var overflowed: [HeadItem] = []
+    /// The width the name keeps while controls go to More: its own, up to `nameFloor`.
+    private var nameKept = 0.0
+    /// The name at `nameKept` or wider: the room the head's placing kept for it, held over the controls' own widths.
+    private lazy var nameWidth: NSLayoutConstraint = {
+        let floor = titleButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 0)
+        floor.priority = UILayoutPriority(900)
+        floor.isActive = true
+        return floor
+    }()
+
+    /// Whether `item` belongs in this head at all, as the panel stands.
+    private func wants(_ item: HeadItem) -> Bool {
+        switch item {
+        case .send: sendWanted
+        case .newCanvas, .openTab: !ownTab
+        case .undock: canvasShown && !ownTab
+        case .inspect: inspection != nil
+        case .mode, .comments: !canvasShown
+        case .modePick: false
+        case .reload: true
+        case .expand: !ownTab && !drawer
+        }
+    }
+
+    /// Each control the panel wants stands in the head while the name keeps
+    /// its floor, by `priority`; what has no room goes to More, which then
+    /// stands before Close. The mode gives up its segments for its pick
+    /// before it goes. Close and the name always stand.
+    private func placeHeadItems() {
+        guard isViewLoaded, let head = dragArea as? UIStackView else { return }
+        let width = head.bounds.width
+        guard width > 0 else { return }
+        let wanted = HeadItem.allCases.filter(wants)
+        let room = { (item: HeadItem) in self.slots[item]?.fittingWidth ?? 0 }
+        nameKept = min(Self.nameFloor, titleButton.wholeWidth)
+        if nameWidth.constant != nameKept { nameWidth.constant = nameKept }
+        // The identity's own trailing margin stands with the name.
+        let name = nameKept + 8 - Space.space1
+        let close = Self.target
+        let all = wanted.reduce(0) { $0 + room($1) }
+        var shown = Set(wanted)
+        if name + all + close > width {
+            // First the room More takes, then each control by priority while it fits.
+            var left = width - name - close - Self.target
+            shown = []
+            for item in Self.priority where wanted.contains(item) {
+                let stands = item == .mode && room(.mode) > left ? HeadItem.modePick : item
+                guard room(stands) <= left else { continue }
+                shown.insert(stands)
+                left -= room(stands)
+            }
+        }
+        overflowed = wanted.filter { !shown.contains($0) && !($0 == .mode && shown.contains(.modePick)) }
+        for item in HeadItem.allCases {
+            let hidden = !shown.contains(item)
+            if slots[item]?.isHidden != hidden { slots[item]?.isHidden = hidden }
+        }
+        let moreHidden = overflowed.isEmpty
+        if moreSlot.isHidden != moreHidden { moreSlot.isHidden = moreHidden }
+        paintMore()
+    }
+
+    /// More's own words, and Comments' open count on it while it holds Comments.
+    private func paintMore() {
+        // As on Comments: the count stands always, 0 too.
+        // Run on every layout: each is written only when it changed, as a label's words lay the head out again.
+        let holds = overflowed.contains(.comments)
+        let count = "\(comments.open)"
+        if moreBadge.text != count { moreBadge.text = count }
+        if moreBadge.isHidden == holds { moreBadge.isHidden = !holds }
+        let words = holds ? "More, Comments \(count) open" : "More"
+        if moreButton.accessibilityLabel != words { moreButton.accessibilityLabel = words }
+    }
+
+    /// The three modes, the chosen one checked: the mode's pick, and More's when it holds the mode.
+    private func modeMenu() -> UIMenu {
+        let choices = Mode.allCases.map { choice in
+            UIAction(title: choice.name, image: choice.glyph.image, state: mode == choice ? .on : .off) { [weak self] _ in
+                self?.setMode(choice)
+            }
+        }
+        return UIMenu(title: "Preview mode", options: .displayInline, children: choices)
+    }
+
+    /// More's menu: the controls the head has no room for, in its order, each
+    /// doing what its button does; the mode as a choice of three with the
+    /// current one checked, Comments with its open count.
+    private func overflowMenu() -> [UIMenuElement] {
+        overflowed.compactMap { item -> UIMenuElement? in
+            switch item {
+            case .send:
+                let words = sending ? "Sending…" : "Send picks"
+                let action = UIAction(title: words, image: Glyph.send.image) { [weak self] _ in self?.send() }
+                if !sendButton.isEnabled { action.attributes = .disabled }
+                return action
+            case .newCanvas:
+                let action = UIAction(title: "New canvas", image: Glyph.plus.image) { [weak self] _ in self?.newCanvas() }
+                if making { action.attributes = .disabled }
+                return action
+            case .undock:
+                return UIAction(title: "Undock", image: Glyph.undock.image) { [weak self] _ in self?.giveBack(folded: false) }
+            case .openTab:
+                return UIAction(title: "Open in new tab", image: Glyph.external.image) { [weak self] _ in
+                    guard let self, let id = artifactId else { return }
+                    onOpenTab(id)
+                }
+            case .inspect:
+                return UIAction(title: Words.Artifacts.inspect, image: Glyph.tuning.image, state: inspectOpen ? .on : .off) { [weak self] _ in
+                    guard let self else { return }
+                    showInspector(!inspectOpen)
+                }
+            case .mode:
+                return modeMenu()
+            case .modePick:
+                return nil
+            case .comments:
+                let action = UIAction(title: "Comments", image: Glyph.chat.image) { [weak self] _ in self?.openList() }
+                action.subtitle = "\(comments.open) open"
+                return action
+            case .reload:
+                let action = UIAction(title: "Reload", image: Glyph.refresh.image) { [weak self] _ in self?.reload() }
+                // In Comment and Draw what would leave the page waits (`.mode-comment .other`).
+                if mode != .interact { action.attributes = .disabled }
+                return action
+            case .expand:
+                let back = expanded
+                return UIAction(title: back ? "Back to conversation" : "Expand", image: (back ? Glyph.minimize : Glyph.maximize).image) { [weak self] _ in
+                    self?.onExpand()
+                }
+            }
+        }
     }
 
     /// As the phone's drawer it wears the grabber, and its header stands
@@ -701,7 +907,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         self.drawer = drawer
         grabArea.isHidden = !drawer
         // The drawer has no Expand: it is the phone's sheet (SideSplit.svelte's `available` is a desk's).
-        expandButton.isHidden = drawer
+        placeHeadItems()
         if drawer { expanded = false }
         placeHead()
         placeCardConstraints()
@@ -861,10 +1067,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         connected = false
         // A canvas draws with its own tools: no modes or Comments over it, and
         // it can go back to the composer (`canUndock`).
-        let canvas = frame.artifact.kind == .canvas
-        modes.isHidden = canvas
-        pinsButton.isHidden = canvas
-        undockButton.isHidden = !canvas || ownTab
+        canvasShown = frame.artifact.kind == .canvas
+        placeHeadItems()
         paintSend()
         pageLoaded = false
         paintCover(animated: false)
@@ -1325,6 +1529,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard isViewLoaded else { return }
         modes.namesShown = false
         modes.select(Mode.allCases.firstIndex(of: mode))
+        modePick.configuration?.image = mode.glyph.image.resized(to: Size.iconMd)
+        modePick.accessibilityLabel = "Preview mode"
+        modePick.accessibilityValue = mode.name
+        modePick.toolTip = "Preview mode: \(mode.name)"
         reloadButton.setNeedsUpdateConfiguration()
         paintWell()
     }
@@ -1385,10 +1593,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// J and K a step through the pins, Enter opens one, Esc closes.
     private func press(_ key: String) {
         switch key {
-        case "v" where !modes.isHidden: setMode(.interact)
-        case "c" where !modes.isHidden: setMode(.comment)
-        case "d" where !modes.isHidden: setMode(.draw)
-        case "C" where !modes.isHidden:
+        case "v" where !canvasShown: setMode(.interact)
+        case "c" where !canvasShown: setMode(.comment)
+        case "d" where !canvasShown: setMode(.draw)
+        case "C" where !canvasShown:
             pinsShown.toggle()
             deliver(["type": "cawco:pins-shown", "shown": pinsShown])
             paintPins()
@@ -1533,11 +1741,20 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let picks = comments.unsentPicks > 0
         sendButton.configuration?.showsActivityIndicator = sending
         let words = sending ? "Sending…" : "Send picks"
-        KitButton.setTitle(words, of: sendButton, variant: .ghost, height: .sm)
+        // On a narrow pane its glyph alone, as Comments' word goes there: the name keeps its room beside the mode.
+        if narrow {
+            // No title at all: an empty one still keeps the gap after the glyph.
+            sendButton.configuration?.attributedTitle = nil
+        } else {
+            KitButton.setTitle(words, of: sendButton, variant: .ghost, height: .sm)
+        }
+        sendButton.accessibilityLabel = words
+        sendButton.toolTip = words
         #if DEBUG
         PreviewProbe.say("preview send words=\(picks ? words : "-")")
         #endif
-        sendButton.isHidden = !(picks || sending)
+        sendWanted = picks || sending
+        placeHeadItems()
         sendButton.isEnabled = connected && picks && !sending
         sendButton.accessibilityHint = "Sends the page's picks to the session"
     }
@@ -2054,7 +2271,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let centre = PreviewProbe.centre
         let words = mode == .comment ? "Interact" : "Comment"
         let toggle = segmentCentre(mode == .comment ? 0 : 1)
-        let sendWords = sendButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
+        let sendWords = sendButton.accessibilityLabel ?? "?"
         let grab = grabArea.isHidden ? "none" : centre(grabber)
         let page = web.convert(web.bounds, to: nil)
         return "preview head comment=\(words)@\(toggle) mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(comments.open)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
@@ -2062,7 +2279,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     /// The centre of the mode's segment at `index` in the window: the segmented's width in three.
     private func segmentCentre(_ index: Int) -> String {
-        guard modes.window != nil, !modes.isHidden else { return "none" }
+        guard PreviewProbe.centre(modes) != "none" else { return "none" }
         let box = modes.convert(modes.bounds, to: nil)
         let third = Double(box.width) / 3
         let x = Double(box.minX) + third * (Double(index) + 0.5)
@@ -2122,20 +2339,25 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
     }
 
-    /// What of the head the name keeps, against the controls shown after it,
+    /// What of the head the name keeps, against the controls standing after
+    /// it (each by its slot's width, More and Close last) and what More holds,
     /// as laid out: read on each layout and on the page's heartbeat, so a
     /// head that settled after its first layout is read as it stands.
     private func probeRoom() {
         guard PreviewProbe.on, view.window != nil, let head = dragArea as? UIStackView, head.bounds.width > 0 else { return }
-        let shown = head.arrangedSubviews.dropFirst().filter { !$0.isHidden }
-        let room = "preview head room width=\(Int(head.bounds.width)) title=\(Int(titleButton.bounds.width)) controls=\(shown.count):\(Int(shown.reduce(0) { $0 + $1.bounds.width }))"
+        let shown = head.arrangedSubviews.dropFirst().filter { !$0.isHidden }.map { slot in
+            let name = slots.first { $0.value === slot }?.key.rawValue ?? (slot === moreSlot ? "more" : "close")
+            return "\(name):\(Int(slot.bounds.width.rounded()))x\(Int(slot.bounds.height.rounded()))"
+        }
+        let more = overflowed.isEmpty ? "-" : overflowed.map(\.rawValue).joined(separator: ",")
+        let badge = moreBadge.isHidden || moreSlot.isHidden ? "-" : moreBadge.text ?? "-"
+        let room = "preview head room width=\(Int(head.bounds.width)) title=\(Int(titleButton.bounds.width)) floor=\(Int(nameKept)) shown=\(shown.joined(separator: ",")) more=\(more) badge=\(badge)"
         if room != laidRoom {
             laidRoom = room
             PreviewProbe.say(room)
         }
-        // Where Open in new tab stands in the window, where a simulator touch lands.
-        let openTab = openTabButton.isHidden ? "none" : PreviewProbe.centre(openTabButton)
-        let at = "preview head open-tab=\(openTab)"
+        // Where Open in new tab and More stand in the window, where a simulator touch lands.
+        let at = "preview head open-tab=\(PreviewProbe.centre(openTabButton)) more=\(PreviewProbe.centre(moreButton))"
         if at != laidOpenTab {
             laidOpenTab = at
             PreviewProbe.say(at)
@@ -2444,7 +2666,7 @@ extension PreviewController {
         } else {
             inspection = nil
         }
-        inspectButton.isHidden = inspection == nil
+        placeHeadItems()
         placeInspector()
     }
 
@@ -2619,6 +2841,62 @@ final class GrabArea: UIControl {
         return !yields.contains { action in
             action.window != nil && !action.isHidden && action.bounds.contains(action.convert(point, from: self))
         }
+    }
+}
+
+/// One head control in a touch target's room (HIG Layout: "44x44 pt"): at
+/// least 44pt square, `space-1` either side of the control, and a touch
+/// anywhere in it lands on the control's nearest point.
+final class HeadSlot: UIView {
+    let control: UIView
+
+    init(_ control: UIView) {
+        self.control = control
+        super.init(frame: .zero)
+        control.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(control)
+        let snug = widthAnchor.constraint(equalTo: control.widthAnchor, constant: Space.space1 * 2)
+        snug.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 44),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            widthAnchor.constraint(greaterThanOrEqualTo: control.widthAnchor, constant: Space.space1 * 2),
+            snug,
+            control.centerXAnchor.constraint(equalTo: centerXAnchor),
+            control.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        // The control keeps its own width, so the head's room goes to the name and nowhere else.
+        control.setContentHuggingPriority(.required, for: .horizontal)
+        control.setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("HeadSlot is built in code") }
+
+    /// The room the slot takes in the head, as its control stands now.
+    var fittingWidth: Double {
+        max(44, control.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width + Space.space1 * 2)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard !isHidden, alpha > 0.01, isUserInteractionEnabled, bounds.contains(point) else { return nil }
+        let box = control.frame.insetBy(dx: 1, dy: 1)
+        let near = CGPoint(x: min(max(point.x, box.minX), box.maxX), y: min(max(point.y, box.minY), box.maxY))
+        return control.hitTest(convert(near, to: control), with: event) ?? control
+    }
+}
+
+/// The head's row: a touch above or below the artifact's name, in the
+/// head's 44pt, is the name's (HIG Layout: "44x44 pt"), as each control's slot is.
+final class HeadRow: UIStackView {
+    weak var name: UIView?
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        guard let name, name.window != nil, hit == nil || !(hit is UIControl) else { return hit }
+        let at = convert(point, to: name)
+        guard bounds.contains(point), at.x >= 0, at.x <= name.bounds.width else { return hit }
+        return name
     }
 }
 

@@ -50,6 +50,12 @@ final class ArtifactTitleButton: UIButton {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("ArtifactTitleButton is built in code") }
 
+    /// Its width with the whole name standing: the name's own, its glyph and
+    /// unfold, the two gaps between and the insets either side.
+    var wholeWidth: Double {
+        name.intrinsicContentSize.width + Size.iconMd * 2 + Space.space2 * 4
+    }
+
     func show(kind: ArtifactKind, name text: String) {
         glyphView.glyph = kind.glyph
         name.text = text

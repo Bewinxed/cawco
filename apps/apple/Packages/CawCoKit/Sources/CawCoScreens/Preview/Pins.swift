@@ -914,8 +914,9 @@ enum PreviewProbe {
         Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
     }
 
+    /// Where `view` stands in the window; "none" while it or what holds it is hidden (a head control in More).
     static func centre(_ view: UIView) -> String {
-        guard view.window != nil, !view.isHidden else { return "none" }
+        guard view.window != nil, sequence(first: view, next: \.superview).allSatisfy({ !$0.isHidden }) else { return "none" }
         let at = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
         return "\(Int(at.x.rounded())),\(Int(at.y.rounded()))"
     }

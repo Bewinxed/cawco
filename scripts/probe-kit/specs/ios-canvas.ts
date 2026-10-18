@@ -31,7 +31,8 @@
  *    The page names no viewport, as an agent's page may not: the panel lays
  *    it out at its own width and scale 1, as the web's iframe does
  *    (PreviewController `viewport`), before and after the morph.
- * 4. A tap on the head's Open in new tab opens the form in a tab of its own
+ * 4. A tap on the head's Open in new tab (through More when the head has no
+ *    room for it) opens the form in a tab of its own
  *    (`artifact:<id>`): the pane host builds it, its group mounts it in
  *    front, the session's panel holds the artifact open and the tab's own
  *    page answers for it.
@@ -48,6 +49,7 @@ import type { Subprocess } from "bun";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim, type SimChoice } from "../../lib/mac-sim";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { runMoreItem } from "../head-more";
 import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
 
 const RUNTIMES: { choice: SimChoice; tag: string }[] = [
@@ -79,10 +81,11 @@ const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const SWIPE_AT = /^canvas swipe at (\d+),(\d+)$/;
 const SENT = /^canvas ink sent canvas ([0-9a-f-]{36}) to /;
-/** PreviewController's `preview head room …`: the head's width, the name's, and the controls after it. */
-const ROOM = /^preview head room width=(\d+) title=(\d+) controls=(\d+):(\d+)$/;
-/** PreviewController's `preview head open-tab=x,y`: where Open in new tab stands in the window. */
-const OPEN_TAB = /^preview head open-tab=(\d+),(\d+)$/;
+/** PreviewController's `preview head room …`: the head's width, the name's, the controls standing after it, and what More holds. */
+const ROOM =
+  /^preview head room width=(\d+) title=(\d+) floor=(\d+) shown=(\S*) more=(\S+) badge=(\S+)$/;
+/** PreviewController's `preview head open-tab=x,y more=…`: where Open in new tab stands in the window. */
+const OPEN_TAB = /^preview head open-tab=(\d+),(\d+) more=/;
 /** PreviewController's `preview captured …`: how many bytes the page's thumbnail came to. */
 const BYTES = /bytes=(\d+)/;
 const DOC =
@@ -619,14 +622,19 @@ async function formStep(on: On): Promise<string | undefined> {
  */
 async function openTabStep(on: On, pageId: string | undefined): Promise<void> {
   const { heard, kit, tag, udid } = on;
-  const at = heard.findLast((line) => OPEN_TAB.test(line))?.match(OPEN_TAB);
+  // The head as it stands last: ↗ in it, or in More when the head has no room for it.
+  const at = heard
+    .findLast((line) => line.startsWith("preview head open-tab="))
+    ?.match(OPEN_TAB);
   const tabId = `artifact:${pageId ?? "-"}`;
   const tapAt = heard.length;
   const tapped = at
     ? await sh(`${TAP} -x ${at[1]} -y ${at[2]} --udid ${udid} >/dev/null`)
         .then(() => `tapped ${at[1]},${at[2]}`)
         .catch((error: Error) => `axe tap: ${error.message}`)
-    : "the head said no open-tab place";
+    : await runMoreItem(udid, heard, "Open in new tab").catch(
+        (error: Error) => `More: ${error.message}`
+      );
   const ready = await until(
     `${tag}: the artifact's own tab`,
     () =>
