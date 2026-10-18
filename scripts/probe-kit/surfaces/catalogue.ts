@@ -14,7 +14,13 @@
  */
 import type { Page, WebSocketRoute } from "playwright-core";
 import { COMPOSER_FIELD } from "../kit";
-import { DELEGATE_TITLE, type Scene, STUDIO_HOST, type Variant } from "./scene";
+import {
+  DELEGATE_TITLE,
+  type Scene,
+  STUDIO_HOST,
+  STUDIO_MACHINE,
+  type Variant,
+} from "./scene";
 
 export type Width = "desk" | "tablet" | "phone";
 
@@ -270,20 +276,125 @@ const openKeychain = async (page: Page) => {
   await page.getByRole("menuitem", { name: "Unlock keychain…" }).click();
 };
 
+/** What a Mac answers its keychain's unlock with (core `AuthState`). */
+type UnlockAnswer =
+  | "authenticated"
+  | "unauthenticated"
+  | "unreadable-credentials";
+
+/** The page's machine list (client.svelte.ts `load<Machine[]>("/api/agents")`), read on connect. */
+const AGENTS_READ = "**/api/agents";
+
 /**
- * The page's socket to the hub carrying every frame but those `withheld`
- * names: those the hub never hears, so the page stands waiting on their
- * answer, as it does while a machine takes its time.
+ * `rows` with the scene's Mac, `studio`, online, its locked keychain as it
+ * is. The scene holds no Mac online (a workspace runs none), and its Unlock
+ * goes only to a Mac that is (client `askMachine`), the case the unlock is
+ * for: a Mac running, stuck behind its keychain. Offline, the page refuses
+ * the unlock itself ("studio isn't connected") and what it shows while the
+ * Mac works and once it answers (MachineAuthStatus) never stands.
  */
-const withholding = (withheld: (frame: string) => boolean) => (page: Page) =>
-  page.routeWebSocket(DASHBOARD_SOCKET, (ws) => {
-    const hub = ws.connectToServer();
-    ws.onMessage((frame) => {
-      if (!(typeof frame === "string" && withheld(frame))) {
-        hub.send(frame);
+const studioOnline = (rows: unknown): unknown =>
+  Array.isArray(rows)
+    ? rows.map((row: { machineId?: unknown } | null) =>
+        row?.machineId === STUDIO_MACHINE ? { ...row, status: "online" } : row
+      )
+    : rows;
+
+/** A hub message with the studio online in what it carries of the machines: a board's `agents`, or a frame's patch of them. */
+const withStudioOnline = (message: {
+  payload?: { agents?: unknown };
+}): unknown =>
+  message.payload?.agents
+    ? {
+        ...message,
+        payload: {
+          ...message.payload,
+          agents: studioOnline(message.payload.agents),
+        },
       }
+    : message;
+
+/** Each page's answer to the studio's unlock: none, the Mac yet to answer. */
+const studioAnswers = new WeakMap<Page, UnlockAnswer | undefined>();
+
+/**
+ * The page's machines with the studio online (`studioOnline`), in its read
+ * on connect and in every hub message, and its unlock never reaching the
+ * hub: answered here as the page's state says (`studioAnswers`), as the hub
+ * relays a machine's `control_result`, or not at all. A message the hub
+ * sends in parts (core wire.ts) is put together and sent on whole. Routed
+ * once a page; the route stays the page's, so these states come last in
+ * their surface.
+ */
+const studioRouted = async (page: Page): Promise<void> => {
+  if (studioAnswers.has(page)) {
+    return;
+  }
+  studioAnswers.set(page, undefined);
+  await page.route(AGENTS_READ, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      json: studioOnline(await response.json()),
     });
   });
+  await page.routeWebSocket(DASHBOARD_SOCKET, (ws) => {
+    const hub = ws.connectToServer();
+    const parts = new Map<string, string>();
+    hub.onMessage((frame) => {
+      if (typeof frame !== "string") {
+        ws.send(frame);
+        return;
+      }
+      const message = JSON.parse(frame) as {
+        part?: { id: string; last: boolean };
+        payload?: { agents?: unknown };
+        text?: string;
+      };
+      if (!message.part) {
+        ws.send(JSON.stringify(withStudioOnline(message)));
+        return;
+      }
+      const text = (parts.get(message.part.id) ?? "") + (message.text ?? "");
+      if (!message.part.last) {
+        parts.set(message.part.id, text);
+        return;
+      }
+      parts.delete(message.part.id);
+      ws.send(JSON.stringify(withStudioOnline(JSON.parse(text))));
+    });
+    ws.onMessage((frame) => {
+      if (!(typeof frame === "string" && UNLOCK_CONTROL(frame))) {
+        hub.send(frame);
+        return;
+      }
+      const answer = studioAnswers.get(page);
+      if (!answer) {
+        return;
+      }
+      const { requestId } = JSON.parse(frame) as { requestId: string };
+      ws.send(
+        JSON.stringify({
+          verb: "frames",
+          machineId: STUDIO_MACHINE,
+          requestId,
+          payload: { kind: "control_result", ok: true, requestId, result: answer },
+        })
+      );
+    });
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => window.kitHydrated === true);
+};
+
+/** The studio's keychain unlocked from its menu, its password sent, and `answer` the Mac's (`studioRouted`). */
+const unlockStudio = (answer?: UnlockAnswer) => async (page: Page) => {
+  await studioRouted(page);
+  studioAnswers.set(page, answer);
+  await openKeychain(page);
+  await page.getByPlaceholder(KEYCHAIN_PASSWORD).fill("probe-password");
+  await press(UNLOCK)(page);
+};
 
 /**
  * A transcript's row pressed, scrolled to as a person scrolls to it: the
@@ -779,19 +890,6 @@ export const SURFACES: Surface[] = [
         root: "body",
       },
       {
-        // Its password sent and the Mac yet to answer: the unlock under way.
-        // Its socket's route stays the page's, withholding the unlock alone.
-        name: "unlocking",
-        widths: ["desk"],
-        act: async (page) => {
-          await reloadedWith(withholding(UNLOCK_CONTROL))(page);
-          await openKeychain(page);
-          await page.getByPlaceholder(KEYCHAIN_PASSWORD).fill("probe-password");
-          await press(UNLOCK)(page);
-        },
-        root: "body",
-      },
-      {
         // The machines list's Add machine: Connect a machine, on its
         // one-command tab (the command, and the wait for the machine).
         name: "add-machine",
@@ -801,6 +899,29 @@ export const SURFACES: Surface[] = [
           await press(ADD_MACHINE)(page);
           await page.getByRole("tab", { name: "With one command" }).click();
         },
+        root: "body",
+      },
+      // The studio online and its keychain's unlock sent (`studioRouted`,
+      // which stays the page's: these come last on this hub).
+      {
+        // The Mac yet to answer: the unlock under way (MachineAuthStatus waiting).
+        name: "unlocking",
+        widths: ["desk"],
+        act: unlockStudio(),
+        root: "body",
+      },
+      {
+        // Answered unlocked, its logins read: the check.
+        name: "unlocked",
+        widths: ["desk"],
+        act: unlockStudio("authenticated"),
+        root: "body",
+      },
+      {
+        // Answered unlocked, its logins still unreadable: the warning.
+        name: "unlock-unreadable",
+        widths: ["desk"],
+        act: unlockStudio("unreadable-credentials"),
         root: "body",
       },
       {

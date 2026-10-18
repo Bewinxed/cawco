@@ -10,6 +10,7 @@
  *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b]              against the baselines
  *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] --approve    writes them
  *   bun scripts/probe-kit/run.ts style-snapshot --coverage                    the coverage map
+ *   bun scripts/probe-kit/run.ts style-snapshot --coverage --styled-at=<rev>  of the files styled at <rev>
  *   bun scripts/probe-kit/run.ts style-snapshot --record                      the hub tape, again
  *   bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate   in a workspace: no delegate,
  *                                                                             its states left out with a NOTE
@@ -51,7 +52,10 @@
  * (`__svelte_meta.loc.file`), and writes which surfaces render each file
  * with a `<style>` (`style-snapshot-coverage.json`), then lists the files
  * no surface renders. It counts what the reader reads: not what a
- * `content-visibility: hidden` box skips.
+ * `content-visibility: hidden` box skips. `--styled-at=<rev>` counts the
+ * files that had a `<style>` at that revision instead (a converted tree,
+ * held to its base of record's list; whether a file's rules were scoped is
+ * read off its source there), and lists apart those gone from this tree.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -447,9 +451,9 @@ async function record(kit: Kit, surfaces: Surface[]): Promise<void> {
   );
 }
 
-/** Every `.svelte` under the dashboard's src with a `<style>`, repo-relative. */
-function styled(): string[] {
-  const out: string[] = [];
+/** Every `.svelte` under the dashboard's src with a `<style>`, repo-relative, with its source. */
+function styled(): Map<string, string> {
+  const out = new Map<string, string>();
   const walkDir = (dir: string) => {
     for (const entry of readdirSync(dir)) {
       if (entry === "node_modules") {
@@ -458,16 +462,52 @@ function styled(): string[] {
       const path = join(dir, entry);
       if (statSync(path).isDirectory()) {
         walkDir(path);
-      } else if (
-        entry.endsWith(".svelte") &&
-        readFileSync(path, "utf8").includes("<style")
-      ) {
-        out.push(relative(ROOT, path));
+      } else if (entry.endsWith(".svelte")) {
+        const source = readFileSync(path, "utf8");
+        if (source.includes("<style")) {
+          out.set(relative(ROOT, path), source);
+        }
       }
     }
   };
   walkDir(join(ROOT, "apps", "dashboard", "src"));
-  return out.sort();
+  return new Map([...out].sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/** Git's answer in the checkout; a thrown error with its own words. */
+const gitSays = (args: string[]): string => {
+  const run = Bun.spawnSync(["git", ...args], { cwd: ROOT });
+  if (run.exitCode !== 0) {
+    throw new Error(
+      `git ${args.join(" ")} exited ${run.exitCode}: ${run.stderr.toString().trim()}`
+    );
+  }
+  return run.stdout.toString();
+};
+
+/**
+ * {@link styled} as it stood at `ref` (a git revision): the files a tree
+ * that has since converted them must still render, each with its source
+ * there (`--styled-at=`, the base of record for the converted tree).
+ */
+function styledAt(ref: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const listed = gitSays([
+    "grep",
+    "-l",
+    "<style",
+    ref,
+    "--",
+    "apps/dashboard/src/**/*.svelte",
+  ])
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.slice(ref.length + 1))
+    .sort((a, b) => a.localeCompare(b));
+  for (const path of listed) {
+    out.set(path, gitSays(["show", `${ref}:${path}`]));
+  }
+  return out;
 }
 
 /** What coverage asks of the Svelte compiler: one file compiled, its CSS. */
@@ -493,16 +533,18 @@ const SCOPE_MARK = "svelte-coverage-scope";
  * scoping class, a scoped rule carries it and a `:global` one does not, and
  * a selector nothing in the template can match is gone (`css_unused_selector`).
  */
-async function scopedFiles(files: string[]): Promise<Set<string>> {
+async function scopedFiles(
+  sources: Map<string, string>
+): Promise<Set<string>> {
   const { compile } = (await import(
     createRequire(join(ROOT, "apps", "dashboard", "package.json")).resolve(
       "svelte/compiler"
     )
   )) as SvelteCompiler;
   return new Set(
-    files.filter((file) => {
+    [...sources.keys()].filter((file) => {
       const path = join(ROOT, file);
-      const { css } = compile(readFileSync(path, "utf8"), {
+      const { css } = compile(sources.get(file) ?? "", {
         filename: path,
         css: "external",
         cssHash: () => SCOPE_MARK,
@@ -596,8 +638,17 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
   );
   const map: Record<string, string[]> = {};
   const uncovered: string[] = [];
-  const files = styled();
-  const scoped = await scopedFiles(files);
+  const at = flag("styled-at");
+  const sources = at ? styledAt(at) : styled();
+  // A file gone from this tree since `at` is no file it renders.
+  const gone = [...sources.keys()].filter(
+    (file) => !existsSync(join(ROOT, file))
+  );
+  for (const file of gone) {
+    sources.delete(file);
+  }
+  const files = [...sources.keys()];
+  const scoped = await scopedFiles(sources);
   for (const file of files) {
     // Rendered through a child alone, a file proves only its unscoped rules:
     // a scoped one matches its own elements, none of which stood there.
@@ -610,8 +661,13 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
   }
   await writeFile(COVERAGE, `${JSON.stringify(map, null, 2)}\n`);
   kit.note(
-    `coverage: ${files.length - uncovered.length} of ${files.length} files with a <style> are rendered by a surface (${relative(ROOT, COVERAGE)})`
+    `coverage: ${files.length - uncovered.length} of ${files.length} files with a <style>${at ? ` at ${at}` : ""} are rendered by a surface (${relative(ROOT, COVERAGE)})`
   );
+  if (gone.length > 0) {
+    console.log(
+      `  gone from this tree since ${at} (${gone.length}):\n    ${gone.join("\n    ")}`
+    );
+  }
   if (uncovered.length > 0) {
     console.log(
       `  rendered by no surface (${uncovered.length}):\n    ${uncovered.join("\n    ")}`
