@@ -117,7 +117,7 @@
         <Input
           aria-label={flow.prompt.message}
           autocomplete="off"
-          class="h-[30px]"
+          class="h-(--c-btn-h-sm)"
           disabled={flow.phase === "answering"}
           onkeydown={(event) => {
             if (event.key === "Enter") {
@@ -153,7 +153,7 @@
       <Input
         aria-label={accountsWords.signin.codeLabel}
         autocomplete="off"
-        class="h-[30px]"
+        class="h-(--c-btn-h-sm)"
         disabled={flow.phase === "checking"}
         onkeydown={(event) => {
           if (event.key === "Enter") {
