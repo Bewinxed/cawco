@@ -1,0 +1,12 @@
+diff --git a/package.json b/package.json
+index 8d650ff..398cd14 100644
+--- a/package.json
++++ b/package.json
+@@ -15,6 +15,7 @@
+     "!dist/**/*.spec.*"
+   ],
+   "peerDependencies": {
++    "bits-ui": "^2.0.0",
+     "svelte": "^5.0.0"
+   },
+   "devDependencies": {

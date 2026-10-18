@@ -8,5 +8,10 @@
 # A store package's own undeclared import is declared in the root package.json,
 # the one node_modules above the store, until bun ships packageExtensions
 # (oven-sh/bun#40053): bits-ui for vaul-svelte (huntabyte/vaul-svelte#130).
+# Inside a CawCo workspace bun's global store is on (its workspace bunfig), and
+# a package there realpaths into the cache, with no node_modules of ours above
+# it. So vaul-svelte is patched (patches/), which keeps it in this project's
+# store: "Entries fall back to a per-project node_modules/.bun/ directory when
+# the package has a patch applied" (https://bun.com/docs/pm/global-store).
 [install]
 hoist = false

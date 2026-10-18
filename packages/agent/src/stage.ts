@@ -465,7 +465,7 @@ function stageFor(
     throw new StageRefusal(
       tree.folder === tree.ref.path
         ? missing
-        : `${missing} The stage runs in a clone of your checkout, ${root}, whose dependencies install as a delegate's clone's do: linked from a bun lockfile.`
+        : `${missing} The stage runs in a clone of your checkout, ${root}, whose dependencies install inside its own boundary from the checkout's lockfile.`
     );
   }
   // Every stage runs on the agent's own bun, whatever the lockfile: Vite's

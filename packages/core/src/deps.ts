@@ -1,11 +1,11 @@
 /**
  * A checkout's JavaScript dependencies, installed from its root lockfile:
- * what a workspace's cut finishes inside its boundary after the agent seeded
- * it (agent seed-deps.ts `finishInstall`, stage-clone.ts) and what the
- * repository's own scripts load before they import anything a dependency
- * provides (scripts/lib/deps.ts). The landing gate installs nothing of its
- * own: a project declares its install as a step of its gate (hub
- * gate-file.ts).
+ * what a place's stage clone installs inside its boundary (agent
+ * stage-clone.ts `installInside`) and what the repository's own scripts load
+ * before they import anything a dependency provides (scripts/lib/deps.ts). A
+ * workspace's cut installs nothing: its delegate runs its project's install.
+ * The landing gate installs nothing of its own: a project declares its
+ * install as a step of its gate (hub gate-file.ts).
  *
  * This module imports nothing, so scripts/lib/deps.ts loads it in a checkout
  * with no dependencies.

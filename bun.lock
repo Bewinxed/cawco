@@ -279,6 +279,9 @@
   "trustedDependencies": [
     "socket-activation",
   ],
+  "patchedDependencies": {
+    "vaul-svelte@1.0.0-next.7": "patches/vaul-svelte@1.0.0-next.7.patch",
+  },
   "overrides": {
     "@types/bun": "^1.4.3",
     "oniguruma-to-es": "^4.3.6",

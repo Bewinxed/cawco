@@ -78,10 +78,11 @@ import {
   rm,
   stat,
   symlink,
+  writeFile,
 } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { invariant, WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { atMost } from "@cawco/core/at-most";
@@ -4397,8 +4398,69 @@ const makeDirs = async (id: string): Promise<void> => {
     ].map((path) => mkdir(path, { recursive: true }))
   );
   await linkGitConfig(xdg.config);
+  await writeBunConfig(id, xdg.config);
   // Its `TMPDIR`'s short name on macOS, made again after a restart cleared it.
   linkWorkspaceTmp(id);
+};
+
+/** The global bunfig {@link writeBunConfig} writes: bun's global virtual store on. */
+const BUN_GLOBAL_STORE = `# CawCo: bun's global virtual store, so this workspace's installs link from the
+# workspaces' cache. A project's own bunfig.toml overrides it (globalStore = false).
+[install]
+globalStore = true
+`;
+
+/**
+ * Linux: `<config home>/.bunfig.toml`, the global bunfig of every bun the
+ * workspace runs (its `XDG_CONFIG_HOME`, `workspaceXdgEnv`), turning bun's
+ * global virtual store on. Inside a boundary the clone and the workspaces'
+ * bun cache are each a bind mount of their own, and link(2) refuses across
+ * mount points (link(2), EXDEV: "link() does not work across different mount
+ * points, even if the same filesystem is mounted on both"), so bun's
+ * hardlink backend copied every package into each clone: 2.0 GB in every
+ * cockpit clone (2026-10-16). With the store, bun makes each package once in
+ * `<cache>/links/`, inside the cache's own mount, and a clone's
+ * `node_modules` is symlinks into it (bun.com/docs/pm/global-store: "Package
+ * files live in one shared cache; each project's node_modules is a thin tree
+ * of symlinks into it"): 5.9 MB a cockpit clone, 2026-10-18. Only the
+ * isolated linker uses it ("the hoisted linker does not use it"); a hoisted
+ * install copies as before. A global bunfig, and never the env's
+ * `BUN_INSTALL_GLOBAL_STORE`, which bun reads after every bunfig: a project
+ * whose packages import what they never declare (they no longer reach its
+ * root `node_modules` from the store) says `globalStore = false` in its own
+ * (bun.com/docs/runtime/bunfig: "keys set in the local file override the
+ * same keys in the global file"). Written only as a new file in a config
+ * home that is a folder of the scratch dir's own (the workspace writes the
+ * scratch dir, and a link it planted there is never followed); one there
+ * already is the workspace's to keep. On macOS bun clones files inside its
+ * boundary already: Seatbelt makes no mounts.
+ */
+const writeBunConfig = async (
+  id: string,
+  configHome: string
+): Promise<void> => {
+  if (process.platform !== "linux") {
+    return;
+  }
+  const own = join(
+    await realpath(scratchOf(id)),
+    relative(scratchOf(id), configHome)
+  );
+  if ((await realpath(configHome)) !== own) {
+    console.warn(
+      `[workspace] ${id}: its config home ${configHome} leads elsewhere through a link, so no bunfig was written there: its bun installs copy from the workspaces' cache`
+    );
+    return;
+  }
+  try {
+    await writeFile(join(configHome, ".bunfig.toml"), BUN_GLOBAL_STORE, {
+      flag: "wx",
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+  }
 };
 
 /**
@@ -4448,9 +4510,8 @@ const linkedFiles = async (
  * host's bun cache shares inodes with it and every host tree installed from
  * it, and a write inside the clone would change a file the host runs. A file
  * linked to the workspaces' own bun cache (`workspaceCacheEnv`) stays linked:
- * the cut links each clone's dependencies there (seed-deps.ts), every
- * workspace writes that cache already, and no host tree is installed from
- * it. It copies and renames files in place, so it runs only before a
+ * every workspace writes that cache already, and no host tree is installed
+ * from it. It copies and renames files in place, so it runs only before a
  * boundary starts with no sandbox of the workspace running (its first start,
  * a start after a reboot, a replacement once the one before is stopped),
  * never beside an older generation still running in the clone at a handover

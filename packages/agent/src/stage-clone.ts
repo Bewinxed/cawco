@@ -14,10 +14,9 @@
  *
  * - cut once ({@link cut}), at the checkout's HEAD (that one commit, fetched
  *   from the checkout) with its uncommitted changes and its own secret files,
- *   its dependencies linked from the workspaces' cache and installed inside
- *   its own boundary (seed-deps.ts), under a workspace id of its own
- *   ({@link stageCloneId}), never a place's: its `node_modules` are its own
- *   to write;
+ *   its dependencies installed inside its own boundary ({@link installInside}),
+ *   under a workspace id of its own ({@link stageCloneId}), never a place's:
+ *   its `node_modules` are its own to write;
  * - kept in step with the checkout ({@link syncStageClone}): a new HEAD
  *   fetched and checked out, then every path the checkout's `git status`
  *   names, and every one it named the time before, made in the clone as it
@@ -49,17 +48,21 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-import { LOCKFILES, type WorkspaceRef } from "@cawco/core";
+import { depsScript, LOCKFILES, type WorkspaceRef } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { workspaceStateDir } from "@cawco/core/paths";
-import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import {
+  SAFE_GIT_ENV,
+  SAFE_GIT_SHELL,
+  safeGitArgv,
+} from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { STAGE_CLONE_GIT_MS } from "@cawco/core/stage";
+import { STAGE_CLONE_GIT_MS, STAGE_CLONE_INSTALL_MS } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { cloneDenies } from "@cawco/core/workspace-policy";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
 import { expandHome } from "./fs";
-import { finishInstall, seedDependencies } from "./seed-deps";
+import { runWorkflowCommand } from "./workflow-command";
 import { copyOwnSecrets, gitUntil } from "./workspace";
 
 /** How often a serving place stage's clone is brought in step with its checkout. Ours: an edit shows within a second, for one `git status` (20 ms on cockpit). */
@@ -395,10 +398,32 @@ const mirror = async (
 };
 
 /**
+ * The clone's dependencies installed inside its own boundary from its
+ * lockfile (core `depsScript`, which installs only when they were not
+ * installed from the lockfile and manifests as they stand), where its bun
+ * links from the workspaces' cache (boundary.ts `writeBunConfig`): the stage
+ * runs the project's own toolchain from them. One that fails is logged, and
+ * its next install there runs it again; the stage then says what it could
+ * not load (stage.ts `notInstalled`).
+ */
+const installInside = async (boundary: WorkspaceRef): Promise<void> => {
+  const result = await runWorkflowCommand(
+    boundary.path,
+    `${SAFE_GIT_SHELL}${depsScript()}`,
+    STAGE_CLONE_INSTALL_MS,
+    boundary
+  );
+  if (result.exitCode !== 0) {
+    console.warn(
+      `[stage] ${boundary.id}: its clone's install inside its boundary failed (exit ${result.exitCode}: ${(result.stderr || result.stdout).trim().split("\n").slice(-3).join(" ")})`
+    );
+  }
+};
+
+/**
  * A whole clone brought in step ({@link mirror}), its record kept when
  * anything moved; a package manifest or lockfile among what changed
- * installs again inside its boundary (core `depsScript`, which installs
- * only when they changed). The paths it changed.
+ * installs again ({@link installInside}). The paths it changed.
  */
 const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
   const { changed, kept: now } = await mirror(boundary, kept);
@@ -409,7 +434,7 @@ const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
     await keep(boundary.id, now);
   }
   if (manifests(changed).length > 0) {
-    await finishInstall(boundary);
+    await installInside(boundary);
   }
   return changed;
 };
@@ -418,10 +443,9 @@ const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
  * Cuts place `place`'s stage clone at `path` from the checkout at `repo`
  * (both real paths): `git init`, the checkout's HEAD fetched and checked out
  * ({@link atHead}), its uncommitted changes mirrored, its own secret files
- * copied (workspace.ts `copyOwnSecrets`), its dependencies linked on this
- * host (seed-deps.ts) before its boundary starts and installed inside it,
- * as a delegate's are. A cut that fails is cut again whole at the next
- * use, and says why.
+ * copied (workspace.ts `copyOwnSecrets`), its boundary started and its
+ * dependencies installed inside it ({@link installInside}). A cut that fails
+ * is cut again whole at the next use, and says why.
  */
 const cut = async (
   boundary: WorkspaceRef,
@@ -453,13 +477,8 @@ const cut = async (
     await atHead(boundary.path, repo);
     const { kept } = await mirror(boundary, { repo, head, mirrored: [] });
     await copyOwnSecrets(repo, boundary.path, git);
-    // As a delegate's cut installs (workspace.ts `createWorkspace`): before
-    // the boundary, since inside it bun copies every file (seed-deps.ts).
-    const seeded = await seedDependencies(boundary.id, boundary.path);
     await ensureBoundary(boundary);
-    if (seeded) {
-      await finishInstall(boundary);
-    }
+    await installInside(boundary);
     await keep(boundary.id, kept);
     console.info(
       `[stage] ${place.id}: its stage clone ${boundary.path} cut from ${repo} at ${kept.head.slice(0, 9)} with ${kept.mirrored.length} uncommitted path(s), in ${((Date.now() - started) / 1000).toFixed(1)}s`
