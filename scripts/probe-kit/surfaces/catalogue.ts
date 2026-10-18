@@ -1563,10 +1563,14 @@ export const SURFACES: Surface[] = [
     states: [{ name: "rest", root: "body" }],
   },
   {
-    // Suggest while typing on: words for the task the session's skill is made for, and its chip.
+    // Suggest while typing on: words for the task the machine's skill is made
+    // for, and its chip. On a session that never ran the skill: the composer
+    // suggests from what the session lists (its init's `slash_commands`), and
+    // the skill session's later init lists `tray-check` no longer (its
+    // `skills` still do), so the hub was asked about 27 skills and none of them.
     name: "suggesting",
     serve: "built",
-    route: (s) => `/session/${s.skillRun}`,
+    route: (s) => `/session/${s.think}`,
     states: [
       {
         name: "chip",
