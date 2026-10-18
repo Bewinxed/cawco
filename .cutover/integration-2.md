@@ -351,3 +351,27 @@ What stays a custom property is either a constant, which costs nothing while mou
   Inserted from the reach on, here in every run: 1a 475, 1b 1229, 2a 1, 2b 1, 2c 65, 2d 101. Main's runs are the same except 1a, which inserted 535 in p1 and p3 and 475 in p2. The same three turns had streamed; one more chunk of the listing landed inside main's window.
 - inline-restyle (580982756), the same three pairs, elements restyled per change (medians, main → here): the window to 820/900/740/900px 24/24/30/30 → 14/14/17/17; the card to the long title's tab 1860 → 1571, back 1915 → 1734; the project offer arriving 1680 → 1472, put off 152 → 95. Each change wrote its element's inline style the same number of times in both trees (1, or 2 for the card's first move).
 - Gates: `bun run lint` exit 0. `bun run typecheck`: `svelte-check: 620 files, 0 errors, 0 warnings`; only `packages/hub openapi:check` fails, main's. vite build `✔ done`.
+
+## Phase 2 (integration-2 brief, 2026-10-18)
+
+### Tools fixed on both trees (base of record first, then here)
+- Probe kit: a spec that fails keeps its fleet's evidence in its output folder, `fleet-on-failure/` (hub log, every agent's log, every session's transcript, work items, artifacts, the Claude projects' JSONL), named on the FAIL line. Proved with a spec made to fail.
+- hub tape: a command's `provenance.presenceId` is masked as the page's own id (presence.ts `presenceClientId`, minted per tab in its sessionStorage). catch-up/switch's approve had never matched its recorded frame, so the walk read a page with no turn behind the tab.
+- scene: the sheet's card is pushed to origin. A delegate's clone starts at origin's branch (agent clone.ts `prepareClone`), so the unpushed card never reached it and its `artifact_create` was refused.
+- surfaces: jump/peek presses its arrows once Finder's `searching` mark is gone. Rows that arrived after the arrow moved the list and shut the peek.
+
+### Step 1: catch-up/switch on the walk's clock
+Three consecutive walks on host tape 1 (approve, compare, compare): `catch-up: 3 reads, 348 elements`, `PASS style-snapshot: 0 differences` twice. "Catching up…" is in the read: CatchUp's 116×35 pill with its 6×6 `.beat`, on the transcript's dock, in all three passes.
+
+### Step 3: the host's tapes
+Main, host record 2 at 5e658993b: `19847 HTTP exchanges, 66 on previews' origins, 479 sockets`, no "did not open". Sheet, at 6886fa857: `8 HTTP exchanges, 60 on previews' origins, 6 sockets`. Both are committed identically on both trees.
+
+### Main's commits carried now (both trees)
+- 412633f81: Row's script is byte-identical to main's. Its markup keeps the converted form, less `data-drawn={drawn || undefined}`. Transcript's rule is on its converted residual form, `[data-slot="listing"] :global([data-item][data-drawn])`.
+- 6bd0b6d97: carried unchanged (its +/− lines equal main's).
+
+### Step 10's lane records
+The eleven patches (S01, S04, S07, S08, S10, S11, S13, S16, S22, S24, O7-kit) applied cleanly to `.cutover/lanes/` only: 123 lines added, none removed.
+
+### Step 4: how long a walk takes
+57 surfaces, 176 states, about 1,164 state-passes. At PROBE_PARALLEL=2, about 28 s per state-pass per worker: about 4.5 h per full walk. A run in a background task is stopped at 2 h, so each full walk runs detached.
