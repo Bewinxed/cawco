@@ -617,7 +617,7 @@
   }
   .steps li span {
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     white-space: nowrap;
     text-overflow: ellipsis;
   }

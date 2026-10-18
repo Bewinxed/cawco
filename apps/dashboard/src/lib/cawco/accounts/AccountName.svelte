@@ -53,7 +53,7 @@
   }
   b,
   small {
-    overflow: hidden;
+    overflow: clip;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
