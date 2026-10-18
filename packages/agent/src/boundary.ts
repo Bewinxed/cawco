@@ -166,6 +166,7 @@ import {
 } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
+import { closeWorkspaceBrowsers, ensureGateToken } from "./browser/gate";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { cawcoCommand } from "./git-credential";
@@ -2107,6 +2108,9 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
     throw refusal(ref.id, nested);
   }
   await placeReady(ref);
+  // Its door to the project's browser (browser/gate.ts), minted once and
+  // kept in its state dir for the workspace's life.
+  await ensureGateToken(ref.id);
   // Asked before the keeper is: the endpoint only ever moves on to this
   // build's keeper, so a keeper dialled after "not owed" is this build's.
   const owed = await ownKeeperOwed();
@@ -2354,6 +2358,24 @@ const LAUNCHD_SOCKETS = "/private/tmp";
 const SIMULATOR_SOCKETS = "/private/var/tmp";
 
 /**
+ * Where a Mac's container runtimes keep their sockets (browser/runtime.ts
+ * looks in each): Docker's system socket (its link and the file it names
+ * both resolve past `/var/run`, which no policy denies on macOS) and the
+ * user's Docker Desktop, OrbStack, Colima, Rancher Desktop and Podman
+ * machine dirs, all under home, denied by the policy already and named here
+ * so a policy's allow under home never reopens one.
+ */
+const CONTAINER_SOCKETS = [
+  "/var/run/docker.sock",
+  "/private/var/run/docker.sock",
+  join(homedir(), ".docker", "run"),
+  join(homedir(), ".orbstack", "run"),
+  join(homedir(), ".colima"),
+  join(homedir(), ".rd"),
+  join(homedir(), ".local", "share", "containers"),
+];
+
+/**
  * A host socket in {@link LAUNCHD_SOCKETS} or {@link SIMULATOR_SOCKETS}
  * a workspace connects to, as a Seatbelt regex over its whole path: a booted
  * simulator's testmanagerd, which `xcodebuild test-without-building` dials to
@@ -2501,18 +2523,26 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         githubDoorOf(id),
         workspaceTmpDir(id),
       ],
-      hostSockets: await Promise.all(
-        [
-          dirname(workspacesDir()),
-          dirname(sessiondPath()),
-          LAUNCHD_SOCKETS,
-          SIMULATOR_SOCKETS,
-          // The per-user temp and cache dirs: a workspace writes them for
-          // Apple's build tools, and every host app keeps its sockets there
-          // (VS Code's git askpass, browsers' singletons, srt's proxies).
-          ...(await darwinUserDirs()),
-        ].map((path) => realpath(path).catch(() => path))
-      ),
+      hostSockets: [
+        ...(await Promise.all(
+          [
+            dirname(workspacesDir()),
+            dirname(sessiondPath()),
+            LAUNCHD_SOCKETS,
+            SIMULATOR_SOCKETS,
+            // The container runtimes' sockets, the browsers' among them: a
+            // command that reached one would run a container of its own
+            // beside a project's browser, or into it. Each by the path a
+            // runtime is dialled at as well as by the file it names.
+            ...CONTAINER_SOCKETS,
+            // The per-user temp and cache dirs: a workspace writes them for
+            // Apple's build tools, and every host app keeps its sockets there
+            // (VS Code's git askpass, browsers' singletons, srt's proxies).
+            ...(await darwinUserDirs()),
+          ].map((path) => realpath(path).catch(() => path))
+        )),
+        ...CONTAINER_SOCKETS,
+      ],
       reachedHostSockets: [TEST_MANAGER_SOCKET, REMOTE_AUTOMATION_SOCKET],
     });
     const file = join(generationDir(id, gen), "boundary.sb");
@@ -5067,7 +5097,8 @@ const signalHeld = async (
  * Kills the workspace's boundaries, the current one and every older one
  * still beside it, with every process in them ({@link stopBoundary}), and any
  * other boundary process of the workspace; on macOS everything carrying the
- * workspace's marker. Stops serving its doors. What still uses it from
+ * workspace's marker. Stops serving its doors, and closes its pages in its
+ * project's browser with its sessions' connections there. What still uses it from
  * outside the boundary ends too: a session's CLI in its clone, an executor
  * on its way in ({@link endUsers}). Its record goes (`boundary.json`, each
  * older one's), so its executor says the boundary is not running and a
@@ -5156,6 +5187,9 @@ const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
   await closeToolDoor(ref.id);
   await closeGitDoor(ref.id);
   await closeGithubDoor(ref.id);
+  // Its sessions' connections to the project's browser cut, and its pages
+  // there closed (browser/gate.ts).
+  await closeWorkspaceBrowsers(ref.id);
   const held = await readHeld(ref.id).catch(() => undefined);
   const boundaries = [...(held ? [held] : []), ...(await readRetiring(ref.id))];
   const inners: number[] = [];

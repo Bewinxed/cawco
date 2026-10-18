@@ -11,7 +11,18 @@ import type {
   FilesystemPathEntry,
   SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
+import { BROWSER_PORTS } from "@cawco/core/browser";
 import type { Policy } from "@cawco/core/workspace-judge";
+
+/**
+ * Every port of {@link BROWSER_PORTS}: the browsers' neko, DevTools, gate and
+ * media ports, which no command of a workspace dials on this machine.
+ */
+const browserPorts = (): number[] =>
+  Array.from(
+    { length: BROWSER_PORTS.last - BROWSER_PORTS.first + 1 },
+    (_, at) => BROWSER_PORTS.first + at
+  );
 
 const within = (path: string, root: string): boolean =>
   root === "/" || path === root || path.startsWith(`${root}/`);
@@ -73,6 +84,11 @@ export interface SrtPlace {
  * - `allowGitConfig`, with the clone's own `.git/config` denied by name in the
  *   policy: srt's built-in `**\/.git/config` deny would refuse every repository
  *   a command clones inside the workspace (REPORT.md §5g).
+ *
+ * The browsers' ports ({@link BROWSER_PORTS}) need nothing here: `127.0.0.1`
+ * inside the sandbox is its own network namespace's, and its proxy refuses
+ * loopback; the container runtimes' sockets are under the denied home dir and
+ * `/run` (workspace-policy.ts `LINUX_HOST_PRIVATE`).
  * - A write deny reaches srt only where the policy allows writes: everywhere
  *   else writes are refused anyway, and srt would make a mount point for each
  *   that does not exist yet.
@@ -192,7 +208,13 @@ export interface SeatbeltPlace {
  * are reached, each by its whole path. Allows come after denies, as srt writes its `allowUnixSockets`
  * (`(allow network-outbound (remote unix-socket (subpath …)))`,
  * macos-sandbox-utils.ts). The network is the host's: Seatbelt cannot judge a
- * destination by the name it resolves.
+ * destination by the name it resolves. Of it, every port of the browsers
+ * ({@link BROWSER_PORTS}) is refused on this machine's loopback: a project's
+ * Chromium answers its DevTools port to anyone who reaches it, and agents
+ * reach a browser through its gate alone, from outside every boundary.
+ * Seatbelt filters loopback by port only ("The only valid input for IP is
+ * localhost or *, meaning that you can only filter by port", Apple's
+ * Sandbox Guide), so it is one rule per port.
  */
 export const seatbeltProfile = (
   policy: Policy,
@@ -266,6 +288,9 @@ export const seatbeltProfile = (
     ...place.reachedHostSockets.map(
       (pattern) =>
         `(allow network-outbound (remote unix-socket (path-regex #"${pattern}")))`
+    ),
+    ...browserPorts().map(
+      (port) => `(deny network-outbound (remote ip "localhost:${port}"))`
     ),
     "",
   ].join("\n");

@@ -8,6 +8,12 @@
  * viewer, its profile kept, and wakes on the next need. The daemon tells the
  * hub the whole list on each change ({@link BrowserFrame}); `cawco browser`
  * acts on the same records from a terminal.
+ *
+ * The daemon serves each browser's DevTools gate (gate.ts) on the browser's
+ * gate port, for every browser it keeps a record of, asleep ones too: a
+ * session's browser tool connecting wakes its browser, and holds it awake
+ * while connected. A browser `cawco browser` started gets its gate at the
+ * daemon's next tick.
  */
 import type {
   BrowserFrame,
@@ -19,6 +25,7 @@ import type {
 } from "@cawco/core/browser";
 import { isBrowserKey } from "@cawco/core/browser";
 import { ContainerHost, RELAY_RENEW_MS } from "./container-host";
+import { gateOf, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
 import { findRuntime, type Runtime } from "./runtime";
 import {
@@ -141,6 +148,74 @@ const told = (): void => {
 const why = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/** Whether this process serves the gates: the daemon's, never a terminal's. */
+let servingGates = false;
+/** Why a gate did not listen, by key, said once until it does. */
+const gateFailed = new Map<BrowserKey, string>();
+
+/** Writes `key`'s last use as now: a gate connection opened or closed. */
+const used = (key: BrowserKey): void => {
+  withBrowser(key, async () => {
+    const record = await readBrowser(key);
+    if (record) {
+      await writeBrowser({ ...record, lastUsedAt: Date.now() });
+    }
+  })
+    .then(told)
+    .catch((error: unknown) =>
+      console.warn(`[browser] ${key}'s last use was not kept: ${why(error)}`)
+    );
+};
+
+/**
+ * `key`'s DevTools address as its host gives it: with `wake`, the browser
+ * started or woken first (as the hub's start would, keeping the container's
+ * relay); without, only while it runs.
+ */
+const devtoolsOf = async (
+  key: BrowserKey,
+  wake: boolean
+): Promise<string | undefined> => {
+  if (wake) {
+    await startBrowser({ key });
+  }
+  const record = await readBrowser(key);
+  if (record?.state !== "live") {
+    return;
+  }
+  const host = await hostOf(record);
+  return host && (await host.running(record))
+    ? host.devtoolsUrl(record)
+    : undefined;
+};
+
+/** Serves `record`'s gate on its gate port, when this process serves gates. */
+const gateFor = (record: BrowserRecord): void => {
+  if (!servingGates) {
+    return;
+  }
+  const { key } = record;
+  const port = portsOf(record).gate;
+  try {
+    serveGate({
+      key,
+      port,
+      machineId: () => machineId,
+      devtools: (wake) => devtoolsOf(key, wake),
+      used: () => used(key),
+    });
+    gateFailed.delete(key);
+  } catch (error) {
+    const said = why(error);
+    if (gateFailed.get(key) !== said) {
+      gateFailed.set(key, said);
+      console.warn(
+        `[browser] ${key}'s gate does not listen on 127.0.0.1:${port}: ${said}`
+      );
+    }
+  }
+};
+
 /** Stops `record` on the host it ran on, when that host is still here. */
 const stopOn = async (record: BrowserRecord): Promise<void> => {
   await (await hostOf(record))?.stop(record);
@@ -190,6 +265,7 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
       record = { ...live, state: "live", lastUsedAt: Date.now() };
       await writeBrowser(record);
       console.info(`[browser] ${key} live on the ${host.kind} host`);
+      gateFor(record);
       starting.delete(key);
       return rowOf(record);
     } catch (error) {
@@ -264,6 +340,7 @@ export const removeBrowser = async (key: BrowserKey): Promise<void> => {
       await host?.remove(record);
     }
   });
+  stopGate(key);
   await forgetBrowser(key);
   console.info(`[browser] ${key} removed`);
   told();
@@ -296,11 +373,18 @@ const readBack = async (): Promise<void> => {
   }
 };
 
-/** Stops the browsers nobody has used for {@link BROWSER_IDLE_MS}, and those whose relay credential runs out. */
+/**
+ * Stops the browsers nobody has used for {@link BROWSER_IDLE_MS}, and those
+ * whose relay credential runs out; never one an agent is connected to.
+ */
 const idleDown = async (): Promise<void> => {
   const now = Date.now();
   for (const record of await allBrowsers()) {
-    if (record.state !== "live" || record.takeover) {
+    if (
+      record.state !== "live" ||
+      record.takeover ||
+      gateOf(record.key)?.held
+    ) {
       continue;
     }
     const idle = now - record.lastUsedAt > BROWSER_IDLE_MS;
@@ -319,7 +403,7 @@ const idleDown = async (): Promise<void> => {
   }
 };
 
-/** One tick: the runtime again when due, the records against their hosts, the idle ones down, and the frame. */
+/** One tick: the runtime again when due, every browser's gate, the records against their hosts, the idle ones down, and the frame. */
 const tick = async (): Promise<void> => {
   const records = await allBrowsers();
   if (
@@ -328,13 +412,17 @@ const tick = async (): Promise<void> => {
   ) {
     await browserRuntime(true);
   }
+  for (const record of records) {
+    gateFor(record);
+  }
   await readBack();
   await idleDown();
   await tell();
 };
 
-/** The daemon's part: the runtime and the records read as it starts, then a tick every minute. */
+/** The daemon's part: the runtime and the records read as it starts, every gate served, then a tick every minute. */
 export const watchBrowsers = async (): Promise<void> => {
+  servingGates = true;
   const found = await browserRuntime(true);
   console.info(
     "missing" in found
