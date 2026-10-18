@@ -368,8 +368,10 @@
     transition: height var(--dur-pop) var(--ease-drawer);
   }
 }
+/* Its floating wrapper glides with it, marked while the surface morphs
+   (NsPopoverGroup `data-ns-morph`). */
 @media (prefers-reduced-motion: no-preference) {
-  [data-bits-floating-content-wrapper]:has(> .ns-pop[data-morph]) {
+  [data-bits-floating-content-wrapper][data-ns-morph] {
     transition: transform var(--dur-pop) var(--ease-drawer);
   }
 }

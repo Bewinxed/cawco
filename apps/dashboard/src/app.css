@@ -1476,8 +1476,9 @@
      cut at the card's top edge, the anchor's foot, with room for the whole
      overlay shadow past the others. It never moves, so the card's slide is
      all the compositor has to play. In CSS, not the wrapper's own style,
-     which bits-ui writes whole on every placement. */
-  [data-bits-floating-content-wrapper]:has(> .kit-pop.kit-hang) {
+     which bits-ui writes whole on every placement; HangCard marks the
+     wrapper it draws (`data-hang`). */
+  [data-bits-floating-content-wrapper][data-hang] {
     clip-path: inset(0 -120px -120px);
   }
   /* Open and close are the card's own (`hang`): the kit's rise, scale and
@@ -1773,9 +1774,9 @@
      after a drawer closed on a phone, and the next tap was lost. While a
      drawer is closing the body takes presses again. Every other modal
      layer that could be open meanwhile has its own scrim over the page, and
-     a menu still closes on a press outside it. The drawer is portalled
-     straight into <body>, so the test reads only the body's children. */
-  body:has(> [data-slot="drawer-content"][data-state="closed"]) {
+     a menu still closes on a press outside it. The closing drawer says so
+     on the body (ui/drawer/drawer-content, page-marks). */
+  body[data-drawer~="closed"] {
     pointer-events: auto !important;
   }
 

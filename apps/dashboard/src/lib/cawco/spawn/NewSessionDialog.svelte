@@ -21,6 +21,7 @@
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { mirror } from "#lib/cawco/page-marks.js";
   import {
     Alert,
     AlertDescription,
@@ -192,6 +193,23 @@
   });
   const mobile = new MediaQuery("(max-width: 640px)");
   let card = $state<HTMLElement | null>(null);
+  // The phone's sheet (the kit drawer's) says on the body that it is up, for
+  // its scrim's exit (the styles below).
+  $effect(() => {
+    if (card) {
+      return mirror(
+        card,
+        "body",
+        "data-session-sheet",
+        ["data-vaul-drawer", "class"],
+        (sheet) =>
+          sheet.hasAttribute("data-vaul-drawer") &&
+          sheet.classList.contains("session-card")
+            ? ["up"]
+            : []
+      );
+    }
+  });
   /**
    * The card tweens to its new height when its body changes, as every dialog
    * does (DESIGN.md, Dialog; ui/dialog's content): it renders its own
@@ -2398,12 +2416,8 @@
     /* The sheet leaves as the dialog does: --dur-exit on --ease-out, with
        its scrim, instead of vaul's 500ms slide. */
     :global(.session-card[data-vaul-drawer][data-state="closed"]),
-    /* The sheet is portalled straight into <body>: asked of the body's own
-       children, so a change anywhere in the page is not a search of it. */
-    :global(
-      body:has(> .session-card[data-vaul-drawer])
-        [data-vaul-overlay][data-state="closed"]
-    ) {
+    /* The sheet says it is up on the body (`data-session-sheet`, page-marks). */
+    :global(body[data-session-sheet] [data-vaul-overlay][data-state="closed"]) {
       animation-duration: var(--dur-exit);
       animation-timing-function: var(--ease-out);
     }

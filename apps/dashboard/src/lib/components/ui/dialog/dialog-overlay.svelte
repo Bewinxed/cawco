@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Dialog as DialogPrimitive } from "bits-ui";
+  import { scrimMark } from "#lib/cawco/page-marks.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
@@ -10,7 +11,8 @@
   }: WithoutChildrenOrChild<DialogPrimitive.OverlayProps> = $props();
 </script>
 
-<!-- A scrim fading out lets presses through to the page (floating-presence). -->
+<!-- A scrim fading out lets presses through to the page (floating-presence);
+     open or closing, it is said on the root for the screen's edges (page-marks). -->
 <DialogPrimitive.Overlay
   class={cn("kit-scrim fixed inset-0 isolate z-50", className)}
   data-slot="dialog-overlay"
@@ -18,6 +20,10 @@
   {...restProps}
 >
   {#snippet child({ props, open })}
-    <div {...props} style:pointer-events={pressable(open)}></div>
+    <div
+      {...props}
+      style:pointer-events={pressable(open)}
+      {@attach scrimMark}
+    ></div>
   {/snippet}
 </DialogPrimitive.Overlay>
