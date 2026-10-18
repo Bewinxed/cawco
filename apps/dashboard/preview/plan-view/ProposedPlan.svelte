@@ -93,13 +93,25 @@
     return state === "todo" ? "todo" : "doing";
   };
 
-  /** The mark's place, which the rails hang from. */
+  /**
+   * The mark's 18px cell: every rail hangs from it and every list is
+   * measured off it, so each level steps in by one --tree-step, whatever
+   * its first row draws.
+   */
   const MARK = ".pv-mark";
   /**
-   * What is drawn in it, which each arm ends on: the dot, the tick or the
-   * delegate's tile, so no arm stops short of a 6px dot in its 18px cell.
+   * How far into its cell a row's drawn mark starts, for its own arm: a dot
+   * or a tick is smaller than the cell, so the arm runs on to it; a
+   * delegate's tile fills the cell and keeps the list's own reach.
    */
-  const DRAWN = ".pv-mark :is(.dot, .step-tick, .tree-mark)";
+  const reachOf = (step: Step): string | undefined => {
+    if (step.carrier) {
+      return;
+    }
+    return ownMark(stateOf(step)) === "done"
+      ? "calc((var(--mark-w) - var(--icon-md)) / 2)"
+      : "calc((var(--mark-w) - var(--status-dot-size)) / 2)";
+  };
 </script>
 
 {#snippet row(step: Step)}
@@ -194,11 +206,14 @@
     in:branch={{ glyph: MARK }}
     out:branch={{ glyph: MARK }}
     {@attach reflow()}
-    {@attach nested ? nestFrom(MARK, DRAWN) : clock.watch}
+    {@attach nested ? nestFrom(MARK) : clock.watch}
   >
     {#each steps as step (step.id)}
       {@const shows = step.carrier ? isOpen(step) : true}
-      <li data-flip="box">
+      <li
+        data-flip="box"
+        style:--nest-reach={nested ? reachOf(step) : undefined}
+      >
         {@render row(step)}
         {#if shows && (step.children?.length ?? 0) > 0}
           {@render tree(step.children ?? [], true)}
@@ -323,7 +338,10 @@
     min-inline-size: 0;
     padding-inline-start: calc(var(--mark-gap) - var(--space-2));
     overflow-wrap: anywhere;
-    text-wrap: pretty;
+    /* A list item's words wrap "pretty" in the app (app.css), which breaks
+       a line early to even out the last one: a title here takes its whole
+       line before it wraps. */
+    text-wrap: wrap;
     font-weight: var(--weight-body);
   }
   .row[data-state="doing"] .words,
