@@ -63,7 +63,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one return at a time, as a person makes them
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { CDPSession, Page } from "playwright-core";
+import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, SCROLLER, traceMain } from "../frames";
 import { type Kit, open, ROOT, type Spec } from "../kit";
@@ -95,6 +95,8 @@ const HELD_MS = 30_000 + 3000;
 const BACK_MS = 100;
 /** Light pages are given this to load once their tab is shown. */
 const LIGHT_READY_MS = 60_000;
+/** How long after the press what other renderers ran is summed (`elsewhere`). */
+const ELSEWHERE_MS = 1000;
 /** After the switch away, how long before a kept page's window is first read: its hold has landed. */
 const SETTLE_MS = 1000;
 /** How long after a switch its tasks are its own: the shown frame, the catch-up, the landing's steps. */
@@ -127,6 +129,8 @@ const RIVE = join(
 
 /** One return, read. */
 interface Back {
+  /** What other renderers' main threads (an out-of-process preview's) ran in the second after the press, by event. */
+  elsewhere: string;
   /** Every task of `HEAVY_MS` or more from the reach on: when after the press, what it ran, its CPU and what it restyled. */
   heavy: string;
   /** What each pane held as the pointer came onto the tab (two-pane-perf's `census`). */
@@ -162,8 +166,18 @@ type Read = Omit<Back, "kind" | "psi" | "scene" | "page">;
 interface Clock {
   /** Its document's `performance.timeOrigin`: a new one is a new document. */
   born: number;
+  /** Calls to `requestAnimationFrame`, `setTimeout` and `setInterval` since it loaded, any script's. */
+  calls: number;
   /** Its own long tasks, each its start (epoch ms) and length (ms). */
   long: [number, number][];
+  /** Its own long animation frames: when (epoch ms), how long, its rendering's and its style and layout's share, and the scripts in it. */
+  longFrames: {
+    at: number;
+    ms: number;
+    render: number;
+    scripts: string;
+    style: number;
+  }[];
   /** When the pane's last `cawco:release` reached it, epoch ms; 0 when none has. */
   releasedAt: number;
   /** Its animation frames' times, epoch ms, the last 600. */
@@ -176,11 +190,15 @@ interface Clock {
 interface PageBack {
   /** From the press to its first animation frame after it, ms; null when none came. */
   firstTickMs: number | null;
+  /** Frame and timer requests any of its scripts made while its tab was off screen (held, each waits); NaN when its page was gone. */
+  hiddenCalls: number;
   /** Its animation frames and interval ticks while its tab was off screen; NaN when its page was gone. */
   hiddenTicks: number;
   hiddenTimers: number;
   /** The page's own long tasks from the press to its first animation frame after it: when after the press, and how long, ms. */
   longAfter: [number, number][];
+  /** Its own long animation frames in the same span, each said whole (when after the press, its length, its rendering and style shares, its scripts). */
+  longFramesAfter: string[];
   /** From the press to the pane's first reach into the frame to post (`watchPosts`), ms; null where unread (WebKit) or none came. */
   postMs: number | null;
   /** From the press to the pane's `cawco:release` reaching the page, ms; null when none came after the press. */
@@ -189,8 +207,8 @@ interface PageBack {
   reloaded: boolean;
 }
 
-/** Pane `pane`'s preview page's window, read in its frame; null while no page stands there. */
-async function clockOf(page: Page, pane: string): Promise<Clock | null> {
+/** Pane `pane`'s preview frame; null while no page stands there. */
+async function previewFrame(page: Page, pane: string): Promise<Frame | null> {
   const src = await page
     .locator(`[data-slot="pane"][data-pane="${pane}"] iframe[title="Preview"]`)
     .first()
@@ -200,15 +218,26 @@ async function clockOf(page: Page, pane: string): Promise<Clock | null> {
     return null;
   }
   const { origin } = new URL(src);
-  const frame = page
-    .frames()
-    .find((one) => one !== page.mainFrame() && one.url().startsWith(origin));
+  return (
+    page
+      .frames()
+      .find(
+        (one) => one !== page.mainFrame() && one.url().startsWith(origin)
+      ) ?? null
+  );
+}
+
+/** Pane `pane`'s preview page's window, read in its frame; null while no page stands there. */
+async function clockOf(page: Page, pane: string): Promise<Clock | null> {
+  const frame = await previewFrame(page, pane);
   if (!frame) {
     return null;
   }
   return frame
     .evaluate(() => {
       const own = window as unknown as {
+        __calls?: number;
+        __frames?: Clock["longFrames"];
         __long?: [number, number][];
         __releasedAt?: number;
         __tickAt?: number[];
@@ -217,7 +246,9 @@ async function clockOf(page: Page, pane: string): Promise<Clock | null> {
       };
       return {
         born: performance.timeOrigin,
+        calls: own.__calls ?? 0,
         long: [...(own.__long ?? [])],
+        longFrames: [...(own.__frames ?? [])],
         releasedAt: own.__releasedAt ?? 0,
         ticks: own.__ticks ?? 0,
         tickAt: [...(own.__tickAt ?? [])],
@@ -238,29 +269,48 @@ function pageBack(
   const posted = posts.find((at) => at >= pressAt);
   const kept = !!(before && hidden && hidden.born === before.born);
   const first = after?.tickAt.find((at) => at > pressAt);
+  /** The span its own long tasks and frames are read in: from the press to its first frame. */
+  const spanEnd = first ?? pressAt + WINDOW_MS;
   return {
     reloaded: !(before && after && after.born === before.born),
     hiddenTicks:
       kept && before && hidden ? hidden.ticks - before.ticks : Number.NaN,
     hiddenTimers:
       kept && before && hidden ? hidden.timers - before.timers : Number.NaN,
+    hiddenCalls:
+      kept && before && hidden ? hidden.calls - before.calls : Number.NaN,
     firstTickMs: first === undefined ? null : Math.round(first - pressAt),
     releaseMs:
       after && after.releasedAt > pressAt
         ? Math.round(after.releasedAt - pressAt)
         : null,
     postMs: posted === undefined ? null : Math.round(posted - pressAt),
-    longAfter: (after?.long ?? [])
-      .filter(([at]) => at >= pressAt && at <= (first ?? pressAt + WINDOW_MS))
-      .map(([at, ms]): [number, number] => [
-        Math.round(at - pressAt),
-        Math.round(ms),
-      ]),
+    // An observer buffered and live can say a task twice: each once, by its start.
+    longAfter: [
+      ...new Map(
+        (after?.long ?? [])
+          .filter(([at]) => at >= pressAt && at <= spanEnd)
+          .map(([at, ms]) => [at, ms])
+      ),
+    ].map(([at, ms]): [number, number] => [
+      Math.round(at - pressAt),
+      Math.round(ms),
+    ]),
+    longFramesAfter: [
+      ...new Map(
+        (after?.longFrames ?? [])
+          .filter((frame) => frame.at >= pressAt && frame.at <= spanEnd)
+          .map((frame) => [frame.at, frame])
+      ).values(),
+    ].map(
+      (frame) =>
+        `${frame.ms}ms at ${Math.round(frame.at - pressAt)}ms (rendering ${frame.render}ms, style and layout ${frame.style}ms; scripts: ${frame.scripts || "none"})`
+    ),
   };
 }
 
 const pageLine = (back: PageBack) =>
-  `its page ${back.reloaded ? "loaded again" : "kept"}; off screen ${back.hiddenTicks} animation frames and ${back.hiddenTimers} interval ticks; the pane reached into its frame ${back.postMs === null ? "unread" : `${back.postMs}ms after the press`}; its release reached it ${back.releaseMs === null ? "never" : `${back.releaseMs}ms after the press`}; its own long tasks before its first frame ${back.longAfter.map(([at, ms]) => `${ms}ms at ${at}ms`).join(", ") || "none"}; its first animation frame ${back.firstTickMs === null ? "never came" : `${back.firstTickMs}ms after the press`}`;
+  `its page ${back.reloaded ? "loaded again" : "kept"}; off screen ${back.hiddenTicks} animation frames and ${back.hiddenTimers} interval ticks, ${back.hiddenCalls} frame and timer requests; the pane reached into its frame ${back.postMs === null ? "unread" : `${back.postMs}ms after the press`}; its release reached it ${back.releaseMs === null ? "never" : `${back.releaseMs}ms after the press`}; its own long tasks before its first frame ${back.longAfter.map(([at, ms]) => `${ms}ms at ${at}ms`).join(", ") || "none"}, its long frames ${back.longFramesAfter.join("; ") || "none"}; its first animation frame ${back.firstTickMs === null ? "never came" : `${back.firstTickMs}ms after the press`}`;
 
 /**
  * The heavy page: Rive's runtime and its wasm (compiled and instantiated at
@@ -292,11 +342,30 @@ rive.RuntimeLoader.awaitInstance().then(function () { window.__wasm = true; });
 var c = document.getElementById("c"), g = c.getContext("2d");
 window.__ticks = 0; window.__tickAt = []; window.__timers = 0; window.__releasedAt = 0;
 setInterval(function () { window.__timers++; }, 100);
+window.__calls = 0;
+["requestAnimationFrame", "setTimeout", "setInterval"].forEach(function (name) {
+  var own = window[name];
+  window[name] = function () { window.__calls++; return own.apply(window, arguments); };
+});
 window.__long = [];
 try {
   new PerformanceObserver(function (list) {
     list.getEntries().forEach(function (entry) { window.__long.push([performance.timeOrigin + entry.startTime, entry.duration]); });
   }).observe({ type: "longtask", buffered: true });
+} catch (e) {}
+window.__frames = [];
+try {
+  new PerformanceObserver(function (list) {
+    list.getEntries().forEach(function (entry) {
+      window.__frames.push({
+        at: performance.timeOrigin + entry.startTime,
+        ms: Math.round(entry.duration),
+        render: Math.round(entry.renderStart ? entry.startTime + entry.duration - entry.renderStart : 0),
+        style: Math.round(entry.styleAndLayoutStart ? entry.startTime + entry.duration - entry.styleAndLayoutStart : 0),
+        scripts: (entry.scripts || []).map(function (s) { return s.invoker + " " + Math.round(s.duration) + "ms"; }).join("; ")
+      });
+    });
+  }).observe({ type: "long-animation-frame", buffered: true });
 } catch (e) {}
 addEventListener("message", function (event) {
   if (event.data && event.data.type === "cawco:release") window.__releasedAt = performance.timeOrigin + performance.now();
@@ -514,6 +583,15 @@ async function measureBack(
       await page.evaluate(() => performance.mark("two-pane:reach:0"));
       await point.reach();
       await page.waitForTimeout(REACH_MS);
+      // The trace's CPU profiler starts in an idle isolate at its next script:
+      // a held out-of-process preview's first is its release, where starting
+      // (every compiled function logged) took ~500 ms of its thread. A script
+      // run there now keeps that off the return's clock.
+      await (
+        await previewFrame(page, id)
+      )
+        ?.evaluate(() => 0)
+        .catch(() => undefined);
       origin = await page.evaluate(() => performance.timeOrigin);
       madeAt = await page.evaluate((pane) => {
         const drawn = () => {
@@ -586,6 +664,12 @@ async function measureBack(
     input: press ?? "none reported",
     inputMs,
     pressAt: origin + madeAt,
+    elsewhere:
+      main
+        .elsewhere(madeMark, madeMark + ELSEWHERE_MS * 1000)
+        .slice(0, 16)
+        .map(([name, ms]) => `${name} ${ms.toFixed(1)}ms`)
+        .join(", ") || "nothing",
     traced: true,
     longest: Math.round(longest?.cpu ?? 0),
     longestWhat: longest
@@ -658,6 +742,7 @@ async function clickBack(
     longest: 0,
     longestWhat: "not traced",
     pressAt,
+    elsewhere: "not traced",
     reach: 0,
     traced: false,
     work: null,
@@ -851,7 +936,7 @@ const run = async (kit: Kit) => {
     };
     backs.push(back);
     kit.note(
-      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
+      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
     );
   };
   await leg(isolated, `1a: busy, back after ${SHORT_MS / 1000}s`, busy, "busy");
