@@ -192,6 +192,7 @@ import { serviceManaged, setSessionLimits } from "./sessiond-client";
 import {
   ensureServed,
   ensureStage,
+  networkOf,
   StageRefusal,
   setStageSink,
   stageComponents,
@@ -2768,13 +2769,14 @@ export const startDaemon = (rediscover = false) =>
     // session bounded there, a preview of a port in it (and, read by
     // boundary.ts itself, an attached CLI, a command in flight, a live work
     // item the hub names on each beat). One quiet for a while closes, and its
-    // next command starts it again.
+    // next command starts it again. A place's sheet holds its stage clone's.
     watchQuietBoundaries({
       sessions: () => supervisor.boundedWorkspaces(),
       previews: () =>
-        servingPreviews().flatMap(({ source }) =>
-          "workspace" in source && source.workspace ? [source.workspace] : []
-        ),
+        servingPreviews().flatMap(({ source }) => {
+          const network = "port" in source ? networkOf(source) : undefined;
+          return network ? [network] : [];
+        }),
     });
 
     // The usage scanner outlives connections too: its store (usage.db) is the

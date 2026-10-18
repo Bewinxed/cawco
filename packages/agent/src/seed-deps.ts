@@ -209,9 +209,11 @@ export const seedDependencies = async (
  * (core `depsScript`): the packages {@link seedDependencies} left out, their
  * scripts and the project's own, then the lockfile's stamp, so a check finds
  * them installed. One that fails is logged, and its next install there runs
- * it again.
+ * it again. Answers why it failed, or nothing when it did not.
  */
-export const finishInstall = async (workspace: WorkspaceRef): Promise<void> => {
+export const finishInstall = async (
+  workspace: WorkspaceRef
+): Promise<string | undefined> => {
   const result = await runWorkflowCommand(
     workspace.path,
     `${SAFE_GIT_SHELL}${depsScript()}`,
@@ -219,8 +221,10 @@ export const finishInstall = async (workspace: WorkspaceRef): Promise<void> => {
     workspace
   );
   if (result.exitCode !== 0) {
+    const why = `exit ${result.exitCode}: ${(result.stderr || result.stdout).trim().split("\n").slice(-3).join(" ")}`;
     console.warn(
-      `[workspace] ${workspace.id}: its install inside its boundary failed (exit ${result.exitCode}): ${(result.stderr || result.stdout).trim().split("\n").slice(-3).join(" ")}`
+      `[workspace] ${workspace.id}: its install inside its boundary failed (${why})`
     );
+    return why;
   }
 };

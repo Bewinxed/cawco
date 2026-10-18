@@ -261,14 +261,15 @@ export const leadPlaceRef = (
     : undefined;
 
 /**
- * The place a sheet's stage runs in for a session with no workspace of its
- * own (live components): Caw's place ({@link leadPlaceRef}); for any other
- * session, a place over the folder it works in, on its machine, so the stage
- * mounts the very files the session edits. Its boundary is the one a lead's
- * place has (workspace-policy.ts `isPlace`): the project's toolchain runs
- * with no credential store, no service manager and its own network, as on a
- * delegate's clone, while the session's own commands stay on the host. Its id
- * names the machine and folder, so every session there shares one stage.
+ * The place a sheet's stage is named by for a session with no workspace of
+ * its own (live components): Caw's place ({@link leadPlaceRef}); for any
+ * other session, a place over the folder it works in, on its machine. The
+ * machine runs the stage in that place's stage clone (agent stage-clone.ts):
+ * a clone of the checkout at its HEAD with its uncommitted changes, kept in
+ * step with it, in a boundary of its own, so the toolchain writes its own
+ * tree and never the person's, while the session's own commands stay on the
+ * host. Its id names the machine and folder, so every session there shares
+ * one stage.
  */
 export const stagePlaceRef = (
   row: Pick<InstanceRow, "role" | "projectId" | "machineId" | "cwd">

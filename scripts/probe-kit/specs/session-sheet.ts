@@ -2,15 +2,17 @@
  * A session the person talks to directly (no work item, no workspace) opens,
  * reads and edits a live-component sheet on the files it works on, as a
  * delegate does in its workspace (the owner, from a top-level chat: "is this
- * a gap in the design system tool?"). Its stage runs in a place over the
- * folder the session works in (hub caw.ts `stagePlaceRef`): a boundary like
- * a workspace's, over the session's own files.
+ * a gap in the design system tool?"). Its stage runs in the place over the
+ * folder the session works in (hub caw.ts `stagePlaceRef`), in that place's
+ * stage clone (agent stage-clone.ts): a clone of the checkout at its HEAD
+ * with its uncommitted changes, kept in step with it, in a boundary of its
+ * own, so the toolchain never writes the person's checkout.
  *
  * On a scratch fleet, a Claude Code session spawned in the fleet's repo,
- * which holds a Vite + Svelte project (`Card.svelte` and its story file;
- * its node_modules a link to the dashboard's, which the place's boundary
- * holds read-only, so Vite's config load and caches must write elsewhere),
- * against the mock model:
+ * which holds a Vite + Svelte project, all of it uncommitted (`Card.svelte`
+ * and its story file; its node_modules a link to the dashboard's, which the
+ * stage's boundary holds read-only, so Vite's config load and caches must
+ * write elsewhere), against the mock model:
  *
  * 1. `components_list` answers the repo's components, `src/Card.svelte`
  *    with its story file, never "this session runs in no workspace".
@@ -26,7 +28,21 @@
  *    session rewrites `Card.svelte` with its shell, and the open sheet shows
  *    the edit in place, with no reload.
  *
- * The place's boundary is made of user namespaces: like a spec that
+ * Then a second session, in a checkout of its own whose node_modules the
+ * session's boundary holds read-only, as `~/cockpit` is: a SvelteKit project
+ * committed with its bun.lock and installed in place, its card and story
+ * file uncommitted. SvelteKit's sync writes into the tree it serves
+ * (`node_modules/$app/tsconfig.json`, `.svelte-kit/`); on a place over the
+ * checkout it died "EROFS: read-only file system, open
+ * '…/node_modules/$app/tsconfig.json'".
+ *
+ * 6. `components_list` answers `src/lib/Card.svelte` with its story file.
+ * 7. `artifact_create(kind: "sheet", file: "src/lib/Card.stories.js")`
+ *    answers an id and its stage `live`.
+ * 8. The checkout holds nothing the stage wrote: its `git status
+ *    --ignored` as before the legs, and no `node_modules/$app`.
+ *
+ * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
  *
@@ -34,7 +50,8 @@
  */
 import { existsSync } from "node:fs";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { STAGE_ENSURE } from "../../../packages/core/src/stage";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -71,6 +88,40 @@ export default { component: Card, args: { title: "Hello" } };
 
 export const One = { args: {} };
 `,
+};
+
+/** A SvelteKit project, committed as a checkout of its own: its tsconfig extends the one Kit's sync writes into node_modules, as the dashboard's does. */
+const KIT: Record<string, string> = {
+  ".gitignore": "node_modules\n.svelte-kit\n",
+  "package.json": JSON.stringify({
+    name: "probe-kit",
+    private: true,
+    type: "module",
+    devDependencies: {
+      "@sveltejs/kit": "^3.1.0",
+      "@sveltejs/vite-plugin-svelte": "^7.3.1",
+      svelte: "5.57.1",
+      vite: "^8.3.4",
+    },
+  }),
+  "svelte.config.js": "export default {};\n",
+  "vite.config.ts": `import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({ plugins: [sveltekit()] });
+`,
+  "tsconfig.json": '{ "extends": "$app/tsconfig" }\n',
+  "src/app.html":
+    "<!doctype html>\n<html>\n<head>%sveltekit.head%</head>\n<body>%sveltekit.body%</body>\n</html>\n",
+  "src/routes/+page.svelte": "<h1>kit</h1>\n",
+};
+
+const KIT_STORY = "src/lib/Card.stories.js";
+
+/** The Kit project's card and its story file, left uncommitted: the stage shows what the session sees. */
+const KIT_CARD: Record<string, string> = {
+  "src/lib/Card.svelte": PROJECT["src/Card.svelte"] as string,
+  [KIT_STORY]: PROJECT[STORY] as string,
 };
 
 /** What the session's edit writes: the same card, its heading changed. */
@@ -122,14 +173,33 @@ const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 500);
 /** A place id no session names: what a dashboard's raw stage control could invent. */
 const FORGED_PLACE = "0badc0de-caw";
 
+/** `files` written into `dir`, each folder made. */
+const writeFiles = async (dir: string, files: Record<string, string>) => {
+  await Promise.all(
+    Object.entries(files).map(async ([file, text]) => {
+      await mkdir(dirname(join(dir, file)), { recursive: true });
+      await writeFile(join(dir, file), text);
+    })
+  );
+};
+
+/**
+ * {@link KIT} in a checkout of its own at `dir`: installed in place by bun
+ * (a real node_modules, held read-only by a place's boundary), committed
+ * with its bun.lock, and {@link KIT_CARD} left uncommitted.
+ */
+const writeKit = async (dir: string) => {
+  await writeFiles(dir, KIT);
+  await Bun.$`bun install --no-progress`.cwd(dir).quiet();
+  await Bun.$`git init -q && git add -A && git -c user.email=p@p -c user.name=p commit -q -m kit`
+    .cwd(dir)
+    .quiet();
+  await writeFiles(dir, KIT_CARD);
+};
+
 /** {@link PROJECT} written into `dir`, the dashboard's packages linked in. */
 const writeProject = async (dir: string) => {
-  await mkdir(join(dir, "src"), { recursive: true });
-  await Promise.all(
-    Object.entries(PROJECT).map(([file, text]) =>
-      writeFile(join(dir, file), text)
-    )
-  );
+  await writeFiles(dir, PROJECT);
   await symlink(
     join(ROOT, "apps/dashboard/node_modules"),
     join(dir, "node_modules")
@@ -141,6 +211,8 @@ const run = async (kit: Kit) => {
   await writeProject(fleet.repo);
   const elsewhere = join(fleet.sandbox, "elsewhere");
   await writeProject(elsewhere);
+  const kitDir = join(fleet.sandbox, "kit");
+  await writeKit(kitDir);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -150,10 +222,15 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Cards", fleet.repo);
-  /** Asks the session to make call `n`, and waits for what it answered. */
-  const call = async (n: string, name: string, input: object) => {
+  /** Asks session `who` to make call `n`, and waits for what it answered. */
+  const call = async (
+    n: string,
+    name: string,
+    input: object,
+    who: string = session
+  ) => {
     asks.set(n, { name, input });
-    await fleet.send(session, `PROBE-CALL:${n}`);
+    await fleet.send(who, `PROBE-CALL:${n}`);
     return (await until(
       `${name}'s answer`,
       () => answered.get(n),
@@ -202,63 +279,114 @@ const run = async (kit: Kit) => {
       !kept,
     `${JSON.stringify(forged).slice(0, 300)}; place record ${kept ? "kept" : "none"}`
   );
-  if (!id) {
-    return;
+  // 4 and 5 read and edit the sheet leg 2 made.
+  if (id) {
+    await readAndEdit(id);
   }
 
-  // 4. Read back: live, no errors, its story.
-  const read = await call("4", "mcp__cawco__artifact_read", { id });
+  // 6. A session in a checkout whose node_modules its boundary holds read-only, as ~/cockpit's are.
+  const status = () =>
+    Bun.$`git status --porcelain --ignored --untracked-files=all`
+      .cwd(kitDir)
+      .text();
+  const untouched = await status();
+  const kitSession = await fleet.spawn("claude", "Kit", kitDir);
+  const kitListed = await call(
+    "6",
+    "mcp__cawco__components_list",
+    {},
+    kitSession
+  );
   kit.check(
-    "4: artifact_read answers the stage live with no errors, and story One",
-    read.match(STATUS)?.[1] === "live" &&
-      read.match(ERRORS)?.[1] === "[]" &&
-      read.includes('"One"'),
-    short(read)
+    "6: components_list in a checkout read-only to its boundary answers src/lib/Card.svelte with its story file",
+    kitListed.includes('"src/lib/Card.svelte"') &&
+      kitListed.includes(`"${KIT_STORY}"`),
+    short(kitListed)
   );
 
-  // 5. The sheet through the session's preview, and the session's edit reaching it.
-  const { port } = (await (
-    await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
-      method: "POST",
-    })
-  ).json()) as { port?: number };
-  const page = await kit.page("desk");
-  await page.goto(
-    `http://127.0.0.1:${port ?? 0}/@cawco/sheet?file=${encodeURIComponent(STORY)}`,
-    { waitUntil: "domcontentloaded" }
+  // 7. The sheet made on that checkout, its stage live.
+  const kitCreated = await call(
+    "7",
+    "mcp__cawco__artifact_create",
+    { kind: "sheet", name: "kit-cards", file: KIT_STORY },
+    kitSession
   );
-  const heading = () =>
-    page
-      .locator('[data-cawco-story="One"] [data-probe="title"]')
-      .textContent({ timeout: 5000 })
-      .catch((error: Error) => `none (${error.message.split("\n")[0]})`);
-  const before = await until(
-    "the story's heading",
-    heading,
-    (said) => said === "Hello",
-    60_000
-  ).catch(() => heading());
-  await page.evaluate(() => {
-    (window as unknown as { __stayed: boolean }).__stayed = true;
-  });
-  const edit = await call("5", "Bash", {
-    command: `cat > ${join(fleet.repo, "src/Card.svelte")} <<'EOF'\n${EDITED}EOF`,
-    description: "Rewrite the card's heading",
-  });
-  const after = await until(
-    "the edited heading",
-    heading,
-    (said) => said === "Edited Hello",
-    30_000
-  ).catch(() => heading());
-  const stayed = await page
-    .evaluate(() => (window as unknown as { __stayed?: boolean }).__stayed)
-    .catch(() => false);
   kit.check(
-    "5: the sheet mounts One through the session's preview, and the session's edit to Card.svelte reaches it in place",
-    before === "Hello" && after === "Edited Hello" && stayed === true,
-    `before "${before}", after "${after}", ${stayed ? "no reload" : "reloaded"}; the edit answered ${short(edit).slice(0, 120)}`
+    "7: artifact_create(kind: sheet) there answers an id and its stage live",
+    !!kitCreated.match(ID)?.[1] && kitCreated.match(STATUS)?.[1] === "live",
+    short(kitCreated)
   );
+
+  // 8. Nothing of the stage's in the checkout.
+  // What a session's own spawn may place (its project Claude dir) is the session's, not the stage's.
+  const prior = new Set(untouched.split("\n"));
+  const sessions = `${relative(kitDir, projectClaudeDir(kitDir))}/`;
+  const made = (await status())
+    .split("\n")
+    .filter((line) => !(prior.has(line) || line.slice(3).startsWith(sessions)));
+  const app = existsSync(join(kitDir, "node_modules", "$app"));
+  kit.check(
+    "8: the checkout holds nothing the stage wrote: no entry in its status it lacked before, and no node_modules/$app",
+    made.length === 0 && !app,
+    `new in its status: ${JSON.stringify(made)}; node_modules/$app ${app ? "made" : "none"}`
+  );
+
+  /** Legs 4 and 5, on the sheet `sheet` leg 2 made. */
+  async function readAndEdit(sheet: string): Promise<void> {
+    // 4. Read back: live, no errors, its story.
+    const read = await call("4", "mcp__cawco__artifact_read", { id: sheet });
+    kit.check(
+      "4: artifact_read answers the stage live with no errors, and story One",
+      read.match(STATUS)?.[1] === "live" &&
+        read.match(ERRORS)?.[1] === "[]" &&
+        read.includes('"One"'),
+      short(read)
+    );
+
+    // 5. The sheet through the session's preview, and the session's edit reaching it.
+    const { port } = (await (
+      await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+        method: "POST",
+      })
+    ).json()) as { port?: number };
+    const page = await kit.page("desk");
+    await page.goto(
+      `http://127.0.0.1:${port ?? 0}/@cawco/sheet?file=${encodeURIComponent(STORY)}`,
+      { waitUntil: "domcontentloaded" }
+    );
+    const heading = () =>
+      page
+        .locator('[data-cawco-story="One"] [data-probe="title"]')
+        .textContent({ timeout: 5000 })
+        .catch((error: Error) => `none (${error.message.split("\n")[0]})`);
+    const before = await until(
+      "the story's heading",
+      heading,
+      (said) => said === "Hello",
+      60_000
+    ).catch(() => heading());
+    await page.evaluate(() => {
+      (window as unknown as { __stayed: boolean }).__stayed = true;
+    });
+    const edit = await call("5", "Bash", {
+      command: `cat > ${join(fleet.repo, "src/Card.svelte")} <<'EOF'\n${EDITED}EOF`,
+      description: "Rewrite the card's heading",
+    });
+    const after = await until(
+      "the edited heading",
+      heading,
+      (said) => said === "Edited Hello",
+      30_000
+    ).catch(() => heading());
+    const stayed = await page
+      .evaluate(() => (window as unknown as { __stayed?: boolean }).__stayed)
+      .catch(() => false);
+    kit.check(
+      "5: the sheet mounts One through the session's preview, and the session's edit to Card.svelte reaches it in place",
+      before === "Hello" && after === "Edited Hello" && stayed === true,
+      `before "${before}", after "${after}", ${stayed ? "no reload" : "reloaded"}; the edit answered ${short(edit).slice(0, 120)}`
+    );
+  }
 };
 
 const spec: Spec = { name: "session-sheet", run };

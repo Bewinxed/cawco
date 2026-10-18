@@ -21,8 +21,8 @@
  * It speaks to the daemon in JSON lines on stdout, each `{"cawco": <word>}`:
  * `ready` with its port once it serves, `errors` with every compile error
  * standing whenever that changes, `beat` every {@link BEAT_MS}, and `fatal`
- * with why it could not start. Vite's own words go to stderr (`logLevel:
- * "warn"`). Once nothing reads its stdout (the daemon is gone), a beat's
+ * with why it could not start. Vite's own words go to stderr (its logger at
+ * "warn"). Once nothing reads its stdout (the daemon is gone), a beat's
  * write fails and the stage ends. Astro's and Nuxt's own words go to stderr
  * too (their `logLevel` at `warn`).
  *
@@ -126,11 +126,20 @@ interface DevServer {
   watcher: { emit: (event: "change", file: string) => boolean };
 }
 
+/** What the stage uses of a Vite logger (vite.dev/guide/api-javascript `createLogger`). */
+interface ViteLogger {
+  error: (message: string, options?: object) => void;
+}
+
 /** The project's own Vite, as the stage uses it. */
 interface Vite {
+  createLogger: (level: "warn") => ViteLogger;
   createServer: (config: object) => Promise<DevServer>;
   version: string;
 }
+
+/** What Vite's logger says as a config file fails to load, before it throws the load's own error (Vite 8.3 `loadConfigFromFile`). */
+const CONFIG_UNREAD = "failed to load config from";
 
 /** The project's own Astro, as the stage uses it: its programmatic `dev()` (docs.astro.build/en/reference/programmatic-reference/). */
 interface Astro {
@@ -1475,16 +1484,34 @@ async function startVite(): Promise<Started> {
   const configFile = CONFIGS.map((name) => resolve(root, name)).find(
     existsSync
   );
-  const started = await vite.createServer({
-    root,
-    configFile: configFile ?? false,
-    configLoader: "native",
-    cacheDir: CACHE_DIR,
-    clearScreen: false,
-    logLevel: "warn",
-    plugins: plugins(),
-    server: { host: HOST, port, strictPort: true, hmr: { overlay: false } },
-  });
+  // A config that does not load fails the stage with the load's own error,
+  // named as the config's: no other loader is tried (no fallback).
+  const logger = vite.createLogger("warn");
+  const said = logger.error;
+  let unread = false;
+  logger.error = (message, options) => {
+    unread ||= message.includes(CONFIG_UNREAD);
+    said(message, options);
+  };
+  const started = await vite
+    .createServer({
+      root,
+      configFile: configFile ?? false,
+      configLoader: "native",
+      cacheDir: CACHE_DIR,
+      clearScreen: false,
+      customLogger: logger,
+      plugins: plugins(),
+      server: { host: HOST, port, strictPort: true, hmr: { overlay: false } },
+    })
+    .catch((error: unknown) => {
+      throw unread && configFile
+        ? new Error(
+            `Vite couldn't load ${relative(root, configFile)}: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error }
+          )
+        : error;
+    });
   await started.listen();
   const address = started.httpServer?.address();
   return {

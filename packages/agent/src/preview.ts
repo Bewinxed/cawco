@@ -27,7 +27,7 @@ import {
   WorkspaceDown,
   workspaceGone,
 } from "./preview-bridge";
-import { sourceViewer, wakeSource } from "./stage";
+import { networkOf, sourceViewer, wakeSource } from "./stage";
 
 /**
  * The listeners this process serves, with the source each was asked for and
@@ -231,22 +231,19 @@ export function stopPreview({
 
 /**
  * Where a port preview's requests go: the host's loopback, or for a
- * workspace's port the socket of the bridge into that workspace's network
- * (`preview-bridge.ts`); a workspace with no boundary running throws
- * {@link WorkspaceDown}.
+ * workspace's port the socket of the bridge into the network it is in
+ * (`preview-bridge.ts`, stage.ts `networkOf`); a workspace with no boundary
+ * running throws {@link WorkspaceDown}.
  */
 const upstreamOf = async (
   instanceId: string,
-  source: { port: number; workspace?: string }
+  source: { port: number; stage?: unknown; workspace?: string }
 ): Promise<{ unix: string } | "host"> => {
-  if (source.workspace === undefined) {
+  const network = networkOf(source);
+  if (network === undefined) {
     return "host";
   }
-  const reached = await reachWorkspace(
-    instanceId,
-    source.workspace,
-    source.port
-  );
+  const reached = await reachWorkspace(instanceId, network, source.port);
   return reached === "host" ? "host" : { unix: reached };
 };
 
@@ -503,10 +500,8 @@ async function start(
           );
         } catch (error) {
           // Nothing answered: the workspace closed under it, or its server is down.
-          if (
-            source.workspace !== undefined &&
-            (await workspaceGone(source.workspace))
-          ) {
+          const network = networkOf(source);
+          if (network !== undefined && (await workspaceGone(network))) {
             previewFailed(
               "agent listener",
               instanceId,

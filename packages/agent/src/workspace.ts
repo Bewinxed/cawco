@@ -449,7 +449,7 @@ const fetchCut = async (
  * its repository with that repository's keys, and reads no other's. One in
  * a package or build tree is not the repository's own.
  */
-const copyOwnSecrets = async (
+export const copyOwnSecrets = async (
   repoRoot: string,
   path: string,
   git: (root: string, ...args: string[]) => Promise<string>

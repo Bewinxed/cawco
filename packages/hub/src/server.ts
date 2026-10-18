@@ -339,6 +339,7 @@ import { protocolRange } from "@cawco/core/runtime";
 import {
   type Found,
   type SheetWritten,
+  STAGE_CLONE_MS,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
   STAGE_READY_MS,
@@ -10437,11 +10438,13 @@ export const createServer = (
         `The sheet's workspace ${workspace.id.slice(0, 8)} is on no machine the hub knows, so its stage can't run.`
       );
     }
+    // A place's stage runs in a clone of its checkout, cut and installed on
+    // its first use (agent stage-clone.ts): its call waits for that too.
     const asked = await callAgent(
       machineId,
       method,
       [workspace, arg],
-      STAGE_READY_MS + 15_000
+      STAGE_READY_MS + (isPlace(workspace.id) ? STAGE_CLONE_MS : 0) + 15_000
     );
     switch (asked.kind) {
       case "unanswered":
