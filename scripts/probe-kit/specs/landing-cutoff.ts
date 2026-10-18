@@ -31,15 +31,19 @@
  *   lands in the hub's LFS store (its `tmp` dir), the spec replaces the
  *   clone's `.git/config` on the host with the same bytes (a new inode, as
  *   any host write makes), standing in for whatever else may stop a sandbox
- *   mid-push. The agent's log says the sandbox restarted; the item ends done
- *   all the same, saying it landed, and its commit is on main.
- * - C, nothing to land: a delegate commits nothing, so its HEAD is on main
- *   already (as workspace a7dd050f's one commit was). Before it finishes,
- *   the host writes into its clone's config the `lfs.<url>.access` git-lfs
- *   left in the clones of 2026-10-17, a key the git door runs no git under
- *   (safe-git.ts `repositoryConfigProblem`), so the landing's fetch fails
- *   ("remote helper 'cawco' aborted session"). The item ends done, "Nothing
- *   to land".
+ *   mid-push. The agent's log says the sandbox restarted. The cut-off push
+ *   (137) is reported, not tried again (hub landing.ts `CUT_OFF`): main is
+ *   read once after it, and the item ends done saying it landed when main
+ *   holds its commit, else failed saying the push was cut off and main does
+ *   not hold it; the hub saw one LFS upload batch for it.
+ * - C, a fetch that fails: a delegate commits nothing, so its HEAD is on
+ *   main already (as workspace a7dd050f's one commit was). Before it
+ *   finishes, the host writes into its clone's config the `lfs.<url>.access`
+ *   git-lfs left in the clones of 2026-10-17, a key the git door runs no git
+ *   under (safe-git.ts `repositoryConfigProblem`), so the landing's fetch
+ *   fails ("remote helper 'cawco' aborted session"). The item is not
+ *   landed, the refusal naming the fetch in git's words: a ref the clone
+ *   fetched before never stands in for a fetch that failed.
  * - D, a committed `.lfsconfig` cannot move a hub origin's git-lfs: a
  *   delegate commits a large file and an `.lfsconfig` whose `lfs.url` names
  *   a second project's repository on the same hub and whose `lfs.pushurl`
@@ -624,30 +628,44 @@ const run = async (kit: Kit) => {
     );
 
     // B
+    const uploadsBefore = (await lfsLines(project.id, "batch upload")).length;
     const b = await delegate("B");
     watcher.close();
+    const bUploads = (await lfsLines(project.id, "batch upload")).slice(
+      uploadsBefore
+    );
     check(
       "B: the host replaced the clone's .git/config mid-push, and the agent says the sandbox restarted",
       b.inode.after !== b.inode.before && b.restarted.length > 0,
       `inode ${b.inode.before} -> ${b.inode.after}\n${b.restarted.join("\n") || "no restart said"}`
     );
-    check(
-      "B: the item is done all the same, its report saying it landed on main",
-      b.row.state === "done" && b.result.includes("Landed on main at"),
-      b.said
-    );
     const bMain = await onMain("B");
     check(
-      "B: its commit is on the hub's main",
-      bMain.ok,
-      bMain.subjects.join(" | ")
+      "B: the cut-off push is reported, not retried: main read once after it, the item done saying it landed when main held its commit, else failed saying the push was cut off and main does not hold it",
+      (b.row.state === "done" &&
+        b.result.includes("Landed on main at") &&
+        bMain.ok) ||
+        (b.row.state === "failed" &&
+          `${b.row.error ?? ""}${b.result}`.includes(
+            "the push to main was cut off, and main does not hold the commits"
+          )),
+      `${b.said}\nmain: ${bMain.subjects.join(" | ")}`
+    );
+    check(
+      "B: one push went to the hub for it (one LFS upload batch), none tried again",
+      bUploads.length === 1,
+      bUploads.join("\n") || "no upload batch logged"
     );
 
     // C
     const c = await delegate("C");
     check(
-      "C: nothing ahead of main, its fetch refused for git-lfs's key in its config: the item is done, nothing to land",
-      c.row.state === "done" && c.result.includes("Nothing to land"),
+      "C: nothing ahead of main, its fetch refused for git-lfs's key in its config: the item is not landed, the refusal naming the fetch in git's words, never a cached ref's \"nothing to land\"",
+      c.row.state === "failed" &&
+        `${c.row.error ?? ""}${c.result}`.includes(
+          "Not landed: the fetch of origin/main"
+        ) &&
+        !c.result.includes("Nothing to land"),
       c.said
     );
 

@@ -9,15 +9,15 @@
  * `approval` (the folder is no repository yet, or files over 50 MB would go
  * into history raw) → `snapshot` (the source's work, committed off to the
  * side and pushed to the hub as `cawco/move/<machine>`) → `clone` → `lfs`
- * (large files) → `install` (dependencies, by lockfile) → `start` → and then
- * `started`, `failed` or `cancelled`. Secrets and ignored files never move.
+ * (large files) → `start` → and then `started`, `failed` or `cancelled`.
+ * Secrets and ignored files never move. Dependencies are the session's to
+ * install as it needs them, as in any checkout.
  */
 
 import type { EffortLevel, HarnessKind, PermissionMode } from "./harness";
 
 /** A stage the job does work in. */
-export type MoveStep =
-  "approval" | "snapshot" | "clone" | "lfs" | "install" | "start";
+export type MoveStep = "approval" | "snapshot" | "clone" | "lfs" | "start";
 
 /** Where a job stands: at one of its steps, or settled. */
 export type MoveStage = MoveStep | "started" | "failed" | "cancelled";
@@ -62,17 +62,9 @@ export interface MoveAsk {
   title: string;
 }
 
-/** What `install` runs, chosen by the lockfile at the repository's root. */
-export interface MoveInstall {
-  /** The command as argv. */
-  argv: string[];
-  /** The command as one line, for the pane's mono subline: `bun install`. */
-  command: string;
-}
-
 /** A job's failure: the step it failed at, in words, and the tool's own last line. */
 export interface MoveError {
-  /** The tool's own last line (git's, the installer's), any credential removed. */
+  /** The tool's own last line (git's, git-lfs's), any credential removed. */
   detail?: string;
   message: string;
   stage: MoveStep;
@@ -105,8 +97,12 @@ export interface MoveJob {
    */
   from: { kind: "hub" } | { kind: "outside"; host: string };
   id: string;
-  /** Set while `install` is a step: the command the target runs. */
-  install?: MoveInstall;
+  /**
+   * Never sent: a move installs nothing. Declared for the shipped apps whose
+   * client reads it (TestFlight 20261015.3 to 20261018); it goes once none
+   * is installable.
+   */
+  install?: { argv: string[]; command: string };
   /** What a Cancel left on disk, in words, once cancelled. */
   kept?: string;
   /** The large files: how many, and their bytes; set when `lfs` is a step. */
@@ -208,8 +204,6 @@ export const CONTROL_MOVE_SNAPSHOT = "moveSnapshot";
 export const CONTROL_MOVE_CLONE = "moveClone";
 /** On the target: the large files. */
 export const CONTROL_MOVE_LFS = "moveLfs";
-/** On the target: the dependencies. */
-export const CONTROL_MOVE_INSTALL = "moveInstall";
 /** Stops whatever step of a job runs on the machine. */
 export const CONTROL_MOVE_CANCEL = "moveCancel";
 /**
@@ -239,7 +233,6 @@ export const MOVE_STEPS: ReadonlySet<string> = new Set([
   CONTROL_MOVE_SNAPSHOT,
   CONTROL_MOVE_CLONE,
   CONTROL_MOVE_LFS,
-  CONTROL_MOVE_INSTALL,
 ]);
 
 /** A folder as a move reads it, on the source or the target. */
@@ -266,8 +259,6 @@ export interface MoveInspection {
   isGit: boolean;
   /** Large files in HEAD's tree and in what is uncommitted: count and bytes. */
   lfs: { bytes: number; files: number };
-  /** The lockfile at the root, by which `install` is chosen; null when none. */
-  lockfile: string | null;
   /**
    * `origin`'s URL as git has it, less any credential an http(s) URL carries
    * (`https://user:token@host/…` reads `https://host/…`); null when none.
@@ -380,13 +371,6 @@ export interface MoveLfsResult {
   files: number;
 }
 
-/** {@link CONTROL_MOVE_INSTALL}'s request. */
-export interface MoveInstallRequest {
-  argv: string[];
-  jobId: string;
-  path: string;
-}
-
 /**
  * Daemon → hub: how far the step in flight is. `file` only while a file of
  * at least {@link LARGE_FILE_BYTES} is in flight (the largest).
@@ -436,111 +420,3 @@ export const moveBranch = (machineName: string): string =>
       .replace(/[^a-z0-9._-]+/g, "-")
       .replace(/^[-.]+|[-.]+$/g, "") || "machine"
   }`;
-
-/**
- * bun's install that never writes the lockfile, as every pick of
- * {@link installFor} is frozen. bun.com/docs/pm/cli/install: "Bun installs
- * the exact versions specified in the lockfile and does not update it. If
- * your `package.json` disagrees with `bun.lock`, Bun exits with an error";
- * and "If there is no lockfile at all, `--frozen-lockfile` installs from
- * `package.json` without writing one".
- */
-const BUN_FROZEN: MoveInstall = {
-  argv: ["bun", "install", "--frozen-lockfile"],
-  command: "bun install --frozen-lockfile",
-};
-
-/** bun's words as a frozen install refuses a lockfile its `package.json` disagrees with. */
-const BUN_FROZEN_REFUSAL = "lockfile had changes, but lockfile is frozen";
-
-/**
- * The install a lockfile at a repository's root picks (my call; no lockfile,
- * no install): each frozen, so it installs what the lockfile holds and never
- * rewrites it, and refuses a lockfile its `package.json` disagrees with.
- */
-export const installFor = (lockfile: string | null): MoveInstall | null => {
-  switch (lockfile) {
-    case "bun.lock":
-    case "bun.lockb":
-      return BUN_FROZEN;
-    case "pnpm-lock.yaml":
-      return {
-        argv: ["pnpm", "install", "--frozen-lockfile"],
-        command: "pnpm install --frozen-lockfile",
-      };
-    case "package-lock.json":
-      return { argv: ["npm", "ci"], command: "npm ci" };
-    case "yarn.lock":
-      return {
-        argv: ["yarn", "install", "--frozen-lockfile"],
-        command: "yarn install --frozen-lockfile",
-      };
-    default:
-      return null;
-  }
-};
-
-/** The lockfiles {@link installFor} knows, most specific first. */
-export const LOCKFILES = [
-  "bun.lock",
-  "bun.lockb",
-  "pnpm-lock.yaml",
-  "package-lock.json",
-  "yarn.lock",
-] as const;
-
-/**
- * Where a checkout's install records what it installed from, next to the
- * dependencies: one hash of its root lockfile (its `package.json` when it
- * has none) and every tracked `package.json`, so a manifest changed without
- * its lockfile installs too, and the frozen install refuses it. Gone with
- * them: a clone cut again has none.
- */
-const DEPS_STAMP = "node_modules/.cawco-lockfile";
-
-/** What {@link depsScript} prints first when it installs, and only then. */
-export const DEPS_INSTALLING = "installing: ";
-
-/**
- * What {@link depsScript} prints, last, when bun's frozen install refused a
- * lockfile that disagrees with `package.json`, then that lockfile:
- * `stale lockfile: bun.lock`.
- */
-export const DEPS_STALE = "stale lockfile: ";
-
-/**
- * Installs a checkout's dependencies when they were not installed from its
- * root lockfile and manifests as they stand ({@link DEPS_STAMP}): none
- * installed, or one changed since; by {@link installFor}'s pick for that lockfile,
- * which never rewrites it, so the tree the gate checks is the one that
- * lands. With no lockfile its `package.json` stands in for one, installed by
- * bun's frozen install, which writes none: the checkout gains no file to
- * commit. Then stamps it. An install that refused a lockfile its
- * `package.json` disagrees with ends on a {@link DEPS_STALE} line. Neither
- * file, or a matching stamp: nothing runs and nothing is printed. The stamp,
- * not the installer's own check, decides: `npm ci` removes a `node_modules`
- * that is there before every install (docs.npmjs.com/cli/commands/npm-ci).
- * Run in the checkout's
- * root: before a work item's landing gate (the hub's `runGate`) and before a
- * probe's scratch fleet starts from the checkout.
- */
-export const depsScript = (): string => {
-  const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
-  const picks = LOCKFILES.map(
-    (lock, index) =>
-      `${index ? "elif" : "if"} [ -f ${lock} ]; then lock=${lock}; install=${word(installFor(lock)?.command ?? "")}`
-  ).join("\n");
-  return [
-    `${picks}\nelif [ -f package.json ]; then lock=package.json; install=${word(BUN_FROZEN.command)}\nelse exit 0\nfi`,
-    `inputs="$({ git hash-object "$lock"; git -c core.quotePath=false ls-files -- ':(glob)**/package.json' | git hash-object --stdin-paths; } | git hash-object --stdin)"`,
-    `stamp="$(cat ${DEPS_STAMP} 2>/dev/null)"`,
-    `[ "$stamp" = "$inputs" ] && exit 0`,
-    `what="a package.json"; [ "$lock" = package.json ] || what="$what or $lock"`,
-    `if [ -n "$stamp" ]; then why="$what changed since the dependencies were installed"; else why="no dependencies installed from $lock"; fi`,
-    `echo "${DEPS_INSTALLING}$install ($why)"`,
-    `out="$($install 2>&1)"; code=$?`,
-    `printf '%s\\n' "$out"`,
-    `if [ "$code" -ne 0 ]; then\ncase "$out" in *${word(BUN_FROZEN_REFUSAL)}*) echo "${DEPS_STALE}$lock" ;; esac\nexit "$code"\nfi`,
-    `mkdir -p node_modules && printf '%s\\n' "$inputs" > ${DEPS_STAMP}`,
-  ].join("\n");
-};

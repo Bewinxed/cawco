@@ -1838,6 +1838,133 @@
         }
       }
     },
+    "/api/projects/{id}/gate": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdGate",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdGate 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdGate200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdGate 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdGate 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdGate 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdGate 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdGate 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdGate 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdGate 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdGate 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdGate 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdGate 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/tasks": {
       "get": {
         "parameters": [
@@ -22360,9 +22487,6 @@
                   "review": {
                     "type": "boolean"
                   },
-                  "appleGate": {
-                    "type": "boolean"
-                  },
                   "lands": {
                     "type": "string",
                     "enum": [
@@ -24503,6 +24627,21 @@
         },
         "required": [
           "types"
+        ]
+      },
+      "getApiProjectsByIdGate200": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/ProjectGate"
+          }
+        },
+        "required": [
+          "file",
+          "gate"
         ]
       },
       "deleteApiProjectsByIdTasksByTaskId200": {
@@ -27675,6 +27814,9 @@
                 "string"
               ]
             },
+            "appleGate": {
+              "type": "boolean"
+            },
             "name": {
               "type": "string"
             },
@@ -27752,9 +27894,6 @@
               "$ref": "#/components/schemas/StagesTemplate"
             },
             "review": {
-              "type": "boolean"
-            },
-            "appleGate": {
               "type": "boolean"
             },
             "upstreamPosts": {
@@ -27917,6 +28056,9 @@
               "string"
             ]
           },
+          "appleGate": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -27994,9 +28136,6 @@
             "$ref": "#/components/schemas/StagesTemplate"
           },
           "review": {
-            "type": "boolean"
-          },
-          "appleGate": {
             "type": "boolean"
           },
           "upstreamPosts": {
@@ -28146,6 +28285,9 @@
               "string"
             ]
           },
+          "appleGate": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -28223,9 +28365,6 @@
             "$ref": "#/components/schemas/StagesTemplate"
           },
           "review": {
-            "type": "boolean"
-          },
-          "appleGate": {
             "type": "boolean"
           },
           "upstreamPosts": {
@@ -28395,6 +28534,9 @@
               "string"
             ]
           },
+          "appleGate": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -28472,9 +28614,6 @@
             "$ref": "#/components/schemas/StagesTemplate"
           },
           "review": {
-            "type": "boolean"
-          },
-          "appleGate": {
             "type": "boolean"
           },
           "upstreamPosts": {
@@ -28596,6 +28735,9 @@
               "string"
             ]
           },
+          "appleGate": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -28673,9 +28815,6 @@
             "$ref": "#/components/schemas/StagesTemplate"
           },
           "review": {
-            "type": "boolean"
-          },
-          "appleGate": {
             "type": "boolean"
           },
           "upstreamPosts": {
@@ -31715,6 +31854,104 @@
           "date",
           "message",
           "sha"
+        ]
+      },
+      "ProjectGate": {
+        "description": "A project's gate: `none` with no gate.md; `declared`, its steps (none\nwhen its block names none); `unreadable`, what is wrong with it.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "none"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "declared"
+                ]
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/DeclaredStep"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "steps"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "unreadable"
+                ]
+              },
+              "problems": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "problems"
+            ]
+          }
+        ]
+      },
+      "DeclaredStep": {
+        "description": "A step as the project declares it.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "inputs": {
+            "description": "The paths whose change makes it run; absent: it always runs.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "name": {
+            "description": "What the report calls it.",
+            "type": "string"
+          },
+          "needs": {
+            "$ref": "#/components/schemas/DeclaredStepNeeds",
+            "description": "The capability of the machine it runs on; absent: the workspace's own."
+          },
+          "stopsRest": {
+            "description": "A failure leaves the steps after it unrun.",
+            "type": "boolean"
+          },
+          "timeoutSec": {
+            "description": "Seconds before it is killed; the gate's default when absent.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "command",
+          "name",
+          "stopsRest"
         ]
       },
       "TaskList": {
@@ -41207,8 +41444,23 @@
             "type": "string"
           },
           "install": {
-            "$ref": "#/components/schemas/MoveInstall",
-            "description": "Set while `install` is a step: the command the target runs."
+            "description": "Never sent: a move installs nothing. Declared for the shipped apps whose\nclient reads it (TestFlight 20261015.3 to 20261018); it goes once none\nis installable.",
+            "type": "object",
+            "properties": {
+              "argv": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "command": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "argv",
+              "command"
+            ]
           },
           "kept": {
             "description": "What a Cancel left on disk, in words, once cancelled.",
@@ -41352,7 +41604,7 @@
         "type": "object",
         "properties": {
           "detail": {
-            "description": "The tool's own last line (git's, the installer's), any credential removed.",
+            "description": "The tool's own last line (git's, git-lfs's), any credential removed.",
             "type": "string"
           },
           "message": {
@@ -41373,31 +41625,9 @@
         "enum": [
           "approval",
           "clone",
-          "install",
           "lfs",
           "snapshot",
           "start"
-        ]
-      },
-      "MoveInstall": {
-        "description": "What `install` runs, chosen by the lockfile at the repository's root.",
-        "type": "object",
-        "properties": {
-          "argv": {
-            "description": "The command as argv.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "command": {
-            "description": "The command as one line, for the pane's mono subline: `bun install`.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "argv",
-          "command"
         ]
       },
       "MoveStage": {
@@ -41408,7 +41638,6 @@
           "cancelled",
           "clone",
           "failed",
-          "install",
           "lfs",
           "snapshot",
           "start",
@@ -52549,6 +52778,13 @@
         "enum": [
           "caw",
           "session"
+        ]
+      },
+      "DeclaredStepNeeds": {
+        "type": "string",
+        "enum": [
+          "apple",
+          "linux"
         ]
       },
       "DelegateBudgetPer": {

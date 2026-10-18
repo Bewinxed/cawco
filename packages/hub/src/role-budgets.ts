@@ -62,11 +62,11 @@ import type { Tasks } from "./tasks";
  * project_settings' `set_runs_on`: an Apple task named a Mac nowhere, so
  * task_start placed it on Linux (tsk-7, tsk-15). About 80 tokens for the
  * worker, 95 for the lead, descriptions cut to a clause (worker 23,830,
- * lead 15,583 measured). project_settings' `set_apple_gate` (apple-gate.ts):
- * two commits landed with iOS compile errors no Linux check saw, and the
- * gate that stops that is the person's per project. About 30 tokens for
+ * lead 15,583 measured). project_settings' `set_apple_gate`: two commits
+ * landed with iOS compile errors no Linux check saw. About 30 tokens for
  * the lead, its description cut to the kinds that always ask (lead 15,638
- * measured). `artifact_delete` (a superseded artifact leaves the panel) fits
+ * measured); gone on 2026-10-18, when a project's gate became its gate.md
+ * (gate-file.ts). `artifact_delete` (a superseded artifact leaves the panel) fits
  * the same budgets: the artifact and comment tools' words were cut to pay
  * for it (worker 23,877, delegate 6,440, lead 15,641 measured).
  * 2026-10-15: `machine_pause` (machine-pause.ts), the orchestrator's way to

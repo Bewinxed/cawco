@@ -12,8 +12,8 @@
  * Nothing is installed outside a git checkout, or where the hooks directory
  * is read-only: a CawCo workspace's boundary keeps its clone's `.git/hooks`
  * from being written, so no workspace plants a hook. A workspace never pushes
- * to main; the hub lands its commits after running the same checks
- * (packages/hub/src/landing.ts LAND_GATE_SCRIPTS).
+ * to main; the hub lands its commits after running the same checks, as the
+ * cockpit project's gate.md declares them (packages/hub/src/gate-file.ts).
  */
 import { chmod, copyFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";

@@ -30,10 +30,8 @@ import {
   CAWCO_ENV,
   FREE_SPACE_MARGIN,
   LARGE_FILE_BYTES,
-  LOCKFILES,
   type MoveCloneRequest,
   type MoveInspection,
-  type MoveInstallRequest,
   type MoveLargeFile,
   type MoveLfsObject,
   type MoveLfsRequest,
@@ -761,16 +759,6 @@ const stayingAtRoot = (
   };
 };
 
-const lockfileAt = async (path: string): Promise<string | null> => {
-  for (const name of LOCKFILES) {
-    // biome-ignore lint/performance/noAwaitInLoops: the first lockfile found picks the install
-    if (await exists(join(path, name))) {
-      return name;
-    }
-  }
-  return null;
-};
-
 /** A folder that is no repository, read through a throwaway one. */
 const inspectPlain = async (
   path: string,
@@ -865,7 +853,6 @@ export const moveInspect = async (path: string): Promise<MoveInspection> => {
     origin: null,
     originCredential: false,
     pushed: false,
-    lockfile: null,
   };
   const none = {
     ...base,
@@ -879,9 +866,8 @@ export const moveInspect = async (path: string): Promise<MoveInspection> => {
   if (!base.exists || base.empty) {
     return none;
   }
-  const lockfile = await lockfileAt(path);
   if (!(await exists(join(path, ".git")))) {
-    return inspectPlain(path, { ...base, lockfile });
+    return inspectPlain(path, base);
   }
   const [head, branch, remote] = await Promise.all([
     maybe(path, ["rev-parse", "-q", "--verify", "HEAD^{commit}"]),
@@ -945,7 +931,6 @@ export const moveInspect = async (path: string): Promise<MoveInspection> => {
     branch,
     origin,
     originCredential: bare?.basic !== undefined,
-    lockfile,
     pushed: (onRemote ?? "")
       .split("\n")
       .some((ref) => ref.startsWith("refs/remotes/origin/")),
@@ -1697,39 +1682,4 @@ const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
       await uncommit(undefined, path, snapshot).catch(() => undefined);
       await rm(scratch, { recursive: true, force: true });
     }
-  });
-
-// ── Install ────────────────────────────────────────────────────────────────
-
-/** The dependencies, by the lockfile's own tool; its last line when it fails. */
-export const moveInstall = (
-  request: MoveInstallRequest
-): Promise<{ ok: true }> =>
-  runStep(request.jobId, "install", async (run) => {
-    let ran: Ran;
-    try {
-      ran = await exec(run, request.argv, {
-        cwd: request.path,
-        env: plainEnv(),
-      });
-    } catch (error) {
-      if (error instanceof MoveCancelled) {
-        throw error;
-      }
-      // biome-ignore lint/style/useErrorCause: StepFailed takes the cause as its third argument, after the tool's line
-      throw new StepFailed(
-        "Installing dependencies failed",
-        error instanceof Error ? error.message : String(error),
-        { cause: error }
-      );
-    }
-    if (ran.code !== 0) {
-      throw new StepFailed(
-        "Installing dependencies failed",
-        lastLine(ran.stderr) ||
-          lastLine(ran.stdout) ||
-          `${request.argv[0]} exited ${ran.code}`
-      );
-    }
-    return { ok: true as const };
   });

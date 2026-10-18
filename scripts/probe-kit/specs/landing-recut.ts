@@ -1,31 +1,33 @@
 /**
- * The landing gate runs its steps in a clone with the project's dependencies
- * installed, every time (core move.ts `depsScript`), including a clone cut
- * again after its workspace retired. On a scratch fleet (real hub, agent and
- * sessiond; Claude Code against the mock model). This spec delegates, so its
- * fleet cuts workspaces: it runs on the host, outside every boundary.
+ * A project that declares CawCo's own gate shape (gate.md: `bun install
+ * --frozen-lockfile` with on-fail: stop, `bun run lint:changed`, `bun run
+ * typecheck`; hub gate-file.ts) lands through exactly those steps, including
+ * from a clone cut again after its workspace retired, and its declared
+ * install refuses a stale lockfile in bun's own words. The hub installs
+ * nothing of its own. On a scratch fleet (real hub, agent and sessiond;
+ * Claude Code against the mock model). This spec delegates, so its fleet
+ * cuts workspaces: it runs on the host, outside every boundary.
  *
- * Two projects, each with a `typecheck` script (`tsc --noEmit`, TypeScript a
- * dev dependency) and node_modules ignored: L has a bun.lock, N has none (as
- * nightly 3981's ds-probe-sendback, a copy of `site/`, had none). For each:
+ * Two projects, each with `lint:changed` and `typecheck` scripts (`tsc
+ * --noEmit`, TypeScript a dev dependency) and node_modules ignored: L has a
+ * bun.lock, N has none (as nightly 3981's ds-probe-sendback, a copy of
+ * `site/`, had none). For each:
  *
  * - its delegate commits a file and calls finish_item: it lands on the first
- *   try, the gate's `bun run typecheck` passing, and its install line (N's
- *   names `bun install --frozen-lockfile` and package.json) says why it ran;
+ *   try, the declared install, `bun run lint:changed` and `bun run
+ *   typecheck` passing;
  * - its workspace retires, its clone gone;
  * - its parent hands off to it: the clone is cut again at the same path, the
  *   same session commits a second file and calls finish_item once, and that
- *   finish passes the gate on its first try, no "Not landed" answer in the
- *   reopened turn. The re-cut clone's dependencies came from somewhere it
- *   names: the gate's install line ("no dependencies installed from …"), or,
- *   for L on Linux, the agent's seed of the cut (seed-deps.ts) with no
- *   install line.
+ *   finish passes the declared gate on its first try, no "Not landed"
+ *   answer in the reopened turn.
  *
  * Then S, with a bun.lock: its delegate adds a dependency to package.json
- * and leaves bun.lock as it was. The gate's frozen install refuses it, and
- * finish_item's first sentence says package.json and bun.lock disagree and
- * to run `bun install` in the workspace and commit bun.lock; the
- * workspace's bun.lock is unchanged, the item is not done, nothing lands.
+ * and leaves bun.lock as it was. The declared frozen install refuses it:
+ * finish_item says `bun install --frozen-lockfile` failed so lint:changed
+ * and typecheck did not run, with bun's own words ("lockfile had changes,
+ * but lockfile is frozen"); the workspace's bun.lock is unchanged, the item
+ * is not done, nothing lands.
  *
  *   bun scripts/probe-kit/run.ts landing-recut
  */
@@ -34,6 +36,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
@@ -41,16 +44,23 @@ const TAG = /PROBE-RECUT-GATE-([LNS])/;
 type Tag = "L" | "N" | "S";
 /** The projects that land, retire and land again; S's gate refuses its stale lockfile. */
 type LegTag = Exclude<Tag, "S">;
+/** Each project's scripts: what its declared gate runs after the install. */
+const SCRIPTS = {
+  "lint:changed": "tsc --noEmit -p . --pretty false",
+  typecheck: "tsc --noEmit -p .",
+};
 /** S's package.json: the project's, with a dependency bun.lock does not hold. */
 const STALE_MANIFEST = {
   name: "landing-recut-probe",
   private: true,
-  scripts: { typecheck: "tsc --noEmit -p ." },
+  scripts: SCRIPTS,
   devDependencies: { typescript: "5.9.3", "is-number": "7.0.0" },
 };
-/** How finish_item names a stale lockfile, in its first sentence (work-items.ts `failedRun`). */
+/** How finish_item names the failed install, in its first sentence (work-items.ts `failedRun`). */
 const STALE_WORDS =
-  "package.json and bun.lock disagree, so the dependency install refused and no other step ran: run `bun install` in the workspace and commit bun.lock. Fix it, commit, and call finish_item again.";
+  "bun install --frozen-lockfile failed, so bun run lint:changed and bun run typecheck did not run. Fix it, commit, and call finish_item again.";
+/** bun's own words as its frozen install refuses a lockfile package.json disagrees with. */
+const BUN_REFUSAL = "error: lockfile had changes, but lockfile is frozen";
 /** The parent's handoff to a retired delegate, and the mark of its reopened turn. */
 const again = (tag: Tag) => `PROBE-RECUT-AGAIN-${tag}`;
 /** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
@@ -187,7 +197,7 @@ const makeRepo = async (
       {
         name: "landing-recut-probe",
         private: true,
-        scripts: { typecheck: "tsc --noEmit -p ." },
+        scripts: SCRIPTS,
         devDependencies: { typescript: "5.9.3" },
       },
       null,
@@ -210,22 +220,17 @@ const makeRepo = async (
     .quiet();
 };
 
-/** What each project's gate installs from (core move.ts `depsScript`), by bun's frozen install either way. */
-const LOCK: Record<LegTag, string> = { L: "bun.lock", N: "package.json" };
-
-/**
- * Whether a report names where its clone's dependencies came from: the
- * gate's install line saying none were installed from the project's
- * lockfile (or manifest), or, for L, the cut's seed (`seeded` lines in the
- * agent's log) with no install line.
- */
-const depsNamed = (result: string, tag: LegTag, seeded: number): boolean =>
-  result.includes(
-    `- installed dependencies: bun install --frozen-lockfile (no dependencies installed from ${LOCK[tag]})`
-  ) ||
-  (tag === "L" &&
-    seeded === 1 &&
-    !result.includes("- installed dependencies:"));
+/** Whether a report's landing gate is the declared one, every step passing, in order. */
+const declaredPassed = (result: string): boolean => {
+  const at = result.indexOf("Landing gate, run by the hub:\n");
+  const lines = result.slice(at).split("\n").slice(1, 4);
+  return (
+    at >= 0 &&
+    lines[0]?.startsWith("- bun install --frozen-lockfile: pass") === true &&
+    lines[1]?.startsWith("- bun run lint:changed: pass") === true &&
+    lines[2]?.startsWith("- bun run typecheck: pass") === true
+  );
+};
 
 const itemRow = (fleet: Fleet, id: string) =>
   fleet.query<ItemRow>(
@@ -273,6 +278,7 @@ const delegated = async (fleet: Fleet, tag: Tag, lockfile: boolean) => {
     machineId: MACHINE,
     cwd: repo,
   });
+  await declareGate(fleet.base, project.id, JS_GATE);
   const parent = await fleet.spawn("claude", `Parent ${tag}`, repo, {
     projectId: project.id,
   });
@@ -292,10 +298,10 @@ const delegated = async (fleet: Fleet, tag: Tag, lockfile: boolean) => {
 };
 
 /**
- * S: package.json gains a dependency and bun.lock is not updated. The gate's
- * frozen install refuses it, finish_item says in its first sentence to run
- * `bun install` and commit bun.lock, the workspace's bun.lock is as
- * committed, the item is not done, and nothing lands.
+ * S: package.json gains a dependency and bun.lock is not updated. The
+ * declared frozen install refuses it in bun's words, finish_item says it
+ * failed and left lint:changed and typecheck unrun, the workspace's bun.lock
+ * is as committed, the item is not done, and nothing lands.
  */
 const staleLeg = async (kit: Kit, fleet: Fleet): Promise<void> => {
   const { check } = kit;
@@ -308,12 +314,13 @@ const staleLeg = async (kit: Kit, fleet: Fleet): Promise<void> => {
   );
   const said = refusal(answer.refused);
   check(
-    "S (stale bun.lock): finish_item comes back not landed, saying package.json and bun.lock disagree and to run bun install and commit bun.lock",
+    "S (stale bun.lock): finish_item comes back not landed, the declared install failing in bun's own words and leaving lint:changed and typecheck unrun",
     said.includes(STALE_WORDS) &&
+      said.includes("- bun install --frozen-lockfile: fail (exit 1") &&
       said.includes(
-        "- dependencies didn't install: bun install --frozen-lockfile (a package.json or bun.lock changed since the dependencies were installed)"
+        "- bun run typecheck: not run (bun install --frozen-lockfile failed first)"
       ) &&
-      said.includes("error: lockfile had changes, but lockfile is frozen"),
+      said.includes(BUN_REFUSAL),
     said || `no answer read; ${JSON.stringify(answer.row)}`
   );
   const path = workspaceRow(fleet, started.workspaceId)?.path ?? "";
@@ -372,10 +379,10 @@ const leg = async (
   );
   const firstResult = first.row?.result ?? "";
   check(
-    `${label}: the first hand-in lands on its first try, bun run typecheck passing`,
+    `${label}: the first hand-in lands on its first try, the declared install, lint:changed and typecheck passing`,
     first.refused === undefined &&
       first.row?.state === "done" &&
-      firstResult.includes("- bun run typecheck: pass (exit 0") &&
+      declaredPassed(firstResult) &&
       firstResult.includes("Landed on main at"),
     `${first.row?.state} ${first.row?.error ?? ""}\n${refusal(first.refused) || firstResult.slice(0, 1500)}`
   );
@@ -383,20 +390,6 @@ const leg = async (
     return;
   }
   const workspace = workspaceOf(started.workspaceId);
-  const seeds = async () =>
-    (await fleet.logs("agent"))
-      .split("\n")
-      .filter(
-        (line) =>
-          line.includes(`[workspace] ${started.workspaceId}:`) &&
-          line.includes("its dependencies linked from the workspaces' cache")
-      ).length;
-  const seededFirst = await seeds();
-  check(
-    `${label}: the first hand-in's dependencies came from the gate's install, saying why, or the cut's seed`,
-    depsNamed(firstResult, tag, seededFirst),
-    `seeded ${seededFirst}; ${firstResult.slice(0, 1500)}`
-  );
 
   const retired = await until(
     `${label}'s workspace retired`,
@@ -440,20 +433,14 @@ const leg = async (
     refused: notLanded(again(tag)),
   }));
   const result = second.row?.result ?? "";
-  const seeded = (await seeds()) - seededFirst;
   check(
-    `${label}: the follow-up's finish_item passes the gate on its first try in the clone cut again, and lands`,
+    `${label}: the follow-up's finish_item passes the declared gate on its first try in the clone cut again, and lands`,
     second.refused === undefined &&
       second.row?.state === "done" &&
       result.includes(`Delegate commit again_${tag}`) &&
-      result.includes("- bun run typecheck: pass (exit 0") &&
+      declaredPassed(result) &&
       result.includes("Landed on main at"),
     `${second.row?.state} ${second.row?.error ?? ""}\n${refusal(second.refused) || result.slice(0, 1500)}`
-  );
-  check(
-    `${label}: the re-cut clone's dependencies came from the gate's install line naming why (none installed from ${LOCK[tag]}), or the cut's seed with no install line`,
-    depsNamed(result, tag, seeded),
-    `seeded at the re-cut: ${seeded}; ${result.slice(0, 1500)}`
   );
 };
 

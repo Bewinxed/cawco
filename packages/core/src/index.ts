@@ -24,6 +24,9 @@ export * from "./continuation";
 export * from "./delegate-types";
 // A task's deliverables by kind, and a post task's `*.post.json`.
 export * from "./deliverables";
+// A checkout's JavaScript dependencies from its root lockfile: a workspace's
+// cut and the repository's scripts, never the landing gate.
+export * from "./deps";
 // Finding things across the fleet: what /api/find answers (find.ts).
 export * from "./find";
 // Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).

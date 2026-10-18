@@ -47,6 +47,7 @@ typeOverrides:
     DamagedRowRemedy: OpenEnums.DamagedRowRemedy
     DecisionSentTo: OpenEnums.DecisionSentTo
     DecisionState: OpenEnums.DecisionState
+    DeclaredStepNeeds: OpenEnums.DeclaredStepNeeds
     DelegateBudgetPer: OpenEnums.DelegateBudgetPer
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus

@@ -205,10 +205,10 @@ export const seedDependencies = async (
 };
 
 /**
- * The install a seeded clone's boundary finishes, as the hub's checks run it
- * (core `depsScript`): the packages {@link seedDependencies} left out, their
- * scripts and the project's own, then the lockfile's stamp, so a check finds
- * them installed. One that fails is logged, and its next install there runs
+ * The install a seeded clone's boundary finishes (core deps.ts
+ * `depsScript`): the packages {@link seedDependencies} left out, their
+ * scripts and the project's own, then the lockfile's stamp, so a later run
+ * finds them installed. One that fails is logged, and its next install there runs
  * it again. Answers why it failed, or nothing when it did not.
  */
 export const finishInstall = async (

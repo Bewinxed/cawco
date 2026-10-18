@@ -64,7 +64,6 @@
     "snapshot",
     "clone",
     "lfs",
-    "install",
     "start",
   ]);
   const MOVE_IT = "Move it";
@@ -124,8 +123,6 @@
           : `Fetching from ${moveSourceName(job.from)}`;
       case "lfs":
         return "Downloading large files";
-      case "install":
-        return "Installing dependencies";
       default:
         return `Starting the session on ${target}`;
     }
@@ -150,8 +147,6 @@
         return job.lfs
           ? `Large files · ${sizeWords(job.lfs.bytes)} · ${plural(job.lfs.files, "file")}`
           : "Large files";
-      case "install":
-        return "Dependencies installed";
       default:
         return job.moved
           ? [job.moved, job.stayed].filter(Boolean).join(" · ")
@@ -485,11 +480,6 @@
                     >{partWords(file.bytes, file.total)}</span
                   >
                 </div>
-              {/if}
-              {#if row.step === "install" && (row.phase === "active" || row.phase === "failed") && job.install}
-                <code data-slot="sub" class="sub mono"
-                  >{job.install.command}</code
-                >
               {/if}
               {#if row.phase === "asking" && job.ask}
                 <div

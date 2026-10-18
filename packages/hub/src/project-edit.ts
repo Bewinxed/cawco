@@ -1,10 +1,9 @@
 /**
- * A project's name, its Review before done, its Apple build gate
- * (apple-gate.ts), where its work lands and its upstream choice
- * (upstream.ts), changed by the person (`PATCH /api/projects/:id`, the
- * project head's details tray) or, but for the upstream choice, by its Caw
- * (`project_settings` `rename`, `set_review`, `set_apple_gate`,
- * `set_lands`): one check and one write for all five. Where work lands is
+ * A project's name, its Review before done, where its work lands and its
+ * upstream choice (upstream.ts), changed by the person (`PATCH
+ * /api/projects/:id`, the project head's details tray) or, but for the
+ * upstream choice, by its Caw (`project_settings` `rename`, `set_review`,
+ * `set_lands`): one check and one write for all four. Where work lands is
  * a dispatch setting, written by the dispatcher's own `configure`
  * (`lands`), so the dispatcher looks at the project again as it changes.
  * The upstream choice is the person's alone: it is what keeps sessions, Caw
@@ -26,7 +25,6 @@ export const PROJECT_NAME_LIMIT = 200;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 export interface ProjectEdit {
-  appleGate?: boolean;
   /** Where its attempts land when their task says nothing. */
   lands?: LandsMode;
   name?: string;
@@ -84,9 +82,6 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
   if (asked.review !== undefined && asked.review !== project.review) {
     change.review = asked.review;
   }
-  if (asked.appleGate !== undefined && asked.appleGate !== project.appleGate) {
-    change.appleGate = asked.appleGate;
-  }
   if (
     asked.upstreamPosts !== undefined &&
     asked.upstreamPosts !== project.upstreamPosts
@@ -115,7 +110,7 @@ export const createProjectEdits = ({
 }: ProjectEditsDeps) => ({
   /**
    * Checks and applies a change to a project's name, Review before done,
-   * Apple build gate, landing and upstream choice; answers the project as it
+   * landing and upstream choice; answers the project as it
    * is now. Nothing asked is refused.
    */
   async edit(projectId: string, asked: ProjectEdit): Promise<ProjectRow> {
@@ -129,13 +124,12 @@ export const createProjectEdits = ({
     if (
       asked.name === undefined &&
       asked.review === undefined &&
-      asked.appleGate === undefined &&
       asked.lands === undefined &&
       asked.upstreamPosts === undefined
     ) {
       throw new ProjectEditRefusal(
         400,
-        "Name what changes: the project's name, whether it reviews before done, whether its work waits for the iOS build, where its work lands, or whether its agents may post to other repositories."
+        "Name what changes: the project's name, whether it reviews before done, where its work lands, or whether its agents may post to other repositories."
       );
     }
     const { lands: landsTo, ...details } = changeOf(project, asked);

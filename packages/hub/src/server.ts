@@ -517,6 +517,7 @@ import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
+import { gateRoutes } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
@@ -17824,6 +17825,10 @@ export const createServer = (
         return { ...place, held: work ? heldPlace(work) : null };
       }),
       primaryPlaceId: checkoutOf(project)?.id ?? null,
+      // Read by nothing: the Apple build is a step a project declares in its
+      // gate.md (gate-file.ts). Kept for the shipped apps that require it
+      // (TestFlight 20261015.3 to 20261018); it goes once none is installable.
+      appleGate: false as boolean,
     };
   };
 
@@ -21515,6 +21520,7 @@ export const createServer = (
             decisionsChanged(id);
           }
         ),
+        gateRoutes((id) => db.project(id) !== undefined),
         taskRoutes(tasks),
         artifactRoutes(artifacts),
         decisionRoutes(decisions),
@@ -24817,8 +24823,8 @@ export const createServer = (
         }
       )
       // The person's own edit of a project: its name, whether it reviews
-      // before done, its Apple build gate, where its work lands and its
-      // upstream choice (project-edit.ts). Every dashboard and the app hear
+      // before done, where its work lands and its upstream choice
+      // (project-edit.ts). Every dashboard and the app hear
       // it at once (`projects.changed`; a review change, `tasks.changed` too).
       .patch(
         "/api/projects/:id",
@@ -24826,7 +24832,6 @@ export const createServer = (
           body: t.Object({
             name: t.Optional(t.String({ maxLength: 2000 })),
             review: t.Optional(t.Boolean()),
-            appleGate: t.Optional(t.Boolean()),
             lands: t.Optional(LANDS),
             // Null: the fleet's answer (upstream.ts).
             upstreamPosts: t.Optional(

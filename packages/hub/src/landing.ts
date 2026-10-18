@@ -12,18 +12,17 @@
  *
  * An item gates before it takes a turn: fetch, rebase onto the branch as it
  * is now (a conflict is undone and goes back to the delegate), and run the
- * landing gate on that tree (the repository's {@link LAND_GATE_SCRIPTS}, and
- * the iOS build when the item changes what the Swift build reads:
- * work-items.ts `gateSteps`), outside the queue, each step waiting there for
- * whatever machine slot or pause it needs. No session writes it. Only a
- * gated item joins the queue.
+ * landing gate on that tree (the steps its project declares in gate.md:
+ * gate-file.ts, work-items.ts `gateSteps`), outside the queue, each step
+ * waiting there for whatever machine slot or pause it needs. No session
+ * writes it. Only a gated item joins the queue.
  *
  * One landing at a time per repository and branch, and a turn never waits:
  * fetch, rebase onto the branch again, run again only the commands whose
  * inputs the rebase changed, push, and, while someone keeps pushing in
  * between, the same again, three tries in all. A command due in the turn that
- * would wait for a machine slot or a pause, or run on another machine (the
- * Apple build), does not: the item steps out of the turn (`busy`), gates
+ * would wait for a machine slot or a pause, or run on another machine (a
+ * step that `needs:` one), does not: the item steps out of the turn (`busy`), gates
  * again on the newer branch, and queues again, so the next ready item lands
  * (2026-10-16: an item that had passed sat 13 minutes behind one waiting for
  * the Mac's one build slot). Nothing ahead of the branch counts as landed,
@@ -36,10 +35,10 @@
  * typecheck (23da40303 sorted boundary.ts's imports, and ded95f4d2 formatted
  * SessionHover's, after rebases had landed them unlinted on main), and a wire
  * change can break the iOS app (312b43065). One command runs at most once on
- * one set of inputs: the caller skips a command that already passed, or one
- * {@link GATE_COVERS} names did, on the tree about to be pushed, or, for a
- * command that declares the paths it reads, on the same trees of those paths
- * (work-items.ts `gateOnce`), and runs every other.
+ * one set of inputs: the caller skips a command that already passed on the
+ * tree about to be pushed, or, for a step that declares the paths it reads
+ * (`on:`), on the same trees of those paths (work-items.ts `gateOnce`), and
+ * runs every other.
  *
  * A work item that lands `branch` or `pr` goes to a branch of its own
  * instead ({@link pushBranch}): HEAD as it is, replacing only what the hub
@@ -49,16 +48,19 @@
 import type { CommandResult } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { WouldWait } from "./machine-pause";
+import type { RunsOnCapability } from "./runs-on";
 
 /**
  * Why git turned a landing down: the step it was on, the end of what git
  * said, and `cause` when the words name it. `auth` is the remote refusing the
  * login (no credential reached git, or a bad one); `race` is a push that was
  * still behind the branch after every try, someone else pushing between the
- * hub's fetch and its push each time.
+ * hub's fetch and its push each time; `cut-off`, a push the workspace's
+ * boundary stopped before it answered ({@link CUT_OFF}), the branch read once
+ * after it and not holding the commit.
  */
 export interface Refusal {
-  cause?: "auth" | "race";
+  cause?: "auth" | "race" | "cut-off";
   detail: string;
   kind: "refused";
   step: "read" | "fetch" | "push" | "pull request";
@@ -257,8 +259,9 @@ const LOCAL_MS = 60_000;
 /**
  * A command the workspace's boundary cut off: its sandbox stopped while it
  * ran (agent boundary.ts, the executor's "cut off" line). A push cut off
- * there says nothing of where it got: the host's side of the git door runs
- * on, and the remote may take it after the hub has looked.
+ * there is not tried again: the branch is read once ({@link holds}), and the
+ * landing is landed when it holds the commit and refused, saying so, when it
+ * does not.
  */
 const CUT_OFF = 137;
 /** Pushes that lost a race, as git words them. */
@@ -307,70 +310,25 @@ export const statusCommand = (skip: string[] = []): string =>
     : `git status --porcelain -- . ${skip.map((path) => quote(`:(exclude,literal)${path}`)).join(" ")}`;
 
 /**
- * The landing gate's scripts: these of the repository's root package.json,
- * each run as `bun run <name>` in the workspace, inside its boundary, on the
- * commit about to be pushed. The repository says what they check; a
- * repository whose package.json defines neither runs none. The cockpit's
- * pre-push hook (scripts/git-hooks/pre-push) runs the same two for a push
- * to main by hand.
- */
-export const LAND_GATE_SCRIPTS = ["lint:changed", "typecheck"] as const;
-
-/**
- * The commands whose pass on a tree covers another's there, by the command
- * covered. `bun run lint` covers `bun run lint:changed`: the root
- * package.json runs the same css-scope and mark-line checks in both, then
- * `fmt.ts --check` over every file where lint:changed passes `--changed`, and
- * `ultracite check` (ultracite 7: `biome check --no-errors-on-unmatched ./`)
- * where lint:changed runs `biome check --no-errors-on-unmatched` on the files
- * changed since the merge-base with origin/main.
- */
-export const GATE_COVERS: Readonly<Record<string, readonly string[]>> = {
-  "bun run lint:changed": ["bun run lint"],
-};
-
-/**
- * Prints, one per line, the {@link LAND_GATE_SCRIPTS} the checkout's root
- * package.json defines; nothing without a package.json.
- */
-export const landGateProbe = `if [ -f package.json ]; then bun -e ${quote(
-  `const scripts = JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).scripts ?? {}; for (const name of ${JSON.stringify(LAND_GATE_SCRIPTS)}) { if (typeof scripts[name] === "string") { console.log(name); } }`
-)}; fi`;
-
-/**
- * One step of the landing gate, which the hub alone writes: a shell command
- * run in the item's workspace (or, with `machine`, in its gate workspace on
- * that machine, at its last commit), passing when it exits 0.
+ * One step of the landing gate as it runs: a step the project declares
+ * (gate-file.ts), a shell command run in the item's workspace (or, with
+ * `machine`, in its gate workspace on that machine, at its last commit),
+ * passing when it exits 0. No session writes it.
  */
 export interface GateStep {
   command: string;
-  /** The machine it runs on, by machineId, when not the workspace's own: the iOS build's Mac. */
+  /** The paths it reads (`on:`): its pass is kept by their trees, not the whole tree's. */
+  inputs?: readonly string[];
+  /** The machine it runs on, by machineId, when not the workspace's own. */
   machine?: string;
-  /** What the report calls it: the command, or "iOS build compiles". */
+  /** What the report calls it: its `name:`, or the command. */
   name: string;
+  /** The capability its machine needs (`needs:`): a paused one gives way to another that has it. */
+  needs?: RunsOnCapability;
+  /** A failure leaves the steps after it unrun (`on-fail: stop`). */
+  stopsRest?: boolean;
   /** Seconds before the command is killed; 600 when not given. */
   timeoutSec?: number;
-}
-
-/**
- * The gate's script steps for the workspace `run` reaches, in {@link
- * LAND_GATE_SCRIPTS}' order. Throws with the probe's words when the
- * package.json could not be read.
- */
-export async function landGateSteps(
-  run: LandingDeps<unknown>["run"]
-): Promise<GateStep[]> {
-  const probe = await run(landGateProbe, LOCAL_MS);
-  if (probe.exitCode !== 0) {
-    throw new Error(
-      `the landing gate's scripts could not be read from package.json:\n${detailOf(probe)}`
-    );
-  }
-  const defined = new Set(probe.stdout.split("\n").map((line) => line.trim()));
-  return LAND_GATE_SCRIPTS.filter((name) => defined.has(name)).map((name) => ({
-    name: `bun run ${name}`,
-    command: `bun run ${name}`,
-  }));
 }
 
 /**
@@ -387,22 +345,18 @@ export async function land<F>(
     return start;
   }
   const key = `${deps.repo ?? start.remote}#${base}`;
-  const cut: CutOff = {};
   for (;;) {
     if (deps.stopped?.()) {
       return { kind: "stopped" };
     }
     // biome-ignore lint/performance/noAwaitInLoops: an item that stepped out of its turn gates again before it queues again
     const gated = await onBase(base, deps, false);
-    if (gated.kind === "nothing" && cut.push) {
-      return { kind: "landed", ...cut.push };
-    }
     if (gated.kind !== "on-base") {
       return gated;
     }
     const turn = await deps.queue(
       key,
-      () => attempt(base, deps, 1, cut).catch(steppedOut),
+      () => attempt(base, deps, 1).catch(steppedOut),
       deps.turn
     );
     if (turn.kind !== "busy") {
@@ -442,9 +396,7 @@ async function onBase<F>(
   const target = quote(`origin/${base}`);
   const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
   if (fetched.exitCode !== 0) {
-    return (await landedBefore(run, base))
-      ? { kind: "nothing" }
-      : refusal("fetch", fetched);
+    return refusal("fetch", fetched);
   }
   const ahead = await run(`git rev-list --count ${target}..HEAD`, LOCAL_MS);
   if (ahead.exitCode !== 0) {
@@ -484,24 +436,6 @@ async function onBase<F>(
 }
 
 /**
- * Whether every commit of HEAD is on `base` as the clone last fetched it: a
- * workspace whose work is on the branch already has nothing to land, whether
- * or not the fetch that would say so again goes through (2026-10-17: an item
- * whose one commit was on main failed on "remote helper 'cawco' aborted
- * session"). The branch only moves on, so what it held then it holds now.
- */
-async function landedBefore(
-  run: LandingDeps<unknown>["run"],
-  base: string
-): Promise<boolean> {
-  const held = await run(
-    `git merge-base --is-ancestor HEAD ${quote(`refs/remotes/origin/${base}`)}`,
-    LOCAL_MS
-  );
-  return held.exitCode === 0;
-}
-
-/**
  * Whether origin's `ref` is at `sha` now. A push that did not answer 0 may
  * still have landed (its command cut off after the remote took it), and a
  * ref at the commit pushed is landed whatever the command said.
@@ -516,26 +450,25 @@ async function holds(
 }
 
 /**
- * A landing's push its boundary cut off ({@link CUT_OFF}): the commit it
- * sent, and whether the turn had rebased. The landing goes on as after a
- * lost race; a later read that finds the branch already holding every commit
- * is that push landed, not nothing to land.
+ * A push its boundary cut off ({@link CUT_OFF}) whose branch, read once
+ * after it, does not hold the commit: refused, in words saying so.
  */
-interface CutOff {
-  push?: { onto: string; rebased: boolean; sha: string };
-}
+const cutOff = (pushed: CommandResult, ref: string, sha: string): Refusal => ({
+  kind: "refused",
+  step: "push",
+  cause: "cut-off",
+  detail: `The push was cut off before it answered (exit ${CUT_OFF}: the workspace's boundary stopped), and origin's ${ref} does not hold ${sha.slice(0, 9)} when read after it.${pushed.stderr.trim() || pushed.stdout.trim() ? `\n${detailOf(pushed)}` : ""}`,
+});
 
 /**
  * The turn: fetch, rebase, the commands whose inputs that moved, push; once
- * more if the push lost a race or was cut off ({@link CutOff}). Nothing in it
- * waits: a command that would throws {@link WouldWait}, which steps the item
- * out ({@link land}).
+ * more if the push lost a race. Nothing in it waits: a command that would
+ * throws {@link WouldWait}, which steps the item out ({@link land}).
  */
 async function attempt<F>(
   base: string,
   deps: LandingDeps<F>,
-  n: number,
-  cut: CutOff
+  n: number
 ): Promise<LandingOutcome<F>> {
   const run = (cmd: string, timeoutMs: number) =>
     deps.run(cmd, timeoutMs, true);
@@ -543,9 +476,6 @@ async function attempt<F>(
     return { kind: "stopped" };
   }
   const gated = await onBase(base, deps, true);
-  if (gated.kind === "nothing" && cut.push) {
-    return { kind: "landed", ...cut.push };
-  }
   if (gated.kind !== "on-base") {
     return gated;
   }
@@ -564,21 +494,14 @@ async function attempt<F>(
     return { kind: "landed", sha: after, onto, rebased };
   }
   if (pushed.exitCode === CUT_OFF) {
-    cut.push = {
-      sha: after,
-      onto,
-      rebased: rebased || (cut.push?.rebased ?? false),
-    };
-    return n < ATTEMPTS
-      ? await attempt(base, deps, n + 1, cut)
-      : refusal("push", pushed);
+    return cutOff(pushed, base, after);
   }
   const said = `${pushed.stderr}\n${pushed.stdout}`;
   if (!(LOST_RACE.test(said) && !NOT_AUTHORISED.test(said))) {
     return refusal("push", pushed);
   }
   return n < ATTEMPTS
-    ? await attempt(base, deps, n + 1, cut)
+    ? await attempt(base, deps, n + 1)
     : {
         kind: "refused",
         step: "push",
@@ -647,9 +570,7 @@ export async function pushBranch(
       }
       const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
       if (fetched.exitCode !== 0) {
-        return (await landedBefore(run, base))
-          ? { kind: "nothing" }
-          : refusal("fetch", fetched);
+        return refusal("fetch", fetched);
       }
       const ahead = await run(
         `git rev-list --count ${quote(`origin/${base}`)}..HEAD`,
@@ -665,7 +586,7 @@ export async function pushBranch(
       if (deps.stopped?.()) {
         return { kind: "stopped" };
       }
-      const refused = await leasedPush(run, `refs/heads/${branch}`, 1);
+      const refused = await leasedPush(run, `refs/heads/${branch}`, sha, 1);
       return refused && !(await holds(run, `refs/heads/${branch}`, sha))
         ? refused
         : { kind: "pushed", sha };
@@ -677,14 +598,16 @@ export async function pushBranch(
 const SPACE = /\s+/;
 
 /**
- * HEAD pushed to `ref`, replacing it only if it still holds what
+ * HEAD (`sha`) pushed to `ref`, replacing it only if it still holds what
  * `git ls-remote` read just before (or is still missing); once more from a
- * fresh read when someone pushed in between. Answers why it was refused, or
- * nothing when it was pushed.
+ * fresh read when someone pushed in between. A push cut off is not tried
+ * again ({@link CUT_OFF}): the caller reads the branch once. Answers why it
+ * was refused, or nothing when it was pushed.
  */
 async function leasedPush(
   run: LandingDeps<unknown>["run"],
   ref: string,
+  sha: string,
   n: number
 ): Promise<Refusal | undefined> {
   const there = await run(`git ls-remote origin ${quote(ref)}`, NETWORK_MS);
@@ -700,17 +623,14 @@ async function leasedPush(
     return;
   }
   if (pushed.exitCode === CUT_OFF) {
-    // From a fresh read: one the cut-off push landed on is HEAD already.
-    return n < ATTEMPTS
-      ? await leasedPush(run, ref, n + 1)
-      : refusal("push", pushed);
+    return cutOff(pushed, ref, sha);
   }
   const said = `${pushed.stderr}\n${pushed.stdout}`;
   if (!(LOST_RACE.test(said) && !NOT_AUTHORISED.test(said))) {
     return refusal("push", pushed);
   }
   return n < ATTEMPTS
-    ? await leasedPush(run, ref, n + 1)
+    ? await leasedPush(run, ref, sha, n + 1)
     : {
         kind: "refused",
         step: "push",

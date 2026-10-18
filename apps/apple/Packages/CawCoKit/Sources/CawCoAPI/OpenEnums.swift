@@ -1611,6 +1611,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/DeclaredStepNeeds`.
+    public enum DeclaredStepNeeds: OpenEnum {
+        case apple
+        case linux
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "apple": self = .apple
+            case "linux": self = .linux
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .apple: "apple"
+            case .linux: "linux"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.apple, .linux]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/DelegateBudgetPer`.
     public enum DelegateBudgetPer: OpenEnum {
         case attempt
@@ -3660,7 +3698,6 @@ public enum OpenEnums {
         case cancelled
         case clone
         case failed
-        case install
         case lfs
         case snapshot
         case start
@@ -3674,7 +3711,6 @@ public enum OpenEnums {
             case "cancelled": self = .cancelled
             case "clone": self = .clone
             case "failed": self = .failed
-            case "install": self = .install
             case "lfs": self = .lfs
             case "snapshot": self = .snapshot
             case "start": self = .start
@@ -3689,7 +3725,6 @@ public enum OpenEnums {
             case .cancelled: "cancelled"
             case .clone: "clone"
             case .failed: "failed"
-            case .install: "install"
             case .lfs: "lfs"
             case .snapshot: "snapshot"
             case .start: "start"
@@ -3702,7 +3737,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.approval, .cancelled, .clone, .failed, .install, .lfs, .snapshot, .start, .started]
+        public static let allCases: [Self] = [.approval, .cancelled, .clone, .failed, .lfs, .snapshot, .start, .started]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -3717,7 +3752,6 @@ public enum OpenEnums {
     public enum MoveStep: OpenEnum {
         case approval
         case clone
-        case install
         case lfs
         case snapshot
         case start
@@ -3728,7 +3762,6 @@ public enum OpenEnums {
             switch rawValue {
             case "approval": self = .approval
             case "clone": self = .clone
-            case "install": self = .install
             case "lfs": self = .lfs
             case "snapshot": self = .snapshot
             case "start": self = .start
@@ -3740,7 +3773,6 @@ public enum OpenEnums {
             switch self {
             case .approval: "approval"
             case .clone: "clone"
-            case .install: "install"
             case .lfs: "lfs"
             case .snapshot: "snapshot"
             case .start: "start"
@@ -3752,7 +3784,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.approval, .clone, .install, .lfs, .snapshot, .start]
+        public static let allCases: [Self] = [.approval, .clone, .lfs, .snapshot, .start]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

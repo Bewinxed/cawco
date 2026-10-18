@@ -39,7 +39,6 @@ import {
   CONTROL_MOVE_CLONE,
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_INSPECT,
-  CONTROL_MOVE_INSTALL,
   CONTROL_MOVE_LFS,
   CONTROL_MOVE_PREPARE,
   CONTROL_MOVE_REMOTE_CREDENTIAL,
@@ -146,7 +145,6 @@ import {
   moveCancel,
   moveClone,
   moveInspect,
-  moveInstall,
   moveLfs,
   movePrepare,
   moveRemoteCredential,
@@ -3031,12 +3029,6 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_MOVE_LFS,
       unfenced((request) => moveLfs(request as Parameters<typeof moveLfs>[0]))
-    );
-    supervisor.registerDaemonFunction(
-      CONTROL_MOVE_INSTALL,
-      unfenced((request) =>
-        moveInstall(request as Parameters<typeof moveInstall>[0])
-      )
     );
     supervisor.registerDaemonFunction(CONTROL_MOVE_CANCEL, (jobId) =>
       moveCancel(jobId as string)

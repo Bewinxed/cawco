@@ -1979,12 +1979,10 @@ export interface DbShape {
       >
     >
   ) => void;
-  /** The project's name, its Review before done, its Apple build gate and its upstream choice, as project-edit.ts checked them. */
+  /** The project's name, its Review before done and its upstream choice, as project-edit.ts checked them. */
   readonly setProjectDetails: (
     id: string,
-    change: Partial<
-      Pick<ProjectRow, "appleGate" | "name" | "review" | "upstreamPosts">
-    >
+    change: Partial<Pick<ProjectRow, "name" | "review" | "upstreamPosts">>
   ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
   readonly setProjectDispatch: (

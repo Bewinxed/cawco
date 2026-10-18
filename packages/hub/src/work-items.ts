@@ -14,10 +14,9 @@
  * The hub is the one authority: `delegate` is a request to {@link start}, and
  * the frames that move a session move its item. It is `done` only when its
  * session calls `finish_item` and its work passes the hub's landing gate
- * ({@link gateSteps}: the dependency install, the repository's lint and
- * typecheck on the tree about to land, and the iOS build when the item
- * changes what the Swift build reads) and lands. No session declares what
- * the hub runs: the session's report, quoting the output of every command
+ * ({@link gateSteps}: the steps its project declares in gate.md, on the tree
+ * about to land; gate-file.ts) and lands. No session declares what the hub
+ * runs: the session's report, quoting the output of every command
  * that proves its work, is the proof, and the parent's report is that
  * report with the gate's lines, the landing and the commits under it.
  *
@@ -76,9 +75,6 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
-  DEPS_INSTALLING,
-  DEPS_STALE,
-  depsScript,
   handoffMarker,
   holdingWords,
   machineCalled,
@@ -96,18 +92,6 @@ import {
   MachinePathRefused,
 } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
-import {
-  APPLE_GATE_COMMAND,
-  APPLE_GATE_INPUTS,
-  APPLE_GATE_STEP,
-  APPLE_GATE_TIMEOUT_SEC,
-  appleGateDiff,
-  appleGateRefusal,
-  appleMachines,
-  appPaths,
-  diffPaths,
-  lastMac,
-} from "./apple-gate";
 import { briefingFor } from "./briefings";
 import type {
   DbShape,
@@ -122,15 +106,24 @@ import type {
   WorkLanding,
   WorkOrigin,
 } from "./db/schema";
+import {
+  capableMachines,
+  capableRefusal,
+  changedPathsCommand,
+  covers,
+  type DeclaredStep,
+  diffPaths,
+  GATE_FILE,
+  lastCapable,
+  projectGate,
+} from "./gate-file";
 import { leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
   type Failed,
-  GATE_COVERS,
   type GateStep,
   type LandingTurn,
   land,
-  landGateSteps,
   landingQueue,
   openPullRequest,
   pushBranch,
@@ -148,6 +141,7 @@ import {
   writeFolderFiles,
 } from "./project-folder";
 import { placesChanged } from "./project-placements";
+import type { RunsOnCapability } from "./runs-on";
 import type { Todo } from "./task-file";
 import type { TodoChanges } from "./tasks";
 import { unwatchedMode } from "./unwatched-mode";
@@ -1383,6 +1377,11 @@ interface StepOutcome {
    */
   skipped?: string;
   step: GateStep;
+  /**
+   * Why a step did not run and so did not pass: an earlier step with
+   * `on-fail: stop` failed (`bun install --frozen-lockfile failed first`).
+   */
+  unrun?: string;
   /** Where a step on another machine ran: `on Omars-MacBook-Pro at 1a2b3c4d5`. */
   where?: string;
 }
@@ -1397,25 +1396,20 @@ interface Passed {
   stage: string;
 }
 
-/**
- * The paths a step's command reads, for the commands that declare them: its
- * pass is kept and matched by those paths' trees rather than the whole
- * tree's, so it holds after a rebase that left them as they were (the Apple
- * gate's compile, apple-gate.ts {@link APPLE_GATE_INPUTS}). Every other step
- * is kept and matched by the whole tree.
- */
-const STEP_INPUTS: Readonly<Record<string, readonly string[]>> = {
-  [APPLE_GATE_COMMAND]: APPLE_GATE_INPUTS,
-};
-/** Every path a step declares, read once per look at the workspace. */
-const INPUT_PATHS = [...new Set(Object.values(STEP_INPUTS).flat())];
+/** Every path the steps declare as their inputs (`on:`), read once per look at the workspace. */
+const inputPathsOf = (steps: readonly GateStep[]): string[] => [
+  ...new Set(steps.flatMap((step) => step.inputs ?? [])),
+];
 
 /**
  * A clean workspace as {@link gateOnce} keys passes by it: `tree`, HEAD's
  * tree with the item's outputs' contents beside it; `inputs`, the tree of
  * each declared input path at HEAD (`absent` where HEAD has none); `outputs`,
  * each output's content hash; `stamp`, all of it, to tell whether the
- * workspace moved during a run.
+ * workspace moved during a run. A step that declares its inputs (`on:`) has
+ * its pass kept and matched by those paths' trees rather than the whole
+ * tree's, so it holds after a rebase that left them as they were; every
+ * other step by the whole tree.
  */
 interface TreeState {
   inputs: ReadonlyMap<string, string>;
@@ -1433,7 +1427,7 @@ const passKey = (
   step: GateStep,
   state: TreeState
 ): { key: string; said: (stage: string) => string } => {
-  const inputs = STEP_INPUTS[step.command.trim()];
+  const { inputs } = step;
   if (!inputs) {
     return {
       key: state.tree,
@@ -1454,9 +1448,8 @@ const passKey = (
 
 /**
  * Why `step` need not run where `passed` passed (all kept under its
- * {@link passKey}, which `said` names): the same command passed there, or
- * one that covers it did (landing.ts {@link GATE_COVERS}). Undefined when it
- * must run.
+ * {@link passKey}, which `said` names): the same command passed there.
+ * Undefined when it must run.
  */
 const priorPass = (
   step: GateStep,
@@ -1465,46 +1458,39 @@ const priorPass = (
 ): string | undefined => {
   const command = step.command.trim();
   const same = passed.find((each) => each.command === command);
-  if (same) {
-    return said(same.stage);
-  }
-  const covers = GATE_COVERS[command] ?? [];
-  const cover = passed.find((each) => covers.includes(each.command));
-  return cover
-    ? `${cover.command}, which covers it, ${said(cover.stage)}`
-    : undefined;
+  return same ? said(same.stage) : undefined;
 };
 
-/** An install {@link depsScript} ran ahead of the gate's steps: the gate's first line. */
-interface InstallOutcome {
-  durationMs: number;
-  passed: boolean;
-  result: CommandResult;
-  /** What it said it ran: `bun install (bun.lock changed …)`. */
-  said: string;
-  /** The lockfile it refused because package.json disagrees with it ({@link DEPS_STALE}): `bun.lock`. */
-  stale?: string;
-  /** Where it ran, when on another machine's gate workspace. */
-  where?: string;
+/**
+ * A run of the landing gate: each step's outcome, and whether the project
+ * declares a gate at all (gate-file.ts): one that declares none lands with
+ * no checks, and its report says so.
+ */
+interface GateRun {
+  declared: boolean;
+  outcomes: StepOutcome[];
 }
 
 /**
- * A run of the landing gate: the installs it made first, and the steps' own
- * outcomes, none of them when the workspace's own install failed.
+ * The landing gate an item lands through: the steps its project declares
+ * that are due for it (gate-file.ts), and whether it declares a gate at all.
  */
-interface GateRun {
-  installs: InstallOutcome[];
-  outcomes: StepOutcome[];
+interface Gate {
+  declared: boolean;
+  steps: GateStep[];
 }
+
+/** What a landing that pushed says of a project that declares no gate. */
+const NO_CHECKS = "landed with no checks: this project declares none";
 
 /**
  * How a gate run waits. At finish_item and while an item gates on top of
  * its branch (`inTurn` false) its steps wait out their machine's pause and
  * the shared slots they need, `say` hearing each wait with the name of the
  * step that waits (null once none does). In the landing turn (`inTurn` true)
- * nothing waits: a step due there that runs on another machine, or one (or
- * its dependency install) that would wait for a pause or a slot, throws
- * {@link WouldWait}, and the item steps out of its turn (landing.ts).
+ * nothing waits: a step due there that runs on another machine, or one that
+ * would wait for a pause or a slot, throws {@link WouldWait}, and the item
+ * steps out of its turn (landing.ts).
  */
 interface GateHow {
   inTurn: boolean;
@@ -1513,7 +1499,7 @@ interface GateHow {
 
 /**
  * The turn runs only what runs in the workspace itself: a due step on
- * another machine (the iOS build on a Mac) is the gate's, outside the queue.
+ * another machine (one that `needs:` a Mac) is the gate's, outside the queue.
  * Throws {@link WouldWait} naming the first such step, before any of them
  * runs; nothing when there is none.
  */
@@ -1547,16 +1533,8 @@ interface Ran {
   where: string | undefined;
 }
 
-/** A step's install a machine's pause cancelled: it runs again with its step. */
-class PausedRun extends Error {
-  constructor() {
-    super("cancelled by its machine's pause");
-  }
-}
-
-/** Whether a run fails: an install that failed, or a step. */
+/** Whether a run fails: a step that failed, or one left unrun by one that did. */
 const runFailed = (run: GateRun): boolean =>
-  run.installs.some((install) => !install.passed) ||
   run.outcomes.some((outcome) => !outcome.passed);
 
 /** A fenced block that no command output can close early. */
@@ -1564,48 +1542,24 @@ const fenced = (text: string): string =>
   `\n\`\`\`\`\n${text.trimEnd()}\n\`\`\`\``;
 
 /**
- * An install's line above the gate's steps: what it ran, and on a failure
- * the installer's output (and its stderr, for the delegate).
- */
-const installLine = (
-  { said, passed, result, durationMs, where }: InstallOutcome,
-  withStderr = false
-): string => {
-  const facts = `${passed ? "" : `exit ${result.exitCode}, `}${(durationMs / 1000).toFixed(1)}s${where ? `, ${where}` : ""}`;
-  const line = `- ${passed ? "installed dependencies" : "dependencies didn't install"}: ${said} (${facts})`;
-  if (passed) {
-    return line;
-  }
-  const out = result.stdout.trim() ? `${line}${fenced(result.stdout)}` : line;
-  return withStderr && result.stderr.trim()
-    ? `${out}\nstderr:${fenced(result.stderr)}`
-    : out;
-};
-
-/** A run's install lines, each on its own line ahead of the steps; empty without one. */
-const installLines = (run: GateRun, withStderr = false): string =>
-  run.installs.map((each) => `${installLine(each, withStderr)}\n`).join("");
-
-/**
- * A failed gate run as the delegate reads it: `head`, when the workspace's
- * install failed, that no step ran, else which steps failed; `lines`, the
- * install lines and then the steps', failures first, each failure with its
- * output.
+ * A failed gate run as the delegate reads it: `head`, which steps failed
+ * and which they left unrun; `lines`, the steps', failures first, each
+ * failure with its output.
  */
 const failedRun = (run: GateRun): { head: string; lines: string } => {
-  const failing = run.outcomes.filter((outcome) => !outcome.passed);
+  const failing = run.outcomes.filter(
+    (outcome) => !(outcome.passed || outcome.unrun)
+  );
+  const unrun = run.outcomes.filter((outcome) => outcome.unrun);
   const passing = run.outcomes.filter((outcome) => outcome.passed);
-  const stale = run.installs.find((install) => install.stale)?.stale;
-  let head = `${failing.map((each) => each.step.name).join(" and ")} failed`;
-  if (stale) {
-    head = `package.json and ${stale} disagree, so the dependency install refused and no other step ran: run \`bun install\` in the workspace and commit ${stale}`;
-  } else if (run.outcomes.length === 0) {
-    head = "the dependency install failed, so no other step ran";
-  }
+  const names = (each: StepOutcome[]) =>
+    each.map((outcome) => outcome.step.name).join(" and ");
   return {
-    head,
-    lines:
-      `${installLines(run, true)}${[...failing, ...passing].map(stepResultLine).join("\n")}`.trimEnd(),
+    head: `${names(failing)} failed${unrun.length > 0 ? `, so ${names(unrun)} did not run` : ""}`,
+    lines: [...failing, ...unrun, ...passing]
+      .map(stepResultLine)
+      .join("\n")
+      .trimEnd(),
   };
 };
 
@@ -1620,10 +1574,14 @@ const stepLine = ({
   durationMs,
   result,
   skipped,
+  unrun,
   where,
 }: StepOutcome): string => {
   if (skipped) {
     return `- ${step.name}: pass (not run again: ${skipped})`;
+  }
+  if (unrun) {
+    return `- ${step.name}: not run (${unrun})`;
   }
   const line = `- ${step.name}: ${passed ? "pass" : "fail"} (exit ${exitCode}, ${(durationMs / 1000).toFixed(1)}s${where ? `, ${where}` : ""})`;
   // A pass is its line: its output is the report's length, not its news.
@@ -1632,18 +1590,29 @@ const stepLine = ({
     : line;
 };
 
-/** A gate run as the report lists it: its installs, then each step; empty when it ran nothing. */
+/** A gate run as the report lists it: each step; empty when it ran nothing. */
 const gateLines = (run: GateRun): string =>
-  `${installLines(run)}${run.outcomes.map(stepLine).join("\n")}`.trimEnd();
+  run.outcomes.map(stepLine).join("\n").trimEnd();
+
+/**
+ * A finished landing's gate lines: its steps, or, for a project that
+ * declares no gate, {@link NO_CHECKS} once it pushed something; empty
+ * when it pushed nothing.
+ */
+const landingGateLines = (
+  landing: Exclude<Landed, { kind: "retry" | "stopped" }>
+): string => {
+  if (landing.gate.declared) {
+    return gateLines(landing.gate);
+  }
+  return landing.kind === "done" && landing.landed ? NO_CHECKS : "";
+};
 
 /** A step as the delegate reads it: a failure carries its stderr too. */
 const stepResultLine = (outcome: StepOutcome): string =>
   !outcome.passed && outcome.result.stderr.trim()
     ? `${stepLine(outcome)}\nstderr:${fenced(outcome.result.stderr)}`
     : stepLine(outcome);
-
-/** A gate run with nothing in it: an item whose landing has no gate. */
-const NO_GATE: GateRun = { installs: [], outcomes: [] };
 
 /**
  * The landing line of an item that landed on its base: where, what its turn
@@ -1664,11 +1633,8 @@ const landedLine = (
         : `${each.step.name} ${each.passed ? "passed" : "failed"}`
     )
     .join(", ");
-  const installed = (turn?.installs ?? [])
-    .map((each) => `, installing dependencies first: ${each.said}`)
-    .join("");
   const after = landed.rebased
-    ? `${base} had moved by its turn, so it rebased again${ran ? `: ${ran}${installed}` : ", with no gate steps to run"}`
+    ? `${base} had moved by its turn, so it rebased again${ran ? `: ${ran}` : ", with no gate steps to run"}`
     : `${base} had not moved by its turn, so nothing ran again`;
   const stepped =
     steps.length > 0
@@ -1756,6 +1722,8 @@ const refusedLine = (
     said = `${step[refusal.step]} from ${machine} wasn't authorised by origin`;
   } else if (refusal.cause === "race") {
     said = `${target} moved on origin before each of the hub's ${refusal.tries} pushes, so every one was turned down as behind it`;
+  } else if (refusal.cause === "cut-off") {
+    said = `${step.push} was cut off, and ${target} does not hold the commits`;
   } else if (refusal.step === "push") {
     said = `${step.push} was refused`;
   }
@@ -1781,8 +1749,10 @@ const failureOf = (
  * The landing gate's section of a report: its lines under their heading;
  * nothing for a landing with no gate.
  */
-const gateSection = (run: GateRun): string => {
-  const lines = gateLines(run);
+const gateSection = (
+  landing: Exclude<Landed, { kind: "retry" | "stopped" }>
+): string => {
+  const lines = landingGateLines(landing);
   return lines ? `\n\nLanding gate, run by the hub:\n${lines}` : "";
 };
 
@@ -1799,7 +1769,7 @@ const finishedReport = (
   tail: string
 ): string => {
   const failure = failureOf(landing, collected);
-  const head = `${summary}${gateSection(landing.gate)}`;
+  const head = `${summary}${gateSection(landing)}`;
   if (!failure) {
     return `${head}\n\n${landing.line}${collected.line}${tail}`;
   }
@@ -5116,58 +5086,6 @@ export const createWorkItems = ({
       await machineFree(machineId);
       queued(null);
     };
-    /** The installs this run made, each a line of the gate's log ahead of its steps. */
-    const installs: InstallOutcome[] = [];
-    /**
-     * Installs the dependencies of the checkout at `path` on `machineId`,
-     * inside `bound`'s boundary, when they were not installed from its
-     * lockfile (or manifest) as it stands ({@link depsScript}): a first
-     * hand-in, a clone cut again, a changed lockfile. Answers whether the
-     * gate can run there: false once its install failed. An install that ran is logged in
-     * {@link installs}, with `where`. One a pause cancels throws
-     * {@link PausedRun}: it runs again with its step.
-     */
-    const install = async (
-      machineId: string,
-      path: string,
-      bound: WorkspaceRef,
-      where?: string
-    ): Promise<boolean> => {
-      const started = Date.now();
-      const complete = await command(
-        machineId,
-        path,
-        `${SAFE_GIT_SHELL}${depsScript()}`,
-        GATE_TIMEOUT_SEC * 1000,
-        bound,
-        asStep
-      );
-      if (complete.cancelled) {
-        throw new PausedRun();
-      }
-      if (
-        complete.exitCode === 0 &&
-        !complete.stdout.startsWith(DEPS_INSTALLING)
-      ) {
-        return true;
-      }
-      const said = complete.stdout.startsWith(DEPS_INSTALLING)
-        ? (complete.stdout.split("\n")[0] ?? "").slice(DEPS_INSTALLING.length)
-        : "the dependency install";
-      const stale = complete.stdout
-        .split("\n")
-        .find((line) => line.startsWith(DEPS_STALE))
-        ?.slice(DEPS_STALE.length);
-      installs.push({
-        said,
-        ...(stale ? { stale } : {}),
-        result: gateTails(complete),
-        where,
-        durationMs: Date.now() - started,
-        passed: complete.exitCode === 0,
-      });
-      return complete.exitCode === 0;
-    };
     /** A memo per machine: the first call for a machine runs `make`, every later one shares it. */
     const once = <T>(
       memo: Map<string, Promise<T>>,
@@ -5186,7 +5104,7 @@ export const createWorkItems = ({
       string,
       Promise<{ at: WorkspaceRow; head: string }>
     >();
-    /** The gate workspace on `machineId`, at the workspace's commit; its dependencies not yet installed. */
+    /** The gate workspace on `machineId`, at the workspace's commit. */
     const atCommit = (
       machineId: string
     ): Promise<{ at: WorkspaceRow; head: string }> =>
@@ -5205,27 +5123,6 @@ export const createWorkItems = ({
         ]);
         return { at, head: made.head };
       });
-    /** The failure a checkout whose install failed throws, for its step's line. */
-    const INSTALL_FAILED =
-      "its dependency install failed there; the dependencies line above the steps has the installer's output";
-    const installed = new Map<
-      string,
-      Promise<{ at: WorkspaceRow; head: string }>
-    >();
-    /** The gate workspace on `machineId`, at the workspace's commit, its dependencies installed. */
-    const elsewhere = (
-      machineId: string
-    ): Promise<{ at: WorkspaceRow; head: string }> =>
-      once(installed, machineId, async () => {
-        const ready = await atCommit(machineId);
-        const where = `on ${machineName(machineId)} at ${ready.head.slice(0, 9)}`;
-        if (
-          !(await install(machineId, ready.at.path, refOf(ready.at), where))
-        ) {
-          throw new Error(INSTALL_FAILED);
-        }
-        return ready;
-      });
     /**
      * One step on another machine; a machine that cannot run it fails the
      * step in its words. Undefined when a pause cancelled it, to run again.
@@ -5237,7 +5134,7 @@ export const createWorkItems = ({
     ): Promise<Ran | undefined> => {
       const on = `on ${machineName(machineId)}`;
       try {
-        const { at, head } = await elsewhere(machineId);
+        const { at, head } = await atCommit(machineId);
         const complete = await command(
           machineId,
           at.path,
@@ -5250,11 +5147,6 @@ export const createWorkItems = ({
           ? undefined
           : { where: `${on} at ${head.slice(0, 9)}`, complete };
       } catch (error) {
-        if (error instanceof PausedRun) {
-          // Its install was cut: the next run there starts the install again.
-          installed.delete(machineId);
-          return;
-        }
         return {
           where: on,
           complete: {
@@ -5265,35 +5157,16 @@ export const createWorkItems = ({
         };
       }
     };
-    /** The workspace's own install, run again from the start while a pause cuts it. */
-    const installHere = async (): Promise<boolean> => {
-      for (;;) {
-        // biome-ignore lint/performance/noAwaitInLoops: an install a pause cut runs again once it is over
-        await unpaused(workspace.machineId);
-        try {
-          return await install(
-            workspace.machineId,
-            workspace.path,
-            refOf(workspace)
-          );
-        } catch (error) {
-          if (!(error instanceof PausedRun)) {
-            throw error;
-          }
-        }
-      }
-    };
     /**
-     * Where a step runs: the machine it names, else the workspace's. The
-     * Apple build gate whose Mac is paused moves to a Mac that is not, when
-     * one is online ({@link gateMac}).
+     * Where a step runs: the machine it names, else the workspace's. A step
+     * that `needs:` a capability whose machine is paused moves to one with
+     * it that is not, when one is online ({@link gateMachine}).
      */
     const machineFor = (step: GateStep): string => {
       const named = step.machine ?? workspace.machineId;
-      return step.name === APPLE_GATE_STEP &&
-        item.projectId &&
-        machinePaused(named)
-        ? (gateMac(workspace, item.projectId)?.machineId ?? named)
+      return step.needs && item.projectId && machinePaused(named)
+        ? (gateMachine(workspace, item.projectId, step.needs)?.machineId ??
+            named)
         : named;
     };
     /**
@@ -5318,24 +5191,31 @@ export const createWorkItems = ({
       );
       return complete.cancelled ? undefined : { complete, where: undefined };
     };
-    const local = steps.some(
-      (step) => !step.machine || step.machine === workspace.machineId
-    );
     if (how.inTurn) {
       refuseAway(steps, workspace.machineId, machineName);
     }
     try {
-      // A failed install is the run's one line: no step can pass without it.
-      if (local && !(await installHere())) {
-        return { installs, outcomes: [] };
-      }
       const outcomes: StepOutcome[] = [];
+      /** A failed step with `on-fail: stop`, which leaves every step after it unrun. */
+      let stopped: GateStep | undefined;
       for (const step of steps) {
         current = step;
+        if (stopped) {
+          outcomes.push({
+            step,
+            unrun: `${stopped.name} failed first`,
+            passed: false,
+            exitCode: 0,
+            durationMs: 0,
+            result: { exitCode: 0, stdout: "", stderr: "" },
+          });
+          continue;
+        }
         const limit = (step.timeoutSec ?? GATE_TIMEOUT_SEC) * 1000;
         let started = 0;
         // A step a pause cancels is no outcome and no attempt: it waits the
-        // pause out (or moves, the Apple gate), then runs again from the start.
+        // pause out (or moves, a step that `needs:` a capability), then runs
+        // again from the start.
         let ran: Ran | undefined;
         while (!ran) {
           const machineId = machineFor(step);
@@ -5358,10 +5238,13 @@ export const createWorkItems = ({
           durationMs: Date.now() - started,
           passed: result.exitCode === 0,
         });
+        if (result.exitCode !== 0 && step.stopsRest) {
+          stopped = step;
+        }
       }
-      return { installs, outcomes };
+      return { declared: true, outcomes };
     } catch (error) {
-      waitedIn(error, current?.name ?? "the dependency install");
+      waitedIn(error, current?.name ?? "the landing gate");
     }
   };
 
@@ -5369,14 +5252,15 @@ export const createWorkItems = ({
    * What a gate run in the workspace runs on ({@link TreeState}): HEAD's
    * tree (`git rev-parse HEAD^{tree}`), with the item's outputs' contents
    * beside it when it has outputs, and the tree of each path a step declares
-   * as its inputs (`git rev-parse HEAD:<path>`), while nothing else is
-   * uncommitted; landing.ts lands only such a tree. Undefined while
+   * as its inputs, `inputPaths` (`git rev-parse HEAD:<path>`), while nothing
+   * else is uncommitted; landing.ts lands only such a tree. Undefined while
    * something else is uncommitted: those steps read files no tree names, so
    * their passes are neither kept nor matched. `noWait` in a landing turn.
    */
   const treeState = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
+    inputPaths: readonly string[],
     noWait: boolean
   ): Promise<TreeState | undefined> => {
     const outputs = item.outputs ?? [];
@@ -5385,8 +5269,8 @@ export const createWorkItems = ({
         ? ` && git hash-object -- ${outputs.map(quote).join(" ")}`
         : "";
     const declared =
-      INPUT_PATHS.length > 0
-        ? ` && for path in ${INPUT_PATHS.map(quote).join(" ")}; do git rev-parse --verify -q "HEAD:$path" || echo absent; done`
+      inputPaths.length > 0
+        ? ` && for path in ${inputPaths.map(quote).join(" ")}; do git rev-parse --verify -q "HEAD:$path" || echo absent; done`
         : "";
     const read = await runIn(workspace, item)(
       `left=$(${statusCommand(outputs)}) && test -z "$left" && git rev-parse --verify 'HEAD^{tree}'${hashed}${declared}`,
@@ -5399,7 +5283,7 @@ export const createWorkItems = ({
       .filter(Boolean);
     if (
       read.exitCode !== 0 ||
-      lines.length !== 1 + outputs.length + INPUT_PATHS.length
+      lines.length !== 1 + outputs.length + inputPaths.length
     ) {
       return;
     }
@@ -5410,18 +5294,17 @@ export const createWorkItems = ({
       outputs: new Map(
         outputs.map((output, at) => [output, contents[at] ?? ""])
       ),
-      inputs: new Map(INPUT_PATHS.map((path, at) => [path, trees[at] ?? ""])),
+      inputs: new Map(inputPaths.map((path, at) => [path, trees[at] ?? ""])),
       stamp: lines.join(" "),
     };
   };
 
   /**
-   * {@link runGate}, each step run at most once on one tree: a step that
-   * passed on the tree the workspace holds now, or whose command one that
-   * covers it did (landing.ts GATE_COVERS), is not run again; its outcome
-   * says where it passed. A step that declares its inputs
-   * ({@link STEP_INPUTS}) is matched by those paths' trees instead, so a
-   * rebase that left them alone does not run it again: the iOS compile runs
+   * {@link runGate} over `gate`'s steps, each run at most once on one tree:
+   * a step that passed on the tree the workspace holds now is not run again;
+   * its outcome says where it passed. A step that declares its inputs
+   * (`on:`) is matched by those paths' trees instead, so a rebase that left
+   * them alone does not run it again: an iOS compile on `apps/apple` runs
    * once per apps/apple tree, at finish_item, and not again on the rebased
    * tree when the rebase left apps/apple as it was. `stage` names this run
    * for the lines of the steps it lets skip later; `how`, whether its steps
@@ -5431,11 +5314,13 @@ export const createWorkItems = ({
   const gateOnce = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    steps: GateStep[],
+    gate: Gate,
     stage: string,
     how: GateHow
   ): Promise<GateRun> => {
-    const state = await treeState(workspace, item, how.inTurn);
+    const { steps } = gate;
+    const inputPaths = inputPathsOf(steps);
+    const state = await treeState(workspace, item, inputPaths, how.inTurn);
     const kept = passes.get(item.id);
     const prior = steps.map((step): string | undefined => {
       if (!state) {
@@ -5446,15 +5331,14 @@ export const createWorkItems = ({
     });
     const due = steps.filter((_, at) => prior[at] === undefined);
     const run =
-      due.length > 0 ? await runGate(workspace, item, due, how) : NO_GATE;
-    if (due.length > 0 && run.outcomes.length === 0) {
-      // The workspace's install failed: no step ran.
-      return run;
-    }
+      due.length > 0
+        ? await runGate(workspace, item, due, how)
+        : { declared: gate.declared, outcomes: [] };
     if (
       state &&
       due.length > 0 &&
-      (await treeState(workspace, item, how.inTurn))?.stamp === state.stamp
+      (await treeState(workspace, item, inputPaths, how.inTurn))?.stamp ===
+        state.stamp
     ) {
       const byKey = kept ?? new Map<string, Passed[]>();
       for (const each of run.outcomes.filter((outcome) => outcome.passed)) {
@@ -5468,7 +5352,7 @@ export const createWorkItems = ({
     }
     const ran = [...run.outcomes];
     return {
-      installs: run.installs,
+      declared: gate.declared,
       outcomes: steps.map((step, at) => {
         const skipped = prior[at];
         return skipped === undefined
@@ -5575,7 +5459,7 @@ export const createWorkItems = ({
   /**
    * Lands a finished item's commits on its workspace's base branch
    * (landing.ts): it gates on top of the branch outside the queue, the
-   * landing gate's `steps` run on the rebased tree, its status saying so and
+   * landing gate's steps run on the rebased tree, its status saying so and
    * what each step waits for there; then it takes its turn, where only the
    * steps whose inputs the turn's rebase moved run again, and none waits.
    * Answers the line the report and the delegate read when the item can be
@@ -5586,17 +5470,16 @@ export const createWorkItems = ({
   const landOnBase = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    steps: GateStep[]
+    gate: Gate
   ): Promise<Landed> => {
     const { base } = workspace;
     /** The last gate's run on top of the branch and the turn's, for the report. */
-    const runs: { gate: GateRun; turn?: GateRun } = { gate: NO_GATE };
+    const runs: { gate: GateRun; turn?: GateRun } = {
+      gate: { declared: gate.declared, outcomes: [] },
+    };
     /** The times it stepped out of its turn, and why the last time. */
     const stepped: string[] = [];
-    /**
-     * The landing gate on the tree the workspace holds: run as every step
-     * is, so a lockfile the rebase moved is installed first.
-     */
+    /** The landing gate on the tree the workspace holds. */
     const onBaseGate = async (
       turning: boolean
     ): Promise<Failed<GateRun> | undefined> => {
@@ -5605,7 +5488,7 @@ export const createWorkItems = ({
       const run = await gateOnce(
         workspace,
         item,
-        steps,
+        gate,
         turning
           ? `in its turn to land on ${base}`
           : `while gating on top of ${base}`,
@@ -5635,27 +5518,27 @@ export const createWorkItems = ({
       stopped: landingStopped(item),
       ...(item.projectId ? { repo: item.projectId } : {}),
     });
-    const { gate } = runs;
+    const ran = runs.gate;
     switch (outcome.kind) {
       case "stopped":
         return stoppedLanding(item);
       case "landed":
         return {
           kind: "done",
-          gate,
+          gate: ran,
           landed: { sha: outcome.sha, onto: outcome.onto },
           line: landedLine(base, outcome, runs.turn, stepped),
         };
       case "nothing":
         return {
           kind: "done",
-          gate,
+          gate: ran,
           line: `Nothing to land: ${base} already holds every commit in this workspace.`,
         };
       case "no-remote":
         return {
           kind: "done",
-          gate,
+          gate: ran,
           line: "Not landed: this workspace's repository has no remote.",
         };
       case "dirty":
@@ -5676,7 +5559,7 @@ export const createWorkItems = ({
       default:
         return {
           kind: "refused",
-          gate,
+          gate: ran,
           line: refusedLine(
             outcome,
             { head: "Not landed", target: base },
@@ -5722,7 +5605,7 @@ export const createWorkItems = ({
     const what = item.taskId
       ? `an attempt at ${item.taskId}`
       : `work item ${item.id}`;
-    const lines = gateLines(gate);
+    const lines = gate.declared ? gateLines(gate) : NO_CHECKS;
     return [
       summary.trim(),
       ...(lines ? [`Landing gate, run by the CawCo hub:\n${lines}`] : []),
@@ -5824,7 +5707,7 @@ export const createWorkItems = ({
   };
 
   /**
-   * Lands a finished item the way it lands: on its base (the gate's `steps`
+   * Lands a finished item the way it lands: on its base (the gate's steps
    * run on top of it, {@link landOnBase}), on a branch, through a pull
    * request, or not at all. `earlier` is the gate's run at finish_item: every
    * step for a branch or a pull request, none for an item landing on its base.
@@ -5832,7 +5715,7 @@ export const createWorkItems = ({
   const landFinished = (
     workspace: WorkspaceRow,
     item: WorkItemRow,
-    steps: GateStep[],
+    gate: Gate,
     earlier: GateRun,
     summary: string
   ): Promise<Landed> => {
@@ -5849,7 +5732,7 @@ export const createWorkItems = ({
       case "pr":
         return landOnBranch(workspace, item, summary, earlier);
       default:
-        return landOnBase(workspace, item, steps);
+        return landOnBase(workspace, item, gate);
     }
   };
 
@@ -5939,7 +5822,7 @@ export const createWorkItems = ({
    * A finished item whose gate passed at finish_item, to its end: its
    * outputs must be in its workspace (else it is back to running, told which
    * are not); then it lands as its row says (on its base, the rest of the
-   * gate's `steps` run on the rebased tree) and its outputs are collected,
+   * gate's steps run on the rebased tree) and its outputs are collected,
    * and it is done (or failed, when it could not land or its outputs did not
    * arrive) with the report the hub builds sent to its parent.
    */
@@ -5947,7 +5830,7 @@ export const createWorkItems = ({
     item: WorkItemRow,
     row: InstanceRow,
     workspace: WorkspaceRow,
-    steps: GateStep[],
+    gate: Gate,
     submission: WorkItemSubmission,
     earlier: GateRun
   ): Promise<{ done: boolean; text: string }> => {
@@ -5962,7 +5845,7 @@ export const createWorkItems = ({
     const landing = await landFinished(
       workspace,
       item,
-      steps,
+      gate,
       earlier,
       submission.summary
     );
@@ -5985,7 +5868,7 @@ export const createWorkItems = ({
       collected,
       `${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`
     );
-    const lines = gateLines(landing.gate);
+    const lines = landingGateLines(landing);
     const gateSaid = lines ? `\n\nLanding gate:\n${lines}` : "";
     const ended = finish(db.workItem(item.id) ?? item, {
       ...(failure ? { state: "failed", error: failure } : { state: "done" }),
@@ -6000,102 +5883,127 @@ export const createWorkItems = ({
     return landedText(landing, collected, gateSaid, held);
   };
 
-  /** The paths of the workspace's changes against its target that the Swift build reads (apple-gate.ts). */
-  const appTouched = async (
+  /** The paths of the workspace's changes against its target, for the steps that run `on:` some. */
+  const changedPaths = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<string[]> => {
     const diff = await runIn(workspace, item)(
-      appleGateDiff(quote(`origin/${workspace.base}`)),
+      changedPathsCommand(quote(`origin/${workspace.base}`)),
       GIT_TIMEOUT_MS
     );
     if (diff.exitCode !== 0) {
       throw new Error(
-        `the hub could not read the item's changes against origin/${workspace.base} for the Apple build gate: ${failedWith(diff)}`
+        `the hub could not read the item's changes against origin/${workspace.base} for its landing gate's on: steps: ${failedWith(diff)}`
       );
     }
-    return appPaths(diffPaths(diff.stdout));
+    return diffPaths(diff.stdout);
   };
 
   /**
-   * The online Mac the iOS build runs on: one holding the workspace's gate
-   * workspace already, else one with the project's repository, else any;
-   * among the Macs not paused first. With every Mac paused, a paused one: its
-   * build waits for the pause's end, its item's status saying so.
+   * The online machine with `capability` a step that `needs:` it runs on:
+   * one holding the workspace's gate workspace already (its build is
+   * incremental), else one with the project's repository, else any; among
+   * the machines not paused first. With every one paused, a paused one: its
+   * step waits for the pause's end, its item's status saying so.
    */
-  const gateMac = (workspace: WorkspaceRow, projectId: string) => {
-    const macs = appleMachines(db.listAgents(), online);
+  const gateMachine = (
+    workspace: WorkspaceRow,
+    projectId: string,
+    capability: RunsOnCapability
+  ) => {
+    const capable = capableMachines(db.listAgents(), capability, online);
     const held = new Set(
       db.checkWorkspacesOf(workspace.id).map((each) => each.machineId)
     );
-    const pick = (among: typeof macs) =>
+    const pick = (among: typeof capable) =>
       among.find((each) => held.has(each.machineId)) ??
       among.find((each) => repositoryOn(projectId, each.machineId)) ??
       among[0];
     return (
-      pick(macs.filter((each) => !machinePaused(each.machineId))) ?? pick(macs)
+      pick(capable.filter((each) => !machinePaused(each.machineId))) ??
+      pick(capable)
     );
   };
 
   /**
-   * The Apple build gate's step (apple-gate.ts), when the item's project has
-   * the gate on and its diff against its target touches what the Swift build
-   * reads: it compiles the iOS app on an online Mac, at the item's last
-   * commit, in the workspace's gate workspace there ({@link runGate}). A Mac
-   * that holds that workspace already is picked first (its build is
-   * incremental), then one with a checkout of the project. With no Mac
-   * online the item does not land: `refusal` says why, in one sentence.
-   */
-  const appleStep = async (
-    workspace: WorkspaceRow,
-    item: WorkItemRow
-  ): Promise<{ steps: GateStep[] } | { refusal: string }> => {
-    const { projectId } = item;
-    if (!(projectId && db.project(projectId)?.appleGate === true)) {
-      return { steps: [] };
-    }
-    const touched = await appTouched(workspace, item);
-    if (touched.length === 0) {
-      return { steps: [] };
-    }
-    const mac = gateMac(workspace, projectId);
-    if (!mac) {
-      return { refusal: appleGateRefusal(touched, lastMac(db.listAgents())) };
-    }
-    return {
-      steps: [
-        {
-          name: APPLE_GATE_STEP,
-          command: APPLE_GATE_COMMAND,
-          machine: mac.machineId,
-          timeoutSec: APPLE_GATE_TIMEOUT_SEC,
-        },
-      ],
-    };
-  };
-
-  /**
    * THE landing gate of an item: what stands between its finished work and
-   * where it lands, and what no session writes. The repository's lint and
-   * typecheck scripts (landing.ts LAND_GATE_SCRIPTS), its dependencies
-   * installed first, and the iOS build when the item changes what the Swift
-   * build reads ({@link appleStep}). An item that lands none has no gate: it
-   * puts nothing anywhere. `refusal` when the iOS build has no Mac to run on.
+   * where it lands, and what no session writes. The steps its project
+   * declares in gate.md (gate-file.ts), in order: each `on:` step only when
+   * the item's diff against its target touches one of its paths, and each
+   * `needs:` step on an online machine with that capability, at the item's
+   * last commit, in the workspace's gate workspace there ({@link runGate}).
+   * A project with no gate.md declares none. An item that lands none has no
+   * gate: it puts nothing anywhere. `refusal`, in words, when gate.md does
+   * not read or no machine a due step needs is online.
    */
   const gateSteps = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
-  ): Promise<{ steps: GateStep[] } | { refusal: string }> => {
-    if (item.lands === "none") {
+  ): Promise<Gate | { refusal: string }> => {
+    const { projectId } = item;
+    if (item.lands === "none" || !projectId) {
+      return { declared: false, steps: [] };
+    }
+    const declared = await projectGate(projectId);
+    if (declared.kind === "none") {
+      return { declared: false, steps: [] };
+    }
+    if (declared.kind === "unreadable") {
+      return {
+        refusal: `Not landed: this project's ${GATE_FILE}, which declares its landing gate, does not read, so the hub cannot tell what to run. ${declared.problems.join(" ")} It is in the project's folder on the hub: ask your parent or the person to fix it there, then call finish_item again.`,
+      };
+    }
+    const touched = declared.steps.some((step) => step.inputs)
+      ? await changedPaths(workspace, item)
+      : [];
+    const steps: GateStep[] = [];
+    for (const step of declared.steps) {
+      const due = dueStep(workspace, projectId, step, touched);
+      if ("refusal" in due) {
+        return due;
+      }
+      steps.push(...due.steps);
+    }
+    return { declared: true, steps };
+  };
+
+  /**
+   * One declared step as the gate runs it for an item whose diff is
+   * `touched`: none when it runs `on:` paths the diff leaves alone; on an
+   * online machine with the capability it `needs:`, else `refusal`.
+   */
+  const dueStep = (
+    workspace: WorkspaceRow,
+    projectId: string,
+    step: DeclaredStep,
+    touched: readonly string[]
+  ): { steps: GateStep[] } | { refusal: string } => {
+    const { inputs, needs } = step;
+    const reads = inputs ? touched.filter((path) => covers(inputs, path)) : [];
+    if (inputs && reads.length === 0) {
       return { steps: [] };
     }
-    const apple = await appleStep(workspace, item);
-    if ("refusal" in apple) {
-      return apple;
-    }
-    return {
-      steps: [...(await landGateSteps(runIn(workspace, item))), ...apple.steps],
+    const base: GateStep = {
+      name: step.name,
+      command: step.command,
+      stopsRest: step.stopsRest,
+      ...(inputs ? { inputs } : {}),
+      ...(step.timeoutSec ? { timeoutSec: step.timeoutSec } : {}),
     };
+    if (!needs) {
+      return { steps: [base] };
+    }
+    const machine = gateMachine(workspace, projectId, needs);
+    return machine
+      ? { steps: [{ ...base, needs, machine: machine.machineId }] }
+      : {
+          refusal: capableRefusal(
+            { name: step.name, needs },
+            reads,
+            lastCapable(db.listAgents(), needs)
+          ),
+        };
   };
 
   /**
@@ -6124,11 +6032,10 @@ export const createWorkItems = ({
         update(item.id, settled);
         return { done: false, text: gate.refusal };
       }
-      const { steps } = gate;
       const run = await gateOnce(
         workspace,
         item,
-        item.lands === "main" ? [] : steps,
+        item.lands === "main" ? { ...gate, steps: [] } : gate,
         "at finish_item",
         { inTurn: false, say: (words) => landingWait(item.id, words) }
       );
@@ -6148,7 +6055,7 @@ export const createWorkItems = ({
         current,
         row,
         workspace,
-        steps,
+        gate,
         submission,
         run
       );
