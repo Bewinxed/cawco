@@ -35,6 +35,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import type { Subprocess } from "bun";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
 const AUTHOR = [
@@ -124,7 +125,7 @@ const spawnGit = (
 /** Throws git's own words when it did not end well. */
 const failed = (
   args: readonly string[],
-  child: { signalCode: string | null },
+  child: Pick<Subprocess, "signalCode">,
   code: number,
   stderr: string
 ): void => {
