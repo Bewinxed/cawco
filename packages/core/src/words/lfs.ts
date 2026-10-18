@@ -14,7 +14,7 @@ export const lfsWords = {
   row: (count: number, size: string) =>
     `${count} ${count === 1 ? "file" : "files"} · ${size}`,
   /** What was answered: Track committed them. */
-  tracked: (commit: string) => `Tracked with LFS in ${commit.slice(0, 9)}`,
+  tracked: (commit: string) => `Tracked with LFS in ${commit.slice(0, 7)}`,
 
   // ── The project's Large files setting ──
   label: "Large files",
@@ -29,7 +29,9 @@ export const lfsWords = {
   url: "LFS URL",
   urlPlaceholder: "https://host/owner/repo.git/info/lfs",
   connection: "Connection",
-  noConnections: "No connection holds a key yet: add one in Connections.",
+  /** Before the link to Connections, which says the rest. */
+  noConnections: "No connection holds a key yet: add one in",
+  connectionsLink: "Connections",
   save: "Save",
   saving: "Saving…",
   cancel: "Cancel",

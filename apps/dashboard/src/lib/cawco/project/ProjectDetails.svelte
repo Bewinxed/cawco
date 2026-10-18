@@ -792,7 +792,7 @@
             <Input
               aria-label="Folder on that machine"
               autocomplete="off"
-              class="add-path h-[30px] text-label"
+              class="add-path h-(--c-btn-h-sm) text-label"
               placeholder="/absolute/path on that machine"
               spellcheck="false"
               bind:value={addPath}
@@ -877,7 +877,7 @@
             <Input
               aria-label={lfsWords.url}
               autocomplete="off"
-              class="add-path h-[30px] text-label"
+              class="add-path h-(--c-btn-h-sm) text-label"
               placeholder={lfsWords.urlPlaceholder}
               spellcheck="false"
               type="url"
@@ -886,6 +886,7 @@
             {#if lfsKeyed.length === 0 && lfsListed}
               <p data-slot="note" class="note lfs-none">
                 {lfsWords.noConnections}
+                <a href="/config/connections">{lfsWords.connectionsLink}</a>.
               </p>
             {/if}
             <div class="add-acts">
@@ -1445,6 +1446,9 @@
   }
   .lfs-none {
     grid-column: 1 / -1;
+  }
+  .note a {
+    color: var(--link-ink);
   }
   .lfs-acts {
     display: flex;

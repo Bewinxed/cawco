@@ -68,7 +68,8 @@
   data-lfs-offer={offer.id}
 >
   {#if now}
-    <ul class="patterns">
+    <!-- biome-ignore lint/a11y/noRedundantRoles: with list-style none, WebKit drops a list's semantics; its own answer is an explicit role="list" (https://www.scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
+    <ul class="patterns" role="list">
       {#each now.rows as row (row.pattern)}
         <li class="pattern-line" data-lfs-pattern={row.pattern}>
           <code class="pattern">{row.pattern}</code>
@@ -133,8 +134,5 @@
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--ink-muted);
-  }
-  .num {
-    font-variant-numeric: tabular-nums;
   }
 </style>
