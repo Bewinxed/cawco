@@ -992,7 +992,7 @@ public struct UsageRings: Sendable {
         {
             openCode = Rings.openCodeRing(
                 fetchedAt: reading.fetchedAt, stale: reading.stale ?? false, windows: reading.windows,
-                live: fleet.rows.filter { $0.harness == .opencode &&($0.status == .running || $0.status == .starting) },
+                live: fleet.rows.filter { $0.harness == .opencode && ($0.status == .running || $0.status == .starting) },
                 now: now,
                 // Shown beside Claude's accounts: never in a hue one of them wears.
                 worn: claude?.accounts.map(\.hue) ?? []
