@@ -14,15 +14,21 @@
 <span class="badge" data-tone={tone}>{String(props.text ?? "")}</span>
 
 <style>
-  /* DESIGN.md, Badges: label role, recess surface, no border, 5px radius;
+  /* DESIGN.md, Badges: 20px (--c-badge-h), label role, recess surface, no border, 5px radius;
      the live, attn, done and fail variants take their status pairs. */
   .badge {
+    display: inline-flex;
+    align-items: center;
     align-self: start;
+    block-size: var(--c-badge-h);
     max-inline-size: 100%;
+    overflow: hidden;
     padding: 0 var(--space-2);
+    white-space: nowrap;
+    text-overflow: ellipsis;
     border-radius: var(--radius-xs);
     font: var(--type-label);
-    overflow-wrap: anywhere;
+    line-height: 1;
     background: var(--surface-recess);
     color: var(--ink-strong);
     &[data-tone="live"] {

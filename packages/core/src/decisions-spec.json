@@ -440,7 +440,7 @@
           "config"
         ],
         "additionalProperties": false,
-        "description": "Controls for values the person tunes rather than picks, drawn where you put it; artifact_read answers them as the dials entry's value, by panel name and path."
+        "description": "Controls for values the person tunes rather than picks: a DialKit panel at the page's foot. artifact_read answers them as the dials entry's value, by panel name and path."
       }
     }
   }

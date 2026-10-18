@@ -13,9 +13,10 @@
  * Paths, on every preview origin: `/__cawco/decision/<file>`, the bundle's
  * entry (`host.js`, `host.css`), its chunks (Pele's diagram types, each
  * loaded when a page first draws one) and its files (Caw's stills, the house
- * faces from the dashboard's font packages).
+ * faces from the dashboard's font packages); `dials.js` and `dials.css`,
+ * DialKit with the kit's dials.js, loaded only by a page that has Dials.
  */
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join, normalize } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
 import { embeddedFile, standalone } from "./runtime";
@@ -24,6 +25,8 @@ const HOST_DIR = new URL(
   "../../../apps/dashboard/src/lib/cawco/decisions/host/",
   import.meta.url
 ).pathname;
+const KIT_DIR = new URL("../../hub/skills/decision-page/kit/", import.meta.url)
+  .pathname;
 /** Where the page loads the bundle's chunks and files from, on any preview origin. */
 const PUBLIC_PATH = "/__cawco/decision/";
 
@@ -59,13 +62,33 @@ export async function buildDecisionHost(outdir?: string) {
   return result.outputs;
 }
 
-/** The host's files for a release build: the bundle's outputs (`outdir`). */
+/** DialKit (vendored in the decision-page kit) and the kit's bridge to it (dials.js), as one script and one sheet. */
+async function dialFiles(): Promise<Map<string, string>> {
+  const [kit, bridge, sheet] = await Promise.all(
+    [
+      "vendor/dialkit/browser.global.js",
+      "dials.js",
+      "vendor/dialkit/styles.css",
+    ].map((path) => readFile(join(KIT_DIR, path), "utf8"))
+  );
+  return new Map([
+    ["dials.js", `${kit}\n${bridge}`],
+    ["dials.css", sheet ?? ""],
+  ]);
+}
+
+/** The host's files for a release build: the bundle's outputs (`outdir`) and DialKit's. */
 export async function decisionHostAssets(
   outdir: string,
   filesUnder: (dir: string, prefix: string) => Promise<[string, string][]>
 ): Promise<[string, string][]> {
   await rm(outdir, { recursive: true, force: true });
   await buildDecisionHost(outdir);
+  await Promise.all(
+    [...(await dialFiles())].map(([name, text]) =>
+      Bun.write(join(outdir, name), text)
+    )
+  );
   return filesUnder(outdir, "decision");
 }
 
@@ -74,17 +97,20 @@ const LEADING_SLASHES = /^\/+/;
 
 let built: Promise<Map<string, Blob>> | undefined;
 
-/** The bundle's files by name, built once per process; a failure clears the slot so the next request retries. */
+/** The bundle's files and DialKit's by name, built once per process; a failure clears the slot so the next request retries. */
 const bundle = (): Promise<Map<string, Blob>> => {
-  built ??= buildDecisionHost()
+  built ??= Promise.all([buildDecisionHost(), dialFiles()])
     .then(
-      (outputs) =>
-        new Map(
-          outputs.map((output) => [
-            output.path.replace(DOT_SLASH, ""),
-            output as Blob,
-          ])
-        )
+      ([outputs, dials]) =>
+        new Map<string, Blob>([
+          ...outputs.map(
+            (output) =>
+              [output.path.replace(DOT_SLASH, ""), output as Blob] as const
+          ),
+          ...[...dials].map(
+            ([name, text]) => [name, new Blob([text])] as const
+          ),
+        ])
     )
     .catch((error: unknown) => {
       built = undefined;
@@ -106,7 +132,8 @@ const typeOf = (name: string) =>
 /**
  * One of the host's files, by its path under `/__cawco/decision/`; null
  * when there is none. A chunk's or a file's name is its hash, kept for
- * good; the entry is named the same build after build, so never kept.
+ * good; the entry and DialKit's files are named the same build after build,
+ * so never kept.
  */
 export async function decisionHostFile(path: string): Promise<Response | null> {
   const name = normalize(path).replace(LEADING_SLASHES, "");

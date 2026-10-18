@@ -221,8 +221,7 @@ const mediaIn = (frame: Frame) =>
       ),
       canvas: !!canvas?.contentDocument?.querySelector(".excalidraw canvas"),
       preview: preview?.contentDocument?.body?.textContent?.trim() ?? "",
-      dials: document.querySelectorAll("#decision-host figure.dials input")
-        .length,
+      dials: document.querySelectorAll(".dialkit-root .dialkit-panel").length,
       faces: [...document.fonts]
         .filter((face) => face.status === "loaded")
         .map((face) => face.family),
@@ -477,12 +476,12 @@ const mediaLeg = async (
   await settle(shown, 400);
   const media = await mediaIn(frame);
   kit.check(
-    `(a) ${leg}: three cards, the picture loaded, three diagrams, the canvas live, the mockup live, the dials in the host card, in the host's theme`,
+    `(a) ${leg}: three cards, the picture loaded, three diagrams, the canvas live, the mockup live, the DialKit panel up, in the host's theme`,
     media.image === 64 &&
       media.diagrams.length === 3 &&
       media.canvas &&
       media.preview.includes("slides") &&
-      media.dials === 2 &&
+      media.dials === 1 &&
       media.theme === theme,
     JSON.stringify(media)
   );
@@ -920,14 +919,48 @@ const openAsCanvas = async (on: On) => {
   );
 };
 
-/** Dials: a value the person moves is kept under dials by panel and path; a control no Dials draws is refused. */
+/** A Dials panel's values in the frame's DialKit store, by its name; null while it has none. */
+const panelValues = (frame: Frame, name: string) =>
+  frame.evaluate((panelName) => {
+    const store = (
+      window as unknown as {
+        DialKit?: {
+          DialStore: {
+            getPanels: (kind: string) => { id: string; name: string }[];
+            getValues: (id: string) => Record<string, unknown>;
+          };
+        };
+      }
+    ).DialKit?.DialStore;
+    const panel = store
+      ?.getPanels("panel")
+      .find((one) => one.name === panelName);
+    return panel && store ? store.getValues(panel.id) : null;
+  }, name);
+
+/**
+ * Dials: a value set in DialKit's panel reaches the hub under dials by panel
+ * name and path (the kit's dials.js, as an HTML page's), and after a reload
+ * the panel starts from the hub's value.
+ */
 const dialChecks = async (on: On, frame: Frame) => {
-  const { fleet, kit } = on;
-  const radius = frame.locator(
-    '#decision-host figure.dials input[type="range"]'
-  );
-  await radius.scrollIntoViewIfNeeded();
-  await radius.fill("20");
+  const { desk, kit } = on;
+  await frame.evaluate(() => {
+    const store = (
+      window as unknown as {
+        DialKit: {
+          DialStore: {
+            getPanels: (kind: string) => { id: string; name: string }[];
+            updateValues: (id: string, values: object) => void;
+          };
+        };
+      }
+    ).DialKit.DialStore;
+    const panel = store.getPanels("panel").find((one) => one.name === "Card");
+    if (panel) {
+      store.updateValues(panel.id, { radius: 20 });
+    }
+  });
   const tuned = await until(
     "the dial's value on the hub",
     on.read,
@@ -936,31 +969,20 @@ const dialChecks = async (on: On, frame: Frame) => {
         ?.Card?.radius === 20,
     10_000
   ).catch(() => null);
+  await desk.reload({ waitUntil: "domcontentloaded" });
+  const again = await frameWith(desk, 3);
+  const restored = await until(
+    "the panel restored from the hub after a reload",
+    () => panelValues(again, "Card"),
+    (values) => values?.radius === 20,
+    20_000
+  ).catch(() => null);
   kit.check(
-    "Dials: moving the radius keeps dials.Card.radius on the hub, the panel drawn in the host card where the program put it",
-    !!tuned,
-    JSON.stringify(tuned?.state.dials)
+    "Dials: a value set in DialKit's panel reaches the hub as dials.Card.radius, and comes back from the hub after a reload",
+    !!tuned && restored?.radius === 20,
+    JSON.stringify({ hub: tuned?.state.dials, restored })
   );
-  const refused = await fetch(
-    `${fleet.base}/api/instances/${on.writer}/artifacts`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        kind: "page",
-        name: "bad-dials",
-        program: `root = Decisions("Tune", [pick, tune])\npick = Decision("pick", "Which?", [a, b])\na = Option("a", "A")\nb = Option("b", "B")\ntune = Dials("Card", {radius: [12, 32, 0], spring: null})`,
-      }),
-    }
-  );
-  const said = await refused.text();
-  kit.check(
-    "Dials: a control no Dials draws is refused, naming it",
-    refused.status === 422 &&
-      said.includes('Dials("Card") radius') &&
-      said.includes('Dials("Card") spring'),
-    `${refused.status} ${said.slice(0, 300)}`
-  );
+  return again;
 };
 
 /** Canvas: Open to draw brings the canvas to the front of the panel. */
@@ -998,8 +1020,8 @@ const run = async (kit: Kit) => {
       await mediaLeg(on, view, theme);
     }
   }
-  const first = await marks(on, await frameWith(on.desk, 3));
   await dialChecks(on, await frameWith(on.desk, 3));
+  const first = await marks(on, await frameWith(on.desk, 3));
   await insertAhead(on, first);
   await graphChecks(on);
   await makeTasks(on);

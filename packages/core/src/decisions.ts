@@ -209,8 +209,6 @@ export interface ProgramRead {
   /** The artifacts its Canvas and Preview pieces show, by id. */
   artifacts: { component: "Canvas" | "Preview"; id: string }[];
   cards: DecisionCard[];
-  /** Its Dials panels: each one's name and config as written. */
-  dials: { config: Record<string, unknown>; name: string }[];
   /** The files its Image pieces show, as written. */
   images: string[];
   intro: string;
@@ -285,7 +283,6 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
     sections: [],
     artifacts: [],
     images: [],
-    dials: [],
   };
   if (root?.typeName !== "Decisions") {
     return read;
@@ -330,11 +327,6 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
       read.artifacts.push({ component: typeName, id: text(props.artifact) });
     } else if (typeName === "Image") {
       read.images.push(text(props.file));
-    } else if (typeName === "Dials") {
-      read.dials.push({
-        name: text(props.name),
-        config: (props.config ?? {}) as Record<string, unknown>,
-      });
     } else {
       walk(props.children, section);
     }
