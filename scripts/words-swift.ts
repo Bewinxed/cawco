@@ -156,6 +156,74 @@ const ENUMS: { members: Member[]; swift: string }[] = [
       { file: "blocks.ts", export: "BLOCK_PAGE_TITLES", as: "pageTitles" },
     ],
   },
+  {
+    swift: "Connections",
+    members: [
+      { file: "words/connections.ts", export: "connectionsWords", as: "" },
+      {
+        file: "words/connections.ts",
+        export: "CONNECTION_SERVICES",
+        as: "services",
+      },
+    ],
+  },
+  {
+    swift: "DelegateTypes",
+    members: [
+      {
+        file: "words/delegate-types.ts",
+        export: "delegateTypesWords",
+        as: "",
+      },
+      {
+        file: "harness.ts",
+        export: "EFFORT_LEVELS",
+        as: "effortLevels",
+        rules: true,
+      },
+    ],
+  },
+  {
+    swift: "Mcp",
+    members: [
+      { file: "words/mcp.ts", export: "mcpWords", as: "" },
+      {
+        file: "fleet.ts",
+        export: "CAWCO_OAUTH_URL",
+        as: "oauthUrl",
+        rules: true,
+      },
+    ],
+  },
+  {
+    swift: "Memory",
+    members: [{ file: "words/memory.ts", export: "memoryWords", as: "" }],
+  },
+  {
+    swift: "Skills",
+    members: [
+      { file: "words/skills.ts", export: "skillsWords", as: "" },
+      {
+        file: "claude-dirs.ts",
+        export: "USER_LAYER_LABEL",
+        as: "userLayer",
+        rules: true,
+      },
+      {
+        file: "claude-dirs.ts",
+        export: "CLAUDE_DIR_NAME",
+        as: "claudeDir",
+        rules: true,
+      },
+    ],
+  },
+  {
+    swift: "Spend",
+    members: [
+      { file: "words/spend.ts", export: "spendWords", as: "" },
+      { file: "words/spend.ts", export: "SPEND_ON_CAP", as: "onCaps" },
+    ],
+  },
 ];
 
 /** The helpers a word may call, and their Swift twins. */
@@ -667,13 +735,16 @@ const scalar = (value: unknown): string => {
   return typeof value === "string" ? literal(value) : String(value);
 };
 
-/** An array of records: a struct for them, and the array. */
-function emitRecords(
-  key: string,
+/**
+ * A struct for a list of records: its declaration (with a struct of its
+ * own first for every field that is itself a list of records, a service's
+ * `ways`) and how one record is written as a value of it.
+ */
+function recordStruct(
+  name: string,
   records: Record<string, unknown>[],
-  doc: string[],
   where: string
-): string[] {
+): { decl: string[]; value: (record: Record<string, unknown>) => string } {
   const fields: string[] = [];
   for (const record of records) {
     for (const field of Object.keys(record)) {
@@ -682,24 +753,60 @@ function emitRecords(
       }
     }
   }
+  const nested: string[] = [];
+  const parts = fields.map((field) => {
+    const values = records.map((record) => record[field] ?? null);
+    const lists = values.filter((one) => one !== null);
+    if (
+      lists.length > 0 &&
+      lists.every((one) => Array.isArray(one) && one.every(isRecord))
+    ) {
+      const inner = recordStruct(
+        singular(field),
+        (lists as Record<string, unknown>[][]).flat(),
+        `${where}.${field}`
+      );
+      nested.push(...inner.decl);
+      const optional = lists.length < values.length ? "?" : "";
+      return {
+        type: `[${singular(field)}]${optional}`,
+        write: (one: unknown) =>
+          one === null || one === undefined
+            ? "nil"
+            : `[${(one as Record<string, unknown>[]).map(inner.value).join(", ")}]`,
+      };
+    }
+    return { type: fieldType(values, `${where}.${field}`), write: scalar };
+  });
+  return {
+    decl: [
+      ...nested,
+      `public struct ${name}: Sendable, Equatable {`,
+      ...fields.map(
+        (field, i) => `    public let ${member(field)}: ${parts[i]?.type}`
+      ),
+      "}",
+      "",
+    ],
+    value: (record) =>
+      `${name}(${fields.map((field, i) => `${member(field)}: ${parts[i]?.write(record[field])}`).join(", ")})`,
+  };
+}
+
+/** An array of records: a struct for them (and for any records they hold), and the array. */
+function emitRecords(
+  key: string,
+  records: Record<string, unknown>[],
+  doc: string[],
+  where: string
+): string[] {
   const struct = singular(key);
-  const types = fields.map((field) =>
-    fieldType(
-      records.map((record) => record[field] ?? null),
-      `${where}.${field}`
-    )
-  );
+  const { decl, value } = recordStruct(struct, records, where);
   return [
-    `public struct ${struct}: Sendable, Equatable {`,
-    ...fields.map((field, i) => `    public let ${member(field)}: ${types[i]}`),
-    "}",
-    "",
+    ...decl,
     ...doc,
     `public static let ${member(key)}: [${struct}] = [`,
-    ...records.map(
-      (record) =>
-        `    ${struct}(${fields.map((field) => `${member(field)}: ${scalar(record[field])}`).join(", ")}),`
-    ),
+    ...records.map((record) => `    ${value(record)},`),
     "]",
   ];
 }
@@ -1078,8 +1185,12 @@ function spells(text: string, { known, shapes }: Vocabulary): boolean {
   if (lettered.length > 1) {
     return true;
   }
+  // Swift's ids are strings too (a slug is "skills", a body's key "delegates"):
+  // as in a script, only a word that could not be an id is matched whole.
   return known.some(
-    (word) => word === trimmed || (word.includes(" ") && trimmed.includes(word))
+    (word) =>
+      (word === trimmed && !ID_LIKE.test(word)) ||
+      (word.includes(" ") && trimmed.includes(word))
   );
 }
 

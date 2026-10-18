@@ -173,6 +173,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case rulerPen = "ruler-cross-pen-bold-duotone" // IconRulerPen
     case mic = "microphone-bold-duotone" // IconMic
     case minusCircle = "minus-circle-bold-duotone" // IconMinusCircle
+    case shop = "shop-bold-duotone" // IconShop
+    case history = "history-bold-duotone" // IconHistory
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)

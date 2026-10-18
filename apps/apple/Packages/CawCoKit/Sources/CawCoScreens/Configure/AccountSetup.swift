@@ -272,7 +272,6 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         empty.priority = .defaultLow
         empty.isActive = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (setup: AccountSetupController, _: UITraitCollection) in setup.paintBox() }
-        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (setup: AccountSetupController, _: UITraitCollection) in setup.drawTitle() }
         paintBox()
         drawTitle()
     }
@@ -281,13 +280,15 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         box.layer.borderColor = Palette.borderWell.resolvedColor(with: traitCollection).cgColor
     }
 
-    /// A compact width's navigation bar says the title; a wide card says it itself (SectionFrame).
+    /// Pushed over the list, the navigation bar says the title; beside the rail the card says it itself (SectionFrame).
     private func drawTitle() {
-        titleLabel.isHidden = traitCollection.horizontalSizeClass == .compact
+        let hidden = ConfigSections.listed(view)
+        if titleLabel.isHidden != hidden { titleLabel.isHidden = hidden }
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        drawTitle()
         // The web's container query: the setup's own width, 640 or more.
         let now = card.bounds.width - Space.space7 * 2 >= 640
         guard now != wide, card.bounds.width > 0 else { return }

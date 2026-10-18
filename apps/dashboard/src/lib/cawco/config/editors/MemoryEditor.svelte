@@ -6,6 +6,7 @@
     placedOnly,
     scoped,
     scopeKey,
+    memoryWords as words,
   } from "@cawco/core";
   import { untrack } from "svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
@@ -243,19 +244,19 @@
     { value: MAIN, label: fileLabel(MAIN) },
     ...(fleet?.memoryDocs ?? []).map((doc) => ({
       value: doc.path,
-      label: `${docLabel(doc.path, doc.scope)}${drafts.paths.has(fileHref(doc.path)) ? " · unsaved" : ""}`,
+      label: `${docLabel(doc.path, doc.scope)}${drafts.paths.has(fileHref(doc.path)) ? words.unsavedShort : ""}`,
     })),
   ]);
   const label = $derived(main ? fileLabel(path) : docLabel(path, savedScope));
 
   /** The scope's two narrowings, each "None" when it names nothing. */
   const ROLE_OPTIONS = [
-    { value: "", label: "None" },
-    { value: "orchestrator", label: "Orchestrator" },
-    { value: "leaf", label: "Leaf" },
+    { value: "", label: words.none },
+    { value: "orchestrator", label: words.orchestrator },
+    { value: "leaf", label: words.leaf },
   ];
   const projectOptions = $derived([
-    { value: "", label: "None" },
+    { value: "", label: words.none },
     ...cawco.projects
       .map((project) => ({ value: project.id, label: project.name }))
       .sort((a, b) => a.label.localeCompare(b.label)),
@@ -308,7 +309,7 @@
 
   function sourceLabel(source: string): string {
     if (!source.startsWith("machine:")) {
-      return "the fleet";
+      return words.theFleet;
     }
     const machineId = source.slice("machine:".length);
     const machine = machines.find((row) => row.machineId === machineId);
@@ -430,9 +431,9 @@
   }
 
   const SAID: Record<string, string> = {
-    applied: "In sync",
-    failed: "Kept its own copy",
-    removed: "Taken off",
+    applied: words.inSync,
+    failed: words.keptOwn,
+    removed: words.takenOff,
   };
 </script>
 
@@ -440,13 +441,13 @@
 
 <EditorFrame
   canSave={dirty}
-  deleteLabel={saved ? "Delete everywhere" : undefined}
+  deleteLabel={saved ? words.deleteEverywhere : undefined}
   {deleting}
   failed={saveFailed || deleteProblem !== null}
   oncancel={cancel}
   ondelete={saved ? remove : undefined}
   onsubmit={() => save()}
-  saveLabel="Save"
+  saveLabel={words.save}
   saving={busy && !forcing}
   settling={!drawn || (versions === null && historyError === null)}
   title={label}
@@ -464,20 +465,20 @@
   {#snippet header()}
     <div class="switch">
       <PickerChip
-        label="File"
+        label={words.file}
         onpick={(next) => goto(fileHref(next))}
         options={files}
         value={path}
       />
       {#if !main}
         <PickerChip
-          label="Role"
+          label={words.role}
           onpick={pickRole}
           options={ROLE_OPTIONS}
           value={scope.role ?? ""}
         />
         <PickerChip
-          label="Projects"
+          label={words.projects}
           onpick={pickProject}
           options={projectOptions}
           picked={scope.projectIds ?? []}
@@ -487,41 +488,38 @@
     <h1 data-slot="title" class="title">{label}</h1>
     {#if !main}
       <p class="facts">
-        <span>Loaded into: {loadedInto(scope, cawco.projects)}</span>
+        <span>{words.loadedInto(loadedInto(scope, cawco.projects))}</span>
       </p>
     {/if}
     <p data-slot="num" class="facts num">
       <span>{formatBytes(bytes)}</span>
-      <span
-        class="tokens"
-        title="Roughly what this file costs every session that loads it, at about four bytes a token"
-        >~{tokens.toLocaleString()}
-        tokens</span
+      <span class="tokens" title={words.tokensTitle}
+        >{words.tokens(tokens.toLocaleString())}</span
       >
       {#if saved}
-        <span>saved {formatDistanceToNow(new Date(saved.updatedAt))}</span>
+        <span
+          >{words.savedAgo(
+            formatDistanceToNow(new Date(saved.updatedAt))
+          )}</span
+        >
         <span class="font-mono" title={saved.hash}
           >{saved.hash.slice(0, 8)}</span
         >
       {:else}
-        <span>Not written yet</span>
+        <span>{words.notWritten}</span>
       {/if}
       {#if dirty}
-        <span class="unsaved" in:crossIn out:crossOut
-          >Unsaved changes · ⌘S saves</span
-        >
+        <span class="unsaved" in:crossIn out:crossOut>{words.unsaved}</span>
       {/if}
     </p>
     <RowFault again={() => save()} reason={saveProblem} />
     <RowFault again={remove} reason={deleteProblem} />
   {/snippet}
 
-  <EditorSection hue={HUE} icon={IconDocument} label="Contents">
+  <EditorSection hue={HUE} icon={IconDocument} label={words.contents}>
     {#if conflict}
       <div class="conflict" in:unfold out:unfold>
-        <p class="caution">
-          Changed elsewhere while you edited. Nothing was overwritten.
-        </p>
+        <p class="caution">{words.changedElsewhere}</p>
         {#key conflict.hash}
           <DiffView
             filePath={path}
@@ -536,15 +534,15 @@
             size="sm"
             variant="outline"
           >
-            Take latest
+            {words.takeLatest}
           </Button>
           <Button
             disabled={busy && !forcing}
             failed={saveFailed}
-            label="Save mine anyway"
+            label={words.saveMine}
             onclick={() => save(conflict?.hash)}
             pending={busy && forcing}
-            pendingLabel="Saving…"
+            pendingLabel={words.saving}
             size="sm"
             variant="outline"
           />
@@ -566,16 +564,13 @@
     </div>
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconHistory} label="History">
+  <EditorSection hue={HUE} icon={IconHistory} label={words.history}>
     {#if historyError}
       <p class="caution" role="alert">{historyError}</p>
     {:else if versions === null}
-      <p data-slot="note" class="note">Loading…</p>
+      <p data-slot="note" class="note">{words.loading}</p>
     {:else if versions.length === 0}
-      <p data-slot="note" class="note">
-        Nothing replaced yet. Every version a save, an adopt or an overwrite
-        replaces is kept here.
-      </p>
+      <p data-slot="note" class="note">{words.nothingReplaced}</p>
     {:else}
       <!-- Rows that come and go (Show all, a new version) go through
            reflow, what follows sliding; a row's compare folds open inside
@@ -589,7 +584,7 @@
                   >{formatDistanceToNow(new Date(row.createdAt))}</span
                 >
                 <span data-slot="note" class="note"
-                  >from {sourceLabel(row.source)}</span
+                  >{words.from(sourceLabel(row.source))}</span
                 >
                 <span data-slot="note" class="note font-mono" title={row.hash}
                   >{row.hash.slice(0, 8)}</span
@@ -603,7 +598,7 @@
                   size="sm"
                   variant={shown === row.id ? "secondary" : "outline"}
                 >
-                  {shown === row.id ? "Hide" : "Compare"}
+                  {shown === row.id ? words.hide : words.compare}
                 </Button>
               </div>
               {#if shown === row.id}
@@ -620,7 +615,7 @@
                         out:crossOut
                       >
                         <Spinner class="size-4 shrink-0" /><span
-                          >Reading that version…</span
+                          >{words.readingVersion}</span
                         >
                       </p>
                     {:else if contents[row.id] !== undefined}
@@ -635,10 +630,10 @@
                         <Button
                           class="self-start"
                           failed={restoreFailed?.id === row.id}
-                          label="Restore this version"
+                          label={words.restore}
                           onclick={() => restore(row)}
                           pending={restoring === row.id}
-                          pendingLabel="Restoring…"
+                          pendingLabel={words.restoring}
                           size="sm"
                           variant="outline"
                         />
@@ -668,9 +663,7 @@
               size="sm"
               variant="ghost"
             >
-              {allVersions
-                ? "Show the latest 5"
-                : `Show all ${versions.length}`}
+              {allVersions ? words.showLatest : words.showAll(versions.length)}
             </Button>
           </div>
         {/if}
@@ -681,21 +674,19 @@
   <!-- A machine holds a copy of the main file and of a linked document
        alone: a scoped one is loaded into sessions, never adopted from one. -->
   {#if !scoped(savedScope)}
-    <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
+    <EditorSection hue={HUE} icon={IconLaptop} label={words.perMachine}>
       {#if machines.length === 0}
         <p data-slot="note" class="note">
-          <AddMachineLink>No machines yet</AddMachineLink>
-          — this lands on the first one that registers.
+          <AddMachineLink>{words.noMachines}</AddMachineLink>{words.landsFirst}
         </p>
       {:else}
         {#if applied.length > 0}
           <p data-slot="note" class="note">
-            In sync on {applied.length} machine{applied.length === 1
-              ? ""
-              : "s"}.
+            {words.inSyncOn(applied.length)}
             {#if asleep.length > 0}
-              {asleep.map((row) => machineLabel(row.hostname)).join(", ")}
-              offline — they sync when back.
+              {words.offlineSync(
+                asleep.map((row) => machineLabel(row.hostname)).join(", ")
+              )}
             {/if}
           </p>
         {/if}
@@ -711,9 +702,9 @@
                   hue={machineHue(index, online)}
                   icon={machineIcon(machine.os)}
                   meta="{SAID[item?.state ?? ''] ??
-                    'Not reported'} · {machineOs(machine.os).label}{online
+                    words.notReported} · {machineOs(machine.os).label}{online
                     ? ''
-                    : ' · offline, it syncs when back'}"
+                    : words.offlineWhenBack}"
                   name={machineLabel(machine.hostname)}
                   presence={online ? "online" : "off"}
                 />
@@ -727,16 +718,16 @@
                         size="sm"
                         variant={comparingThis ? "secondary" : "outline"}
                       >
-                        {comparingThis ? "Hide" : "Compare"}
+                        {comparingThis ? words.hide : words.compare}
                       </Button>
                     {/if}
                     <Button
                       disabled={!online || settle === "push"}
                       failed={machine.machineId in settleFailed}
-                      label="Adopt this copy"
+                      label={words.adoptCopy}
                       onclick={() => adopt(machine)}
                       pending={settle === "adopt"}
-                      pendingLabel="Adopting…"
+                      pendingLabel={words.adopting}
                       size="sm"
                       variant="outline"
                     />
@@ -744,10 +735,10 @@
                       <Button
                         disabled={!online || settle === "adopt"}
                         failed={machine.machineId in settleFailed}
-                        label="Send ours"
+                        label={words.sendOurs}
                         onclick={() => overwrite(machine)}
                         pending={settle === "push"}
-                        pendingLabel="Sending…"
+                        pendingLabel={words.sending}
                         size="sm"
                         variant="outline"
                       />
@@ -773,7 +764,7 @@
                         out:crossOut
                       >
                         <Spinner class="size-4 shrink-0" /><span
-                          >Reading this machine's copy…</span
+                          >{words.readingCopy}</span
                         >
                       </p>
                     {:else if unread[machine.machineId]}
@@ -782,7 +773,7 @@
                       </p>
                     {:else if copies[machine.machineId] === null}
                       <p data-slot="note" class="note" in:crossIn out:crossOut>
-                        This machine has no copy of this file.
+                        {words.noCopy}
                       </p>
                     {:else if copies[machine.machineId] !== undefined}
                       <div in:crossIn out:crossOut>

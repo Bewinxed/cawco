@@ -77,6 +77,24 @@ public enum Words {
             "Back to \(section)"
         }
 
+        /// The toast after a delete, which goes through at once: Undo for as long as the hub keeps it.
+        public static let undo = "Undo"
+
+        /// A row's refused action, said under it, offers it again.
+        public static let tryAgain = "Try again"
+
+        public static func deleted(what: String) -> String {
+            "Deleted \(what)"
+        }
+
+        public static func removed(what: String) -> String {
+            "Removed \(what)"
+        }
+
+        public static func unlinked(what: String) -> String {
+            "Unlinked \(what)"
+        }
+
         // packages/core/src/words/configure.ts `CONFIG_GROUPS`
         /// The rail's groups, in its order.
         public static let groups: [String] = ["Automation", "Agents", "Tools", "Memory", "Hub"]
@@ -1682,5 +1700,818 @@ public enum Words {
             /// Each word by the key it stands under, for a lookup by data value.
             public static let byKey: [String: String] = ["board": board, "table": table, "pipeline": pipeline, "routines": routines]
         }
+    }
+
+    public enum Connections {
+        // packages/core/src/words/connections.ts `connectionsWords`
+        public static let list = "Connections"
+
+        /// The header's menu, and the sign-in form it opens.
+        public static let signInTo = "Sign in to a service"
+
+        public static func signInService(service: String) -> String {
+            "Sign in to \(service)"
+        }
+
+        public static func account(service: String) -> String {
+            "Which \(service) account"
+        }
+
+        public static let accountHint = "Two accounts of one service are two connections."
+
+        public static let accountPlaceholder = "brand, or your handle"
+
+        public static func key(service: String) -> String {
+            "\(service) key"
+        }
+
+        public static func rowKey(service: String, account: String) -> String {
+            "\(service) key for \(account)"
+        }
+
+        public static let cancel = "Cancel"
+
+        public static let signIn = "Sign in"
+
+        public static let signingIn = "Signing in…"
+
+        public static let setKey = "Set key"
+
+        public static let saveKey = "Save key"
+
+        public static let saving = "Saving…"
+
+        /// The empty state: signing in is the person's, so the line says so.
+        public static let emptyLine = "Each service asks you, not Caw, to let the hub in, so signing in is yours. The projects you allow then read from it and act through it."
+
+        /// The empty state's cards, as a screen reader names the list.
+        public static let servicesLabel = "Services"
+
+        /// A row's state, the hub's word.
+        public static let stateSignedIn = "Signed in"
+
+        public static let stateNeedsSignIn = "Not signed in"
+
+        public static let stateError = "Failing"
+
+        /// A row's line while its sign-in is open, and when it stops.
+        public static func signingInTab(service: String) -> String {
+            "\(service)'s sign-in is open in a new tab; this row turns signed in when you finish there."
+        }
+
+        public static let signInClosed = "The sign-in tab closed before it finished."
+
+        public static let blocked = "The browser blocked the sign-in tab. Allow pop-ups for this page, then try again."
+
+        /// The hub's reasons a row's own button already says.
+        public static let saidSignIn = "Sign in."
+
+        public static let saidSetKey = "Set its key."
+
+        public static let saidSetApp = "Set its app."
+
+        public static let saidUnderWay = "A sign-in is under way."
+
+        /// The row's ⋯, and Projects…'s checklist.
+        public static let projects = "Projects…"
+
+        public static let remove = "Remove"
+
+        public static let projectsMayUse = "Projects that may use it:"
+
+        public static func projectsFor(service: String) -> String {
+            "Projects that may use \(service)"
+        }
+
+        public static func more(count: Int) -> String {
+            "+\(count)"
+        }
+
+        public static func unread(clause: String) -> String {
+            "Could not read the connections — \(clause)."
+        }
+
+        // packages/core/src/words/connections.ts `CONNECTION_SERVICES`
+        public struct Way: Sendable, Equatable {
+            public let auth: String
+            public let label: String
+            public let says: String
+            public let key: String?
+        }
+
+        public struct Service: Sendable, Equatable {
+            public let service: String
+            public let label: String
+            public let url: String
+            public let ways: [Way]
+        }
+
+        public static let services: [Service] = [
+            Service(service: "github", label: "GitHub", url: "https://api.githubcopilot.com/mcp/", ways: [Way(auth: "app", label: "GitHub App", says: "An app you register and install on the projects' repositories, with Issues: read and write. It acts as itself.", key: nil), Way(auth: "bearer", label: "Token", says: "A fine-grained personal access token limited to the projects' repositories, with Issues: read and write.", key: "It acts as you.")]),
+            Service(service: "linear", label: "Linear", url: "https://mcp.linear.app/mcp", ways: [Way(auth: "app", label: "Linear app", says: "An OAuth app you create in Linear's settings. It acts as itself, with read and write.", key: nil), Way(auth: "bearer", label: "API key", says: "A personal API key limited to the projects' teams.", key: "It acts as you."), Way(auth: "oauth", label: "Sign in", says: "Linear's own sign-in, for agents' Linear tools. A project's tasks need a Linear app or an API key.", key: nil)]),
+            Service(service: "slack", label: "Slack", url: "https://mcp.slack.com/mcp", ways: [Way(auth: "bearer", label: "User token", says: "A Slack user token from your Slack app.", key: "A Slack user token (xoxp-…) from your Slack app.")]),
+        ]
+    }
+
+    public enum DelegateTypes {
+        // packages/core/src/words/delegate-types.ts `delegateTypesWords`
+        /// The list.
+        public static let list = "Delegate types"
+
+        public static let add = "New delegate type"
+
+        public static let emptyTitle = "No delegate types yet"
+
+        public static let emptyLine = "A fresh hub seeds five on first read; delete all of them and this is what is left."
+
+        public static let remove = "Delete delegate type"
+
+        /// The fleet's group; each project's own types follow under its name.
+        public static let fleet = "The fleet"
+
+        public static func projectList(project: String) -> String {
+            "\(project)'s delegate types"
+        }
+
+        /// A project type with a fleet type's name: its sessions pick the project's.
+        public static func shadows(name: String) -> String {
+            "shadows the fleet's \(name)"
+        }
+
+        /// A file under `delegates/` that made no type, in the hub's words.
+        public static func fileProblem(path: String, problem: String) -> String {
+            "\(path): \(problem)"
+        }
+
+        /// A row's line after its description: how it runs, and every narrowing.
+        public static func effortOf(effort: String) -> String {
+            "\(effort) effort"
+        }
+
+        public static func skillCount(count: Int) -> String {
+            "\(count) skill\(count == 1 ? "" : "s")"
+        }
+
+        public static func deniedCount(count: Int) -> String {
+            "\(count) tool\(count == 1 ? "" : "s") denied"
+        }
+
+        public static let mayDelegateShort = "may delegate"
+
+        /// The editor.
+        public static let what = "delegate type"
+
+        public static let create = "Create delegate type"
+
+        public static let save = "Save changes"
+
+        public static let newTitle = "New delegate type"
+
+        public static let nameLabel = "Delegate type name"
+
+        public static let namePlaceholder = "explore"
+
+        public static let nameKept = "The name is the key a running call already asks for by; renaming means creating a new type."
+
+        public static let nameRule = "Lowercase letters, digits and hyphens — the exact string a delegate call's type param names."
+
+        public static let duplicate = "Another delegate type already has that name. Two types called the same thing are two a calling agent cannot tell apart."
+
+        public static let newSessions = "Changes apply to new sessions only — running sessions keep the type list they started with."
+
+        public static let description = "Description"
+
+        public static let descriptionHint = "What the calling model reads to decide whether this is the type to route to — not a note for you, a routing signal for it."
+
+        public static let descriptionPlaceholder = "Read-only codebase exploration and fan-out search; returns conclusions, not file dumps."
+
+        public static let runsOn = "What it runs on"
+
+        public static let runsOnNote = "The harness and model the delegate spawns on, and how hard it should think."
+
+        public static let harness = "Harness"
+
+        public static let model = "Model"
+
+        public static let effort = "Effort"
+
+        public static let unset = "Unset"
+
+        public static let reach = "What it can reach"
+
+        public static let reachNote = "Comma-separated. Both are optional narrowings — empty means the delegate has the harness's ordinary defaults."
+
+        public static let skills = "Skills"
+
+        public static let skillsPlaceholder = "svelte-foundations:coding, ui-observer"
+
+        public static let denied = "Tools denied"
+
+        public static let deniedPlaceholder = "Write, Edit, NotebookEdit"
+
+        public static let mayDelegate = "May delegate"
+
+        public static let mayDelegateOn = "It can spawn delegates and sessions of its own."
+
+        public static let mayDelegateOff = "Leaf — it does the work itself and cannot delegate further."
+
+        /// What a type's fields are refused for before the hub sees them.
+        public static let problemName = "a delegate type needs a name: lowercase letters, digits and hyphens only"
+
+        public static let problemDescription = "a delegate type needs a description — it is the whole of how the calling model routes to it"
+
+        public static let problemModel = "a delegate type needs a model"
+
+        public static func problemHarness(harness: String) -> String {
+            "“\(harness)” is not a harness a delegate type can run on"
+        }
+
+        // packages/core/src/harness.ts `EFFORT_LEVELS`
+        /// Every {@link EffortLevel}, low to max: the one runtime list validators and pickers read.
+        public static let effortLevels: [String] = ["low", "medium", "high", "xhigh", "max"]
+    }
+
+    public enum Mcp {
+        // packages/core/src/words/mcp.ts `mcpWords`
+        /// The list.
+        public static let list = "MCP servers"
+
+        public static let add = "Add server"
+
+        public static let syncAll = "Sync all"
+
+        public static let syncing = "Syncing…"
+
+        public static let emptyTitle = "No MCP servers yet"
+
+        public static let emptyLine = "Add a server and every machine gets it — the quick way is a package name."
+
+        public static let remove = "Remove everywhere"
+
+        /// A remote server's meta line leads with its transport.
+        public static func transportOf(transport: String, url: String) -> String {
+            "\(transport) · \(url)"
+        }
+
+        /// A row's sign-in, for a server that signs in with OAuth.
+        public static let signIn = "Sign in"
+
+        public static func signingIn(name: String) -> String {
+            "Waiting for \(name)…"
+        }
+
+        public static let signedIn = "Signed in for the fleet"
+
+        public static let signInClosed = "The sign-in tab closed before it finished."
+
+        /// The editor.
+        public static let what = "MCP server"
+
+        public static let save = "Save changes"
+
+        public static let newTitle = "New MCP server"
+
+        public static let nameLabel = "Server name"
+
+        public static let namePlaceholder = "Name this server"
+
+        public static func renamed(name: String) -> String {
+            "A new name makes a new server; \(name) stays as it is."
+        }
+
+        public static func callsAs(name: String) -> String {
+            "What sessions call its tools — `mcp__\(name)__…`. New sessions pick it up; a running session keeps the servers it started with."
+        }
+
+        public static let howItRuns = "How machines run it"
+
+        public static let kind = "Kind"
+
+        public static let kindBunx = "bunx package"
+
+        public static let kindCommand = "Command"
+
+        public static let kindRemote = "Remote"
+
+        public static let howBunx = "Every machine runs the package with bunx. Nothing to install first."
+
+        public static let howCommand = "Runs a command the machines already have on their PATH."
+
+        public static let howRemote = "Calls an endpoint. No process runs on the machines."
+
+        public static let package = "Package"
+
+        public static let packagePlaceholder = "@modelcontextprotocol/server-filesystem"
+
+        public static let packageArgs = "Arguments (optional)"
+
+        public static let packageArgsPlaceholder = "/home/you/projects"
+
+        public static let command = "Command"
+
+        public static let commandPlaceholder = "uvx"
+
+        public static let args = "Arguments"
+
+        public static let argsHint = "Split on spaces. Quotes are not honoured."
+
+        public static let argsPlaceholder = "mcp-server-git --repository /home/you/repo"
+
+        public static let url = "URL"
+
+        public static let urlPlaceholder = "https://mcp.example.com/sse"
+
+        public static let transport = "Transport"
+
+        public static let transportHttp = "HTTP"
+
+        public static let transportSse = "SSE · deprecated"
+
+        public static let headers = "Headers"
+
+        public static let environment = "Environment"
+
+        /// Backticks mark what is set in the code face (Coded.svelte, `coded`).
+        public static let expanded = "`${VAR}` is expanded on each machine, from that machine's own environment — secrets never pass through the hub."
+
+        public static let headerKey = "Authorization"
+
+        public static let headerValue = "Bearer ${MY_TOKEN}"
+
+        public static let envKey = "API_KEY"
+
+        public static let envValue = "${MY_API_KEY}"
+
+        public static let addPair = "Add"
+
+        public static func removePair(key: String) -> String {
+            "Remove \(key)"
+        }
+
+        public static let `where` = "Where it applies"
+
+        public static let whereNote = "Every machine in the fleet unless you narrow it to one project. A project's server reaches each of its checkouts and delegate workspaces."
+
+        public static let scope = "Scope"
+
+        public static let everyMachine = "Every machine in the fleet"
+
+        /// Why a name cannot be used.
+        public static let problemEmpty = "Give the server a name."
+
+        public static let problemCharacters = "Letters, digits, dashes and underscores only."
+
+        public static func problemReserved(name: String) -> String {
+            "Claude Code keeps “\(name)” for itself."
+        }
+
+        public static func problemTaken(name: String) -> String {
+            "There is already a server called “\(name)”."
+        }
+
+        // packages/core/src/fleet.ts `CAWCO_OAUTH_URL`
+        /// Where CawCo publishes its shared OAuth client: a metadata document, and the page that hands a sign-in back to the install that started it. Used only for a provider that identifies clients by such a document and has no dynamic registration; every other provider redirects straight to the install.
+        public static let oauthUrl = "https://cawco.dev/oauth"
+    }
+
+    public enum Memory {
+        // packages/core/src/words/memory.ts `memoryWords`
+        /// The list.
+        public static let list = "Memory files"
+
+        public static let filter = "Filter files…"
+
+        public static let filterLabel = "Filter memory files"
+
+        public static func noMatch(filter: String) -> String {
+            "No file matches “\(filter)”."
+        }
+
+        public static let everySession = "Loaded into every session"
+
+        public static let noMemory = "The fleet keeps no memory yet — write one, or adopt a machine's copy"
+
+        public static func facts(size: String, ago: String) -> String {
+            "\(size) · saved \(ago)"
+        }
+
+        /// How long ago, as utils/time.ts `formatDistanceToNow` says it.
+        public static let justNow = "just now"
+
+        public static func ago(span: String) -> String {
+            "\(span) ago"
+        }
+
+        public static let unsavedDraft = " · unsaved draft"
+
+        public static let deleteEverywhere = "Delete everywhere"
+
+        /// New document.
+        public static let newDocument = "New document"
+
+        public static func pathUnder(layer: String) -> String {
+            "Path under \(layer)/"
+        }
+
+        public static let pathHint = "A `models/<model>.md` is put in front of the session running that model."
+
+        public static let pathPlaceholder = "models/deepseek-v4.md"
+
+        public static let create = "Create and open"
+
+        public static let creating = "Creating…"
+
+        public static let needsPath = "A document needs a path — models/deepseek-v4.md, say."
+
+        public static func alreadyLinked(path: String) -> String {
+            "“\(path)” is already a linked document."
+        }
+
+        public static func writtenElsewhere(path: String) -> String {
+            "\(path) was written elsewhere a moment ago. Nothing was overwritten."
+        }
+
+        /// The editor.
+        public static let what = "memory file"
+
+        public static let save = "Save"
+
+        public static let file = "File"
+
+        public static let role = "Role"
+
+        public static let projects = "Projects"
+
+        public static let none = "None"
+
+        public static let orchestrator = "Orchestrator"
+
+        public static let leaf = "Leaf"
+
+        public static func loadedInto(sessions: String) -> String {
+            "Loaded into: \(sessions)"
+        }
+
+        public static func tokens(count: String) -> String {
+            "~\(count) tokens"
+        }
+
+        public static let tokensTitle = "Roughly what this file costs every session that loads it, at about four bytes a token"
+
+        public static func savedAgo(ago: String) -> String {
+            "saved \(ago)"
+        }
+
+        public static let notWritten = "Not written yet"
+
+        public static let unsaved = "Unsaved changes · ⌘S saves"
+
+        public static let unsavedShort = " · unsaved"
+
+        public static let contents = "Contents"
+
+        public static let changedElsewhere = "Changed elsewhere while you edited. Nothing was overwritten."
+
+        public static let takeLatest = "Take latest"
+
+        public static let saveMine = "Save mine anyway"
+
+        public static let saving = "Saving…"
+
+        public static let history = "History"
+
+        public static let loading = "Loading…"
+
+        public static let nothingReplaced = "Nothing replaced yet. Every version a save, an adopt or an overwrite replaces is kept here."
+
+        public static func from(source: String) -> String {
+            "from \(source)"
+        }
+
+        public static let theFleet = "the fleet"
+
+        public static let compare = "Compare"
+
+        public static let hide = "Hide"
+
+        public static let readingVersion = "Reading that version…"
+
+        public static let restore = "Restore this version"
+
+        public static let restoring = "Restoring…"
+
+        public static let showLatest = "Show the latest 5"
+
+        public static func showAll(count: Int) -> String {
+            "Show all \(count)"
+        }
+
+        public static let perMachine = "Per machine"
+
+        public static let noMachines = "No machines yet"
+
+        public static let landsFirst = " — this lands on the first one that registers."
+
+        public static func inSyncOn(count: Int) -> String {
+            "In sync on \(count) machine\(count == 1 ? "" : "s")."
+        }
+
+        public static func offlineSync(names: String) -> String {
+            "\(names) offline — they sync when back."
+        }
+
+        public static let inSync = "In sync"
+
+        public static let keptOwn = "Kept its own copy"
+
+        public static let takenOff = "Taken off"
+
+        public static let notReported = "Not reported"
+
+        public static let offlineWhenBack = " · offline, it syncs when back"
+
+        public static let adoptCopy = "Adopt this copy"
+
+        public static let adopting = "Adopting…"
+
+        public static let sendOurs = "Send ours"
+
+        public static let sending = "Sending…"
+
+        public static let readingCopy = "Reading this machine's copy…"
+
+        public static let noCopy = "This machine has no copy of this file."
+
+        /// Why a document's path cannot be used (fleet.ts `memoryDocProblem`).
+        public static let problemNotMarkdown = "a linked document is markdown — its path has to end in .md"
+
+        public static func problemAbsolute(path: String, layer: String) -> String {
+            "“\(path)” is absolute — a document's path is relative to \(layer)/"
+        }
+
+        public static func problemBackslash(path: String) -> String {
+            "“\(path)” uses backslashes — the path is the same string on every machine, so it is forward-slashed"
+        }
+
+        public static func problemAt(path: String) -> String {
+            "“\(path)” has an @ — a machine reports a project's copy of a document as <path>@<place>"
+        }
+
+        public static func problemSegments(path: String) -> String {
+            "“\(path)” is not a usable path — no empty, “.” or “..” segments"
+        }
+
+        public static func problemDotted(path: String) -> String {
+            "“\(path)” hides a segment behind a dot — the set is documents, not dotfiles"
+        }
+
+        /// The parts a document's sessions are said in (fleet.ts `scopeWords`).
+        public static let scopeNone = "No session on its own: linked, read on purpose"
+
+        public static func scopeEvery(role: String) -> String {
+            "Every \(role) session"
+        }
+
+        public static func scopeEveryIn(projects: String) -> String {
+            "Every session in \(projects)"
+        }
+
+        public static let scopeSessions = "Sessions"
+
+        public static func scopeSessionsOf(who: String) -> String {
+            "\(who) sessions"
+        }
+
+        public static func scopeBriefing(about: String) -> String {
+            "Sessions briefing \(about)"
+        }
+
+        public static let scopeAnyDelegate = "any delegate"
+
+        public static func scopeDelegates(types: String) -> String {
+            "\(types) delegates"
+        }
+
+        public static func scopeOnModels(model: String) -> String {
+            "on models matching \(model)"
+        }
+
+        public static func scopeIn(projects: String) -> String {
+            "in \(projects)"
+        }
+
+        public static let scopeAnd = " and "
+
+        public static let scopeGone = "a project that is gone"
+    }
+
+    public enum Skills {
+        // packages/core/src/words/skills.ts `skillsWords`
+        /// The groups.
+        public static let skills = "Skills"
+
+        public static let marketplaces = "Marketplaces"
+
+        public static let plugins = "Plugins"
+
+        public static let noSkills = "No skills fetched yet. Paste what you would otherwise have run and the hub downloads the files itself."
+
+        public static let degraded = "CawCo installs a skill's files. A skill that also ships hooks or subagents runs in its degraded mode until those are set up by hand."
+
+        public static let noMarketplaces = "No marketplaces linked yet. Link one and its plugins become browsable here."
+
+        public static let noPlugins = "Nothing installed yet. Browse a marketplace above and add a plugin."
+
+        public static let pluginOff = "Disabling a plugin uninstalls it from the machines and keeps its row here."
+
+        /// A row's actions and state.
+        public static let fetching = "Fetching…"
+
+        public static let fetchAgain = "Fetch again"
+
+        public static func fetchAllAgain(count: Int) -> String {
+            "Fetch all \(count) again"
+        }
+
+        public static let previousVersions = "Previous versions"
+
+        public static let hidePreviousVersions = "Hide previous versions"
+
+        public static func readingVersions(name: String) -> String {
+            "Reading \(name)'s previous versions"
+        }
+
+        public static let removeEverywhere = "Remove everywhere"
+
+        /// Where a kept version came from, when it is the fleet's own row.
+        public static let theFleet = "the fleet"
+
+        public static let unlink = "Unlink"
+
+        public static let noBytes = "No bytes resolved yet"
+
+        /// A marketplace's listing.
+        public static let browse = "Browse"
+
+        public static let hide = "Hide"
+
+        public static func readFrom(source: String) -> String {
+            "Read from \(source)"
+        }
+
+        public static func reading(name: String) -> String {
+            "Reading \(name)"
+        }
+
+        public static let listsNothing = "This marketplace lists no plugins."
+
+        public static let install = "Install"
+
+        public static let adding = "Adding…"
+
+        public static let added = "Added"
+
+        /// Fetch skill.
+        public static let fetchSkill = "Fetch skill"
+
+        public static let source = "Source"
+
+        public static func readsAs(source: String) -> String {
+            "Reads as `\(source)`"
+        }
+
+        /// Backticks mark what is set in the code face (Coded.svelte, `coded`).
+        public static let sourceHint = "The install command, an `owner/repo` slug, or a `skills:`, `github:`, `npm:` or `https://` source."
+
+        public static let sourcePlaceholder = "bunx skills add pbakaus/impeccable"
+
+        public static let name = "Name"
+
+        public static let namePlaceholder = "impeccable"
+
+        public static let landsIn = "The directory it lands in —"
+
+        public static func inProjectFolders(project: String) -> String {
+            " in each of \(project)'s folders"
+        }
+
+        public static let scope = "Scope"
+
+        public static let everyMachine = "Every machine in the fleet"
+
+        public static let severalSkills = "That repo holds several skills. Pick the one to fetch."
+
+        /// Link marketplace.
+        public static let linkMarketplace = "Link marketplace"
+
+        public static let link = "Link"
+
+        public static let linking = "Linking…"
+
+        public static let marketSourceHint = "A GitHub `owner/repo`, a git URL, or a URL that ends in `marketplace.json`. Anthropic publishes `anthropics/skills` and `anthropics/claude-plugins-official`."
+
+        public static let marketSourcePlaceholder = "anthropics/skills"
+
+        public static let marketNamePlaceholder = "skills"
+
+        public static let readingManifest = "Reading its marketplace.json…"
+
+        public static func installsAs(name: String) -> String {
+            "What its plugins are installed as — `plugin@\(name)`."
+        }
+
+        public static func callsItself(name: String) -> String {
+            "This marketplace calls itself `\(name)`, and links as `\(name)`: its plugins install as `plugin@\(name)`."
+        }
+
+        public static func alreadyLinked(name: String) -> String {
+            "\"\(name)\" is already linked."
+        }
+
+        /// On each machine.
+        public static let onEachMachine = "On each machine"
+
+        public static let inventoryNote = "What each machine really has, whoever put it there — read live, never stored. Anything the fleet does not manage can be adopted into it."
+
+        public static let noMachines = "No machines yet"
+
+        public static let noMachinesAfter = " — each one reports what it has once it registers."
+
+        public static let showWhatItHas = "Show what it has"
+
+        public static let offline = "Offline"
+
+        public static let asking = "Asking this machine…"
+
+        public static let noMcpAtAll = "This machine has no MCP servers at all."
+
+        public static let noSkillsAtAll = "This machine has no skills at all."
+
+        public static let fleetBadge = "fleet"
+
+        public static func shadowedBy(scope: String) -> String {
+            "shadowed by \(scope)"
+        }
+
+        public static let adopt = "Adopt"
+
+        public static let adopting = "Adopting…"
+
+        public static let inTheFleet = "In the fleet"
+
+        /// A marketplace the hub could not read or link, with its reason.
+        public static func couldNotRead(what: String, why: String) -> String {
+            "Could not read \(what) — \(why)."
+        }
+
+        public static func couldNotLink(what: String, why: String) -> String {
+            "Could not link \(what) — \(why)."
+        }
+
+        public static let saidNothing = "it said nothing"
+
+        /// Why a name cannot be used.
+        public static let problemEmpty = "Give the skill a name."
+
+        public static let problemCharacters = "Letters, digits, dots, dashes and underscores only."
+
+        public static func problemTaken(name: String) -> String {
+            "There is already a skill called “\(name)”."
+        }
+
+        // packages/core/src/claude-dirs.ts `USER_LAYER_LABEL`
+        /// The user layer as a person reads it on any machine: `~/.claude`.
+        public static let userLayer = "~/.claude"
+
+        // packages/core/src/claude-dirs.ts `CLAUDE_DIR_NAME`
+        /// The dir name `paths.ts` joins onto a home or a project.
+        public static let claudeDir = ".claude"
+    }
+
+    public enum Spend {
+        // packages/core/src/words/spend.ts `spendWords`
+        public static let note = "Each project sets what it may spend in a day or a month on its Usage page, and follows this unless it chooses otherwise."
+
+        /// The one field's label.
+        public static let onCap = "When one is reached"
+
+        /// The settings could not be read, with the hub's clause.
+        public static func unread(clause: String) -> String {
+            "Could not read the spend settings — \(clause)."
+        }
+
+        // packages/core/src/words/spend.ts `SPEND_ON_CAP`
+        public struct OnCap: Sendable, Equatable {
+            public let value: String
+            public let label: String
+            public let means: String
+        }
+
+        /// What reaching a budget can do, in the order the field lists them.
+        public static let onCaps: [OnCap] = [
+            OnCap(value: "pause", label: "Pause dispatch", means: "No new attempt at the project's tasks starts. Caw still answers you."),
+            OnCap(value: "quiet", label: "Stop waking Caw", means: "What would wake the project's Caw is noted in its thread, without a turn. Attempts still start."),
+            OnCap(value: "both", label: "Pause both", means: "No new attempt starts, and Caw is not woken."),
+        ]
     }
 }

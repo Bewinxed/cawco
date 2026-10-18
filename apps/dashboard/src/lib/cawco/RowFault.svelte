@@ -20,6 +20,7 @@
    * already holding a fault (a list row arriving), it stands still and the
    * list's own motion carries it.
    */
+  import { configureWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -30,7 +31,7 @@
   let {
     reason,
     again,
-    againLabel = "Try again",
+    againLabel = configureWords.tryAgain,
     againPending = "Trying again…",
     class: className,
     children,

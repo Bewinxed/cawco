@@ -24,7 +24,9 @@ public final class FleetConfig {
     /// later read fails, as each slot is.
     public private(set) var rulesCount: Int?
     public private(set) var hooksCount: Int?
-    public private(set) var typesCount: Int?
+    /// The delegate types by name: a draft for one deleted since holds nothing to save.
+    public private(set) var typeNames: Set<String>?
+    public var typesCount: Int? { typeNames?.count }
     /// The catalog's tools, each a person sets a policy for.
     public private(set) var toolsCount: Int?
     @ObservationIgnored private weak var hub: HubConnection?
@@ -42,7 +44,7 @@ public final class FleetConfig {
         defer { loading = false }
         async let rules = try? hub.api.rules.list().ok.body.json.rules.count
         async let hooks = try? hub.api.fleet.hooks().ok.body.json.hooks.count
-        async let types = try? hub.api.delegates.types().ok.body.json.types.count
+        async let types = try? Set(hub.api.delegates.types().ok.body.json.types.map(\.name))
         async let tools = try? hub.api.tools.list().ok.body.json.catalog.count
         do {
             snapshot = try await hub.api.fleet.read().ok.body.json
@@ -53,7 +55,7 @@ public final class FleetConfig {
         let (r, h, t, c) = await (rules, hooks, types, tools)
         if let r { rulesCount = r }
         if let h { hooksCount = h }
-        if let t { typesCount = t }
+        if let t { typeNames = t }
         if let c { toolsCount = c }
     }
 

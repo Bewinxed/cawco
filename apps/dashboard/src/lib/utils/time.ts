@@ -1,45 +1,48 @@
+import { memoryWords } from "@cawco/core";
+
 /**
- * Format a date as a relative time string (e.g., "5 minutes ago")
+ * Format a date as a relative time string (e.g., "5m ago"); the app's
+ * FleetMemory `ago` says it the same way.
  */
 export function formatDistanceToNow(date: Date): string {
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
   if (diffInSeconds < 5) {
-    return "just now";
+    return memoryWords.justNow;
   }
 
   if (diffInSeconds < 60) {
-    return `${diffInSeconds}s ago`;
+    return memoryWords.ago(`${diffInSeconds}s`);
   }
 
   const diffInMinutes = Math.floor(diffInSeconds / 60);
   if (diffInMinutes < 60) {
-    return `${diffInMinutes}m ago`;
+    return memoryWords.ago(`${diffInMinutes}m`);
   }
 
   const diffInHours = Math.floor(diffInMinutes / 60);
   if (diffInHours < 24) {
-    return `${diffInHours}h ago`;
+    return memoryWords.ago(`${diffInHours}h`);
   }
 
   const diffInDays = Math.floor(diffInHours / 24);
   if (diffInDays < 7) {
-    return `${diffInDays}d ago`;
+    return memoryWords.ago(`${diffInDays}d`);
   }
 
   const diffInWeeks = Math.floor(diffInDays / 7);
   if (diffInWeeks < 4) {
-    return `${diffInWeeks}w ago`;
+    return memoryWords.ago(`${diffInWeeks}w`);
   }
 
   const diffInMonths = Math.floor(diffInDays / 30);
   if (diffInMonths < 12) {
-    return `${diffInMonths}mo ago`;
+    return memoryWords.ago(`${diffInMonths}mo`);
   }
 
   const diffInYears = Math.floor(diffInDays / 365);
-  return `${diffInYears}y ago`;
+  return memoryWords.ago(`${diffInYears}y`);
 }
 
 /**

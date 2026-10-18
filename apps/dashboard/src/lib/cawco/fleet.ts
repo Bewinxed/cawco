@@ -28,7 +28,9 @@ import {
   type McpHttpServerConfig,
   type McpSSEServerConfig,
   type MemoryScope,
+  mcpWords,
   parseAgentFrontMatter,
+  skillsWords,
 } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
 import { hubFailure } from "#lib/cawco/hub-read.js";
@@ -103,16 +105,16 @@ export function mcpNameProblem(
 ): string | undefined {
   const trimmed = name.trim();
   if (!trimmed) {
-    return "Give the server a name.";
+    return mcpWords.problemEmpty;
   }
   if (!NAME_PATTERN.test(trimmed)) {
-    return "Letters, digits, dashes and underscores only.";
+    return mcpWords.problemCharacters;
   }
   if (RESERVED.includes(trimmed.toLowerCase())) {
-    return `Claude Code keeps “${trimmed}” for itself.`;
+    return mcpWords.problemReserved(trimmed);
   }
   if (taken.includes(trimmed)) {
-    return `There is already a server called “${trimmed}”.`;
+    return mcpWords.problemTaken(trimmed);
   }
   return undefined;
 }
@@ -211,13 +213,13 @@ export function skillNameProblem(
 ): string | undefined {
   const trimmed = name.trim();
   if (!trimmed) {
-    return "Give the skill a name.";
+    return skillsWords.problemEmpty;
   }
   if (!SKILL_NAME_PATTERN.test(trimmed)) {
-    return "Letters, digits, dots, dashes and underscores only.";
+    return skillsWords.problemCharacters;
   }
   if (taken.includes(trimmed)) {
-    return `There is already a skill called “${trimmed}”.`;
+    return skillsWords.problemTaken(trimmed);
   }
   return undefined;
 }
@@ -507,7 +509,10 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
   );
   if (!read.name) {
     throw new Error(
-      `Could not read ${source} — ${(read.error ?? "it said nothing").replace(TRAILING_STOPS, "")}.`
+      skillsWords.couldNotRead(
+        source,
+        (read.error ?? skillsWords.saidNothing).replace(TRAILING_STOPS, "")
+      )
     );
   }
   return read.name;
@@ -538,7 +543,10 @@ export const linkMarketplace = async (
   );
   if (!link.marketplace) {
     throw new Error(
-      `Could not link ${source} — ${(link.error ?? "it said nothing").replace(TRAILING_STOPS, "")}.`
+      skillsWords.couldNotLink(
+        source,
+        (link.error ?? skillsWords.saidNothing).replace(TRAILING_STOPS, "")
+      )
     );
   }
   return link.marketplace;
@@ -1203,7 +1211,7 @@ export const marketplaceCatalog = async (
   );
   if (read.error) {
     throw new Error(
-      `Could not read ${row.name} — ${read.error.replace(TRAILING_STOPS, "")}.`
+      skillsWords.couldNotRead(row.name, read.error.replace(TRAILING_STOPS, ""))
     );
   }
   return read.plugins ?? [];

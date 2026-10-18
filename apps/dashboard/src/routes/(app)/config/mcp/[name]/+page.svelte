@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { mcpWords as words } from "@cawco/core";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import McpEditor from "#lib/cawco/config/editors/McpEditor.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -23,9 +24,9 @@
   found={name === "new" || server !== null}
   loaded={fleet !== null}
   problem={store.fleet.error}
-  saveLabel={name === "new" ? "Add server" : "Save changes"}
+  saveLabel={name === "new" ? words.add : words.save}
   {section}
-  what="MCP server"
+  what={words.what}
 >
   <McpEditor {server} {taken} />
 </EditorRoute>

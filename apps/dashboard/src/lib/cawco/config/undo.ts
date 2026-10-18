@@ -1,4 +1,4 @@
-import type { Deleted } from "@cawco/core";
+import { configureWords, type Deleted } from "@cawco/core";
 import { failureWords, hubRefusal } from "../hub-read";
 import { toast } from "../toasts";
 
@@ -40,7 +40,7 @@ export function offerUndo<T>(
   toast(words, {
     id,
     action: {
-      label: "Undo",
+      label: configureWords.undo,
       onClick: () => {
         settled();
         restoreDeleted<T>(deleted)

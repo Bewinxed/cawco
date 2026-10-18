@@ -1,10 +1,11 @@
-import type {
-  FleetAgent,
-  FleetMarketplace,
-  FleetMcpServer,
-  FleetPlugin,
-  FleetSkillMeta,
-  RuleRow,
+import {
+  configureWords,
+  type FleetAgent,
+  type FleetMarketplace,
+  type FleetMcpServer,
+  type FleetPlugin,
+  type FleetSkillMeta,
+  type RuleRow,
 } from "@cawco/core";
 import { type DelegateType, removeDelegateType } from "../delegate-types";
 import {
@@ -84,7 +85,7 @@ export function deleteRule(
       land: (back) => {
         store.rules.value = putBack(store.rules.value ?? [], back, at, same);
       },
-      words: `Deleted ${rule.name}`,
+      words: configureWords.deleted(rule.name),
       mark: rule.id,
     },
     leave
@@ -109,7 +110,7 @@ export function deleteHook(
       land: (back) => {
         store.hooks.value = putBack(store.hooks.value ?? [], back, at, same);
       },
-      words: `Deleted ${hook.name}`,
+      words: configureWords.deleted(hook.name),
       mark: hook.id,
     },
     leave
@@ -134,7 +135,7 @@ export function deleteDelegateType(
       land: (back) => {
         store.types.value = putBack(store.types.value ?? [], back, at, same);
       },
-      words: `Deleted ${name}`,
+      words: configureWords.deleted(name),
       mark: name,
     },
     leave
@@ -167,7 +168,7 @@ export function deleteAgent(
           fleet.agents = putBack(fleet.agents, back, at, same);
         }
       },
-      words: `Removed ${name}`,
+      words: configureWords.removed(name),
       mark: name,
     },
     leave
@@ -200,7 +201,7 @@ export function deleteMcpServer(
           fleet.config.mcp = putBack(fleet.config.mcp, back, at, same);
         }
       },
-      words: `Removed ${name}`,
+      words: configureWords.removed(name),
       mark: name,
     },
     leave
@@ -226,7 +227,7 @@ export function deleteSkill(store: ConfigStore, name: string): Promise<void> {
         fleet.skills = putBack(fleet.skills, back, at, same);
       }
     },
-    words: `Removed ${name}`,
+    words: configureWords.removed(name),
     mark: name,
   });
 }
@@ -250,7 +251,7 @@ export function deletePlugin(store: ConfigStore, id: string): Promise<void> {
         fleet.config.plugins = putBack(fleet.config.plugins, back, at, same);
       }
     },
-    words: `Removed ${id}`,
+    words: configureWords.removed(id),
     mark: id,
   });
 }
@@ -285,7 +286,7 @@ export function deleteMarketplace(
         );
       }
     },
-    words: `Unlinked ${name}`,
+    words: configureWords.unlinked(name),
     mark: name,
   });
 }
@@ -322,7 +323,7 @@ export function deleteMemory(
             fleet.memoryDocs = back.docs;
           }
         },
-        words: "Deleted CLAUDE.md",
+        words: configureWords.deleted(MAIN),
         mark: MAIN,
       },
       leave
@@ -349,7 +350,7 @@ export function deleteMemory(
           ].toSorted((a, b) => a.path.localeCompare(b.path));
         }
       },
-      words: `Deleted ${path}`,
+      words: configureWords.deleted(path),
       mark: path,
     },
     leave

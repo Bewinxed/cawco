@@ -50,6 +50,7 @@ import {
   type ConnectionAuth,
   type ConnectionTransport,
   type ConnectionView,
+  connectionsWords,
   connectionToolName,
   type InstanceRow,
   parseConnectionTool,
@@ -600,7 +601,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (!tokens) {
       return Promise.reject(
         new ConnectionProblem(
-          `${r.name} is not signed in: ${r.reason ?? "Sign in."}`
+          `${r.name} is not signed in: ${r.reason ?? connectionsWords.saidSignIn}`
         )
       );
     }
@@ -668,7 +669,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   ): Promise<{ expiresAt: number; token: string }> => {
     const { app } = opened(r);
     if (!app) {
-      setState(r, "needs-sign-in", "Set its app.");
+      setState(r, "needs-sign-in", connectionsWords.saidSetApp);
       return problem(`${r.name} needs its app: ${NO_SECRET}.`);
     }
     if (app.service === "linear") {
@@ -868,7 +869,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const transportOf = (r: ConnectionRow, bearer?: string): Transport => {
     const sealed = opened(r);
     if ((r.auth === "bearer" || r.auth === "header") && !sealed.key) {
-      setState(r, "needs-sign-in", "Set its key.");
+      setState(r, "needs-sign-in", connectionsWords.saidSetKey);
       problem(`${r.name} needs its key: ${NO_SECRET}.`);
     }
     if (r.transport === "stdio") {
@@ -1412,10 +1413,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
       return { state: "error", reason: "Not looked at yet." };
     }
     const reasons: Record<Exclude<ConnectionAuth, "none">, string> = {
-      oauth: "Sign in.",
-      app: "Set its app.",
-      bearer: "Set its key.",
-      header: "Set its key.",
+      oauth: connectionsWords.saidSignIn,
+      app: connectionsWords.saidSetApp,
+      bearer: connectionsWords.saidSetKey,
+      header: connectionsWords.saidSetKey,
     };
     return { state: "needs-sign-in", reason: reasons[authKind] };
   };
@@ -1550,7 +1551,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       tokensExpireAt: null,
       ...(service === "github"
         ? { state: "error", reason: "Not looked at yet." }
-        : { state: "needs-sign-in", reason: "Sign in." }),
+        : { state: "needs-sign-in", reason: connectionsWords.saidSignIn }),
     });
     console.info(`[connections] ${name}: app set`);
     if (service === "github") {
@@ -1674,7 +1675,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (!authorizationUrl) {
       return problem(`${name}'s server asked for no sign-in.`);
     }
-    setState(r, "needs-sign-in", "A sign-in is under way.");
+    setState(r, "needs-sign-in", connectionsWords.saidUnderWay);
     console.info(`[connections] ${name}: sign-in started`);
     return { authorizationUrl: authorizationUrl.toString() };
   };

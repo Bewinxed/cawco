@@ -228,6 +228,11 @@ public final class HubConnection {
     /// A count per project that moves each time its arrangement of blocks
     /// changes (`blocks.changed`), here or on another screen: its pages read it again.
     public private(set) var blocksChanged: [String: Int] = [:]
+    /// The latest `fleet.fetch` frames (a skill, plugin or marketplace the hub
+    /// fetched, landed), and how many have come since launch: what a fetch
+    /// asked of the hub waits on (fleet.ts `untilFetched`).
+    @ObservationIgnored public private(set) var fleetFetches: [Components.Schemas.FleetFetchFrame] = []
+    @ObservationIgnored public private(set) var fleetFetchCount = 0
     /// Each project's starters by place, as the hub last wrote them since
     /// this connection (`starters.changed`): a set written after a page read
     /// its stages replaces the one they carried (client.svelte.ts `startersOf`).
@@ -1633,6 +1638,10 @@ public final class HubConnection {
             fleet.lawsBroken = broken
         case let .fleetUpstream(answer):
             fleet.upstream = .answered(answer)
+        case let .fleetFetched(frame):
+            fleetFetches = Array((fleetFetches + [frame]).suffix(32))
+            fleetFetchCount += 1
+            Task { [configuration] in await configuration.load() }
         case let .tailnetHttps(tailnet):
             // Its step taken while connected: the row ticks, then leaves
             // (client.svelte.ts `tailnetTicked`).

@@ -178,6 +178,8 @@ const SOLAR_ICONS = [
   "ruler-cross-pen-bold-duotone", // IconRulerPen
   "microphone-bold-duotone", // IconMic
   "minus-circle-bold-duotone", // IconMinusCircle: a run that never ran, skipped or stopped
+  "shop-bold-duotone", // IconShop: Configure › Skills' marketplaces
+  "history-bold-duotone", // IconHistory: a skill's previous versions
 ];
 
 /**

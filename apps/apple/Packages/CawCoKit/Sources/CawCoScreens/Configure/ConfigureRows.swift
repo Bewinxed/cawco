@@ -46,14 +46,19 @@ struct RowAction {
 /// as a pull-down from the ghost icon button.
 func rowMenu(_ label: String, actions: [RowAction]) -> UIButton {
     let button = KitGhostButton(.more, label: Words.Configure.moreFor(label: label))
-    button.menu = UIMenu(children: actions.map { action in
+    button.menuOnOpen { rowMenuItems(actions) }
+    button.showsMenuAsPrimaryAction = true
+    return button
+}
+
+/// A row's actions as its ⋯ menu lists them.
+func rowMenuItems(_ actions: [RowAction]) -> [UIMenuElement] {
+    actions.map { action in
         var attributes: UIMenuElement.Attributes = []
         if action.destructive { attributes.insert(.destructive) }
         if action.disabled { attributes.insert(.disabled) }
         return UIAction(title: action.label, image: action.glyph?.image.resized(to: 16), attributes: attributes) { _ in action.run() }
-    })
-    button.showsMenuAsPrimaryAction = true
-    return button
+    }
 }
 
 /// Where one fleet row has landed (RolloutChip.svelte): "2/2 machines" on

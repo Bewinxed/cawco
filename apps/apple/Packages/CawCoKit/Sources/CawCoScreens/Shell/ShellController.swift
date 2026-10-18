@@ -620,6 +620,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             accountsProbed = true
             AccountsProbe.start(shell: self)
         }
+        if ConfigProbe.on, !configProbed {
+            configProbed = true
+            ConfigProbe.start(shell: self)
+        }
         #endif
     }
 
@@ -629,6 +633,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private var askProbed = false
     private var parityProbed = false
     private var accountsProbed = false
+    private var configProbed = false
 
     /// The split's rail, the panes' screens, and whether the width is a phone's.
     var probeRail: SidebarViewController { rail }

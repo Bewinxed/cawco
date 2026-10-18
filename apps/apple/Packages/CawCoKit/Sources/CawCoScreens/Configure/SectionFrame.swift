@@ -29,6 +29,7 @@ class ConfigSectionController: ObservedViewController {
 
     private let titleLabel = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
     private let purposeLabel = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
+    private let head = UIStackView()
     private let body = UIStackView()
     private let skeleton = UIStackView()
     private let problemSlot = UIStackView()
@@ -79,7 +80,8 @@ class ConfigSectionController: ObservedViewController {
         titles.spacing = 4
         actions.spacing = 8
         actions.alignment = .center
-        let head = UIStackView(arrangedSubviews: [titles, actions])
+        head.addArrangedSubview(titles)
+        head.addArrangedSubview(actions)
         head.alignment = .top
         head.spacing = 12
         actions.setContentHuggingPriority(.required, for: .horizontal)
@@ -134,16 +136,38 @@ class ConfigSectionController: ObservedViewController {
             body.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Space.space7),
             body.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor, constant: -Space.space6),
         ])
-        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (controller: ConfigSectionController, _: UITraitCollection) in
-            controller.drawTitle()
-        }
         drawTitle()
         drawFrame(animated: false)
     }
 
-    /// A compact width's navigation bar says the title; a wide card says it itself.
+    /// Pushed over the list, the navigation bar says the title; beside the rail the card says it itself.
     private func drawTitle() {
-        titleLabel.isHidden = traitCollection.horizontalSizeClass == .compact
+        let hidden = ConfigSections.listed(view)
+        guard titleLabel.isHidden != hidden else { return }
+        titleLabel.isHidden = hidden
+        view.setNeedsLayout()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        drawTitle()
+        wrapHead()
+    }
+
+    /// `.head { flex-wrap: wrap }`: the actions stand beside the titles when
+    /// both fit on one line at their own widths, else on the line under them,
+    /// at its start; the titles are never narrowed to make room for them.
+    private func wrapHead() {
+        let room = head.bounds.width
+        guard room > 0, !actions.isHidden else { return }
+        let unbounded = CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        let titles = [titleLabel, purposeLabel].filter { !$0.isHidden }.map { $0.sizeThatFits(unbounded).width }.max() ?? 0
+        let acts = actions.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
+        let wraps = titles + head.spacing + acts > room
+        let axis: NSLayoutConstraint.Axis = wraps ? .vertical : .horizontal
+        guard head.axis != axis else { return }
+        head.axis = axis
+        head.alignment = wraps ? .leading : .top
     }
 
     /// Skeleton, problem alone, or the rows (with a later read's problem above them).

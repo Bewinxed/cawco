@@ -1,100 +1,16 @@
 <script lang="ts" module>
-  import type { ConnectionAuth } from "@cawco/core";
+  import {
+    CONNECTION_SERVICES,
+    type ConnectionService,
+    type ConnectionWay,
+  } from "@cawco/core";
 
-  /**
-   * One way the hub signs in to a service: how (`auth`), what it is called
-   * where it is picked, and what it takes, said under the pick.
-   */
-  export interface Way {
-    auth: Extract<ConnectionAuth, "oauth" | "bearer" | "app">;
-    /** What the key is, said under its field. */
-    key?: string;
-    label: string;
-    /** What the way is for, under the pick. */
-    says: string;
-  }
+  /** One way the hub signs in to a service (core `ConnectionWay`). */
+  export type Way = ConnectionWay;
+  /** A service the page can start a connection to (core `CONNECTION_SERVICES`, where each one's sources are). */
+  export type Service = ConnectionService;
 
-  /**
-   * A service the page can start a connection to: its MCP server and the
-   * ways the hub signs in there, the first the one offered first.
-   * - GitHub: "To access resources on behalf of an organization, or for
-   *   long-lived integrations, you should use a GitHub App"
-   *   (docs.github.com, managing your personal access tokens); its remote
-   *   MCP server takes the app's `ghs_` token or a token as
-   *   `Authorization: Bearer` (github/github-mcp-server#696). A project's
-   *   tracker needs "Issues" (write) (docs.github.com, create an issue).
-   * - Linear: an app acting as itself ("This option should be used for
-   *   agents and service accounts", linear.app/developers/oauth-2-0-authentication),
-   *   or an API key, both of which its MCP server takes as a bearer
-   *   (linear.app/docs/mcp); or its MCP server's own sign-in, "OAuth 2.1 with
-   *   dynamic client registration", whose token is for its MCP server alone.
-   * - Slack: "We do not support SSE-based connections or Dynamic Client
-   *   Registration at this time" (docs.slack.dev/ai/slack-mcp-server), so a
-   *   user token, as Bearer.
-   */
-  export interface Service {
-    label: string;
-    service: string;
-    url: string;
-    ways: Way[];
-  }
-
-  export const SERVICES: Service[] = [
-    {
-      service: "github",
-      label: "GitHub",
-      url: "https://api.githubcopilot.com/mcp/",
-      ways: [
-        {
-          auth: "app",
-          label: "GitHub App",
-          says: "An app you register and install on the projects' repositories, with Issues: read and write. It acts as itself.",
-        },
-        {
-          auth: "bearer",
-          label: "Token",
-          says: "A fine-grained personal access token limited to the projects' repositories, with Issues: read and write.",
-          key: "It acts as you.",
-        },
-      ],
-    },
-    {
-      service: "linear",
-      label: "Linear",
-      url: "https://mcp.linear.app/mcp",
-      ways: [
-        {
-          auth: "app",
-          label: "Linear app",
-          says: "An OAuth app you create in Linear's settings. It acts as itself, with read and write.",
-        },
-        {
-          auth: "bearer",
-          label: "API key",
-          says: "A personal API key limited to the projects' teams.",
-          key: "It acts as you.",
-        },
-        {
-          auth: "oauth",
-          label: "Sign in",
-          says: "Linear's own sign-in, for agents' Linear tools. A project's tasks need a Linear app or an API key.",
-        },
-      ],
-    },
-    {
-      service: "slack",
-      label: "Slack",
-      url: "https://mcp.slack.com/mcp",
-      ways: [
-        {
-          auth: "bearer",
-          label: "User token",
-          says: "A Slack user token from your Slack app.",
-          key: "A Slack user token (xoxp-…) from your Slack app.",
-        },
-      ],
-    },
-  ];
+  export const SERVICES: readonly Service[] = CONNECTION_SERVICES;
 
   /** What an app connection is set with, before the hub holds it. */
   export interface AppDraft {
@@ -160,7 +76,12 @@
    * checklist) and Remove, which goes through at once with Undo in its toast
    * (JOURNEY.md Flow 5).
    */
-  import type { ConnectionView, Deleted } from "@cawco/core";
+  import {
+    type ConnectionView,
+    configureWords,
+    type Deleted,
+    connectionsWords as words,
+  } from "@cawco/core";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -219,7 +140,7 @@
       loaded = true;
       readError = null;
     } catch (error) {
-      readError = `Could not read the connections — ${failureClause(error)}.`;
+      readError = words.unread(failureClause(error));
     }
   }
 
@@ -255,17 +176,17 @@
 
   /** The hub's state, as the row's word. */
   const STATE = {
-    "signed-in": { label: "Signed in", variant: "done" },
-    "needs-sign-in": { label: "Not signed in", variant: "secondary" },
-    error: { label: "Failing", variant: "attn" },
+    "signed-in": { label: words.stateSignedIn, variant: "done" },
+    "needs-sign-in": { label: words.stateNeedsSignIn, variant: "secondary" },
+    error: { label: words.stateError, variant: "attn" },
   } as const;
 
   /** The hub's reasons the row's own button already says. */
   const SAID_BY_BUTTON = new Set([
-    "Sign in.",
-    "Set its key.",
-    "Set its app.",
-    "A sign-in is under way.",
+    words.saidSignIn,
+    words.saidSetKey,
+    words.saidSetApp,
+    words.saidUnderWay,
   ]);
 
   /** The line under a row: its sign-in under way, its last failure, or the hub's reason. */
@@ -273,7 +194,7 @@
     if (signing[row.name]) {
       return {
         tone: "busy",
-        text: `${labelOf(row)}'s sign-in is open in a new tab; this row turns signed in when you finish there.`,
+        text: words.signingInTab(labelOf(row)),
       };
     }
     const problem = problems[row.name];
@@ -319,13 +240,13 @@
       const { closed } = tab;
       await read();
       const row = rows.find((each) => each.name === name);
-      if (row?.reason !== "A sign-in is under way.") {
+      if (row?.reason !== words.saidUnderWay) {
         stopWatching(name);
         return;
       }
       if (closed) {
         stopWatching(name);
-        problems[name] = "The sign-in tab closed before it finished.";
+        problems[name] = words.signInClosed;
       }
     }, WATCH_MS);
   }
@@ -349,8 +270,7 @@
     await read();
   }
 
-  const BLOCKED =
-    "The browser blocked the sign-in tab. Allow pop-ups for this page, then try again.";
+  const BLOCKED = words.blocked;
 
   function signIn(row: ConnectionView) {
     const tab = window.open("", "_blank");
@@ -542,8 +462,11 @@
       stopWatching(row.name);
       // The hub puts it back whole, key and projects with it; the list is
       // read again, as after every change here.
-      offerUndo(`deleted:${row.name}`, `Removed ${labelOf(row)}`, deleted, () =>
-        read()
+      offerUndo(
+        `deleted:${row.name}`,
+        configureWords.removed(labelOf(row)),
+        deleted,
+        () => read()
       );
     } catch (error) {
       problems[row.name] = failureWords(error);
@@ -594,7 +517,7 @@
         <Button
           {...props}
           icon={IconPlus}
-          label="Sign in to a service"
+          label={words.signInTo}
           title={blocked ?? undefined}
         />
       {/snippet}
@@ -722,14 +645,14 @@
 {#snippet addForm(service: Service)}
   <form
     data-slot="add"
-    aria-label="Sign in to {service.label}"
+    aria-label={words.signInService(service.label)}
     class="add"
     onsubmit={add}
     transition:unfold
   >
     <p class="add-head mark-line">
       <ProviderLogo provider={service.service} />
-      <span>Sign in to {service.label}</span>
+      <span>{words.signInService(service.label)}</span>
     </p>
     {#if service.ways.length > 1}
       <div data-slot="way" class="way">
@@ -756,21 +679,25 @@
       </div>
     {/if}
     <Field
-      hint="Two accounts of one service are two connections."
+      hint={words.accountHint}
       id="connection-account"
-      label="Which {service.label} account"
+      label={words.account(service.label)}
     >
       <Input
         autocomplete="off"
         id="connection-account"
-        placeholder="brand, or your handle"
+        placeholder={words.accountPlaceholder}
         required
         {@attach focusOnOpen}
         bind:value={account}
       />
     </Field>
     {#if addWay?.auth === "bearer"}
-      <Field hint={addWay.key} id="connection-key" label="{service.label} key">
+      <Field
+        hint={addWay.key}
+        id="connection-key"
+        label={words.key(service.label)}
+      >
         <Input
           autocomplete="off"
           id="connection-key"
@@ -788,16 +715,16 @@
     <div class="buttons">
       <Button
         disabled={addPending}
-        label="Cancel"
+        label={words.cancel}
         onclick={stopAdding}
         size="sm"
         variant="ghost"
       />
       <Button
         class="pressable"
-        label="Sign in"
+        label={words.signIn}
         pending={addPending}
-        pendingLabel="Signing in…"
+        pendingLabel={words.signingIn}
         size="sm"
         type="submit"
       />
@@ -826,11 +753,8 @@
          service asking you, so Caw can't start it. The line says so, and
          each card signs in to one service, its row then saying how it goes. -->
     <div data-slot="connections-page-empty" class="empty">
-      <p data-slot="empty-line" class="empty-line">
-        Each service asks you, not Caw, to let the hub in, so signing in is
-        yours. The projects you allow then read from it and act through it.
-      </p>
-      <ul data-slot="cards" aria-label="Services" class="cards">
+      <p data-slot="empty-line" class="empty-line">{words.emptyLine}</p>
+      <ul data-slot="cards" aria-label={words.servicesLabel} class="cards">
         {#each SERVICES as service (service.service)}
           <li>
             <button
@@ -840,7 +764,7 @@
               type="button"
             >
               <ProviderLogo provider={service.service} />
-              <span>Sign in to {service.label}</span>
+              <span>{words.signInService(service.label)}</span>
             </button>
           </li>
         {/each}
@@ -850,14 +774,14 @@
       {/if}
     </div>
   {:else}
-    <RowList label="Connections">
+    <RowList label={words.list}>
       {#each rows as row (row.id)}
         {@const shown = shownOf(row)}
         {@const marked = MARKED.has(row.service.toLowerCase())}
         <SectionRow
           actions={[
             {
-              label: "Projects…",
+              label: words.projects,
               icon: IconToolTodo,
               onselect: () => chooseFor(row),
             },
@@ -874,7 +798,7 @@
                 ]
               : []),
             {
-              label: "Remove",
+              label: words.remove,
               icon: IconTrash,
               destructive: true,
               disabled: removing === row.name,
@@ -935,7 +859,7 @@
             {#if keying === row.name}
               <form
                 data-slot="row-ask"
-                aria-label="{labelOf(row)} key"
+                aria-label={words.key(labelOf(row))}
                 class="row-ask"
                 onsubmit={(event) => {
                   event.preventDefault();
@@ -944,7 +868,7 @@
                 transition:unfold
               >
                 <Input
-                  aria-label="{labelOf(row)} key for {row.account}"
+                  aria-label={words.rowKey(labelOf(row), row.account)}
                   autocomplete="off"
                   class="key"
                   required
@@ -954,15 +878,15 @@
                 />
                 <Button
                   class="pressable"
-                  label="Save key"
+                  label={words.saveKey}
                   pending={keyPending}
-                  pendingLabel="Saving…"
+                  pendingLabel={words.saving}
                   size="xs"
                   type="submit"
                 />
                 <Button
                   class="pressable"
-                  label="Cancel"
+                  label={words.cancel}
                   onclick={() => {
                     keying = null;
                     key = "";
@@ -981,13 +905,14 @@
           {#snippet trailing()}
             {#if shown.chips.length > 0}
               <span class="projects">
-                <span class="sr-only">Projects that may use it:</span>
+                <span class="sr-only">{words.projectsMayUse}</span>
                 {#each shown.chips as chip (chip)}
                   <Badge variant="secondary"><span>{chip}</span></Badge>
                 {/each}
                 {#if shown.more > 0}
                   <Badge variant="ghost"
-                    ><span data-slot="num" class="num">+{shown.more}</span
+                    ><span data-slot="num" class="num"
+                      >{words.more(shown.more)}</span
                     ></Badge
                   >
                 {/if}
@@ -1007,17 +932,17 @@
             {:else if row.state !== "signed-in" && signsIn(row)}
               <Button
                 class="pressable"
-                label="Sign in"
+                label={words.signIn}
                 onclick={() => signIn(row)}
                 pending={signing[row.name] ?? false}
-                pendingLabel="Signing in…"
+                pendingLabel={words.signingIn}
                 size="sm"
                 variant="outline"
               />
             {:else if row.state !== "signed-in" && takesKey(row) && keying !== row.name}
               <Button
                 class="pressable"
-                label="Set key"
+                label={words.setKey}
                 onclick={() => {
                   key = "";
                   keying = row.name;
@@ -1046,7 +971,7 @@
   <Popover.Content align="end" class="w-64" customAnchor={chooseAnchor}>
     {#if choosing}
       {@const row = choosing}
-      <p class="pick-head">Projects that may use {labelOf(row)}</p>
+      <p class="pick-head">{words.projectsFor(labelOf(row))}</p>
       <ul class="checklist">
         {#each cawco.projects as project (project.id)}
           <li>

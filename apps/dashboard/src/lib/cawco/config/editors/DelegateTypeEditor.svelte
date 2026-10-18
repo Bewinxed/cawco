@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { EFFORT_LEVELS } from "@cawco/core";
+  import { EFFORT_LEVELS, delegateTypesWords as words } from "@cawco/core";
   import { untrack } from "svelte";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -101,7 +101,7 @@
 
   const duplicate = $derived(
     submission.name !== "" && taken.includes(submission.name)
-      ? "Another delegate type already has that name. Two types called the same thing are two a calling agent cannot tell apart."
+      ? words.duplicate
       : undefined
   );
 
@@ -173,32 +173,30 @@
 </script>
 
 <EditorFrame
-  deleteLabel={name ? "Delete delegate type" : undefined}
+  deleteLabel={name ? words.remove : undefined}
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
   ondelete={name ? remove : undefined}
   onsubmit={save}
-  saveLabel={name ? "Save changes" : "Create delegate type"}
+  saveLabel={name ? words.save : words.create}
   saving={busy}
-  title={name ? draft.name : "New delegate type"}
+  title={name ? draft.name : words.newTitle}
 >
   {#snippet header()}
     <TitleInput
       disabled={name !== null}
       invalid={Boolean(problemFor("name") || duplicate)}
-      label="Delegate type name"
+      label={words.nameLabel}
       mono
       onblur={() => {
         touched.name = true;
       }}
-      placeholder="explore"
+      placeholder={words.namePlaceholder}
       bind:value={draft.name}
     />
     <p data-slot="note" class="note">
-      {name
-        ? "The name is the key a running call already asks for by; renaming means creating a new type."
-        : "Lowercase letters, digits and hyphens — the exact string a delegate call's type param names."}
+      {name ? words.nameKept : words.nameRule}
     </p>
     {#if problemFor("name")}
       <p class="problem" in:appear>{problem}</p>
@@ -206,21 +204,18 @@
       <p class="problem" in:appear>{duplicate}</p>
     {/if}
     <Alert.Root>
-      <Alert.Description>
-        Changes apply to new sessions only — running sessions keep the type list
-        they started with.
-      </Alert.Description>
+      <Alert.Description>{words.newSessions}</Alert.Description>
     </Alert.Root>
     {#if failed}
       <p class="problem" role="alert" in:appear>{failed}</p>
     {/if}
   {/snippet}
 
-  <EditorSection hue={HUE} icon={IconDocument} label="Description">
+  <EditorSection hue={HUE} icon={IconDocument} label={words.description}>
     <Field
-      hint="What the calling model reads to decide whether this is the type to route to — not a note for you, a routing signal for it."
+      hint={words.descriptionHint}
       id="type-description"
-      label="Description"
+      label={words.description}
       problem={problemFor("description")}
     >
       <Textarea
@@ -230,20 +225,17 @@
         onblur={() => {
           touched.description = true;
         }}
-        placeholder="Read-only codebase exploration and fan-out search; returns conclusions, not file dumps."
+        placeholder={words.descriptionPlaceholder}
         rows={4}
         bind:value={draft.description}
       />
     </Field>
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconCpu} label="What it runs on">
-    <p data-slot="note" class="note">
-      The harness and model the delegate spawns on, and how hard it should
-      think.
-    </p>
+  <EditorSection hue={HUE} icon={IconCpu} label={words.runsOn}>
+    <p data-slot="note" class="note">{words.runsOnNote}</p>
     <Choice
-      label="Harness"
+      label={words.harness}
       onchange={(next) => {
         draft.harness = next as DelegateType["harness"];
       }}
@@ -253,7 +245,7 @@
       }))}
       value={draft.harness}
     />
-    <Field id="type-model" label="Model" problem={problemFor("model")}>
+    <Field id="type-model" label={words.model} problem={problemFor("model")}>
       <ModelCombobox
         class="w-full min-w-0 max-w-md"
         harness={draft.harness}
@@ -266,7 +258,7 @@
       />
     </Field>
     <Choice
-      label="Effort"
+      label={words.effort}
       onchange={(next) => {
         if (next === "unset") {
           // biome-ignore lint/performance/noDelete: an unset effort is omitted from the saved payload, not serialized as effort: undefined
@@ -276,44 +268,39 @@
         }
       }}
       options={[
-        { value: "unset", label: "Unset" },
+        { value: "unset", label: words.unset },
         ...EFFORT_LEVELS.map((effort) => ({ value: effort, label: effort })),
       ]}
       value={draft.effort ?? "unset"}
     />
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconKey} label="What it can reach">
-    <p data-slot="note" class="note">
-      Comma-separated. Both are optional narrowings — empty means the delegate
-      has the harness's ordinary defaults.
-    </p>
-    <Field id="type-skills" label="Skills">
+  <EditorSection hue={HUE} icon={IconKey} label={words.reach}>
+    <p data-slot="note" class="note">{words.reachNote}</p>
+    <Field id="type-skills" label={words.skills}>
       <Input
         autocomplete="off"
         class="font-mono"
         id="type-skills"
-        placeholder="svelte-foundations:coding, ui-observer"
+        placeholder={words.skillsPlaceholder}
         spellcheck="false"
         bind:value={skillsText}
       />
     </Field>
-    <Field id="type-deny" label="Tools denied">
+    <Field id="type-deny" label={words.denied}>
       <Input
         autocomplete="off"
         class="font-mono"
         id="type-deny"
-        placeholder="Write, Edit, NotebookEdit"
+        placeholder={words.deniedPlaceholder}
         spellcheck="false"
         bind:value={denyToolsText}
       />
     </Field>
     <SwitchField
-      hint={canDelegate
-        ? "It can spawn delegates and sessions of its own."
-        : "Leaf — it does the work itself and cannot delegate further."}
+      hint={canDelegate ? words.mayDelegateOn : words.mayDelegateOff}
       id="type-delegate"
-      label="May delegate"
+      label={words.mayDelegate}
       bind:checked={canDelegate}
     />
   </EditorSection>

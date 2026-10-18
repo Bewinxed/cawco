@@ -6,7 +6,7 @@
     FleetMcpServer,
     FleetSkillMeta,
   } from "@cawco/core";
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel, skillsWords as words } from "@cawco/core";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -97,20 +97,16 @@
   <SectionHeader
     hue="var(--hue-amber-500)"
     icon={IconLaptop}
-    label="On each machine"
+    label={words.onEachMachine}
   />
-  <p data-slot="note" class="note">
-    What each machine really has, whoever put it there — read live, never
-    stored. Anything the fleet does not manage can be adopted into it.
-  </p>
+  <p data-slot="note" class="note">{words.inventoryNote}</p>
 
   <!-- Each machine keeps its row whether it is up or not: a machine that
        drops for a moment says "Offline" in the same place, so nothing under
        the list moves. It opens only while it is up; open, it can still close. -->
   {#if machines.length === 0}
     <p data-slot="note" class="note">
-      <AddMachineLink>No machines yet</AddMachineLink>
-      — each one reports what it has once it registers.
+      <AddMachineLink>{words.noMachines}</AddMachineLink>{words.noMachinesAfter}
     </p>
   {:else}
     <ul data-slot="machines" class="machines">
@@ -138,20 +134,18 @@
             >
             <span data-slot="note" class="note">
               {#if open[machine.machineId]}
-                Hide
+                {words.hide}
               {:else if machine.status === "online"}
-                Show what it has
+                {words.showWhatItHas}
               {:else}
-                Offline
+                {words.offline}
               {/if}
             </span>
           </button>
           {#if open[machine.machineId]}
             {#if reading[machine.machineId]}
               <p data-slot="note" class="note busy mark-line" role="status">
-                <Spinner class="size-4 shrink-0" /><span
-                  >Asking this machine…</span
-                >
+                <Spinner class="size-4 shrink-0" /><span>{words.asking}</span>
               </p>
             {:else if unread[machine.machineId]}
               <Alert variant="warning">
@@ -159,9 +153,7 @@
               </Alert>
             {:else if rows.length === 0}
               <p data-slot="note" class="note">
-                {kind === "mcp"
-                  ? "This machine has no MCP servers at all."
-                  : "This machine has no skills at all."}
+                {kind === "mcp" ? words.noMcpAtAll : words.noSkillsAtAll}
               </p>
             {:else}
               <ul class="found">
@@ -174,11 +166,14 @@
                         <Badge variant="outline"><span>{row.scope}</span></Badge
                         >
                         {#if row.managed}
-                          <Badge variant="secondary"><span>fleet</span></Badge>
+                          <Badge variant="secondary"
+                            ><span>{words.fleetBadge}</span></Badge
+                          >
                         {/if}
                         {#if "shadowedBy" in row && row.shadowedBy}
                           <Badge variant="attn"
-                            ><span>shadowed by {row.shadowedBy}</span></Badge
+                            ><span>{words.shadowedBy(row.shadowedBy)}</span
+                            ></Badge
                           >
                         {/if}
                       </span>
@@ -191,18 +186,20 @@
                     {#if !(row.managed || taken.includes(row.name))}
                       <Button
                         failed={key in adoptFailed}
-                        label="Adopt"
+                        label={words.adopt}
                         onclick={() =>
                           kind === "mcp"
                             ? adoptServer(machine, row as DiscoveredMcp)
                             : adopt(machine, row as DiscoveredSkill)}
                         pending={busy[key] === true}
-                        pendingLabel="Adopting…"
+                        pendingLabel={words.adopting}
                         size="sm"
                         variant="outline"
                       />
                     {:else if taken.includes(row.name) && !row.managed}
-                      <span data-slot="note" class="note">In the fleet</span>
+                      <span data-slot="note" class="note"
+                        >{words.inTheFleet}</span
+                      >
                     {/if}
                     <RowFault class="adopt-fault" reason={adoptFailed[key]} />
                   </li>

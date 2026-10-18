@@ -82,14 +82,22 @@ class ConfigEditorController: ObservedViewController {
 
     /// Saves the fields; true when the hub took them.
     func save() async -> Bool { true }
-    /// The question Delete asks, read when it is pressed; nil while there is
-    /// nothing to delete yet.
+    /// The question Delete asks, read when it is pressed; nil for a delete
+    /// that goes through at once, with Undo after it (`deleteNow`).
     func deleteQuestion() -> Question? { nil }
+    /// A delete asked nothing first (deletes.ts): it runs at once, and its toast offers Undo.
+    func deleteNow() {}
     /// Deletes the row; a refusal is thrown in the hub's words, and stays
     /// under the question where it was asked.
     func delete() async throws {}
-    /// Cancel: the fields are dropped and the list comes back.
-    func cancel() { navigationController?.popViewController(animated: true) }
+    /// Where the editor keeps what it changed and has not saved (ConfigDrafts), if it keeps it.
+    var draftPath: String?
+
+    /// Cancel: the fields are dropped, their draft with them, and the list comes back.
+    func cancel() {
+        if let draftPath { ConfigDrafts.shared.drop(draftPath) }
+        navigationController?.popViewController(animated: true)
+    }
 
     // MARK: Frame
 
@@ -126,8 +134,16 @@ class ConfigEditorController: ObservedViewController {
         head.spacing = 8
         head.alignment = .top
         // `.narrow-menu`: under 640px Delete leaves the commit row for the header's ⋯.
-        if deleteLabel != nil {
+        if let deleteLabel {
             headMenu.showsMenuAsPrimaryAction = true
+            // Delete, as it can run when the menu opens.
+            headMenu.menuOnOpen { [weak self] in
+                guard let self else { return [] }
+                let blocked = hub.writesBlocked != nil || deleting || saving
+                return [UIAction(title: deleteLabel, image: Glyph.trash.image.resized(to: 16), attributes: blocked ? [.destructive, .disabled] : .destructive) { [weak self] _ in
+                    self?.runDelete()
+                }]
+            }
             headMenu.accessibilityIdentifier = "editor.more"
             headMenu.setContentHuggingPriority(.required, for: .horizontal)
             head.addArrangedSubview(headMenu)
@@ -219,12 +235,6 @@ class ConfigEditorController: ObservedViewController {
         deleteButton?.isHidden = compact
         deleteButton?.isEnabled = down == nil && !saving && !deleting
         headMenu.isHidden = !compact || deleteLabel == nil
-        if let deleteLabel {
-            headMenu.menu = UIMenu(children: [
-                UIAction(title: deleteLabel, image: Glyph.trash.image.resized(to: 16),
-                         attributes: down != nil || deleting || saving ? [.destructive, .disabled] : .destructive) { [weak self] _ in self?.runDelete() },
-            ])
-        }
     }
 
     #if DEBUG
@@ -277,7 +287,11 @@ class ConfigEditorController: ObservedViewController {
     /// confirm, pending until the hub answers; a refusal stays under it in
     /// the hub's words, the confirm the way to try again.
     private func runDelete() {
-        guard !deleting, let ask = deleteQuestion() else { return }
+        guard !deleting else { return }
+        guard let ask = deleteQuestion() else {
+            deleteNow()
+            return
+        }
         question.ask(AskHere.Request(title: ask.title, body: [ask.body], confirmLabel: ask.confirm, pendingLabel: ask.pending,
                                      destructive: true) { [weak self] in try await self?.delete() })
         drawFooter()

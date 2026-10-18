@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { delegateTypesWords as words } from "@cawco/core";
   import { deleteDelegateType } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
@@ -38,20 +39,16 @@
   function runsOn(row: DelegateType): string {
     const parts = [row.harness, row.model];
     if (row.effort) {
-      parts.push(`${row.effort} effort`);
+      parts.push(words.effortOf(row.effort));
     }
     if (row.skills?.length) {
-      parts.push(
-        `${row.skills.length} skill${row.skills.length === 1 ? "" : "s"}`
-      );
+      parts.push(words.skillCount(row.skills.length));
     }
     if (row.denyTools?.length) {
-      parts.push(
-        `${row.denyTools.length} tool${row.denyTools.length === 1 ? "" : "s"} denied`
-      );
+      parts.push(words.deniedCount(row.denyTools.length));
     }
     if (row.canDelegate) {
-      parts.push("may delegate");
+      parts.push(words.mayDelegateShort);
     }
     return parts.join(" · ");
   }
@@ -83,25 +80,25 @@
       title={down ?? undefined}
     >
       <IconPlus />
-      <span>New delegate type</span>
+      <span>{words.add}</span>
     </Button>
   {/snippet}
 
   <div data-slot="group" class="group">
-    <SectionHeader hue={section.hue} icon={section.icon} label="The fleet" />
+    <SectionHeader hue={section.hue} icon={section.icon} label={words.fleet} />
     {#if types.length === 0}
       <EmptyState
         icon={section.icon}
-        line="A fresh hub seeds five on first read; delete all of them and this is what is left."
-        title="No delegate types yet"
+        line={words.emptyLine}
+        title={words.emptyTitle}
       />
     {:else}
-      <RowList label="Delegate types">
+      <RowList label={words.list}>
         {#each types as row (row.name)}
           <SectionRow
             actions={[
               {
-                label: "Delete delegate type",
+                label: words.remove,
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[row.name] === true,
@@ -131,7 +128,7 @@
         label={entry.project.name}
       />
       {#if entry.types.length > 0}
-        <RowList label="{entry.project.name}'s delegate types">
+        <RowList label={words.projectList(entry.project.name)}>
           {#each entry.types as row (row.name)}
             <SectionRow
               href={folderFileHref(entry.project.id, row.path)}
@@ -145,7 +142,7 @@
               {#snippet badge()}
                 {#if row.shadows}
                   <Badge variant="secondary"
-                    ><span>shadows the fleet's {row.name}</span></Badge
+                    ><span>{words.shadows(row.name)}</span></Badge
                   >
                 {/if}
               {/snippet}
@@ -154,7 +151,7 @@
         </RowList>
       {/if}
       {#each entry.problems as fault (`${fault.path}:${fault.problem}`)}
-        <RowFault reason="{fault.path}: {fault.problem}" />
+        <RowFault reason={words.fileProblem(fault.path, fault.problem)} />
       {/each}
     </div>
   {/each}
