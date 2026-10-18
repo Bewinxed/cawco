@@ -326,16 +326,9 @@ body {
   font: var(--type-label);
   text-align: start;
 
-  & svg {
+  & > svg {
     flex: none;
     color: var(--ink-muted);
-  }
-  &[aria-checked="true"] {
-    color: var(--selected-ink);
-
-    & svg {
-      color: var(--selected-ink);
-    }
   }
   &:focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
@@ -362,6 +355,21 @@ body {
 .rail-item-hint {
   color: var(--ink-muted);
   font: var(--type-meta);
+}
+
+/* A checked item's tick (DESIGN.md, Menu item): in the item's own ink, no
+   fill; the hover is the only fill an item takes. It fades in over
+   --dur-control as the kit's menu tick does. */
+.rail-item-tick {
+  display: grid;
+  flex: none;
+  place-items: center;
+  opacity: 0;
+  transition: opacity var(--dur-control) var(--ease-out);
+
+  &[data-on="true"] {
+    opacity: 1;
+  }
 }
 
 /* ---- A file the canvas wouldn't take (images.ts): one line in the error

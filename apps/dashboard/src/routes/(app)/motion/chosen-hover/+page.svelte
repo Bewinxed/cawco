@@ -6,12 +6,15 @@
    * the permission rows, the side panel's pressed head button, the plan
    * ring, the comments list's current pin, the model list (its catalogue
    * is the browser's kept one, `cawco-models:by-harness`, which the
-   * chosen-hover spec seeds with two Claude models before the page loads)
-   * and a live Crepe editor, for its slash menu.
+   * chosen-hover spec seeds with two Claude models before the page loads),
+   * a live Crepe editor, for its slash menu, and a Caw reply's file chips
+   * (`?control=files` stands the page on that project's file, shallowly, as
+   * the project page does, so the first chip reads current).
    */
   import type { Pin } from "@cawco/core/comments";
   import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
   import PinList from "#lib/cawco/preview/PinList.svelte";
+  import FolderFiles from "#lib/cawco/project/FolderFiles.svelte";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import LifetimeChip from "#lib/cawco/spawn/LifetimeChip.svelte";
   import MachinesChip from "#lib/cawco/spawn/MachinesChip.svelte";
@@ -21,6 +24,7 @@
   import ProjectChip from "#lib/cawco/spawn/ProjectChip.svelte";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
   import { IconEye, IconLaptop, IconPen, IconServer } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
 
   const control = $derived(page.url.searchParams.get("control"));
@@ -74,6 +78,12 @@
   const pins: Pin[] = [pin("pin-1", 1), pin("pin-2", 2)];
   const noop = () => undefined;
   let markdown = $state("");
+
+  $effect(() => {
+    if (control === "files") {
+      goto("/project/p1?file=notes.md", { replace: true, shallow: true });
+    }
+  });
 </script>
 
 <svelte:head><title>Chosen and hover | CawCo</title></svelte:head>
@@ -159,6 +169,9 @@
       {pins}
       placing={null}
     />
+  </section>
+  <section data-probe="files">
+    <FolderFiles files={["notes.md", "plan.md"]} projectId="p1" />
   </section>
 </main>
 

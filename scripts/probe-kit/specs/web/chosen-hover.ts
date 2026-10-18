@@ -22,8 +22,12 @@
  * protocol (`CSS.forcePseudoState`), the pointer away.
  *
  * The canvas's tool rail (DESIGN.md, The tool rail): its chosen tool is on
- * the kit Toggle's on step, a hovered unchosen tool differs from it, and the
- * chosen tool stands 3:1 against the rail. The canvas host is its own
+ * the kit Toggle's on step, a hovered unchosen tool differs from it, the
+ * chosen tool's glyph is `ink-strong` at 4.5:1 or more on that step and an
+ * unchosen one's `ink-muted`. Its Shapes menu (DESIGN.md, Menu item): the
+ * checked item has no fill, its label and tick in the item's own ink, an
+ * unchosen item's tick unseen, and a hovered unchosen item takes
+ * `surface-hover`. The canvas host is its own
  * bundle, whose sheet styles html and body, so the rail is drawn on a page of
  * its own from the sheets the host loads: the decision-page kit's tokens
  * (host.tsx) and canvas.css, in the host's scheme (`color-scheme` on the
@@ -57,9 +61,10 @@ interface Control {
   name: string;
   /**
    * On the wash: the chosen row whose every text is read against it, and its
-   * label, which takes the wash's paired ink (`selected-ink`).
+   * label, which takes the wash's paired ink (`selected-ink`), and its glyph,
+   * when it draws one, in `selected-icon`.
    */
-  onWash?: { label: string; row: string };
+  onWash?: { icon?: string; label: string; row: string };
   /** The unchosen item. */
   other: string;
   /** Steps that bring the chosen item on screen (the slash menu's `/`). */
@@ -179,6 +184,20 @@ const CONTROLS: Control[] = [
     onWash: {
       row: `${SLASH} .tab-group li.selected`,
       label: `${SLASH} .tab-group li.selected`,
+    },
+  },
+  {
+    name: "A Caw reply's current file chip",
+    control: "files",
+    hover: "force",
+    recipe: WASH,
+    ready: '[data-probe="files"] .file[aria-current="page"]',
+    chosen: '[data-probe="files"] .file[aria-current="page"]',
+    other: '[data-probe="files"] .file:not([aria-current])',
+    onWash: {
+      row: '[data-probe="files"] .file[aria-current="page"]',
+      label: '[data-probe="files"] .file[aria-current="page"] .path',
+      icon: '[data-probe="files"] .file[aria-current="page"] .icon',
     },
   },
 ];
@@ -329,9 +348,9 @@ interface Ink {
  */
 function readInks(
   page: Page,
-  onWash: { label: string; row: string }
-): Promise<{ label: Ink | null; texts: Ink[] }> {
-  return page.evaluate(({ label, row }) => {
+  onWash: { icon?: string; label: string; row: string }
+): Promise<{ icon: Ink | null; label: Ink | null; texts: Ink[] }> {
+  return page.evaluate(({ icon, label, row }) => {
     const ink = (el: Element): Ink | null => {
       const { color } = getComputedStyle(el);
       const canvas = document.createElement("canvas");
@@ -370,7 +389,12 @@ function readInks(
           .filter((one): one is Ink => one !== null && one.text.length > 0)
       : [];
     const labelEl = document.querySelector(label);
-    return { label: labelEl ? ink(labelEl) : null, texts };
+    const iconEl = icon ? document.querySelector(icon) : null;
+    return {
+      icon: iconEl ? ink(iconEl) : null,
+      label: labelEl ? ink(labelEl) : null,
+      texts,
+    };
   }, onWash);
 }
 
@@ -401,16 +425,21 @@ async function checkInks(
   if (!c.onWash) {
     return;
   }
-  const { label, texts } = await readInks(page, c.onWash);
+  const { icon, label, texts } = await readInks(page, c.onWash);
   const paired = await resolve(page, "var(--selected-ink)");
+  const iconInk = await resolve(page, "var(--selected-icon)");
+  const iconOk =
+    !c.onWash.icon ||
+    (icon !== null && iconInk !== null && same(icon.rgb, iconInk.rgb));
   const measured = texts.map((one) => ({
     text: one.text.slice(0, 24),
     ink: one.color,
     ratio: wash ? Math.round(ratio(one.rgb, wash.rgb) * 100) / 100 : 0,
   }));
   kit.check(
-    `${theme}: ${c.name}: its label takes selected-ink and every text on the wash holds 4.5:1`,
-    wash !== null &&
+    `${theme}: ${c.name}: its label takes selected-ink${c.onWash.icon ? ", its glyph selected-icon," : ""} and every text on the wash holds 4.5:1`,
+    iconOk &&
+      wash !== null &&
       label !== null &&
       paired !== null &&
       same(label.rgb, paired.rgb) &&
@@ -419,6 +448,9 @@ async function checkInks(
     JSON.stringify({
       label: label?.color,
       selectedInk: paired?.color,
+      ...(c.onWash.icon
+        ? { icon: icon?.color, selectedIcon: iconInk?.color }
+        : {}),
       measured,
     })
   );
@@ -432,7 +464,10 @@ const RAIL_SHEETS = [
   join(ROOT, "packages/agent/src/canvas-host/canvas.css"),
 ];
 
-/** Two tools of the rail's tools group, the first chosen, as rail.tsx draws them. */
+/**
+ * Two tools of the rail's tools group, the first chosen, and two items of a
+ * radio menu, the first checked, as rail.tsx draws them.
+ */
 const RAIL_PAGE = (scheme: string) => `<!doctype html>
 <html data-canvas-inset style="color-scheme: ${scheme}">
 <head>${RAIL_SHEETS.map((path) => `<style>${readFileSync(path, "utf8")}</style>`).join("")}</head>
@@ -440,6 +475,10 @@ const RAIL_PAGE = (scheme: string) => `<!doctype html>
   <div aria-label="Tools" class="rail rail-tools" role="toolbar">
     <button class="rail-box" data-chosen data-probe="chosen" type="button"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 4h16v16H4z" fill="currentColor"/></svg></button>
     <button class="rail-box" data-probe="other" type="button"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 4h16v16H4z" fill="currentColor"/></svg></button>
+  </div>
+  <div class="rail-menu" role="menu">
+    <button aria-checked="true" class="rail-item" data-probe="item-on" role="menuitemradio" type="button"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 4h16v16H4z" fill="currentColor"/></svg><span class="rail-item-label">Rectangle</span><span class="rail-item-hint">4</span><span class="rail-item-tick" data-on="true"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button>
+    <button aria-checked="false" class="rail-item" data-probe="item-off" role="menuitemradio" type="button"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 4h16v16H4z" fill="currentColor"/></svg><span class="rail-item-label">Ellipse</span><span class="rail-item-hint">5</span><span class="rail-item-tick" data-on="false"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button>
   </div>
 </div></div></body></html>`;
 
@@ -483,7 +522,10 @@ function paintStack(
   }, layers);
 }
 
-/** The rail's chosen tool: the Toggle's on step, not its hover, 3:1 against the rail. */
+/**
+ * The rail's chosen tool: the Toggle's on step, not its hover, its glyph
+ * strong on it; and its menu's checked item: no fill, the item's own ink.
+ */
 async function checkRail(
   kit: Kit,
   theme: string,
@@ -495,13 +537,23 @@ async function checkRail(
   await settle(page, 400);
   const host = { selector: ".canvas-host" };
   const rail = { selector: ".rail-tools" };
-  const ground = await paintStack(page, [host, rail]);
   const chosen = await paintStack(page, [
     host,
     rail,
     { selector: '[data-probe="chosen"]' },
   ]);
   const recipe = await paintStack(page, [host, rail, { value: ON_STEP }]);
+  // The glyphs' inks at rest, before any hover moves them.
+  const inks = await page.evaluate(() => {
+    const read = (sel: string) => {
+      const el = document.querySelector(sel);
+      return el ? getComputedStyle(el).color : null;
+    };
+    return {
+      chosen: read('[data-probe="chosen"]'),
+      other: read('[data-probe="other"]'),
+    };
+  });
   const release = await forceHover(cdp, '[data-probe="other"]');
   await settle(page, 400);
   const hovered = await paintStack(page, [
@@ -510,15 +562,15 @@ async function checkRail(
     { selector: '[data-probe="other"]' },
   ]);
   await release();
-  const glyph = await page.evaluate(() => {
-    const el = document.querySelector('[data-probe="chosen"]');
-    return el ? getComputedStyle(el).color : null;
-  });
-  const glyphRgb = glyph
-    ? (await paintStack(page, [{ value: glyph }])).rgb
+  const strong = await paintStack(page, [{ value: "var(--ink-strong)" }]);
+  const muted = await paintStack(page, [{ value: "var(--ink-muted)" }]);
+  const chosenInk = inks.chosen
+    ? (await paintStack(page, [{ value: inks.chosen }])).rgb
     : [];
-  const against = Math.round(ratio(chosen.rgb, ground.rgb) * 100) / 100;
-  const ink = Math.round(ratio(glyphRgb, chosen.rgb) * 100) / 100;
+  const otherInk = inks.other
+    ? (await paintStack(page, [{ value: inks.other }])).rgb
+    : [];
+  const onFill = Math.round(ratio(chosenInk, chosen.rgb) * 100) / 100;
   kit.check(
     `${theme}: Canvas rail's chosen tool: chosen differs from a hovered unchosen tool and is DESIGN's Toggle on step`,
     same(chosen.rgb, recipe.rgb) && !same(chosen.rgb, hovered.rgb),
@@ -531,15 +583,62 @@ async function checkRail(
     })
   );
   kit.check(
-    `${theme}: Canvas rail's chosen tool stands 3:1 against the rail`,
-    against >= 3,
+    `${theme}: Canvas rail's chosen tool's glyph is ink-strong at 4.5:1 on its fill, an unchosen one's ink-muted`,
+    same(chosenInk, strong.rgb) && same(otherInk, muted.rgb) && onFill >= 4.5,
     JSON.stringify({
-      rail: ground.colors,
-      railRgb: ground.rgb.join(","),
+      chosenGlyph: inks.chosen,
+      inkStrong: strong.colors[0],
+      otherGlyph: inks.other,
+      inkMuted: muted.colors[0],
       chosenRgb: chosen.rgb.join(","),
-      fillAgainstRail: against,
-      glyph,
-      glyphOnFill: ink,
+      glyphOnFill: onFill,
+    })
+  );
+
+  // The Shapes menu: the checked item and an unchosen one under the pointer.
+  const item = await page.evaluate(() => {
+    const read = (sel: string) => {
+      const el = document.querySelector(sel);
+      if (!el) {
+        return null;
+      }
+      const style = getComputedStyle(el);
+      return {
+        background: style.backgroundColor,
+        color: style.color,
+        opacity: style.opacity,
+      };
+    };
+    return {
+      on: read('[data-probe="item-on"]'),
+      onLabel: read('[data-probe="item-on"] .rail-item-label'),
+      onTick: read('[data-probe="item-on"] .rail-item-tick'),
+      onTickSvg: read('[data-probe="item-on"] .rail-item-tick svg'),
+      offTick: read('[data-probe="item-off"] .rail-item-tick'),
+    };
+  });
+  const releaseItem = await forceHover(cdp, '[data-probe="item-off"]');
+  await settle(page, 400);
+  const itemHovered = await paintStack(page, [
+    { selector: '[data-probe="item-off"]' },
+  ]);
+  await releaseItem();
+  const hoverStep = await paintStack(page, [{ value: "var(--surface-hover)" }]);
+  const clear = (bg: string | undefined) =>
+    bg === "rgba(0, 0, 0, 0)" || bg === "transparent";
+  kit.check(
+    `${theme}: Canvas rail's Shapes menu: the checked item has no fill, its label and tick in the item's own ink; a hovered unchosen item takes surface-hover`,
+    item.on !== null &&
+      clear(item.on.background) &&
+      item.onLabel?.color === item.on.color &&
+      item.onTickSvg?.color === item.on.color &&
+      item.onTick?.opacity === "1" &&
+      item.offTick?.opacity === "0" &&
+      same(itemHovered.rgb, hoverStep.rgb),
+    JSON.stringify({
+      ...item,
+      hovered: itemHovered.colors[0],
+      surfaceHover: hoverStep.colors[0],
     })
   );
 }

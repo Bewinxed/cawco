@@ -380,6 +380,9 @@ function Item({
       type="button"
     >
       {inside}
+      <span className="rail-item-tick" data-on={checked}>
+        <Icon name="tick" />
+      </span>
     </button>
   );
 }

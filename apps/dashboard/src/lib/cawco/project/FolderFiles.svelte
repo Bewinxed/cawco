@@ -69,14 +69,22 @@
     cursor: pointer;
     transition: background-color var(--dur-control) var(--ease-out);
   }
-  .file[aria-current="page"] {
-    background: var(--surface-fill);
-  }
   .file :global(.icon) {
     flex: none;
     inline-size: 16px;
     block-size: 16px;
     color: var(--ink-muted);
+  }
+  /* The file the page shows now takes the Selected pair (DESIGN.md Colors:
+     Selected): the wash, its path in selected-ink and its glyph in
+     selected-icon. It stands after the base rules it overrides. */
+  .file[aria-current="page"] {
+    background: var(--selected-bg);
+    color: var(--selected-ink);
+
+    & :global(.icon) {
+      color: var(--selected-icon);
+    }
   }
   .path {
     min-inline-size: 0;
