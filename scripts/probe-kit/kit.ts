@@ -11,7 +11,7 @@
  * one without draw the same frame.
  */
 import { existsSync } from "node:fs";
-import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { constants, homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -23,6 +23,14 @@ import {
   webkit,
 } from "playwright-core";
 import { readWithin } from "../../packages/core/src/bounded";
+import { CLAUDE_DIR_NAME } from "../../packages/core/src/claude-dirs";
+import {
+  openLockFile,
+  release,
+  tryLock,
+  tryShare,
+  unlock,
+} from "../../packages/core/src/flock";
 import { type HeavySlot, heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
@@ -324,6 +332,149 @@ const viteBuild = async (): Promise<void> => {
   }
 };
 
+/**
+ * The checkout's built dashboard, which every run in it serves from one
+ * folder (`.svelte-kit/output`, what `vite preview` reads), and the lock the
+ * runs serving it share.
+ *
+ * WHY. A build empties that folder before it writes it again, and each run
+ * built once, so a second run in a checkout rebuilt it under every run still
+ * serving it. On 2026-10-18 two base self-compares started 2 s apart in one
+ * checkout: the second's build took the first's server chunks and fonts away
+ * (`ERR_MODULE_NOT_FOUND …/chunks/sr-only-styles.js`, then an `ENOENT` on a
+ * woff2 nothing handled ended `vite preview`) and every state after was
+ * refused. A surfaces walk beside a style-snapshot's build in the converted
+ * checkout lost nine pages to reloads ("Execution context was destroyed,
+ * most likely because of a navigation"): a build names its chunks anew.
+ *
+ * HOW. A build carries the key of the tree it was built from
+ * (`OUTPUT_STAMP`, `treeKey`). A run whose tree has that key serves the
+ * build as it is, holding the lock shared. A run whose tree differs builds
+ * only once it holds the lock alone, which is once no run serves the old
+ * build. The kernel frees a run's lock when it ends, a SIGKILL included.
+ * `vite dev` reads the sources, not this folder, and holds nothing.
+ */
+const KIT_DIR = join(DASHBOARD, ".svelte-kit");
+const OUTPUT_LOCK = join(KIT_DIR, "probe-output.lock");
+const OUTPUT_STAMP = join(KIT_DIR, "output", "probe-tree.txt");
+/** Between looks at a lock another run holds. */
+const OUTPUT_WAIT_MS = 2000;
+/**
+ * What a build reads, from the root: the dashboard, the workspace packages
+ * it imports, the design tokens and the root's own files (`bun.lock`,
+ * `package.json`); a glob's `*` stops at a `/`.
+ */
+const BUILD_READS = [
+  "apps/dashboard",
+  "packages",
+  "design",
+  ":(glob)*",
+];
+
+/** Git's answer in the checkout, `input` on its stdin. */
+const gitSays = async (args: string[], input?: string): Promise<string> => {
+  const child = Bun.spawn(["git", ...args], {
+    cwd: ROOT,
+    env: process.env,
+    stdin: input === undefined ? "ignore" : new Blob([input]),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [out, err, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code !== 0) {
+    throw new Error(`git ${args.join(" ")} exited ${code}: ${err.trim()}`);
+  }
+  return out;
+};
+
+/**
+ * The tree a build is built from, as one key: HEAD (the build writes its
+ * short hash as its version, vite.config.ts `BUILD_VERSION`), and in what it
+ * reads, every change to a tracked file and every untracked file's content.
+ * The baselines a run writes are not in it, so an approve never makes the
+ * next run's tree another.
+ */
+const treeKey = async (): Promise<string> => {
+  const hash = new Bun.CryptoHasher("sha256");
+  hash.update(await gitSays(["rev-parse", "HEAD"]));
+  hash.update(await gitSays(["diff", "HEAD", "--binary", "--", ...BUILD_READS]));
+  const untracked = (
+    await gitSays([
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      ...BUILD_READS,
+    ])
+  )
+    .split("\0")
+    .filter(Boolean);
+  if (untracked.length > 0) {
+    hash.update(untracked.join("\0"));
+    hash.update(
+      await gitSays(["hash-object", "--stdin-paths"], untracked.join("\n"))
+    );
+  }
+  return hash.digest("hex");
+};
+
+const stampSays = (key: string): Promise<boolean> =>
+  Bun.file(OUTPUT_STAMP)
+    .text()
+    .then(
+      (stamp) => stamp === key,
+      () => false
+    );
+
+/**
+ * The checkout's build of this tree, built here when it is not, and the
+ * descriptor that holds it shared until the run lets it go (`unlock`).
+ */
+const builtOutput = async (): Promise<number> => {
+  await mkdir(KIT_DIR, { recursive: true });
+  const fd = openLockFile(OUTPUT_LOCK, true);
+  try {
+    const key = await treeKey();
+    let waiting = false;
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: each look follows the last
+      if (tryShare(fd) && (await stampSays(key))) {
+        return fd;
+      }
+      release(fd);
+      if (tryLock(fd)) {
+        try {
+          if (!(await stampSays(key))) {
+            await rm(OUTPUT_STAMP, { force: true });
+            console.log("… building the dashboard");
+            await viteBuild();
+            await writeFile(`${OUTPUT_STAMP}.new`, key);
+            await rename(`${OUTPUT_STAMP}.new`, OUTPUT_STAMP);
+          }
+        } finally {
+          release(fd);
+        }
+        continue;
+      }
+      if (!waiting) {
+        waiting = true;
+        console.log(
+          "… waiting on this checkout's built dashboard: another run is building it, or serves one built from another tree"
+        );
+      }
+      await Bun.sleep(OUTPUT_WAIT_MS);
+    }
+  } catch (error) {
+    unlock(fd);
+    throw error;
+  }
+};
+
 /** A dashboard server: its address, its process, and its end when its run is done with it. */
 interface Served {
   base: string;
@@ -460,6 +611,8 @@ export class Run {
   private devServer: Promise<Served> | null = null;
   private builtServer: Promise<Served> | null = null;
   private built: Promise<void> | null = null;
+  /** The descriptor holding the checkout's build shared while this run serves it. */
+  private output: number | null = null;
   private readonly browsers = new Map<string, Promise<Browser>>();
   private slot: Promise<HeavySlot> | null = null;
 
@@ -469,12 +622,14 @@ export class Run {
     return this.slot;
   }
 
-  /** The dashboard built once per run, the first time a spec needs it. */
+  /**
+   * The checkout's build of this tree, the first time a spec needs it, held
+   * until the run closes (`builtOutput`).
+   */
   build(): Promise<void> {
     this.built ??= (async () => {
       await this.heavy();
-      console.log("… building the dashboard");
-      await viteBuild();
+      this.output = await builtOutput();
     })();
     return this.built;
   }
@@ -747,6 +902,10 @@ export class Run {
     }
     (await this.devServer)?.stop();
     (await this.builtServer)?.stop();
+    if (this.output !== null) {
+      unlock(this.output);
+      this.output = null;
+    }
     (await this.slot?.catch(() => undefined))?.release();
     this.slot = null;
   }
@@ -810,7 +969,7 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
   // `claude/home/…` the HOME's own `.claude`, `claude/cawco/accounts/<id>/…` each account's.
   const sessionLogs = new Bun.Glob("**/projects/**/*.jsonl");
   for (const [root, under] of [
-    [join(fleet.home, ".claude"), "home"],
+    [join(fleet.home, CLAUDE_DIR_NAME), "home"],
     [join(fleet.home, ".cawco"), "cawco"],
   ] as const) {
     if (!existsSync(root)) {

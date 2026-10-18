@@ -12,6 +12,8 @@ import { closeSync, constants, openSync } from "node:fs";
 
 /** `LOCK_EX | LOCK_NB` (2 | 4, the same on Linux and macOS): take it now or not at all. */
 const LOCK_EX_NOW = 6;
+/** `LOCK_SH | LOCK_NB` (1 | 4): held with every other sharer, now or not at all. */
+const LOCK_SH_NOW = 5;
 const LOCK_UN = 8;
 /**
  * O_CLOEXEC, which node:fs does not name (Linux's 0o2000000, macOS's
@@ -50,6 +52,18 @@ export const openLockFile = (path: string, create: boolean): number =>
 /** Takes `fd`'s file's lock now, or answers false: another holds it. */
 export const tryLock = (fd: number): boolean =>
   loadLibc().flock(fd, LOCK_EX_NOW) === 0;
+
+/**
+ * Takes `fd`'s file's lock shared now, or answers false: another holds it
+ * alone. On a descriptor that holds it alone, it converts it.
+ */
+export const tryShare = (fd: number): boolean =>
+  loadLibc().flock(fd, LOCK_SH_NOW) === 0;
+
+/** Lets `fd`'s lock go, the descriptor kept for the next take. */
+export const release = (fd: number): void => {
+  loadLibc().flock(fd, LOCK_UN);
+};
 
 /** Lets `fd`'s lock go and closes it. */
 export const unlock = (fd: number): void => {
