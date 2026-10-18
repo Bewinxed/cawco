@@ -51,6 +51,7 @@
    * as Prompt.svelte's permission fields, so the two surfaces read as one
    * idea.
    */
+  import PageThumb from "../preview/PageThumb.svelte";
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
   import DocThumb from "./DocThumb.svelte";
@@ -459,13 +460,7 @@
                 >
               </button>
               {#if preview?.thumbnail}
-                <div aria-hidden="true" class="artifact-thumb" inert>
-                  <Shot
-                    alt="Preview"
-                    size="thumb"
-                    src={`data:image/png;base64,${preview.thumbnail}`}
-                  />
-                </div>
+                <PageThumb thumbnail={preview.thumbnail} />
               {/if}
             </div>
             {#if openFailed.has(callId(m))}
@@ -655,7 +650,7 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
 
-    &:not(:has(.artifact-thumb)) {
+    &:not(:has(:global(.page-thumb))) {
       inline-size: fit-content;
     }
     @media (hover: hover) {
@@ -739,26 +734,6 @@
     & :global(svg) {
       inline-size: 12px;
       block-size: 12px;
-    }
-  }
-  .artifact-thumb {
-    inline-size: 90px;
-    block-size: 64px;
-    flex-shrink: 0;
-    overflow: hidden;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-
-    & :global(.box) {
-      block-size: 64px;
-      min-block-size: 0;
-    }
-    & :global(img) {
-      inline-size: 100%;
-      block-size: 64px;
-      object-fit: cover;
-      object-position: top;
     }
   }
   .shots {

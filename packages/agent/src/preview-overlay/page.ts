@@ -45,6 +45,7 @@ import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { cropPicture } from "./picture";
 import { type Box, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
+import { drawInScheme, type Scheme } from "./schemes";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
 /** The page hash on the overlay's tag in a page's HTML (core `injectOverlay`). */
@@ -390,7 +391,7 @@ artifact.watch({
 });
 
 /** The host's theme, once it said one: "light" or "dark". */
-let hostTheme: "light" | "dark" | null = null;
+let hostTheme: Scheme | null = null;
 
 /**
  * A page artifact (HTML the agent wrote) draws in the host's theme, never the
@@ -401,15 +402,23 @@ let hostTheme: "light" | "dark" | null = null;
  * and Tailwind's dark variant key on.
  */
 function themed() {
-  const kind = artifact.kind();
-  if (!hostTheme || (kind !== "page" && kind !== "sheet")) {
-    return;
+  if (hostTheme && themesWithHost()) {
+    themeRoot(document.documentElement, hostTheme);
   }
-  const root = document.documentElement;
-  root.style.colorScheme = hostTheme;
-  root.dataset.theme = hostTheme;
-  if (kind === "sheet") {
-    root.classList.toggle("dark", hostTheme === "dark");
+}
+
+/** This page draws in the host's theme: a page artifact or a sheet, never a preview. */
+function themesWithHost(): boolean {
+  const kind = artifact.kind();
+  return kind === "page" || kind === "sheet";
+}
+
+/** `root` (this page's, or its copy's in schemes.ts) set to draw in `scheme`. */
+function themeRoot(root: HTMLElement, scheme: Scheme) {
+  root.style.colorScheme = scheme;
+  root.dataset.theme = scheme;
+  if (artifact.kind() === "sheet") {
+    root.classList.toggle("dark", scheme === "dark");
   }
 }
 
@@ -1222,17 +1231,55 @@ const THUMB_AREA = 200_000;
  * (picture.ts), so its work is what is on screen, never the whole document
  * (a whole tall page drawn once was 1.8 s of the dashboard's own thread,
  * the frame sharing its process).
+ *
+ * `png` is drawn in `scheme`, the one the page shows. A page that draws in
+ * the host's theme is drawn in the other scheme too, from an unpainted copy
+ * (schemes.ts), as `other`; `single` says the page looks the same in both (a
+ * page with no dark styles, or a preview, which keeps its own scheme), and
+ * its one picture stands for both.
  */
-async function thumbnail(): Promise<{ png: string | null; error?: string }> {
+async function thumbnail(): Promise<{
+  error?: string;
+  other: string | null;
+  png: string | null;
+  scheme: Scheme;
+  single: boolean;
+}> {
+  // A part left undrawn is said only when no picture came at all.
   let error: string | undefined;
+  const heard = (message: string) => {
+    error ??= message;
+  };
   const png = await cropPicture(
     { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
-    (message) => {
-      error ??= message;
-    },
+    heard,
     { area: THUMB_AREA, thumbnail: true }
   );
-  return png ? { png } : { png: null, error: error ?? "Nothing was drawn." };
+  const shown = themesWithHost() ? hostTheme : null;
+  if (!(png && shown)) {
+    return {
+      png,
+      scheme:
+        shown ??
+        (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
+      other: null,
+      single: !!png,
+      ...(png ? {} : { error: error ?? "Nothing was drawn." }),
+    };
+  }
+  // The other scheme undrawn leaves that scheme without a thumbnail, never this one's picture in its place.
+  const drawn = await drawInScheme(shown === "dark" ? "light" : "dark", {
+    area: THUMB_AREA,
+    into: shadow,
+    theme: themeRoot,
+    failed: heard,
+  });
+  return {
+    png,
+    scheme: shown,
+    other: drawn.same ? null : drawn.png,
+    single: drawn.same,
+  };
 }
 
 /** The element Comment mode last outlined under the pointer. */

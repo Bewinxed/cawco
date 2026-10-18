@@ -848,7 +848,8 @@ const state = $state({
     Extract<FramePayload, { kind: "preview" }> & {
       title?: string;
       path?: string;
-      thumbnail?: string;
+      /** The page's capture in each scheme (PageThumb draws the reader's). */
+      thumbnail?: import("./preview/wire").PageThumbnail;
       /** The revision the thumbnail was taken of. */
       thumbnailRevision?: string;
       /** A transcript card that shows the thumbnail is on screen (ToolGroup): the pane takes one. */

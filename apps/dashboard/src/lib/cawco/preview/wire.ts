@@ -51,13 +51,48 @@ export function previewUrl(value: unknown, origin: string): string | null {
 }
 
 /** A screenshot as the overlay sends it, or nothing. */
-export function previewPng(value: unknown): string | null {
+function previewPng(value: unknown): string | null {
   return typeof value === "string" &&
     value.length > 0 &&
     value.length <= PNG_MAX &&
     BASE64.test(value)
     ? value
     : null;
+}
+
+/**
+ * A page's thumbnail in each scheme, base64 PNG; null where none was drawn.
+ * `single`: the page looks the same in both (no dark styles of its own, or a
+ * preview keeping its own scheme), so `light` and `dark` are its one picture.
+ */
+export interface PageThumbnail {
+  dark: string | null;
+  light: string | null;
+  single: boolean;
+}
+
+/**
+ * The overlay's `cawco:capture`: `png` drawn in `scheme`, `other` in the
+ * other scheme, or `single` when the page draws the same in both. Null when
+ * it carries no picture.
+ */
+export function previewThumbnail(message: {
+  other?: unknown;
+  png?: unknown;
+  scheme?: unknown;
+  single?: unknown;
+}): PageThumbnail | null {
+  const png = previewPng(message.png);
+  if (!png) {
+    return null;
+  }
+  if (message.single === true) {
+    return { light: png, dark: png, single: true };
+  }
+  const other = previewPng(message.other);
+  return message.scheme === "dark"
+    ? { light: other, dark: png, single: false }
+    : { light: png, dark: other, single: false };
 }
 
 export function previewError(value: unknown): string | null {

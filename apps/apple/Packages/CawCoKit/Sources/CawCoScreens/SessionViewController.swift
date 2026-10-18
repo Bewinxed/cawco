@@ -553,7 +553,7 @@ final class SessionViewController: ObservedViewController {
         let frame = hub.previews.byInstance[sessionId]
         // The artifact on show, and what its page has said of itself since (its title, its picture): the cards draw both.
         let page = frame.flatMap(hub.previews.page)
-        let key = frame?.state == .open ? frame.flatMap(PreviewKey.of).map { "\($0)|\(page?.title ?? "")|\(page?.thumbnail?.count ?? 0)" } : nil
+        let key = frame?.state == .open ? frame.flatMap(PreviewKey.of).map { "\($0)|\(page?.title ?? "")|\(page?.thumbnail?.light?.count ?? 0)|\(page?.thumbnail?.dark?.count ?? 0)" } : nil
         if key != drawnPreview {
             drawnPreview = key
             // The transcript's cards stand at full presence for the page now shown.

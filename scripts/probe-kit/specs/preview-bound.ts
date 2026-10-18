@@ -776,7 +776,7 @@ const run = async (kit: Kit) => {
   });
   await fleet.send(made, "PROBE-CALL:1");
   await until("the page made", () => answered.get("1"), Boolean, 180_000);
-  const card = madeDesk.locator(".preview-tool .artifact-thumb img");
+  const card = madeDesk.locator('.preview-tool [data-slot="page-thumb"] img');
   const thumbed = await until(
     "the card's thumbnail",
     () => card.count(),

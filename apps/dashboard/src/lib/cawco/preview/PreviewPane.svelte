@@ -91,9 +91,9 @@
     previewPickPlace,
     previewPinAt,
     previewPinId,
-    previewPng,
     previewSheet,
     previewShortcut,
+    previewThumbnail,
     previewTitle,
     previewUrl,
     SHORTCUT_MESSAGE,
@@ -1329,9 +1329,10 @@
         pageHeld = message.held === true;
         break;
       case "cawco:capture": {
-        const png = previewPng(message.png);
-        if (png && preview) {
-          preview.thumbnail = png;
+        // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
+        const shot = previewThumbnail(message);
+        if (shot && preview) {
+          preview.thumbnail = shot;
           preview.thumbnailRevision = preview.revision;
           preview.thumbnailWanted = false;
         }

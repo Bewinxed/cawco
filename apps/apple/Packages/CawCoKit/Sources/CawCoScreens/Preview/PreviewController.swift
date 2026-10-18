@@ -1300,10 +1300,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 }
             }
         case "cawco:capture":
-            if let revision, let png = Self.png(body["png"]) {
-                hub.previews.captured(instanceId, revision: revision, png: png)
+            // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
+            if let revision, let thumbnail = Self.thumbnail(body) {
+                hub.previews.captured(instanceId, revision: revision, thumbnail: thumbnail)
                 #if DEBUG
-                PreviewProbe.say("preview captured revision=\(revision) bytes=\(png.count) title=\(hub.previews.pages[instanceId]?.title ?? "")")
+                PreviewProbe.say("preview captured revision=\(revision) bytes=\(thumbnail.light?.count ?? 0)+\(thumbnail.dark?.count ?? 0) single=\(thumbnail.single) title=\(hub.previews.pages[instanceId]?.title ?? "")")
                 #endif
             }
         case "cawco:undock":
@@ -2440,14 +2441,28 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         (value as? String).map { String($0.prefix(max)) }
     }
 
-    /// The longest capture the page may post, in UTF-16 units: wire.ts `PNG_MAX` of base64 and its envelope.
-    private static let captureMost = 4_000_000 + 1024
+    /// The longest capture the page may post, in UTF-16 units: two pictures (each scheme) of wire.ts `PNG_MAX` of base64 and their envelope.
+    private static let captureMost = 2 * 4_000_000 + 1024
 
     /// wire.ts `previewPng`: a base64 PNG of at most `PNG_MAX`, its bytes.
     private static func png(_ value: Any?) -> Data? {
         guard let text = value as? String, !text.isEmpty, text.count <= 4_000_000,
               text.wholeMatch(of: /[A-Za-z0-9+\/]+={0,2}/) != nil else { return nil }
         return Data(base64Encoded: text)
+    }
+
+    /// The overlay's `cawco:capture` (wire.ts `previewThumbnail`): `png` drawn
+    /// in `scheme`, `other` in the other scheme, or `single` when the page
+    /// draws the same in both; nil when it carries no picture.
+    private static func thumbnail(_ body: [String: Any]) -> PreviewStore.PageThumbnail? {
+        guard let shown = Self.png(body["png"]) else { return nil }
+        if body["single"] as? Bool == true {
+            return .init(light: shown, dark: shown, single: true)
+        }
+        let other = Self.png(body["other"])
+        return body["scheme"] as? String == "dark"
+            ? .init(light: other, dark: shown, single: false)
+            : .init(light: shown, dark: other, single: false)
     }
 
     /// A pin's id (wire.ts `previewPinId`).

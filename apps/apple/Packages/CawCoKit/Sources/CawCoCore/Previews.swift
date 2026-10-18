@@ -17,7 +17,7 @@ public final class PreviewStore {
     /// Why an artifact's last open failed, said under the call that asked (ToolGroup.svelte `openFailed`).
     public private(set) var openFailed: [String: String] = [:]
     /// What the panel's page said of itself, by session (client.svelte.ts
-    /// `previews[id].title`, `.thumbnail`): its title, and the PNG the overlay
+    /// `previews[id].title`, `.thumbnail`): its title, and the PNGs the overlay
     /// captured once it was ready, for the revision on show. The transcript's
     /// card for that artifact reads them.
     public private(set) var pages: [String: ShownPage] = [:]
@@ -25,7 +25,28 @@ public final class PreviewStore {
     public struct ShownPage: Equatable, Sendable {
         public let revision: String
         public var title: String
-        public var thumbnail: Data?
+        public var thumbnail: PageThumbnail?
+    }
+
+    /// A page's thumbnail in each scheme (wire.ts `PageThumbnail`): nil where
+    /// none was drawn. `single`: the page looks the same in both (no dark
+    /// styles of its own, or a preview keeping its own), so `light` and
+    /// `dark` are its one picture.
+    public struct PageThumbnail: Equatable, Sendable {
+        public let light: Data?
+        public let dark: Data?
+        public let single: Bool
+
+        public init(light: Data?, dark: Data?, single: Bool) {
+            self.light = light
+            self.dark = dark
+            self.single = single
+        }
+
+        /// The picture for the reader's scheme; nil when that scheme has none, never the other's in its place.
+        public func picture(dark night: Bool) -> Data? {
+            night ? dark : light
+        }
     }
 
     public init() {}
@@ -40,11 +61,11 @@ public final class PreviewStore {
     }
 
     /// The overlay's capture of the page on show (`cawco:capture`).
-    public func captured(_ instanceId: String, revision: String, png: Data) {
+    public func captured(_ instanceId: String, revision: String, thumbnail: PageThumbnail) {
         if pages[instanceId]?.revision == revision {
-            pages[instanceId]?.thumbnail = png
+            pages[instanceId]?.thumbnail = thumbnail
         } else {
-            pages[instanceId] = ShownPage(revision: revision, title: "", thumbnail: png)
+            pages[instanceId] = ShownPage(revision: revision, title: "", thumbnail: thumbnail)
         }
     }
 

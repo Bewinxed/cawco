@@ -86,7 +86,7 @@ const ROOM =
   /^preview head room width=(\d+) title=(\d+) floor=(\d+) shown=(\S*) more=(\S+) badge=(\S+)$/;
 /** PreviewController's `preview head open-tab=x,y more=…`: where Open in new tab stands in the window. */
 const OPEN_TAB = /^preview head open-tab=(\d+),(\d+) more=/;
-/** PreviewController's `preview captured …`: how many bytes the page's thumbnail came to. */
+/** PreviewController's `preview captured … bytes=<light>+<dark>`: how many bytes the page's day thumbnail came to. */
 const BYTES = /bytes=(\d+)/;
 const DOC =
   /^preview doc origin=(\d+) elements=(-?\d+) width=(\d+) scale=([\d.]+)$/;

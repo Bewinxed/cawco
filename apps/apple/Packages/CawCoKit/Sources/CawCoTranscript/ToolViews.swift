@@ -628,8 +628,10 @@ final class PreviewCard: UIView {
     private var cardBottom: NSLayoutConstraint!
     private var faultBottom: NSLayoutConstraint!
     private var cardWidth: NSLayoutConstraint!
-    /// The picture the thumbnail was cut from, so a repeat configure keeps the cut.
-    private var thumbFrom: Data?
+    /// The page's pictures in each scheme, as last configured: a scheme change picks again.
+    private var thumbnail: PreviewStore.PageThumbnail?
+    /// The picture the thumbnail was cut from and whether it was inset, so a repeat configure keeps the cut.
+    private var thumbFrom: (png: Data, inset: Bool)?
 
     /// `.preview-tool` `padding: space-2`, `.artifact-open` `padding: space-2`: the words 16 in, the thumbnail 8.
     private static let pad = Space.space2
@@ -659,9 +661,9 @@ final class PreviewCard: UIView {
         let row = railLine([mark, words], spacing: Space.space2)
         let opener = UIView()
         opener.pin(row, insets: UIEdgeInsets(top: Self.pad, left: Self.pad, bottom: Self.pad, right: Self.pad))
-        // `.artifact-thumb`: 90×64 on the recess, a hairline at `--radius-sm`, the page from its top.
+        // PageThumb.svelte: 90×64 in the well (`surface-well`, `border-well`) at `--radius-sm`, the page from its top.
         thumb.translatesAutoresizingMaskIntoConstraints = false
-        thumb.backgroundColor = Palette.surfaceRecess
+        thumb.backgroundColor = Palette.surfaceWell
         thumb.layer.cornerRadius = Radius.radiusSm
         thumb.layer.cornerCurve = .continuous
         thumb.layer.borderWidth = 1
@@ -709,13 +711,18 @@ final class PreviewCard: UIView {
             card.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.txPreviewMin),
         ])
         card.boxShadow = Shadow.shadowTile
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PreviewCard, _: UITraitCollection) in view.paint() }
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PreviewCard, _: UITraitCollection) in
+            view.paint()
+            view.showThumb()
+            // A scheme with a picture where the other had none (or none where it had one) sizes the card again.
+            if let fitted = view.fitted { view.fit(fitted.name, place: "", width: fitted.width) }
+        }
         paint()
     }
 
     private func paint() {
         card.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
-        thumb.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+        thumb.layer.borderColor = Palette.borderWell.resolvedColor(with: traitCollection).cgColor
     }
 
     @available(*, unavailable)
@@ -741,7 +748,8 @@ final class PreviewCard: UIView {
         path.attributedText = Styled.string(place, TypeScale.typeMeta, color: Palette.inkMuted, size: TypeScale.textMeta, leading: TypeScale.leadingRoot, mono: true)
         path.isHidden = place.isEmpty
         accessibilityLabel = place.isEmpty ? name : "\(name), \(place)"
-        showThumb(page?.thumbnail)
+        thumbnail = page?.thumbnail
+        showThumb()
         fit(named, place: place, width: width)
         accessibilityTraits = openable && !opening ? .button : [.button, .notEnabled]
         accessibilityValue = opening ? "Opening" : nil
@@ -763,20 +771,37 @@ final class PreviewCard: UIView {
     /// The fault the card says now.
     private var saying: String?
 
-    /// The thumbnail: the page from its top (`object-fit: cover; object-position: top`).
-    private func showThumb(_ png: Data?) {
-        guard png != thumbFrom else { return }
-        thumbFrom = png
+    /// The name and row width the card was last fitted to, for a scheme change to fit it again.
+    private var fitted: (name: NSAttributedString, width: CGFloat?)?
+
+    /// The thumbnail in the reader's scheme (PageThumb.svelte): the page from
+    /// its top (`object-fit: cover; object-position: top`). A page that looks
+    /// the same in both schemes stands inset in the well at night
+    /// (`padding: --space-1`, the picture at `--radius-xs`); a scheme with no
+    /// picture shows none.
+    private func showThumb() {
+        let night = traitCollection.userInterfaceStyle == .dark
+        let png = thumbnail?.picture(dark: night)
+        let inset = night && thumbnail?.single == true
+        guard png != thumbFrom?.png || inset != thumbFrom?.inset else { return }
         guard let png, let image = UIImage(data: png), image.size.width > 0, image.size.height > 0 else {
+            thumbFrom = nil
             thumb.image = nil
             thumb.isHidden = true
             return
         }
+        thumbFrom = (png, inset)
         let box = Self.thumbSize
-        let scale = max(box.width / image.size.width, box.height / image.size.height)
+        let frame = inset ? CGRect(origin: .zero, size: box).insetBy(dx: Space.space1, dy: Space.space1) : CGRect(origin: .zero, size: box)
+        let scale = max(frame.width / image.size.width, frame.height / image.size.height)
         let drawn = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         thumb.image = UIGraphicsImageRenderer(size: box).image { _ in
-            image.draw(in: CGRect(x: (box.width - drawn.width) / 2, y: 0, width: drawn.width, height: drawn.height))
+            if inset {
+                UIBezierPath(roundedRect: frame, cornerRadius: Radius.radiusXs).addClip()
+            } else {
+                UIRectClip(frame)
+            }
+            image.draw(in: CGRect(x: frame.midX - drawn.width / 2, y: frame.minY, width: drawn.width, height: drawn.height))
         }
         thumb.isHidden = false
     }
@@ -785,6 +810,7 @@ final class PreviewCard: UIView {
     /// wide as its name (`inline-size: fit-content`), which wraps whole once
     /// it is wider than the row. The place never sets it (`contain: inline-size`).
     private func fit(_ name: NSAttributedString, place _: String, width: CGFloat?) {
+        fitted = (name, width)
         let most = min(CGFloat(Size.txPreviewMax), width ?? CGFloat(Size.txPreviewMax))
         let chrome = Self.pad * 4 + Size.rowMark + Space.space2 + (thumb.isHidden ? 0 : Self.thumbSize.width + Space.space2)
         let room = max(0, most - chrome)
