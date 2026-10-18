@@ -195,6 +195,15 @@ export const authStatusIn = async (
         why: `Claude Code answered \`claude auth status\` for ${dir} with no JSON carrying a loggedIn (exit ${child.exitCode}). Its sign-in was not read.`,
       };
     }
+    // It "Exits with code 0 if logged in, 1 if not"
+    // (https://code.claude.com/docs/en/cli): an exit that says otherwise
+    // than its JSON leaves neither read.
+    if (status.loggedIn !== (child.exitCode === 0)) {
+      return {
+        kind: "unread",
+        why: `Claude Code answered \`claude auth status\` for ${dir} with loggedIn ${status.loggedIn} but exit ${child.exitCode}, which say opposite things. Its sign-in was not read.`,
+      };
+    }
     // `email` and `orgName` are the login's `emailAddress` and
     // `organizationName`, which its initialize response reports as `email`
     // and `organization`: one identity, whichever of the two read it.

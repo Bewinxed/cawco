@@ -8,7 +8,7 @@ import {
   sameIdentity,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { accountIds, accountsRoot } from "@cawco/core/paths";
+import { accountConfigDir, accountIds, accountsRoot } from "@cawco/core/paths";
 import {
   bootId,
   markerIsLive,
@@ -22,8 +22,10 @@ import {
 import type { Subprocess } from "bun";
 import {
   accountEnv,
+  authStatusIn,
   bareEnv,
   linkUserLayer,
+  noAuthAnswer,
   probeAccount,
   removeAccountDir,
 } from "./accounts";
@@ -34,8 +36,10 @@ import { ClaudeRefused, claudeToStart } from "./claude-version";
  * that account's own config dir (`~/.cawco/accounts/<id>/claude`).
  *
  * The sign-in is Claude Code's own: the daemon runs the unmodified
- * `claude auth login` under a pseudo-terminal, hands the authorisation link it
- * prints to the reader, and types the code they paste back into it. The CLI
+ * `claude auth login` under a pseudo-terminal, hands the authorize link it
+ * prints to the reader, and types the code they paste back into it. Its
+ * screen is read for that link alone ({@link AUTHORIZE}), and whether it
+ * signed in comes from its `claude auth status` afterwards. The CLI
  * exchanges the code and stores the login where it always does — the macOS
  * keychain, or `.credentials.json` in its config directory when the keychain
  * refuses the write (a daemon outside the GUI session, a locked keychain) and
@@ -44,11 +48,27 @@ import { ClaudeRefused, claudeToStart } from "./claude-version";
  * its machine's store cannot be clobbered by a copy of itself.
  */
 
-/** The prompt `claude auth login` shows once its link is printed. */
-const PROMPT = "Paste code here";
+/**
+ * Where Claude Code's sign-in authorises: its `CLAUDE_AI_AUTHORIZE_URL`
+ * (a subscription) and `CONSOLE_AUTHORIZE_URL` (`--console`), origin and
+ * path, as 2.1.302's own source holds them and its `auth login` printed them
+ * in a pty. Nothing of the screen but a link to one of these is read: not
+ * its prompt's words, not any other link on it. When Claude Code moves them,
+ * the sign-in stops and shows its screen ({@link noLink}).
+ */
+const AUTHORIZE = new Set([
+  "https://claude.com/cai/oauth/authorize",
+  "https://platform.claude.com/oauth/authorize",
+]);
 
-/** The authorisation link in what the CLI printed before that prompt. */
-const LINK = /https:\/\/\S+/;
+/** The PKCE request an authorize link carries, each its own parameter. */
+const AUTHORIZE_PARAMS = ["client_id", "code_challenge", "state"];
+
+/**
+ * Each whole link on the screen: one a space or a line's end follows, so a
+ * link still arriving is never read cut short.
+ */
+const LINKS = /https:\/\/\S+(?=\s)/g;
 
 /** Long enough for the CLI to boot and print its link. */
 const LINK_TIMEOUT_MS = 30_000;
@@ -184,6 +204,63 @@ export const endOrphanedSignIns = async (): Promise<void> => {
 const said = (signIn: SignIn, from = 0) =>
   Bun.stripANSI(signIn.output.slice(from)).trim();
 
+/** The distinct authorize links ({@link AUTHORIZE}) on the screen. */
+const authorizeLinks = (signIn: SignIn): string[] => {
+  const found = new Set<string>();
+  for (const [link] of Bun.stripANSI(signIn.output).matchAll(LINKS)) {
+    const url = URL.parse(link);
+    if (
+      url &&
+      AUTHORIZE.has(`${url.origin}${url.pathname}`) &&
+      AUTHORIZE_PARAMS.every((param) => url.searchParams.get(param))
+    ) {
+      found.add(link);
+    }
+  }
+  return [...found];
+};
+
+/** How many of the screen's last lines a stop shows, and how much of each. */
+const SCREEN_LINES = 6;
+const SCREEN_LINE_CHARS = 240;
+
+/** A pty's line ends: `\r\n`, and `\r\r\n` where it adds its own `\r`. */
+const LINE_BREAKS = /[\r\n]+/;
+
+/** The CLI's last lines since `from`, ANSI stripped, for a stop to show. */
+const lastLines = (signIn: SignIn, from = 0): string => {
+  const lines = said(signIn, from)
+    .split(LINE_BREAKS)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-SCREEN_LINES)
+    .map((line) =>
+      line.length > SCREEN_LINE_CHARS
+        ? `${line.slice(0, SCREEN_LINE_CHARS)}…`
+        : line
+    );
+  return lines.length > 0 ? lines.join("\n") : "(nothing)";
+};
+
+/** Whether the CLI has ended, by its exit or a signal. */
+const ended = (signIn: SignIn): boolean =>
+  signIn.child.exitCode !== null || signIn.child.signalCode !== null;
+
+/** Why a sign-in stopped before handing out a link, and the screen it stopped on. */
+const noLink = (
+  signIn: SignIn,
+  why: "timeout" | "ended" | "several"
+): string => {
+  const what = {
+    timeout: `Claude Code on this machine didn't show its sign-in link within ${LINK_TIMEOUT_MS / 1000} s, so the sign-in stopped.`,
+    ended:
+      "Claude Code's sign-in on this machine ended before it showed its sign-in link.",
+    several:
+      "Claude Code on this machine showed more than one sign-in link, so the sign-in stopped rather than pick one.",
+  }[why];
+  return `${what} Nothing was signed in or out. Run \`claude update\` there if it is out of date, then open the sign-in link again. Its screen said:\n${lastLines(signIn)}`;
+};
+
 /**
  * Answered true once `done` holds, answered with `done()` once the CLI
  * exits; unanswered when neither happened within `ms`.
@@ -276,34 +353,38 @@ const beginSignIn = async (
   // biome-ignore lint/complexity/noVoid: the marker goes however the login ends; nothing waits on it
   void current.child.exited.then(() => unmarkLogin(account, pid));
 
-  const prompted = await until(
+  // Ready once its authorize link is on the screen, whatever its prompt says.
+  const shown = await until(
     current,
-    () => current.output.includes(PROMPT),
+    () => authorizeLinks(current).length > 0,
     LINK_TIMEOUT_MS
   );
-  const url = said(current).match(LINK)?.[0];
+  const links = authorizeLinks(current);
   let failure: string | undefined;
-  switch (prompted.kind) {
+  switch (shown.kind) {
     case "answered":
-      if (!(prompted.value && url)) {
-        failure =
-          said(current) || "`claude auth login` printed no sign-in link.";
+      // A link printed by a CLI that then ended is one no process can redeem.
+      if (ended(current)) {
+        failure = noLink(current, "ended");
+      } else if (links.length > 1) {
+        failure = noLink(current, "several");
       }
       break;
     case "unanswered":
-      failure = `\`claude auth login\` printed no sign-in link within ${LINK_TIMEOUT_MS / 1000} s.${said(current) ? ` It said: ${said(current)}` : ""}`;
+      failure = noLink(current, "timeout");
       break;
     default: {
-      const unhandled: never = prompted;
+      const unhandled: never = shown;
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
+  const [url] = links;
   if (failure !== undefined || !url) {
     end(current);
     if (inFlight.get(account) === current) {
       inFlight.delete(account);
     }
-    throw new Error(failure ?? "`claude auth login` printed no sign-in link.");
+    throw new Error(failure ?? noLink(current, "ended"));
   }
   return { url };
 };
@@ -344,22 +425,53 @@ const finishSignIn = async (account: string, code: string): Promise<void> => {
   );
   const { exitCode } = signIn.child;
   end(signIn);
+  // The terminal echoed the code back: shown as what it was, never itself.
+  const screen = `Open the sign-in link again for a new code. Its screen said:\n${lastLines(signIn, from).replaceAll(trimmed, "(the pasted code)")}`;
   switch (exited.kind) {
     case "answered":
       if (exitCode !== 0) {
         throw new Error(
-          said(signIn, from) ||
-            `\`claude auth login\` exited with code ${exitCode}.`
+          `Claude Code's sign-in on this machine ended without signing in (exit ${exitCode}). ${screen}`
         );
       }
-      return;
+      break;
     case "unanswered":
       throw new Error(
-        said(signIn, from) ||
-          `\`claude auth login\` did not finish signing in within ${EXCHANGE_TIMEOUT_MS / 1000} s.`
+        `Claude Code on this machine didn't finish signing in within ${EXCHANGE_TIMEOUT_MS / 1000} s, so the sign-in stopped. ${screen}`
       );
     default: {
       const unhandled: never = exited;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+  // Signed in is what the dir's `claude auth status` says, not the screen.
+  const dir = accountConfigDir(account);
+  const status = await authStatusIn(
+    { ...bareEnv(), ...accountEnv(account) },
+    dir
+  );
+  switch (status.kind) {
+    case "unanswered":
+      throw new Error(noAuthAnswer(dir, status));
+    case "answered":
+      switch (status.value.kind) {
+        case "signin":
+          if (!status.value.loggedIn) {
+            throw new Error(
+              `Claude Code's sign-in on this machine finished, but \`claude auth status\` says it isn't signed in. ${screen}`
+            );
+          }
+          return;
+        case "unread":
+        case "locked":
+          throw new Error(status.value.why);
+        default: {
+          const unhandled: never = status.value;
+          throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    default: {
+      const unhandled: never = status;
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
