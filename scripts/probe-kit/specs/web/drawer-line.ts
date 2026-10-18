@@ -518,22 +518,68 @@ async function onTheLine(kit: Kit, base: string): Promise<void> {
   kit.note(`readings:\n${table(rows)}`);
 }
 
+/** One route at one width, read once its page has settled. */
+async function takeAway(
+  kit: Kit,
+  base: string,
+  width: number,
+  route: string
+): Promise<Record<string, string>> {
+  const page = await chromiumAt(kit, width);
+  // One wall clock for every run: a running animation phased by
+  // `Date.now()` (DelegateTray's `animation-delay: -{now % 2000}ms`)
+  // reads the same before and after. Timers run on as they do.
+  await page.clock.setFixedTime(AWAY_CLOCK);
+  await openBench(page, base, route);
+  // Off the benches the hub band runs, and with no hub it opens once its
+  // connect grace is over (HubBand's CONNECT_GRACE, 4s from its mount) or
+  // the socket reports a failed connect, whichever comes first: past the
+  // grace, every take reads it open.
+  await page.waitForTimeout(route.startsWith("/motion/") ? 1500 : 5000);
+  await settle(page, 400);
+  const taken = await snapshot(page);
+  await page.close();
+  return taken;
+}
+
+/** How one take differs from the snapshot before, as a check's detail. */
+function difference(
+  was: Record<string, string>,
+  now: Record<string, string>
+): { same: boolean; detail: string } {
+  const paths = Object.keys(now);
+  /** Each property that differs, with how many elements it differs on. */
+  const differs = new Map<string, number>();
+  const movedPaths = paths.filter((path) => {
+    const diff = changed(was[path], now[path]);
+    for (const prop of diff) {
+      differs.set(prop, (differs.get(prop) ?? 0) + 1);
+    }
+    return diff.length > 0;
+  });
+  const missing = Object.keys(was).filter((p) => !(p in now));
+  const props = [...differs].map(([p, n]) => `${p}×${n}`).join(", ");
+  return {
+    same: movedPaths.length === 0 && missing.length === 0,
+    detail: `${paths.length} elements, ${movedPaths.length} differ${props ? ` (${props}; first ${movedPaths[0]})` : ""}, ${missing.length} gone${missing.length ? ` (${missing[0]})` : ""}`,
+  };
+}
+
+/**
+ * Takes of one page after the first: a virtual list's rows land where its
+ * measurements had reached, so one take can catch another moment than the
+ * snapshot before did. An entry passes only when a whole take computes
+ * exactly as before.
+ */
+const RETAKES = 3;
+
 /** 3: away from the line, every element as it was. */
 async function awayFromTheLine(kit: Kit, base: string): Promise<void> {
   const away: Record<string, Record<string, string>> = {};
   for (const width of AWAY_WIDTHS) {
     for (const route of AWAY_ROUTES) {
       // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-      const page = await chromiumAt(kit, width);
-      // One wall clock for every run: a running animation phased by
-      // `Date.now()` (DelegateTray's `animation-delay: -{now % 2000}ms`)
-      // reads the same before and after. Timers run on as they do.
-      await page.clock.setFixedTime(AWAY_CLOCK);
-      await openBench(page, base, route);
-      await page.waitForTimeout(1500);
-      await settle(page, 400);
-      away[`${width} ${route}`] = await snapshot(page);
-      await page.close();
+      away[`${width} ${route}`] = await takeAway(kit, base, width, route);
     }
   }
   const file = join(kit.out, "away.json");
@@ -544,25 +590,26 @@ async function awayFromTheLine(kit: Kit, base: string): Promise<void> {
     return;
   }
   const then = JSON.parse(readFileSync(before, "utf8")) as typeof away;
-  for (const [key, now] of Object.entries(away)) {
-    const was = then[key] ?? {};
-    const paths = Object.keys(now);
-    /** Each property that differs, with how many elements it differs on. */
-    const differs = new Map<string, number>();
-    const movedPaths = paths.filter((path) => {
-      const diff = changed(was[path], now[path]);
-      for (const prop of diff) {
-        differs.set(prop, (differs.get(prop) ?? 0) + 1);
+  for (const width of AWAY_WIDTHS) {
+    for (const route of AWAY_ROUTES) {
+      const key = `${width} ${route}`;
+      const was = then[key] ?? {};
+      let take = 1;
+      let read = difference(was, away[key]);
+      const first = read.detail;
+      while (!read.same && take <= RETAKES) {
+        take += 1;
+        // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+        read = difference(was, await takeAway(kit, base, width, route));
       }
-      return diff.length > 0;
-    });
-    const missing = Object.keys(was).filter((p) => !(p in now));
-    const props = [...differs].map(([p, n]) => `${p}×${n}`).join(", ");
-    kit.check(
-      `${key}: every element computes as it did before`,
-      movedPaths.length === 0 && missing.length === 0,
-      `${paths.length} elements, ${movedPaths.length} differ${props ? ` (${props}; first ${movedPaths[0]})` : ""}, ${missing.length} gone${missing.length ? ` (${missing[0]})` : ""}`
-    );
+      kit.check(
+        `${key}: every element computes as it did before`,
+        read.same,
+        take === 1
+          ? read.detail
+          : `take ${take}: ${read.detail} (take 1: ${first})`
+      );
+    }
   }
 }
 
