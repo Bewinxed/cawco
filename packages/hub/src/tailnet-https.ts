@@ -4,9 +4,9 @@
  * every preview port answer `https://<name>:<port>` on its tailnet addresses,
  * and every other interface (the LAN address, `cawco.local`, loopback) keeps
  * answering plain http on the same ports. Where something stands in the way,
- * the first step that needs the person is the state, and the dashboard's
- * onboarding row says it; the hub checks again every {@link CHECK_MS} on its
- * own.
+ * every step on the path is the state, each done or not, and the dashboard's
+ * onboarding row lists them; the hub checks again every {@link NEEDS_CHECK_MS}
+ * on its own while one stands, so each ticks as the person takes it.
  *
  * The hub serves TLS itself, with Tailscale's certificate, rather than
  * proxying through `tailscale serve`:
@@ -36,7 +36,7 @@
 import { hostname, userInfo } from "node:os";
 import type {
   TailnetHttps,
-  TailnetHttpsStep,
+  TailnetHttpsTodo,
   TailnetOrigin,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
@@ -47,10 +47,12 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
-import { firstLine, type Ran, runTailscale } from "./tailscale-cli";
+import { firstLine, runTailscale } from "./tailscale-cli";
 
-/** How often the hub reads Tailscale's state and certificate again. Our choice: a step the person took ticks within it. */
+/** How often the hub reads Tailscale's state and certificate again, for a renewal or a change. Our choice. */
 const CHECK_MS = 30_000;
+/** How often while a step of the person's stands. Our choice: a step they just took ticks while they still look at it. */
+const NEEDS_CHECK_MS = 5000;
 /** How long one `tailscale` call may take: a first certificate is an ACME order. Our choice. */
 const CALL_MS = 60_000;
 const ACCESS_DENIED = /access denied/i;
@@ -67,6 +69,11 @@ interface Status {
   TUN?: boolean;
 }
 
+/** `tailscale debug prefs`: ipn.Prefs, the part read here. */
+interface Prefs {
+  OperatorUser?: string;
+}
+
 /** A certificate and its key, as Bun's `tls` takes them. */
 interface Pair {
   cert: string;
@@ -76,8 +83,14 @@ interface Pair {
 /** What one reading found: the state, and while it can serve, what it serves with. */
 type Reading =
   | { state: "absent" | "signed-out" }
-  | { state: "needs"; step: TailnetHttpsStep; name?: string; command?: string }
-  | { state: "ready"; name: string; ips: string[]; pair: Pair }
+  | { state: "needs"; steps: TailnetHttpsTodo[]; name?: string }
+  | {
+      state: "ready";
+      name: string;
+      ips: string[];
+      pair: Pair;
+      steps: TailnetHttpsTodo[];
+    }
   /** It couldn't be read this time (a timeout, a refused order): what stood goes on. */
   | { state: "unread"; why: string };
 
@@ -103,6 +116,13 @@ const stopped = (server: Listening, now: boolean): void =>
 /** What the person's machine is, by its sign-in. */
 const user = userInfo().username;
 const host = hostname();
+
+/** The operator right, not yet given: its command, with this process's user. */
+const operatorStep: TailnetHttpsTodo = {
+  step: "operator",
+  done: false,
+  command: `sudo tailscale set --operator=${user}`,
+};
 
 /** A pair from `tailscale cert`'s stdout: its key, and every certificate of the chain in order. */
 const pairOf = (stdout: string): Pair | null => {
@@ -167,41 +187,81 @@ export const createTailnetHttps = ({
     }
   };
 
-  /** Why `tailscale cert` gave no pair: the person's step, or a line for the log. */
-  const certRefusal = (ran: Ran, name: string): Reading =>
-    ACCESS_DENIED.test(ran.output)
-      ? {
-          state: "needs",
-          step: "operator",
-          name,
-          command: `sudo tailscale set --operator=${user}`,
-        }
-      : {
-          state: "unread",
-          why: `tailscale cert ${name} gave no certificate: ${firstLine(ran.output)}`,
-        };
+  /**
+   * Whether this process may take Tailscale's certificate, as far as it can
+   * be read before the tailnet issues one: on Linux, tailscaled lets root,
+   * its own user and its operator write, and `cert` needs write
+   * (ipn/ipnauth.go `IsReadonlyConn`, ipn/localapi/cert.go "cert access
+   * denied"), and any user may read its prefs. A daemon running as this user
+   * runs in userspace networking, the `userspace` step. Elsewhere (macOS
+   * also lets its admin group write) only `tailscale cert` itself says.
+   */
+  const operatorTodo = async (): Promise<TailnetHttpsTodo | null> => {
+    if (process.platform !== "linux" || process.getuid?.() === 0) {
+      return null;
+    }
+    const asked = await run(["debug", "prefs"]);
+    if (asked.kind === "unanswered" || asked.value.code !== 0) {
+      return null;
+    }
+    try {
+      const prefs = JSON.parse(asked.value.stdout) as Prefs;
+      return prefs.OperatorUser === user
+        ? { step: "operator", done: true }
+        : operatorStep;
+    } catch {
+      return null;
+    }
+  };
 
-  /** One reading of Tailscale on this machine: its state, then its certificate. */
+  /** Every step that applies to this machine, done or not, in the order to take them. */
+  const stepsOf = async (
+    { CertDomains, CurrentTailnet, TUN }: Status,
+    name: string | undefined
+  ): Promise<TailnetHttpsTodo[]> => {
+    const steps: TailnetHttpsTodo[] = [];
+    if (TUN === false) {
+      steps.push({ step: "userspace", done: false });
+    }
+    // MagicDNS, then HTTPS Certificates: both on the admin console's DNS page.
+    steps.push({
+      step:
+        CurrentTailnet?.MagicDNSEnabled === false || !name
+          ? "enable-magicdns"
+          : "enable-https",
+      done: Boolean(name && CertDomains?.includes(name)),
+    });
+    const operator = await operatorTodo();
+    if (operator) {
+      steps.push(operator);
+    }
+    return steps;
+  };
+
+  /** One reading of Tailscale on this machine: its state, every step, then its certificate. */
   const read = async (): Promise<Reading> => {
     const status = await readStatus();
     if ("reading" in status) {
       return status.reading;
     }
-    const { BackendState, CertDomains, CurrentTailnet, Self, TUN } =
-      status.status;
-    if (BackendState !== "Running") {
+    if (status.status.BackendState !== "Running") {
       return { state: "signed-out" };
     }
-    const name = Self?.DNSName?.replace(TRAILING_DOT, "") || undefined;
-    if (TUN === false) {
-      return { state: "needs", step: "userspace", name };
+    const name =
+      status.status.Self?.DNSName?.replace(TRAILING_DOT, "") || undefined;
+    const steps = await stepsOf(status.status, name);
+    if (!name || steps.some((todo) => !todo.done)) {
+      return { state: "needs", steps, name };
     }
-    if (CurrentTailnet?.MagicDNSEnabled === false || !name) {
-      return { state: "needs", step: "enable-magicdns", name };
-    }
-    if (!CertDomains?.includes(name)) {
-      return { state: "needs", step: "enable-https", name };
-    }
+    return certOf(name, status.status.Self?.TailscaleIPs ?? [], steps);
+  };
+
+  /** The certificate for `name`, once every step is done: served with, or why not. */
+  const certOf = async (
+    name: string,
+    ips: string[],
+    steps: TailnetHttpsTodo[]
+  ): Promise<Reading> => {
     const asked = await run([
       "cert",
       "--cert-file",
@@ -217,10 +277,24 @@ export const createTailnetHttps = ({
       };
     }
     const pair = asked.value.code === 0 ? pairOf(asked.value.stdout) : null;
-    if (!pair) {
-      return certRefusal(asked.value, name);
+    if (pair) {
+      return { state: "ready", name, ips, pair, steps };
     }
-    return { state: "ready", name, ips: Self?.TailscaleIPs ?? [], pair };
+    if (!ACCESS_DENIED.test(asked.value.output)) {
+      return {
+        state: "unread",
+        why: `tailscale cert ${name} gave no certificate: ${firstLine(asked.value.output)}`,
+      };
+    }
+    // Refused for want of the operator right, where the prefs couldn't say so.
+    return {
+      state: "needs",
+      steps: [
+        ...steps.filter((todo) => todo.step !== "operator"),
+        operatorStep,
+      ],
+      name,
+    };
   };
 
   /**
@@ -267,7 +341,7 @@ export const createTailnetHttps = ({
    * person's step; a preview port's refused, that preview keeps its plain
    * listener alone, said in a line.
    */
-  const serve = (at: { name: string; ips: string[]; pair: Pair }): Reading => {
+  const serve = (at: Extract<Reading, { state: "ready" }>): Reading => {
     for (const beside of besides) {
       let opened: Listening[];
       try {
@@ -277,9 +351,11 @@ export const createTailnetHttps = ({
           closeAll();
           return {
             state: "needs",
-            step: "port",
+            steps: [
+              ...at.steps,
+              { step: "port", done: false, command: "cawco service install" },
+            ],
             name: at.name,
-            command: "cawco service install",
           };
         }
         console.warn(
@@ -293,8 +369,8 @@ export const createTailnetHttps = ({
         stopped(server, false);
       }
     }
-    live = at;
-    return { state: "ready", ...at };
+    live = { name: at.name, ips: at.ips, pair: at.pair };
+    return at;
   };
 
   /** Whether `at` serves with what the listeners hold now. */
@@ -311,15 +387,22 @@ export const createTailnetHttps = ({
       case "absent":
       case "signed-out":
         return { state: reading.state, host };
-      case "needs":
+      case "needs": {
+        // The first step that stands, as `step` and `command` (what an app
+        // that reads one step at a time shows), and every step as `steps`.
+        const first = reading.steps.find((todo) => !todo.done);
         return {
           state: "needs",
           host,
-          step: reading.step,
           ...(reading.name ? { name: reading.name } : {}),
-          ...(reading.command ? { command: reading.command } : {}),
-          ...(reading.step === "port" ? { port: dashboardPort } : {}),
+          ...(first ? { step: first.step } : {}),
+          ...(first?.command ? { command: first.command } : {}),
+          ...(reading.steps.some((todo) => todo.step === "port")
+            ? { port: dashboardPort }
+            : {}),
+          steps: reading.steps,
         };
+      }
       case "ready":
         return {
           state: "serving",
@@ -368,12 +451,21 @@ export const createTailnetHttps = ({
   };
 
   return {
-    /** Reads Tailscale now, then every {@link CHECK_MS}. */
+    /** Reads Tailscale now, then every {@link NEEDS_CHECK_MS} while a step stands, else every {@link CHECK_MS}. */
     start(): void {
-      const tick = () => detach(checkOnce(), "tailnet check");
+      const tick = (): void => {
+        detach(
+          checkOnce().finally(() => {
+            // Never what keeps a process up: the hub's listeners do that.
+            setTimeout(
+              tick,
+              state.state === "needs" ? NEEDS_CHECK_MS : CHECK_MS
+            ).unref();
+          }),
+          "tailnet check"
+        );
+      };
       tick();
-      // Never what keeps a process up: the hub's listeners do that.
-      setInterval(tick, CHECK_MS).unref();
     },
 
     /** Where it stands now, as `GET /api/tailnet-https` answers. */

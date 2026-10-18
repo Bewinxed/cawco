@@ -731,6 +731,43 @@ public enum Words {
             "Port \(port) on \(host)'s tailnet address is held by a listener CawCo can't share. Run \(command) there once."
         }
 
+        /// The row's line over its steps, while one stands.
+        public static let lead = "Every device on your tailnet opens CawCo over HTTPS once these are done. Each ticks by itself."
+
+        /// The admin console's two switches, MagicDNS first (tailscale.com/kb/1153/enabling-https: "Enable MagicDNS if not already enabled").
+        public static let stepMagicDns = "Turn on MagicDNS, then HTTPS Certificates"
+
+        /// "Under HTTPS Certificates, select Enable HTTPS."
+        public static let stepHttps = "Turn on HTTPS Certificates"
+
+        /// "your machine names and your tailnet DNS name will be published on a public ledger."
+        public static let adminNote = "On Tailscale's DNS page. Tailscale lists your machine names in the public certificate log."
+
+        /// `tailscale cert` answers only root, tailscaled's own user and its operator.
+        public static let stepOperator = "Let CawCo take Tailscale's certificate"
+
+        /// Where the command runs: sudo asks for the person's password there.
+        public static func runOnce(host: String) -> String {
+            "Run it once in a terminal on \(host)."
+        }
+
+        public static let stepUserspace = "Run tailscaled with its network interface"
+
+        public static func userspaceNote(host: String) -> String {
+            "Tailscale on \(host) runs in userspace networking, so CawCo has no tailnet address to listen on. Run tailscaled as root, without --tun=userspace-networking."
+        }
+
+        public static func stepPort(port: Int) -> String {
+            "Free port \(port) on the tailnet address"
+        }
+
+        public static func portNote(host: String) -> String {
+            "A listener CawCo can't share holds it. Run this once in a terminal on \(host)."
+        }
+
+        /// A step's command box, for a screen reader.
+        public static let command = "Command"
+
         /// HTTPS came on while the row stood: its tick.
         public static func done(dashboard: String) -> String {
             "HTTPS is on. Every device on your tailnet opens CawCo at \(dashboard)."

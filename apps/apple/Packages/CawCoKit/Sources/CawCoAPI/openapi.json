@@ -40265,7 +40265,7 @@
         "type": "object",
         "properties": {
           "command": {
-            "description": "The command the step runs on the hub's machine, for `operator` and `port`.",
+            "description": "The command the first step that stands runs on the hub's machine, for `operator` and `port`.",
             "type": "string"
           },
           "dashboard": {
@@ -40289,7 +40289,14 @@
           },
           "step": {
             "$ref": "#/components/schemas/TailnetHttpsStep",
-            "description": "What the person does next, while `needs`."
+            "description": "What the person does next, while `needs`: the first of `steps` not done."
+          },
+          "steps": {
+            "description": "Every step on the path, in the order to take them, while `needs`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TailnetHttpsTodo"
+            }
           }
         },
         "required": [
@@ -40298,13 +40305,44 @@
         ]
       },
       "TailnetHttpsState": {
-        "description": "Where it stands on the hub's machine:\n- `absent`: no Tailscale there (no CLI, or its daemon is not running);\n- `signed-out`: Tailscale is there but not signed in to a tailnet;\n- `needs`: on a tailnet, and one step of the person's stands between it\n  and HTTPS ({@link TailnetHttpsStep});\n- `serving`: the dashboard and the previews answer over HTTPS on the name.",
+        "description": "Where it stands on the hub's machine:\n- `absent`: no Tailscale there (no CLI, or its daemon is not running);\n- `signed-out`: Tailscale is there but not signed in to a tailnet;\n- `needs`: on a tailnet, and a step of the person's stands between it\n  and HTTPS ({@link TailnetHttpsTodo});\n- `serving`: the dashboard and the previews answer over HTTPS on the name.",
         "type": "string",
         "enum": [
           "absent",
           "needs",
           "serving",
           "signed-out"
+        ]
+      },
+      "TailnetHttpsTodo": {
+        "description": "One step of the path to HTTPS, as the hub last read it: every step that\napplies to this machine, done or not, so the person sees the whole path at\nonce and each step ticks as the hub finds it taken.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "The command it runs on the hub's machine, for `operator` and `port`.",
+            "type": "string"
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "step": {
+            "$ref": "#/components/schemas/TailnetHttpsStep"
+          }
+        },
+        "required": [
+          "done",
+          "step"
+        ]
+      },
+      "TailnetHttpsStep": {
+        "description": "A step of the person's on the path to HTTPS:\n- `enable-magicdns`, `enable-https`: the tailnet has no certificates yet;\n  both are switches on the admin console's DNS page (MagicDNS first,\n  \"Configure HTTPS\", tailscale.com/kb/1153/enabling-https);\n- `operator`: Tailscale gives its certificate only to root and its\n  operator (\"cert access denied\", ipn/localapi/cert.go);\n- `userspace`: tailscaled runs with `--tun=userspace-networking`, so the\n  machine has no tailnet address to listen on;\n- `port`: a listener the hub can't share holds a port on the tailnet\n  address (the dashboard's socket from before it shared its port).",
+        "type": "string",
+        "enum": [
+          "enable-https",
+          "enable-magicdns",
+          "operator",
+          "port",
+          "userspace"
         ]
       },
       "AgentRow": {
@@ -53150,16 +53188,6 @@
         "enum": [
           "file",
           "template"
-        ]
-      },
-      "TailnetHttpsStep": {
-        "type": "string",
-        "enum": [
-          "enable-https",
-          "enable-magicdns",
-          "operator",
-          "port",
-          "userspace"
         ]
       },
       "TaskHistoryState": {

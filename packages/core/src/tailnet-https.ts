@@ -17,14 +17,14 @@
  * Where it stands on the hub's machine:
  * - `absent`: no Tailscale there (no CLI, or its daemon is not running);
  * - `signed-out`: Tailscale is there but not signed in to a tailnet;
- * - `needs`: on a tailnet, and one step of the person's stands between it
- *   and HTTPS ({@link TailnetHttpsStep});
+ * - `needs`: on a tailnet, and a step of the person's stands between it
+ *   and HTTPS ({@link TailnetHttpsTodo});
  * - `serving`: the dashboard and the previews answer over HTTPS on the name.
  */
 export type TailnetHttpsState = "absent" | "signed-out" | "needs" | "serving";
 
 /**
- * The one step that stands, the first that needs the person:
+ * A step of the person's on the path to HTTPS:
  * - `enable-magicdns`, `enable-https`: the tailnet has no certificates yet;
  *   both are switches on the admin console's DNS page (MagicDNS first,
  *   "Configure HTTPS", tailscale.com/kb/1153/enabling-https);
@@ -38,9 +38,21 @@ export type TailnetHttpsState = "absent" | "signed-out" | "needs" | "serving";
 export type TailnetHttpsStep =
   "enable-magicdns" | "enable-https" | "operator" | "userspace" | "port";
 
+/**
+ * One step of the path to HTTPS, as the hub last read it: every step that
+ * applies to this machine, done or not, so the person sees the whole path at
+ * once and each step ticks as the hub finds it taken.
+ */
+export interface TailnetHttpsTodo {
+  /** The command it runs on the hub's machine, for `operator` and `port`. */
+  command?: string;
+  done: boolean;
+  step: TailnetHttpsStep;
+}
+
 /** What `GET /api/tailnet-https` answers, and the `tailnet.https` frame carries. */
 export interface TailnetHttps {
-  /** The command the step runs on the hub's machine, for `operator` and `port`. */
+  /** The command the first step that stands runs on the hub's machine, for `operator` and `port`. */
   command?: string;
   /** The dashboard's https address while `serving`: `https://<name>:<port>`. */
   dashboard?: string;
@@ -51,8 +63,10 @@ export interface TailnetHttps {
   /** The port a `port` step names. */
   port?: number;
   state: TailnetHttpsState;
-  /** What the person does next, while `needs`. */
+  /** What the person does next, while `needs`: the first of `steps` not done. */
   step?: TailnetHttpsStep;
+  /** Every step on the path, in the order to take them, while `needs`. */
+  steps?: TailnetHttpsTodo[];
 }
 
 /**

@@ -8,11 +8,18 @@
  * 1. absent (no daemon): `/api/tailnet-https` says `absent`; `/health`
  *    hands out no ts.net address; Needs you shows nothing.
  * 2. signed out: `signed-out`, still nothing to show.
- * 3. HTTPS off: `needs` · `enable-https`; Caw's Needs you shows "HTTPS on
- *    your tailnet" with the step's line and its one button, Open
- *    Tailscale's DNS page, at console.tailscale.com/admin/dns.
- * 4. operator missing (cert access denied): `needs` · `operator`, the row
- *    moves on to `sudo tailscale set --operator=<user>` and Copy command.
+ * 3. A fresh tailnet (MagicDNS off, no certificates, no operator): `needs`
+ *    with both steps standing; Caw's Needs you shows "HTTPS on your
+ *    tailnet", its line, and the two steps in order: the admin console's
+ *    switches with Open Tailscale's DNS page at console.tailscale.com/admin/dns,
+ *    and `sudo tailscale set --operator=<user>` whole in its command box. At
+ *    the desk and on the phone, light and dark: each captured, nothing wider
+ *    than the row, the command never cut.
+ * 4. Each step ticks by itself, in either order: the operator given first
+ *    (its tick, the admin step still standing), then HTTPS on with the
+ *    operator missing (the admin tick, the command standing), then the
+ *    operator refused by `tailscale cert` where the prefs can't be read
+ *    (a macOS hub's way).
  * 5. HTTPS on: `serving`; the row ticks ("HTTPS is on." and Open the HTTPS
  *    dashboard at https://<name>:<port>), then leaves; `/health` hands out
  *    the https name as `dashboard` and `secureDashboard`. The dashboard
@@ -35,37 +42,62 @@ import { freePortRange, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 
 const NAME = "probe-box.tail0000.ts.net";
-/** How long a state takes to be read: the hub reads Tailscale every 30 s. */
+/** How long a state takes to be read: the hub reads Tailscale every 5 s while a step stands, else every 30 s. */
 const READ_MS = 45_000;
 /** An environment variable that names a proxy. */
 const PROXY_VARIABLE = /proxy/i;
 const ROW =
   ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"]) [data-slot="row"][data-kind="tailnet"]';
-
-type StubState = "absent" | "signed-out" | "https-off" | "operator" | "on";
+const USER = userInfo().username;
+const COMMAND = `sudo tailscale set --operator=${USER}`;
 
 /**
- * `tailscale` as the hub runs it: `status --json` and `cert` by the state
- * file's word. Its files are written into it, never read from the
- * environment: a Bun process spawns with the environment it started with,
- * whatever this one sets later.
+ * The stub's states, as a person meets them:
+ * - `fresh`: a new tailnet: MagicDNS off, no certificates, no operator;
+ * - `operator-first`: the operator given, the admin console's switches not yet;
+ * - `https-off`: MagicDNS on, no certificates, no operator;
+ * - `operator`: certificates on, no operator (`cert` refused);
+ * - `denied`: certificates on, the prefs unreadable and `cert` refused;
+ * - `on`: certificates on, the operator given, `cert` answers.
+ */
+type StubState =
+  | "absent"
+  | "signed-out"
+  | "fresh"
+  | "operator-first"
+  | "https-off"
+  | "operator"
+  | "denied"
+  | "on";
+
+/**
+ * `tailscale` as the hub runs it: `status --json`, `debug prefs` and `cert`
+ * by the state file's word. Its files are written into it, never read from
+ * the environment: a Bun process spawns with the environment it started
+ * with, whatever this one sets later.
  */
 const stubOf = (state: string, cert: string, key: string) => `#!/bin/sh
 state=$(cat "${state}")
-running='"BackendState":"Running","TUN":true,"CurrentTailnet":{"MagicDNSEnabled":true},"Self":{"DNSName":"${NAME}.","TailscaleIPs":["::1"]}'
+self='"BackendState":"Running","TUN":true,"Self":{"DNSName":"${NAME}.","TailscaleIPs":["::1"]}'
 case "$1" in
 status)
   case "$state" in
   absent) echo "failed to connect to local tailscaled; it doesn't appear to be running (sudo systemctl start tailscaled ?)" >&2; exit 1 ;;
   signed-out) echo '{"BackendState":"NeedsLogin","TUN":true,"Self":{"DNSName":"","TailscaleIPs":[]},"CertDomains":null}' ;;
-  https-off) echo "{$running,\\"CertDomains\\":null}" ;;
-  *) echo "{$running,\\"CertDomains\\":[\\"${NAME}\\"]}" ;;
+  fresh|operator-first) echo "{$self,\\"CurrentTailnet\\":{\\"MagicDNSEnabled\\":false},\\"CertDomains\\":null}" ;;
+  https-off) echo "{$self,\\"CurrentTailnet\\":{\\"MagicDNSEnabled\\":true},\\"CertDomains\\":null}" ;;
+  *) echo "{$self,\\"CurrentTailnet\\":{\\"MagicDNSEnabled\\":true},\\"CertDomains\\":[\\"${NAME}\\"]}" ;;
+  esac ;;
+debug)
+  case "$state" in
+  denied) echo "prefs access denied" >&2; exit 1 ;;
+  operator-first|on) echo '{"OperatorUser":"${USER}"}' ;;
+  *) echo '{}' ;;
   esac ;;
 cert)
-  if [ "$state" = operator ]; then
-    echo "Access denied: cert access denied" >&2
-    exit 1
-  fi
+  case "$state" in
+  operator|denied) echo "Access denied: cert access denied" >&2; exit 1 ;;
+  esac
   cat "${cert}" "${key}" ;;
 *) exit 2 ;;
 esac
@@ -76,30 +108,159 @@ interface Read {
   dashboard?: string;
   state: string;
   step?: string;
+  steps?: { command?: string; done: boolean; step: string }[];
 }
 
-/** The row's words and its one button, as the engine has them. */
+/** The steps as the hub says them: `step:done` each, in order. */
+const stepsOf = (read: Read): string =>
+  (read.steps ?? [])
+    .map((todo) => `${todo.step}:${todo.done ? "done" : "stands"}`)
+    .join(" ");
+
+/**
+ * The row's words, its steps and its one button, as the engine has them:
+ * each step's label, note, tick, command (whole, and whether its box shows
+ * it whole) and link; and whether anything in the row is wider than it.
+ */
 const readRow = (page: Page) =>
   page.evaluate((selector) => {
     const row = document.querySelector(selector);
     if (!row) {
       return null;
     }
-    const text = (slot: string) =>
-      row.querySelector(`[data-slot="${slot}"]`)?.textContent?.trim() ?? "";
+    const text = (slot: string, from: Element = row) =>
+      from
+        .querySelector(`[data-slot="${slot}"]`)
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim() ?? "";
     const button = row.querySelector(
       '[data-slot="peers"] [data-slot="button"]'
     );
+    const edge = row.getBoundingClientRect().right;
     return {
       name: text("name"),
       want: text("want"),
       meta: text("meta"),
+      steps: [...row.querySelectorAll('[data-slot="step"]')].map((step) => {
+        const code = step.querySelector('[data-slot="step-command"] code');
+        // The mark's centre against the label's first line's: the label's
+        // box is its lines, each one line-height tall (the mark line's
+        // padding gives back what its trim took).
+        const labelBox = step.querySelector('[data-slot="step-label"]');
+        const markBox = step.querySelector('[data-slot="step-mark"]');
+        const lineHeight = labelBox
+          ? Number.parseFloat(getComputedStyle(labelBox).lineHeight)
+          : 0;
+        const labelRect = labelBox?.getBoundingClientRect();
+        const markRect = markBox?.getBoundingClientRect();
+        const link = step.querySelector('[data-slot="step-link"] a');
+        return {
+          step: step.getAttribute("data-step"),
+          done: step.hasAttribute("data-done"),
+          ticked: step.querySelector('[data-slot="step-mark"] svg') !== null,
+          // What it shows, without what only a screen reader hears ("…, done").
+          label: [
+            ...(step.querySelector('[data-slot="step-label"]')?.childNodes ??
+              []),
+          ]
+            .filter(
+              (node) =>
+                !(node instanceof Element && node.classList.contains("sr-only"))
+            )
+            .map((node) => node.textContent)
+            .join("")
+            .trim(),
+          spoken: text("step-label", step),
+          lines:
+            labelRect && lineHeight
+              ? Math.round(labelRect.height / lineHeight)
+              : 0,
+          markOff:
+            labelRect && markRect
+              ? Math.abs(
+                  markRect.top +
+                    markRect.height / 2 -
+                    (labelRect.top + lineHeight / 2)
+                )
+              : null,
+          // The number a standing step draws: its attribute, through `::before`.
+          number: (() => {
+            const shown = step.querySelector(".step-number");
+            return shown &&
+              getComputedStyle(shown, "::before").content !== "none"
+              ? shown.getAttribute("data-n")
+              : null;
+          })(),
+          // Each of the command's words on one line: broken between words, never inside one.
+          wordsWhole: code
+            ? [...code.querySelectorAll(".word")].every(
+                (word) =>
+                  word.getBoundingClientRect().height <=
+                  Number.parseFloat(getComputedStyle(code).lineHeight) + 0.5
+              )
+            : null,
+          boxMinHeight: code?.parentElement
+            ? getComputedStyle(code.parentElement).minHeight
+            : null,
+          note: text("step-note", step),
+          command: code?.textContent ?? null,
+          commandWhole: code ? code.scrollWidth <= code.clientWidth : null,
+          copy:
+            code?.parentElement?.querySelector("button")?.textContent?.trim() ??
+            null,
+          link: link?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+          href: link?.getAttribute("href") ?? null,
+        };
+      }),
       button: button?.textContent?.replace(/\s+/g, " ").trim() ?? "",
       href: button?.getAttribute("href") ?? null,
       buttons: row.querySelectorAll('[data-slot="peers"] [data-slot="button"]')
         .length,
+      spills: [...row.querySelectorAll("*")].some(
+        (one) => one.getBoundingClientRect().right > edge + 0.5
+      ),
     };
   }, ROW);
+
+type Row = NonNullable<Awaited<ReturnType<typeof readRow>>>;
+
+/** Where the row is read and captured: the desk light first, its words' reference. */
+const SHOTS = [
+  { view: "desk", theme: "light" },
+  { view: "desk", theme: "dark" },
+  { view: "phone", theme: "light" },
+  { view: "phone", theme: "dark" },
+] as const;
+
+type Hand = (typeof SHOTS)[number]["view"];
+
+/** A press where a hand presses: the mouse at the desk, a finger's tap on the phone. */
+const press = async (page: Page, view: Hand, selector: string) => {
+  const at = await page.evaluate((sel) => {
+    const el = [...document.querySelectorAll(sel)].find(
+      (one) => one.getBoundingClientRect().width > 0
+    );
+    const r = el?.getBoundingClientRect();
+    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  }, selector);
+  if (!at) {
+    throw new Error(`nothing drawn at ${selector}`);
+  }
+  await (view === "phone"
+    ? page.touchscreen.tap(at.x, at.y)
+    : page.mouse.click(at.x, at.y));
+};
+
+/** Caw's panel opened from his head in the bar, as a hand opens it. */
+const openNeeds = async (page: Page, view: Hand, base: string) => {
+  await open(page, base, "[data-needs-caw]");
+  await press(page, view, "[data-needs-caw]");
+  await page.waitForSelector(
+    ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"])[data-shown]',
+    { timeout: 30_000 }
+  );
+  await settle(page, 400);
+};
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
@@ -157,58 +318,213 @@ const run = async (kit: Kit) => {
     JSON.stringify(signedOut)
   );
 
-  // 3. HTTPS off: the step, in Caw's Needs you.
-  const page = await kit.page("desk");
-  await open(page, base, "[data-needs-caw]");
-  await set("https-off");
-  const off = await reads("HTTPS off", (r) => r.state === "needs");
-  kit.check(
-    "3: HTTPS certificates off reads needs · enable-https",
-    off.step === "enable-https",
-    JSON.stringify(off)
+  // Caw's panel open at the desk and on the phone, light and dark, as a hand
+  // opens it: the mouse at the desk, a finger's tap on the phone.
+  const pages = await Promise.all(
+    SHOTS.map(async (shot) => {
+      const page = await kit.page(shot.view, { theme: shot.theme });
+      page.setDefaultTimeout(60_000);
+      await openNeeds(page, shot.view, base);
+      return { ...shot, page, label: `${shot.view} ${shot.theme}` };
+    })
   );
-  await page.click("[data-needs-caw]");
-  await page.waitForSelector(ROW, { timeout: 30_000 });
-  await settle(page, 300);
-  const asking = await readRow(page);
+  const [desk] = pages;
+  if (!desk) {
+    return;
+  }
+  const { page } = desk;
+
+  /** Every step whose label wrapped to two lines or more, in any capture. */
+  const wrapped: Row["steps"] = [];
+  /**
+   * The row on every page once `ready` holds, captured as
+   * `<name>-<view>-<theme>.png` in the spec's folder; each page held to
+   * nothing wider than the row, every command whole in its box, and every
+   * step's mark on its label's first line.
+   */
+  const capture = async (name: string, ready: (row: Row) => boolean) => {
+    const rows: Record<string, Row> = {};
+    for (const one of pages) {
+      const row = await until(
+        `${name} on ${one.label}`,
+        async () => (await readRow(one.page)) ?? undefined,
+        ready,
+        30_000
+      );
+      await settle(one.page, 300);
+      await one.page.locator(ROW).screenshot({
+        path: join(kit.out, `${name}-${one.view}-${one.theme}.png`),
+      });
+      rows[one.label] = row;
+      kit.check(
+        `${name}, ${one.label}: nothing in the row is wider than it; every command shows whole, no word broken, with Copy, in a box at least 36px tall; every standing step draws its number; every step's mark sits on its label's first line within 0.5px`,
+        !row.spills &&
+          row.steps.every(
+            (todo, index) =>
+              (todo.command === null ||
+                (todo.commandWhole === true &&
+                  todo.wordsWhole === true &&
+                  todo.copy === "Copy" &&
+                  todo.boxMinHeight === "36px")) &&
+              (todo.done || todo.number === String(index + 1)) &&
+              todo.markOff !== null &&
+              todo.markOff <= 0.5
+          ),
+        JSON.stringify(row)
+      );
+    }
+    wrapped.push(
+      ...Object.values(rows).flatMap((row) =>
+        row.steps.filter((todo) => todo.lines >= 2)
+      )
+    );
+    return rows["desk light"] as Row;
+  };
+
+  // 3. A fresh tailnet: every step at once.
+  await set("fresh");
+  const fresh = await reads(
+    "a fresh tailnet",
+    (r) => stepsOf(r) === "enable-magicdns:stands operator:stands"
+  );
   kit.check(
-    "3: Needs you shows HTTPS on your tailnet, the step's line, and one button that opens Tailscale's DNS page",
-    asking?.name === "HTTPS on your tailnet" &&
-      asking.want.startsWith(
-        "Turn on HTTPS Certificates on Tailscale's DNS page"
-      ) &&
+    "3: a fresh tailnet reads needs with both steps standing, MagicDNS first, the operator's command with this user",
+    fresh.state === "needs" &&
+      fresh.step === "enable-magicdns" &&
+      fresh.steps?.[1]?.command === COMMAND,
+    JSON.stringify(fresh)
+  );
+  const asking = await capture(
+    "fresh",
+    (row) => row.steps.length === 2 && row.steps.every((todo) => !todo.done)
+  );
+  const [admin, operator] = asking.steps;
+  kit.check(
+    "3: Needs you says HTTPS on your tailnet, its line, then step 1 the DNS page's switches with its link, step 2 the command whole in its box",
+    asking.name === "HTTPS on your tailnet" &&
+      asking.want ===
+        "Every device on your tailnet opens CawCo over HTTPS once these are done. Each ticks by itself." &&
       asking.meta.startsWith("Onboarding · Tailscale on ") &&
-      asking.buttons === 1 &&
-      asking.button === "Open Tailscale's DNS page" &&
-      asking.href === "https://console.tailscale.com/admin/dns",
+      admin?.label === "Turn on MagicDNS, then HTTPS Certificates" &&
+      admin.note ===
+        "On Tailscale's DNS page. Tailscale lists your machine names in the public certificate log." &&
+      admin.link === "Open Tailscale's DNS page" &&
+      admin.href === "https://console.tailscale.com/admin/dns" &&
+      operator?.label === "Let CawCo take Tailscale's certificate" &&
+      operator.note.startsWith("Run it once in a terminal on ") &&
+      operator.command === COMMAND &&
+      asking.buttons === 0,
     JSON.stringify(asking)
   );
 
-  // 4. The operator right missing: the row moves on to its command.
-  await set("operator");
-  const operator = await reads(
-    "cert access denied",
-    (r) => r.step === "operator"
+  // Every label fits one line at 390px; at 320px (the narrowest phone) the
+  // admin step's wraps, and its mark stays on the first line.
+  const narrow = pages.find((one) => one.label === "phone light");
+  if (narrow) {
+    await narrow.page.setViewportSize({ width: 320, height: 844 });
+    const squeezed = await until(
+      "a step label wrapped at 320px",
+      async () => (await readRow(narrow.page)) ?? undefined,
+      (row) => row.steps.some((todo) => todo.lines >= 2),
+      30_000
+    );
+    await narrow.page
+      .locator(ROW)
+      .screenshot({ path: join(kit.out, "fresh-phone320-light.png") });
+    wrapped.push(...squeezed.steps.filter((todo) => todo.lines >= 2));
+    kit.check(
+      "3, phone 320 light: nothing in the row is wider than it, and the command shows whole with no word broken",
+      !squeezed.spills &&
+        squeezed.steps.every(
+          (todo) =>
+            todo.command === null ||
+            (todo.commandWhole === true && todo.wordsWhole === true)
+        ),
+      JSON.stringify(squeezed)
+    );
+    await narrow.page.setViewportSize({ width: 390, height: 844 });
+  }
+
+  // 4. Each step ticks by itself, in either order.
+  await set("operator-first");
+  const given = await reads(
+    "the operator given first",
+    (r) => stepsOf(r) === "enable-magicdns:stands operator:done"
   );
-  const command = `sudo tailscale set --operator=${userInfo().username}`;
   kit.check(
-    "4: cert access denied reads needs · operator, with the command",
-    operator.command === command,
-    JSON.stringify(operator)
+    "4: the operator given first reads its step done, the admin console's still standing",
+    given.step === "enable-magicdns" && given.command === undefined,
+    JSON.stringify(given)
   );
-  await page.waitForFunction(
-    (selector) =>
-      document.querySelector(selector)?.textContent?.includes("Copy command"),
-    ROW,
-    { timeout: 30_000 }
+  const ticking = await capture(
+    "operator-first",
+    (row) => row.steps[1]?.done === true
   );
-  const copying = await readRow(page);
   kit.check(
-    "4: the row says to run the command there once, its one button Copy command",
-    copying?.want.includes(`Run ${command} there once.`) === true &&
-      copying.buttons === 1 &&
-      copying.button === "Copy command",
-    JSON.stringify(copying)
+    "4: the operator's step ticks by itself: its tick and label, no command; the admin step stands with its link",
+    ticking.steps[1]?.ticked === true &&
+      ticking.steps[1].label === "Let CawCo take Tailscale's certificate" &&
+      ticking.steps[1].spoken ===
+        "Let CawCo take Tailscale's certificate, done" &&
+      ticking.steps[1].command === null &&
+      ticking.steps[1].note === "" &&
+      ticking.steps[0]?.done === false &&
+      ticking.steps[0].link === "Open Tailscale's DNS page",
+    JSON.stringify(ticking)
+  );
+
+  await set("https-off");
+  const off = await reads(
+    "MagicDNS on, no certificates, no operator",
+    (r) => stepsOf(r) === "enable-https:stands operator:stands"
+  );
+  kit.check(
+    "4: MagicDNS on with no certificates reads enable-https first, the operator standing",
+    off.step === "enable-https",
+    JSON.stringify(off)
+  );
+  const httpsOff = await until(
+    "Turn on HTTPS Certificates",
+    async () => (await readRow(page)) ?? undefined,
+    (row) => row.steps[0]?.label === "Turn on HTTPS Certificates",
+    30_000
+  );
+  kit.check(
+    "4: the admin step says Turn on HTTPS Certificates alone",
+    httpsOff.steps[1]?.command === COMMAND,
+    JSON.stringify(httpsOff)
+  );
+
+  await set("denied");
+  const denied = await reads(
+    "certificates on, cert refused",
+    (r) => stepsOf(r) === "enable-https:done operator:stands"
+  );
+  kit.check(
+    "4: certificates on with cert access denied (no prefs to read) reads the admin step done, the operator standing with its command",
+    denied.step === "operator" && denied.command === COMMAND,
+    JSON.stringify(denied)
+  );
+  const httpsOn = await capture(
+    "https-on",
+    (row) => row.steps[0]?.done === true && row.steps[1]?.done === false
+  );
+  kit.check(
+    "4: the admin step ticks by itself, and the command stands whole",
+    httpsOn.steps[0]?.ticked === true &&
+      httpsOn.steps[0].label === "Turn on HTTPS Certificates" &&
+      httpsOn.steps[0].link === null &&
+      httpsOn.steps[1]?.command === COMMAND,
+    JSON.stringify(httpsOn)
+  );
+
+  kit.check(
+    "3–4: a step whose label wraps to two lines (at 320px) keeps its mark on the first line's centre within 0.5px",
+    wrapped.length > 0 &&
+      wrapped.every((todo) => todo.markOff !== null && todo.markOff <= 0.5),
+    JSON.stringify(
+      wrapped.map(({ label, lines, markOff }) => ({ label, lines, markOff }))
+    )
   );
 
   // 5. HTTPS on: the row ticks, the hub serves the name and hands it out.
@@ -220,17 +536,14 @@ const run = async (kit: Kit) => {
     on.dashboard === https,
     JSON.stringify(on)
   );
-  await page.waitForFunction(
-    (selector) =>
-      document.querySelector(selector)?.textContent?.includes("HTTPS is on."),
-    ROW,
-    { timeout: 30_000 }
+  const ticked = await capture("done", (row) =>
+    row.want.startsWith("HTTPS is on.")
   );
-  const ticked = await readRow(page);
   kit.check(
-    "5: the row ticks: HTTPS is on, and its one button opens the https dashboard",
-    ticked?.want ===
+    "5: the row ticks: HTTPS is on, no steps, and its one button opens the https dashboard",
+    ticked.want ===
       `HTTPS is on. Every device on your tailnet opens CawCo at ${https}.` &&
+      ticked.steps.length === 0 &&
       ticked.button === "Open the HTTPS dashboard" &&
       ticked.href === https,
     JSON.stringify(ticked)
