@@ -756,9 +756,7 @@ async function walkTape(
       played.stop();
     }
     const on = [sheet, hub ?? ""].filter(Boolean).join(" ");
-    into.misses.push(
-      ...played.misses().map((m) => (on ? `${on}: ${m}` : m))
-    );
+    into.misses.push(...played.misses().map((m) => (on ? `${on}: ${m}` : m)));
   }
 }
 
