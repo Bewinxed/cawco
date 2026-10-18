@@ -910,7 +910,7 @@
     {#if readProblem}
       <!-- literal: 46ch -->
       <p
-        class="m-auto max-w-(--problem-w) p-space-6 type-body text-ink-muted"
+        class="m-auto max-w-(--problem-w) p-space-6 type-body text-ink-muted wrap-anywhere"
         role="alert"
         style:--problem-w="46ch"
         in:crossIn
@@ -923,7 +923,7 @@
            does. Its own stacking: what is raised inside it (an Earlier row's
            mark) stays under the foot fade as it scrolls past the composer. -->
       <div
-        class="flex flex-auto flex-col justify-center min-h-0 pt-space-6 px-space-5 pb-(--composer-clearance) overflow-y-auto isolate"
+        class="flex flex-auto flex-col justify-center min-h-0 pt-space-6 px-space-5 pb-(--composer-clearance) overflow-y-auto overscroll-contain isolate"
         data-thread-hero
         in:crossIn
       >
