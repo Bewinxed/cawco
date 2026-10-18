@@ -2250,7 +2250,15 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
 /**
  * How the runner starts one command, a perl program (no single quote,
  * backslash or `${`: it goes into bash single quotes inside this template).
- * Every command leads a process group of its own. In a place
+ * Every command leads a process group of its own and starts with stdin,
+ * stdout and stderr alone: the launcher closes every other fd it inherits
+ * (listed in /dev/fd). The runner's process substitutions leave their pipes'
+ * write ends open in it (bash keeps `/dev/fd/63` and `/dev/fd/62` beside the
+ * fds 1 and 2 they were opened onto), and a job the command leaves running,
+ * `nohup sleep 2999 > /dev/null 2>&1 &`, kept them: each `cat` copying a
+ * stream into its FIFO saw no end, so the executor waited on its output as
+ * long as the job ran (stage 2's workspace rig, nightly 0776f5fd8, timed out
+ * after 900 s on that command). In a place
  * (`CAWCO_PLACE`, a person's own folder) nothing it starts outlives it:
  * the launcher makes itself the command's child subreaper (Linux
  * `prctl(PR_SET_CHILD_SUBREAPER)`, 36, by the machine's syscall number), so
@@ -2262,6 +2270,7 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
  * there. macOS has no subreaper: the command's group goes.
  */
 const LAUNCH = [
+  'if (opendir(my $fds, "/dev/fd")) { my @open = grep { /^[0-9]+$/ && $_ > 2 } readdir($fds); closedir($fds); POSIX::close($_) for @open; }',
   "setpgrp(0, 0);",
   "exec @ARGV unless $ENV{CAWCO_PLACE};",
   'if ($^O eq "linux") {',
