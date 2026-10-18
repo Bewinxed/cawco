@@ -489,6 +489,13 @@ const APPROVE_PUSH = /^Approve .+ on Approve the deploy push$/;
 
 /** How long the push's session takes to answer its approval: its tool run and its reply. */
 const ANSWER_MS = 3000;
+/**
+ * How long a suggestion chip may take: the composer's pause after the last
+ * keystroke (suggest.svelte.ts SUGGEST_PAUSE_MS, 1.5s) and the hub's own
+ * wait on Jev (hub suggest.ts SUGGEST_TIMEOUT_MS, 10s), with room for the
+ * answer to draw. A page's default 10s is shorter than the product's own.
+ */
+const SUGGESTED_MS = 15_000;
 
 /**
  * A tab switched to whose session moved on behind the tab shown: the
@@ -497,14 +504,16 @@ const ANSWER_MS = 3000;
  * `hold`: requestAnimationFrame, then setTimeout 0).
  *
  * The deploy push's session (the route) is put behind the chips session's
- * tab and built there, the page's time running as any act's does. Then the
- * walk's clock is paused where it stands: Playwright's clock "overrides
- * native global classes and functions related to time", setInterval and
- * requestAnimationFrame among them (https://playwright.dev/docs/clock), so
- * the rebuild scheduler's turn (scheduler.svelte.ts CADENCE, 250ms) cannot
- * come round and the hidden pane builds nothing more. Its permission is
- * approved from the needs panel: the hub answers with its turn (recorded on
- * the `written` hub), which its rows have not built. Its tab is activated
+ * tab and built there, and the needs panel opened on its permission, the
+ * page's time running as any act's does: the panel opens a frame and a task
+ * after the press (NeedsCaw `choose`). Then the walk's clock is paused
+ * where it stands: Playwright's clock "overrides native global classes and
+ * functions related to time", setInterval and requestAnimationFrame among
+ * them (https://playwright.dev/docs/clock), so the rebuild scheduler's turn
+ * (scheduler.svelte.ts CADENCE, 250ms) cannot come round and the hidden
+ * pane builds nothing more. The permission is approved (the answer goes out
+ * on the socket in the press's own task): the hub answers with its turn
+ * (recorded on the `written` hub), which its rows have not built. Its tab is activated
  * in the page (`click()`, as Enter activates it), the pointer off the page:
  * a tab under the pointer builds its pane (PaneTabs `onpointerenter`). The
  * catch-up's release waits on a frame and a timer the paused clock does not
@@ -524,14 +533,17 @@ const caughtUp = async (page: Page, scene: Scene) => {
     .locator(`[data-pane="${behind}"] [role=log]`)
     .waitFor({ state: "attached" });
   await page.waitForTimeout(1500);
-  // Paused at Date's own (pinned) moment: no page time moves from here.
-  await page.clock.pauseAt(await page.evaluate(() => Date.now()));
   await page.click("[data-needs-caw]");
-  await page
+  const approve = page
     .getByRole("button", { name: APPROVE_PUSH })
     .filter({ visible: true })
-    .first()
-    .click();
+    .first();
+  // Every check a press makes (visible, still, enabled, the one the pointer
+  // hits), with nothing pressed: the panel open as far as it opens.
+  await approve.click({ trial: true });
+  // Paused at Date's own (pinned) moment: no page time moves from here.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+  await approve.click();
   await page.waitForTimeout(ANSWER_MS);
   await page.keyboard.press("Escape");
   await page.mouse.move(-1, -1);
@@ -1569,7 +1581,7 @@ export const SURFACES: Surface[] = [
           await page
             .locator("[data-slot=suggest] fieldset button")
             .first()
-            .waitFor();
+            .waitFor({ timeout: SUGGESTED_MS });
         },
         root: MAIN,
       },
