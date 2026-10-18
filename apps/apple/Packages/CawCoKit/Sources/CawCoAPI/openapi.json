@@ -30265,6 +30265,9 @@
             "$ref": "#/components/schemas/AccountBorrowFrame"
           },
           {
+            "$ref": "#/components/schemas/BrowserFrame"
+          },
+          {
             "$ref": "#/components/schemas/WorkflowFrame"
           }
         ],
@@ -30315,6 +30318,7 @@
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "command_queue": "#/components/schemas/CommandQueueFrame",
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
+            "browsers": "#/components/schemas/BrowserFrame",
             "workflow": "#/components/schemas/WorkflowFrame"
           }
         }
@@ -41216,6 +41220,13 @@
         "description": "Optional machine tools. Reporting never installs or impersonates a tool.",
         "type": "object",
         "properties": {
+          "addresses": {
+            "description": "`public-address` only: the machine's global unicast addresses, outside private, link-local and CGNAT ranges.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "available": {
             "type": "boolean"
           },
@@ -52218,6 +52229,212 @@
           "requestId"
         ]
       },
+      "BrowserFrame": {
+        "description": "Daemon-originated: the machine's runtime and every browser on it, whole, on each change.",
+        "type": "object",
+        "properties": {
+          "browsers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrowserRow"
+            }
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "browsers"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/BrowserRuntime"
+          }
+        },
+        "required": [
+          "browsers",
+          "kind",
+          "machineId",
+          "runtime"
+        ]
+      },
+      "BrowserRow": {
+        "description": "One browser as its machine reports it.",
+        "type": "object",
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/BrowserHostKind"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "lastUsedAt": {
+            "description": "ms epoch of the last agent connection or viewer.",
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ports": {
+            "$ref": "#/components/schemas/BrowserPorts",
+            "description": "One browser's ports; `http` and `media` are the container host's alone."
+          },
+          "progress": {
+            "description": "How far an image build is, while `state` is `pulling` or `building`.",
+            "type": "object",
+            "properties": {
+              "done": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              },
+              "what": {
+                "type": "string",
+                "enum": [
+                  "image"
+                ]
+              }
+            },
+            "required": [
+              "done",
+              "total",
+              "what"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/BrowserState"
+          },
+          "takeover": {
+            "description": "Who holds the browser privately, since when, and the ask it answers; null while no one does.",
+            "type": "object",
+            "properties": {
+              "by": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "since": {
+                "type": "number"
+              },
+              "requestId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "by",
+              "since"
+            ]
+          },
+          "viewers": {
+            "type": "number"
+          },
+          "why": {
+            "description": "Why it is `failed`, one sentence.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "key",
+          "lastUsedAt",
+          "name",
+          "state",
+          "viewers"
+        ]
+      },
+      "BrowserHostKind": {
+        "description": "Which host runs a browser on its machine: a container where a runtime answers, a local Chromium where none does.",
+        "type": "string",
+        "enum": [
+          "container",
+          "local"
+        ]
+      },
+      "BrowserKey": {
+        "description": "Which browser: a project's, or the machine's for sessions outside any project.",
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^project:.*$"
+          },
+          {
+            "type": "string",
+            "pattern": "^machine:.*$"
+          }
+        ]
+      },
+      "BrowserPorts": {
+        "description": "One browser's ports; `http` and `media` are the container host's alone.",
+        "type": "object",
+        "properties": {
+          "devtools": {
+            "type": "number"
+          },
+          "gate": {
+            "type": "number"
+          },
+          "http": {
+            "type": "number"
+          },
+          "media": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "devtools",
+          "gate"
+        ]
+      },
+      "BrowserState": {
+        "type": "string",
+        "enum": [
+          "asleep",
+          "building",
+          "failed",
+          "live",
+          "pulling",
+          "starting",
+          "stopping"
+        ]
+      },
+      "BrowserRuntime": {
+        "description": "The machine's container runtime as the agent found it, or the sentence that names the install.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "$ref": "#/components/schemas/BrowserRuntimeKind"
+              },
+              "endpoint": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "endpoint",
+              "kind",
+              "version"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "missing": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "missing"
+            ]
+          }
+        ]
+      },
       "WorkflowFrame": {
         "description": "Hub-originated run transition, separate from a harness's session frames.",
         "type": "object",
@@ -52755,6 +52972,13 @@
           "manual"
         ]
       },
+      "BrowserRuntimeKind": {
+        "type": "string",
+        "enum": [
+          "docker",
+          "podman"
+        ]
+      },
       "CatalogTypeSource": {
         "type": "string",
         "enum": [
@@ -53008,10 +53232,12 @@
         "enum": [
           "browser",
           "claude",
+          "container-runtime",
           "git",
           "node",
           "opencode",
           "pi",
+          "public-address",
           "service-manager"
         ]
       },

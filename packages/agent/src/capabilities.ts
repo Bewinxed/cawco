@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
-import { homedir, platform } from "node:os";
+import { BlockList } from "node:net";
+import { homedir, networkInterfaces, platform } from "node:os";
 import { join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type {
@@ -8,6 +9,11 @@ import type {
 } from "@cawco/core/capabilities";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
+import {
+  findRuntime,
+  runtimeInstallCommand,
+  runtimeMissing,
+} from "./browser/runtime";
 import { claudeHostVersion } from "./claude-version";
 import { opencodeBinary } from "./harnesses/opencode-client";
 import { probeStarted } from "./probe-count";
@@ -64,6 +70,51 @@ function playwrightBrowser(): string | undefined {
   }
   return undefined;
 }
+
+/** Addresses no screen out on the internet reaches the machine by: private, CGNAT, link-local, loopback, documentation, multicast and reserved. */
+const NOT_PUBLIC = new BlockList();
+for (const [address, prefix] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 3],
+] as const) {
+  NOT_PUBLIC.addSubnet(address, prefix, "ipv4");
+}
+for (const [address, prefix] of [
+  ["::", 3],
+  ["4000::", 2],
+  ["8000::", 1],
+  ["2001:db8::", 32],
+] as const) {
+  NOT_PUBLIC.addSubnet(address, prefix, "ipv6");
+}
+
+/** Every global unicast address of the machine's interfaces (a stream relay listens on one, Projects spec §5.11). */
+const publicAddresses = (): string[] => [
+  ...new Set(
+    Object.values(networkInterfaces()).flatMap((addresses) =>
+      (addresses ?? [])
+        .filter(
+          (one) =>
+            !NOT_PUBLIC.check(
+              one.address,
+              one.family === "IPv4" ? "ipv4" : "ipv6"
+            )
+        )
+        .map((one) => one.address)
+    )
+  ),
+];
 
 function linuxInstall(pkg: string): string {
   if (resolveBin("apt-get")) {
@@ -168,6 +219,8 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
   const nodeInstall =
     'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . "$HOME/.nvm/nvm.sh" && nvm install 24';
   const opencode = await opencodeBinary();
+  const runtime = await findRuntime();
+  const addresses = publicAddresses();
   const opencodeAdvice = await installAdvice("opencode");
   const items: MachineCapability[] = [
     {
@@ -216,6 +269,28 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
         ? "brew install --cask google-chrome && brew install node@24"
         : `${node ? "node --version" : nodeInstall} && npx --yes playwright install --with-deps chromium`,
       ...(node ? {} : { reason: "Browser tools also require Node/npm" }),
+    },
+    {
+      // The browser's container runtime (browser/runtime.ts); without one the
+      // browser runs as a local Chromium (`browser` above).
+      id: "container-runtime",
+      available: !("missing" in runtime),
+      installCommand: runtimeInstallCommand(),
+      ...("missing" in runtime
+        ? { reason: runtimeMissing() }
+        : {
+            path: runtime.endpoint,
+            version: `${runtime.kind} ${runtime.version}`,
+          }),
+    },
+    {
+      id: "public-address",
+      available: addresses.length > 0,
+      addresses,
+      installCommand: "",
+      ...(addresses.length
+        ? {}
+        : { reason: "No interface of this machine holds a public address" }),
     },
     {
       id: "service-manager",

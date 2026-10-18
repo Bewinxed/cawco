@@ -69,6 +69,14 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
+  BROWSER_REMOVE,
+  BROWSER_START,
+  BROWSER_STOP,
+  type BrowserKey,
+  type BrowserStartArgs,
+  isBrowserKey,
+} from "@cawco/core/browser";
+import {
   CUSTODY_BOUND_MS,
   type HandoverCommand,
   type HandoverEvent,
@@ -121,6 +129,13 @@ import {
   takeUpstreamRules,
   watchQuietBoundaries,
 } from "./boundary";
+import {
+  removeBrowser,
+  setBrowserSink,
+  startBrowser,
+  stopBrowser,
+  watchBrowsers,
+} from "./browser/browsers";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
@@ -210,6 +225,15 @@ const takeUpstream = (
       `[workspace] the hub's upstream rules could not be written: ${error instanceof Error ? error.message : String(error)}`
     );
   });
+};
+
+/** The key a `browser.stop` or `browser.remove` names (`{ key }`), or a refusal saying what came. */
+const browserKeyOf = (args: unknown): BrowserKey => {
+  const key = (args as { key?: unknown } | null)?.key;
+  if (!isBrowserKey(key)) {
+    throw new Error(`${JSON.stringify(args)} names no browser key.`);
+  }
+  return key;
 };
 
 /** The hub's session limits, said to every keeper, which starts each child under them from here; said in the log once each time they change. */
@@ -1922,8 +1946,8 @@ const attach = (
       }
       // Usage and workflow-run transitions originate at the hub, never at a
       // daemon; machine-scoped control replies do travel through this sink,
-      // without an instanceId. A move's progress and a command's slot wait
-      // go out on `emit`.
+      // without an instanceId. A move's progress, a command's slot wait, a
+      // stage's and the browsers' frames go out on `emit`.
       if (
         frame.kind === "usage" ||
         frame.kind === "workflow" ||
@@ -1931,7 +1955,8 @@ const attach = (
         frame.kind === "moves" ||
         frame.kind === "move_progress" ||
         frame.kind === "command_queue" ||
-        frame.kind === "stage"
+        frame.kind === "stage" ||
+        frame.kind === "browsers"
       ) {
         return false;
       }
@@ -2934,6 +2959,29 @@ export const startDaemon = (rediscover = false) =>
       }
       return makeUpstreamPost(id, post);
     });
+    // A project's browser (browser/browsers.ts): started or woken on its
+    // machine's host, stopped, removed; the whole list told on each change.
+    setBrowserSink(machineIdValue, (frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    supervisor.registerDaemonFunction(BROWSER_START, (args) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : startBrowser(args as BrowserStartArgs)
+    );
+    supervisor.registerDaemonFunction(BROWSER_STOP, async (args) =>
+      stopBrowser(browserKeyOf(args))
+    );
+    supervisor.registerDaemonFunction(BROWSER_REMOVE, async (args) =>
+      removeBrowser(browserKeyOf(args))
+    );
+    yield* Effect.forkScoped(
+      Effect.promise(() =>
+        watchBrowsers().catch((error: unknown) =>
+          console.warn(`[browser] not watched: ${String(error)}`)
+        )
+      )
+    );
     // Live components: a workspace's stage, started or woken, and a sheet's stories (stage.ts).
     setStageSink((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })

@@ -17,6 +17,7 @@ import {
 } from "@cawco/core";
 import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
+import { BrowserCommandError } from "./browser";
 import { ConnectionKeyError } from "./connections";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { OwnerApprovalError, ownerFetch } from "./owner";
@@ -50,6 +51,9 @@ Usage
   cawco sessiond                          run this machine's session keeper
   cawco dashboard                         serve the built dashboard on its inherited socket
   cawco capabilities                      report optional machine tools and install commands
+  cawco browser list                      this machine's container runtime and browsers
+  cawco browser <start|stop|remove> <key> start (or wake), stop, or remove with its profile,
+                                          the browser of project:<id> or machine:<id>
   cawco status [--hub <url>] [--verbose]  print the hub it found, and the fleet
   cawco service <${SERVICE_ACTIONS.join("|")}> [service...]
                                             run cawco as per-user services
@@ -752,6 +756,15 @@ const runTool = async (args: Args): Promise<number> => {
   return 0;
 };
 
+/** `cawco browser <list|start|stop|remove> [key]`: this machine's browsers (browser.ts). */
+const runBrowserCommand = async (args: Args): Promise<number> => {
+  const { runBrowser } = await import("./browser");
+  for (const line of await runBrowser(args.action, args.rest[0])) {
+    console.log(line);
+  }
+  return 0;
+};
+
 /** `cawco heavy-run <command>`: its one argument is a shell command, whatever it starts with. */
 const runHeavy = async (argv: string[]): Promise<number> => {
   const [command] = argv;
@@ -846,6 +859,8 @@ const run = async (argv: string[]): Promise<number> => {
       console.log(JSON.stringify(await probeCapabilities(), null, 2));
       return 0;
     }
+    case "browser":
+      return runBrowserCommand(args);
     case "up":
       return up(args);
     case "hub":
@@ -889,7 +904,8 @@ const code = await (
     error instanceof ConnectionKeyError ||
     error instanceof RelayError ||
     error instanceof PairingError ||
-    error instanceof OwnerApprovalError
+    error instanceof OwnerApprovalError ||
+    error instanceof BrowserCommandError
   ) {
     console.error(`cawco: ${error.message}`);
     return 1;

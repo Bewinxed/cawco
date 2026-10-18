@@ -3266,6 +3266,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "stage") {
     return;
   }
+  // A machine's browsers travel machine → hub only; the hub's browser registry reads them.
+  if (frame.kind === "browsers") {
+    return;
+  }
 
   const target = session(frame.instanceId);
 

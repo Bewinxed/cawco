@@ -243,6 +243,9 @@ export async function buildBinary(options: {
       join(ROOT, "packages/agent/src/upstream-shim.ts"),
     ],
     ["boundary/upstream-guard.ts", join(work, "upstream-guard.ts")],
+    // A project's browser image's build context, sent to the machine's
+    // container runtime as it is (agent browser/image.ts).
+    ...(await filesUnder(join(ROOT, "packages/agent/browser"), "browser")),
   ] as [string, string][];
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;
   const [platform, arch] = options.target.split("-");
@@ -272,7 +275,11 @@ export async function buildBinary(options: {
       autoloadBunfig: false,
     },
     minify: true,
-    external: ["playwright-core"],
+    // cpu-features: an optional native addon of ssh2 (dockerode's
+    // docker-modem loads it), built by no install here; ssh2 requires it
+    // inside a try and goes on without it, and the browser runtime speaks to
+    // unix sockets alone, never SSH.
+    external: ["playwright-core", "cpu-features"],
     define: {
       __CAWCO_RELEASE__: "true",
       __CAWCO_VERSION__: JSON.stringify(options.version),

@@ -1,5 +1,7 @@
 /** Optional machine tools. Reporting never installs or impersonates a tool. */
 export interface MachineCapability {
+  /** `public-address` only: the machine's global unicast addresses, outside private, link-local and CGNAT ranges. */
+  addresses?: string[];
   available: boolean;
   id:
     | "git"
@@ -8,6 +10,8 @@ export interface MachineCapability {
     | "pi"
     | "node"
     | "browser"
+    | "container-runtime"
+    | "public-address"
     | "service-manager";
   /**
    * What installs it here. Empty when nothing may: a copy came some way

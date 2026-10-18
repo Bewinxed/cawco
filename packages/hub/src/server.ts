@@ -26949,6 +26949,11 @@ export const createServer = (
                 );
                 break;
               }
+              // A machine's browsers, whole: the hub's browser registry is
+              // where they are read (Projects spec §5.11); no screen is sent them.
+              if (kind === "browsers") {
+                break;
+              }
               if (kind === "move_progress") {
                 moves.progress(
                   message.machineId,

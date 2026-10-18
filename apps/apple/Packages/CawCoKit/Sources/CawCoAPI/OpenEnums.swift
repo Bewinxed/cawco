@@ -905,6 +905,135 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/BrowserHostKind`.
+    public enum BrowserHostKind: OpenEnum {
+        case container
+        case local
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "container": self = .container
+            case "local": self = .local
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .container: "container"
+            case .local: "local"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.container, .local]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/BrowserRuntimeKind`.
+    public enum BrowserRuntimeKind: OpenEnum {
+        case docker
+        case podman
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "docker": self = .docker
+            case "podman": self = .podman
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .docker: "docker"
+            case .podman: "podman"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.docker, .podman]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/BrowserState`.
+    public enum BrowserState: OpenEnum {
+        case asleep
+        case building
+        case failed
+        case live
+        case pulling
+        case starting
+        case stopping
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "asleep": self = .asleep
+            case "building": self = .building
+            case "failed": self = .failed
+            case "live": self = .live
+            case "pulling": self = .pulling
+            case "starting": self = .starting
+            case "stopping": self = .stopping
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .asleep: "asleep"
+            case .building: "building"
+            case .failed: "failed"
+            case .live: "live"
+            case .pulling: "pulling"
+            case .starting: "starting"
+            case .stopping: "stopping"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.asleep, .building, .failed, .live, .pulling, .starting, .stopping]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/CallerKind`.
     public enum CallerKind: OpenEnum {
         case anonymous
@@ -3520,10 +3649,12 @@ public enum OpenEnums {
     public enum MachineCapabilityId: OpenEnum {
         case browser
         case claude
+        case containerRuntime
         case git
         case node
         case opencode
         case pi
+        case publicAddress
         case serviceManager
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
@@ -3532,10 +3663,12 @@ public enum OpenEnums {
             switch rawValue {
             case "browser": self = .browser
             case "claude": self = .claude
+            case "container-runtime": self = .containerRuntime
             case "git": self = .git
             case "node": self = .node
             case "opencode": self = .opencode
             case "pi": self = .pi
+            case "public-address": self = .publicAddress
             case "service-manager": self = .serviceManager
             default: self = .unrecognized(rawValue)
             }
@@ -3545,10 +3678,12 @@ public enum OpenEnums {
             switch self {
             case .browser: "browser"
             case .claude: "claude"
+            case .containerRuntime: "container-runtime"
             case .git: "git"
             case .node: "node"
             case .opencode: "opencode"
             case .pi: "pi"
+            case .publicAddress: "public-address"
             case .serviceManager: "service-manager"
             case let .unrecognized(rawValue): rawValue
             }
@@ -3558,7 +3693,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.browser, .claude, .git, .node, .opencode, .pi, .serviceManager]
+        public static let allCases: [Self] = [.browser, .claude, .containerRuntime, .git, .node, .opencode, .pi, .publicAddress, .serviceManager]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

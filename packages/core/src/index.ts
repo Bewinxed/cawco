@@ -13,6 +13,8 @@ export * from "./archive";
 export * from "./attachments";
 // Pages are blocks: a project page's arrangement, kept by the hub.
 export * from "./blocks";
+// A project's browser: its key, the agent's ports, the daemon's frame and the hub's commands.
+export * from "./browser";
 // An artifact's `state`: one entry per choice or field, and its bounds.
 export * from "./choices";
 // Claude Code's dir names, as a screen, a message or a shell script names them (paths.ts owns the paths).
@@ -1516,6 +1518,8 @@ export type FramePayload =
   | import("./stage").StageFrame
   /** Daemon-originated: a borrowed sign-in near its expiry, asking for a fresh one. */
   | import("./accounts").AccountBorrowFrame
+  /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
+  | import("./browser").BrowserFrame
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 

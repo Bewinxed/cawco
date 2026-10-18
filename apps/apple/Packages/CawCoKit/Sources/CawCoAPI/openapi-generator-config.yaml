@@ -30,6 +30,9 @@ typeOverrides:
     BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
     BlockPage: OpenEnums.BlockPage
     BlockWidth: OpenEnums.BlockWidth
+    BrowserHostKind: OpenEnums.BrowserHostKind
+    BrowserRuntimeKind: OpenEnums.BrowserRuntimeKind
+    BrowserState: OpenEnums.BrowserState
     CallerKind: OpenEnums.CallerKind
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
