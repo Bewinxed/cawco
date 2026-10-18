@@ -22,6 +22,7 @@
  * argv, a file, a job's lines or the database.
  */
 
+import { lookup } from "node:dns/promises";
 import {
   chmodSync,
   existsSync,
@@ -29,6 +30,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
+import { connect } from "node:net";
 import { homedir, hostname, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -64,11 +66,14 @@ const OUTPUT_MS = 3000;
 
 /**
  * Runs a short command and answers its stdout, or undefined when it failed.
- * One that did not answer in time is said once in the log, apart from a
- * failure, and its rows are not listed.
+ * One that did not answer in time (`ms`) is said once in the log, apart from
+ * a failure, and what it would answer is not had.
  */
-const output = async (argv: string[]): Promise<string | undefined> => {
-  const ran = await readWithin(OUTPUT_MS, async (signal) => {
+const output = async (
+  argv: string[],
+  ms = OUTPUT_MS
+): Promise<string | undefined> => {
+  const ran = await readWithin(ms, async (signal) => {
     const child = Bun.spawn(argv, {
       stdout: "pipe",
       stderr: "ignore",
@@ -86,7 +91,7 @@ const output = async (argv: string[]): Promise<string | undefined> => {
       return ran.value;
     case "unanswered":
       console.warn(
-        `[join] ${argv.join(" ")} did not answer within ${Math.round(ran.after / 1000)} s; what it would list is not listed`
+        `[join] ${argv.join(" ")} did not answer within ${Math.round(ran.after / 1000)} s; what it would answer is not had`
       );
       return;
     default: {
@@ -354,73 +359,270 @@ const trustCommand = (key: string): string | null => {
 const remoteCommand = (body: string): string =>
   `exec sh -c 'p=$PPID; ( while ps -p "$p" >/dev/null 2>&1; do sleep 1; done; kill -TERM 0 ) >/dev/null 2>&1 & w=$!; ${body}; s=$?; kill "$w" 2>/dev/null; exit $s'`;
 
-/** Everything the output says went wrong, most specific first. */
-const UNREACHABLE = [
-  "Connection refused",
-  "Connection timed out",
-  "Operation timed out",
-  "No route to host",
-  "Could not resolve hostname",
-  "Network is unreachable",
-  // ServerAliveInterval's end: `Connection to <host> port <port> timed out`.
-  "timed out",
-];
+/**
+ * The step an add fails on when `ssh` ended before the remote command said
+ * anything: ssh refused the session. Once the hub has reached the machine's
+ * port and found its host key as it knows it ({@link beforeSsh}), that is
+ * the sign-in, most often; but `ssh` exits 255 for every failure of its own
+ * (ssh(1) EXIT STATUS), so which one is in ssh's words, shown below it.
+ */
+const SIGN_IN_STEP = "signing in over SSH";
 
 /**
- * `ssh`'s last word when no way of signing in worked, with the ways the
- * machine had left to offer: `user@host: Permission denied (publickey,password).`
+ * What went wrong once `ssh` ran, off its exit and the step lines the remote
+ * command printed (CawCo's own): the download through the hub's connection,
+ * a machine that never came online, or the step it stopped on. Whether the
+ * machine was reachable, and its host key, are settled before `ssh` runs
+ * ({@link beforeSsh}), never read off ssh's words.
  */
-const DENIED = /Permission denied \(([^)]*)\)/;
-
-/** The ways of signing in a password answers. */
-const BY_PASSWORD = new Set(["password", "keyboard-interactive"]);
-
 const problemOf = (
   lines: readonly string[],
   exitCode: number,
-  machineId: string | null,
-  byPassword: boolean
+  machineId: string | null
 ): SshJoinProblem => {
-  const text = lines.join("\n");
   const steps = lines.filter((line) => line.startsWith(INSTALL_STEP_PREFIX));
-  // ssh's own 255 with nothing from the script: the session never started.
-  const unstarted = exitCode === 255 && steps.length === 0;
-  const denied = unstarted ? DENIED.exec(text) : null;
-  if (denied && byPassword) {
-    const offered = (denied[1] ?? "").split(",").filter(Boolean);
-    // A machine that offered ways and none of them a password never asked for it.
-    return {
-      kind: "password",
-      asked:
-        offered.length === 0 || offered.some((way) => BY_PASSWORD.has(way)),
-    };
-  }
-  if (denied?.[1]?.startsWith("publickey")) {
-    return { kind: "key" };
-  }
-  if (
-    text.includes("REMOTE HOST IDENTIFICATION HAS CHANGED") ||
-    text.includes("Host key verification failed")
-  ) {
-    return { kind: "host-key" };
-  }
-  const unreachable = UNREACHABLE.find((said) => text.includes(said));
-  if (unreachable && unstarted) {
-    return {
-      kind: "unreachable",
-      detail:
-        lines.find((line) => line.includes(unreachable))?.trim() ?? unreachable,
-    };
-  }
   const last = steps.at(-1)?.slice(INSTALL_STEP_PREFIX.length);
-  if (last?.startsWith(DOWNLOAD_STEP) && UNREACHED.test(text)) {
+  if (last?.startsWith(DOWNLOAD_STEP) && UNREACHED.test(lines.join("\n"))) {
     return { kind: "download" };
   }
   if (exitCode === 0 && machineId) {
     return { kind: "unregistered" };
   }
-  // No step line at all: it never signed in, for a reason none of the above names.
-  return { kind: "step", step: last ?? "connecting over SSH" };
+  return { kind: "step", step: last ?? SIGN_IN_STEP };
+};
+
+/**
+ * Where `ssh` connects for a target, as `ssh -G` resolves it after its config
+ * (ssh(1) `-G`: one `keyword value` line each): the host and port, the
+ * known-hosts files it checks the host key in and the name it looks it up by
+ * (ssh_config(5) HostKeyAlias as it is; else the host, `[host]:port` off port
+ * 22, sshd(8) SSH_KNOWN_HOSTS FILE FORMAT), and whether it goes through
+ * another host (ProxyJump, ProxyCommand), which the hub cannot reach the way
+ * `ssh` does.
+ */
+interface SshDestination {
+  host: string;
+  keyName: string;
+  knownHosts: string[];
+  port: number;
+  proxied: boolean;
+}
+
+const destinationOf = async (
+  target: string,
+  port: number | null
+): Promise<SshDestination | undefined> => {
+  const said = await output([
+    "ssh",
+    "-G",
+    ...(port === null ? [] : ["-p", String(port)]),
+    "--",
+    target,
+  ]);
+  if (said === undefined) {
+    return;
+  }
+  const config = new Map<string, string>();
+  for (const line of said.split("\n")) {
+    const at = line.indexOf(" ");
+    if (at > 0) {
+      config.set(line.slice(0, at), line.slice(at + 1).trim());
+    }
+  }
+  const host = config.get("hostname");
+  const at = Number(config.get("port"));
+  if (!(host && Number.isInteger(at))) {
+    return;
+  }
+  const set = (keyword: string): boolean => {
+    const value = config.get(keyword);
+    return value !== undefined && value !== "none";
+  };
+  const files = (keyword: string): string[] =>
+    (config.get(keyword) ?? "").split(" ").filter(Boolean);
+  return {
+    host,
+    port: at,
+    keyName:
+      config.get("hostkeyalias") ?? (at === 22 ? host : `[${host}]:${at}`),
+    knownHosts: [
+      ...files("userknownhostsfile"),
+      ...files("globalknownhostsfile"),
+    ].filter((file) => existsSync(file)),
+    proxied: set("proxyjump") || set("proxycommand"),
+  };
+};
+
+/** getaddrinfo's errors for a name that does not resolve (EAI_*, as Node names them). */
+const UNRESOLVED = new Set([
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EAI_NONAME",
+  "EAI_FAIL",
+  "EAI_NODATA",
+  "ENODATA",
+]);
+
+/** connect(2)'s errors, in the words the add says them in. */
+const CONNECT_ERRORS: Record<string, string> = {
+  ECONNREFUSED: "connection refused",
+  EHOSTUNREACH: "no route to host",
+  EHOSTDOWN: "the host is down",
+  ENETUNREACH: "the network is unreachable",
+  ENETDOWN: "the network is down",
+  ETIMEDOUT: "no answer",
+};
+
+/** One TCP connect from the hub to `address`: undefined once it connects, else connect(2)'s errno. */
+const tcpConnect = (
+  address: string,
+  port: number
+): Promise<string | undefined> =>
+  new Promise((resolve) => {
+    const socket = connect({ host: address, port, timeout: CONNECT_S * 1000 });
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(undefined);
+    });
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve("ETIMEDOUT");
+    });
+    socket.once("error", (error: NodeJS.ErrnoException) => {
+      socket.destroy();
+      resolve(error.code ?? "EIO");
+    });
+  });
+
+/**
+ * Whether the hub reaches `host` on `port`, as `ssh` would first: the name
+ * resolved, then a TCP connect to each of its addresses in turn until one
+ * answers. Unreachable, by getaddrinfo's or connect(2)'s errno: the name did
+ * not resolve, the port refused, no route, or no answer within ssh's own
+ * ConnectTimeout.
+ */
+const reach = async (
+  host: string,
+  port: number
+): Promise<SshJoinProblem | undefined> => {
+  const addresses = await lookup(host, { all: true }).then(
+    (found) => found.map(({ address }) => address),
+    (error: NodeJS.ErrnoException) => error.code ?? "EIO"
+  );
+  if (typeof addresses === "string") {
+    return {
+      kind: "unreachable",
+      detail: UNRESOLVED.has(addresses)
+        ? `the name ${host} did not resolve`
+        : `looking up ${host} failed: ${addresses}`,
+    };
+  }
+  let failed = "ENOTFOUND";
+  for (const address of addresses) {
+    // biome-ignore lint/performance/noAwaitInLoops: one address after another, as ssh tries them
+    const code = await tcpConnect(address, port);
+    if (code === undefined) {
+      return;
+    }
+    failed = code;
+  }
+  return {
+    kind: "unreachable",
+    detail:
+      addresses.length === 0
+        ? `the name ${host} did not resolve`
+        : (CONNECT_ERRORS[failed] ?? `connecting failed: ${failed}`),
+  };
+};
+
+/**
+ * The keys of a known-hosts line, `type blob` each, from `ssh-keygen -F`'s
+ * answer: a line is `[marker] hosts type blob [comment]` (sshd(8)), and its
+ * `#` lines are ssh-keygen's own notes. A `@cert-authority` line vouches by
+ * certificate, which a plain key cannot be compared with: `null`.
+ */
+const knownKeysOf = (said: string): Set<string> | null => {
+  const keys = new Set<string>();
+  for (const line of said.split("\n")) {
+    const fields = line.trim().split(WHITESPACE);
+    if (!fields[0] || fields[0].startsWith("#")) {
+      continue;
+    }
+    if (fields[0] === "@cert-authority") {
+      return null;
+    }
+    const [, type, blob] = fields[0].startsWith("@") ? fields.slice(1) : fields;
+    if (type && blob) {
+      keys.add(`${type} ${blob}`);
+    }
+  }
+  return keys;
+};
+
+const WHITESPACE = /\s+/;
+
+/**
+ * Whether the machine's host key is one this hub's `ssh` knows it by: what
+ * `ssh-keyscan` hears from the machine against what `ssh-keygen -F` finds in
+ * each known-hosts file `ssh` reads. Changed when the hub knows keys for it
+ * and the machine offers none of them; a machine the hub knows no key for is
+ * new, which `ssh` takes (StrictHostKeyChecking=accept-new, ssh-tunnels.ts).
+ * Not changed, too, when either side could not be read: `ssh` then decides.
+ */
+const hostKeyChanged = async (to: SshDestination): Promise<boolean> => {
+  const known = new Set<string>();
+  for (const file of to.knownHosts) {
+    // biome-ignore lint/performance/noAwaitInLoops: a few files, each a short local read
+    const said = await output(["ssh-keygen", "-F", to.keyName, "-f", file]);
+    const keys = said === undefined ? new Set<string>() : knownKeysOf(said);
+    if (keys === null) {
+      return false;
+    }
+    for (const key of keys) {
+      known.add(key);
+    }
+  }
+  if (known.size === 0) {
+    return false;
+  }
+  const scanned = await output(
+    [
+      "ssh-keyscan",
+      "-T",
+      String(CONNECT_S),
+      "-p",
+      String(to.port),
+      "--",
+      to.host,
+    ],
+    (CONNECT_S + 5) * 1000
+  );
+  const offered = scanned === undefined ? null : knownKeysOf(scanned);
+  if (!offered || offered.size === 0) {
+    return false;
+  }
+  return ![...offered].some((key) => known.has(key));
+};
+
+/**
+ * What stops an add before any `ssh` runs: the machine's port unreachable
+ * from the hub ({@link reach}), or its host key not the one the hub knows
+ * ({@link hostKeyChanged}). A target that goes through another host, or one
+ * `ssh -G` could not resolve, is `ssh`'s to try.
+ */
+export const beforeSsh = async (
+  target: string,
+  port: number | null
+): Promise<SshJoinProblem | undefined> => {
+  const to = await destinationOf(target, port);
+  if (!to || to.proxied) {
+    return;
+  }
+  const unreached = await reach(to.host, to.port);
+  if (unreached) {
+    return unreached;
+  }
+  return (await hostKeyChanged(to)) ? { kind: "host-key" } : undefined;
 };
 
 /**
@@ -432,7 +634,7 @@ const tunnelProblem = (
 ): SshJoinProblem =>
   outcome.refusal
     ? { kind: "step", step: refusalStep(outcome.refusal) }
-    : problemOf(outcome.lines, outcome.code ?? 255, null, false);
+    : problemOf(outcome.lines, outcome.code ?? 255, null);
 
 interface JoinDeps {
   /** Runs each finished job's forgetting until the hub closes. */
@@ -478,15 +680,7 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
   const runs = new Map<string, Run>();
 
   const fail = (job: SshJoinJob, problem: SshJoinProblem): void => {
-    // The `password` kind rides beside a null `problem` while an installable
-    // app reads `problem` closed: the bridge's one place (scripts/
-    // wire-compat.ts BRIDGES). Once the guard says no shipped reader needs
-    // it, this and `passwordProblem` go.
-    if (problem.kind === "password") {
-      job.passwordProblem = { asked: problem.asked };
-    } else {
-      job.problem = problem;
-    }
+    job.problem = problem;
     job.state = "failed";
   };
 
@@ -504,7 +698,7 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
         return;
       }
     }
-    fail(job, problemOf(job.lines, exitCode ?? -1, machineId, false));
+    fail(job, problemOf(job.lines, exitCode ?? -1, machineId));
   };
 
   /** One line of the add's output, kept as the dialog reads it. */
@@ -612,6 +806,17 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
     run: Run,
     trust: { password: string; command: string } | null
   ): Promise<void> => {
+    const stopped = await Promise.race([
+      beforeSsh(job.target, job.port),
+      run.halt,
+    ]);
+    if (run.stopped) {
+      return;
+    }
+    if (stopped) {
+      fail(job, stopped);
+      return;
+    }
     if (trust) {
       const code = await session(job, run, trust.password, trust.command);
       if (run.stopped) {
@@ -619,7 +824,7 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
       }
       if (code !== 0) {
         job.exitCode = code;
-        fail(job, problemOf(job.lines, code, null, true));
+        fail(job, problemOf(job.lines, code, null));
         return;
       }
     }

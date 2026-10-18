@@ -217,7 +217,6 @@ final class AddMachineController: KitDialogController {
         _ = hub.fleet.machines
         infoAlert.label.text = join.infoError
         infoAlert.isHidden = join.infoError == nil
-        if join.job?.problem?.value1 != nil || join.job?.passwordProblem?.asked == false { keyOpen = true }
         render()
         // Once a second while the install is still going.
         if join.job?.state == .running, poller == nil {
@@ -468,32 +467,22 @@ final class AddMachineController: KitDialogController {
         guard let job = join.job, job.state == .failed else { return nil }
         let host = job.target.split(separator: "@").last.map(String.init) ?? job.target
         let tail = Array(job.lines.suffix(20))
-        // The `password` kind, sent beside a null `problem` while a shipped
-        // app reads `problem` closed (core join.ts; hub scripts/wire-compat.ts).
-        if let refused = job.passwordProblem {
-            guard refused.asked else {
-                return ("\(job.target) does not take a password over SSH, only a key. Add the key below to ~/.ssh/authorized_keys on that machine, then Retry with the password left empty.", [])
-            }
-            let user = job.target.contains("@") ? job.target.split(separator: "@").dropLast().joined(separator: "@") : nil
-            return ("\(host) refused that password\(user.map { " for \($0)" } ?? ""). Nothing was installed. Check the password, then Retry.", [])
-        }
+        // The problem's union in core join.ts order: host-key, unreachable,
+        // download, step, unregistered.
         guard let problem = job.problem else { return join.refused.map { ($0, []) } }
         if problem.value1 != nil {
-            return ("\(job.target) refused this hub's SSH key. Add the key below to ~/.ssh/authorized_keys on that machine, then Retry.", [])
-        }
-        if problem.value2 != nil {
             return ("\(job.target) answered with a different SSH host key than this hub saw before, so the hub stopped. If the machine was reinstalled, remove the old key on the hub with ssh-keygen -R \(host), then Retry.", [])
         }
-        if let unreachable = problem.value3 {
+        if let unreachable = problem.value2 {
             return ("\(job.target) did not answer on port \(Int(job.port ?? 22)) (\(unreachable.detail)). Check the address and that SSH is running there, then Retry.", [])
         }
-        if problem.value4 != nil {
+        if problem.value3 != nil {
             return ("\(host) signed in, but the install script didn't come through this hub's SSH connection. Its last output is below. Retry.", tail)
         }
-        if let step = problem.value5 {
+        if let step = problem.value4 {
             return ("The step \"\(step.step)\" failed on \(job.target). Its last output is below. Fix what it names, then Retry.", tail)
         }
-        if problem.value6 != nil {
+        if problem.value5 != nil {
             return ("CawCo installed on \(job.target), but the machine never came online on this hub through its SSH connection. Its last output is below. Retry.", tail)
         }
         return nil

@@ -10,7 +10,7 @@
    * and ends in `cawco binary-install agent`, and the fleet is what says it worked.
    * Both end on the same view: the title, the joined row and Close.
    */
-  import type { SshJoinJob, SshJoinProblem } from "@cawco/core";
+  import type { SshJoinJob } from "@cawco/core";
   import { INSTALL_STEP_PREFIX, machineLabel } from "@cawco/core";
   import { MediaQuery } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -233,21 +233,6 @@
   const hostOf = (value: string): string => value.split("@").at(-1) ?? value;
 
   /**
-   * What went wrong, with the `password` kind read from where the hub sends
-   * it while a shipped app reads `problem` closed: `passwordProblem`, beside
-   * a null `problem` (core join.ts; the bridge in hub scripts/wire-compat.ts).
-   */
-  const problemOf = (run: SshJoinJob): SshJoinProblem | null =>
-    run.problem ??
-    (run.passwordProblem
-      ? { kind: "password", asked: run.passwordProblem.asked }
-      : null);
-
-  /** Who the run signed in as, when its target names one: `bewinxed` in `bewinxed@box`. */
-  const userOf = (value: string): string | null =>
-    value.includes("@") ? value.slice(0, value.lastIndexOf("@")) : null;
-
-  /**
    * A failed run, said with the error formula: what happened, why, how to fix
    * it, what next. The key and the output ride along where they are the fix.
    */
@@ -256,16 +241,11 @@
       return null;
     }
     const where = job.target;
-    const problem = problemOf(job);
+    const { problem } = job;
     if (!problem) {
       return { text: sshJoin.refused ?? "", tail: [] as string[] };
     }
     switch (problem.kind) {
-      case "key":
-        return {
-          text: `${where} refused this hub's SSH key. Add the key below to ~/.ssh/authorized_keys on that machine, then Retry.`,
-          tail: [],
-        };
       case "host-key":
         return {
           text: `${where} answered with a different SSH host key than this hub saw before, so the hub stopped. If the machine was reinstalled, remove the old key on the hub with ssh-keygen -R ${hostOf(where)}, then Retry.`,
@@ -291,30 +271,8 @@
           text: `CawCo installed on ${where}, but the machine never came online on this hub through its SSH connection. Its last output is below. Retry.`,
           tail: job.lines.slice(-20),
         };
-      case "password": {
-        const user = userOf(where);
-        return problem.asked
-          ? {
-              text: `${hostOf(where)} refused that password${user ? ` for ${user}` : ""}. Nothing was installed. Check the password, then Retry.`,
-              tail: [],
-            }
-          : {
-              text: `${where} does not take a password over SSH, only a key. Add the key below to ~/.ssh/authorized_keys on that machine, then Retry with the password left empty.`,
-              tail: [],
-            };
-      }
       default:
         return null;
-    }
-  });
-
-  $effect.pre(() => {
-    const problem = job ? problemOf(job) : null;
-    if (
-      problem?.kind === "key" ||
-      (problem?.kind === "password" && !problem.asked)
-    ) {
-      keyOpen = true;
     }
   });
 </script>

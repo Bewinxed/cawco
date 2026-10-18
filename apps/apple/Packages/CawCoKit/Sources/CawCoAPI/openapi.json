@@ -39392,7 +39392,7 @@
           },
           "passwordProblem": {
             "$ref": "#/components/schemas/SshPasswordProblem",
-            "description": "The password add's refusal, with `problem` null: the SshJoinProblem kind\n`password`, held back while an installable app reads `problem` closed (a\nbridge, hub scripts/wire-compat.ts BRIDGES)."
+            "description": "Never sent: declared while an installable app reads it (TestFlight\n20261018), as the wire check (hub scripts/openapi.ts) counts a property\ngone from the schema as gone from what that app receives. A password ssh\nrefused is the sign-in `step` now, in ssh's words. It goes once no\ninstallable app reads it."
           },
           "port": {
             "type": [
@@ -39402,20 +39402,6 @@
           },
           "problem": {
             "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "key"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
-              },
               {
                 "type": "object",
                 "properties": {
@@ -39493,24 +39479,6 @@
                 "required": [
                   "kind"
                 ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "password"
-                    ]
-                  },
-                  "asked": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "asked",
-                  "kind"
-                ]
               }
             ]
           },
@@ -39534,11 +39502,10 @@
         ]
       },
       "SshPasswordProblem": {
-        "description": "SshJoinProblem's `password` as the wire carries it, beside a null `problem`.",
+        "description": "A password add's refusal as the shipped apps read it (TestFlight 20261018): the hub no longer sends one.",
         "type": "object",
         "properties": {
           "asked": {
-            "description": "Whether the machine asked for a password at all: true, it refused this\none; false, it takes none over SSH, only a key.",
             "type": "boolean"
           }
         },

@@ -55,37 +55,29 @@ export interface SshJoinRequest {
 }
 
 /**
- * Why an SSH add failed, as read off its output. The wording is the
- * dashboard's; the hub only says which case it is.
+ * Why an SSH add failed. The wording is the dashboard's; the hub only says
+ * which case it is, decided by what it measured (a TCP connect's errno, the
+ * host keys compared, the remote command's own step lines), never by ssh's
+ * words. A sign-in ssh refused is the `step` it stopped on, ssh's words
+ * shown below it: ssh exits 255 for every failure of its own.
  */
 export type SshJoinProblem =
-  /** The machine refused the hub's key. */
-  | { kind: "key" }
-  /** The machine's host key is not the one the hub saw before. */
+  /** The machine's host key is not one the hub knows it by (ssh-keyscan against ssh-keygen -F). */
   | { kind: "host-key" }
-  /** Nothing answered on that address and port, or the name did not resolve. */
+  /**
+   * The hub's TCP connect to that address and port failed, or the name did
+   * not resolve: `detail` says which, by its errno.
+   */
   | { kind: "unreachable"; detail: string }
   /** SSH got in, but the machine's `curl` of the script through the hub's connection failed. */
   | { kind: "download" }
   /** A step of the install script or `cawco join` failed. */
   | { kind: "step"; step: string }
   /** Everything ran, but the hub never saw the machine come online. */
-  | { kind: "unregistered" }
-  /**
-   * Held back from the wire: an app that reads `problem` closed (TestFlight
-   * 20261015) cannot read it, so the hub sends it as
-   * {@link SshJoinJob.passwordProblem} beside a null `problem` (hub join.ts
-   * `settle`; the bridge in hub scripts/wire-compat.ts) until no installable
-   * app needs that. Declared here so the apps built from now on read it.
-   */
-  | { kind: "password"; asked: boolean };
+  | { kind: "unregistered" };
 
-/** SshJoinProblem's `password` as the wire carries it, beside a null `problem`. */
+/** A password add's refusal as the shipped apps read it (TestFlight 20261018): the hub no longer sends one. */
 export interface SshPasswordProblem {
-  /**
-   * Whether the machine asked for a password at all: true, it refused this
-   * one; false, it takes none over SSH, only a key.
-   */
   asked: boolean;
 }
 
@@ -108,9 +100,11 @@ export interface SshJoinJob {
   /** From the `joined as` line, once it has been printed. */
   machineId: string | null;
   /**
-   * The password add's refusal, with `problem` null: the SshJoinProblem kind
-   * `password`, held back while an installable app reads `problem` closed (a
-   * bridge, hub scripts/wire-compat.ts BRIDGES).
+   * Never sent: declared while an installable app reads it (TestFlight
+   * 20261018), as the wire check (hub scripts/openapi.ts) counts a property
+   * gone from the schema as gone from what that app receives. A password ssh
+   * refused is the sign-in `step` now, in ssh's words. It goes once no
+   * installable app reads it.
    */
   passwordProblem?: SshPasswordProblem;
   port: number | null;
