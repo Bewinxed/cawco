@@ -361,7 +361,8 @@
       return;
     }
     const id = paneId;
-    loadedPanes.enter({ id, onScreen: untrack(() => onScreen), unload });
+    // Its tab's state as it is when the bound is applied, not as it was here.
+    loadedPanes.enter({ id, onScreen: () => onScreen, unload });
     return () => loadedPanes.leave(id);
   });
   $effect(() => {
@@ -1422,6 +1423,22 @@
       letGo(holder, held.id);
       stage = undefined;
     };
+  });
+  /*
+   * The canvas, standing in this panel while its conversation's tab is off
+   * screen, is held as a page is (the overlay's hold.ts, in its host page);
+   * it is never let go, as the stage keeps its one iframe wherever it stands.
+   * Anywhere else (the tab in view, the canvas in the composer) it runs, and
+   * a page loaded again while held (`connected` anew) is held again.
+   */
+  $effect(() => {
+    const one = isCanvas ? stage : undefined;
+    if (!one?.connected) {
+      return;
+    }
+    one.post({
+      type: !onScreen && one.at === "panel" ? "cawco:hold" : "cawco:release",
+    });
   });
   /** Undock (or Done here): the session's composer takes the canvas back, open or as its chip. */
   function giveBack(folded: boolean) {

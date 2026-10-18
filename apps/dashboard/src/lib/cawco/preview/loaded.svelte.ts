@@ -10,6 +10,14 @@
  *
  * A pane that mounts off screen (a tab restored behind another) holds no
  * page until its tab is first shown.
+ *
+ * A switch puts one pane away and shows another, and each pane says so from
+ * its own effect, in whatever order the tree runs them: the arriving pane
+ * may still count as hidden, the one hidden longest, when the leaving one
+ * says it went. So the bound is applied once the switch has settled (the
+ * microtask after it), and only to panes whose tab is off screen then, as
+ * each pane's own `onScreen` says: a pane being shown is never let go by the
+ * switch that shows it.
  */
 import { layoutPolicy } from "../workspace/layout-policy.svelte";
 
@@ -21,18 +29,39 @@ interface Entry {
   hiddenAt: number | null;
   /** Whether it holds its page. */
   loaded: boolean;
+  /** Whether its tab is in view now, as the pane's own prop says. */
+  onScreen: () => boolean;
   /** Lets its page go: the pane's frame goes, and loads again once shown. */
   unload: () => void;
 }
 
 const panes = new Map<string, Entry>();
+let settling = false;
+
+/** Past the bound, the panes off screen hidden longest let their page go. */
+function settle() {
+  settling = false;
+  const kept = [...panes.values()]
+    .filter((one) => one.loaded && one.hiddenAt !== null && !one.onScreen())
+    .sort((a, b) => (a.hiddenAt ?? 0) - (b.hiddenAt ?? 0));
+  for (const one of kept.slice(0, Math.max(0, kept.length - loadedHidden()))) {
+    one.loaded = false;
+    one.unload();
+  }
+}
 
 export const loadedPanes = {
   /** A pane mounted: it holds its page from the start only on screen. */
-  enter(pane: { id: string; onScreen: boolean; unload: () => void }): void {
+  enter(pane: {
+    id: string;
+    onScreen: () => boolean;
+    unload: () => void;
+  }): void {
+    const onScreen = pane.onScreen();
     panes.set(pane.id, {
-      hiddenAt: pane.onScreen ? null : performance.now(),
-      loaded: pane.onScreen,
+      hiddenAt: onScreen ? null : performance.now(),
+      loaded: onScreen,
+      onScreen: pane.onScreen,
       unload: () => pane.unload(),
     });
   },
@@ -46,22 +75,16 @@ export const loadedPanes = {
     }
   },
 
-  /** Pane `id`'s tab went off screen: past the bound, the one hidden longest lets its page go. */
+  /** Pane `id`'s tab went off screen: once the switch has settled, the bound is applied. */
   hidden(id: string): void {
     const entry = panes.get(id);
     if (!entry || entry.hiddenAt !== null) {
       return;
     }
     entry.hiddenAt = performance.now();
-    const kept = [...panes.values()]
-      .filter((one) => one.loaded && one.hiddenAt !== null)
-      .sort((a, b) => (a.hiddenAt ?? 0) - (b.hiddenAt ?? 0));
-    for (const one of kept.slice(
-      0,
-      Math.max(0, kept.length - loadedHidden())
-    )) {
-      one.loaded = false;
-      one.unload();
+    if (!settling) {
+      settling = true;
+      queueMicrotask(settle);
     }
   },
 

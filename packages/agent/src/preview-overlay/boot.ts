@@ -55,23 +55,6 @@ export function parentMark(): OverlayMark | null {
 }
 
 /**
- * The same-origin parent's document while it is still parsing, its overlay
- * perhaps not yet loaded (a page with no head has it injected at the end of
- * its body); null otherwise.
- */
-export function parentParsing(): Document | null {
-  if (window.parent === window) {
-    return null;
-  }
-  try {
-    const { document: parent } = window.parent;
-    return parent.readyState === "loading" ? parent : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Every in-place navigation of this document's history is told
  * (`here.navigated`), so the overlay places its marks again and the pane
  * reads the page's path. The page is served at the root of its own origin,

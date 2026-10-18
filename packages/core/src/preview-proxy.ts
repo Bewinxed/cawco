@@ -7,8 +7,9 @@ import { embeddedFile, standalone } from "./runtime";
 /** Where every previewed page loads the overlay from, on its own origin. */
 export const OVERLAY_PATH = "/__cawco/overlay.js";
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/i;
-const HEAD_CLOSE = /<\/head\s*>/i;
-const BODY = /<\/body\s*>/i;
+const HTML_OPEN = /<html(\s[^>]*)?\s*>/i;
+const DOCTYPE = /^\s*<!doctype[^>]*>/i;
+const SCRIPT_OPEN = /<script\b/i;
 let overlay: Promise<string> | undefined;
 
 /**
@@ -271,11 +272,30 @@ const ATTRIBUTE_ESCAPES: Record<string, string> = {
 };
 
 /**
- * The page with the overlay's script tag in it, carrying the page's hash and
- * `data` as `data-*` attributes (the hub's page artifacts add their id and
- * their document's state, so the overlay fills the page before it paints).
- * First child of <head>, so it runs before Vite's deferred `/@vite/client`
- * module; else before </head> or </body>; else at the end.
+ * Where the overlay's tag goes: before every script of the page's, so its
+ * hold (preview-overlay hold.ts) wraps each frame and timer the page asks
+ * for, and before Vite's deferred `/@vite/client` module. First in <head>;
+ * with no <head>, after <html> or the doctype, where the parser opens the
+ * head for it; with neither, first of all. A script standing before that
+ * place comes after the tag. A head-less page once had the tag at its body's
+ * end, after its own scripts: an interval it started there kept running
+ * while its tab was off screen, held or not.
+ */
+function overlayAt(html: string): number {
+  const after = (pattern: RegExp) => {
+    const found = pattern.exec(html);
+    return found ? found.index + found[0].length : null;
+  };
+  const place = after(HEAD_OPEN) ?? after(HTML_OPEN) ?? after(DOCTYPE) ?? 0;
+  const script = html.search(SCRIPT_OPEN);
+  return script !== -1 && script < place ? script : place;
+}
+
+/**
+ * The page with the overlay's script tag in it ({@link overlayAt}), carrying
+ * the page's hash and `data` as `data-*` attributes (the hub's page
+ * artifacts add their id and their document's state, so the overlay fills
+ * the page before it paints).
  */
 export function injectOverlay(
   html: string,
@@ -288,16 +308,8 @@ export function injectOverlay(
     )
     .join("");
   const script = `<script src="${OVERLAY_PATH}" data-page-hash="${pageHash(html)}"${extra}></script>`;
-  if (HEAD_OPEN.test(html)) {
-    return html.replace(HEAD_OPEN, (match) => match + script);
-  }
-  if (HEAD_CLOSE.test(html)) {
-    return html.replace(HEAD_CLOSE, (match) => script + match);
-  }
-  if (BODY.test(html)) {
-    return html.replace(BODY, (match) => script + match);
-  }
-  return html + script;
+  const at = overlayAt(html);
+  return html.slice(0, at) + script + html.slice(at);
 }
 
 /*

@@ -8,9 +8,9 @@
  * costs the tab in front; held, it keeps its document and costs nothing, and
  * the tab's return shows it as it was, with no reload.
  *
- * Installed by the entry (overlay.ts) as the overlay script runs, first in
- * <head> (core `injectOverlay`) and before any of the page's own, so every
- * callback the page asks for is one of these. Held, nothing is armed with
+ * Installed by the entry (overlay.ts) as the overlay script runs, before
+ * every script of the page's (core `injectOverlay`, head or no head), so
+ * every callback the page asks for is one of these. Held, nothing is armed with
  * the browser: a timer due meanwhile runs on release, an interval starts
  * again, a frame's callback runs in the first frame after it. Cooperative:
  * a Worker, a socket's messages and a MessageChannel go on.
