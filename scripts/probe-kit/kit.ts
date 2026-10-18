@@ -480,6 +480,8 @@ export class Run {
     const offered = new Set<string>();
     const contexts: BrowserContext[] = [];
     const ends: (() => Promise<void>)[] = [];
+    /** The run's failures before this spec: more after it, and it failed. */
+    const failuresBefore = this.failures;
     const out = join(
       process.env.TMPDIR ?? join(ROOT, ".probe"),
       "probe-kit",
@@ -550,7 +552,10 @@ export class Run {
           (await served)?.child.kill();
           (await servedDev)?.child.kill();
           await fleet.close();
-          await fleet.clean(false);
+          // A spec that failed keeps its fleet's sandbox, HOME and runtime
+          // dir (their logs, its delegates' workspaces) and says where: what
+          // says why is otherwise gone with the run.
+          await fleet.clean(this.failures > failuresBefore);
         });
         return Object.assign(fleet, {
           dashboard: () => {
