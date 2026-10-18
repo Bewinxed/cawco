@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { PreviewSource } from "@cawco/core";
+import { PREVIEW_PING_PATH, type PreviewSource } from "@cawco/core";
 import {
   cachePreview,
   causeOf,
@@ -392,7 +392,8 @@ async function start(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
     async fetch(request, server) {
       // `/__cawco/*` (the overlay among it) is the hub listener's own and
-      // never reaches here.
+      // never reaches here, but the ping, which the hub relays to learn this
+      // listener answers (hub preview.ts `pingSession`).
       const url = new URL(request.url);
       // The hub's relay alone, before anything here acts on the request or
       // tells the app it comes from its own localhost: a request straight to
@@ -409,6 +410,9 @@ async function start(
           `refused a request to ${url.pathname} that its hub didn't relay`
         );
         return notRelayed();
+      }
+      if (url.pathname === PREVIEW_PING_PATH) {
+        return new Response("ok", { headers: { "cache-control": "no-store" } });
       }
       let response: Response;
       /** A folder's file at its folder's key: kept for good. */

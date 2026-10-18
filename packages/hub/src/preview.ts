@@ -13,6 +13,7 @@ import {
   type PreviewSource,
   readEnv,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import {
   cachePreview,
@@ -388,6 +389,82 @@ const ping = (): Response =>
     },
   });
 
+/** The probe's answer when what serves the page doesn't answer the hub: 502, and why in the hub's words, which the pane says. */
+const pingFailed = (why: string): Response =>
+  Response.json(
+    { why },
+    {
+      status: 502,
+      headers: {
+        "access-control-allow-origin": "*",
+        "cache-control": "no-store",
+      },
+    }
+  );
+
+/** How long the machine's listener has to answer the ping's relay. Our call: under the pane's own 10 s for the whole probe. */
+const PING_RELAY_MS = 5000;
+
+/** A thrown fetch's short name for the pane: its code (`ECONNRESET`), else its kind. */
+const codeOf = (error: unknown): string => {
+  const { code } = (error ?? {}) as { code?: unknown };
+  if (typeof code === "string") {
+    return code;
+  }
+  return error instanceof Error ? error.name : String(error);
+};
+
+/**
+ * The ping on session `instanceId`'s origin: ok once whatever serves its
+ * page answers the hub. A page the hub serves, or no preview at all (the
+ * frame's own load says it is closed), is the hub's answer alone; a
+ * machine's preview is reached (started when no listener serves it) and its
+ * listener asked for its own ping, so a listener that is gone answers 502
+ * with why, and is forgotten as a request's is ({@link relay}).
+ */
+async function pingSession(
+  instanceId: string,
+  deps: PreviewListenerDeps
+): Promise<Response> {
+  const target = previewTargets.get(instanceId);
+  if (
+    !target ||
+    ("page" in target.source && target.artifact.kind !== "sheet")
+  ) {
+    return ping();
+  }
+  const reached = await deps.reach(instanceId);
+  if (!reached.ok) {
+    return reached.down === "closed" ? ping() : pingFailed(reached.error);
+  }
+  const at = reached.upstream;
+  const address = at.address.includes(":") ? `[${at.address}]` : at.address;
+  const failed = (cause: string, code: string): Response => {
+    previewFailed(
+      HOP,
+      instanceId,
+      `its machine's listener at ${address}:${at.port} didn't answer the ping: ${cause}`
+    );
+    deps.unreachable(instanceId, at);
+    return pingFailed(`its machine's listener didn't answer the hub (${code})`);
+  };
+  try {
+    const read = await readWithin(PING_RELAY_MS, (signal) =>
+      fetch(`http://${address}:${at.port}${PREVIEW_PING_PATH}`, {
+        headers: { [RELAY_HEADER]: at.token },
+        signal,
+      })
+    );
+    if (read.kind !== "answered") {
+      return failed(`no answer within ${read.after} ms`, "timeout");
+    }
+    await read.value.body?.cancel();
+    return ping();
+  } catch (error) {
+    return failed(causeOf(error), codeOf(error));
+  }
+}
+
 /** `cookie` without the dashboard's own (core `DASHBOARD_COOKIE`). */
 const appCookies = (header: string | null): string | null => {
   if (!header) {
@@ -514,7 +591,7 @@ async function serveSession(
   const url = new URL(request.url);
   const { pathname } = url;
   if (pathname === PREVIEW_PING_PATH) {
-    return ping();
+    return pingSession(instanceId, deps);
   }
   if (pathname === OVERLAY_PATH) {
     return overlayResponse(

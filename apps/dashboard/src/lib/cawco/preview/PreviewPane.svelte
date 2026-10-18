@@ -12,6 +12,7 @@
     type ShownFailure,
     sheetWords,
   } from "@cawco/core";
+  import { readWithin } from "@cawco/core/bounded";
   import { type PreviewMode, previewMode } from "@cawco/core/comments";
   import { type Snippet, untrack } from "svelte";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
@@ -275,41 +276,132 @@
     "This preview turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then try again.";
   /**
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
-   * which answers any page with no credentials): probed once per origin,
-   * before the frame loads. Unreached, the pane says what previews need
-   * and where to switch how they are reached: never a fallback.
+   * which answers any page with no credentials, and answers 502 with the
+   * hub's words when the session's machine listener doesn't answer the hub),
+   * before the frame loads. Unreached, the pane says what failed, what
+   * previews need and where to switch how they are reached, and probes again
+   * by itself (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once
+   * when its tab is back in view) until one answers: never a fallback. Once
+   * reached, the frame loads, once.
    */
-  let reached = $state<{ origin: string; ok: boolean } | null>(null);
-  let unreachedWhy = $state("");
+  let reached = $state<
+    | { origin: string; ok: true }
+    | { origin: string; ok: false; said: string; hub: boolean; tries: number }
+    | null
+  >(null);
+  /** Each one probes the origin again: Try again's press, the backoff's timer, the tab back in view. */
+  let probe = $state(0);
+  let probing = $state(false);
+  let previewsNeedFor = $state({ origin: "", said: "" });
+  /** Our call: a probe that hasn't answered in 10 s is a failed one, and the next goes on the backoff. */
+  const PROBE_ANSWER_MS = 10_000;
+  /** Our calls: the first probe again 2 s after a failure, doubling to every 30 s. */
+  const PROBE_FIRST_MS = 2000;
+  const PROBE_MOST_MS = 30_000;
   $effect(() => {
     const origin = paneOrigin;
-    if (!origin || reached?.origin === origin) {
+    // biome-ignore lint/complexity/noVoid: read-only dependency — each bump probes again
+    void probe;
+    if (!origin || untrack(() => reached?.origin === origin && reached.ok)) {
       return;
     }
     let live = true;
-    fetch(`${origin}${PREVIEW_PING_PATH}`, {
-      mode: "cors",
-      credentials: "omit",
-      cache: "no-store",
-    })
-      .then((answer) => answer.ok)
-      .catch(() => false)
-      .then(async (ok) => {
+    probing = true;
+    pingOrigin(origin).then(async (failed) => {
+      if (!live) {
+        return;
+      }
+      if (failed && !failed.hub && previewsNeedFor.origin !== origin) {
+        previewsNeedFor = { origin, said: await previewsNeed(origin) };
         if (!live) {
           return;
         }
-        if (!ok) {
-          unreachedWhy = await previewsNeed(origin);
-        }
-        reached = { origin, ok };
-      });
+      }
+      probing = false;
+      const was = untrack(() => reached);
+      reached = failed
+        ? {
+            origin,
+            ok: false,
+            ...failed,
+            tries: was?.origin === origin && !was.ok ? was.tries + 1 : 1,
+          }
+        : { origin, ok: true };
+    });
     return () => {
       live = false;
+      probing = false;
     };
   });
-  const unreached = $derived(
-    !!paneOrigin && reached?.origin === paneOrigin && !reached.ok
+  let seenBefore = true;
+  $effect(() => {
+    const failed = reached;
+    const seen = inView && onScreen;
+    const back = seen && !seenBefore;
+    seenBefore = seen;
+    if (!(seen && failed && !failed.ok && failed.origin === paneOrigin)) {
+      return;
+    }
+    if (back) {
+      untrack(() => {
+        probe += 1;
+      });
+      return;
+    }
+    const timer = setTimeout(
+      () => {
+        probe += 1;
+      },
+      Math.min(PROBE_FIRST_MS * 2 ** (failed.tries - 1), PROBE_MOST_MS)
+    );
+    return () => clearTimeout(timer);
+  });
+  const unreachedBy = $derived(
+    reached && !reached.ok && reached.origin === paneOrigin ? reached : null
   );
+  const unreached = $derived(!!paneOrigin && !!unreachedBy);
+  /**
+   * What `origin`'s probe failed on, after its host: no answer, a status,
+   * or the hub's own words (`hub`, so the origin itself was reached); null
+   * when it answered ok.
+   */
+  async function pingOrigin(
+    origin: string
+  ): Promise<{ said: string; hub: boolean } | null> {
+    const { host } = new URL(origin);
+    const read = await readWithin(PROBE_ANSWER_MS, (signal) =>
+      fetch(`${origin}${PREVIEW_PING_PATH}`, {
+        mode: "cors",
+        credentials: "omit",
+        cache: "no-store",
+        signal,
+      })
+    ).catch(() => null);
+    if (read?.kind !== "answered") {
+      return {
+        said: read
+          ? `${host} didn't answer within ${PROBE_ANSWER_MS / 1000} s`
+          : `${host} didn't answer`,
+        hub: false,
+      };
+    }
+    const answer = read.value;
+    if (answer.ok) {
+      return null;
+    }
+    const why = await answer
+      .json()
+      .then((body: { why?: unknown }) =>
+        typeof body?.why === "string"
+          ? body.why.replace(TRAILING_STOP, "")
+          : null
+      )
+      .catch(() => null);
+    return why
+      ? { said: `${host} answered ${answer.status}: ${why}`, hub: true }
+      : { said: `${host} answered ${answer.status}`, hub: false };
+  }
+  const TRAILING_STOP = /\.$/;
   /** What previews need to be reached from this tab, by the route it took. */
   async function previewsNeed(origin: string): Promise<string> {
     if (byHost) {
@@ -1730,12 +1822,15 @@
       bind:this={canvasSlot}
     ></div>
   {:else if unreached}
-    <!-- This tab can't reach the preview's own origin: what previews need,
-         and where to switch how they are reached. -->
+    <!-- This tab can't reach the preview's own origin: what failed, what
+         previews need unless the hub itself answered, and where to switch
+         how they are reached. -->
     <div data-slot="down" class="down" role="alert" transition:appear>
       <EmptyState icon={IconAlert} title="This preview can't be reached">
         {#snippet line()}
-          {unreachedWhy}.
+          {unreachedBy?.said}.
+          {#if !unreachedBy?.hub && previewsNeedFor.origin === paneOrigin}{previewsNeedFor.said}.{/if}
+          Trying again on its own.
         {/snippet}
         {#snippet action()}
           <div class="down-actions">
@@ -1743,8 +1838,10 @@
               icon={IconRefresh}
               label="Try again"
               onclick={() => {
-                reached = null;
+                probe += 1;
               }}
+              pending={probing}
+              pendingLabel="Trying again…"
               size="sm"
               variant="outline"
             />
