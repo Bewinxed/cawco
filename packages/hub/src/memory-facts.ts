@@ -786,6 +786,37 @@ interface ProseUnit {
 }
 
 /**
+ * The fenced blocks of a prose file, line by line: each a claim of its own,
+ * never the tail of the paragraph or item before it nor the head of what
+ * follows. The reader answers whether `raw` belonged to a block; `close`
+ * ends the unit open before one, `start` opens the block's own.
+ */
+const fencedBlocks = (
+  close: () => void,
+  start: (unit: ProseUnit) => void
+): ((raw: string, line: number) => boolean) => {
+  let unit: ProseUnit | undefined;
+  return (raw, line) => {
+    const fence = FENCE.test(raw);
+    if (!(fence || unit)) {
+      return false;
+    }
+    if (!unit) {
+      close();
+      unit = { heading: false, lines: [], words: [] };
+      start(unit);
+    }
+    unit.lines.push(line);
+    unit.words.push(raw.trim());
+    if (fence && unit.lines.length > 1) {
+      unit = undefined;
+      close();
+    }
+    return true;
+  };
+};
+
+/**
  * A prose file's claims, in order: each list item (with the lines it
  * continues onto), each paragraph and each fenced block is one; a heading
  * after the first line stays a heading; the first line, a heading, is the
@@ -794,7 +825,6 @@ interface ProseUnit {
 const proseUnits = (content: string): ProseUnit[] => {
   const units: ProseUnit[] = [];
   let open: ProseUnit | undefined;
-  let fenced = false;
   let kind: "item" | "paragraph" = "paragraph";
   const close = () => {
     if (open) {
@@ -802,18 +832,12 @@ const proseUnits = (content: string): ProseUnit[] => {
     }
     open = undefined;
   };
+  const block = fencedBlocks(close, (unit) => {
+    open = unit;
+  });
   for (const [index, raw] of content.split("\n").entries()) {
     const line = index + 1;
-    if (FENCE.test(raw)) {
-      fenced = !fenced;
-      open ??= { heading: false, lines: [], words: [] };
-      open.lines.push(line);
-      open.words.push(raw.trim());
-      continue;
-    }
-    if (fenced) {
-      open?.lines.push(line);
-      open?.words.push(raw.trim());
+    if (block(raw, line)) {
       continue;
     }
     const item = LIST_ITEM.exec(raw);
