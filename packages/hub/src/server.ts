@@ -695,6 +695,7 @@ import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
 import { sourceFacts } from "./source-facts";
+import { createSshDoor } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
 import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
@@ -3305,12 +3306,22 @@ export const createServer = (
 
   /**
    * The SSH connection the hub holds to each machine it added over SSH
-   * (ssh-tunnels.ts): the machine's agent reaches the hub through it, and
-   * the hub reaches its preview listeners the same way. Every joined
-   * machine's is opened once the hub serves.
+   * (ssh-tunnels.ts): the machine's agent reaches the hub through it, at
+   * the door that holds every caller to a proof of what it is
+   * (ssh-door.ts), and the hub reaches its preview listeners the same way.
+   * The door opens, then every joined machine's connection, once the hub
+   * serves.
    */
-  const sshTunnels = createSshTunnels({ db: db.sshMachines, lifetime });
-  offBoot.push(() => sshTunnels.start());
+  const sshDoor = createSshDoor(lifetime);
+  const sshTunnels = createSshTunnels({
+    db: db.sshMachines,
+    lifetime,
+    door: () => sshDoor.port(),
+  });
+  offBoot.push(() => {
+    sshDoor.start();
+    sshTunnels.start();
+  });
 
   /**
    * Why a machine takes no new session start now, or nothing when it does.
@@ -5973,6 +5984,10 @@ export const createServer = (
     db: db.hubAuth,
     hubId,
     session: (authorization) => identities.resolve(authorization),
+    sshKeys: {
+      pending: () => db.sshMachines.pendingKeys(),
+      adopted: (id) => db.sshMachines.update(id, { pendingKey: null }),
+    },
   });
   /**
    * ONE LAUNCH IN FLIGHT PER SESSION. A launch carries the credential minted
@@ -14513,8 +14528,13 @@ export const createServer = (
   /** A socket the hub may close, and the address it came from. */
   type AuthSocket = HubSocket & {
     close: (code?: number, reason?: string) => void;
+    /** Its upgrade's headers: the SSH door's mark among them (ssh-door.ts). */
+    readonly headers?: Record<string, string | undefined>;
     readonly remoteAddress?: string;
   };
+  /** The mode a machine's socket is held to: always paired through a machine's SSH forward (hub-auth.ts `modeFor`). */
+  const socketMode = (ws: AuthSocket) =>
+    hubAuth.modeFor((name) => ws.headers?.[name]);
   /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
   const dashboardDevices = new Map<AuthSocket, string | null>();
   /**
@@ -14589,7 +14609,7 @@ export const createServer = (
           typeof proof === "string" ? proof : undefined
         )
       : "unknown";
-    if (verdict === "proven" || hubAuth.mode() === "trusted") {
+    if (verdict === "proven" || socketMode(ws) === "trusted") {
       socketMachines.set(ws.id, message.machineId);
       return true;
     }
@@ -14661,7 +14681,7 @@ export const createServer = (
     if (!known || registry.agent(former)) {
       return;
     }
-    if (hubAuth.mode() === "pairing") {
+    if (socketMode(ws) === "pairing") {
       const nonce = machineNonces.get(ws.id) ?? "";
       const proof = peek(message.payload, "proof");
       const proven =

@@ -69,10 +69,20 @@ export const machineBin = (dir: string): string => {
     "grep",
     "cat",
     "sed",
+    "mv",
+    "id",
+    // The hub reads where the machine listens, and ends its own stale
+    // session, with these (hub ssh-tunnels.ts `listenersOn`, `endStaleOn`).
+    "ss",
+    // A clone and push through the hub's remote (ssh-reach (i)).
+    "git",
   ]) {
-    const at = [`/usr/bin/${tool}`, `/bin/${tool}`].find((path) =>
-      existsSync(path)
-    );
+    const at = [
+      `/usr/bin/${tool}`,
+      `/bin/${tool}`,
+      `/usr/sbin/${tool}`,
+      `/sbin/${tool}`,
+    ].find((path) => existsSync(path));
     if (at) {
       symlinkSync(at, join(dir, tool));
     }
@@ -124,10 +134,27 @@ export const keyAccepted = (
 /**
  * `tcpip-forward`, as OpenSSH's sshd answers it: a listener on the target's
  * loopback (port 0 allocated and said back), each connection to it opened to
- * the client as a `forwarded-tcpip` channel.
+ * the client as a `forwarded-tcpip` channel; and `cancel-tcpip-forward`,
+ * which closes the listener the request names (by the port it asked for,
+ * 0 for the last one allocated).
  */
 const forwarding = (client: Connection): void => {
+  const listeners = new Map<number, ReturnType<typeof createServer>>();
+  let allocated: number | undefined;
   client.on("request", (accept, reject, name, info) => {
+    if (name === "cancel-tcpip-forward") {
+      const { bindPort } = info as TcpipBindInfo;
+      const port = bindPort === 0 ? allocated : bindPort;
+      const held = port === undefined ? undefined : listeners.get(port);
+      if (!(held && port !== undefined && accept)) {
+        reject?.();
+        return;
+      }
+      held.close();
+      listeners.delete(port);
+      accept();
+      return;
+    }
     if (!(name === "tcpip-forward" && accept)) {
       reject?.();
       return;
@@ -151,9 +178,14 @@ const forwarding = (client: Connection): void => {
         }
       );
     });
-    listener.listen(bindPort, "127.0.0.1", () =>
-      accept((listener.address() as AddressInfo).port)
-    );
+    listener.listen(bindPort, "127.0.0.1", () => {
+      const { port } = listener.address() as AddressInfo;
+      listeners.set(port, listener);
+      if (bindPort === 0) {
+        allocated = port;
+      }
+      accept(port);
+    });
     client.on("close", () => listener.close());
   });
 };
@@ -169,9 +201,16 @@ const running = (
       const child = Bun.spawn(["sh", "-c", info.command], {
         cwd: machine.home,
         env: { HOME: machine.home, PATH: machine.path },
-        stdin: "ignore",
+        stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
+      });
+      // The client's stdin, as sshd hands it on: the hub writes a machine's key so.
+      channel.on("data", (chunk: Buffer) => {
+        child.stdin.write(chunk);
+      });
+      channel.on("end", () => {
+        child.stdin.end();
       });
       const relay = async (
         from: ReadableStream<Uint8Array>,

@@ -52,6 +52,7 @@ import { httpProof, sameMac, socketProof } from "@cawco/core/machine-key";
 import { Elysia, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
 import { HUB_SELF_HEADER, isHubSelf } from "./hub-self";
+import { SSH_FORWARD_HEADER, viaSshForward } from "./ssh-door";
 
 /** What a request is, once its credential is read. */
 export type Caller =
@@ -105,6 +106,9 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/api\/binary-updates\/artifacts\/[^/]+\/[^/]+$/, "machine"],
   ["POST", /^\/api\/binary-updates\/hub-fence$/, "machine"],
   ["PUT", /^\/api\/binary-updates\/machines\/[^/]+\/state$/, "machine"],
+  // A file a reader attached, by the hash a send names: the session's
+  // machine fetches it (agent attachments.ts).
+  ["GET", /^\/api\/files\/[0-9a-f]{64}$/, "machine"],
   // A machine's own row and busy count; the fleet's list stays the person's.
   ["GET", /^\/api\/agents\/[^/]+$/, "machine"],
   ["GET", /^\/api\/agents\/[^/]+\/busy$/, "machine"],
@@ -244,6 +248,15 @@ export interface HubAuthDeps {
   readonly session: (
     authorization: string
   ) => { instanceId: string } | undefined;
+  /**
+   * The keys SSH adds wrote to their machines that no machine has proven
+   * yet, by their record (ssh-tunnels.ts `admit`), and what becomes of one
+   * once a machine proves it.
+   */
+  readonly sshKeys: {
+    readonly adopted: (id: string, machineId: string) => void;
+    readonly pending: () => { id: string; key: string }[];
+  };
 }
 
 /** A header reader: a Request's, or a socket's plain record. */
@@ -262,6 +275,7 @@ export const createHubAuth = ({
   db,
   hubId,
   session,
+  sshKeys,
 }: HubAuthDeps) => {
   let hooks: HubAuthHooks | undefined;
   const pairings = new Map<string, Pairing>();
@@ -328,6 +342,33 @@ export const createHubAuth = ({
 
   const changed = () => hooks?.changed(frame());
 
+  /**
+   * Whether `machineId` proves a key `check` accepts: its own, or one an SSH
+   * add wrote to its machine over its own connection (ssh-tunnels.ts
+   * `admit`), which is its own from then on. An SSH add is the person
+   * admitting that machine; the key is what the machine proves it with.
+   */
+  const proves = (
+    machineId: string,
+    check: (key: string) => boolean
+  ): boolean => {
+    const key = db.machineKey(machineId);
+    if (key && check(key)) {
+      return true;
+    }
+    const given = sshKeys.pending().find((one) => check(one.key));
+    if (!given) {
+      return false;
+    }
+    db.putMachineKey(machineId, given.key);
+    sshKeys.adopted(given.id, machineId);
+    console.log(
+      `[hub-auth] machine ${machineId} proved the key its SSH add gave it: admitted`
+    );
+    changed();
+    return true;
+  };
+
   /** The machine whose proof this header carries, once; undefined for any other header. */
   const machineOf = (
     header: string,
@@ -343,9 +384,7 @@ export const createHubAuth = ({
     ) {
       return;
     }
-    const key = db.machineKey(machineId);
-    if (!(
-      key &&
+    const signed = (key: string) =>
       sameMac(
         httpProof(key, {
           at: when,
@@ -356,8 +395,8 @@ export const createHubAuth = ({
           path,
         }),
         mac
-      )
-    )) {
+      );
+    if (!proves(machineId, signed)) {
       return;
     }
     spent.set(mac, Date.now() + 2 * MACHINE_PROOF_SKEW_MS);
@@ -420,13 +459,26 @@ export const createHubAuth = ({
     if (machineId) {
       return { kind: "machine", machineId };
     }
-    return mode() === "trusted"
+    return modeFor(header) === "trusted"
       ? { kind: "owner", device: null }
       : { kind: "anonymous" };
   };
 
-  /** Whether `caller` may reach `method path` in the current mode. */
-  const allows = (caller: Caller, method: string, path: string): boolean => {
+  /**
+   * The mode a request is held to: the hub's, except through a machine's SSH
+   * forward (ssh-door.ts), where any local user of a shared box can reach
+   * it and every caller proves what it is, as with paired devices.
+   */
+  const modeFor = (header: Headers): HubAuthMode =>
+    viaSshForward(header(SSH_FORWARD_HEADER)) ? "pairing" : mode();
+
+  /** Whether `caller` may reach `method path` in the mode its request is held to. */
+  const allows = (
+    caller: Caller,
+    method: string,
+    path: string,
+    held: HubAuthMode
+  ): boolean => {
     const access = accessOf(method, path);
     if (caller.kind === "hub") {
       return true;
@@ -434,7 +486,7 @@ export const createHubAuth = ({
     if (caller.kind === "machine" && namesAnother(path, caller.machineId)) {
       return false;
     }
-    if (access === "machine-proof" && mode() === "trusted") {
+    if (access === "machine-proof" && held === "trusted") {
       return caller.kind === "owner" || caller.kind === "machine";
     }
     return ALLOWED[access].has(caller.kind);
@@ -482,7 +534,7 @@ export const createHubAuth = ({
       path,
       clientAddress(header, address)
     );
-    if (allows(caller, request.method, path)) {
+    if (allows(caller, request.method, path, modeFor(header))) {
       return;
     }
     console.warn(
@@ -655,13 +707,14 @@ export const createHubAuth = ({
     nonce: string,
     proof: string | undefined
   ): "proven" | "wrong" | "unknown" => {
-    const key = db.machineKey(machineId);
-    if (!key) {
-      return "unknown";
+    const answered = (key: string) =>
+      Boolean(
+        proof && sameMac(socketProof(key, nonce, hubId(), machineId), proof)
+      );
+    if (proves(machineId, answered)) {
+      return "proven";
     }
-    return proof && sameMac(socketProof(key, nonce, hubId(), machineId), proof)
-      ? "proven"
-      : "wrong";
+    return db.machineKey(machineId) ? "wrong" : "unknown";
   };
 
   /**
@@ -931,6 +984,7 @@ export const createHubAuth = ({
     hold,
     mintMachineKey,
     mode,
+    modeFor,
     provesFormer,
     proveSocket,
     released,

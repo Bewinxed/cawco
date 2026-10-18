@@ -17,12 +17,14 @@ export interface SshMachinesDb {
   readonly joined: () => SshMachineRow[];
   /** Every row naming `machineId`. */
   readonly ofMachine: (machineId: string) => SshMachineRow[];
+  /** Each row whose add wrote a key its machine has not yet proven, with that key. */
+  readonly pendingKeys: () => { id: string; key: string }[];
   readonly remove: (id: string) => void;
   /** Rows whose add never finished: left by a hub that stopped while one ran. */
   readonly unjoined: () => SshMachineRow[];
   readonly update: (
     id: string,
-    patch: Partial<Pick<SshMachineRow, "boxPort" | "machineId">>
+    patch: Partial<Pick<SshMachineRow, "boxPort" | "machineId" | "pendingKey">>
   ) => void;
 }
 
@@ -55,6 +57,13 @@ export const sshMachinesDb = (db: BunSQLiteDatabase): SshMachinesDb => ({
       .from(sshMachines)
       .where(eq(sshMachines.machineId, machineId))
       .all(),
+  pendingKeys: () =>
+    db
+      .select({ id: sshMachines.id, key: sshMachines.pendingKey })
+      .from(sshMachines)
+      .where(isNotNull(sshMachines.pendingKey))
+      .all()
+      .flatMap(({ id, key }) => (key ? [{ id, key }] : [])),
   get: (id) =>
     db.select().from(sshMachines).where(eq(sshMachines.id, id)).get(),
   create: (row) => {

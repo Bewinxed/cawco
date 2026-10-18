@@ -1681,6 +1681,13 @@
       "when": 1792337369662,
       "tag": "0236_workspace_cut_from",
       "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "6",
+      "when": 1792337549470,
+      "tag": "0237_ssh_machine_key",
+      "breakpoints": true
     }
   ]
 }

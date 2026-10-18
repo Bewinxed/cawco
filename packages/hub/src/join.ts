@@ -56,6 +56,7 @@ import {
   sshOptions,
   type TunnelOpen,
   type TunnelOutcome,
+  type TunnelRefusal,
 } from "./ssh-tunnels";
 
 /** How long a short command gets to answer. Our choice. */
@@ -254,15 +255,39 @@ const DOWNLOAD_STEP = "downloading the install script from ";
 const CARRY_STEP = "carrying this hub to the machine on its port ";
 
 /**
- * The step a machine whose SSH server refuses to forward a port fails on,
- * naming the setting (sshd_config(5), AllowTcpForwarding: "no to prevent
- * all TCP forwarding, local to allow local (from the perspective of ssh(1))
- * forwarding only or remote to allow remote forwarding only",
- * https://man.openbsd.org/sshd_config.5). The hub reaches a machine added
- * over SSH only through that forward, so there is no other way to try.
+ * The step the hub says as it gives the machine its key over its own
+ * connection (ssh-tunnels.ts `admit`): the add is the person admitting it.
  */
-const FORWARDING_REFUSED =
-  "forwarding a port on the machine to this hub, which its SSH server refuses: set AllowTcpForwarding yes (or remote) in its sshd_config and restart sshd";
+const KEY_STEP = "giving the machine its key to this hub";
+
+/**
+ * The steps a machine fails on when it will not do what its forward needs,
+ * each naming the setting and its fix (https://man.openbsd.org/sshd_config.5).
+ * The hub reaches a machine added over SSH only through that forward, so
+ * there is no other way to try.
+ * - AllowTcpForwarding: "no to prevent all TCP forwarding, local to allow
+ *   local (from the perspective of ssh(1)) forwarding only or remote to
+ *   allow remote forwarding only".
+ * - GatewayPorts: "yes to force remote port forwardings to bind to the
+ *   wildcard address": anyone the machine's network reaches would reach the
+ *   hub, so the add stops before the hub is forwarded there.
+ */
+const refusalStep = (refusal: TunnelRefusal): string => {
+  switch (refusal.kind) {
+    case "forwarding":
+      return "forwarding a port on the machine to this hub, which its SSH server refuses: set AllowTcpForwarding yes (or remote) in its sshd_config and restart sshd";
+    case "exposed":
+      return `forwarding a port on the machine to this hub, which its SSH server would open on ${refusal.bound.join(", ")}, not only its loopback: set GatewayPorts no in its sshd_config and restart sshd`;
+    case "held":
+      return `forwarding port ${refusal.port} on the machine to this hub, which another program there holds: stop it, then Retry`;
+    case "failed":
+      return `${refusal.step} (${refusal.said})`;
+    default: {
+      const unhandled: never = refusal;
+      throw new Error(`unhandled refusal: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
 
 /**
  * How long the machine's `curl` gets for the install script as a whole,
@@ -399,25 +424,15 @@ const problemOf = (
 };
 
 /**
- * Why the hub's own connection to the machine did not come up, off its
- * `ssh`'s lines alone. A refused forward of port 0 is the machine's server
- * refusing forwarding at all; of the port the machine joined on before,
- * something there holds it, or forwarding was turned off since.
+ * Why the hub's own connection to the machine did not come up: what the
+ * machine would not do once signed in, else what its `ssh` said.
  */
 const tunnelProblem = (
   outcome: Extract<TunnelOutcome, { kind: "ended" }>
-): SshJoinProblem => {
-  if (outcome.refused === 0) {
-    return { kind: "step", step: FORWARDING_REFUSED };
-  }
-  if (outcome.refused !== null) {
-    return {
-      kind: "step",
-      step: `forwarding port ${outcome.refused} on the machine to this hub, which something there holds, or its SSH server refuses (AllowTcpForwarding in its sshd_config)`,
-    };
-  }
-  return problemOf(outcome.lines, outcome.code ?? 255, null, false);
-};
+): SshJoinProblem =>
+  outcome.refusal
+    ? { kind: "step", step: refusalStep(outcome.refusal) }
+    : problemOf(outcome.lines, outcome.code ?? 255, null, false);
 
 interface JoinDeps {
   /** Runs each finished job's forgetting until the hub closes. */
@@ -433,9 +448,13 @@ const STOP_GRACE_MS = 3000;
 
 /**
  * Signals `ssh`'s process group: `ssh` and the askpass it may be running.
- * One that is already gone has nothing left to signal.
+ * One that is already gone has nothing left to signal. Only a real pid's
+ * group: `kill(-1)` signals every process this user owns.
  */
 const signalGroup = (pid: number, signal: "SIGTERM" | "SIGKILL"): void => {
+  if (!Number.isInteger(pid) || pid <= 1) {
+    return;
+  }
   try {
     process.kill(-pid, signal);
   } catch {
@@ -636,6 +655,19 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
   ): Promise<void> => {
     job.hubUrl = `http://127.0.0.1:${port}`;
     take(job, `${INSTALL_STEP_PREFIX}${CARRY_STEP}${port}`);
+    take(job, `${INSTALL_STEP_PREFIX}${KEY_STEP}`);
+    const unkept = await tunnels.admit(tunnel.id);
+    if (run.stopped) {
+      return;
+    }
+    if (unkept) {
+      take(job, unkept);
+      if (tunnel.fresh) {
+        tunnels.abandon(tunnel.id);
+      }
+      fail(job, { kind: "step", step: KEY_STEP });
+      return;
+    }
     job.exitCode = await session(job, run, null, installCommand(job.hubUrl));
     if (run.stopped) {
       return;

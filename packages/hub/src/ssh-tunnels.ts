@@ -2,22 +2,38 @@
  * The hub's own way to every machine it added over SSH, and the machine's
  * way back: one SSH connection per machine, which the hub opens and holds,
  * carrying a remote forward from a port on the machine's loopback to the
- * hub's port here. The machine's agent knows its hub as
- * `http://127.0.0.1:<that port>`, so all it sends the hub (its socket, every
- * HTTP call) rides the connection the hub made. The machine needs no route
- * to any address of the hub's: a box on another network, with no Tailscale,
- * joins and stays joined all the same (owner: it "needs to work even when
- * it's on a different network or no tailscale, over ssh"). The same
- * connection carries the hub's previews of the machine's sessions the other
- * way ({@link SshTunnels.carry}).
+ * hub's door for SSH forwards (ssh-door.ts). The machine's agent knows its
+ * hub as `http://127.0.0.1:<that port>`, so all it sends the hub (its
+ * socket, every HTTP call, its git) rides the connection the hub made. The
+ * machine needs no route to any address of the hub's: a box on another
+ * network, with no Tailscale, joins and stays joined all the same (owner:
+ * it "needs to work even when it's on a different network or no tailscale,
+ * over ssh"). The same connection carries the hub's previews of the
+ * machine's sessions the other way ({@link SshTunnels.carry}).
  *
- * The connection is `ssh -N` (ssh(1): "Do not execute a remote command. This
- * is useful for just forwarding ports.") with `-R 127.0.0.1:<port>:127.0.0.1:
- * <hub port>`. The first time, the port is 0: "If the port argument is '0',
- * the listen port will be dynamically allocated on the server and reported
- * to the client at run time" (https://man.openbsd.org/ssh), so it is one
- * nothing on the machine already listens on. It is kept (`ssh_machines`) and
- * asked for by number from then on: the agent's config names it.
+ * The connection is `ssh -N -M`, the master of a control socket (ssh(1)
+ * `-N`: "Do not execute a remote command. This is useful for just
+ * forwarding ports."), and every forward is asked of it with `-O forward`
+ * once it has signed in, in this order ({@link SshTunnels} `connect`):
+ *
+ * 1. Where the machine binds a forward, read with a probe whose far end is
+ *    a port nothing on this host answers, then cancelled. A machine whose
+ *    sshd binds it on more than its loopback (GatewayPorts, sshd_config(5):
+ *    "yes to force remote port forwardings to bind to the wildcard
+ *    address") is refused before the hub is forwarded there at all.
+ * 2. The machine's own stale session, if one still holds the machine's port
+ *    (a link that dropped without a word: its sshd sends no keepalive of
+ *    its own, ClientAliveInterval "The default is 0"), is ended: only an
+ *    `sshd` or `sshd-session` of the user the hub signs in as, listening on
+ *    that port.
+ * 3. The forward, `-R 127.0.0.1:<port>:127.0.0.1:<door>`. The first time the
+ *    port is 0: "If the port argument is '0', the listen port will be
+ *    dynamically allocated on the server and reported to the client at run
+ *    time. When used together with -O forward, the allocated port will be
+ *    printed to the standard output" (https://man.openbsd.org/ssh), so it is
+ *    one nothing on the machine already listens on. It is kept
+ *    (`ssh_machines`) and asked for by number from then on: the agent's
+ *    config names it, and so do the hub remotes its clones keep.
  *
  * A connection that ends is opened again, after 1 s, doubling to a minute
  * while it keeps failing; and every joined machine's is opened when the hub
@@ -31,7 +47,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { darwinSocketRoot } from "@cawco/core/paths";
-import { DB_PATH, HUB_PORT } from "./config";
+import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
@@ -79,8 +95,14 @@ const RETRY_FIRST_MS = 1000;
 const RETRY_MAX_MS = 60_000;
 /** A connection that stayed up this long starts its next retries from the first wait. Our choice. */
 const STEADY_MS = 60_000;
-/** How long a control command (`-O exit`, `-O forward`) gets to answer. Our choice. */
-const CONTROL_MS = 5000;
+/** How long a control command (`-O check`, `-O forward`, one over the master) gets to answer. Our choice. */
+const CONTROL_MS = 10_000;
+/** How long a master gets to sign in and answer on its control socket: its connect, and the sign-in after. Our choice. */
+const MASTER_READY_MS = (CONNECT_S + 20) * 1000;
+/** How often a master that is signing in is asked whether it is up. Our choice. */
+const MASTER_POLL_MS = 250;
+/** How long a stale session gets to let the machine's port go once it is ended. Our choice. */
+const STALE_GONE_MS = 5000;
 /** The lines of `ssh`'s own output kept for the add that waits on it. */
 const MAX_LINES = 40;
 
@@ -105,15 +127,49 @@ const controlDir = (): string => {
 };
 const controlPath = (id: string): string => join(controlDir(), id);
 
-/** `ssh`'s INFO line once port 0 is allocated: `Allocated port 41234 for remote forward to 127.0.0.1:3456`. */
-const ALLOCATED = /^Allocated port (\d+) for remote forward/;
-/** `-v`'s line once the server has the forward: `debug1: remote forward success for: listen 127.0.0.1:41234, connect …`. */
-const FORWARDED = /remote forward success for: listen [^,]*:(\d+),/;
-/** ExitOnForwardFailure's end when the server refused it: `Error: remote port forwarding failed for listen port 0`. */
-const REFUSED = /remote port forwarding failed for listen port (\d+)/;
-/** `-v`'s own lines, kept out of what an add shows. */
-const DEBUG = /^debug\d?: /;
+/** What a machine's server says when it will not forward: `remote port forwarding failed for listen port 0`. */
+const REFUSED = /remote port forwarding failed for listen port/;
 const CARRIAGE_RETURN = /\r$/;
+const PORT_LINE = /^\d+$/;
+/** A listener's address as `ss` and `lsof` print it: its host, then `:<port>`. */
+const LOOPBACK_HOST = /^(?:127\.[\d.]+|\[::1\]|::1|localhost)$/;
+
+/**
+ * The machine's command that prints the address of every listener on
+ * `port`, one per line: `ss` on Linux, `lsof` on macOS. Its words hold no
+ * single quote: it runs as `sh -c '<it>'` under whatever login shell the
+ * machine's user has.
+ */
+const listenersOn = (port: number): string =>
+  `PATH="$PATH:/usr/sbin:/sbin"; if command -v ss >/dev/null 2>&1; then ss -ltnH "sport = :${port}" | while read -r state recv send local rest; do echo "$local"; done; elif command -v lsof >/dev/null 2>&1; then lsof -nP -iTCP:${port} -sTCP:LISTEN -Fn | sed -n "s/^n//p"; else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi`;
+
+/**
+ * The machine's command that ends the stale session of the user it runs as
+ * that still listens on `port`: each pid listening there that is an `sshd`
+ * or `sshd-session` of this user, and nothing else, each an integer above 1.
+ * It prints each pid it ended.
+ */
+const endStaleOn = (port: number): string =>
+  `PATH="$PATH:/usr/sbin:/sbin"; me=$(id -un); if command -v ss >/dev/null 2>&1; then pids=$(ss -ltnpH "sport = :${port}" | sed -n "s/.*pid=\\([0-9][0-9]*\\).*/\\1/p"); elif command -v lsof >/dev/null 2>&1; then pids=$(lsof -nP -iTCP:${port} -sTCP:LISTEN -Fp | sed -n "s/^p//p"); else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi; for pid in $pids; do [ "$pid" -gt 1 ] 2>/dev/null || continue; name=$(ps -o comm= -p "$pid"); owner=$(ps -o user= -p "$pid"); case "$name" in sshd|sshd-session) if [ "$owner" = "$me" ]; then kill "$pid" && echo "$pid"; fi;; esac; done; exit 0`;
+
+/**
+ * The machine's command that keeps its key where its agent reads it
+ * (core machine-key.ts `machineKeyPath`: `$XDG_CONFIG_HOME/cawco`, else
+ * `~/.config/cawco`), readable by its user alone, from its stdin: the key
+ * is in no argv, on either machine.
+ */
+const KEEP_KEY = `umask 077 && d="\${XDG_CONFIG_HOME:-$HOME/.config}/cawco" && mkdir -p "$d" && cat > "$d/machine-key.part" && mv -f "$d/machine-key.part" "$d/machine-key"`;
+
+/** What a machine would not do, which ends an add, or a held connection. */
+export type TunnelRefusal =
+  /** Its sshd forwards no port to the hub (AllowTcpForwarding). */
+  | { kind: "forwarding" }
+  /** Something there other than this user's own sshd holds the machine's port. */
+  | { kind: "held"; port: number }
+  /** Its sshd binds a forward on more than its loopback (GatewayPorts): the addresses it bound. */
+  | { kind: "exposed"; bound: string[] }
+  /** A step over the connection did not run, in `ssh`'s or the machine's words. */
+  | { kind: "failed"; step: string; said: string };
 
 /** How a connection the hub was waiting on came out. */
 export type TunnelOutcome =
@@ -122,8 +178,8 @@ export type TunnelOutcome =
       kind: "ended";
       code: number | null;
       lines: string[];
-      /** The port the machine's server refused to forward, when that ended it. */
-      refused: number | null;
+      /** What the machine would not do, when that ended it. */
+      refusal: TunnelRefusal | null;
     };
 
 /** A connection an add asked for ({@link SshTunnels.open}). */
@@ -140,6 +196,13 @@ export interface TunnelOpen {
 export interface SshTunnels {
   /** An add that made record `id` failed or stopped: its connection ends and its record goes. */
   readonly abandon: (id: string) => void;
+  /**
+   * The add of record `id` admits its machine: a new key, kept for it until
+   * the machine proves it (hub-auth.ts), written over its open connection
+   * where the machine's agent reads its key. Answers what went wrong, or
+   * nothing.
+   */
+  readonly admit: (id: string) => Promise<string | undefined>;
   /**
    * A port on the hub's loopback carried to `port` on the machine's, through
    * the machine's connection: how the hub reaches a preview listener there.
@@ -187,25 +250,40 @@ interface Tunnel {
   waiters: ((outcome: TunnelOutcome) => void)[];
 }
 
-/** A short command's exit and stderr, or null when it did not answer within {@link CONTROL_MS}. */
+/** What a short command answered: its exit, its stdout and its stderr. */
+interface Answer {
+  code: number;
+  err: string;
+  out: string;
+}
+
+/** A short command's answer, or null when it did not answer within {@link CONTROL_MS}. */
 const control = async (
-  argv: string[]
-): Promise<{ code: number; err: string } | null> => {
+  argv: string[],
+  stdin?: string
+): Promise<Answer | null> => {
   const ran = await readWithin(CONTROL_MS, async (signal) => {
     const child = Bun.spawn(argv, {
-      stdin: "ignore",
-      stdout: "ignore",
+      stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin),
+      stdout: "pipe",
       stderr: "pipe",
       signal,
     });
-    const [err, code] = await Promise.all([
+    const [out, err, code] = await Promise.all([
+      new Response(child.stdout).text(),
       new Response(child.stderr).text(),
       child.exited,
     ]);
-    return { code, err: err.trim() };
+    return { code, out: out.trim(), err: err.trim() };
   });
   return ran.kind === "answered" ? ran.value : null;
 };
+
+/** What a short command said when it did not do what it was asked: its stderr, or its exit. */
+const saidBy = (answer: Answer | null): string =>
+  answer
+    ? answer.err || `ssh exited ${answer.code}`
+    : `no answer within ${CONTROL_MS / 1000} s`;
 
 /** A port nothing on the hub's loopback holds right now. */
 const freePort = (): number => {
@@ -220,19 +298,12 @@ const freePort = (): number => {
 };
 
 /**
- * The connection's `ssh`, the master of the control socket at `path`.
- * ExitOnForwardFailure: "Specifies whether ssh(1) should terminate the
- * connection if it cannot set up all requested … remote port forwardings"
- * (ssh_config(5)), so a machine that refuses it ends here rather than
- * holding a connection that carries nothing. BatchMode: "user interaction
- * such as password prompts and host key confirmation requests will be
- * disabled". `-v` for the one line that says a fixed port is forwarded;
- * `-M -S` makes it the master {@link SshTunnels.carry} adds forwards to
- * (ssh(1) `-O forward`: "Request forwardings without command execution").
- * Bound to 127.0.0.1 on the machine: "By default, TCP listening sockets on
- * the server will be bound to the loopback interface only" (ssh(1) `-R`);
- * named, for a server whose GatewayPorts is clientspecified. It leads a
- * process group of its own, so a stop ends it and a `ProxyCommand` it runs.
+ * The connection's `ssh`, the master of the control socket at `path`, with
+ * no forward of its own: each is asked of it once it has signed in
+ * (`-O forward`, ssh(1): "Request forwardings without command execution").
+ * BatchMode: "user interaction such as password prompts and host key
+ * confirmation requests will be disabled". It leads a process group of its
+ * own, so a stop ends it and a `ProxyCommand` it runs.
  */
 const master = (
   row: SshMachineRow,
@@ -241,22 +312,38 @@ const master = (
   Bun.spawn(
     [
       "ssh",
-      "-v",
       "-N",
       "-o",
       "BatchMode=yes",
-      "-o",
-      "ExitOnForwardFailure=yes",
       ...sshOptions(row.sshPort),
       "-M",
       "-S",
       path,
-      "-R",
-      `127.0.0.1:${row.boxPort ?? 0}:127.0.0.1:${HUB_PORT}`,
       "--",
       row.target,
     ],
     { stdin: "ignore", stdout: "ignore", stderr: "pipe", detached: true }
+  );
+
+/** One command on the machine over the master at `path`: `sh -c` and one single-quoted word, as join.ts runs its own. */
+const onMachine = (
+  path: string,
+  target: string,
+  script: string,
+  stdin?: string
+): Promise<Answer | null> =>
+  control(
+    [
+      "ssh",
+      "-S",
+      path,
+      "-o",
+      "BatchMode=yes",
+      "--",
+      target,
+      `exec sh -c '${script}'`,
+    ],
+    stdin
   );
 
 /** Every line of `stream` to `take`, as it comes, the last one too. */
@@ -279,9 +366,17 @@ const eachLine = async (
   }
 };
 
-/** Ends `ssh`'s process group, when it still runs. */
+/**
+ * Ends `ssh`'s process group, when it still runs. Only a real pid's group:
+ * `kill(-1)` signals every process this user owns.
+ */
 const end = (child: Bun.Subprocess | null): void => {
-  if (!child || child.exitCode !== null) {
+  if (
+    !child ||
+    child.exitCode !== null ||
+    !Number.isInteger(child.pid) ||
+    child.pid <= 1
+  ) {
     return;
   }
   try {
@@ -291,11 +386,168 @@ const end = (child: Bun.Subprocess | null): void => {
   }
 };
 
+/** Whether a listener's address, as `ss` or `lsof` prints it (`127.0.0.1:41234`, `[::]:41234`, `*:41234`), is the machine's loopback. */
+const onLoopback = (address: string): boolean =>
+  LOOPBACK_HOST.test(address.slice(0, address.lastIndexOf(":")));
+
+/** Words a person reads for what a machine would not do. */
+export const refusalWords = (refusal: TunnelRefusal): string => {
+  switch (refusal.kind) {
+    case "forwarding":
+      return "its sshd forwards no port (AllowTcpForwarding)";
+    case "held":
+      return `something on the machine other than its own sshd holds port ${refusal.port}`;
+    case "exposed":
+      return `its sshd binds a forward on ${refusal.bound.join(", ")}, beyond its loopback (GatewayPorts)`;
+    case "failed":
+      return `${refusal.step}: ${refusal.said}`;
+    default: {
+      const unhandled: never = refusal;
+      throw new Error(`unhandled refusal: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
+/** Whether `master` answers on its control socket at `path`: signed in. False once it exits, or past {@link MASTER_READY_MS}. */
+const masterReady = async (
+  child: Bun.Subprocess,
+  path: string,
+  target: string
+): Promise<boolean> => {
+  const deadline = Date.now() + MASTER_READY_MS;
+  while (child.exitCode === null && Date.now() < deadline) {
+    if (existsSync(path)) {
+      // biome-ignore lint/performance/noAwaitInLoops: a poll; each check must see the master after the previous wait
+      const checked = await control([
+        "ssh",
+        "-S",
+        path,
+        "-O",
+        "check",
+        "--",
+        target,
+      ]);
+      if (checked?.code === 0) {
+        return true;
+      }
+    }
+    await Bun.sleep(MASTER_POLL_MS);
+  }
+  return false;
+};
+
+/**
+ * Where the machine binds a forward, before the hub is forwarded there: a
+ * probe forward whose far end is a port nothing on this host answers (so
+ * nothing behind it answers anyone), its listeners read, then cancelled by
+ * the spec that made it (`-O cancel` by its allocated port answers "port not
+ * forwarded" and leaves it, measured on OpenSSH 10.2). A refusal, or
+ * nothing when it binds on its loopback alone.
+ */
+const checkBinding = async (
+  path: string,
+  target: string
+): Promise<TunnelRefusal | null> => {
+  const probe = `127.0.0.1:0:127.0.0.1:${freePort()}`;
+  const probed = await control([
+    "ssh",
+    "-S",
+    path,
+    "-O",
+    "forward",
+    "-R",
+    probe,
+    "--",
+    target,
+  ]);
+  if (probed?.code !== 0) {
+    return REFUSED.test(probed?.err ?? "")
+      ? { kind: "forwarding" }
+      : {
+          kind: "failed",
+          step: "forwarding a port on the machine",
+          said: saidBy(probed),
+        };
+  }
+  try {
+    const port = Number(probed.out);
+    if (!PORT_LINE.test(probed.out)) {
+      return {
+        kind: "failed",
+        step: "forwarding a port on the machine",
+        said: `ssh named no port: ${probed.out}`,
+      };
+    }
+    const read = await onMachine(path, target, listenersOn(port));
+    const bound = read?.code === 0 ? read.out.split("\n").filter(Boolean) : [];
+    if (bound.length === 0) {
+      return {
+        kind: "failed",
+        step: `reading where the machine listens on port ${port}`,
+        said: read?.code === 0 ? "it lists no listener there" : saidBy(read),
+      };
+    }
+    const beyond = bound.filter((address) => !onLoopback(address));
+    return beyond.length > 0 ? { kind: "exposed", bound: beyond } : null;
+  } finally {
+    await control([
+      "ssh",
+      "-S",
+      path,
+      "-O",
+      "cancel",
+      "-R",
+      probe,
+      "--",
+      target,
+    ]);
+  }
+};
+
+/**
+ * Ends this user's own stale session that still holds `port` on the
+ * machine, and waits for the port to be let go. Nothing else that holds it
+ * is touched: the forward then says the port is taken.
+ */
+const endStale = async (
+  path: string,
+  target: string,
+  port: number
+): Promise<TunnelRefusal | null> => {
+  const ended = await onMachine(path, target, endStaleOn(port));
+  if (ended?.code !== 0) {
+    return {
+      kind: "failed",
+      step: `freeing port ${port} on the machine`,
+      said: saidBy(ended),
+    };
+  }
+  if (!ended.out) {
+    return null;
+  }
+  console.info(
+    `[ssh] ${target}: ended the stale session holding port ${port} (pid ${ended.out.split("\n").join(", ")})`
+  );
+  const deadline = Date.now() + STALE_GONE_MS;
+  while (Date.now() < deadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the machine after the previous wait
+    const read = await onMachine(path, target, listenersOn(port));
+    if (read?.code === 0 && !read.out) {
+      return null;
+    }
+    await Bun.sleep(MASTER_POLL_MS);
+  }
+  return null;
+};
+
 export const createSshTunnels = ({
   db,
+  door,
   lifetime,
 }: {
   db: SshMachinesDb;
+  /** The port of the hub's door for SSH forwards (ssh-door.ts), once it listens. */
+  door: () => number;
   lifetime: HubLifetimeShape;
 }): SshTunnels => {
   const tunnels = new Map<string, Tunnel>();
@@ -355,42 +607,86 @@ export const createSshTunnels = ({
     rmSync(path, { force: true });
   };
 
-  /** What one connection's `ssh` has said so far, as {@link hear} reads it. */
-  interface Heard {
-    /** Its own lines, `-v`'s left out: what an add shows. */
-    lines: string[];
-    /** The forward the machine's server refused, when it did. */
-    refused: number | null;
-    /** What it said once the connection was up: why a held one ended. */
-    since: string[];
-  }
+  /**
+   * The machine's forward to the hub, once the master at `path` has signed
+   * in: where it binds checked, its stale session ended, then the forward.
+   * Answers the machine's port, or what it would not do.
+   */
+  const forwardHub = async (
+    row: SshMachineRow,
+    path: string
+  ): Promise<{ port: number } | { refusal: TunnelRefusal }> => {
+    const binding = await checkBinding(path, row.target);
+    if (binding) {
+      return { refusal: binding };
+    }
+    if (row.boxPort !== null) {
+      const stale = await endStale(path, row.target, row.boxPort);
+      if (stale) {
+        return { refusal: stale };
+      }
+    }
+    return forwardDoor(row, path);
+  };
 
-  /** One line of `tunnel`'s `ssh` on `row`: the forward up, refused, or a line to keep. */
+  /** The forward itself: the machine's port, kept the first time, to the hub's door. */
+  const forwardDoor = async (
+    row: SshMachineRow,
+    path: string
+  ): Promise<{ port: number } | { refusal: TunnelRefusal }> => {
+    const spec = `127.0.0.1:${row.boxPort ?? 0}:127.0.0.1:${door()}`;
+    const answer = await control([
+      "ssh",
+      "-S",
+      path,
+      "-O",
+      "forward",
+      "-R",
+      spec,
+      "--",
+      row.target,
+    ]);
+    if (answer?.code !== 0) {
+      if (!REFUSED.test(answer?.err ?? "")) {
+        return {
+          refusal: {
+            kind: "failed",
+            step: "forwarding the hub to the machine",
+            said: saidBy(answer),
+          },
+        };
+      }
+      return {
+        refusal:
+          row.boxPort === null
+            ? { kind: "forwarding" }
+            : { kind: "held", port: row.boxPort },
+      };
+    }
+    if (row.boxPort !== null) {
+      return { port: row.boxPort };
+    }
+    if (!PORT_LINE.test(answer.out)) {
+      return {
+        refusal: {
+          kind: "failed",
+          step: "forwarding the hub to the machine",
+          said: `ssh named no port: ${answer.out}`,
+        },
+      };
+    }
+    const port = Number(answer.out);
+    db.update(row.id, { boxPort: port });
+    return { port };
+  };
+
+  /** One line of `tunnel`'s `ssh`: kept for the add that waits on it, and for why a held one ended. */
   const hear = (
     tunnel: Tunnel,
-    row: SshMachineRow,
-    heard: Heard,
+    heard: { lines: string[]; since: string[] },
     raw: string
   ): void => {
     const text = raw.replace(CARRIAGE_RETURN, "");
-    const allocated = ALLOCATED.exec(text);
-    if (allocated) {
-      const port = Number(allocated[1]);
-      db.update(row.id, { boxPort: port });
-      cameUp(tunnel, row, port);
-      return;
-    }
-    const forwarded = FORWARDED.exec(text);
-    if (forwarded && forwarded[1] !== "0") {
-      cameUp(tunnel, row, Number(forwarded[1]));
-    }
-    const refusal = REFUSED.exec(text);
-    if (refusal) {
-      heard.refused = Number(refusal[1]);
-    }
-    if (DEBUG.test(text)) {
-      return;
-    }
     if (tunnel.up) {
       heard.since.push(text);
     }
@@ -431,6 +727,28 @@ export const createSshTunnels = ({
     });
   };
 
+  /**
+   * Once `child`, the master, has signed in: the machine's forward to the
+   * hub, and the connection up. What the machine would not do, or nothing;
+   * a master refused, or not signed in in time, is ended: nothing holds it.
+   */
+  const bringUp = async (
+    tunnel: Tunnel,
+    row: SshMachineRow,
+    path: string,
+    child: Bun.Subprocess
+  ): Promise<TunnelRefusal | null> => {
+    const ready = await masterReady(child, path, row.target);
+    const forwarded =
+      ready && !tunnel.stopped ? await forwardHub(row, path) : null;
+    if (forwarded && "port" in forwarded) {
+      cameUp(tunnel, row, forwarded.port);
+      return null;
+    }
+    end(child);
+    return forwarded?.refusal ?? null;
+  };
+
   /** Opens `tunnel`'s connection once and follows it until `ssh` exits. */
   const connect = async (tunnel: Tunnel): Promise<void> => {
     const row = db.get(tunnel.id);
@@ -444,13 +762,15 @@ export const createSshTunnels = ({
     await clearControl(path, row.target);
     if (tunnel.stopped) {
       tunnel.running = false;
-      settle(tunnel, { kind: "ended", code: null, lines: [], refused: null });
+      settle(tunnel, { kind: "ended", code: null, lines: [], refusal: null });
       return;
     }
     const child = master(row, path);
     tunnel.child = child;
-    const heard: Heard = { lines: [], refused: null, since: [] };
-    await eachLine(child.stderr, (line) => hear(tunnel, row, heard, line));
+    const heard = { lines: [] as string[], since: [] as string[] };
+    const reading = eachLine(child.stderr, (line) => hear(tunnel, heard, line));
+    const refusal = await bringUp(tunnel, row, path, child);
+    await reading;
     const code = await child.exited;
     const steady = tunnel.upAt > 0 && Date.now() - tunnel.upAt >= STEADY_MS;
     tunnel.child = null;
@@ -458,8 +778,8 @@ export const createSshTunnels = ({
     tunnel.up = false;
     tunnel.carried.clear();
     rmSync(path, { force: true });
-    const { lines, refused, since } = heard;
-    settle(tunnel, { kind: "ended", code, lines, refused });
+    const { lines, since } = heard;
+    settle(tunnel, { kind: "ended", code, lines, refusal });
     const now = db.get(row.id);
     if (tunnel.stopped || !now?.machineId || lifetime.closed()) {
       return;
@@ -471,9 +791,9 @@ export const createSshTunnels = ({
       tunnel,
       now,
       steady,
-      refused === null
-        ? ((tunnel.upAt > 0 ? since : lines).at(-1) ?? exit)
-        : `the machine refused to forward port ${refused}: something there holds it, or its sshd no longer allows forwarding (AllowTcpForwarding)`
+      refusal
+        ? `the machine refused: ${refusalWords(refusal)}`
+        : ((tunnel.upAt > 0 ? since : lines).at(-1) ?? exit)
     );
   };
 
@@ -500,6 +820,7 @@ export const createSshTunnels = ({
         sshPort,
         boxPort: null,
         machineId: null,
+        pendingKey: null,
         createdAt: new Date(),
       };
       if (!held) {
@@ -507,8 +828,9 @@ export const createSshTunnels = ({
       }
       const tunnel = tunnelOf(row.id);
       const outcome = new Promise<TunnelOutcome>((resolve) => {
-        if (tunnel.up && row.boxPort !== null) {
-          resolve({ kind: "up", port: row.boxPort });
+        const port = db.get(row.id)?.boxPort ?? null;
+        if (tunnel.up && port !== null) {
+          resolve({ kind: "up", port });
           return;
         }
         tunnel.lines.add(line);
@@ -525,6 +847,21 @@ export const createSshTunnels = ({
         machineId: row.machineId,
         outcome,
       };
+    },
+    admit: async (id) => {
+      const row = db.get(id);
+      if (!(row && tunnels.get(id)?.up)) {
+        return "the hub's SSH connection to the machine is not open";
+      }
+      const key = randomBytes(32).toString("base64url");
+      db.update(id, { pendingKey: key });
+      const kept = await onMachine(
+        controlPath(id),
+        row.target,
+        KEEP_KEY,
+        `${key}\n`
+      );
+      return kept?.code === 0 ? undefined : saidBy(kept);
     },
     abandon: (id) => {
       const tunnel = tunnels.get(id);
@@ -593,7 +930,7 @@ export const createSshTunnels = ({
         ]);
         if (answer?.code !== 0) {
           throw new Error(
-            `the hub's SSH connection to ${row.target} did not carry port ${port}: ${answer ? answer.err || `ssh exited ${answer.code}` : `no answer within ${CONTROL_MS / 1000} s`}`
+            `the hub's SSH connection to ${row.target} did not carry port ${port}: ${saidBy(answer)}`
           );
         }
         return local;

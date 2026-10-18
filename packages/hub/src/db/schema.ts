@@ -507,6 +507,12 @@ export const sshMachines = sqliteTable(
     /** The port on the machine's loopback carried to the hub: null until OpenSSH allocates it. */
     boxPort: integer("box_port"),
     machineId: text("machine_id"),
+    /**
+     * The machine key the last add wrote to the machine (ssh-tunnels.ts
+     * `admit`), sealed, until the machine proves it under the id it
+     * registers as and it is kept as that machine's key (hub-auth.ts).
+     */
+    pendingKey: sealedText("pending_key"),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("ssh_machines_machine").on(table.machineId)]
