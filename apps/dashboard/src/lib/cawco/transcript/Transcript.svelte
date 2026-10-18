@@ -57,6 +57,7 @@
   import { readJson, writeJson } from "../storage";
   import { isThreadTab } from "../thread-tabs";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
+  import { warm } from "../workspace/warm.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import {
     type Handoff,
@@ -1074,7 +1075,24 @@
   const ROW_ESTIMATE = 21;
   /** What every list item carries: the name its drawn rule finds it by (the style's `[data-item]`). */
   const ITEM_ATTRS = { "data-item": "" };
-  const itemAttrs = () => ITEM_ATTRS;
+  /**
+   * A row a warming pane holds is skipped while it stages (`skipping`, set
+   * by `parkRows`): its content is not styled, and its box keeps the size
+   * virtua already has for it, so virtua's observer reads that same size
+   * and nothing moves.
+   */
+  const itemAttrs = ({ item }: { item: Row }) => {
+    const px = skipped.get(item.key);
+    return px === undefined
+      ? ITEM_ATTRS
+      : {
+          "data-item": "",
+          style: {
+            "content-visibility": "hidden",
+            "contain-intrinsic-block-size": `${px}px`,
+          },
+        };
+  };
 
   /**
    * ROWS LEAVE WHERE THEY STAND; THEY DO NOT VANISH.
@@ -1536,6 +1554,163 @@
   /** The rows of the view a far landing left, held mounted while it lands. */
   let lingering = $state<number[]>([]);
   /**
+   * A PANE LAID OUT AGAIN IS STYLED A FEW ROWS A TASK.
+   *
+   * A pane put away is skipped (PaneLeaf `.pane-hidden`), and virtua hears
+   * nothing of it: no size, no scroll. The frame that lays it out again as
+   * the reader reaches for its tab (warm.svelte.ts) styled every element it
+   * holds, 772 of them and 17.5ms on its own (tab-return 1a), and delivered
+   * virtua's observer every size it missed: the range it cut there took
+   * down the rows the view held when it was put away, 4.6-9.6ms of their
+   * removal in a 21-28ms task (1b). So as the pane warms, in that flush, the
+   * rows it holds are kept mounted (`heldRows`, by key, in `keepMounted`) and
+   * skipped, each at the size virtua has for it (`skipping`, in
+   * `itemAttrs`): the frame lays out the pane and those rows' boxes alone.
+   * Once it has painted, `STAGE_ROWS` of them a task are styled, or let go
+   * unstyled where virtua's range no longer holds them (web.dev, "Optimize
+   * long tasks"). While a far landing is on its way none is styled: it lets
+   * go of the view it leaves (`landFar`), and those rows go still skipped;
+   * what is left mounted once it has landed is styled, a step a task. A row virtua never measured (mounted while the pane was
+   * skipped: virtua's `hide`, `visibility: hidden` on its item) is skipped
+   * at virtua's estimate and goes first: its first measurement lands in the
+   * first step, not in the frame that lays the pane out (six such rows, 300
+   * of the 454 elements that frame styled: tab-return 1a). Shown before
+   * that ends, the pane lifts every skip in the flush that shows it
+   * (`skipped`).
+   */
+  let heldRows = $state<string[]>([]);
+  /** The rows still skipped while they stage, each at virtua's size for it, px. */
+  let skipping = $state.raw<ReadonlyMap<string, number>>(new Map());
+  const NO_SKIPS: ReadonlyMap<string, number> = new Map();
+  /** What `itemAttrs` skips: nothing once the pane is shown. */
+  const skipped = $derived(visible ? NO_SKIPS : skipping);
+  /** Each hold's number: whose rows a step in hand is staging. */
+  let parkings = 0;
+  function parkRows(): void {
+    const container = listing?.firstElementChild;
+    if (!(container && list)) {
+      return;
+    }
+    // Attributes alone: nothing here reads the page's layout.
+    const holding: string[] = [];
+    const unmeasured = new Set<string>();
+    for (const item of container.children) {
+      const key = item.querySelector<HTMLElement>(":scope > [data-row]")
+        ?.dataset.row;
+      if (key) {
+        holding.push(key);
+        if ((item as HTMLElement).style.visibility === "hidden") {
+          unmeasured.add(key);
+        }
+      }
+    }
+    if (holding.length === 0) {
+      return;
+    }
+    const at = new Map(renderedRows.map((row, index) => [row.key, index]));
+    const skips = new Map<string, number>();
+    for (const key of holding) {
+      const index = at.get(key);
+      if (index !== undefined) {
+        skips.set(key, list.getItemSize(index));
+      }
+    }
+    // The rows virtua never measured stage first: their first measurement
+    // lands in the first step, behind the frame that laid the pane out.
+    heldRows = [
+      ...holding.filter((key) => unmeasured.has(key)),
+      ...holding.filter((key) => !unmeasured.has(key)),
+    ];
+    skipping = skips;
+    parkings += 1;
+    const own = parkings;
+    // The task after the frame that lays the pane out, then a step a task.
+    const step = () =>
+      requestAnimationFrame(() =>
+        setTimeout(() => {
+          if (own === parkings && stageStep()) {
+            step();
+          }
+        })
+      );
+    step();
+  }
+  /** One step of the staging (`parkRows`); answers whether another is due. */
+  function stageStep(): boolean {
+    // A far landing on its way lets the view it leaves go (`landFar`): its
+    // rows go still skipped, never styled.
+    const landingFar = staging || narrow;
+    if (heldRows.length > 0) {
+      const done = heldRows.slice(0, STAGE_ROWS);
+      heldRows = heldRows.slice(STAGE_ROWS);
+      if (!landingFar) {
+        liftSkips(done);
+      }
+    } else if (!landingFar) {
+      liftSkips(stillMounted().slice(0, STAGE_ROWS));
+    }
+    return heldRows.length > 0 || skipping.size > 0;
+  }
+  /** The rows still skipped that virtua has mounted; the skips of those it let go are dropped. */
+  function stillMounted(): string[] {
+    const onList = new Set<string>();
+    for (const item of listing?.firstElementChild?.children ?? []) {
+      const key = item.querySelector<HTMLElement>(":scope > [data-row]")
+        ?.dataset.row;
+      if (key) {
+        onList.add(key);
+      }
+    }
+    const kept = [...skipping.keys()].filter((key) => onList.has(key));
+    if (kept.length < skipping.size) {
+      skipping = new Map([...skipping].filter(([key]) => onList.has(key)));
+    }
+    return kept;
+  }
+  /** `keys` are styled from here on: their skips are lifted. */
+  function liftSkips(keys: string[]): void {
+    if (!keys.some((key) => skipping.has(key))) {
+      return;
+    }
+    const unlifted = new Map(skipping);
+    for (const key of keys) {
+      unlifted.delete(key);
+    }
+    skipping = unlifted;
+  }
+  /** Whether this pane was warm at the last look: it stages as it warms, once. */
+  let wasWarm = false;
+  $effect(() => {
+    // Both read every time, so a pane warming or `visible` wakes this. A
+    // session's pane goes by the session's id; a thread's by its tab's, read
+    // off the slot it is docked in, which can be none yet as this first runs
+    // (PaneHost moves it there after it mounts).
+    const warmed = warm.panes();
+    const away = !visible;
+    // PaneLeaf's slot: a side split's own panes (paneforge) carry an empty `data-pane`.
+    const pane = listing?.closest<HTMLElement>('[data-slot="pane"][data-pane]')
+      ?.dataset.pane;
+    const now =
+      away &&
+      (warmed.includes(session.instanceId) ||
+        (!!pane && warmed.includes(pane)));
+    if (now && !wasWarm) {
+      untrack(parkRows);
+    }
+    wasWarm = now;
+  });
+  // Shown, nothing stays skipped: `skipped` lifts every skip in this flush,
+  // and the skips are dropped with it, so none comes back if it is put away.
+  $effect.pre(() => {
+    if (visible) {
+      untrack(() => {
+        if (skipping.size > 0) {
+          skipping = NO_SKIPS;
+        }
+      });
+    }
+  });
+  /**
    * The indexes virtua keeps mounted whatever its range: the last
    * `TAIL_MOUNTED` rows, and every row folding shut wherever it stands —
    * virtua dropping one mid-fold cancelled the fold, it never said it had
@@ -1570,6 +1745,15 @@
       if (index < count) {
         kept.push(index);
       }
+    }
+    // The rows a pane held as it was laid out again, held while they stage (`heldRows`).
+    if (heldRows.length > 0) {
+      const warmKeys = new Set(heldRows);
+      renderedRows.forEach((row, index) => {
+        if (warmKeys.has(row.key)) {
+          kept.push(index);
+        }
+      });
     }
     return kept;
   });

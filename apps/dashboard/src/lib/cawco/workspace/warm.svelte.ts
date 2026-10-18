@@ -66,6 +66,11 @@ export const warm = {
     return warmPanes.get(leafId) === paneId;
   },
 
+  /** The panes held warm, one a group at most. Tracked whole: a reader learns of any pane warming. */
+  panes(): string[] {
+    return [...warmPanes.values()];
+  },
+
   /**
    * The reader reached for `paneId`'s tab in `leafId`: it warms, in place of
    * any other there, once the frame in hand has painted ({@link afterPaint}).

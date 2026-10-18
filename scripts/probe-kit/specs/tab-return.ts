@@ -120,6 +120,14 @@ const TURN_MS = 3000;
 const RELEASE_MS = 5 * 60_000;
 /** After the last released turn, for its frames to reach the page. */
 const LANDED_MS = 1500;
+/**
+ * The reach's longest task, CPU ms on a quiet host: a quarter of the frame
+ * budget the slower CPU leaves (`2 × LONG_TASK_MS` over `SLOWER`), so a
+ * slower machine still has room. The parent's call (tab-return, 2026-10-19).
+ */
+const REACH_TASK_MS = 12;
+/** A press this soon after the reach comes while the warm pane's rows are still staged (Transcript `parkRows`). */
+const PRESS_IN_STAGING_MS = 40;
 /** An interaction's length in `inputsOf`'s line. */
 const LENGTH = / (\d+)ms/;
 const RIVE = join(
@@ -154,7 +162,19 @@ interface Back {
   psi: string;
   /** The longest task between the reach and the press, CPU ms. */
   reach: number;
+  /** That task said whole: what it ran, its restyle, the changes that scheduled it and its sampled stacks. */
+  reachWhat: string;
   scene: string;
+  /** The pane once the window is over: anything left skipped, rows in view with no text box, rows a different height (`shownStateOf`). */
+  shown: string;
+  /** From `shownStateOf`: elements with an inline skip, computing it hidden, rows in view, and those with no text box; empty when unread. */
+  shownCounts: number[];
+  /** How many item sizes told from the reach to the press differ from the size the item had before it. */
+  sizeChanges: number;
+  /** How many of its rows were still staged (an inline skip) as the press came. */
+  stagedAtPress: number;
+  /** From the reach to the press: the rows staged, the sizes virtua was told and which changed (`watchSizes`). */
+  staging: string;
   /** Read off a DevTools trace (Chromium); a WebKit return is its click alone. */
   traced: boolean;
   work: SwitchWork | null;
@@ -540,6 +560,193 @@ function watchPosts(): void {
 }
 
 /**
+ * In the dashboard's own document: every size a ResizeObserver is told of a
+ * list item (virtua's `[data-item]`), by its row's key and its pane, with
+ * when (epoch ms) and the size it last reported for that item, so a return
+ * says whether a row changed size while its pane was laid out and its rows
+ * staged (`stagingOf`). Read from the entries virtua is handed: nothing
+ * here reads the page's layout.
+ */
+function watchSizes(): void {
+  if (window.top !== window) {
+    return;
+  }
+  const seen: { at: number; key: string; pane: string; was: number | null; px: number }[] = [];
+  const last = new WeakMap<Element, number>();
+  const w = window as unknown as {
+    __sizes: typeof seen;
+    __lastSize: (el: Element) => number | null;
+  };
+  w.__sizes = seen;
+  w.__lastSize = (el) => last.get(el) ?? null;
+  const Own = window.ResizeObserver;
+  window.ResizeObserver = class extends Own {
+    constructor(callback: ResizeObserverCallback) {
+      super((entries, observer) => {
+        for (const entry of entries) {
+          const el = entry.target;
+          if (el instanceof HTMLElement && el.hasAttribute("data-item")) {
+            const px = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+            seen.push({
+              at: performance.timeOrigin + performance.now(),
+              key: el.querySelector<HTMLElement>(":scope > [data-row]")?.dataset.row ?? "?",
+              pane: el.closest<HTMLElement>("[data-pane]")?.dataset.pane ?? "?",
+              was: last.get(el) ?? null,
+              px,
+            });
+            last.set(el, px);
+          }
+        }
+        callback(entries, observer);
+      });
+    }
+  };
+}
+
+/** What pane `pane`'s list items last reported (`watchSizes`), by key: the sizes before a reach. Attributes and the watch alone. */
+const itemSizesOf = (page: Page, pane: string) =>
+  page.evaluate((id) => {
+    const w = window as unknown as { __lastSize?: (el: Element) => number | null };
+    const sizes: Record<string, number | null> = {};
+    for (const item of document.querySelectorAll(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"] [data-item]`
+    )) {
+      const key = item.querySelector<HTMLElement>(":scope > [data-row]")?.dataset.row;
+      if (key) {
+        sizes[key] = w.__lastSize?.(item) ?? null;
+      }
+    }
+    return sizes;
+  }, pane);
+
+/**
+ * The sizes virtua's observer was told of pane `pane`'s items from `from`
+ * to `to` (epoch ms, `watchSizes`): how many, which differ from the size the
+ * item had before the reach (`before`), and those with no size before.
+ */
+async function sizesTold(
+  page: Page,
+  pane: string,
+  before: Record<string, number | null>,
+  from: number,
+  to: number
+): Promise<{ changes: number; line: string }> {
+  const sizes = (
+    await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __sizes?: {
+              at: number;
+              key: string;
+              pane: string;
+              was: number | null;
+              px: number;
+            }[];
+          }
+        ).__sizes ?? []
+    )
+  ).filter((one) => one.pane === pane && one.at >= from && one.at < to);
+  // A size virtua had measured before the reach; a row it never measured
+  // has none, and what it is told of that row is its first measurement.
+  const hadOf = (one: { key: string }) => before[one.key] ?? null;
+  const changed = sizes.filter((one) => {
+    const had = hadOf(one);
+    return had !== null && Math.abs(one.px - had) > 0.5;
+  });
+  const unmeasured = sizes.filter((one) => hadOf(one) === null);
+  const which = changed
+    .slice(0, 6)
+    .map(
+      (one) =>
+        `${one.key.slice(0, 16)} ${hadOf(one)}→${one.px}px at ${Math.round(one.at - to)}ms`
+    )
+    .join(", ");
+  const rows = Object.keys(before).length;
+  const never = Object.values(before).filter((one) => one === null).length;
+  return {
+    changes: changed.length,
+    line: `${rows} rows mounted before the reach (${never} never measured); ${sizes.length} item sizes told from the reach to the press, ${changed.length} of them a change from the size before${which ? ` (${which})` : ""}, ${unmeasured.length} first measurements of rows never measured`,
+  };
+}
+
+/**
+ * Pane `pane` once its return's window is over: any element in it with an
+ * inline `content-visibility` or computing it `hidden`, and each row in its
+ * view whose first text has no box; with each row still mounted whose box
+ * differs from the size it had before the reach (`before`).
+ */
+const shownStateOf = (
+  page: Page,
+  pane: string,
+  before: Record<string, number | null>
+) =>
+  page.evaluate(
+    ([id, scroller, was]) => {
+      const box = document.querySelector<HTMLElement>(
+        `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+      );
+      if (!box) {
+        return null;
+      }
+      const all = [...box.querySelectorAll<HTMLElement>("*")];
+      const inline = all.filter((el) => el.style.contentVisibility).length;
+      const computed = all.filter(
+        (el) => getComputedStyle(el).contentVisibility === "hidden"
+      ).length;
+      const view = box
+        .querySelector<HTMLElement>(scroller)
+        ?.getBoundingClientRect();
+      const inView = (row: HTMLElement) => {
+        const rect = row.getBoundingClientRect();
+        return (
+          !!view &&
+          rect.height > 0 &&
+          rect.bottom > view.top &&
+          rect.top < view.bottom
+        );
+      };
+      // Its first text that is not blank, and whether it has a box.
+      const draws = (row: HTMLElement) => {
+        const walk = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, {
+          acceptNode: (node) =>
+            node.textContent?.trim()
+              ? NodeFilter.FILTER_ACCEPT
+              : NodeFilter.FILTER_SKIP,
+        });
+        const text = walk.nextNode();
+        if (!text) {
+          return false;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const r = range.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      const shownRows = [
+        ...box.querySelectorAll<HTMLElement>("[data-row]"),
+      ].filter(inView);
+      const rows = shownRows.length;
+      const blank = shownRows.filter((row) => !draws(row)).length;
+      // Each item measured before the reach, and whether its box is that size now.
+      const sized = [...box.querySelectorAll<HTMLElement>("[data-item]")]
+        .map((item) => {
+          const key = item.querySelector<HTMLElement>(":scope > [data-row]")
+            ?.dataset.row;
+          return { item, had: key ? (was[key] ?? null) : null };
+        })
+        .filter((one) => one.had !== null);
+      const kept = sized.length;
+      const moved = sized.filter(
+        ({ item, had }) =>
+          Math.abs(item.getBoundingClientRect().height - (had ?? 0)) > 0.5
+      ).length;
+      return { inline, computed, rows, blank, kept, moved };
+    },
+    [pane, SCROLLER, before] as const
+  );
+
+/**
  * In the dashboard's own document on WebKit, which reports no long tasks:
  * every gap of more than 50 ms in a 16 ms timer on its thread (its start,
  * epoch ms, and its length), where a task held the thread.
@@ -607,10 +814,14 @@ async function measureBack(
   page: Page,
   input: CDPSession,
   id: string,
-  waitFor?: () => Promise<boolean>
+  waitFor?: () => Promise<boolean>,
+  rest = REACH_MS
 ): Promise<Read> {
   const point = await pointAt(page, input, id);
   const held = await census(page);
+  const sizesBefore = await itemSizesOf(page, id);
+  let reachEpoch = 0;
+  let skippedAtPress = 0;
   await page.evaluate(() => {
     const w = window as unknown as {
       __inserted: number;
@@ -646,11 +857,14 @@ async function measureBack(
       )
         ?.evaluate(() => 0)
         .catch(() => undefined);
-      await page.evaluate(() => performance.mark("two-pane:reach:0"));
+      reachEpoch = await page.evaluate(() => {
+        performance.mark("two-pane:reach:0");
+        return performance.timeOrigin + performance.now();
+      });
       await point.reach();
-      await page.waitForTimeout(REACH_MS);
+      await page.waitForTimeout(rest);
       origin = await page.evaluate(() => performance.timeOrigin);
-      madeAt = await page.evaluate((pane) => {
+      [madeAt, skippedAtPress] = await page.evaluate((pane) => {
         const drawn = () => {
           const box = document.querySelector(
             `[data-slot="pane"][data-pane="${CSS.escape(pane)}"]`
@@ -670,7 +884,11 @@ async function measureBack(
         };
         performance.mark("two-pane:switch:0");
         requestAnimationFrame(look);
-        return performance.now();
+        // The rows still staged as the press comes: an inline skip, read off the attribute alone.
+        const staged = document.querySelectorAll(
+          `[data-slot="pane"][data-pane="${CSS.escape(pane)}"] [data-item][style*="content-visibility"]`
+        ).length;
+        return [performance.now(), staged] as const;
       }, id);
       await point.press();
       await page.waitForTimeout(WINDOW_MS);
@@ -698,6 +916,13 @@ async function measureBack(
     );
   const longest = longestOf(own);
   const reach = longestOf(own.filter((task) => task.at < madeMark));
+  const pressEpoch = origin + madeAt;
+  const told = await sizesTold(page, id, sizesBefore, reachEpoch, pressEpoch);
+  const staging = `${skippedAtPress} rows still staged as the press came; ${told.line}`;
+  const settled = await shownStateOf(page, id, sizesBefore);
+  const shown = settled
+    ? `${settled.inline} elements with an inline content-visibility, ${settled.computed} computing it hidden; ${settled.rows} rows in view, ${settled.blank} of them with no box on their first text; ${settled.kept} rows measured before the reach still mounted, ${settled.moved} of them a different height now`
+    : "no pane";
   const inserted = await page.evaluate(() => {
     const w = window as unknown as {
       __inserted: number;
@@ -747,7 +972,25 @@ async function measureBack(
             .join("; ") || "none"
         }`
       : "nothing",
+    shown,
+    shownCounts: settled
+      ? [settled.inline, settled.computed, settled.rows, settled.blank]
+      : [],
+    staging,
+    sizeChanges: told.changes,
+    stagedAtPress: skippedAtPress,
     reach: Math.round(reach?.cpu ?? 0),
+    reachWhat: reach
+      ? `${reach.ran}, ${Math.round((reach.at - madeMark) / 1000)}ms after the press: ${reach.cpu.toFixed(1)}ms of CPU, ${reach.restyled} elements in ${Math.round(reach.styleMs)}ms of style; scheduled by ${
+          reach.scheduled.map(([what, n]) => `${what} ${n}x`).join("; ") ||
+          "nothing traced"
+        }; its stacks: ${main
+          .stacksIn(reach.at, reach.end)
+          .filter(([stack]) => stack !== "(idle)")
+          .slice(0, 8)
+          .map(([stack, ms]) => `${stack} ${ms.toFixed(1)}ms`)
+          .join(" || ")}`
+      : "nothing",
     heavy:
       own
         .filter((task) => task.cpu >= HEAVY_MS)
@@ -811,10 +1054,53 @@ async function clickBack(
     pressAt,
     elsewhere: "not traced",
     reach: 0,
+    reachWhat: "not traced",
+    shown: "not read",
+    shownCounts: [],
+    staging: "not read",
+    sizeChanges: 0,
+    stagedAtPress: 0,
     traced: false,
     work: null,
     worstFrame: "not traced",
   };
+}
+
+/**
+ * A busy return's staging (Transcript `parkRows`): no row changed size from
+ * the reach to the press, nothing left skipped once shown with every row in
+ * view drawing its text, the reach's longest task within `REACH_TASK_MS`
+ * (a press with its rows still staged, 1c, carries the staging in its own
+ * window instead), and 1c's press came while rows were staged.
+ */
+function checkStaging(kit: Kit, back: Back): void {
+  if (!(back.traced && back.kind === "busy")) {
+    return;
+  }
+  kit.check(
+    `${back.scene}: from the reach to the press no row's size changed (virtua's observer told the size each item had before)`,
+    back.sizeChanges === 0,
+    back.staging
+  );
+  const [inline, computed, rows, blank] = back.shownCounts;
+  kit.check(
+    `${back.scene}: once shown nothing in the pane is skipped (no inline content-visibility, none computing it hidden) and every row in view draws its text`,
+    inline === 0 && computed === 0 && rows > 0 && blank === 0,
+    back.shown
+  );
+  if (back.scene.startsWith("1c")) {
+    kit.check(
+      `${back.scene}: the press came while rows were still staged`,
+      back.stagedAtPress > 0,
+      back.staging
+    );
+    return;
+  }
+  kit.check(
+    `${back.scene}: the reach's longest task within ${REACH_TASK_MS}ms of CPU (${REACH_TASK_MS * SLOWER}ms ${SLOWER}x slower)`,
+    back.reach <= REACH_TASK_MS,
+    back.reachWhat.slice(0, 600)
+  );
 }
 
 const run = async (kit: Kit) => {
@@ -876,7 +1162,7 @@ const run = async (kit: Kit) => {
       engine === "webkit"
         ? { engine: "webkit", init: [watchGaps] }
         : {
-            init: [watchCost, watchPosts],
+            init: [watchCost, watchPosts, watchSizes],
             oneProcess: engine === "one-process",
           }
     );
@@ -954,7 +1240,8 @@ const run = async (kit: Kit) => {
     name: string,
     to: string,
     kind: Back["kind"],
-    absence = SHORT_MS
+    absence = SHORT_MS,
+    rest = REACH_MS
   ) => {
     const { page, input, ready } = on;
     const got: { read?: Read; page?: PageBack } = {};
@@ -979,7 +1266,7 @@ const run = async (kit: Kit) => {
       const hidden = kind === "busy" ? null : await clockOf(page, to);
       const waitFor = kind === "past" ? ready : undefined;
       got.read = input
-        ? await measureBack(page, input, to, waitFor)
+        ? await measureBack(page, input, to, waitFor, rest)
         : await clickBack(page, to, waitFor);
       if (kind !== "busy") {
         got.page = pageBack(
@@ -1006,10 +1293,18 @@ const run = async (kit: Kit) => {
     };
     backs.push(back);
     kit.note(
-      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}${back.landing ? `landed: ${back.landing} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
+      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}${back.landing ? `landed: ${back.landing} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
     );
   };
   await leg(isolated, `1a: busy, back after ${SHORT_MS / 1000}s`, busy, "busy");
+  await leg(
+    isolated,
+    `1c: busy, back after ${SHORT_MS / 1000}s, pressed ${PRESS_IN_STAGING_MS}ms after the reach, its rows still staged`,
+    busy,
+    "busy",
+    SHORT_MS,
+    PRESS_IN_STAGING_MS
+  );
   await leg(
     isolated,
     `1b: busy, back after ${BACKLOG_MS / 60_000} min`,
@@ -1095,6 +1390,7 @@ const run = async (kit: Kit) => {
     `${JSON.stringify(backs, null, 2)}\n`
   );
   for (const back of backs) {
+    checkStaging(kit, back);
     // Past the bound a return loads the page again, and in the dashboard's
     // process its load is the dashboard's task: that page's own weight,
     // noted above, not the return's.
