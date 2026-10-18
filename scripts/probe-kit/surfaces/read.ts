@@ -11,8 +11,8 @@
  * `data-slot` is shown beside the key, as a label.
  *
  * Read with time held: every running animation and transition finished (a
- * finite one) or paused at its start (an infinite one) before any value is
- * read, and again after every forced state.
+ * finite one) or cancelled (an infinite one, which has no end to stand at)
+ * before any value is read, and again after every forced state.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the page's reader is one init script (it runs in the page and can import nothing), read in the order the page is walked.
 import type { CDPSession, Page } from "playwright-core";
@@ -252,6 +252,26 @@ interface PageReader {
     nodes: Record<number, Record<number, string>>;
   };
   done: () => void;
+  /**
+   * The browser's own next `count` frames, in real time, whatever the walk's
+   * clock: each runs a whole rendering update, a ResizeObserver's delivery
+   * and what it sets included.
+   */
+  frames: (count: number) => Promise<void>;
+  /**
+   * While an act runs (on), every animation held as it starts, each frame:
+   * what the act opens is at rest before anything under the pointer
+   * measures it (highlight.svelte.ts measures rows as a sheet slides in).
+   */
+  holding: (on: boolean) => void;
+  /** Starts the count `pointerRests` reads, as an act begins. */
+  pointerFrom: () => void;
+  /**
+   * Whether the pointer's last move, press or release since `pointerFrom`
+   * was a move: an act that ends on one (a hover) leaves the pointer where
+   * it rests, one that ends on a press has done with it.
+   */
+  pointerRests: () => boolean;
   read: (root: string) => {
     count: number;
     /** Each interactive element's index in `nodes`. */
@@ -275,6 +295,21 @@ declare global {
 
 /** Installs `window.__ssReader` (an init script; it runs in the page, so it is self-contained). */
 export function installReader(props: readonly string[]): void {
+  // The browser's own frames, kept before the walk's clock (installed after
+  // this script, walk.ts passPage) puts the page's requestAnimationFrame on
+  // its paused time: each is a whole rendering update, observers included.
+  const nativeFrame = window.requestAnimationFrame.bind(window);
+  /** The pointer's last move, press or release (`pointerRests`). */
+  let lastPointer = "";
+  for (const type of ["pointermove", "pointerdown", "pointerup"]) {
+    window.addEventListener(
+      type,
+      (event) => {
+        lastPointer = event.type;
+      },
+      { capture: true, passive: true }
+    );
+  }
   const ROUND = (v: number) => Math.round(v * 2) / 2;
   const SKIP = new Set([
     "SCRIPT",
@@ -316,6 +351,9 @@ export function installReader(props: readonly string[]): void {
     return best;
   };
 
+  /** The frame `holding` holds animations on, while an act runs. */
+  let holdFrame = 0;
+
   /** Every animation of the document and its open shadow roots: finished, or an infinite one held at its start. */
   const still = (): number => {
     const walk = (root: Document | ShadowRoot): Animation[] => {
@@ -341,9 +379,14 @@ export function installReader(props: readonly string[]): void {
             run.finish();
             held += 1;
           }
-        } else if (run.playState !== "paused" || run.currentTime !== 0) {
-          run.pause();
-          run.currentTime = 0;
+        } else {
+          // An infinite one is cancelled: what is read is the element's own
+          // style. Paused at its start instead, a spinner read its first
+          // frame's transform, but Chromium kept the scrollable overflow of
+          // whatever angle it had turned to, and its row read 18px or 16px of
+          // scroll height by the race (bench-updates, the Spinner's
+          // animate-spin); cancelled, the row lays out without it.
+          run.cancel();
           held += 1;
         }
       } catch {
@@ -450,6 +493,36 @@ export function installReader(props: readonly string[]): void {
       return { x: r.x, y: r.y, width: r.width, height: r.height };
     },
     still,
+    frames: (count) =>
+      new Promise<void>((done) => {
+        let left = count;
+        const each = () => {
+          left -= 1;
+          if (left <= 0) {
+            done();
+            return;
+          }
+          nativeFrame(each);
+        };
+        nativeFrame(each);
+      }),
+    pointerRests: () => lastPointer === "pointermove",
+    pointerFrom: () => {
+      lastPointer = "";
+    },
+    holding: (on) => {
+      cancelAnimationFrame(holdFrame);
+      holdFrame = 0;
+      if (!on) {
+        return;
+      }
+      // The page's own frames (the walk's clock, flowing while an act runs).
+      const each = () => {
+        still();
+        holdFrame = requestAnimationFrame(each);
+      };
+      holdFrame = requestAnimationFrame(each);
+    },
     done: () => {
       elements = [];
       base = [];
@@ -512,6 +585,14 @@ export function installReader(props: readonly string[]): void {
         if (el.matches(INTERACTIVE)) {
           interactive.push(el);
           interactiveAt.push(index);
+        }
+        // What a box skips (`content-visibility: hidden`: the home board put
+        // away under a conversation) is not rendered, and the page keeps none
+        // of it current: a skipped subtree fires no ResizeObserver
+        // (lib/utils/rendered.ts), so what it measured stands at whenever the
+        // box was put away. The box itself is read; what it skips is not.
+        if (getComputedStyle(el).contentVisibility === "hidden") {
+          return;
         }
         const counts = new Map<string, number>();
         const kids = [
@@ -600,17 +681,18 @@ export function installReader(props: readonly string[]): void {
   window.__ssReader = reader;
 }
 
-/** Holds every animation still until two frames pass with nothing left to hold (at most 8 rounds). */
+/**
+ * Holds every animation still until two frames pass with nothing left to
+ * hold (at most 8 rounds). The frames are the browser's own, waited for
+ * whatever they take on a busy machine: what finishing an animation set off
+ * (a tab grown to its width, re-measured by its ResizeObserver, which fires
+ * only in a rendering update) has landed before anything is read.
+ */
 export async function holdStill(page: Page): Promise<void> {
   for (let round = 0; round < 8; round += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each round reads what the last one left
     const held = await page.evaluate(() => window.__ssReader?.still() ?? 0);
-    await page.evaluate(
-      () =>
-        new Promise<void>((done) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => done()))
-        )
-    );
+    await page.evaluate(() => window.__ssReader?.frames(2));
     if (held === 0) {
       return;
     }

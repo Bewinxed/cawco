@@ -85,8 +85,9 @@ const approveNamed = (): string | null => {
   return next && !next.startsWith("--") ? next : null;
 };
 // A spec of its own takes `--approve` alone as its own (`run.ts
-// style-snapshot --approve`); a flag of the form `--name=value`
-// (`--surfaces=a,b`) is the spec's own, read off `process.argv`.
+// style-snapshot --approve`); any other flag, `--name=value`
+// (`--surfaces=a,b`) or `--name` alone (`--dump`), is the spec's own, read
+// off `process.argv`, never a spec's name.
 const approveArg =
   approveAt === -1 ? null : (approveNamed() ?? (kind === "web" ? null : kind));
 // `<spec>` approves every baseline it writes; `<spec>:<entry>,…` those named.
@@ -121,7 +122,7 @@ const named =
           (approveNamed() === null || i !== approveAt + 1) &&
           one !== "--review" &&
           (reviewAt === -1 || i !== reviewAt + 1) &&
-          !(one.startsWith("--") && one.includes("="))
+          !one.startsWith("--")
       )
     : [kind];
 const dir =

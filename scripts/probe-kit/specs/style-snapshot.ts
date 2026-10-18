@@ -14,8 +14,16 @@
  *   bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate   in a workspace: no delegate,
  *                                                                             its states left out with a NOTE
  *
+ *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] --twice      the tree against itself: two
+ *                                                                             walks in one run, no baselines
+ *
  * `PASS style-snapshot: 0 differences` or one `FAIL` line per difference:
- * `<surface>/<state> · <width> <theme>[ reduced] · <element key> [<data-slot>] · <property> · <before> → <after>`.
+ * `<surface>/<state> · <width> <theme>[ reduced] · <element key> [<data-slot>] · <property> · <before> → <after>`,
+ * the first 400 of each surface printed and every one written to
+ * `$TMPDIR/probe-kit/style-snapshot/differences.jsonl` (a line each:
+ * surface, state, pass, element, property, before, after), counted in
+ * `differences-summary.txt` beside it. `--twice` holds the same tree on the
+ * same tape to itself: anything it finds is noise, never a change.
  * An element's key is its DOM path from the surface's root (`tag:n`, its
  * place among its siblings of that tag), the same whatever its classes.
  *
@@ -35,7 +43,8 @@
  * each element names the `.svelte` file it is written in
  * (`__svelte_meta.loc.file`), and writes which surfaces render each file
  * with a `<style>` (`style-snapshot-coverage.json`), then lists the files
- * no surface renders.
+ * no surface renders. It counts what the reader reads: not what a
+ * `content-visibility: hidden` box skips.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -49,8 +58,10 @@ import {
   counts,
   differences,
   loadSnapshot,
+  type Snapshot,
   SnapshotWriter,
   saveSnapshot,
+  type Tally,
 } from "../surfaces/snapshot";
 import { PASSES, Servers, TAPE, walk } from "../surfaces/walk";
 
@@ -71,10 +82,13 @@ const flag = (name: string): string | undefined =>
     ?.slice(name.length + 3);
 const has = (name: string): boolean => process.argv.includes(`--${name}`);
 
-async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
-  const tape = await readTape(TAPE);
-  const hub = player(tape);
-  const servers = new Servers(kit, hub);
+/** One walk of every surface at every pass: each surface's snapshot, and its seconds. */
+async function readAll(
+  kit: Kit,
+  servers: Servers,
+  tape: Tape,
+  surfaces: Surface[]
+): Promise<{ seconds: Map<string, number>; snaps: Map<string, Snapshot> }> {
   const writers = new Map<string, SnapshotWriter>();
   const writer = (surface: string) => {
     let w = writers.get(surface);
@@ -84,28 +98,182 @@ async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
     }
     return w;
   };
-  let seconds = new Map<string, number>();
+  const seconds = await walk(
+    kit,
+    servers,
+    tape,
+    surfaces,
+    PASSES,
+    async ({ page, pass, state, surface }) => {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("DOM.enable");
+      await cdp.send("CSS.enable");
+      const read = await readSurface(page, cdp, state.root);
+      writer(surface.name).add(`${state.name} · ${pass.name}`, read);
+      await cdp.detach().catch(() => undefined);
+    },
+    (what, why) => {
+      const [surface, rest] = what.split("/");
+      writer(surface as string).add(rest as string, null, why);
+      kit.note(`${what}: did not open or read (${why})`);
+    }
+  );
+  const snaps = new Map(
+    [...writers].map(([name, w]) => [name, w.snapshot] as const)
+  );
+  return { seconds, snaps };
+}
+
+/** A difference line, as `differences.jsonl` keeps it. */
+interface Difference {
+  after: string;
+  before: string;
+  element: string;
+  pass: string;
+  property: string;
+  state: string;
+  surface: string;
+}
+
+const ARROW = " → ";
+/** A forced state's property on a descendant (`:hover on span:1 color`), counted with the element's own. */
+const FORCED_ON = /^:(hover|focus-visible) on \S+ /;
+
+/** `<state> · <pass> · <element …> · <property> · <before> → <after>`, taken apart from the right. */
+function parsed(surface: string, line: string): Difference {
+  const parts = line.split(" · ");
+  const change = parts.at(-1) ?? "";
+  const at = change.indexOf(ARROW);
+  return {
+    surface,
+    state: parts[0] ?? "",
+    pass: parts[1] ?? "",
+    element: parts.slice(2, -2).join(" · "),
+    property: parts.at(-2) ?? "",
+    before: at === -1 ? change : change.slice(0, at),
+    after: at === -1 ? "" : change.slice(at + ARROW.length),
+  };
+}
+
+/**
+ * Every difference, in kit.out: `differences.jsonl` one per line, and
+ * `differences-summary.txt` counted by surface, by surface and state at a
+ * pass, and by property.
+ */
+async function writeDifferences(kit: Kit, all: Difference[]): Promise<string> {
+  await mkdir(kit.out, { recursive: true });
+  const tally = (key: (d: Difference) => string) => {
+    const counted = new Map<string, number>();
+    for (const d of all) {
+      counted.set(key(d), (counted.get(key(d)) ?? 0) + 1);
+    }
+    return [...counted]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${String(n).padStart(7)}  ${k}`);
+  };
+  const jsonl = join(kit.out, "differences.jsonl");
+  await writeFile(jsonl, all.map((d) => JSON.stringify(d)).join("\n"));
+  await writeFile(
+    join(kit.out, "differences-summary.txt"),
+    [
+      `${all.length} differences`,
+      "",
+      "by surface:",
+      ...tally((d) => d.surface),
+      "",
+      "by surface/state · pass:",
+      ...tally((d) => `${d.surface}/${d.state} · ${d.pass}`),
+      "",
+      "by property:",
+      ...tally((d) => d.property.replace(FORCED_ON, ":$1 ")),
+      "",
+    ].join("\n")
+  );
+  return jsonl;
+}
+
+/**
+ * Each surface's differences, `before` → `after`: the first SHOWN of each
+ * as a FAIL line, the rest counted, every one in kit.out; then the total.
+ */
+async function report(
+  kit: Kit,
+  surfaces: Surface[],
+  pairs: Map<string, [Snapshot, Snapshot]>
+): Promise<void> {
+  const all: Difference[] = [];
+  let shownTotal = 0;
+  for (const surface of surfaces) {
+    const pair = pairs.get(surface.name);
+    if (!pair) {
+      continue;
+    }
+    const tally: Tally = {
+      shadowLayers: 0,
+      transitionLists: 0,
+      zeroOffsets: 0,
+    };
+    const lines = differences(pair[0], pair[1], tally);
+    if (tally.shadowLayers > 0) {
+      kit.note(
+        `${surface.name}: ${tally.shadowLayers} box-shadow value(s) equal once their blank layers (rgba(0, 0, 0, 0) 0px 0px 0px 0px) are set aside`
+      );
+    }
+    if (tally.transitionLists > 0) {
+      kit.note(
+        `${surface.name}: ${tally.transitionLists} transition duration, timing-function, delay or behavior list(s) equal once each is repeated or cut to its transition-property's length (CSS Transitions Level 1 §2: "the user agent must calculate its used value by repeating the list of values until there are enough")`
+      );
+    }
+    if (tally.zeroOffsets > 0) {
+      kit.note(
+        `${surface.name}: ${tally.zeroOffsets} background-position value(s) equal once a zero offset in one unit meets a zero offset in another (0px and 0% place the image at the same corner: CSS Backgrounds 3 §2.6, "with a value pair of 0% 0%, the upper left corner of the image is aligned with the upper left corner of" the area)`
+      );
+    }
+    all.push(...lines.map((line) => parsed(surface.name, line)));
+    for (const line of lines.slice(0, SHOWN)) {
+      kit.check(`${surface.name}/${line}`, false);
+      shownTotal += 1;
+    }
+    if (lines.length > SHOWN) {
+      kit.check(
+        `${surface.name} · ${lines.length - SHOWN} more differences not shown (${lines.length} in all)`,
+        false
+      );
+    }
+  }
+  const file = await writeDifferences(kit, all);
+  kit.check(
+    all.length === 0
+      ? "0 differences"
+      : `${all.length} differences in all (${shownTotal} shown above; every one in ${file})`,
+    all.length === 0
+  );
+}
+
+const describe = (
+  surface: string,
+  snap: Snapshot,
+  seconds: Map<string, number>
+) => {
+  const c = counts(snap);
+  const took = (seconds.get(surface) ?? 0).toFixed(0);
+  console.log(
+    `  ${surface}: ${c.reads} reads, ${c.elements} elements (${c.elements} rects), ${c.forced} read under :hover and :focus-visible, ${c.flagged} spilling or outside what holds them; ${took}s`
+  );
+};
+
+async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
+  const tape = await readTape(TAPE);
+  const hub = player(tape);
+  const servers = new Servers(kit, hub);
+  let first: Awaited<ReturnType<typeof readAll>>;
+  let second: Awaited<ReturnType<typeof readAll>> | null = null;
   try {
-    seconds = await walk(
-      kit,
-      servers,
-      tape,
-      surfaces,
-      PASSES,
-      async ({ page, pass, state, surface }) => {
-        const cdp = await page.context().newCDPSession(page);
-        await cdp.send("DOM.enable");
-        await cdp.send("CSS.enable");
-        const read = await readSurface(page, cdp, state.root);
-        writer(surface.name).add(`${state.name} · ${pass.name}`, read);
-        await cdp.detach().catch(() => undefined);
-      },
-      (what, why) => {
-        const [surface, rest] = what.split("/");
-        writer(surface as string).add(rest as string, null, why);
-        kit.note(`${what}: did not open or read (${why})`);
-      }
-    );
+    first = await readAll(kit, servers, tape, surfaces);
+    // --twice: the same tree on the same tape, walked again in this run.
+    if (has("twice")) {
+      second = await readAll(kit, servers, tape, surfaces);
+    }
   } finally {
     await servers.close();
     hub.stop();
@@ -116,19 +284,27 @@ async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
       `the tape answered ${misses.length} request(s) with "not on the tape" (the same on every run): ${misses.slice(0, 8).join("; ")}`
     );
   }
+  for (const [name, snap] of first.snaps) {
+    describe(name, snap, first.seconds);
+  }
+  const pairs = new Map<string, [Snapshot, Snapshot]>();
+  if (second) {
+    for (const [name, snap] of first.snaps) {
+      const again = second.snaps.get(name);
+      if (again) {
+        pairs.set(name, [snap, again]);
+      }
+    }
+    await report(kit, surfaces, pairs);
+    return;
+  }
   await mkdir(BASELINES, { recursive: true });
-  let total = 0;
-  let shownTotal = 0;
+  let missing = 0;
   for (const surface of surfaces) {
-    const now = writers.get(surface.name)?.snapshot;
+    const now = first.snaps.get(surface.name);
     if (!now) {
       continue;
     }
-    const c = counts(now);
-    const took = (seconds.get(surface.name) ?? 0).toFixed(0);
-    console.log(
-      `  ${surface.name}: ${c.reads} reads, ${c.elements} elements (${c.elements} rects), ${c.forced} read under :hover and :focus-visible, ${c.flagged} spilling or outside what holds them; ${took}s`
-    );
     const file = join(BASELINES, `${surface.name}.json.gz`);
     if (kit.approves(surface.name)) {
       // biome-ignore lint/performance/noAwaitInLoops: one baseline at a time
@@ -141,31 +317,18 @@ async function snapshot(kit: Kit, surfaces: Surface[]): Promise<void> {
         `${surface.name} · (baseline) · none approved → write it with --approve`,
         false
       );
-      total += 1;
+      missing += 1;
       continue;
     }
-    const lines = differences(await loadSnapshot(file), now);
-    total += lines.length;
-    for (const line of lines.slice(0, SHOWN)) {
-      kit.check(`${surface.name}/${line}`, false);
-      shownTotal += 1;
-    }
-    if (lines.length > SHOWN) {
-      kit.check(
-        `${surface.name} · ${lines.length - SHOWN} more differences not shown (${lines.length} in all)`,
-        false
-      );
-    }
+    pairs.set(surface.name, [await loadSnapshot(file), now]);
   }
   if (kit.approve) {
     return;
   }
-  kit.check(
-    total === 0
-      ? "0 differences"
-      : `${total} differences in all (${shownTotal} shown above)`,
-    total === 0
-  );
+  if (missing > 0) {
+    kit.check(`${missing} surface(s) have no baseline`, false);
+  }
+  await report(kit, surfaces, pairs);
 }
 
 /** The fleet the surfaces read, stood up and recorded onto the tape. */
@@ -267,15 +430,27 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
           const pool = [...document.querySelectorAll(root)];
           const els = pool.length > 0 ? pool : [document.body];
           const out = new Set<string>();
-          for (const top of els) {
-            for (const el of [top, ...top.querySelectorAll("*")]) {
-              const meta = (
-                el as unknown as { __svelte_meta?: { loc?: { file?: string } } }
-              ).__svelte_meta;
-              if (meta?.loc?.file) {
-                out.add(meta.loc.file);
-              }
+          // What the reader reads (read.ts): a box that skips its content
+          // (`content-visibility: hidden`) counts, what it skips does not.
+          const visit = (el: Element) => {
+            const meta = (
+              el as unknown as { __svelte_meta?: { loc?: { file?: string } } }
+            ).__svelte_meta;
+            if (meta?.loc?.file) {
+              out.add(meta.loc.file);
             }
+            if (getComputedStyle(el).contentVisibility === "hidden") {
+              return;
+            }
+            for (const kid of [
+              ...el.children,
+              ...(el.shadowRoot ? [...el.shadowRoot.children] : []),
+            ]) {
+              visit(kid);
+            }
+          };
+          for (const top of els) {
+            visit(top);
           }
           return [...out];
         }, state.root);

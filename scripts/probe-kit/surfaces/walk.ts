@@ -10,7 +10,7 @@
  * against a recorder in front of a scratch fleet's hub instead.
  */
 import { join } from "node:path";
-import type { BrowserContext, Page } from "playwright-core";
+import type { BrowserContext, Page, Request } from "playwright-core";
 import { heavySlot } from "../../lib/heavy-run";
 import { until } from "../../scratch-fleet";
 import type { Attach, Tape } from "../hub-tape";
@@ -154,7 +154,19 @@ async function devServer(hub: string) {
   return { base, child };
 }
 
-/** A page for `pass`: its width, theme and motion, the reader installed, its clock held at `at`. */
+/** Each page's requests not yet answered: what `quiet` waits on. */
+const inFlight = new WeakMap<Page, Set<Request>>();
+/** Each request `quiet` gave up waiting on, said once: a page that keeps one open is slow, never still. */
+const gaveUp = new Set<string>();
+
+/**
+ * A page for `pass`: its width, theme and motion, the reader installed, and
+ * its clock the walk's alone. Playwright's fake clock (`clock.install`)
+ * stands paused at the tape's moment: Date, setTimeout, setInterval,
+ * requestAnimationFrame and performance.now move only when `settle` runs
+ * them on, a fixed stretch at a time, so a script's motion is where the
+ * same stretch puts it on every run (the `/motion/` benches' loops).
+ */
 export async function passPage(
   kit: Kit,
   pass: Pass,
@@ -167,43 +179,241 @@ export async function passPage(
     await page.emulateMedia({ reducedMotion: "reduce" });
   }
   await page.context().addInitScript(installReader, PROPS);
+  // Every page focused, as a person's one window is: two passes side by side
+  // share one browser, where only one page would hold its focus, and what
+  // styles itself on focus (an editor's active line) read either way.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  await page.clock.install({ time: at - CLOCK_LEAD_MS });
+  await page.clock.pauseAt(at);
+  // Date stands at the tape's moment whatever stretches the timers are run
+  // on: what a read says of the time ("2m ago") is the same on every run.
   await page.clock.setFixedTime(at);
+  const pending = new Set<Request>();
+  inFlight.set(page, pending);
+  page.on("request", (request) => pending.add(request));
+  // Answered once its response is in: Playwright says no requestfinished
+  // for some answered fetches (a preview's CORS ping), so that alone would
+  // hold a request in flight for good.
+  page.on("response", (response) => pending.delete(response.request()));
+  page.on("requestfinished", (request) => pending.delete(request));
+  page.on("requestfailed", (request) => pending.delete(request));
+  // A new document: the last one's requests are nobody's to wait on.
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) {
+      pending.clear();
+    }
+  });
   // A state whose control is gone fails in seconds, not the default 30.
   page.setDefaultTimeout(10_000);
   return page;
 }
 
+/** How far before the tape's moment the clock is installed, so it can be paused at that moment. */
+const CLOCK_LEAD_MS = 1000;
+/** Real time for the browser's pointer-over under a still pointer once layout has moved (it sends one on a timer). */
+const POINTER_BEAT_MS = 250;
 /**
- * Waits until the page stops changing: fonts and images in, every animation
- * held, and its elements, their boxes and their inline styles the same on
- * four reads in a row 60ms apart.
+ * The page time an act is given: its clock stands this far past the tick
+ * the act began at, whatever the act took. Past an act's own run, and short
+ * of what a state waits on: home/unlocking shows the keychain's unlock under
+ * way, and a machine control gives up after CONTROL_TIMEOUT_MS (15s). After
+ * the mark the walk runs 11s of page time of its own (`arrive`: two settles
+ * round a nudge), so a step at the act's end is read at most ACT_MS + 11s
+ * later. Our call: five seconds.
+ */
+const ACT_MS = 5000;
+
+/**
+ * An act, with the page's time flowing as a person's clicks meet a page
+ * whose motions play (a popover's control is clickable once its opening
+ * has moved it into place); then the clock stands at ACT_MS past the tick
+ * the act began at, the same tick on every run.
+ *
+ * The clock is counted in its own ticks (`performance.now()`, the fake
+ * clock's ticks across reloads), never in wall time: Date is pinned
+ * (`setFixedTime`), and Playwright's `pauseAt(time)` consumes
+ * `time - this._now.time` of that pinned wall time. A mark set in wall time
+ * jumped the clock by everything the walk had run since the page opened,
+ * plus the act's own: home/unlocking's 15s wait was given up 18s into a
+ * single jump. Paused at Date's own moment, it consumes nothing; the act's
+ * remainder of ACT_MS is then run, timer by timer. An act that moves Date
+ * (rail/older sets it a day on, so its sessions read old) keeps its moment.
+ * An act that runs past ACT_MS stands where it ended, and says so.
+ */
+async function acting(
+  page: Page,
+  act: (page: Page) => Promise<unknown>
+): Promise<void> {
+  const began = await page.evaluate(() => performance.now());
+  await page.clock.resume();
+  await page.evaluate(() => {
+    window.__ssReader?.pointerFrom();
+    window.__ssReader?.holding(true);
+  });
+  try {
+    await act(page);
+  } finally {
+    await page
+      .evaluate(() => window.__ssReader?.holding(false))
+      .catch(() => undefined);
+    const moment = await page.evaluate(() => Date.now());
+    await page.clock.pauseAt(moment);
+    await page.clock.setFixedTime(moment);
+    const now = await page.evaluate(() => performance.now());
+    const rest = began + ACT_MS - now;
+    if (rest > 0) {
+      await page.clock.runFor(rest);
+    } else {
+      console.log(
+        `  act: ran ${Math.round(now - began)} ms of page time, past its ${ACT_MS}`
+      );
+    }
+  }
+}
+/**
+ * A state's act, then the page at rest after it. What the act opened is
+ * drawn under the pointer the click left there, and the browser's own
+ * pointer-over for it sent (it sends one a beat after layout moves under a
+ * still pointer): then the pointer off the page, so nothing reads hovered
+ * and a hover's highlight is always placed, then hidden. An act that ends
+ * on a move is a hover, and what it shows is the state (a session row's
+ * hover card): its pointer stays. Measured again at rest, as on arrival.
+ */
+async function actAtRest(
+  page: Page,
+  act: (page: Page) => Promise<unknown>
+): Promise<void> {
+  await acting(page, act);
+  const rests = await page.evaluate(
+    () => window.__ssReader?.pointerRests() ?? false
+  );
+  await holdStill(page);
+  await page.waitForTimeout(POINTER_BEAT_MS);
+  if (!rests) {
+    await page.mouse.move(-1, -1);
+  }
+  await arrive(page);
+}
+/** Each stretch `settle` runs the clock on, and how many. */
+const SETTLE_STEP_MS = 1000;
+const SETTLE_STEPS = 3;
+/** Real time a socket's answer is given to land after the last request is answered. */
+const LAND_MS = 50;
+
+/**
+ * Until the tape has answered every request the page made: none in flight
+ * on two reads in a row, a socket's answers given LAND_MS to land. A page
+ * still asking after 15 s is read as it stands (its requests named).
+ */
+async function quiet(page: Page): Promise<void> {
+  const pending = inFlight.get(page);
+  let calm = 0;
+  for (let i = 0; i < 300 && calm < 2; i += 1) {
+    calm = pending && pending.size > 0 ? 0 : calm + 1;
+    // biome-ignore lint/performance/noAwaitInLoops: polled until nothing is in flight
+    await page.waitForTimeout(LAND_MS);
+  }
+  for (const request of calm < 2 ? (pending ?? []) : []) {
+    const url = request.url().replace(ORIGIN_PORT, ":<port>");
+    if (!gaveUp.has(url)) {
+      gaveUp.add(url);
+      console.log(`  quiet: gave up after 15 s on ${request.method()} ${url}`);
+    }
+  }
+}
+
+/** A loopback origin's port, the run's own, as a line names it. */
+const ORIGIN_PORT = /:\d{4,5}(?=\/)/;
+
+/**
+ * The page's own time, run on: each stretch only once the tape has answered
+ * what the last one asked, so an answer lands at the same point of the
+ * page's time on every run, however busy the machine.
+ */
+async function settle(page: Page): Promise<void> {
+  for (let step = 0; step < SETTLE_STEPS; step += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each stretch runs on what the last one left
+    await quiet(page);
+    await page.clock.runFor(SETTLE_STEP_MS);
+  }
+  await quiet(page);
+}
+
+/** Every scroll offset on the page and the root's box: what a still page keeps between two reads. */
+const scrollsAndBoxes = () => {
+  let sum = 0;
+  // Every inline style's text, hashed: a value a script writes moves the
+  // hash, whatever its length.
+  let styles = 7;
+  let scrolls = `${scrollX},${scrollY}`;
+  const all = document.getElementsByTagName("*");
+  for (const el of all) {
+    const r = el.getBoundingClientRect();
+    sum += r.x * 3 + r.y * 7 + r.width * 11 + r.height * 13;
+    const style = el.getAttribute("style") ?? "";
+    for (let i = 0; i < style.length; i += 1) {
+      styles = (styles * 31 + style.charCodeAt(i)) % 2_147_483_647;
+    }
+    if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+      scrolls += `;${el.scrollTop},${el.scrollLeft}`;
+    }
+  }
+  const loading = [...document.images].filter((img) => !img.complete);
+  return `${all.length} ${sum.toFixed(3)} ${styles} ${loading.length} ${document.fonts.status} ${scrolls}`;
+};
+
+/** The window and every scroll container at the top and start: the one offset each is read at. */
+const toTheStart = () => {
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  for (const el of document.getElementsByTagName("*")) {
+    if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+      el.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    }
+  }
+};
+
+/**
+ * Waits until the page stops changing: fonts and images in, the tape done
+ * answering, the page's time run on its fixed stretches (`settle`), still in
+ * its own time, then every scroll container at its start (what the page
+ * scrolled itself is done by then) and still again: every animation held,
+ * and its elements, their boxes, their inline styles and every scroll offset
+ * the same over three stretches in a row.
  */
 export async function stand(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
-  await page.evaluate(() => window.scrollTo(0, 0));
-  let last = "";
-  let still = 0;
-  for (let i = 0; i < 80 && still < 4; i += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: polled until the page holds still
-    await holdStill(page);
-    const now = await page.evaluate(() => {
-      let sum = 0;
-      let styles = 0;
-      const all = document.getElementsByTagName("*");
-      for (const el of all) {
-        const r = el.getBoundingClientRect();
-        sum += r.x * 3 + r.y * 7 + r.width * 11 + r.height * 13;
-        styles += (el.getAttribute("style") ?? "").length;
-      }
-      const loading = [...document.images].filter((img) => !img.complete);
-      return `${all.length} ${sum.toFixed(2)} ${styles} ${loading.length} ${document.fonts.status}`;
-    });
-    still = now === last ? still + 1 : 0;
-    last = now;
-    await page.waitForTimeout(60);
-  }
+  await settle(page);
+  await stillInPageTime(page);
+  await page.evaluate(toTheStart);
+  await stillInPageTime(page);
   await holdStill(page);
 }
+
+/**
+ * Still in the page's own time: a paused clock holds a spring mid-way and
+ * looks still, so each read follows a stretch of it. A motion a resize or a
+ * scroll restarted (its observer's callback lands in real time, among the
+ * stretches) runs on until it rests; a loop that never rests stops at the
+ * cap, the same stretch of time on every run.
+ */
+async function stillInPageTime(page: Page): Promise<void> {
+  let last = "";
+  let still = 0;
+  for (let i = 0; i < STILL_STRETCHES && still < 3; i += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: polled until the page holds still
+    await quiet(page);
+    await page.clock.runFor(STILL_STEP_MS);
+    await holdStill(page);
+    const now = await page.evaluate(scrollsAndBoxes);
+    still = now === last ? still + 1 : 0;
+    last = now;
+  }
+}
+
+/** Each stretch of page time the stillness reads follow, and at most how many. */
+const STILL_STEP_MS = 250;
+const STILL_STRETCHES = 60;
 
 /**
  * A route as it opens, standing still, then measured once more at rest: a
@@ -213,7 +423,16 @@ export async function stand(page: Page): Promise<void> {
  */
 async function arrive(page: Page): Promise<void> {
   await stand(page);
-  await page.evaluate(() => window.dispatchEvent(new Event("resize")));
+  // A real resize, one pixel and back: a ResizeObserver hears it (a
+  // highlight's rows measured mid-slide, highlight.svelte.ts's `sizes`),
+  // where a dispatched `resize` event reaches only window listeners.
+  const size = page.viewportSize();
+  if (size) {
+    await page.setViewportSize({ width: size.width + 1, height: size.height });
+    await quiet(page);
+    await page.clock.runFor(SETTLE_STEP_MS);
+    await page.setViewportSize(size);
+  }
   await stand(page);
 }
 
@@ -242,9 +461,9 @@ export async function walk(
   const scene = tape.scene as Scene;
   // A tape recorded without the delegate (`--record --without-delegate`)
   // holds nothing for a state that stands on it: said once, then left out.
-  const absent = (state: State) => state.hostOnly === true && !scene.split;
+  const hostOnly = (state: State) => state.hostOnly === true && !scene.split;
   for (const surface of surfaces) {
-    for (const state of surface.states.filter(absent)) {
+    for (const state of surface.states.filter(hostOnly)) {
       kit.note(`${surface.name}/${state.name}: host only, not in this tape`);
     }
   }
@@ -255,7 +474,7 @@ export async function walk(
     // A surface's passes side by side, each on its own page and context.
     await pool(passes, PARALLEL, async (pass) => {
       const states = surface.states.filter(
-        (s) => !(absent(s) || (s.widths && !s.widths.includes(pass.width)))
+        (s) => !(hostOnly(s) || (s.widths && !s.widths.includes(pass.width)))
       );
       if (states.length === 0) {
         return;
@@ -276,8 +495,7 @@ export async function walk(
             );
             await arrive(page);
             if (state.act) {
-              await state.act(page);
-              await stand(page);
+              await actAtRest(page, state.act);
             }
             await visit({ page, pass, state, surface });
           } catch (error) {
