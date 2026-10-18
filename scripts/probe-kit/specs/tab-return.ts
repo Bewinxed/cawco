@@ -142,6 +142,8 @@ interface Back {
   inserted: number;
   /** To a busy tab, to a preview kept off screen, or to one past the bound. */
   kind: "busy" | "kept" | "past";
+  /** A busy return: where its transcript stood once the window was over (`landingOf`). */
+  landing?: string;
   /** The longest task from the reach to the window's end, CPU ms, and what it was. */
   longest: number;
   longestWhat: string;
@@ -558,6 +560,35 @@ function watchGaps(): void {
   }, 16);
 }
 
+/**
+ * Where pane `pane`'s transcript stands, read once a return's window is
+ * over: its scroll offset against its end, and the first row in its view,
+ * by its words and how far its top stands from the view's.
+ */
+function landingOf(page: Page, pane: string): Promise<string> {
+  return page.evaluate(
+    ([scroller, id]) => {
+      const box = document.querySelector<HTMLElement>(
+        `[data-slot="pane"][data-pane="${CSS.escape(id)}"] ${scroller}`
+      );
+      if (!box) {
+        return "no transcript";
+      }
+      const view = box.getBoundingClientRect();
+      const [first] = [...box.querySelectorAll<HTMLElement>("[data-row]")]
+        .map((row) => ({ row, rect: row.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.height > 0 && rect.bottom > view.top)
+        .sort((a, b) => a.rect.top - b.rect.top);
+      const words = (first?.row.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 48);
+      return `scrollTop ${box.scrollTop} of ${box.scrollHeight - box.clientHeight} (${box.scrollHeight - box.clientHeight - box.scrollTop}px off its end); first row in view "${words}", its top ${first ? Math.round(first.rect.top - view.top) : "none"}px from the view's`;
+    },
+    [SCROLLER, pane] as const
+  );
+}
+
 /** The dashboard's reaches into a preview's frame (`watchPosts`), epoch ms. */
 const postsOf = (page: Page) =>
   page.evaluate(
@@ -963,16 +994,19 @@ const run = async (kit: Kit) => {
     if (!got.read) {
       throw new Error(`tab-return: ${name} read nothing`);
     }
+    // Its turns held, nothing moves the busy transcript after its window.
+    const landing = kind === "busy" ? await landingOf(page, to) : undefined;
     const back: Back = {
       scene: name,
       kind,
       psi,
       ...got.read,
       ...(got.page ? { page: got.page } : {}),
+      ...(landing ? { landing } : {}),
     };
     backs.push(back);
     kit.note(
-      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
+      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}${back.landing ? `landed: ${back.landing} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
     );
   };
   await leg(isolated, `1a: busy, back after ${SHORT_MS / 1000}s`, busy, "busy");

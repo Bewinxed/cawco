@@ -1622,7 +1622,8 @@
    * After the landing's frame has painted: the screen above, then the rows
    * left behind, `STAGE_ROWS` a task (a view's worth let go in one, a far
    * landing's last step took 34ms, 27ms of it the rows' removal: tab-return's
-   * 3 min), then the far landing's built rows, by now in virtua's range.
+   * 3 min), then the far landing's built rows past what virtua's range
+   * holds, the same few a task.
    */
   function catchUpRest(): void {
     if (!narrow || unwinding) {
@@ -1643,7 +1644,13 @@
             release();
             return;
           }
-          staged = 0;
+          // The staged screen above the view, the topmost rows first, as
+          // the view left behind was (`ABOVE_LANDING`).
+          staged = Math.max(0, staged - STAGE_ROWS);
+          if (staged > 0) {
+            release();
+            return;
+          }
           unwinding = false;
         })
       );
@@ -1669,8 +1676,23 @@
    * lands then, among rows already measured (web.dev, "Optimize long tasks":
    * break a long task up and yield between the parts). A reader who scrolls
    * meanwhile keeps the view, and the staged rows go with the landing's.
+   *
+   * THE SCREEN ABOVE THE LANDING IS MEASURED WITH IT. Once the pane is shown
+   * its `buffer` mounts a screen above the view, an eighth a task, and the
+   * rows there are the ones its session sent while it was away: never drawn,
+   * at `ROW_ESTIMATE`. Each step measured them taller, and virtua held the
+   * tail's rows where they stood by scrolling (its `scrollTo` behind the
+   * flush, a style and a layout forced), whose scroll event in the next frame
+   * cut its range again: 5 corrections from 89ms to 180ms after the press,
+   * tasks of 16-29ms (tab-return 1b). So the staging measures that screen
+   * too, out of sight, and the rows above the view are let go again with the
+   * view the landing left (`catchUpRest`), before the press shows the pane:
+   * virtua keeps the sizes of rows it unmounts, and the buffer mounts
+   * measured rows that move nothing.
    */
   const STAGE_ROWS = 6;
+  /** How many views of rows from the end a far landing stages: its view, and the screen above it the buffer mounts. */
+  const ABOVE_LANDING = 2;
   /** How many rows from the end a far landing still being built keeps mounted; 0 when none is. */
   let staged = $state(0);
   /** The far landing's rows fill a view: the pin's next far write lands. */
@@ -1689,11 +1711,13 @@
             staged = 0;
             return;
           }
-          // The rows from the end that fill a view, by virtua's sizes: each
-          // step's rows measured by now, the rest at `ROW_ESTIMATE`.
+          // The rows from the end that fill the view and the screen above it
+          // (`ABOVE_LANDING`), by virtua's sizes: each step's rows measured by
+          // now, the rest at `ROW_ESTIMATE`.
           const count = renderedRows.length;
+          const fill = viewHeight * ABOVE_LANDING;
           let need = 0;
-          for (let height = 0; need < count && height < viewHeight; need += 1) {
+          for (let height = 0; need < count && height < fill; need += 1) {
             height += list.getItemSize(count - 1 - need);
           }
           if (staged >= need) {
