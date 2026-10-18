@@ -183,7 +183,7 @@
   {/if}
   {#snippet source()}
     <Segmented
-      class={embedded ? "justify-self-start" : ""}
+      class={embedded ? "justify-self-box-start" : ""}
       items={[
         { value: "dir", label: "Existing files" },
         { value: "repo", label: "Clone from GitHub" },
@@ -353,7 +353,7 @@
           </div>
           <!-- literal: 196px maximum height, 6px padding, 1px gap -->
           <div
-            class="fai-scroll grid max-h-(--max-h) content-start gap-(--gap) overflow-auto overscroll-contain p-(--pad)"
+            class="fai-scroll grid max-h-(--max-h) content-box-start gap-(--gap) overflow-auto overscroll-contain p-(--pad)"
             style:--gap="1px"
             style:--max-h="196px"
             style:--pad="6px"

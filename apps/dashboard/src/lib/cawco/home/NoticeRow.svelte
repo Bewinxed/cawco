@@ -48,7 +48,7 @@
 <article
   data-slot="notice"
   aria-label={label}
-  class="group relative grid min-h-(--row-min) grid-cols-(--columns) items-start gap-x-space-3 px-space-3 py-(--pad-block)"
+  class="group relative grid min-h-(--row-min) grid-cols-(--columns) items-box-start gap-x-space-3 px-space-3 py-(--pad-block)"
   data-flip="box"
   data-nested={nested || undefined}
   style:--columns="var(--lead) minmax(0, 1fr)"

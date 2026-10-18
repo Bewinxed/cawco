@@ -2472,6 +2472,15 @@
 @utility justify-self-box-start {
   justify-self: start;
 }
+@utility justify-self-box-end {
+  justify-self: end;
+}
+@utility self-box-start {
+  align-self: start;
+}
+@utility content-box-start {
+  align-content: start;
+}
 @utility content-unsafe-end {
   align-content: unsafe end;
 }

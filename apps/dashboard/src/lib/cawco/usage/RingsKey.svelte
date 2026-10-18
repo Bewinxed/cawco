@@ -60,7 +60,7 @@
       class="mark-text font-medium whitespace-nowrap text-ink-strong"
       data-key-value>{@render said(row.value)}</span
     >
-    <span class="mark-text min-w-0 justify-self-end text-end text-ink-muted"
+    <span class="mark-text min-w-0 justify-self-box-end text-end text-ink-muted"
       >{@render said(row.reset)}</span
     >
   {/each}

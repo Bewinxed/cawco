@@ -253,7 +253,7 @@
         {/if}
         {#if foldable && opened.has(step.id)}
           <div
-            class="flex flex-col items-start gap-space-2 ms-(--opened-inset) pt-space-1 pb-space-2"
+            class="flex flex-col items-box-start gap-space-2 ms-(--opened-inset) pt-space-1 pb-space-2"
             data-flip-anchor
             in:branch={RESULT}
             out:branch={RESULT}

@@ -3056,7 +3056,7 @@
            the bar as it fades. -->
       {@const [first] = askQuestions}
       <div
-        class="absolute inset-0 flex items-end pb-c-tray-gap pointer-events-none"
+        class="absolute inset-0 flex items-box-end pb-c-tray-gap pointer-events-none"
         in:askedIn
         out:askedOut
       >

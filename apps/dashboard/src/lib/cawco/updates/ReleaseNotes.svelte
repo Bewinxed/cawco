@@ -64,7 +64,7 @@
       <!-- literal: 6px -->
       <h3
         data-slot="release-notes-label"
-        class="mt-space-3 mb-space-2 inline-flex h-icon-lg items-center justify-self-start gap-space-1 rounded-xs bg-surface-recess px-(--pad) type-label text-ink-strong first:mt-0 tone-fixed:bg-note-fixed-bg tone-fixed:text-note-fixed-ink tone-improved:bg-note-improved-bg tone-improved:text-note-improved-ink tone-new:bg-note-new-bg tone-new:text-note-new-ink"
+        class="mt-space-3 mb-space-2 inline-flex h-icon-lg items-center justify-self-box-start gap-space-1 rounded-xs bg-surface-recess px-(--pad) type-label text-ink-strong first:mt-0 tone-fixed:bg-note-fixed-bg tone-fixed:text-note-fixed-ink tone-improved:bg-note-improved-bg tone-improved:text-note-improved-ink tone-new:bg-note-new-bg tone-new:text-note-new-ink"
         data-tone={known?.tone}
         style:--pad="6px"
       >

@@ -970,7 +970,7 @@
         aria-valuemax={RAIL_MAX}
         aria-valuemin={RAIL_MIN}
         aria-valuenow={railWidth}
-        class="absolute top-0 bottom-0 right-(--grip-right) w-(--grip-w) cursor-col-resize touch-none z-5 hover:bg-border-control"
+        class="absolute top-0 bottom-0 right-(--grip-right) w-(--grip-w) cursor-col-resize touch-none z-5 [&:hover]:bg-border-control"
         onkeydown={resizeKey}
         onpointerdown={startDrag}
         role="slider"

@@ -695,7 +695,7 @@
           data-usage-meter-glyph
           {...props}
           aria-label={tip}
-          class="col-2 row-2 inline-grid self-center justify-self-end text-ink-muted"
+          class="col-2 row-2 inline-grid self-center justify-self-box-end text-ink-muted"
           data-status-slot
           role="img"
           ><IconRefresh aria-hidden="true" class="size-icon-sm" /></span
@@ -704,7 +704,7 @@
     </Tip>
   {:else if time.guess}
     <span
-      class="mono-figure col-2 row-2 self-center justify-self-end text-size-meta leading-meta text-ink-muted"
+      class="mono-figure col-2 row-2 self-center justify-self-box-end text-size-meta leading-meta text-ink-muted"
       data-status-slot>~</span
     >
   {/if}
@@ -730,7 +730,7 @@
     >
     <!-- literal: 4ch -->
     <span
-      class="col-5 row-2 justify-self-end type-meta whitespace-nowrap text-ink-muted"
+      class="col-5 row-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted"
       data-week
       ><span
         class="mono-figure inline-block min-w-(--pct-min) text-end"
@@ -801,7 +801,7 @@
     data-slot="cell-d"
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-start items-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
+    class="relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}

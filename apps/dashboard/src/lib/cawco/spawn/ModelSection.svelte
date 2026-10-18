@@ -317,7 +317,7 @@
     {#if !runtime}
       <Rail
         axis="y"
-        class="grid content-start gap-(--rail-gap) rounded-l-md border-r border-r-border-hairline bg-surface-recess p-(--rail-pad)"
+        class="grid content-box-start gap-(--rail-gap) rounded-l-md border-r border-r-border-hairline bg-surface-recess p-(--rail-pad)"
         itemClass="ns-in touch-hit press-tint grid size-(--rail-radio) place-items-center"
         stagger={30}
         items={railItems}
@@ -420,7 +420,7 @@
       <div
         data-slot="list"
         aria-label={`${harnessName(listHarness)} models`}
-        class="fai-scroll relative grid h-(--h) content-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
+        class="fai-scroll relative grid h-(--h) content-box-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
         id={`${uid}-models`}
         role="listbox"
         style:--h="300px"
@@ -441,7 +441,7 @@
         {#if swap.leaving.length}
           <div
             aria-hidden="true"
-            class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 grid content-start gap-space-row"
+            class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 grid content-box-start gap-space-row"
             data-leaving
             inert
           >

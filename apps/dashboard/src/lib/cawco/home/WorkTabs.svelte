@@ -983,7 +983,7 @@
           <!-- A tab with nothing in it: its line on the rows' own text
                column, and under it, on Working, the one thing to do next. -->
           <div
-            class="col-start-1 row-start-1 flex min-w-0 flex-col items-start gap-space-2 self-start px-space-3 py-space-2 type-meta text-ink-muted data-stale:opacity-55"
+            class="col-start-1 row-start-1 flex min-w-0 flex-col items-start gap-space-2 self-box-start px-space-3 py-space-2 type-meta text-ink-muted data-stale:opacity-55"
             data-stale={stale || undefined}
             transition:crossIn
           >

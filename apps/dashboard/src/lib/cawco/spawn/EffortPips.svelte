@@ -172,7 +172,7 @@
   style:--pad-y="10px"
 >
   <div
-    class="col-start-1 row-start-1 grid content-start transition-[opacity] dur-pop ease-out"
+    class="col-start-1 row-start-1 grid content-box-start transition-[opacity] dur-pop ease-out"
     style:opacity={n ? 1 : 0.55}
     style:pointer-events={n ? "auto" : "none"}
   >

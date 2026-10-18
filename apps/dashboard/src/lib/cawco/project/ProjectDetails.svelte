@@ -263,7 +263,7 @@
     <!-- Place: where it lives, its places, and adding one. -->
     <div
       data-slot="row"
-      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
       data-detail="place"
       bind:this={placesRow}
     >
@@ -468,7 +468,7 @@
     <!-- Repository: a fact, with where it comes from. -->
     <div
       data-slot="row"
-      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
       data-detail="repository"
     >
       <p
@@ -502,7 +502,7 @@
     <!-- Work lands: the segment asked breathes until the hub answers. -->
     <div
       data-slot="row"
-      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
       data-detail="lands"
     >
       <p
@@ -549,7 +549,7 @@
     <!-- Caw: his own switch, its ways off with it. -->
     <div
       data-slot="row"
-      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
       data-detail="caw"
     >
       <p
@@ -574,7 +574,7 @@
     <!-- Review before done. -->
     <div
       data-slot="row"
-      class="grid grid-cols-(--row-cols) items-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
       data-detail="review"
     >
       <p

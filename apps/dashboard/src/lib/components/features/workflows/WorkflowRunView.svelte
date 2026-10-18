@@ -261,7 +261,7 @@
          edge as a transcript's prose does, clear of the run's lines. -->
     <header
       data-slot="head"
-      class="flex flex-wrap items-start justify-between gap-x-space-5 gap-y-space-3"
+      class="flex flex-wrap items-box-start justify-between gap-x-space-5 gap-y-space-3"
     >
       <div
         class="flex min-w-0 flex-col gap-space-1 text-size-meta leading-meta"
@@ -487,7 +487,7 @@
         <!-- A line arrives the house way (motion/rows), and the log keeps
              the newest in view only while the reader is at its end. -->
         <ol
-          class="m-0 grid h-(--log-h) list-none content-start gap-space-2 overflow-y-auto px-0 pt-space-2 pb-0"
+          class="m-0 grid h-(--log-h) list-none content-box-start gap-space-2 overflow-y-auto px-0 pt-space-2 pb-0"
           {@attach reflow()}
           {@attach followTail()}
         >

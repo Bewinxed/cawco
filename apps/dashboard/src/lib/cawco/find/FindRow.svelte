@@ -87,7 +87,7 @@
   >
     <span
       data-slot="glyph"
-      class="grid place-items-center row-start-1 col-start-1 w-icon-md h-(--line-1) text-status-idle-glyph tone-live:text-status-live-glyph tone-attn:text-status-attn-glyph tone-fail:text-status-fail-glyph group-data-phone/row:self-start"
+      class="grid place-items-center row-start-1 col-start-1 w-icon-md h-(--line-1) text-status-idle-glyph tone-live:text-status-live-glyph tone-attn:text-status-attn-glyph tone-fail:text-status-fail-glyph group-data-phone/row:self-box-start"
       data-breathes={row.breathes ? "" : undefined}
       data-tone={row.state.tone}
       aria-hidden="true"
@@ -99,13 +99,13 @@
          (Gecko does not trim a scroll container). -->
     <span
       data-slot="title"
-      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-(--line-1) text-ink-row group-data-phone/row:type-body group-data-phone/row:text-(length:--title-fs-phone) group-data-phone/row:leading-(--line-1) group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3"
+      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-(--line-1) text-ink-row group-data-phone/row:type-body group-data-phone/row:text-(length:--title-fs-phone) group-data-phone/row:leading-(--line-1) group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3 group-data-phone/row:line-clamp-std-3 group-data-phone/row:overflow-clip"
       >{row.title}</span
     >
     {#if ago}
       <span
         data-slot="num"
-        class="num row-start-1 col-start-3 type-meta leading-(--line-1) text-ink-muted group-data-phone/row:self-start"
+        class="num row-start-1 col-start-3 type-meta leading-(--line-1) text-ink-muted group-data-phone/row:self-box-start"
         aria-hidden="true">{ago}</span
       >
     {/if}

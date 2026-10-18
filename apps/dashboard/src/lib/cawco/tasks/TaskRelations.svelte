@@ -96,7 +96,7 @@
 {#snippet row(name: string, ids: string[], edgeName: TaskEdge | null)}
   <!-- literal: 6rem minmax(0, 1fr) -->
   <div
-    class="grid grid-cols-(--edge-cols) items-start gap-space-2"
+    class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
     style:--edge-cols="6rem minmax(0, 1fr)"
   >
     <span class="pt-space-1 type-label text-ink-muted">{name}</span>

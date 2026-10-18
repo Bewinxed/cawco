@@ -261,7 +261,7 @@
                them. -->
           <!-- literal: 1fr auto; 28px -->
           <li
-            class="grid grid-cols-(--damaged-cols) items-start gap-x-space-2 gap-y-space-1 py-space-2 pr-space-3 pl-(--damaged-lead)"
+            class="grid grid-cols-(--damaged-cols) items-box-start gap-x-space-2 gap-y-space-1 py-space-2 pr-space-3 pl-(--damaged-lead)"
             data-flip
             style:--damaged-cols="1fr auto"
             style:--damaged-lead="calc(var(--space-3) + 28px + var(--space-3))"

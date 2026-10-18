@@ -271,7 +271,7 @@
       data-slot="blocks"
       bind:this={grid}
       bind:clientWidth={gridWidth}
-      class="grid grid-flow-row grid-cols-(--block-cols) items-start gap-space-group min-w-0"
+      class="grid grid-flow-row grid-cols-(--block-cols) items-box-start gap-space-group min-w-0"
       style:--block-fill={fill === null ? undefined : `${fill}px`}
       style:--columns={columns}
       style:--block-cols="repeat(var(--columns), minmax(0, 1fr))"

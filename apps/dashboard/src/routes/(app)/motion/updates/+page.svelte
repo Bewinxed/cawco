@@ -335,7 +335,7 @@
   <h1 class="type-title">Notices 1 to 7, as the update row of Caw's panel</h1>
   <div
     data-slot="notices"
-    class="grid grid-cols-(--notice-cols) items-start gap-space-5"
+    class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
     data-states="notices"
   >
     {#each NOTICES as notice (notice.kind)}
@@ -348,7 +348,7 @@
   <h1 class="type-title">Updated, with notes written before sections</h1>
   <div
     data-slot="notices"
-    class="grid grid-cols-(--notice-cols) items-start gap-space-5"
+    class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
     data-states="notice-plain"
   >
     <div class="kit-pop w-(--panel-w)" data-notice="plain">
@@ -387,7 +387,7 @@
   </div>
   <div
     data-slot="notices"
-    class="grid grid-cols-(--notice-cols) items-start gap-space-5"
+    class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
     data-states="update-card"
   >
     <div class="kit-pop w-(--panel-w)">

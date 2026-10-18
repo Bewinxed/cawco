@@ -426,7 +426,7 @@
   <div data-slot="host" class="@container/setup min-w-0">
     <!-- literal: 184px minmax(0, 1fr) -->
     <div
-      class="grid grid-cols-(--setup-cols) items-start gap-space-7 @max-setup/setup:grid-cols-(--setup-cols-narrow) @max-setup/setup:gap-space-4"
+      class="grid grid-cols-(--setup-cols) items-box-start gap-space-7 @max-setup/setup:grid-cols-(--setup-cols-narrow) @max-setup/setup:gap-space-4"
       style:--setup-cols="184px minmax(0, 1fr)"
       style:--setup-cols-narrow="minmax(0, 1fr)"
     >
@@ -714,7 +714,7 @@
           {@const device = devices.get(machine.machineId)}
           {#if device}
             <li
-              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-start"
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
               data-device
             >
               <b
@@ -729,7 +729,7 @@
                 <DevicePanel flow={device} machine={name} {online} />
               </div>
               <span
-                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn-ink"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn-ink"
                 data-warn={state === "mismatch" || undefined}
                 style:--area="st"
               >
@@ -757,7 +757,7 @@
                 style:--area="name">{name}</b
               >
               <span
-                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-end type-meta whitespace-nowrap text-ink-muted data-ok:not-data-warn:text-status-done-ink data-warn:text-status-attn-ink"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-ok:not-data-warn:text-status-done-ink data-warn:text-status-attn-ink"
                 data-ok={done || undefined}
                 data-warn={state === "mismatch" || undefined}
                 style:--area="st"

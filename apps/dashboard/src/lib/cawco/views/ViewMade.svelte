@@ -36,7 +36,7 @@
 <!-- literal: repeat(auto-fill, minmax(18rem, 1fr)) -->
 <ul
   aria-label="Made"
-  class="m-0 grid list-none grid-cols-(--made-cols) items-start gap-space-3 p-0"
+  class="m-0 grid list-none grid-cols-(--made-cols) items-box-start gap-space-3 p-0"
   style:--made-cols="repeat(auto-fill, minmax(18rem, 1fr))"
 >
   {#each made as task (task.id)}

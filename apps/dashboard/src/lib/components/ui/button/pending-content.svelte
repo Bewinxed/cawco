@@ -230,7 +230,7 @@
   <!-- Icon only: nothing to morph. -->
 {:else}
   <span
-    class="has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-start"
+    class="has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-box-start"
     ><span
       class="transition-[opacity] dur-morph ease-out covered-true:opacity-0"
       data-covered={covered}
