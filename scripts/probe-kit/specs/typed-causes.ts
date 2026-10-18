@@ -9,6 +9,8 @@
  *   SIGKILL (`HarnessContext.died`). And a resumed conversation whose CLI
  *   exits 1 with its transcript gone ends `CLAUDE_CONVERSATION_GONE`, though
  *   no "No conversation found" is said.
+ * - B, a 429 limit: a real pi session whose provider answers 429 in German
+ *   ends its turn at the account's limit, by the answer's status.
  * - C, a non-English git: a folder in no repository, made a place by a dry
  *   run of `placeRepo` while git speaks German. It is read as in no
  *   repository by `rev-parse --is-inside-work-tree`'s exit, and planned.
@@ -184,6 +186,152 @@ const signalled = async (kit: Kit): Promise<void> => {
   );
 };
 
+/**
+ * The words a provider's 429 says in B: German, and none of the English a
+ * limit was once read by ("usage limit", "rate limit reached", …).
+ */
+const LIMIT_WORDS =
+  "Zu viele Anfragen: das Kontingent dieses Kontos ist erschöpft.";
+
+/**
+ * B: a turn a provider refuses with a 429, on a real pi session (the agent's
+ * own `startPiHost`, pi's SDK, its HTTP to the provider). One loopback server
+ * stands in for the provider, answering every completion `429` in
+ * {@link LIMIT_WORDS}, and for the hub's tool list pi asks for at its start
+ * (an empty one). Retries are off in pi's settings, so the first answer ends
+ * the turn. The turn's result is held at the account's limit by the decision
+ * the hub reads: `atLimit`, set from the answer's status, or, where a build
+ * has none, its `providerLimitRefused` over the turn's error words.
+ */
+const providerLimit = async (kit: Kit, scratch: string): Promise<void> => {
+  const answered: number[] = [];
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: (request) => {
+      const { pathname } = new URL(request.url);
+      if (pathname.startsWith("/api/delegation/tools")) {
+        return Response.json({ tools: [] });
+      }
+      answered.push(429);
+      return Response.json(
+        { error: { message: LIMIT_WORDS, type: "insufficient_quota" } },
+        { status: 429 }
+      );
+    },
+  });
+  const agentDir = join(scratch, "pi-agent");
+  const cwd = join(scratch, "pi-work");
+  await mkdir(agentDir, { recursive: true });
+  await mkdir(cwd, { recursive: true });
+  await writeFile(
+    join(agentDir, "models.json"),
+    JSON.stringify({
+      providers: {
+        probe429: {
+          baseUrl: `http://127.0.0.1:${server.port}/v1`,
+          api: "openai-completions",
+          apiKey: "fake-probe-key",
+          models: [
+            {
+              id: "probe-429",
+              name: "Probe 429",
+              reasoning: false,
+              input: ["text"],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 100_000,
+              maxTokens: 4000,
+            },
+          ],
+        },
+      },
+    })
+  );
+  await writeFile(
+    join(agentDir, "settings.json"),
+    JSON.stringify({ retry: { enabled: false } })
+  );
+  const before = {
+    PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR,
+    CAWCO_MCP_PORT: process.env.CAWCO_MCP_PORT,
+  };
+  Object.assign(process.env, {
+    PI_CODING_AGENT_DIR: agentDir,
+    CAWCO_MCP_PORT: String(server.port),
+  });
+  const frames: Record<string, unknown>[] = [];
+  let session: { dispose: () => Promise<void> } | undefined;
+  try {
+    const { startPiHost } =
+      await import("../../../packages/agent/src/harnesses/pi-runtime");
+    const core = (await import("../../../packages/core/src/index")) as {
+      providerLimitRefused?: (errors: readonly string[]) => boolean;
+    };
+    const ctx = {
+      instanceId: "probe-typed-causes-pi",
+      cwd,
+      busy: () => undefined,
+      emit: () => undefined,
+      failed: (error: unknown) =>
+        kit.note(`B: the session failed: ${String(error)}`),
+      frame: (message: Record<string, unknown>) => {
+        frames.push(message);
+      },
+      keeperRefused: () => undefined,
+      permission: () => undefined,
+      rejected: (_: string, error: unknown) =>
+        kit.note(`B: the send was refused: ${String(error)}`),
+      session: () => undefined,
+    };
+    const started = await startPiHost(
+      {
+        instanceId: ctx.instanceId,
+        cwd,
+        harness: "pi",
+        model: "probe429/probe-429",
+      } as never,
+      ctx as never
+    );
+    session = started;
+    started.send(
+      {
+        type: "user",
+        uuid: crypto.randomUUID(),
+        message: { role: "user", content: "Sag hallo." },
+        parent_tool_use_id: null,
+      } as never,
+      {}
+    );
+    const result = await until(
+      "B: the turn's result",
+      () => frames.find((frame) => frame.type === "result"),
+      Boolean,
+      60_000
+    );
+    const errors = (result.errors as string[] | undefined) ?? [];
+    kit.note(
+      `B: the provider answered ${JSON.stringify(answered)}; the result: ${JSON.stringify({ subtype: result.subtype, is_error: result.is_error, errors, atLimit: result.atLimit })}`
+    );
+    const atLimit =
+      result.atLimit === true || (core.providerLimitRefused?.(errors) ?? false);
+    kit.check(
+      "B: a turn its provider refused with a 429 is at its account's limit, whatever the refusal's words",
+      answered.includes(429) && result.is_error === true && atLimit,
+      JSON.stringify(result).slice(0, 400)
+    );
+  } finally {
+    await session?.dispose().catch(() => undefined);
+    server.stop(true);
+    for (const [name, value] of Object.entries(before)) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+  }
+};
+
 /** C: a folder in no repository, read so while git speaks German. */
 const germanPlace = async (kit: Kit, scratch: string): Promise<void> => {
   const env = await germanEnv(scratch);
@@ -337,6 +485,7 @@ const spec: Spec = {
     );
     try {
       await signalled(kit);
+      await providerLimit(kit, scratch);
       await germanPlace(kit, scratch);
       await germanRace(kit, scratch);
       await trailerless(kit, scratch);
