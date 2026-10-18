@@ -535,6 +535,18 @@
       iframe?.contentWindow?.postMessage(message, paneOrigin);
     }
   }
+  /*
+   * The page's thumbnail, asked once a load: when its overlay is ready and
+   * its frame stands at the size the split gave it. Asked on the page's
+   * first ready, it drew the page at whatever width the split's slide had
+   * reached (one page, five walks, five pictures from 309x646 to 350x571).
+   */
+  $effect(() => {
+    if (connected && !captured && !expand?.moving) {
+      captured = true;
+      post({ type: "cawco:capture" });
+    }
+  });
 
   /*
    * This view's word to the hub that the artifact is on screen at the open
@@ -1152,10 +1164,6 @@
           openLinkedPin();
           if (openPin) {
             post({ type: "cawco:track-pin", id: openPin });
-          }
-          if (!captured) {
-            captured = true;
-            post({ type: "cawco:capture" });
           }
         }
         break;
