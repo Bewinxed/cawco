@@ -304,7 +304,7 @@ function readRoom(line: string | undefined): Room | undefined {
 }
 
 /** What a head read gets wrong, against the controls the panel wants; empty when it holds. */
-function roomFaults(room: Room, wanted: string[]): string[] {
+function roomFaults(room: Room, wanted: string[], pins: number): string[] {
   const faults: string[] = [];
   const standing = room.shown
     .map((slot) => (slot.name === "modePick" ? "mode" : slot.name))
@@ -339,11 +339,16 @@ function roomFaults(room: Room, wanted: string[]): string[] {
   }
   // With no room for More's count beside the mode, the mode keeps the room and More's row carries the count (menusStep).
   if (
+    pins > 0 &&
     !standing.includes("comments") &&
     room.badge === "-" &&
     !room.shown.some((slot) => slot.name === "modePick")
   ) {
     faults.push("Comments' count is nowhere on the head");
+  }
+  // A count of none is not drawn on More.
+  if (pins === 0 && room.badge !== "-") {
+    faults.push(`More draws a count of ${room.badge} with no open pins`);
   }
   const used =
     room.title + room.shown.reduce((sum, slot) => sum + slot.width, 0);
@@ -368,7 +373,7 @@ const meets = (a: Box | undefined, b: Box | undefined) =>
   b[1] < a[1] + a[3];
 
 /** Where a count stands over a glyph beside it (`preview head counts …`); empty when none does. */
-function countFaults(line: string | undefined): string[] {
+function countFaults(line: string | undefined, pins: number): string[] {
   const m = line?.match(COUNTS);
   if (!m) {
     return ["no head counts line"];
@@ -377,6 +382,9 @@ function countFaults(line: string | undefined): string[] {
     .slice(2, 7)
     .map(boxOf);
   const faults: string[] = [];
+  if (pins === 0 && moreCount) {
+    faults.push("More's count is drawn with no open pins");
+  }
   if (meets(moreCount, dots) || meets(moreCount, close)) {
     faults.push("More's count meets its dots or Close");
   }
@@ -469,7 +477,7 @@ async function readAt(
   const more = lastOf(on, OPEN_TAB);
   const counts = lastOf(on, COUNTS);
   const faults = room
-    ? [...roomFaults(room, wanted), ...countFaults(counts)]
+    ? [...roomFaults(room, wanted, on.pins), ...countFaults(counts, on.pins)]
     : ["no head room line"];
   // With no head, what the app last said of its preview, and how much it said at all.
   const said = room
@@ -641,8 +649,8 @@ async function pinsStep(
   const room = readRoom(lastOf(on, ROOM));
   const counts = lastOf(on, COUNTS);
   const faults = [
-    ...(room ? roomFaults(room, wanted) : ["no head room line"]),
-    ...countFaults(counts),
+    ...(room ? roomFaults(room, wanted, total) : ["no head room line"]),
+    ...countFaults(counts, total),
   ];
   if (shown?.match(COUNTS)?.[1] !== String(total)) {
     faults.push(`the head says ${shown?.match(COUNTS)?.[1] ?? "no"} open pins`);

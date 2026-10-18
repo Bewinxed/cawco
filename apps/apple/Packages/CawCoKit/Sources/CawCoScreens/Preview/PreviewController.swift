@@ -829,7 +829,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             shown = fit(Self.target)
             // More holding Comments is as wide as its count after the dots: placed again with that room,
             // unless that room is the mode's (it outranks Comments): then the count stands in More's row.
-            if wanted.contains(.comments), !shown.contains(.comments) {
+            if wanted.contains(.comments), !shown.contains(.comments), comments.open > 0 {
                 let counted = fit(moreWidth(holding: true))
                 let modeStands = { (set: Set<HeadItem>) in set.contains(.mode) || set.contains(.modePick) }
                 if modeStands(counted) || !modeStands(shown) {
@@ -849,11 +849,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintMore()
     }
 
-    /// More's own words, and Comments' open count on it while it holds Comments.
+    /// More's own words, and Comments' open count on it while it holds Comments and there is one to count.
     private func paintMore() {
-        // As on Comments: the count stands always, 0 too.
+        // A count of none on the dots says nothing: More draws it only above 0.
         // Run on every layout: each is written only when it changed, as a label's words lay the head out again.
-        let holds = overflowed.contains(.comments) && countOnMore
+        let holds = overflowed.contains(.comments) && countOnMore && comments.open > 0
         let count = "\(comments.open)"
         if moreBadge.text != count { moreBadge.text = count }
         if moreBadge.isHidden == holds { moreBadge.isHidden = !holds }
