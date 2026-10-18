@@ -7,10 +7,13 @@
  * no fleet socket, no fleet REST reads, no transcript model.
  *
  * The hub sends the whole frame on open and on every change; a socket that
- * drops opens again, and the next frame is the whole of it again.
+ * drops opens again, and the next frame is the whole of it again. A socket
+ * the hub refuses (ARTIFACT_SESSION_REFUSED: the device is not paired, the
+ * artifact is gone) is opened no more, and the tab says the hub's reason.
  */
 import {
   ARTIFACT_SESSION_PATH,
+  ARTIFACT_SESSION_REFUSED,
   type ArtifactSessionFrame,
   type FsEntry,
   type FsPayload,
@@ -34,6 +37,8 @@ const BEAT_MS = 15_000;
 const DEAD_MS = 40_000;
 /** The waits before opening again after a drop, longest last. Our call. */
 const RETRY_MS = [500, 1000, 2000, 5000, 10_000] as const;
+/** The close codes the hub refuses this socket with. */
+const REFUSALS = new Set<number>(Object.values(ARTIFACT_SESSION_REFUSED));
 
 interface Waiter {
   reject: (error: Error) => void;
@@ -67,6 +72,8 @@ export class ArtifactSession implements PaneFleet {
    * kept, closed, once the hub says it shows nothing.
    */
   #preview = $state<PanePreview | undefined>(undefined);
+  /** Why the hub refused the socket, in its words; null while it has not. */
+  #refused = $state<string | null>(null);
   #socket: WebSocket | null = null;
   #ended = false;
   #tries = 0;
@@ -75,15 +82,23 @@ export class ArtifactSession implements PaneFleet {
   #lastHeard = 0;
   readonly #asks = new Map<string, Waiter>();
 
-  /** Follows `instanceId`, the session that made the tab's artifact, from its first frame. */
-  follow(instanceId: string): void {
+  /** Follows `instanceId`, the session that made the tab's artifact `artifactId`, from its first frame. */
+  follow(instanceId: string, artifactId: string): void {
     this.end();
     this.#ended = false;
     this.#tries = 0;
     this.#heard = null;
     this.#preview = undefined;
+    this.#refused = null;
     this.#instanceId = instanceId;
-    this.#open(instanceId);
+    this.#open(
+      `${encodeURIComponent(instanceId)}/${encodeURIComponent(artifactId)}`
+    );
+  }
+
+  /** Why the hub refused the tab's socket (a pairing removed, the artifact deleted); null until it does. */
+  get refused(): string | null {
+    return this.#refused;
   }
 
   /** Stops following: the socket closes, and nothing opens it again. */
@@ -135,10 +150,10 @@ export class ArtifactSession implements PaneFleet {
         : null,
   };
 
-  #open(instanceId: string): void {
+  #open(path: string): void {
     const scheme = location.protocol === "https:" ? "wss:" : "ws:";
     const socket = new WebSocket(
-      `${scheme}//${location.host}${ARTIFACT_SESSION_PATH}${encodeURIComponent(instanceId)}`
+      `${scheme}//${location.host}${ARTIFACT_SESSION_PATH}${path}`
     );
     this.#socket = socket;
     socket.addEventListener("open", () => {
@@ -157,15 +172,22 @@ export class ArtifactSession implements PaneFleet {
       this.#lastHeard = Date.now();
       this.#take(JSON.parse(String(event.data)) as Heard);
     });
-    socket.addEventListener("close", () => {
+    socket.addEventListener("close", (event) => {
       clearInterval(this.#beat);
       if (this.#socket !== socket || this.#ended) {
         return;
       }
       this.#socket = null;
+      // A refusal stays true until the person acts: opening again would be
+      // refused again, and the tab would never say why.
+      if (REFUSALS.has(event.code)) {
+        this.#refused = event.reason;
+        this.end();
+        return;
+      }
       const wait = RETRY_MS[Math.min(this.#tries, RETRY_MS.length - 1)];
       this.#tries += 1;
-      this.#retry = setTimeout(() => this.#open(instanceId), wait);
+      this.#retry = setTimeout(() => this.#open(path), wait);
     });
   }
 

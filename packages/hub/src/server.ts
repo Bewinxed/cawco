@@ -102,6 +102,7 @@ import {
   ACCOUNT_RULES,
   type Account,
   type AccountBorrowFrame,
+  type AccountCatalogFault,
   type AccountIdentity,
   type AccountJoined,
   type AccountJoinedOn,
@@ -112,8 +113,10 @@ import {
   type AccountReport,
   type AccountSigninResult,
   AGENT_BUSY,
+  ARTIFACT_GONE,
   ARTIFACT_ORIGIN,
   ARTIFACT_SESSION_PATH,
+  ARTIFACT_SESSION_REFUSED,
   type ArtifactSessionFrame,
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
@@ -4039,9 +4042,32 @@ export const createServer = (
     return "refusal" in launch ? launch.refusal : undefined;
   };
   /**
+   * Why each account's models could not be read, as its last probe went (its
+   * machine named), until a probe answers (core `AccountCatalogFault`): what
+   * a picker says in place of an empty list. Kept in memory: a hub that
+   * starts again probes again. A fault that changes says so to every
+   * dashboard, as a catalog kept does.
+   */
+  const catalogFaults = new Map<string, string>();
+  const noteCatalogFault = (
+    machineId: string,
+    account: string,
+    reason: string | undefined
+  ): void => {
+    const before = catalogFaults.get(account);
+    if (reason === undefined) {
+      catalogFaults.delete(account);
+    } else {
+      catalogFaults.set(account, reason);
+    }
+    if (before !== reason) {
+      publishUsage(machineId);
+    }
+  };
+  /**
    * One account dir's initialize response, read on its machine by a session
-   * that never takes a turn. Undefined, and said in the log, when it could
-   * not be read.
+   * that never takes a turn. Undefined, and said in the log and as the
+   * account's catalog fault, when it could not be read.
    */
   const probeAccount: AccountProber = async (machineId, account) => {
     const answer = await callAgent(
@@ -4054,18 +4080,32 @@ export const createServer = (
     // Unanswered or refused, the account keeps what the hub last knew of it
     // (accounts.ts `catalogFor` writes nothing and tries again).
     switch (answer.kind) {
-      case "unanswered":
+      case "unanswered": {
+        const fault = unansweredFault(machineId, answer);
         console.warn(
-          `[hub] account probe on ${machineName(machineId)} (${account}) was not answered: ${unansweredFault(machineId, answer)} (after ${answer.after} ms); the account keeps its last known state`
+          `[hub] account probe on ${machineName(machineId)} (${account}) was not answered: ${fault} (after ${answer.after} ms); the account keeps its last known state`
+        );
+        noteCatalogFault(
+          machineId,
+          account,
+          `${machineName(machineId)} didn't answer the read of its models: ${fault}.`
         );
         return;
+      }
       case "answered":
         if (!answer.value.ok) {
+          const error = answer.value.error ?? "it gave no reason";
           console.warn(
-            `[hub] account probe on ${machineName(machineId)} (${account}) was refused: ${answer.value.error ?? "it gave no reason"}`
+            `[hub] account probe on ${machineName(machineId)} (${account}) was refused: ${error}`
+          );
+          noteCatalogFault(
+            machineId,
+            account,
+            `Claude Code on ${machineName(machineId)} couldn't read its models: ${error}.`
           );
           return;
         }
+        noteCatalogFault(machineId, account, undefined);
         return answer.value.result as AccountProbe;
       default:
         throw unreachable(answer);
@@ -14120,6 +14160,26 @@ export const createServer = (
   /** Each dashboard socket's paired device; null for one the hub trusted by its network. */
   const dashboardDevices = new Map<AuthSocket, string | null>();
   /**
+   * Each artifact tab's socket the hub admitted (`ARTIFACT_SESSION_PATH`),
+   * by its id, and its paired device as {@link dashboardDevices} keeps a
+   * dashboard's: a pairing removed, or pairing turned on, closes it too
+   * ({@link reopenArtifactTab}).
+   */
+  const artifactDevices = new Map<
+    string,
+    { device: string | null; socket: AuthSocket }
+  >();
+  /**
+   * Closes an artifact tab's socket for it to open again as what its device
+   * is now, as a dashboard's does: its open admits it, or refuses it with
+   * `ARTIFACT_SESSION_REFUSED.unpaired`, which the tab says. Not refused
+   * here: the browser that turned pairing on is paired by the time it opens
+   * again, and a hub that trusts its network admits a removed device's.
+   * 1012, the protocol's "service restart": a close the tab opens again after.
+   */
+  const reopenArtifactTab = (socket: AuthSocket): void =>
+    socket.close(1012, "Its device's standing changed.");
+  /**
    * What each dashboard socket is, by its id, as an answer it gives is said
    * to every other screen: a page (it sent `Origin`) or the app, and its
    * paired device's name when it has one.
@@ -14301,6 +14361,11 @@ export const createServer = (
           socket.close(4401, PAIRING_REQUIRED);
         }
       }
+      for (const { socket, device } of artifactDevices.values()) {
+        if (device === deviceId) {
+          reopenArtifactTab(socket);
+        }
+      }
     },
     pairingOn: () => {
       // Every machine connected now is admitted: handed its key on its own
@@ -14331,6 +14396,11 @@ export const createServer = (
       for (const [socket, device] of dashboardDevices) {
         if (device === null) {
           socket.close(4401, PAIRING_REQUIRED);
+        }
+      }
+      for (const { socket, device } of artifactDevices.values()) {
+        if (device === null) {
+          reopenArtifactTab(socket);
         }
       }
     },
@@ -14440,7 +14510,9 @@ export const createServer = (
           row?.status === "moving" ||
           (db.runningDelegateCounts().get(instanceId) ?? 0) > 0,
       };
-    }
+    },
+    (instanceId, artifactId) =>
+      db.artifacts.get(artifactId)?.instanceId === instanceId
   );
 
   /** Everything an `instances` frame carries besides the rows themselves. */
@@ -25468,6 +25540,14 @@ export const createServer = (
             readings: mine(db.accounts.readings()),
             bench: mine(db.accounts.bench()),
             catalogs: mine(db.accounts.catalogs()),
+            catalogFaults: mine(
+              [...catalogFaults].map(
+                ([accountId, reason]): AccountCatalogFault => ({
+                  accountId,
+                  reason,
+                })
+              )
+            ),
             rebalances: rebalanceNotices.filter((notice) =>
               notice.came.some((one) => ids.has(one.account.id))
             ),
@@ -28718,7 +28798,7 @@ export const createServer = (
       })
       // An artifact's own tab follows its session here, and nothing else of
       // the fleet (artifact-session.ts): never the dashboard's socket.
-      .ws(`${ARTIFACT_SESSION_PATH}:instance`, {
+      .ws(`${ARTIFACT_SESSION_PATH}:instance/:artifact`, {
         perMessageDeflate: true,
         maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
         drain(ws) {
@@ -28726,11 +28806,38 @@ export const createServer = (
         },
         open(ws) {
           openLine(ws, true);
+          const { instance, artifact } = ws.params;
+          // The person's alone, read here rather than at the gate (hub-auth.ts
+          // lets this upgrade through): a browser cannot read the answer to a
+          // refused upgrade, only a close's code and reason, so the tab is
+          // told on the socket why it is refused, and opens none again.
+          const caller = hubAuth.classify(
+            (name) => ws.headers[name],
+            "GET",
+            `${ARTIFACT_SESSION_PATH}${instance}/${artifact}`,
+            ws.remoteAddress ?? null
+          );
+          if (caller.kind !== "owner") {
+            ws.close(ARTIFACT_SESSION_REFUSED.unpaired, PAIRING_REQUIRED);
+            return;
+          }
+          if (artifactListener.ownerOf(artifact) !== instance) {
+            ws.close(ARTIFACT_SESSION_REFUSED.gone, ARTIFACT_GONE);
+            return;
+          }
+          artifactDevices.set(ws.id, {
+            socket: ws,
+            device: caller.device?.id ?? null,
+          });
           // An artifact's own tab frames its preview from this origin.
           noteParent(pageOrigin(ws.headers));
-          artifactSessions.open(ws, ws.params.instance);
+          artifactSessions.open(ws, instance, artifact);
         },
         message: guardedDashboardMessage((ws, message) => {
+          // A socket refused at its open is closing: it is answered nothing.
+          if (!artifactDevices.has(ws.id)) {
+            return;
+          }
           // Answered at once: a tab that hears nothing within its deadline
           // calls the socket dead and opens another.
           if (
@@ -28754,6 +28861,7 @@ export const createServer = (
         }),
         close(ws) {
           closeLine(ws);
+          artifactDevices.delete(ws.id);
           artifactSessions.close(ws);
         },
       })

@@ -12,14 +12,12 @@
   import * as Command from "#lib/components/ui/command/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { IconRefresh, IconUnfold } from "#lib/icons.js";
+  import { IconUnfold } from "#lib/icons.js";
   import {
     covers,
-    ensureModels,
     MODEL_DEFAULT,
     modelLabel,
     models,
-    refreshModels,
     rememberModel,
   } from "./models.svelte";
 
@@ -55,7 +53,6 @@
 
   const trimmed = $derived(typed.trim());
   const offered = $derived(models.forHarness(harness));
-  const askable = $derived(models.askableFor(harness));
   // Legacy recent ids have no harness provenance; keep them out of scoped pickers.
   const recent = $derived(harness ? [] : models.recent);
   /** A typed id nothing on the list already covers — the whole point of the field. */
@@ -65,24 +62,19 @@
       !recent.includes(trimmed)
   );
 
-  /** Why the list is thin, when it is — said under it rather than as a fake row. */
-  const note = $derived.by(() => {
-    if (models.error !== null) {
-      return models.error;
-    }
-    if (models.loading) {
-      return "Asking a running session what it offers…";
-    }
-    if (offered.length === 0) {
-      return "No list yet — refresh it through a running session, or type an id.";
-    }
-    return null;
-  });
+  /** Why the list could not be read, said under it rather than as a fake row. */
+  const unread = $derived(
+    offered.length === 0 && harness ? models.unread(harness) : null
+  );
+  /** Why the list is empty, when it is. */
+  const note = $derived(
+    offered.length === 0
+      ? (unread ?? "No machine has reported these models yet. Type an id.")
+      : null
+  );
 
   function opened(next: boolean) {
-    if (next) {
-      ensureModels(harness);
-    } else {
+    if (!next) {
       typed = "";
     }
   }
@@ -118,21 +110,6 @@
   const selectDefault = () => void choose(MODEL_DEFAULT);
   // biome-ignore lint/complexity/noVoid: onSelect handlers are sync — the pick is fire-and-forget, and choose()'s own callers already own its rejection
   const selectModel = (model: string) => void choose(model);
-
-  // The picker says for itself why a refresh failed; it is about the list, not
-  // about the session, so it never reaches the page's error slot — and the
-  // popover stays open, because the point was to look at what came back.
-  //
-  // This catch is deliberately bare, and is the log-only side of the boundary:
-  // a background refresh that fails leaves the combobox showing the last-known
-  // list and reopening it retries. Nothing the operator asked for is lost, so
-  // there is nothing to report. It is NOT the class of swallowed rejection that
-  // ate every send from a plain-http origin — that one sat on a user action.
-  const refresh = () =>
-    // biome-ignore lint/complexity/noVoid: the refresh is fire-and-forget by intent — see the comment above
-    void refreshModels(harness).catch(() => {
-      // Log-only boundary: the popover already shows the last-known list.
-    });
 </script>
 
 <Popover.Root onOpenChange={opened} bind:open>
@@ -245,30 +222,14 @@
             </Command.Item>
           {/each}
         </Command.Group>
-
-        <Command.Separator />
-        <Command.Group>
-          <Command.Item
-            disabled={!askable || models.loading}
-            forceMount
-            onSelect={refresh}
-            title={askable
-              ? "Ask a running session of this harness what models it offers"
-              : "A session has to be running to ask what models it offers."}
-            value="refresh-models"
-          >
-            <IconRefresh />
-            <span>Refresh models</span>
-          </Command.Item>
-        </Command.Group>
       </Command.List>
 
       {#if note}
         <p
-          class="border-t border-foreground/5 px-3 py-2 text-meta {models.error
+          class="border-t border-foreground/5 px-3 py-2 text-meta {unread
             ? 'text-error'
             : 'text-muted-foreground'}"
-          role={models.error ? "alert" : undefined}
+          role={unread ? "alert" : undefined}
         >
           {note}
         </p>

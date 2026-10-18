@@ -479,11 +479,18 @@ export class PiProfile {
   async detect(): Promise<HarnessReport> {
     probeStarted();
     const installed = resolveBin("pi") !== undefined;
-    const models = installed
-      ? await modelCatalog().catch((error: unknown) => {
-          console.warn(`[pi] model catalog unavailable: ${error}`);
-        })
-      : undefined;
+    // One that cannot be read says why instead.
+    const read = installed
+      ? await modelCatalog().then(
+          (models) => ({ models }),
+          (error: unknown) => {
+            console.warn(`[pi] model catalog unavailable: ${error}`);
+            return {
+              modelsUnread: `pi didn't list its models (${error instanceof Error ? error.message : String(error)}).`,
+            };
+          }
+        )
+      : {};
     const names = installed
       ? await modelNames().catch((error: unknown) => {
           console.warn(`[pi] model names unavailable: ${error}`);
@@ -500,7 +507,7 @@ export class PiProfile {
       auth: this.auth,
       ...(credential?.reason ? { authReason: credential.reason } : {}),
       capabilities: PI_CAPABILITIES,
-      ...(models ? { models } : {}),
+      ...read,
       ...(names ? { modelNames: names } : {}),
     };
   }

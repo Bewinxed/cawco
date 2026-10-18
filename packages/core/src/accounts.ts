@@ -448,6 +448,16 @@ export interface AccountCatalog {
   readAt: number;
 }
 
+/**
+ * Why an account's models could not be read, as the hub's last probe of it
+ * went, its machine named; gone once a probe answers. A picker with no
+ * catalog for the account says it.
+ */
+export interface AccountCatalogFault {
+  accountId: string;
+  reason: string;
+}
+
 /** Extra-usage state, as the session's rate-limit events report it. */
 export interface AccountOverage {
   disabledReason: string | null;

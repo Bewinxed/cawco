@@ -618,11 +618,6 @@ public final class SessionDetailsController: ObservedViewController {
         asked = sessionId
         readings.refreshContext(hub, sessionId, machineId)
         readings.loadMcp(hub, sessionId, machineId)
-        if let harness {
-            Task { [weak self, hub] in
-                if await ModelCatalog.ensure(hub, harness: harness) { self?.requestRefresh() }
-            }
-        }
     }
 
     /// A change that lands says so where it was made: a check on its line for

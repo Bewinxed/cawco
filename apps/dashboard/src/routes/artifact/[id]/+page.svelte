@@ -39,7 +39,7 @@
           await showArtifact(artifact.instanceId, wanted);
         }
         if (live) {
-          session.follow(artifact.instanceId);
+          session.follow(artifact.instanceId, wanted);
           found = { instanceId: artifact.instanceId, name: artifact.name };
         }
       })
@@ -70,7 +70,16 @@
      menu says a refusal in. -->
 <Overlays>
   <div data-slot="artifact-tab" class="artifact-tab">
-    {#if problem}
+    {#if session.refused}
+      <EmptyState icon={IconAlert} title="This artifact didn't open">
+        {#snippet line()}
+          {session.refused}
+        {/snippet}
+        {#snippet action()}
+          <Button href="/session" label="Back to the fleet" variant="outline" />
+        {/snippet}
+      </EmptyState>
+    {:else if problem}
       <EmptyState icon={IconAlert} title="This artifact didn't open">
         {#snippet line()}
           {problem}

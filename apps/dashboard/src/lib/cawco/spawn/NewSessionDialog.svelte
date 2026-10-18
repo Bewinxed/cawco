@@ -91,12 +91,17 @@
   import MoveAskBody from "../move/MoveAsk.svelte";
   import { moveEstimate, startMove } from "../move.svelte";
   import {
-    fallbackMode,
     fullSendCopy,
+    modeRefusal,
     permissionModesFor,
   } from "../permission-modes";
   import { checkoutOf, checkoutOn, placedOn } from "../projects";
-  import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
+  import {
+    rememberedMachine,
+    rememberMachine,
+    rememberSpawn,
+    spawnPrefs,
+  } from "../spawnPrefs.svelte";
   import { store, stored } from "../storage";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
@@ -254,6 +259,8 @@
   let machineIds = $state<string[]>([]);
   /** Set once the operator picks machines themselves; stops the late-arrival adoption below. */
   let machinesTouched = $state(false);
+  /** The machine the form last started a session on, read as it opens (spawnPrefs `rememberedMachine`). */
+  let remembered = $state<string | null>(null);
   let cwd = $state("");
   let repo = $state<string>();
   let harness = $state<HarnessKind>(spawnPrefs.harness);
@@ -533,16 +540,36 @@
   const modes = $derived(
     modeless
       ? []
-      : permissionModesFor(harness).map((mode) => ({
-          value: mode.value,
-          disabled: report
-            ? !report.capabilities.permissionModes.includes(mode.value)
-            : false,
-          reason:
-            report && !report.capabilities.permissionModes.includes(mode.value)
-              ? "This agent cannot honor this permission mode."
-              : undefined,
-        }))
+      : permissionModesFor(harness).map((mode) => {
+          const refused = machineId
+            ? modeRefusal(
+                machine?.hostname ?? machineId,
+                harness,
+                mode.value,
+                report
+              )
+            : null;
+          return {
+            value: mode.value,
+            disabled: refused !== null,
+            reason: refused ?? undefined,
+          };
+        })
+  );
+  /**
+   * Why the form's mode can't go out on the chosen machine ({@link
+   * modeRefusal}). The mode is never swapped for another: Start waits until
+   * the machine reports its harness, or the person picks a mode it takes.
+   */
+  const modeRefused = $derived(
+    machineId && !modeless
+      ? modeRefusal(
+          machine?.hostname ?? machineId,
+          harness,
+          permissionMode,
+          report
+        )
+      : null
   );
   const workdir = $derived(
     repo === undefined
@@ -909,6 +936,7 @@
     firstMessage.uploading ||
       continueBlocked ||
       placementRefusal !== null ||
+      modeRefused !== null ||
       cawco.hub !== "connected" ||
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
@@ -979,15 +1007,6 @@
       effort = null;
     }
   });
-  $effect(() => {
-    const honoured = modes
-      .filter((mode) => !mode.disabled)
-      .map((mode) => mode.value);
-    const next = fallbackMode(permissionMode, honoured);
-    if (next && !honoured.includes(permissionMode)) {
-      permissionMode = next;
-    }
-  });
   /**
    * The form starts in Full Send: chosen, and offered on this machine. It is
    * never started silently: a warning stands in the form while it is chosen.
@@ -1013,10 +1032,10 @@
         continueFrom?.machineId ||
         prefill?.machineId ||
         primary?.machineId ||
-        cawco.onlineMachines[0]?.machineId ||
         "";
       machineIds = first ? [first] : [];
       machinesTouched = false;
+      remembered = rememberedMachine();
       cwd = continueFrom?.cwd || prefill?.cwd || primary?.path || "";
       ({ harness, permissionMode } = spawnPrefs);
       fullSendCarried = permissionMode === "fullSend";
@@ -1099,13 +1118,18 @@
       }
     });
   });
-  // The fleet arrives over the websocket, so the dialog can open before any
-  // machine is known. Adopt the first one that shows up until the operator picks.
+  // With nothing else naming one, the form opens on the machine it last
+  // started a session on, once the fleet lists it: the fleet arrives over the
+  // websocket, so the dialog can open before it does. With none remembered,
+  // or one the fleet no longer has, no machine is chosen until the operator
+  // picks one.
   $effect(() => {
-    const fallback = cawco.onlineMachines[0]?.machineId;
-    if (open && !machinesTouched && !machineIds.length && fallback) {
+    const id = remembered;
+    const known =
+      id !== null && cawco.machines.some((row) => row.machineId === id);
+    if (open && !machinesTouched && !machineIds.length && known) {
       untrack(() => {
-        machineIds = [fallback];
+        machineIds = [id];
       });
     }
   });
@@ -1585,6 +1609,7 @@
         permissionMode: draft.permissionMode,
         effort: draft.effort,
       });
+      rememberMachine(draft.machineIds);
       await exitTo(first, current);
     } catch (cause) {
       if (!current()) {
@@ -1639,6 +1664,7 @@
       permissionMode: draft.permissionMode,
       effort: draft.effort,
     });
+    rememberMachine(draft.machineIds);
     await exitTo(started.targetInstanceId, current);
   }
 
@@ -1728,6 +1754,7 @@
       permissionMode: draft.permissionMode,
       effort: draft.effort,
     });
+    rememberMachine(draft.machineIds);
   }
   /**
    * Leave for the new session as the dialog starts to close, not after: the
@@ -2126,6 +2153,16 @@
             >Open Configure → Accounts</a
           >
         </AlertDescription>
+      </Alert>
+    </div>
+  {/if}
+  <!-- The chosen permission mode can't go out on this machine: why, beside
+       Start, which waits for a mode the machine takes. -->
+  {#if modeRefused && !placementRefusal}
+    <div class="full-send" data-vaul-no-drag in:unfold|global out:unfold>
+      <Alert role="status" variant="warning">
+        <IconShield />
+        <AlertTitle>{modeRefused}</AlertTitle>
       </Alert>
     </div>
   {/if}

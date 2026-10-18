@@ -9,7 +9,8 @@
  * the one that asks the least. pi reports no modes and is offered none. The
  * SDK has more (`dontAsk`, `auto`); a session that reports one is named by it.
  */
-import type { HarnessKind, PermissionMode } from "@cawco/core";
+import type { HarnessKind, HarnessReport, PermissionMode } from "@cawco/core";
+import { speakerName } from "./transcript/speaker";
 
 export interface PermissionModeOption {
   description: string;
@@ -118,18 +119,26 @@ export function unpickedMode(mode: PermissionMode): PermissionMode {
 }
 
 /**
- * Where a form's mode goes when the machine cannot honour it: Full Send to
- * Bypass, the nearest mode that asks more (and on OpenCode the same one),
- * anything else to the first mode the machine can.
+ * Why `mode` cannot go out to `machine`'s `harness`, or null when it can: the
+ * machine has not reported that harness yet, so which modes it takes is not
+ * known, or it reports modes and this is not one of them. A harness that
+ * reports none (pi) is sent none, so nothing stops it. A mode is never
+ * swapped for another one here: a start goes out on the mode its person
+ * chose, or not at all.
  */
-export function fallbackMode(
+export function modeRefusal(
+  machine: string,
+  harness: HarnessKind,
   mode: PermissionMode,
-  honoured: PermissionMode[]
-): PermissionMode | undefined {
-  if (mode === "fullSend" && honoured.includes("bypassPermissions")) {
-    return "bypassPermissions";
+  report: HarnessReport | undefined
+): string | null {
+  if (!report) {
+    return `${machine} hasn't reported its ${speakerName(harness)} yet, so which permission modes it takes isn't known.`;
   }
-  return honoured[0];
+  const taken = report.capabilities.permissionModes;
+  return taken.length === 0 || taken.includes(mode)
+    ? null
+    : `${machine}'s ${speakerName(harness)} doesn't take ${permissionModeLabel(mode)}. Pick a mode it takes.`;
 }
 
 /** What a person reads before Full Send applies, and while it stands chosen. */

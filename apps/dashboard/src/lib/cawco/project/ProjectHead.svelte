@@ -56,7 +56,6 @@
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { handOver } from "#lib/cawco/motion/share.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
-  import { unpickedMode } from "#lib/cawco/permission-modes.js";
   import UpstreamMenu from "#lib/cawco/project/UpstreamMenu.svelte";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -301,9 +300,9 @@
     const remembered = spawnPrefs.permissionMode;
     const mod = spawnPrefs.model;
     // This start has no pickers of its own — it runs on what the new-session
-    // form was last set to, effort included. Full Send is the exception:
-    // with no form its warning is never read, so this start runs on Bypass.
-    const perm = unpickedMode(remembered);
+    // form was last set to, effort included. Its mode is the remembered one
+    // when the machine takes it, Full Send starting on Bypass (spawnPrefs
+    // `spawnDefaults`, which refuses one the machine doesn't take).
     const level = spawnPrefs.effort;
     // Start empty is a session with no first prompt, whatever was typed.
     const prompt =
@@ -316,7 +315,6 @@
           machineId: primary.machineId,
           cwd: primary.path,
           projectId: project.id,
-          permissionMode: perm,
           harness: spawnPrefs.harness,
           model: mod,
           effort: level ?? undefined,

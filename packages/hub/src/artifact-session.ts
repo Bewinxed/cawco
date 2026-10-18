@@ -9,27 +9,45 @@
  *
  * Each socket is sent the whole frame when it opens, and again whenever the
  * hub moves anything it reads (a preview opens or closes, the board moves, a
- * pulse lands) and the frame comes out different from the last one sent.
+ * pulse lands) and the frame comes out different from the last one sent. A
+ * tab whose artifact is gone is closed with `ARTIFACT_SESSION_REFUSED.gone`
+ * instead, and says why.
  */
-import type { ArtifactSessionFrame } from "@cawco/core";
+import {
+  ARTIFACT_GONE,
+  ARTIFACT_SESSION_REFUSED,
+  type ArtifactSessionFrame,
+} from "@cawco/core";
 import { type HubSocket, sendFrame } from "./wire-socket";
+
+/** A tab's socket, which the hub closes once its artifact is gone. */
+export type ArtifactTabSocket = HubSocket & {
+  close: (code?: number, reason?: string) => void;
+};
 
 export interface ArtifactSessionsShape {
   close: (socket: HubSocket) => void;
-  open: (socket: HubSocket, instanceId: string) => void;
+  open: (
+    socket: ArtifactTabSocket,
+    instanceId: string,
+    artifactId: string
+  ) => void;
   /** Sends what changed to the sockets on `instanceId`, or on every session when none is named. */
   refresh: (instanceId?: string) => void;
 }
 
 interface Follower {
+  artifactId: string;
   instanceId: string;
   /** The frame last sent, serialised. */
   last: string;
-  socket: HubSocket;
+  socket: ArtifactTabSocket;
 }
 
 export const createArtifactSessions = (
-  frameOf: (instanceId: string) => ArtifactSessionFrame
+  frameOf: (instanceId: string) => ArtifactSessionFrame,
+  /** Whether `artifactId` is still `instanceId`'s. */
+  holds: (instanceId: string, artifactId: string) => boolean
 ): ArtifactSessionsShape => {
   const followers = new Map<string, Follower>();
 
@@ -42,8 +60,13 @@ export const createArtifactSessions = (
       string,
       { frame: ArtifactSessionFrame; text: string }
     >();
-    for (const follower of followers.values()) {
+    for (const follower of [...followers.values()]) {
       if (instanceId && follower.instanceId !== instanceId) {
+        continue;
+      }
+      if (!holds(follower.instanceId, follower.artifactId)) {
+        followers.delete(follower.socket.id);
+        follower.socket.close(ARTIFACT_SESSION_REFUSED.gone, ARTIFACT_GONE);
         continue;
       }
       let read = frames.get(follower.instanceId);
@@ -60,8 +83,8 @@ export const createArtifactSessions = (
   };
 
   return {
-    open: (socket, instanceId) => {
-      followers.set(socket.id, { socket, instanceId, last: "" });
+    open: (socket, instanceId, artifactId) => {
+      followers.set(socket.id, { socket, instanceId, artifactId, last: "" });
       refresh(instanceId);
     },
     close: (socket) => {

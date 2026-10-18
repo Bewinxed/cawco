@@ -2600,14 +2600,21 @@ export class OpencodeHarness implements Harness {
       ? await this.#installedVersion().catch(() => undefined)
       : undefined;
     // The catalog the machine reports, so a picker lists OpenCode's models
-    // with no OpenCode session running.
-    const models = installed
+    // with no OpenCode session running: the machine's server is started for
+    // it when none runs. One that cannot be read says why instead.
+    const read = installed
       ? await this.#ensure()
           .then(() => this.#catalog())
-          .catch((error: unknown) => {
-            console.warn(`[opencode] model catalog unavailable: ${error}`);
-          })
-      : undefined;
+          .then(
+            (models) => ({ models }),
+            (error: unknown) => {
+              console.warn(`[opencode] model catalog unavailable: ${error}`);
+              return {
+                modelsUnread: `OpenCode's server here didn't list its models (${errorText(error)}).`,
+              };
+            }
+          )
+      : {};
     const reason = this.authReason;
     return {
       harness: "opencode",
@@ -2616,7 +2623,7 @@ export class OpencodeHarness implements Harness {
       auth: installed ? "authenticated" : "unauthenticated",
       ...(reason ? { authReason: reason } : {}),
       capabilities: OPENCODE_CAPABILITIES,
-      ...(models ? { models } : {}),
+      ...read,
       ...(this.signInFaults.length > 0
         ? { signInFaults: this.signInFaults }
         : {}),

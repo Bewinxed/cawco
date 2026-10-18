@@ -1,14 +1,11 @@
 import type { HarnessKind, ModelInfo } from "@cawco/core";
 
-/**
- * One model a harness offers. `machineId` names the machine whose report
- * listed it; a row asked from a running session carries none.
- */
+/** One model a harness offers, on the machine whose report listed it. */
 export type HarnessModel = ModelInfo & {
   /** The account whose Claude Code offers it; absent for a harness without accounts. */
   accountId?: string;
   harness: HarnessKind;
-  machineId?: string;
+  machineId: string;
 };
 
 /**
@@ -23,7 +20,6 @@ export function modelsForHarness(
   machineIds?: string[]
 ): ModelInfo[] {
   const runsOn = (row: HarnessModel): boolean =>
-    row.machineId === undefined ||
     !machineIds?.length ||
     machineIds.every((machineId) =>
       catalog.some(

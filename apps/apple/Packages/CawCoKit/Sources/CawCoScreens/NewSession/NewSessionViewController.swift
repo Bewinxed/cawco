@@ -73,6 +73,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var machineIds: [String] = []
     /// Set once the operator picks machines themselves; stops the late-arrival adoption.
     private var machinesTouched = false
+    /// The machine the form last started a session on, read as it opens (`SpawnPrefs.rememberedMachine`).
+    private var remembered: String?
     private var cwd = ""
     private var repo: String?
     private var harness = "claude"
@@ -151,6 +153,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private let moveTray = UIStackView()
     /// Full Send chosen, however it got there: in view beside Start, outside the body's scroll.
     private let fullSendNote = KitAlert(tone: .warning, glyph: .shield)
+    /// The chosen mode can't go out on this machine: why, beside Start, which waits.
+    private let modeNote = KitAlert(tone: .warning, glyph: .shield)
     private let sizing = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     /// Continue mode: what the new session opens on (Segmented.svelte's "From a summary / From my asks").
     private let carryRow = UIStackView()
@@ -218,6 +222,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         backButton.isHidden = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (form: NewSessionViewController, _: UITraitCollection) in form.tint() }
         fullSendNote.isHidden = true
+        modeNote.isHidden = true
         reset()
     }
 
@@ -231,8 +236,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         summarizerHarness = harness
         let seeded = prefill.projectId.flatMap { id in fleet.projects.first { $0.id == id } }
         projectId = seeded?.id
-        let first = continuing?.machineId ?? prefill.machineId ?? seeded?.primaryPlace?.machineId ?? fleet.machines.first { $0.status == "online" }?.machineId ?? ""
+        let first = continuing?.machineId ?? prefill.machineId ?? seeded?.primaryPlace?.machineId ?? ""
         machineIds = first.isEmpty ? [] : [first]
+        remembered = hub.spawnPrefs.rememberedMachine
         // A seeded project starts at its primary checkout; without one the form asks.
         cwd = continuing?.cwd ?? prefill.cwd ?? seeded?.primaryPlace?.path ?? ""
         prompt = UserDefaults.standard.string(forKey: Self.keptPrompt) ?? ""
@@ -363,9 +369,18 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private var modes: [(value: String, disabled: Bool)] {
         guard !modeless else { return [] }
-        let honoured = report?.capabilities.permissionModes.map(\.rawValue)
-        return PermissionLook.modes(for: harness).map { mode in (mode, honoured.map { !$0.contains(mode) } ?? false) }
+        return PermissionLook.modes(for: harness).map { mode in (mode, refusal(of: mode) != nil) }
     }
+
+    /// Why `mode` can't go out on the chosen machine (`SpawnPrefs.modeRefusal`); nil with no machine chosen.
+    private func refusal(of mode: String) -> String? {
+        guard !machineId.isEmpty, !modeless else { return nil }
+        return SpawnPrefs.modeRefusal(machine: machine?.name ?? machineId, harness: harness, mode: mode, report: report)
+    }
+
+    /// Why the form's mode can't go out: never swapped for another, Start
+    /// waits until the machine reports its harness or the person picks a mode it takes.
+    private var modeRefused: String? { refusal(of: permissionMode) }
 
     private var workdir: String {
         guard let repo else { return path }
@@ -524,6 +539,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private var cantStart: Bool {
         continueBlocked || !connected || machineIds.isEmpty || offlineMachine != nil || unreadable || locationUnverified || !repoValid
+            || modeRefused != nil
             || (moveTo != nil && !(moving || movedAlready))
     }
 
@@ -546,10 +562,13 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     }
 
     private func settle() {
-        // The fleet arrives over the socket, so the form can open before any
-        // machine is known: adopt the first that shows up until the operator picks.
-        if !machinesTouched, machineIds.isEmpty, let first = fleet.machines.first(where: { $0.status == "online" }) {
-            machineIds = [first.machineId]
+        // With nothing else naming one, the form opens on the machine it last
+        // started a session on, once the fleet lists it: the fleet arrives over
+        // the socket, so the form can open before it does. With none
+        // remembered, or one the fleet no longer has, no machine is chosen
+        // until the operator picks one.
+        if !machinesTouched, machineIds.isEmpty, let remembered, fleet.machines.contains(where: { $0.machineId == remembered }) {
+            machineIds = [remembered]
         }
         if machineId != lastMachine {
             lastMachine = machineId
@@ -557,10 +576,6 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             if !has.contains(harness) { chooseHarness(has.first ?? "claude") }
         }
         if let effort, !efforts.contains(effort) { self.effort = nil }
-        let honoured = modes.filter { !$0.disabled }.map(\.value)
-        if !honoured.contains(permissionMode), let next = PermissionLook.fallback(permissionMode, honoured: honoured) {
-            permissionMode = next
-        }
         // Step 2 holds only while the move it asks about can run.
         if moveStep, !moving { moveStep = false; applyStep(animated: true) }
         // A new machine or project starts the destination over.
@@ -784,7 +799,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         footer.isLayoutMarginsRelativeArrangement = true
         footer.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
         // The Full Send warning stands over the actions, on the recess, out of the scroll.
-        let foot = UIStackView(arrangedSubviews: [fullSendNote, footer])
+        let foot = UIStackView(arrangedSubviews: [modeNote, fullSendNote, footer])
         foot.axis = .vertical
         foot.spacing = 10
         foot.translatesAutoresizingMaskIntoConstraints = false
@@ -1147,6 +1162,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         } else {
             fullSendNote.isHidden = true
         }
+        modeNote.label.text = modeRefused
+        modeNote.isHidden = modeRefused == nil
 
         let text = readingText
         // A move's line wraps to a second line, never a third.
@@ -1479,6 +1496,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private func remember(_ draft: SessionDraft) throws {
         hub.spawnPrefs.remember(harness: try Self.wire(draft.harness), model: Self.shown(draft),
                                 permissionMode: try Self.wire(draft.permissionMode), effort: try draft.effort.map(Self.wire))
+        hub.spawnPrefs.rememberMachine(draft.machineIds)
     }
 
     private func attached(_ target: String, _ draft: SessionDraft) -> String? {

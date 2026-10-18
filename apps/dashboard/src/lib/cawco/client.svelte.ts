@@ -8,6 +8,7 @@ import type {
   Account,
   AccountBench,
   AccountCatalog,
+  AccountCatalogFault,
   AccountHue,
   AccountKind,
   AccountProvider,
@@ -41,7 +42,6 @@ import type {
   LandsMode,
   LawBroken,
   McpServerStatus,
-  ModelInfo,
   MoveJob,
   NeutralSessionInfo,
   NeutralStatus,
@@ -2276,6 +2276,8 @@ export interface AccountsView {
   accounts: Account[];
   /** Accounts out of placement until a window resets. */
   bench: AccountBench[];
+  /** Why accounts with no catalog have none: their last probe's fault. */
+  catalogFaults: AccountCatalogFault[];
   catalogs: AccountCatalog[];
   /** Each account's freshest reading: its windows, plan and extra usage. */
   readings: AccountReading[];
@@ -5142,26 +5144,63 @@ function userMessage(text: string, uuid: string): SendPayload["message"] {
 }
 
 /**
+ * Settles once `ready` reads true, read again whenever what it reads changes
+ * (an effect, never a timer), or `unanswered` past `ms`.
+ */
+function whenTrue(ready: () => boolean, ms: number): Promise<Bounded<void>> {
+  return readWithin(
+    ms,
+    (signal) =>
+      new Promise<void>((resolve) => {
+        const stop = $effect.root(() => {
+          $effect(() => {
+            if (ready()) {
+              resolve();
+              // Not from inside the effect it ends.
+              queueMicrotask(() => stop());
+            }
+          });
+        });
+        signal.addEventListener("abort", () => stop(), { once: true });
+      })
+  );
+}
+
+/**
  * A spawn as it leaves this dashboard: a model only when one was picked (none
  * runs on the harness's own default, never an empty string), and a permission
  * mode named exactly when its harness has modes. What the path says stands
  * (the form's choice, the session's own settings); a mode it leaves out is
- * the one the New Session form shows by default ({@link spawnDefaults}). The
- * hub settles the same rule (`settleMode`).
+ * the remembered one, when the machine takes it ({@link spawnDefaults}, which
+ * throws why not, and nothing starts). The hub settles the same rule
+ * (`settleMode`). Which modes a machine takes is its report's, so a start
+ * waits for the report (the first fleet read, a machine whose report is on
+ * its way) up to {@link CONTROL_TIMEOUT_MS}; one still missing then is the
+ * machine's own word.
  */
-function explicit(machineId: string, payload: SpawnPayload): SpawnPayload {
+async function explicit(
+  machineId: string,
+  payload: SpawnPayload
+): Promise<SpawnPayload> {
+  await whenTrue(
+    () =>
+      state.fleetRead &&
+      state.machines.find((row) => row.machineId === machineId)?.harnesses !==
+        undefined,
+    CONTROL_TIMEOUT_MS
+  );
   const harness = payload.harness ?? "claude";
   const report = state.machines
-    .find((machine) => machine.machineId === machineId)
+    .find((row) => row.machineId === machineId)
     ?.harnesses?.find((entry) => entry.harness === harness);
-  const defaults = spawnDefaults(harness, report);
   const { permissionMode, model, ...rest } = payload;
   // A harness with no permission modes (pi) is sent none, whatever the
   // path carried (a stored row's, a remembered preference).
   const mode =
     report?.capabilities.permissionModes.length === 0
       ? undefined
-      : (permissionMode ?? defaults.permissionMode);
+      : (permissionMode ??
+        spawnDefaults(machineName(machineId), harness, report).permissionMode);
   return {
     ...rest,
     ...(model ? { model } : {}),
@@ -5185,7 +5224,7 @@ async function start({
 }): Promise<Bounded<SessionState>> {
   const instanceId = newId();
   const requestId = newId();
-  const payload = explicit(machineId, { instanceId, ...spawn });
+  const payload = await explicit(machineId, { instanceId, ...spawn });
   let taken: Bounded<void>;
   try {
     taken = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () => {
@@ -5448,7 +5487,7 @@ export async function ensureAlive(
       throw new Error(plan.reason);
     }
     const requestId = newId();
-    const payload = explicit(machineId, {
+    const payload = await explicit(machineId, {
       instanceId,
       cwd: target.cwd,
       harness: target.harness,
@@ -7576,29 +7615,6 @@ export async function refreshContext(
 }
 
 /**
- * The models this session offers. `supportedModels` is a `Query` method, so it
- * is only answerable while the session is up — the answer is the same account's
- * either way, so `models.svelte.ts` asks once through whoever is running and
- * keeps it for the whole app.
- */
-// biome-ignore lint/suspicious/useAwait: async is kept intentionally so the returned promise settles on its own microtask, matching every other ask()-wrapping export here
-export async function loadModels(
-  instanceId: string,
-  machineId: string
-): Promise<Bounded<ModelInfo[]>> {
-  const requestId = newId();
-  const payload: ControlPayload = {
-    instanceId,
-    requestId,
-    method: "supportedModels",
-    args: [],
-  };
-  return askMachine<ModelInfo[]>(machineId, requestId, CONTROL_TIMEOUT_MS, () =>
-    send({ verb: "control", machineId, instanceId, requestId, payload })
-  );
-}
-
-/**
  * A refusal because the session is in custody — being handed back after an
  * agent restart. Expected for a moment, and the next ask gets through, so it
  * is not an error to log or to show.
@@ -7856,7 +7872,7 @@ export async function relaunchSession(
   }
 
   const requestId = newId();
-  const payload = explicit(machineId, {
+  const payload = await explicit(machineId, {
     instanceId,
     cwd: target.cwd,
     harness: target.harness,
@@ -8067,7 +8083,7 @@ export async function editAndResend(
   }
 
   const requestId = newId();
-  const payload = explicit(machineId, {
+  const payload = await explicit(machineId, {
     instanceId,
     cwd: target.cwd,
     harness: target.harness,

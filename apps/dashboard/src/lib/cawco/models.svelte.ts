@@ -1,32 +1,25 @@
 /**
- * The model list, once for the whole app. `supportedModels()` is a `Query`
- * method, so it can only be asked through a session that is already up — and
- * each harness type returns its own list (Claude models from a Claude session,
- * opencode models from an opencode session). One session per unique harness is
- * queried and the results are merged, so the picker shows everything the fleet
- * can run. Kept in localStorage across visits.
+ * The model list, once for the whole app: what each machine reports its
+ * harnesses can run, and for Claude each signed-in account's catalog, which
+ * the hub reads per account and keeps. The catalog is a property of an
+ * installed CLI and the account behind it, never of a session that happens
+ * to be up, so nothing here asks a session. A harness with no catalog says
+ * why ({@link models}`.unread`).
  */
 
-import type { HarnessKind, InstanceRow, ModelInfo } from "@cawco/core";
-import { isEffortLevel } from "@cawco/core";
-import { untrack } from "svelte";
-import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
-import {
-  cawco,
-  didntAnswer,
-  harnessCan,
-  isCustodyRefusal,
-  loadModels,
-} from "./client.svelte";
+import type { ModelInfo } from "@cawco/core";
+import { isEffortLevel, machineLabel } from "@cawco/core";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { cawco } from "./client.svelte";
 import { type HarnessModel, modelsForHarness } from "./model-catalog";
 import { readJson, writeJson } from "./storage";
+import { speakerName } from "./transcript/speaker";
 
 /**
- * Both keys hang off one prefix so the imminent product rename is one edit.
+ * Every key hangs off one prefix so the imminent product rename is one edit.
  * Nothing else may write the literal.
  */
 export const MODEL_STORAGE_PREFIX = "cawco-models";
-const OFFERED_KEY = `${MODEL_STORAGE_PREFIX}:by-harness`;
 const RECENT_KEY = `${MODEL_STORAGE_PREFIX}:recent`;
 
 /** How many typed-in model ids are remembered — a shortlist, not a history. */
@@ -44,197 +37,17 @@ const store = $state({
    * claude's own catalog carries none. Keyed by wire id.
    */
   claudeWindows: {} as Record<string, number>,
-  offered: [] as HarnessModel[],
   recent: [] as string[],
-  loading: false,
-  /** Why the last read failed, for the picker to say instead of showing nothing. */
-  error: null as string | null,
 });
 
-// What the last visit learned, read once as the module loads rather than from a
-// getter — a read that writes is a render that mutates. Nothing to read on the
-// server, where the picker is a trigger and no more.
-store.offered = readJson<HarnessModel[]>(OFFERED_KEY, []);
+// Read once as the module loads rather than from a getter — a read that
+// writes is a render that mutates. Nothing to read on the server.
 store.recent = readJson<string[]>(RECENT_KEY, []);
 
-/** One running session per unique harness, so each harness type is queried. */
-function liveByHarness(): InstanceRow[] {
-  const seen = new Set<string>();
-  const result: InstanceRow[] = [];
-  for (const row of cawco.runningInstances) {
-    const harness = row.harness ?? "claude";
-    if (seen.has(harness)) {
-      continue;
-    }
-    seen.add(harness);
-    result.push(row);
-  }
-  return result;
-}
-
-/** Whether any running session can answer a `supportedModels` call. */
-const hasLiveSession = () => cawco.runningInstances.length > 0;
-
 /**
- * Sessions already asked, for the life of the page. Plain, not `$state`: an
- * effect that calls `ensureModels` must not depend on it. A session that
- * refused is in here too — asking it again on every render was a tight loop,
- * and each ask made the agent write a frame into the transcript.
- *
- * Recovery does not come from re-asking these, it comes from the ones that are
- * not in here yet: a session spawned after the walk is a fresh candidate, and
- * a session spawned after a restart is the one most likely to answer.
- */
-const asked = new Set<string>();
-
-/** Sessions of one harness that have not been asked yet, in board order. */
-function candidates(kind: string, harness?: string): InstanceRow[] {
-  return cawco.runningInstances.filter(
-    (row) =>
-      (row.harness ?? "claude") === kind &&
-      !asked.has(row.id) &&
-      (!harness || kind === harness) &&
-      harnessCan(row, "supportedModels")
-  );
-}
-
-/** How many are asked at once while walking a harness's sessions. */
-const ASK_BATCH = 8;
-
-/**
- * What one harness answers, by asking its sessions until one of them does.
- *
- * Asking a single nominee was the bug. Which session that is depends on board
- * order, and a session that CANNOT answer is common: every one adopted after an
- * agent restart refuses each control until it hands back. One refusal therefore
- * left a whole harness with no catalog — no model names, and no effort scale on
- * any of its sessions — while dozens of healthy siblings sat unasked behind it.
- * There is no cap that fixes this, because the one that answers can be last.
- *
- * Walking them is affordable precisely because the failure is cheap: a refusal
- * is decided by the agent without reaching a model, and `supportedModels` is a
- * read-only control, so a refused one writes nothing into a transcript. The
- * walk stops at the first answer, so a healthy fleet asks once.
- */
-async function askHarness(
-  kind: string,
-  harness: string | undefined
-): Promise<{ custody: boolean; list?: ModelInfo[]; refused?: unknown }> {
-  let custody = false;
-  let refused: unknown;
-  for (
-    let batch = candidates(kind, harness).slice(0, ASK_BATCH);
-    batch.length > 0;
-    batch = candidates(kind, harness).slice(0, ASK_BATCH)
-  ) {
-    for (const row of batch) {
-      asked.add(row.id);
-    }
-    // biome-ignore lint/performance/noAwaitInLoops: each batch is asked only because the one before it produced no answer — that is the point of the walk
-    const lists = await Promise.all(
-      batch.map((row) =>
-        loadModels(row.id, row.machineId).then(
-          (read): ModelInfo[] | undefined => {
-            switch (read.kind) {
-              case "answered":
-                return read.value;
-              case "unanswered":
-                // The walk asks the next session; what this one did is said if none answers.
-                refused ??= new Error(didntAnswer(row.machineId, read));
-                return undefined;
-              default: {
-                const unhandled: never = read;
-                throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-              }
-            }
-          },
-          (error: unknown): ModelInfo[] | undefined => {
-            if (isCustodyRefusal(error)) {
-              custody = true;
-            } else {
-              refused ??= error;
-            }
-            return undefined;
-          }
-        )
-      )
-    );
-    const answer = lists.find((list) => list !== undefined);
-    if (answer) {
-      return { custody, list: answer, refused };
-    }
-  }
-  return { custody, refused };
-}
-
-async function ask(harness?: string): Promise<void> {
-  if (liveByHarness().length === 0) {
-    throw new Error(
-      "A session has to be running to ask what models it offers."
-    );
-  }
-  // A harness its machine already described is not asked at all — that is the
-  // point of the report. What is left is the harnesses only a session can
-  // answer for.
-  const described = new Set<string>(reported().map((row) => row.harness));
-  const kinds = [
-    ...new Set(
-      cawco.runningInstances
-        .map((row) => row.harness ?? "claude")
-        .filter((kind) => !harness || kind === harness)
-    ),
-  ].filter(
-    (kind) => !described.has(kind) && candidates(kind, harness).length > 0
-  );
-  if (kinds.length === 0) {
-    return;
-  }
-  store.loading = true;
-  store.error = null;
-  try {
-    const results = await Promise.all(
-      kinds.map((kind) => askHarness(kind, harness))
-    );
-    const answered = new Map<HarnessKind, ModelInfo[]>();
-    let custody = false;
-    let refused: unknown;
-    for (const [index, result] of results.entries()) {
-      if (result.list) {
-        answered.set(kinds[index] as HarnessKind, result.list);
-      }
-      custody ||= result.custody;
-      refused ??= result.refused;
-    }
-    const merged = [...answered].flatMap(([kind, list]) =>
-      list.map((model) => ({ ...model, harness: kind }))
-    );
-    if (merged.length === 0 && refused !== undefined) {
-      throw refused;
-    }
-    if (merged.length === 0 && custody) {
-      throw new Error(
-        "Every session we could ask is being handed back after an agent restart. Try again in a moment."
-      );
-    }
-    store.offered = [
-      ...store.offered.filter((row) => !answered.has(row.harness)),
-      ...merged,
-    ];
-    writeJson(OFFERED_KEY, store.offered);
-  } finally {
-    store.loading = false;
-  }
-}
-
-/**
- * What the machines themselves report they can run — the catalog as a property
- * of an installed CLI rather than of a session that happens to be up.
- *
- * This is the answer whenever a machine gives one. It needs no session, so it
- * survives everything the session route did not: nothing running, everything in
- * custody after an agent restart, a fleet that is entirely idle. A harness that
- * reports no catalog (an older agent, or one whose probe failed) is simply
- * absent here, and falls through to asking a session below.
+ * What the machines themselves report they can run. A harness whose catalog
+ * its machine could not read is absent here, and says why in its report
+ * (`modelsUnread`).
  */
 function reported(): HarnessModel[] {
   const rows: HarnessModel[] = [];
@@ -283,25 +96,69 @@ function accountRows(): HarnessModel[] {
     });
 }
 
-/**
- * Reported first, asked second. Both are the same shape and the same question,
- * so a harness answered by its machine simply never reaches the ask — and one
- * that is not (opencode, whose catalog really does hang off a running server)
- * carries on as before.
- */
+/** The reported catalog, Claude rows carrying the window the hub saw a turn report. */
 function catalog(): HarnessModel[] {
-  const machineRows = reported();
-  const described = new Set(machineRows.map((row) => row.harness));
-  return [
-    ...machineRows,
-    ...store.offered.filter((row) => !described.has(row.harness)),
-  ].map((row) => {
+  return reported().map((row) => {
     const window =
       row.harness === "claude"
         ? store.claudeWindows[row.resolvedModel ?? row.value]
         : undefined;
     return window ? { ...row, contextWindow: window } : row;
   });
+}
+
+/**
+ * Why `harness` offers nothing to pick on `machineIds` (every machine when
+ * none are named), or null when it offers something or nothing says why: each
+ * machine that could not read its catalog, in its own words; for Claude, the
+ * hub's last probe of each account signed in there whose models it could not
+ * read, or that it has not read them yet (it tries again until it can).
+ */
+function unread(harness: string, machineIds?: string[]): string | null {
+  if (modelsForHarness(catalog(), harness, machineIds).length > 0) {
+    return null;
+  }
+  const machines = cawco.machines.filter(
+    (machine) => !machineIds?.length || machineIds.includes(machine.machineId)
+  );
+  const said =
+    harness === "claude"
+      ? claudeUnread(machines.map((machine) => machine.machineId))
+      : machines.flatMap((machine) => {
+          const why = machine.harnesses?.find(
+            (report) => report.harness === harness
+          )?.modelsUnread;
+          return why ? [`${machineLabel(machine.hostname)}: ${why}`] : [];
+        });
+  if (said === null) {
+    return null;
+  }
+  return said.length > 0
+    ? `${speakerName(harness)}'s models couldn't be read. ${said.join(" ")}`
+    : "The hub hasn't read the models of the Claude accounts signed in here yet. It tries again until it can.";
+}
+
+/**
+ * Claude's side of {@link unread}: the hub's fault for each account signed in
+ * on `machineIds` that has no catalog; empty while none has one yet (a read
+ * on its way); null with none signed in there.
+ */
+function claudeUnread(machineIds: string[]): string[] | null {
+  const view = cawco.accounts;
+  const accounts = new Set(
+    (view?.signins ?? [])
+      .filter(
+        (signin) =>
+          signin.state === "signed-in" && machineIds.includes(signin.machineId)
+      )
+      .map((signin) => signin.accountId)
+  );
+  if (accounts.size === 0) {
+    return null;
+  }
+  return (view?.catalogFaults ?? [])
+    .filter((fault) => accounts.has(fault.accountId))
+    .map((fault) => fault.reason);
 }
 
 /** Reads the claude windows the hub has observed, for pickers that size models. */
@@ -337,67 +194,13 @@ export const models = {
       harness,
       machineIds
     ),
+  unread,
   /** Typed-in ids the offered list does not cover, newest first. */
   get recent(): string[] {
     const rows = catalog();
     return store.recent.filter((id) => !rows.some((row) => covers(row, id)));
   },
-  get loading(): boolean {
-    return store.loading;
-  },
-  get error(): string | null {
-    return store.error;
-  },
-  /** Whether a session is up to ask through — what the refresh item is gated on. */
-  get askable(): boolean {
-    return hasLiveSession();
-  },
-  askableFor: (harness?: string): boolean =>
-    liveByHarness().some(
-      (row) => !harness || (row.harness ?? "claude") === harness
-    ),
 };
-
-/**
- * Refreshes the list once per page, through whoever is running. Silent about
- * there being no session to ask through: opening a picker is not the moment to
- * complain that nothing is running. Each session is asked once per page,
- * whatever it answered; the reads are untracked so a caller's effect depends
- * only on what it reads itself, not on the store this changes.
- *
- * What was cached is a warm start, NOT a reason to stop asking. Stopping on a
- * non-empty list was wrong twice over. Most callers pass no harness, so ONE
- * harness's rows answered for every harness: a browser that had cached an
- * opencode list never asked a Claude session what it offers, and every Claude
- * session on the board read as a model nothing describes — no name, and no
- * effort scale, because the row that carries the scale was never fetched. And
- * the list comes from a harness binary that is upgraded under us, so even a
- * list of the right harness goes out of date. Neither had any invalidation but
- * a hand-clicked "Refresh models". One ask per harness per page is the price of
- * not having that.
- */
-export function ensureModels(harness?: string): void {
-  untrack(() => {
-    if (!hasLiveSession()) {
-      return;
-    }
-    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — ensureModels itself is synchronous, and the catch below already reports a refusal via store.error
-    void ask(harness).catch((error: unknown) => {
-      store.error = failureWords(error);
-    });
-  });
-}
-
-/** Asks again and replaces what was cached — the picker's "Refresh models". */
-export async function refreshModels(harness?: string): Promise<void> {
-  asked.clear();
-  try {
-    await ask(harness);
-  } catch (error) {
-    store.error = failureWords(error);
-    throw error;
-  }
-}
 
 /**
  * An offered row stands for a model id if either name matches: `system.init`

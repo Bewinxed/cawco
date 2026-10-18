@@ -29001,6 +29001,12 @@
               "$ref": "#/components/schemas/AccountCatalog"
             }
           },
+          "catalogFaults": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountCatalogFault"
+            }
+          },
           "rebalances": {
             "type": "array",
             "items": {
@@ -29011,6 +29017,7 @@
         "required": [
           "accounts",
           "bench",
+          "catalogFaults",
           "catalogs",
           "readings",
           "rebalances",
@@ -41041,11 +41048,15 @@
             "description": "pi only: the model each bare model id pi offers resolves to, by pi's own\nresolver (`resolveCliModel`) with this machine's accounts counted as\nsigned in, as `provider/id`. A name pi cannot resolve is absent. The hub\nreads the provider, and so the account, of a session started on one of\nthem here. `default` depends on the session's directory and is asked\nper start ({@link CONTROL_PI_DEFAULT_MODEL})."
           },
           "models": {
-            "description": "The models this harness offers on this machine.\n\nIt rides the machine's report for the same reason {@link * HarnessCapabilities.permissionModes} does, and not the {@link * CONTROL_SUPPORTED_MODELS} control beside it: the catalog is a property of\nthe installed CLI and the account behind it, identical for every session on\nthe machine and knowable with none running. Asking a session for it made a\nfleet-wide fact inherit one session's lifecycle — a machine with nothing\nrunning had no catalog at all, so its model picker was empty and no session\ncould be named or shown an effort scale.\n\nAbsent (not empty) from a machine whose agent predates the field, and from\na harness that could not be probed; empty means it was asked and offered\nnothing.",
+            "description": "The models this harness offers on this machine.\n\nIt rides the machine's report for the same reason {@link * HarnessCapabilities.permissionModes} does, and not the {@link * CONTROL_SUPPORTED_MODELS} control beside it: the catalog is a property of\nthe installed CLI and the account behind it, identical for every session on\nthe machine and knowable with none running. Asking a session for it made a\nfleet-wide fact inherit one session's lifecycle — a machine with nothing\nrunning had no catalog at all, so its model picker was empty and no session\ncould be named or shown an effort scale.\n\nAbsent (not empty) from a harness whose catalog could not be read, which\nthen says why ({@link modelsUnread}), and from Claude, whose catalog is\neach account's (the hub's account catalogs); empty means it was asked and\noffered nothing.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ModelInfo"
             }
+          },
+          "modelsUnread": {
+            "description": "Why this harness's catalog could not be read on this read, in the\nmachine's words: OpenCode's server would not start or answer, pi's\nregistry failed. Set exactly when an installed harness that reports its\ncatalog has no {@link models}; a picker says it instead of an empty list.",
+            "type": "string"
           },
           "signInFaults": {
             "description": "OpenCode only: each of the machine's own OpenCode sign-ins (not a CawCo\naccount) whose provider refused it the last time a session here used\nit, until a turn on that provider succeeds. The home says each on the\nmachine's row, with the fix ({@link opencodeSignInFaultWords}).",
@@ -47058,6 +47069,22 @@
           "defaultEfforts",
           "models",
           "readAt"
+        ]
+      },
+      "AccountCatalogFault": {
+        "description": "Why an account's models could not be read, as the hub's last probe of it\nwent, its machine named; gone once a probe answers. A picker with no\ncatalog for the account says it.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId",
+          "reason"
         ]
       },
       "RebalanceNotice": {

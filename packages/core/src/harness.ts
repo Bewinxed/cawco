@@ -1395,11 +1395,19 @@ export interface HarnessReport {
    * running had no catalog at all, so its model picker was empty and no session
    * could be named or shown an effort scale.
    *
-   * Absent (not empty) from a machine whose agent predates the field, and from
-   * a harness that could not be probed; empty means it was asked and offered
-   * nothing.
+   * Absent (not empty) from a harness whose catalog could not be read, which
+   * then says why ({@link modelsUnread}), and from Claude, whose catalog is
+   * each account's (the hub's account catalogs); empty means it was asked and
+   * offered nothing.
    */
   models?: ModelInfo[];
+  /**
+   * Why this harness's catalog could not be read on this read, in the
+   * machine's words: OpenCode's server would not start or answer, pi's
+   * registry failed. Set exactly when an installed harness that reports its
+   * catalog has no {@link models}; a picker says it instead of an empty list.
+   */
+  modelsUnread?: string;
   /**
    * OpenCode only: each of the machine's own OpenCode sign-ins (not a CawCo
    * account) whose provider refused it the last time a session here used

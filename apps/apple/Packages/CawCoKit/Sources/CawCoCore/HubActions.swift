@@ -151,9 +151,6 @@ extension HubConnection {
     public func setPermissionModeControl(instanceId: String, machineId: String, mode: Components.Schemas.SpawnPayload.PermissionModePayload) async throws {
         _ = try await control(machineId, instanceId: instanceId, method: "setPermissionMode", args: [mode.rawValue])
     }
-    public func supportedModels(instanceId: String, machineId: String) async throws -> [Components.Schemas.ModelInfo] {
-        try await sessionControl(instanceId: instanceId, machineId: machineId, method: "supportedModels")
-    }
     public func contextUsage(instanceId: String, machineId: String) async throws -> ContextUsage {
         try await sessionControl(instanceId: instanceId, machineId: machineId, method: "getContextUsage")
     }

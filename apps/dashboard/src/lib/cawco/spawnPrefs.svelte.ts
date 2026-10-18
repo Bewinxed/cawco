@@ -6,23 +6,21 @@ import type {
   PermissionMode,
 } from "@cawco/core";
 import { MODEL_DEFAULT } from "./models.svelte";
-import {
-  fallbackMode,
-  permissionModesFor,
-  unpickedMode,
-} from "./permission-modes";
+import { modeRefusal, unpickedMode } from "./permission-modes";
 import { readJson, writeJson } from "./storage";
 
 /**
  * What the new-session form was last set to. A user who picks Fable and a
  * permission mode is telling us how they work, not just how this one session
  * starts — a form that resets to the defaults every visit makes them say it
- * again for every session. Where a session runs is not a preference: a plain
- * New session opens with no location, and one opened from a project carries
- * that project. Kept out of the model store because these are session
- * preferences.
+ * again for every session. A plain New session opens with no folder, and one
+ * opened from a project carries that project; its machine is the one the
+ * form last started a session on ({@link rememberedMachine}), only ever its
+ * id, never a folder that would fill in after a check. Kept out of the model
+ * store because these are session preferences.
  */
 const KEY = "cawco-spawn-prefs";
+const MACHINE_KEY = "cawco-spawn-machine";
 
 interface SpawnPrefs {
   /**
@@ -86,37 +84,31 @@ export const spawnPrefs = {
 };
 
 /**
- * The permission mode the New Session form shows before anything is touched,
- * for a spawn that has no form: the remembered one unless the machine's
- * harness cannot honour it, then the nearest one it can — the same
- * correction the form makes. A harness that reports no modes at all (pi) has
- * none, and none is given. With no form there is no Full Send warning to
- * read, so a remembered Full Send starts these on Bypass ({@link
- * unpickedMode}). No model: a spawn that names none runs on its harness's own
- * default.
+ * The permission mode a spawn that has no form starts on: the remembered one,
+ * when `machine`'s harness takes it. With no form there is no Full Send
+ * warning to read, so a remembered Full Send starts these on Bypass ({@link
+ * unpickedMode}). A harness that reports no modes at all (pi) is given none.
+ * Throws the reason, and nothing starts, while the machine has not reported
+ * the harness or does not take the mode ({@link modeRefusal}): no mode is
+ * sent that its person did not choose. No model: a spawn that names none runs
+ * on its harness's own default.
  *
  * Full Send is remembered only as a form's own choice: the form reaches it
  * through its confirmation, or opens on it under its warning.
  */
 export function spawnDefaults(
+  machine: string,
   harness: HarnessKind,
-  report?: HarnessReport
+  report: HarnessReport | undefined
 ): { permissionMode?: PermissionMode } {
-  if (report?.capabilities.permissionModes.length === 0) {
-    return {};
-  }
   const remembered = unpickedMode(store.permissionMode);
-  if (!report) {
-    return { permissionMode: remembered };
+  const refused = modeRefusal(machine, harness, remembered, report);
+  if (refused) {
+    throw new Error(`${refused} Nothing was started.`);
   }
-  const honoured = permissionModesFor(harness)
-    .map((mode) => mode.value)
-    .filter((mode) => report.capabilities.permissionModes.includes(mode));
-  return {
-    permissionMode: honoured.includes(remembered)
-      ? remembered
-      : (fallbackMode(remembered, honoured) ?? remembered),
-  };
+  return report?.capabilities.permissionModes.length === 0
+    ? {}
+    : { permissionMode: remembered };
 }
 
 /** Called when a spawn actually goes out, so a form the user abandoned teaches nothing. */
@@ -126,4 +118,21 @@ export function rememberSpawn(prefs: SpawnPrefs): void {
   store.permissionMode = prefs.permissionMode;
   store.effort = prefs.effort;
   writeJson(KEY, store);
+}
+
+/**
+ * The machine the New Session form last started a session on, which it
+ * opens on next; null when it has started none. Read as the form opens.
+ */
+export const rememberedMachine = (): string | null => {
+  const id = readJson<unknown>(MACHINE_KEY, null);
+  return typeof id === "string" && id ? id : null;
+};
+
+/** Called with the machines a spawn from the form went out to: the first is the one it opens on next. */
+export function rememberMachine(machineIds: readonly string[]): void {
+  const [first] = machineIds;
+  if (first) {
+    writeJson(MACHINE_KEY, first);
+  }
 }

@@ -16,12 +16,7 @@
   import Cpu from "~icons/solar/cpu-bolt-bold-duotone";
   import Search from "~icons/solar/magnifer-bold-duotone";
   import HarnessLogo from "../HarnessLogo.svelte";
-  import {
-    ensureModels,
-    models,
-    providerOf,
-    rememberModel,
-  } from "../models.svelte";
+  import { models, providerOf, rememberModel } from "../models.svelte";
   import {
     crossIn,
     crossOut,
@@ -198,7 +193,6 @@
 
   $effect(() => {
     const next = harness;
-    ensureModels(next);
     if (next === untrack(() => listHarness)) {
       return;
     }
@@ -430,7 +424,8 @@
             {#if q}
               No {harnessName(listHarness)} models match "{query}"
             {:else}
-              No {harnessName(listHarness)} models reported yet
+              {models.unread(listHarness, machineIds) ??
+                `No ${harnessName(listHarness)} models reported yet`}
             {/if}
           </div>
         {/if}
