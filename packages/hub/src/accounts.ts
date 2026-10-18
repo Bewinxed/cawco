@@ -252,45 +252,21 @@ export const reconcileAccounts = async (
 };
 
 /**
- * What Claude Code's error message in place of an answer says about its
- * account's credential: `refused` for good, so the account is signed out
- * there; `raced`, a refresh another of its processes held, which is no
- * sign-out; nothing for any other failure. Read on the message's own `error`
- * first, then on the words the CLI writes for that one cause, measured on
- * CLI 2.1.288's API-error mapping:
- * - a 403 "OAuth token has been revoked" or a 401 "OAuth access token has
- *   been revoked" → `authentication_failed`, "Failed to authenticate: OAuth
- *   token revoked. …" ("OAuth token revoked · Please run /login" in its UI);
- * - `OAuthRefreshDeadError` ("OAuth refresh token is no longer valid") →
- *   `authentication_failed`, "Failed to authenticate: OAuth session expired
- *   and could not be refreshed" ("Login expired · Please run /login");
- * - `OAuthRefreshLockTimeoutError` → `server_error`, "Failed to refresh OAuth
- *   token: another Claude Code process is refreshing it …" ("Could not
- *   refresh your login because another Claude Code process is refreshing
- *   it …").
- * A bare 401 ("Failed to authenticate. API Error: 401 …") is neither: it
- * says nothing of whether a refresh was tried or why it failed.
+ * Whether Claude Code's error in place of an answer refused its account's
+ * credential for good, read on the message's own `error` alone (the Agent
+ * SDK's `SDKAssistantMessageError`): `authentication_failed` is a credential
+ * the API turned down, so the account is signed out there, the message's
+ * words its reason. Every other error (`server_error` among them, a refresh
+ * another of its processes held as well as a server's failure) says nothing
+ * of the credential, and is no sign-out.
  */
-export const claudeCredentialWord = (
+export const claudeCredentialRefused = (
   error: string | undefined,
   text: string
-): { kind: "refused"; reason: string } | { kind: "raced" } | undefined => {
-  if (
-    error === "server_error" &&
-    text.includes("another Claude Code process is refreshing")
-  ) {
-    return { kind: "raced" };
-  }
-  if (
-    error === "authentication_failed" &&
-    (text.includes("OAuth token revoked") ||
-      text.includes("OAuth session expired and could not be refreshed") ||
-      text.startsWith("Login expired · Please run /login"))
-  ) {
-    return { kind: "refused", reason: text.trim() };
-  }
-  return undefined;
-};
+): { reason: string } | undefined =>
+  error === "authentication_failed"
+    ? { reason: text.trim() || "Claude Code's sign-in was refused" }
+    : undefined;
 
 /** Why extra usage is off, by Claude Code's `overageDisabledReason`, in words. */
 const OFF_REASONS: Record<string, string> = {

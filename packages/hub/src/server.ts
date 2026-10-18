@@ -372,7 +372,7 @@ import { websocket } from "elysia/websocket";
 import {
   type AccountProber,
   accountOfIdentity,
-  claudeCredentialWord,
+  claudeCredentialRefused,
   keepProbe,
   machineAccount,
   machineReadings,
@@ -4426,11 +4426,11 @@ export const createServer = (
   ): string => JSON.stringify([row.id, row.spawnedAt]);
   /**
    * A Claude session's error in place of an answer, read for what it says of
-   * its account's credential ({@link claudeCredentialWord}). Refused for good:
-   * the account is signed out on the session's machine with the refusal's
-   * words, so no new session is placed on it there and Configure → Accounts
-   * offers to sign it in again; a refresh another process held changes
-   * nothing. Only the row's live launch speaks for its account, and only one
+   * its account's credential ({@link claudeCredentialRefused}). Refused for
+   * good: the account is signed out on the session's machine with the
+   * refusal's words, so no new session is placed on it there and Configure →
+   * Accounts offers to sign it in again; any other error changes nothing.
+   * Only the row's live launch speaks for its account, and only one
    * reading the account's own credential: not one on the machine's own login
    * while it moves into CawCo, nor one still running from a credential that
    * has moved out of its store, whose refusal is that old credential's.
@@ -4444,8 +4444,8 @@ export const createServer = (
     generation: string | undefined,
     error: string | undefined,
     text: string
-  ): ReturnType<typeof claudeCredentialWord> => {
-    const word = claudeCredentialWord(error, text);
+  ): ReturnType<typeof claudeCredentialRefused> => {
+    const word = claudeCredentialRefused(error, text);
     const [row] = word ? db.getInstancesByIds([instanceId]) : [];
     const accountId = row?.accountId;
     if (
@@ -4459,12 +4459,6 @@ export const createServer = (
     }
     const named = accountWords(accountId);
     const where = `${named} on ${machineName(machineId)}`;
-    if (word.kind === "raced") {
-      console.info(
-        `[accounts] ${sessionName(row)}'s turn was cut: its Claude Code refreshed ${named}'s token at the same moment as another Claude Code process on ${machineName(machineId)}. ${named} stays signed in there, and the turn is sent again in a minute, once.`
-      );
-      return word;
-    }
     const signedIn = db.accounts
       .signins()
       .some(
@@ -8172,10 +8166,10 @@ export const createServer = (
   /**
    * Sessions whose turn in flight died on their account's credential and
    * whose end is the at-limit controller's to answer, not a failed turn to
-   * hand back ({@link takeCredentialTurn}): a token refresh race it sends
-   * again, or a refusal it moves the session off.
+   * hand back ({@link takeCredentialTurn}): a refusal it moves the session
+   * off.
    */
-  const credentialTurns = new Map<string, "raced" | "refused">();
+  const credentialTurns = new Set<string>();
   /** Sessions whose turn in flight has called a tool: it has done work, which a refusal never runs again. */
   const workedTurns = new Set<string>();
   /**
@@ -21664,25 +21658,15 @@ export const createServer = (
    * Who answers the end of a turn of `instanceId` its live launch's Claude
    * Code ended on its account's credential ({@link settleRefusal}): the
    * at-limit controller ({@link credentialTurns}), or the turn's end as any
-   * failed turn's. A token refresh race goes again, once. A refusal moves
-   * the session and carries it on, but a work item's session only from a
+   * failed turn's. A refusal moves the session and carries it on, but a work item's session only from a
    * turn that called no tool, once per item, and only with an account to
    * take it; otherwise its item fails as today, its failure naming the
    * account ({@link refusedFailures}).
    */
-  const takeCredentialTurn = (
-    instanceId: string,
-    word: "raced" | "refused"
-  ): void => {
+  const takeCredentialTurn = (instanceId: string): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     const from = row?.accountId ? db.accounts.get(row.accountId) : undefined;
     if (!(row && from && atLimit.manages(instanceId))) {
-      return;
-    }
-    if (word === "raced") {
-      if (atLimit.retriesRace(instanceId)) {
-        credentialTurns.set(instanceId, "raced");
-      }
       return;
     }
     // A move owed to its next launch off this refusal is the controller's
@@ -21692,7 +21676,7 @@ export const createServer = (
       if (owed?.kind === "moved" && owed.because?.kind === "refused") {
         relaunchAtTurnEnd.delete(instanceId);
       }
-      credentialTurns.set(instanceId, "refused");
+      credentialTurns.add(instanceId);
     };
     const itemId = row.workItemId;
     if (!itemId) {
@@ -28242,7 +28226,7 @@ export const createServer = (
                       .join("\n")
                   );
                   if (word) {
-                    takeCredentialTurn(message.instanceId, word.kind);
+                    takeCredentialTurn(message.instanceId);
                   }
                 }
                 if (
@@ -28620,20 +28604,15 @@ export const createServer = (
                   credentialTurns.has(message.instanceId)
                 ) {
                   // A turn its credential ended that the hub answers:
-                  // nothing ended, as at a limit. A refresh race goes again
-                  // where it is; a refusal moves the session and carries on.
+                  // nothing ended, as at a limit. The session moves and
+                  // carries on.
                   const ended = message.instanceId;
-                  const word = credentialTurns.get(ended);
                   credentialTurns.delete(ended);
                   limitRefused.delete(ended);
                   finalMessage.delete(ended);
-                  if (word === "raced") {
-                    atLimit.turnRaced(ended);
-                  } else {
-                    atLimit.signedOut(ended).catch((error: unknown) => {
-                      limitAnswerFailed(ended, "its refused sign-in", error);
-                    });
-                  }
+                  atLimit.signedOut(ended).catch((error: unknown) => {
+                    limitAnswerFailed(ended, "its refused sign-in", error);
+                  });
                 } else if (
                   neutral.type === "result" &&
                   limitRefused.delete(message.instanceId) &&
@@ -28653,10 +28632,6 @@ export const createServer = (
                     });
                   }
                 } else if (neutral.type === "result") {
-                  // A turn that ended on anything but a refresh race the hub
-                  // sends again: one waiting to go again went with it, and a
-                  // second race fails as any turn does.
-                  atLimit.turnWent(message.instanceId);
                   const [cacheRow] = db.getInstancesByIds([message.instanceId]);
                   if (cacheRow?.harness === "claude") {
                     db.updateKeepAlive(
