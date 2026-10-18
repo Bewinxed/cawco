@@ -1,27 +1,25 @@
 /**
- * Every cut of a workspace, its first and one again after it retired, on
- * every OS, answers with the project's dependencies installed (agent
- * seed-deps.ts `installDependencies`), so its delegate's own first
- * `bun run typecheck` passes with no install of its own, and the landing
- * gate finds them installed (core move.ts `depsScript`'s stamp). On a scratch
- * fleet (real hub, agent and sessiond; Claude Code against the mock model).
- * This spec delegates, so its fleet cuts workspaces: it runs on the host,
- * outside every boundary, on Linux or macOS.
+ * The landing gate runs its steps in a clone with the project's dependencies
+ * installed, every time (core move.ts `depsScript`), including a clone cut
+ * again after its workspace retired. On a scratch fleet (real hub, agent and
+ * sessiond; Claude Code against the mock model). This spec delegates, so its
+ * fleet cuts workspaces: it runs on the host, outside every boundary.
  *
- * Two projects, each with a `typecheck` script (its own `tsc --noEmit`, TypeScript a
+ * Two projects, each with a `typecheck` script (`tsc --noEmit`, TypeScript a
  * dev dependency) and node_modules ignored: L has a bun.lock, N has none (as
  * nightly 3981's ds-probe-sendback, a copy of `site/`, had none). For each:
  *
- * - its delegate's first command is `bun run typecheck`, and it passes; then
- *   it commits a file and calls finish_item: it lands on the first try, the
- *   gate's `bun run typecheck` passing with no install line;
+ * - its delegate commits a file and calls finish_item: it lands on the first
+ *   try, the gate's `bun run typecheck` passing, and its install line (N's
+ *   names `bun install --frozen-lockfile` and package.json) says why it ran;
  * - its workspace retires, its clone gone;
- * - the person sends it a follow-up: the clone is cut again at the same
- *   path, and the same session's first command there, `bun run typecheck`,
- *   passes (on 2026-10-18 a Mac delegate's failed with "Cannot find module
- *   'svelte/compiler'" in a clone cut again); it commits a second file and
- *   calls finish_item once, and that finish passes the gate on its first
- *   try with no install line, no "Not landed" answer in the reopened turn.
+ * - its parent hands off to it: the clone is cut again at the same path, the
+ *   same session commits a second file and calls finish_item once, and that
+ *   finish passes the gate on its first try, no "Not landed" answer in the
+ *   reopened turn. The re-cut clone's dependencies came from somewhere it
+ *   names: the gate's install line ("no dependencies installed from …"), or,
+ *   for L on Linux, the agent's seed of the cut (seed-deps.ts) with no
+ *   install line.
  *
  * Then S, with a bun.lock: its delegate adds a dependency to package.json
  * and leaves bun.lock as it was. The gate's frozen install refuses it, and
@@ -34,6 +32,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -42,29 +41,22 @@ const TAG = /PROBE-RECUT-GATE-([LNS])/;
 type Tag = "L" | "N" | "S";
 /** The projects that land, retire and land again; S's gate refuses its stale lockfile. */
 type LegTag = Exclude<Tag, "S">;
-/**
- * The projects' typecheck: the clone's own tsc, so a clone with no install
- * fails it. `bun run` puts every enclosing folder's `node_modules/.bin` on
- * PATH, and a home with its own TypeScript (the Mac's `~/node_modules/.bin/tsc`)
- * passed a bare `tsc` in a clone with no dependencies (2026-10-18).
- */
-const TYPECHECK = "./node_modules/.bin/tsc --noEmit -p .";
 /** S's package.json: the project's, with a dependency bun.lock does not hold. */
 const STALE_MANIFEST = {
   name: "landing-recut-probe",
   private: true,
-  scripts: { typecheck: TYPECHECK },
+  scripts: { typecheck: "tsc --noEmit -p ." },
   devDependencies: { typescript: "5.9.3", "is-number": "7.0.0" },
 };
 /** How finish_item names a stale lockfile, in its first sentence (work-items.ts `failedRun`). */
 const STALE_WORDS =
   "package.json and bun.lock disagree, so the dependency install refused and no other step ran: run `bun install` in the workspace and commit bun.lock. Fix it, commit, and call finish_item again.";
-/** The person's follow-up to a retired delegate, and the mark of its reopened turn. */
+/** The parent's handoff to a retired delegate, and the mark of its reopened turn. */
 const again = (tag: Tag) => `PROBE-RECUT-AGAIN-${tag}`;
 /** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
 const NOT_LANDED = "Not landed: the landing gate ran on";
-/** How a gate report names an install it ran (work-items.ts): none when the cut's install stamped the clone. */
-const INSTALL_LINE = "- installed dependencies:";
+/** How the hub says a handoff waits for a clone cut again (delegation-actions.ts). */
+const RECUTTING = "cutting its clone again";
 /** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 120_000;
 const COMMIT =
@@ -97,33 +89,6 @@ const commitCommand = (name: string, mark: string) =>
     `${COMMIT} 'Delegate commit ${name}'`,
     `echo ${mark}`,
   ].join(" && ");
-
-/** The mark of the delegate's own typecheck in a cut: `-PASS` or `-FAIL: <its last lines>` follows it. */
-const typecheckMark = (phase: "FIRST" | "AGAIN", tag: Tag) =>
-  `DELEGATE-TYPECHECK-${phase}-${tag}`;
-
-/**
- * The delegate's own `bun run typecheck`, first in its clone, before
- * anything installs: its output says whether it passed (`-PASS` or `-FAIL`
- * printed by `printf`, so the command's own text holds neither) and, when
- * not, its last lines.
- */
-const typecheckCommand = (mark: string) =>
-  `if out=$(bun run typecheck 2>&1); then echo "${mark}-$(printf PASS)"; else echo "${mark}-$(printf FAIL): $(printf '%s' "$out" | tail -3)"; fi`;
-
-/** What the delegate's own typecheck under `mark` printed, from the model requests that read it. */
-const typecheckSeen = (
-  fleet: Fleet,
-  mark: string
-): "pass" | string | undefined => {
-  if (fleet.seen.some((one) => one.all.includes(`${mark}-PASS`))) {
-    return "pass";
-  }
-  const failed = fleet.seen.find((one) => one.all.includes(`${mark}-FAIL`));
-  return failed
-    ? failed.all.slice(failed.all.indexOf(`${mark}-FAIL`)).slice(0, 600)
-    : undefined;
-};
 
 /** finish_item once it is offered, after a ToolSearch for it when it is not. */
 const finishing = (
@@ -162,8 +127,8 @@ const respond = (request: Seen): Reply => {
   if (step.finish && request.all.includes(again(tag))) {
     if (!request.all.includes(`DONE-AGAIN-${tag}`)) {
       return tool("Bash", {
-        command: `${typecheckCommand(typecheckMark("AGAIN", tag))}; ${commitCommand(`again_${tag}`, `DONE-AGAIN-${tag}`)}`,
-        description: "Typecheck, then commit again",
+        command: commitCommand(`again_${tag}`, `DONE-AGAIN-${tag}`),
+        description: "Commit again",
       });
     }
     return finishing(
@@ -185,7 +150,7 @@ const respond = (request: Seen): Reply => {
               `${COMMIT} 'Delegate commit stale'`,
               "echo DONE-COMMIT-S",
             ].join(" && ")
-          : `${typecheckCommand(typecheckMark("FIRST", tag))}; ${commitCommand(`first_${tag}`, `DONE-COMMIT-${tag}`)}`,
+          : commitCommand(`first_${tag}`, `DONE-COMMIT-${tag}`),
       description: "Commit",
     });
   }
@@ -222,21 +187,16 @@ const makeRepo = async (
       {
         name: "landing-recut-probe",
         private: true,
-        scripts: { typecheck: TYPECHECK },
+        scripts: { typecheck: "tsc --noEmit -p ." },
         devDependencies: { typescript: "5.9.3" },
       },
       null,
       2
     )}\n`
   );
-  // No global types but its own: TypeScript below 6.0 includes every
-  // `node_modules/@types` of any enclosing folder, and a home with its own
-  // (`~/node_modules/@types/bun`) failed this project's typecheck on the Mac.
-  // typescriptlang.org/tsconfig/types.html: "If `types` is specified, only
-  // packages listed will be included in the global scope."
   await writeFile(
     join(repo, "tsconfig.json"),
-    `${JSON.stringify({ compilerOptions: { strict: true, noEmit: true, module: "esnext", target: "es2022", types: [] }, include: ["src"] }, null, 2)}\n`
+    `${JSON.stringify({ compilerOptions: { strict: true, noEmit: true, module: "esnext", target: "es2022" }, include: ["src"] }, null, 2)}\n`
   );
   await writeFile(join(repo, "src", "index.ts"), "export const ok = true;\n");
   await writeFile(join(repo, ".gitignore"), "node_modules\n");
@@ -249,6 +209,23 @@ const makeRepo = async (
     .env(env)
     .quiet();
 };
+
+/** What each project's gate installs from (core move.ts `depsScript`), by bun's frozen install either way. */
+const LOCK: Record<LegTag, string> = { L: "bun.lock", N: "package.json" };
+
+/**
+ * Whether a report names where its clone's dependencies came from: the
+ * gate's install line saying none were installed from the project's
+ * lockfile (or manifest), or, for L, the cut's seed (`seeded` lines in the
+ * agent's log) with no install line.
+ */
+const depsNamed = (result: string, tag: LegTag, seeded: number): boolean =>
+  result.includes(
+    `- installed dependencies: bun install --frozen-lockfile (no dependencies installed from ${LOCK[tag]})`
+  ) ||
+  (tag === "L" &&
+    seeded === 1 &&
+    !result.includes("- installed dependencies:"));
 
 const itemRow = (fleet: Fleet, id: string) =>
   fleet.query<ItemRow>(
@@ -370,11 +347,20 @@ const staleLeg = async (kit: Kit, fleet: Fleet): Promise<void> => {
   );
 };
 
-/** One project's leg: typecheck and land, retire, follow up, typecheck and land again on the first try. */
-const leg = async (kit: Kit, fleet: Fleet, tag: LegTag): Promise<void> => {
+/** One project's leg: land, retire, hand off, land again on the first try. */
+const leg = async (
+  kit: Kit,
+  fleet: Fleet,
+  tag: LegTag,
+  callAsParent: (
+    parent: string,
+    name: string,
+    args: object
+  ) => Promise<{ status: number; text: string }>
+): Promise<void> => {
   const { check } = kit;
   const label = tag === "L" ? "L (bun.lock)" : "N (no lockfile)";
-  const { started } = await delegated(fleet, tag, tag === "L");
+  const { parent, started } = await delegated(fleet, tag, tag === "L");
   const itemOf = (id: string) => itemRow(fleet, id);
   const workspaceOf = (id: string) => workspaceRow(fleet, id);
   const notLanded = (mark: string) => notLandedSeen(fleet, mark);
@@ -384,26 +370,33 @@ const leg = async (kit: Kit, fleet: Fleet, tag: LegTag): Promise<void> => {
     started.workItemId,
     `PROBE-RECUT-GATE-${tag}`
   );
-  const firstTypecheck = typecheckSeen(fleet, typecheckMark("FIRST", tag));
-  check(
-    `${label}: in its first cut, the delegate's own first bun run typecheck passes, no install of its own`,
-    firstTypecheck === "pass",
-    firstTypecheck ?? "the delegate's typecheck was never read"
-  );
   const firstResult = first.row?.result ?? "";
   check(
-    `${label}: the first hand-in lands on its first try, bun run typecheck passing, the gate installing nothing (the cut did)`,
+    `${label}: the first hand-in lands on its first try, bun run typecheck passing`,
     first.refused === undefined &&
       first.row?.state === "done" &&
       firstResult.includes("- bun run typecheck: pass (exit 0") &&
-      firstResult.includes("Landed on main at") &&
-      !firstResult.includes(INSTALL_LINE),
+      firstResult.includes("Landed on main at"),
     `${first.row?.state} ${first.row?.error ?? ""}\n${refusal(first.refused) || firstResult.slice(0, 1500)}`
   );
   if (first.row?.state !== "done") {
     return;
   }
   const workspace = workspaceOf(started.workspaceId);
+  const seeds = async () =>
+    (await fleet.logs("agent"))
+      .split("\n")
+      .filter(
+        (line) =>
+          line.includes(`[workspace] ${started.workspaceId}:`) &&
+          line.includes("its dependencies linked from the workspaces' cache")
+      ).length;
+  const seededFirst = await seeds();
+  check(
+    `${label}: the first hand-in's dependencies came from the gate's install, saying why, or the cut's seed`,
+    depsNamed(firstResult, tag, seededFirst),
+    `seeded ${seededFirst}; ${firstResult.slice(0, 1500)}`
+  );
 
   const retired = await until(
     `${label}'s workspace retired`,
@@ -417,25 +410,22 @@ const leg = async (kit: Kit, fleet: Fleet, tag: LegTag): Promise<void> => {
     `${retired?.state}; clone ${existsSync(workspace?.path ?? "") ? "stands" : "gone"}`
   );
 
-  // The person's follow-up reopens the finished item as its parent's handoff
-  // does (work-items.ts `reopens`): the hub keeps it while the clone is cut
-  // again (`recutFor`).
-  await fleet.send(
-    started.instanceId,
-    `${again(tag)}: commit one more file, then finish.`
-  );
-  const cut = await until(
-    `${label}'s clone cut again`,
-    () => workspaceOf(started.workspaceId),
-    (row) => row?.state === "active" && existsSync(row.path),
-    SETTLE_MS
-  ).catch(() => workspaceOf(started.workspaceId));
+  const message = `${again(tag)}: commit one more file, then finish.`;
+  let handed = await callAsParent(parent, "handoff", {
+    target: started.instanceId,
+    message,
+  });
+  // A cold target is refused once with the cost considerations; the repeat goes.
+  if (!handed.text.includes(RECUTTING)) {
+    handed = await callAsParent(parent, "handoff", {
+      target: started.instanceId,
+      message,
+    });
+  }
   check(
-    `${label}: the follow-up cuts its clone again at its own path`,
-    cut?.state === "active" &&
-      cut.path === workspace?.path &&
-      existsSync(cut.path),
-    `${cut?.state}; ${cut?.path} (was ${workspace?.path}); clone ${existsSync(cut?.path ?? "") ? "stands" : "gone"}`
+    `${label}: the handoff waits while its clone is cut again`,
+    handed.status === 200 && handed.text.includes(RECUTTING),
+    `${handed.status} ${handed.text.slice(0, 800)}`
   );
   const second = await until(
     `${label}'s reopened item ended or its gate failed`,
@@ -449,22 +439,21 @@ const leg = async (kit: Kit, fleet: Fleet, tag: LegTag): Promise<void> => {
     row: itemOf(started.workItemId),
     refused: notLanded(again(tag)),
   }));
-  const againTypecheck = typecheckSeen(fleet, typecheckMark("AGAIN", tag));
-  check(
-    `${label}: in the clone cut again, the delegate's own first bun run typecheck passes, no install of its own`,
-    againTypecheck === "pass",
-    againTypecheck ?? "the delegate's typecheck was never read"
-  );
   const result = second.row?.result ?? "";
+  const seeded = (await seeds()) - seededFirst;
   check(
-    `${label}: the follow-up's finish_item passes the gate on its first try in the clone cut again, and lands, the gate installing nothing (the cut did)`,
+    `${label}: the follow-up's finish_item passes the gate on its first try in the clone cut again, and lands`,
     second.refused === undefined &&
       second.row?.state === "done" &&
       result.includes(`Delegate commit again_${tag}`) &&
       result.includes("- bun run typecheck: pass (exit 0") &&
-      result.includes("Landed on main at") &&
-      !result.includes(INSTALL_LINE),
+      result.includes("Landed on main at"),
     `${second.row?.state} ${second.row?.error ?? ""}\n${refusal(second.refused) || result.slice(0, 1500)}`
+  );
+  check(
+    `${label}: the re-cut clone's dependencies came from the gate's install line naming why (none installed from ${LOCK[tag]}), or the cut's seed with no install line`,
+    depsNamed(result, tag, seeded),
+    `seeded at the re-cut: ${seeded}; ${result.slice(0, 1500)}`
   );
 };
 
@@ -486,8 +475,51 @@ const run = async (kit: Kit) => {
     join(home, ".gitconfig"),
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
-  await leg(kit, fleet, "N");
-  await leg(kit, fleet, "L");
+  const credentials = new Map<string, string>();
+  const callAsParent = async (parent: string, name: string, args: object) => {
+    let credential = credentials.get(parent);
+    if (credential === undefined) {
+      credential =
+        (
+          await Bun.file(
+            `/proc/${await fleet.sessionPid(parent)}/environ`
+          ).text()
+        )
+          .split("\0")
+          .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
+          ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+      credentials.set(parent, credential);
+    }
+    const read = await readWithin(300_000, async (signal) => {
+      const response = await fetch(
+        `${fleet.base}/api/delegation/call/${parent}`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            Authorization: `Bearer ${credential}`,
+          },
+          body: JSON.stringify({ name, arguments: args }),
+          signal,
+        }
+      );
+      return { status: response.status, text: await response.text() };
+    });
+    switch (read.kind) {
+      case "answered":
+        return read.value;
+      case "unanswered":
+        throw new Error(
+          `${name} as the parent did not answer within ${read.after} ms (${read.reason})`
+        );
+      default: {
+        const unhandled: never = read;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+  };
+  await leg(kit, fleet, "N", callAsParent);
+  await leg(kit, fleet, "L", callAsParent);
   await staleLeg(kit, fleet);
 };
 

@@ -493,9 +493,8 @@ export const LOCKFILES = [
  * Where a checkout's install records what it installed from, next to the
  * dependencies: one hash of its root lockfile (its `package.json` when it
  * has none) and every tracked `package.json`, so a manifest changed without
- * its lockfile installs too, and the frozen install refuses it. Written by
- * every cut's own install (agent seed-deps.ts `installDependencies`), so the
- * gate finds a fresh clone's dependencies installed.
+ * its lockfile installs too, and the frozen install refuses it. Gone with
+ * them: a clone cut again has none.
  */
 const DEPS_STAMP = "node_modules/.cawco-lockfile";
 
