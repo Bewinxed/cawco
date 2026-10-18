@@ -389,6 +389,63 @@ const writeProject = async (dir: string) => {
   );
 };
 
+/** Legs 2b to 2e: the component canvas's answers through the session's own tools. */
+const componentLegs = async (
+  kit: Kit,
+  call: (n: string, name: string, input: object) => Promise<string>,
+  created: string,
+  id: string | undefined
+) => {
+  // 2b. No panel drew it (this run opens no dashboard): the daemon did, in the machine's Chromium.
+  kit.check(
+    "2b: with no panel open, artifact_create's answer is the daemon's draw: by stage, every frame drawn",
+    created.includes('"by":"stage"') &&
+      created.includes('"state":"drawn"') &&
+      !created.includes('"state":"unseen"'),
+    short(created.slice(created.indexOf('"render"')))
+  );
+
+  // 2c. A canvas with no word on what it is for is refused, with the shape and an example.
+  const bare = await call("2c", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "bare",
+    file: STORY,
+  });
+  kit.check(
+    "2c: artifact_create(kind: component) with no about is refused with its shape and an example",
+    bare.includes("takes about") && bare.includes('kind: "component"'),
+    short(bare)
+  );
+
+  // 2d. One frame read: its state, its parts; a fresh draw on asking.
+  if (id) {
+    const frame = await call("2d", "mcp__cawco__artifact_read", {
+      id,
+      state: { story: "One", interaction: "rest" },
+      render: true,
+    });
+    kit.check(
+      "2d: artifact_read with state answers that frame, drawn, with the component chain it drew; render: true is the daemon's draw",
+      frame.includes('"frame":{"story":"One"') &&
+        frame.includes('"parts":[{') &&
+        frame.includes('"by":"stage"'),
+      short(frame.slice(frame.indexOf('"frame"')))
+    );
+  }
+
+  // 2e. The library's card of the component: its states file and stories.
+  const card = await call("2e", "mcp__cawco__design_map", {
+    component: "src/Card.svelte",
+  });
+  kit.check(
+    "2e: design_map with component answers its card: states file, stories, used in and made of",
+    card.includes(`"statesFiles":["${STORY}"]`) &&
+      card.includes('"stories":[{') &&
+      card.includes('"usedIn":['),
+    short(card)
+  );
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   await writeProject(fleet.repo);
@@ -457,54 +514,7 @@ const run = async (kit: Kit) => {
     short(created)
   );
 
-  // 2b. No panel drew it (this run opens no dashboard): the daemon did, in the machine's Chromium.
-  kit.check(
-    "2b: with no panel open, artifact_create's answer is the daemon's draw: by stage, every frame drawn",
-    created.includes('"by":"stage"') &&
-      created.includes('"state":"drawn"') &&
-      !created.includes('"state":"unseen"'),
-    short(created.slice(created.indexOf('"render"')))
-  );
-
-  // 2c. A canvas with no word on what it is for is refused, with the shape and an example.
-  const bare = await call("2c", "mcp__cawco__artifact_create", {
-    kind: "component",
-    name: "bare",
-    file: STORY,
-  });
-  kit.check(
-    "2c: artifact_create(kind: component) with no about is refused with its shape and an example",
-    bare.includes("takes about") && bare.includes('kind: "component"'),
-    short(bare)
-  );
-
-  // 2d. One frame read: its state, its parts; a fresh draw on asking.
-  if (id) {
-    const frame = await call("2d", "mcp__cawco__artifact_read", {
-      id,
-      state: { story: "One", interaction: "rest" },
-      render: true,
-    });
-    kit.check(
-      "2d: artifact_read with state answers that frame, drawn, with the component chain it drew; render: true is the daemon's draw",
-      frame.includes('"frame":{"story":"One"') &&
-        frame.includes('"parts":[{') &&
-        frame.includes('"by":"stage"'),
-      short(frame.slice(frame.indexOf('"frame"')))
-    );
-  }
-
-  // 2e. The library's card of the component: its states file and stories.
-  const card = await call("2e", "mcp__cawco__design_map", {
-    component: "src/Card.svelte",
-  });
-  kit.check(
-    "2e: design_map with component answers its card: states file, stories, used in and made of",
-    card.includes(`"statesFiles":["${STORY}"]`) &&
-      card.includes('"stories":[{') &&
-      card.includes('"usedIn":['),
-    short(card)
-  );
+  await componentLegs(kit, call, created, id);
 
   // 3. A dashboard's raw stage control, on a folder the hub never resolved.
   // A machine that took it answers once its stage is up or has failed.
