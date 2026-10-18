@@ -21,6 +21,12 @@
  *      animation, never a step;
  *  (d) a search and a project's board answered by an HTML 502: one
  *      sentence, no `<` drawn;
+ *  (e) a tab that has never had the hub, refused from its first socket:
+ *      the band's `data-open` and the page's top recorded from load (a
+ *      MutationObserver and a frame loop installed before the page's own
+ *      scripts), the band opening once and holding through 20 s of tries,
+ *      the page moving once; closing once when the hub answers; then the
+ *      same tab, connected, losing the hub as before;
  *
  * and each state swept for spills and overlaps (journeys/scan.ts).
  */
@@ -1614,6 +1620,188 @@ async function conversationLeg(
   await page.close();
 }
 
+/** One change of the band's `data-open`, or of the page's top, at the page's clock (ms). */
+interface Change {
+  at: number;
+  value: boolean | number;
+}
+
+/**
+ * Installed before the page's own scripts: every change of the band's
+ * `data-open` as a MutationObserver hears it, and every frame the page's
+ * top (`#main-content`) stands somewhere new, from the first frame on.
+ */
+function recordBand() {
+  const w = window as unknown as {
+    probeBand: Change[];
+    probeTop: Change[];
+  };
+  w.probeBand = [];
+  w.probeTop = [];
+  let shown: boolean | null = null;
+  const heard = () => {
+    const band = document.querySelector('[data-slot="hub-band"]');
+    if (!band) {
+      return;
+    }
+    const now = band.hasAttribute("data-open");
+    if (now !== shown) {
+      shown = now;
+      w.probeBand.push({ at: Math.round(performance.now()), value: now });
+    }
+  };
+  new MutationObserver(heard).observe(document, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["data-open"],
+  });
+  let top: number | null = null;
+  const frame = () => {
+    const main = document.querySelector("#main-content");
+    if (main) {
+      const now = Math.round(main.getBoundingClientRect().top * 10) / 10;
+      if (now !== top) {
+        top = now;
+        w.probeTop.push({ at: Math.round(performance.now()), value: now });
+      }
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
+/** What the recorder has heard since it last read, and the page's clock now. */
+const recorded = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as {
+      probeBand: Change[];
+      probeTop: Change[];
+    };
+    const out = {
+      band: w.probeBand,
+      top: w.probeTop,
+      now: Math.round(performance.now()),
+    };
+    w.probeBand = [];
+    w.probeTop = [];
+    return out;
+  });
+
+/** A change list as one line: `+1234 open`, `+1300 112.5`. */
+const listed = (changes: Change[]) =>
+  changes
+    .map((c) => {
+      if (typeof c.value === "number") {
+        return `+${c.at} ${c.value}`;
+      }
+      return `+${c.at} ${c.value ? "open" : "shut"}`;
+    })
+    .join(", ") || "none";
+
+/** The page's top as runs of motion: frames of change under 100 ms apart are one run. */
+const moves = (top: Change[]) => {
+  const runs: Change[][] = [];
+  for (const change of top) {
+    const last = runs.at(-1);
+    const prev = last?.at(-1);
+    if (last && prev && change.at - prev.at < 100) {
+      last.push(change);
+    } else {
+      runs.push([change]);
+    }
+  }
+  return runs;
+};
+
+/**
+ * A tab that has never had the hub, the hub refusing it from the first
+ * socket: the band opens once and holds through 20 s of tries, the page's
+ * top moving once, with it; the hub answering, the band closes once. Then
+ * the same tab, connected, losing the hub: the band as it was before.
+ */
+async function neverConnected(kit: Kit, base: string) {
+  const name = "desk never connected";
+  const page = await kit.page("desk", { theme: "light", init: [recordBand] });
+  const socket = await proxied(page);
+  socket.mode = "refuse";
+  const loaded = Date.now();
+  await open(page, `${base}/session`, '[data-slot="shell"]', 90_000);
+  await Bun.sleep(Math.max(0, loaded + 20_000 - Date.now()));
+  const away = await recorded(page);
+  kit.note(`${name}: ${socket.refused.length} tries refused in 20 s`);
+  kit.note(`${name}: data-open over 20 s: ${listed(away.band)}`);
+  kit.note(`${name}: #main-content top over 20 s: ${listed(away.top)}`);
+  const opened = away.band.filter((c) => c.value === true);
+  const openAt = opened[0]?.at ?? Number.NaN;
+  kit.check(
+    `${name}: through 20 s of refused tries the band opens once and never shuts`,
+    socket.refused.length >= 3 &&
+      opened.length === 1 &&
+      !away.band.some((c) => c.value === false && c.at > openAt),
+    `${socket.refused.length} tries; ${listed(away.band)}`
+  );
+  // The first frame places the page; every move after it is the band's.
+  const runs = moves(away.top.slice(1));
+  const run = runs[0] ?? [];
+  kit.check(
+    `${name}: the page's top moves once, as the band opens, and not again`,
+    runs.length === 1 &&
+      (run[0]?.at ?? 0) >= openAt - 50 &&
+      run.every((c, i) => i === 0 || c.value >= (run[i - 1]?.value ?? 0)),
+    `${runs.length} run(s): ${runs.map((r) => `+${r[0]?.at}→+${r.at(-1)?.at} ${r[0]?.value}→${r.at(-1)?.value} (${r.length} frames)`).join("; ")}`
+  );
+
+  // The hub answers: the next try reaches it, and the band leaves once.
+  socket.mode = "proxy";
+  const reached = await until(socket.live, 45_000);
+  await until(async () => !(await bandNow(page)).open, 15_000);
+  await settle(page, 1000);
+  const back = await recorded(page);
+  kit.note(`${name}: data-open as the hub answers: ${listed(back.band)}`);
+  kit.check(
+    `${name}: the hub answering, the band closes once`,
+    reached &&
+      back.band.length === 1 &&
+      back.band[0]?.value === false &&
+      !(await bandNow(page)).open,
+    `${reached ? "reached" : "never reached"}; ${listed(back.band)}`
+  );
+
+  // Connected now: the hub lost, the band as it was before this change.
+  socket.mode = "refuse";
+  const dropped = socket.refused.length;
+  socket.drop();
+  await Bun.sleep(20_000);
+  const lost = await recorded(page);
+  kit.note(`${name}, then lost: data-open over 20 s: ${listed(lost.band)}`);
+  kit.check(
+    `${name}, then lost: the band opens once and holds through 20 s of tries`,
+    socket.refused.length - dropped >= 3 &&
+      lost.band.length === 1 &&
+      lost.band[0]?.value === true,
+    `${socket.refused.length - dropped} tries; ${listed(lost.band)}`
+  );
+  socket.mode = "proxy";
+  await page
+    .locator(`${BAND} button[data-slot="button"]:not([aria-busy])`)
+    .click({ timeout: 10_000 })
+    .catch(() => undefined);
+  await until(socket.live, 30_000);
+  await until(async () => !(await bandNow(page)).open, 15_000);
+  await settle(page, 1000);
+  const again = await recorded(page);
+  kit.note(
+    `${name}, then lost: data-open as the hub answers: ${listed(again.band)}`
+  );
+  kit.check(
+    `${name}, then lost: the hub answering, the band closes once`,
+    again.band.length === 1 && again.band[0]?.value === false,
+    listed(again.band)
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "hub-states",
   run: async (kit) => {
@@ -1632,6 +1820,7 @@ const spec: Spec = {
       name: "Probe",
     });
     const findings = { count: 0 };
+    await neverConnected(kit, base);
     for (const view of ["phone", "narrowDesk", "desk"] as const) {
       for (const theme of ["light", "dark"] as const) {
         // biome-ignore lint/performance/noAwaitInLoops: one leg at a time, each its own page

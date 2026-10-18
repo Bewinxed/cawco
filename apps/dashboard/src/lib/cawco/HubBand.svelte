@@ -48,8 +48,9 @@
    * The first connection is not a fault: `status` starts `disconnected`, a
    * socket not made yet reads like one that failed, so the band waits for
    * evidence. Disconnected or errored, it shows once an attempt has failed
-   * or the grace has run out; merely connecting, only on a page that has
-   * had the hub.
+   * or the grace has run out, and on a page that has never had the hub it
+   * holds through every try after; merely connecting on a page that has
+   * had the hub, once the grace has run out.
    */
   import { connectionWords } from "@cawco/core";
   import { onMount, untrack } from "svelte";
@@ -83,10 +84,13 @@
     if (s === "connected") {
       return null;
     }
+    // A page that has never had the hub reads every state the same way, so
+    // its band stays open through each try (`connectFailed` holds until the
+    // hub answers) instead of shutting each time a try goes out.
     const shown =
-      s === "disconnected" || s === "error"
+      s === "disconnected" || s === "error" || !everConnected
         ? cawco.connectFailed || graceOver
-        : everConnected && graceOver;
+        : graceOver;
     if (!shown) {
       return null;
     }
