@@ -4,7 +4,9 @@
  * server's app hosting its routes in an `<iframe>`) is pointed at element by
  * element, not as one frame. The overlay runs in the top document; every
  * frame's document is read from here, recursively, and its boxes mapped to
- * the top viewport by adding each frame's content-box offset.
+ * the top viewport through each frame's content box: its offset, and the
+ * scale it is drawn at (a frame shown smaller than its own size, by a
+ * transform on it or on what holds it).
  *
  * A frame of another origin cannot be read (the browser's same-origin
  * policy): it stays one element, named by its origin.
@@ -63,19 +65,65 @@ export const frameOrigin = (frame: FrameElement): string => {
   }
 };
 
-/** Where a frame's viewport starts in its own document's viewport: inside its border and padding. */
-const contentBox = (frame: Element) => {
+/**
+ * A frame's viewport in its own document's viewport: where it starts, inside
+ * its border and padding, its size there, and the scale its document is drawn
+ * at, its drawn box over its layout box (a transform on the frame or on what
+ * holds it; 1 where nothing scales it).
+ */
+const contentBox = (frame: FrameElement) => {
   const r = frame.getBoundingClientRect();
+  const sx = frame.offsetWidth > 0 ? r.width / frame.offsetWidth : 1;
+  const sy = frame.offsetHeight > 0 ? r.height / frame.offsetHeight : 1;
   const style = (frame.ownerDocument.defaultView ?? window).getComputedStyle(
     frame
   );
   const left = Number.parseFloat(style.paddingLeft) || 0;
   const top = Number.parseFloat(style.paddingTop) || 0;
+  const w =
+    frame.clientWidth - left - (Number.parseFloat(style.paddingRight) || 0);
+  const h =
+    frame.clientHeight - top - (Number.parseFloat(style.paddingBottom) || 0);
   return {
-    x: r.left + frame.clientLeft + left,
-    y: r.top + frame.clientTop + top,
-    w: frame.clientWidth - left - (Number.parseFloat(style.paddingRight) || 0),
-    h: frame.clientHeight - top - (Number.parseFloat(style.paddingBottom) || 0),
+    x: r.left + (frame.clientLeft + left) * sx,
+    y: r.top + (frame.clientTop + top) * sy,
+    w: w * sx,
+    h: h * sy,
+    sx,
+    sy,
+  };
+};
+
+/**
+ * How a frame's document maps to the top viewport: a point `p` of its
+ * viewport stands at `x + p * sx` (and `y + p * sy`) in the top one.
+ */
+interface Mapping {
+  sx: number;
+  sy: number;
+  x: number;
+  y: number;
+}
+
+const TOP: Mapping = { x: 0, y: 0, sx: 1, sy: 1 };
+
+/** `box`, in the viewport `to` maps, in the top viewport. */
+const mapped = (to: Mapping, box: DOMRect): DOMRect =>
+  new DOMRect(
+    to.x + box.x * to.sx,
+    to.y + box.y * to.sy,
+    box.width * to.sx,
+    box.height * to.sy
+  );
+
+/** The mapping of `frame`'s document, `frame` standing in the document `to` maps. */
+const into = (to: Mapping, frame: FrameElement): Mapping => {
+  const box = contentBox(frame);
+  return {
+    x: to.x + box.x * to.sx,
+    y: to.y + box.y * to.sy,
+    sx: to.sx * box.sx,
+    sy: to.sy * box.sy,
   };
 };
 
@@ -99,18 +147,9 @@ export const framesOf = (el: Element): FrameElement[] => {
   return chain;
 };
 
-/** `el`'s box in the top viewport: its own, moved by each frame it stands in. */
-export const rectOf = (el: Element): DOMRect => {
-  const { x, y, width, height } = el.getBoundingClientRect();
-  let dx = 0;
-  let dy = 0;
-  for (const frame of framesOf(el)) {
-    const box = contentBox(frame);
-    dx += box.x;
-    dy += box.y;
-  }
-  return new DOMRect(x + dx, y + dy, width, height);
-};
+/** `el`'s box in the top viewport: its own, moved and scaled by each frame it stands in. */
+export const rectOf = (el: Element): DOMRect =>
+  mapped(framesOf(el).reduce(into, TOP), el.getBoundingClientRect());
 
 /** Displays whose box an `overflow` never clips to. */
 const UNCLIPPED = new Set(["inline", "contents", "none"]);
@@ -161,18 +200,14 @@ const clipsIn = (el: Element): DOMRect[] => {
  */
 export const clipOf = (el: Element): DOMRect | null => {
   const boxes: DOMRect[] = [];
-  let dx = 0;
-  let dy = 0;
-  const moved = (box: DOMRect) =>
-    new DOMRect(box.x + dx, box.y + dy, box.width, box.height);
+  let to = TOP;
   for (const frame of framesOf(el)) {
-    boxes.push(...clipsIn(frame).map(moved));
+    boxes.push(...clipsIn(frame).map((clip) => mapped(to, clip)));
     const box = contentBox(frame);
-    dx += box.x;
-    dy += box.y;
-    boxes.push(new DOMRect(dx, dy, box.w, box.h));
+    boxes.push(mapped(to, new DOMRect(box.x, box.y, box.w, box.h)));
+    to = into(to, frame);
   }
-  boxes.push(...clipsIn(el).map(moved));
+  boxes.push(...clipsIn(el).map((clip) => mapped(to, clip)));
   if (boxes.length === 0) {
     return null;
   }
@@ -197,7 +232,7 @@ export const clipOf = (el: Element): DOMRect | null => {
 /**
  * The deepest element at the top viewport's `x`, `y`, starting from `hit`
  * (the top document's own): into each same-origin frame it lands on, the
- * point moved into that frame's viewport. A frame of another origin, or one
+ * point moved and scaled into that frame's viewport. A frame of another origin, or one
  * whose point lands on nothing, is the element.
  */
 export const deepElementAt = (
@@ -214,8 +249,8 @@ export const deepElementAt = (
       return el;
     }
     const box = contentBox(el);
-    px -= box.x;
-    py -= box.y;
+    px = (px - box.x) / box.sx;
+    py = (py - box.y) / box.sy;
     const inner = doc.elementFromPoint(px, py);
     if (!inner || inner.closest("cawco-overlay")) {
       return el;
