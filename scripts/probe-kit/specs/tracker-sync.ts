@@ -1150,6 +1150,13 @@ const legs = async (
     .click();
   const fresh = await project("Tracker bound in the dashboard");
   await open(desk, `${base}/project/${fresh}`, "[data-place-line]");
+  // A new project opens on Caw: his panel stands over its empty board and
+  // its head (CawFloat), and Escape puts it away, as a person does before
+  // opening the details.
+  const caw = desk.locator(".caw-float-pop");
+  await caw.waitFor({ state: "visible" });
+  await desk.keyboard.press("Escape");
+  await caw.waitFor({ state: "detached" });
   await desk.locator("[data-place-line]").click();
   await desk.waitForSelector('[data-detail="tracker"]');
   await desk

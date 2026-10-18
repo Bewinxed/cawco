@@ -831,7 +831,7 @@
           title="No routines yet"
         >
           {#snippet action()}
-            <!-- The starters as the kit's option chips (CawStarters' own),
+            <!-- The starters as the kit's option chips,
                  a press putting its words in the composer under them, unsent. -->
             {#if starters.length > 0}
               <ul

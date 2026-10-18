@@ -320,6 +320,29 @@
   );
   /** You can talk to Caw, on or off: only a reason he cannot start (no machine) stops it. */
   const canTalk = $derived(lead.view !== null && !lead.view.problem);
+  /**
+   * Arrived on the project, its board and his view read: his panel opens as
+   * the person last left it here, else while the board is empty, so a
+   * project just made opens on Caw (PRD §5.6; CawLead.arrive).
+   */
+  $effect(() => {
+    if (list !== null && lead.view !== null) {
+      const blank = empty;
+      untrack(() => lead.arrive(blank));
+    }
+  });
+  /**
+   * The empty board's block, while Caw stands over it: his panel stands
+   * beside it on a desk (CawFloat), not over it.
+   */
+  function besideHim(node: HTMLElement) {
+    lead.beside = node;
+    return () => {
+      if (lead.beside === node) {
+        lead.beside = null;
+      }
+    };
+  }
 
   /** The project's views, kept then drafted, once read. */
   let views = $state<ProjectView[]>([]);
@@ -467,8 +490,6 @@
       count: each.value === "decisions" ? decisions.waiting : 0,
     }))
   );
-  /** The head: the views bar's "+" opens its New session popover. */
-  let head = $state<ReturnType<typeof ProjectHead> | null>(null);
   let tab = $derived(data.view);
   /** The view on screen: the one asked for once it exists, the board meanwhile. */
   const current = $derived(
@@ -1763,11 +1784,19 @@
     {#if !lead.view}
       <Skeleton class="h-48 w-full max-w-xl rounded-[var(--radius-lg)]" />
     {:else if canTalk}
-      <div data-slot="caw-empty" class="state caw-empty">
+      <!-- His panel stands beside this block on a desk while it is open
+           (CawFloat, lead.beside), the project's starters in it; put away,
+           they stand here and open it with their words. -->
+      <div
+        data-slot="caw-empty"
+        class="state caw-empty"
+        data-beside={lead.open || undefined}
+        {@attach besideHim}
+      >
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
             <!-- He stands here instead of sitting in the head, and is the
-                 same seat at 80: a press opens his panel over the page
+                 same seat at 80: a press opens his panel beside the board
                  (CawFloat). His switch is under the head's ⋯, empty board
                  or not. -->
             <div
@@ -1788,7 +1817,7 @@
             <!-- A starter opens his panel with its words in his composer;
                  a press on one is no press outside the panel (CawFloat,
                  data-caw-asks), so another starter replaces the words. -->
-            {#if starters.length > 0}
+            {#if starters.length > 0 && !lead.open}
               <div class="contents" data-caw-asks>
                 <StarterCards
                   onpick={(text) => lead.ask(text, "board")}
@@ -1905,7 +1934,6 @@
         class={["project-page", fadeOn === "page" && "kit-edge-fade-block"]}
       >
         <ProjectHead
-          bind:this={head}
           {lead}
           {machine}
           onask={canTalk ? ask : null}
@@ -1990,7 +2018,7 @@
           needs={needsYou.length}
           needsOn={filtering}
           onchoose={choose}
-          onnewsession={(anchor) => head?.newSessionFrom(anchor)}
+          onnewsession={() => lead.newThread()}
           ontoggleneeds={() => {
             needsOnly = !filtering;
           }}
@@ -2345,6 +2373,11 @@
   .caw-empty {
     inline-size: 100%;
     max-inline-size: var(--c-starters-w);
+  }
+  /* His panel beside it: the block as wide as its words, so the panel
+     stands clear of them (CawFloat places it at the block's end). */
+  .caw-empty[data-beside] {
+    inline-size: fit-content;
   }
   .caw-empty :global(.kit-empty-action) {
     align-self: stretch;

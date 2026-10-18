@@ -28,10 +28,9 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { crossIn, crossOut, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
-  import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import {
     Alert,
@@ -452,6 +451,25 @@
   const taskHref = (id: string) =>
     `/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(id)}`;
   /**
+   * The messages the first read found: a reply not among them landed while
+   * the thread was open, and its cards are uncovered one by one; read back
+   * from history nothing moves (design f2640f55 §2, Motion).
+   */
+  let readBefore: Set<string> | null = null;
+  $effect.pre(() => {
+    if (readBefore === null && messages !== null) {
+      readBefore = new Set(messages.map((message) => message.id));
+    }
+  });
+  const landedLive = (messageId: string) =>
+    readBefore !== null && !readBefore.has(messageId);
+  /**
+   * The cards' stagger: each starts --dur-stagger after the one before,
+   * the step shortened so the last starts within --dur-cascade.
+   */
+  const staggerStep = (count: number) =>
+    Math.min(dur("--dur-stagger"), dur("--dur-cascade") / Math.max(count, 1));
+  /**
    * A card opens its task beside the conversation on a desk; on a phone the
    * task is its own page, whose Back comes back here. Docked beside the
    * project page, the page stands it beside its board.
@@ -741,6 +759,19 @@
   const noMachine = $derived(
     !!view?.problem && cawco.onlineMachines.length === 0
   );
+  /**
+   * Docked in Caw's panel, the composer has a place of its own at the foot
+   * and the room ends over it (the owner's pins 17 and 22): nothing scrolls
+   * under the composer or Caw on its pill, or under the line standing in its
+   * place when he can't start.
+   */
+  const reserved = $derived.by(() => {
+    if (!docked) {
+      return null;
+    }
+    const over = writable ? foot.stack + foot.perch : offHeight;
+    return `calc(var(--space-4) + var(--safe-bottom) + ${over}px + var(--space-2))`;
+  });
 </script>
 
 {#snippet face(live: boolean)}
@@ -768,20 +799,29 @@
   {/if}
 {/snippet}
 
-{#snippet taskCards(ids: string[])}
+{#snippet taskCards(ids: string[], messageId: string)}
   <!-- What the cards are, the cards at one height (title over id), what
        each waits on you for under it, and the way to the board they are on.
        The box tweens as cards arrive and the head's words change (a stage
        moves under it). -->
   {@const filed = ids.flatMap((id) => tasks.filter((task) => task.id === id))}
+  <!-- Landed while the thread is open, the head and then each card are
+       uncovered in turn; read back from history nothing moves. -->
+  {@const live = landedLive(messageId)}
+  {@const step = staggerStep(filed.length + 1)}
   <div class="thread-tasks" data-thread-tasks {@attach morph()}>
     {#if filed.length > 0}
-      <p class="tasks-head" data-tasks-head>
+      <p class="tasks-head" class:arrive={live} data-tasks-head>
         <MorphText text={filedWords(filed)} />
       </p>
       <ul class="tasks-grid">
-        {#each filed as task (task.id)}
-          <li class="thread-task">
+        {#each filed as task, at (task.id)}
+          <li
+            data-slot="filed-task"
+            class="thread-task"
+            class:arrive={live}
+            style:animation-delay={live ? `${(at + 1) * step}ms` : undefined}
+          >
             <TaskCard
               href={taskHref(task.id)}
               {kindOf}
@@ -863,7 +903,7 @@
 {/snippet}
 
 {#snippet slide()}
-  <div class="transcript-slide">
+  <div data-slot="room" class="transcript-slide">
     {#if readProblem}
       <p class="problem" role="alert" in:crossIn>
         The thread could not be read: {readProblem}
@@ -871,7 +911,7 @@
     {:else if hero}
       <div class="hero" data-thread-hero in:crossIn>
         <EmptyState
-          line={view && !view.on && !docked
+          line={view && !view.on
             ? "Caw is off, so he acts only when you write to him."
             : undefined}
           title="What's next for {projectName}?"
@@ -887,12 +927,12 @@
             </div>
           {/snippet}
           {#snippet action()}
-            {#if docked}
-              <CawStarters onpick={pick} {starters} />
-              {@render docked.under?.()}
-            {:else if starters.length > 0}
-              <StarterCards onpick={pick} {starters} />
+            {#if starters.length > 0}
+              <!-- In his panel, suggestion rows as wide as their words;
+                   in a tab, the starter cards. -->
+              <StarterCards onpick={pick} rows={!!docked} {starters} />
             {/if}
+            {@render docked?.under?.()}
           {/snippet}
         </EmptyState>
       </div>
@@ -902,7 +942,7 @@
           agentName="Caw"
           bare
           {focused}
-          latestInset={writable && foot.stack
+          latestInset={writable && foot.stack && !reserved
             ? `calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
             : undefined}
           onshown={(drawn) => {
@@ -919,7 +959,7 @@
     <!-- The skeleton stands in for rows still on their way and goes the
          moment they are drawn: its rows are not where the real ones fall, so
          fading it over them reads as a second, stale transcript. -->
-    {#if writable}
+    {#if writable && !docked}
       <FootFade solid={foot.stack ? fadeSolid : undefined} />
     {/if}
     {#if veiled}
@@ -934,7 +974,10 @@
   <div
     data-slot="body"
     class="body"
-    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
+    style:--composer-clearance={reserved
+      ? "var(--space-4)"
+      : `calc(${composerRoom} + var(--space-4) + var(--space-4))`}
+    style:padding-block-end={reserved}
   >
     {#if docked}
       {@render slide()}
@@ -1203,5 +1246,30 @@
   }
   .board-link {
     margin-block-start: var(--space-3);
+  }
+  /* A reply's filed tasks, landing while the thread is open: the head line
+     first, then each card, uncovered top to bottom on one clock (design
+     f2640f55 §2): a fade from nothing and, motion allowed, a rise from
+     --pop-rise, over --dur-pop on --ease-out, each card from its own start
+     (its inline animation-delay). Held at its start until then
+     (`backwards`); done, it leaves the card as it is. */
+  .arrive {
+    animation: filed-fade var(--dur-pop) var(--ease-out) backwards;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .arrive {
+      animation-name: filed-rise;
+    }
+  }
+  @keyframes filed-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes filed-rise {
+    from {
+      opacity: 0;
+      translate: 0 var(--pop-rise);
+    }
   }
 </style>

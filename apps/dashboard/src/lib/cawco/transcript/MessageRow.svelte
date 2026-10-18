@@ -879,7 +879,7 @@
     <MessageBody source={message.content} />
     {#if voice?.tasks && message.metadata?.tasks?.length}
       <!-- The tasks the turn is about, under it (a project's Caw). -->
-      {@render voice.tasks(message.metadata.tasks)}
+      {@render voice.tasks(message.metadata.tasks, message.id)}
     {/if}
     {#if voice?.files && message.metadata?.files?.length}
       <!-- The files of the project's folder the turn wrote (a project's Caw). -->

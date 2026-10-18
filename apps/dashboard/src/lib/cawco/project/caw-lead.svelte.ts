@@ -42,8 +42,12 @@ import {
 import type { CawStatus } from "../home/Caw.svelte";
 import { dur } from "../motion/curves.svelte";
 import { isRetry, type TaskSummary } from "../project-tasks";
+import { store, stored } from "../storage";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";
+
+/** Where a project's panel being open or put away is kept, in this browser. */
+const openKey = (projectId: string): string => `cawco.caw.open.${projectId}`;
 
 /** The statuses the head Caw changes between, fetched once he is on screen. */
 export const HEAD_NEXT: CawStatus[] = [
@@ -90,9 +94,36 @@ export class CawLead {
    * opened it: the head's at 48, or the 80 he stands at over an empty
    * board or an empty Decisions tab. `anchor` is the seat on screen now,
    * so the panel moves to the head when he sits down and stays open.
+   * Open or put away by the person is kept per project, so the
+   * conversation is where they left it when they come back (caw-assistant
+   * design, "Open/closed is remembered per project"); a project they never
+   * opened or put it away on opens it while its board is empty
+   * ({@link arrive}).
    */
-  open = $state(false);
+  #open = $state(false);
+  get open(): boolean {
+    return this.#open;
+  }
+  set open(next: boolean) {
+    this.#open = next;
+    const id = this.#projectId();
+    if (id) {
+      store("local", openKey(id), next ? "1" : "0");
+    }
+  }
   anchor = $state<HTMLElement | null>(null);
+  /**
+   * What the panel stands by instead of under his seat: the empty board's
+   * block, while he stands over it, so the panel never covers the board's
+   * words (CawFloat: beside them where there is room, else under them).
+   */
+  beside = $state<HTMLElement | null>(null);
+  /**
+   * A New thread asked for (the head's New session, the views bar's "+"):
+   * his panel shows a thread not yet started, its composer taking the
+   * caret, and clears it (CawThread).
+   */
+  fresh = $state(false);
   /** Your half-written words to him, in his panel's composer, kept while it is put away. */
   readonly draft = new ComposerDraft();
   #landedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -102,6 +133,8 @@ export class CawLead {
   readonly #reading: () => boolean;
   /** The project `view` was read for. */
   #viewFor: string | null = null;
+  /** The project whose arrival opened or kept his panel ({@link arrive}). */
+  #arrivedFor: string | null = null;
 
   /**
    * `reading`: the page is on its way to another project and the wait has
@@ -140,6 +173,32 @@ export class CawLead {
     this.open = true;
   }
 
+  /**
+   * New work, told to him: his panel on a new thread, the caret in its
+   * composer (the head's New session, the views bar's "+"). What he does
+   * with it (files tasks, starts a session, asks back) is his.
+   */
+  newThread(): void {
+    this.fresh = true;
+    this.draft.focusWanted = true;
+    this.open = true;
+  }
+
+  /**
+   * The page has read the project's board and his view: his panel opens as
+   * the person last left it here, else while the board is empty and he can
+   * take words (a project just made opens on him). Once per project.
+   */
+  arrive(emptyBoard: boolean): void {
+    const id = this.#projectId();
+    if (!id || this.#arrivedFor === id || this.#viewFor !== id) {
+      return;
+    }
+    this.#arrivedFor = id;
+    const kept = stored("local", openKey(id));
+    this.#open = kept === null ? emptyBoard : kept === "1";
+  }
+
   /** Reads his view; the page calls it on arrival and after a reconnect. */
   async read(): Promise<void> {
     const id = this.#projectId();
@@ -151,7 +210,7 @@ export class CawLead {
       this.view = null;
       // His panel and your words to the last project's Caw are not this one's.
       if (this.#viewFor !== null) {
-        this.open = false;
+        this.#open = false;
         this.draft.text = "";
       }
     }

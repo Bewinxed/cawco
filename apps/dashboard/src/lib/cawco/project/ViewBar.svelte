@@ -18,7 +18,8 @@
    *   head's `⋯` opens it);
    * - Needs you, the page's filter (NeedsYouChip), while something needs you;
    * - New session, the screen's one coral control, on Send's recipe
-   *   (app.css `.kit-send`).
+   *   (app.css `.kit-send`): it opens Caw's panel on a new thread, the
+   *   caret in his composer (work in a project starts by telling Caw).
    *
    * The pill and "+" press to --press-scale over --dur-toggle.
    */
@@ -59,8 +60,8 @@
     /** The Needs you filter is on. */
     needsOn: boolean;
     ontoggleneeds: () => void;
-    /** New session, from the "+" it opens over. */
-    onnewsession: (anchor: HTMLElement) => void;
+    /** New session: Caw's panel on a new thread. */
+    onnewsession: () => void;
   } = $props();
 
   let shell = $state<HTMLElement | null>(null);
@@ -174,7 +175,8 @@
     <button
       aria-label="New session"
       class="kit-send new-session touch-hit pressable"
-      onclick={(event) => onnewsession(event.currentTarget)}
+      data-caw-asks
+      onclick={onnewsession}
       type="button"
     >
       <IconPlus aria-hidden="true" />

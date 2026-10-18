@@ -79,12 +79,12 @@ export interface StagesView {
   views: { by: string | null; name: string }[];
 }
 
-/** The kind of work a starter names (core starters.ts `STARTER_GLYPHS`); CawStarters draws its glyph. */
+/** The kind of work a starter names (core starters.ts `STARTER_GLYPHS`); StarterCards draws its glyph. */
 export type { ProjectStarter, StarterGlyph, StarterPlace } from "@cawco/core";
 
 /**
  * A sentence to Caw a press puts in the composer, and its glyph: what
- * CawStarters and StarterCards draw. A project's own starters
+ * StarterCards draws. A project's own starters
  * ({@link ProjectStarter}) carry their reason and sources besides.
  */
 export interface Starter {

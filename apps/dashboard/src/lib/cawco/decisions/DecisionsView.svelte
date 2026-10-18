@@ -20,8 +20,8 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
-  import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import type { ProjectStarter, StageKind } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -271,7 +271,7 @@
                      in his composer, nothing sent. A press on it is no
                      press outside the panel (CawFloat, data-caw-asks). -->
                 <div class="contents" data-caw-asks>
-                  <CawStarters
+                  <StarterCards
                     onpick={(text) => lead.ask(text, "decisions")}
                     {starters}
                   />

@@ -72,18 +72,33 @@
    * centred, tinting under a press as wide controls do (The Press Rule). One
    * column in a narrow container; wider, as many columns of at least
    * --c-starter-w as fit (3 + 1, then 4 across at --c-starters-w).
+   *
+   * `rows`: in Caw's panel, the same tiles as suggestion rows, one under the
+   * other, each as wide as its words and no wider (the owner's pin 22), its
+   * reason under its words when the hub wrote one: a smaller caption in the
+   * muted ink, so the words lead and the reason says why (pin 10).
    */
   let {
     starters,
     onpick,
+    rows = false,
   }: {
-    starters: Starter[];
+    starters: (Starter & { reason?: string })[];
     onpick: (text: string) => void;
+    rows?: boolean;
   } = $props();
 </script>
 
-<div data-slot="starter-cards" class="starter-cards">
-  <ul data-slot="cards" aria-label="Starters" class="cards">
+<div
+  data-slot="starter-cards"
+  class="starter-cards"
+  data-rows={rows || undefined}
+>
+  <ul
+    data-slot="cards"
+    aria-label={rows ? "Things to ask Caw" : "Starters"}
+    class="cards"
+  >
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
       <li>
@@ -100,9 +115,16 @@
               class="starter-glyph"
             /></span
           >
-          <span data-slot="starter-text" class="starter-text"
-            >{starter.text}</span
-          >
+          <span class="starter-words" data-box>
+            <span data-slot="starter-text" class="starter-text"
+              >{starter.text}</span
+            >
+            {#if rows && starter.reason}
+              <span data-slot="starter-reason" class="starter-reason"
+                >{starter.reason}</span
+              >
+            {/if}
+          </span>
         </button>
       </li>
     {/each}
@@ -153,7 +175,7 @@
     transition: background-color var(--dur-control) var(--ease-out);
   }
   /* The glyph in the words' own ink, so its duotone's darker layer stands
-     clear of the card (CawStarters' chips the same). */
+     clear of the card. */
   .starter :global(.starter-glyph) {
     flex: none;
     inline-size: var(--icon-md);
@@ -168,5 +190,40 @@
   .starter:focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
+  }
+  .starter-words {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-inline-size: 0;
+  }
+  .starter-text {
+    overflow-wrap: anywhere;
+  }
+  /* Why it is offered: under the words, a step down in size and ink. */
+  .starter-reason {
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  /* Suggestion rows: one under the other, each as wide as its words (never
+     past the column), at a row's height rather than a card's. */
+  [data-rows] .cards {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+  [data-rows] li {
+    max-inline-size: 100%;
+  }
+  [data-rows] .starter {
+    inline-size: auto;
+    max-inline-size: 100%;
+    block-size: auto;
+    min-block-size: var(--c-btn-h);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
   }
 </style>

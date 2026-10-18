@@ -4,6 +4,10 @@
    * keeps its width and its scroll under it, nothing beside it moves. One
    * panel for the page, opened from whichever seat stands (CawSeat, its
    * `lead.anchor`), so it moves to the head with him when he sits down.
+   * While he stands over the empty board it stands by the board's block
+   * (`lead.beside`), beside its words where the screen has the room and
+   * under them where it has not, so the board and the conversation are
+   * both read.
    *
    * Wider than a phone it is the kit popover under his seat, a conversation's width
    * (--c-panel-w) and as tall as the room under him allows, up to
@@ -15,6 +19,8 @@
    * on his seat does too, and only once.
    */
   import { MediaQuery } from "svelte/reactivity";
+  import { innerWidth as screenWidth } from "svelte/reactivity/window";
+  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -37,12 +43,48 @@
   };
   /**
    * A press on a seat is the seat's own toggle, and a press on a starter
-   * that asks him (`data-caw-asks`, lead.ask) puts its words in the panel:
-   * neither is a press outside.
+   * that asks him (`data-caw-asks`, lead.ask) or on New session puts its
+   * words or a new thread in the panel: none is a press outside.
    */
   const onSeat = (target: EventTarget | null) =>
     target instanceof Element &&
     target.closest(".caw-seat, [data-caw-asks]") !== null;
+
+  /** Kept between the screen's edge and the panel (the popover's collision padding). */
+  const COLLISION = 12;
+
+  /**
+   * While he stands over the empty board, the panel stands by the board's
+   * block, never over its words: beside them where the screen has the room
+   * past them for the panel, else under them (a narrow desk). Over a board
+   * with tasks it opens under his seat.
+   */
+  const beside = $derived.by(
+    (): {
+      block: HTMLElement;
+      gap: number;
+      side: "right" | "bottom";
+    } | null => {
+      const block = lead.beside;
+      const room = screenWidth.current ?? 0;
+      if (!(block && lead.open)) {
+        return null;
+      }
+      const words = [
+        ...block.querySelectorAll(".kit-empty-title, .kit-empty-line"),
+      ].map((each) => each.getBoundingClientRect().right);
+      const panel = Math.min(numberOf("--c-panel-w"), room - 2 * COLLISION);
+      const gap = numberOf("--space-6");
+      return {
+        block,
+        gap,
+        side:
+          Math.max(0, ...words) + gap + panel + COLLISION <= room
+            ? "right"
+            : "bottom",
+      };
+    }
+  );
 </script>
 
 {#if phone.current}
@@ -62,8 +104,8 @@
       align="start"
       aria-label="Caw, lead of {projectName}"
       class="caw-float-pop"
-      collisionPadding={12}
-      customAnchor={lead.anchor}
+      collisionPadding={COLLISION}
+      customAnchor={beside?.block ?? lead.anchor}
       onCloseAutoFocus={(event) => {
         // Focus goes back to him without the ring: a ring left on him at
         // rest reads as a state he is in.
@@ -83,8 +125,8 @@
           lead.draft.focusWanted = true;
         }
       }}
-      side="bottom"
-      sideOffset={4}
+      side={beside?.side ?? "bottom"}
+      sideOffset={beside?.gap ?? 4}
       trapFocus={false}
     >
       {#key projectId}

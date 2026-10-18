@@ -20,7 +20,9 @@
    * link to its thread, a task that landed. The name is renamed where it
    * stands; the line opens the project's details under the head
    * (ProjectDetails), `· N places` opens them at its places. Then New
-   * session, Spin off, and `⋯` holding Pick stages (while the code
+   * session (Caw's panel on a new thread, the caret in his composer: work
+   * in a project starts by telling Caw, PRD §5.6), Spin off, and `⋯`
+   * holding Pick stages (while the code
    * stages stand in), Project details…, Caw's settings (CawPanel, off `⋯`:
    * a popover on a desk, the bottom sheet on touch), Spend, Other people's
    * repositories (the upstream choice: the fleet's answer until the project
@@ -29,8 +31,8 @@
    * under the head at a time: the details or a forget.
    *
    * Under 640px the head carries no button but `⋯`: New session is the
-   * coral "+" of the page's views bar (ViewBar), which opens its popover
-   * over itself (`newSessionFrom`), and Spin off is in `⋯` (Apple HIG,
+   * coral "+" of the page's views bar (ViewBar), which opens Caw's panel as
+   * this one does, and Spin off is in `⋯` (Apple HIG,
    * Toolbars: "Prioritize only the most important items for inclusion in
    * the main toolbar area … Create a More menu to include additional
    * items").
@@ -59,7 +61,6 @@
   import UpstreamMenu from "#lib/cawco/project/UpstreamMenu.svelte";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -67,7 +68,6 @@
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -119,10 +119,6 @@
     "(hover: none), (pointer: coarse), (max-width: 640px)"
   );
   let cawOpen = $state(false);
-  let spawnOpen = $state(false);
-  /** What the New session popover opens over: its button, or the views bar's "+" on a phone. */
-  let spawnAnchor = $state<HTMLElement | null>(null);
-  let spawnPrompt = $state("");
   let more = $state<HTMLElement | null>(null);
   /** The place a forget asked from this head's `⋯` stands (forget.svelte.ts). */
   const forgetAt = $derived(`head:${project.id}`);
@@ -200,13 +196,10 @@
   }
 
   /**
-   * Which start is on its way (its button pending, the others held), and
-   * why the last one was refused: a start from the popover says it under
-   * the popover's form, which stays open with the prompt typed; a spin-off
-   * says it under the head's line, where the button stands.
+   * A spin-off on its way (its button pending), and why the last one was
+   * refused: said under the head's line, where the button stands.
    */
-  let starting = $state<"start" | "empty" | "spin" | null>(null);
-  let startFault = $state<string | null>(null);
+  let spinning = $state(false);
   let spinFault = $state<string | null>(null);
 
   /**
@@ -275,27 +268,12 @@
     editedId = project.id;
   });
 
-  /**
-   * New session from somewhere other than its button (the views bar's "+"
-   * on a phone): the same popover, over `anchor`; with no checkout yet, the
-   * New Session dialog, as the button does.
-   */
-  export function newSessionFrom(anchor: HTMLElement): void {
-    if (!primary) {
-      newSession({ projectId: project.id });
+  /** Spin off: a scratch session on the project's checkout, opened. */
+  async function spinOff() {
+    if (!primary || spinning) {
       return;
     }
-    spawnAnchor = anchor;
-    spawnOpen = true;
-  }
-
-  async function startSession(way: "start" | "empty" | "spin") {
-    if (!primary || starting) {
-      return;
-    }
-    const scratch = way === "spin";
-    starting = way;
-    startFault = null;
+    spinning = true;
     spinFault = null;
     const remembered = spawnPrefs.permissionMode;
     const mod = spawnPrefs.model;
@@ -304,9 +282,6 @@
     // when the machine takes it, Full Send starting on Bypass (spawnPrefs
     // `spawnDefaults`, which refuses one the machine doesn't take).
     const level = spawnPrefs.effort;
-    // Start empty is a session with no first prompt, whatever was typed.
-    const prompt =
-      way === "empty" ? undefined : spawnPrompt.trim() || undefined;
     let instanceId: string;
     try {
       instanceId = answeredOr(
@@ -318,20 +293,15 @@
           harness: spawnPrefs.harness,
           model: mod,
           effort: level ?? undefined,
-          prompt,
-          scratch: scratch ? {} : undefined,
+          scratch: {},
         }),
         "whether the session started is not known"
       );
     } catch (error) {
-      if (scratch) {
-        spinFault = message(error);
-      } else {
-        startFault = message(error);
-      }
+      spinFault = message(error);
       return;
     } finally {
-      starting = null;
+      spinning = false;
     }
     rememberSpawn({
       harness: spawnPrefs.harness,
@@ -340,8 +310,6 @@
       effort: level,
     });
     handOver("session:new", `session:${instanceId}`);
-    spawnPrompt = "";
-    spawnOpen = false;
     // biome-ignore lint/complexity/noVoid: fire-and-forget navigation after the spawn already succeeded
     void goto(conversationHref(instanceId, cawco.instanceIndex));
   }
@@ -454,93 +422,28 @@
         {/if}
       </p>
       <!-- A spin-off the hub refused, under the line, by the button pressed. -->
-      <RowFault again={() => startSession("spin")} reason={spinFault} />
+      <RowFault again={spinOff} reason={spinFault} />
     </div>
   </div>
   <div data-slot="acts" class="acts">
-    {#if !primary}
-      <!-- No checkout yet: a session needs a machine and folder, which the
-           New Session dialog asks for. -->
-      <Button
-        class="head-act pressable"
-        onclick={() => newSession({ projectId: project.id })}
-        >New session</Button
-      >
-    {:else}
-      <Popover.Root bind:open={spawnOpen}>
-        <Popover.Trigger
-          onclick={() => {
-            spawnAnchor = null;
-          }}
-        >
-          {#snippet child({ props })}
-            <Button {...props} class="head-act pressable">New session</Button>
-          {/snippet}
-        </Popover.Trigger>
-        <!-- The kit popover's own 6px padding (DESIGN.md, `kit-pop`). Over
-             the views bar's "+" it opens upward from the foot. -->
-        <Popover.Content
-          align="end"
-          class="w-80"
-          collisionPadding={8}
-          customAnchor={spawnAnchor}
-          side={spawnAnchor ? "top" : "bottom"}
-          sideOffset={spawnAnchor ? 8 : 4}
-        >
-          <form
-            class="flex flex-col gap-3"
-            onsubmit={(e) => {
-              e.preventDefault();
-              startSession("start");
-            }}
-          >
-            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
-            <label class="flex flex-col gap-1 text-meta text-muted-foreground">
-              First prompt (optional)
-              <Input
-                autocomplete="off"
-                class="text-label"
-                placeholder="What should this session do?"
-                spellcheck="false"
-                bind:value={spawnPrompt}
-              />
-            </label>
-            <RowFault again={() => startSession("start")} reason={startFault} />
-            <div class="flex items-center justify-end gap-2">
-              <Button
-                data-share="session:new"
-                data-share-ttl="8000"
-                disabled={starting !== null && starting !== "empty"}
-                label="Start empty"
-                onclick={() => startSession("empty")}
-                pending={starting === "empty"}
-                pendingLabel="Starting…"
-                size="sm"
-                type="button"
-                variant="ghost"
-              />
-              <Button
-                data-share="session:new"
-                data-share-ttl="8000"
-                disabled={starting !== null && starting !== "start"}
-                label="Start"
-                pending={starting === "start"}
-                pendingLabel="Starting…"
-                size="sm"
-                type="submit"
-              />
-            </div>
-          </form>
-        </Popover.Content>
-      </Popover.Root>
+    <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
+         thread, the caret in his composer. A press here is no press outside
+         his panel (CawFloat, data-caw-asks). -->
+    <Button
+      aria-haspopup="dialog"
+      class="head-act pressable"
+      data-caw-asks
+      data-new-session
+      onclick={() => lead.newThread()}>New session</Button
+    >
+    {#if primary}
       <Button
         class="head-act pressable"
         data-share="session:new"
         data-share-ttl="8000"
-        disabled={starting !== null && starting !== "spin"}
         label="Spin off"
-        onclick={() => startSession("spin")}
-        pending={starting === "spin"}
+        onclick={spinOff}
+        pending={spinning}
         pendingLabel="Spinning off…"
         variant="outline"
       />
@@ -572,10 +475,7 @@
       >
         {#if narrow.current}
           {#if primary}
-            <DropdownMenu.Item
-              disabled={starting !== null}
-              onSelect={() => startSession("spin")}
-            >
+            <DropdownMenu.Item disabled={spinning} onSelect={spinOff}>
               <IconFork />
               <span>Spin off</span>
             </DropdownMenu.Item>
