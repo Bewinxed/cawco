@@ -119,9 +119,9 @@
     }
   }
   @media (prefers-reduced-motion: no-preference) {
-    /* css-scope: the Trigger's press, as above */
+    /* css-scope: the Trigger's press, as above; it is held as data-pressed (dropdown-menu-trigger.svelte), since its menu takes :active a frame in */
     .att-btn:active,
-    :global([data-att-btn]:active) {
+    :global([data-att-btn]:is(:active, [data-pressed])) {
       transform: scale(var(--press-scale));
     }
   }
