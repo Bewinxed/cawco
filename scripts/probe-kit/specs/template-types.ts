@@ -499,4 +499,8 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default { name: "template-types", run } satisfies Spec;
+export default {
+  name: "template-types",
+  host: "each start cuts a workspace",
+  run,
+} satisfies Spec;

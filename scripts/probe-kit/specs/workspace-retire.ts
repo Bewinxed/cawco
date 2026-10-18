@@ -406,12 +406,6 @@ const diskPhase = async (kit: Kit): Promise<void> => {
       heavy.stderr.startsWith("probe-heavy-run did not start:"),
     `exit ${heavy.code}: ${heavy.stderr}`
   );
-  if (process.platform === "linux" && process.env.CAWCO_WORKSPACE) {
-    kit.note(
-      "(d) build-both.sh not run: it builds on the Mac, which a CawCo workspace on Linux cannot reach; run this spec on the Mac, or from a shell with `ssh mac`"
-    );
-    return;
-  }
   const build = await refused(
     "bash apps/apple/scripts/build-both.sh ios --compile-only"
   );
@@ -1239,6 +1233,7 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
 
 const spec: Spec = {
   name: "workspace-retire",
+  host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
     // Each run starts from nothing, however many run in one process.
     for (const tag of Object.keys(steps)) {

@@ -16,6 +16,9 @@
  * setting, so the words say so, and the hub names its commands once
  * ({@link sayNestedBoundaryFix}). Dependency-free: the boundary host
  * (`boundary-host.ts`) bundles it.
+ *
+ * macOS meets the same case by another rule: Seatbelt never nests
+ * ({@link nestedSeatbeltRefusal}), and there is no host change for it.
  */
 
 /** The AppArmor profile that strips capabilities beneath bwrap. */
@@ -49,6 +52,47 @@ export const nestedBoundaryReason = (label: string): string =>
 /** Whether `reason` (a failed spawn or wake) is this refusal. */
 export const isNestedBoundaryRefusal = (reason: string): boolean =>
   reason.includes(MARK) && reason.includes(NESTED_BOUNDARY_PROFILE);
+
+/**
+ * macOS's sandbox-exec, which applies a Seatbelt profile to what it runs: a
+ * workspace's boundary there (agent boundary.ts `planFor`).
+ */
+export const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
+
+/**
+ * What sandbox-exec says, exiting 71 (`EX_OSERR`), when the process it runs
+ * in is under a Seatbelt profile already: Seatbelt does not nest, so a
+ * profile applied beneath another is refused whatever it allows
+ * (`sandbox-exec -p '(version 1)(allow default)' /usr/bin/true` inside a
+ * workspace, on a Mac, 2026-10-18).
+ */
+const SEATBELT_REFUSED = "sandbox_apply: Operation not permitted";
+
+/** The boundary's words when this process already runs under a Seatbelt profile. */
+export const nestedSeatbeltReason = (): string =>
+  `this machine's CawCo runs inside another macOS sandbox (Seatbelt), and Seatbelt does not nest: sandbox-exec answers "${SEATBELT_REFUSED}" to any profile applied beneath another, so a boundary cannot start inside it. That is macOS, not CawCo: run this outside every workspace, from a shell on the Mac`;
+
+/**
+ * macOS: why no boundary can start here, when this process already runs
+ * under a Seatbelt profile (a scratch fleet run from inside a workspace),
+ * read by applying the most open profile there is to `/usr/bin/true` and
+ * hearing sandbox-exec refuse it ({@link SEATBELT_REFUSED}); nothing when the
+ * profile applies, or when sandbox-exec fails some other way (the boundary's
+ * own start then says what). `sandboxExec` is the binary asked, sandbox-exec
+ * unless a check names another.
+ */
+export const nestedSeatbeltRefusal = (
+  sandboxExec: string = SANDBOX_EXEC
+): string | undefined => {
+  const tried = Bun.spawnSync(
+    [sandboxExec, "-p", "(version 1)(allow default)", "/usr/bin/true"],
+    { stdin: "ignore", stdout: "ignore", stderr: "pipe" }
+  );
+  return tried.exitCode !== 0 &&
+    tried.stderr.toString().includes(SEATBELT_REFUSED)
+    ? nestedSeatbeltReason()
+    : undefined;
+};
 
 let said = false;
 

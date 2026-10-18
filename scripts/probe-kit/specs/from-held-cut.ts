@@ -378,6 +378,7 @@ const cutPhase = async (
 
 const spec: Spec = {
   name: "from-held-cut",
+  host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
     const { fleet, parent, src } = await scene(kit);
     const held = await heldPhase(kit, fleet, parent, src);

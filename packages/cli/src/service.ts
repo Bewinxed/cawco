@@ -16,16 +16,20 @@ import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
 import { hubDbPath } from "@cawco/core/paths";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /**
  * The machine's keeper endpoint, as this machine derives it
  * (`@cawco/core/sessiond`, design §12), with the same override the daemon's
- * entry point honours: what names the current keeper (core keepers.ts).
+ * entry point honours: what names the current keeper (core keepers.ts). Its
+ * path alone: this module's layout reads it as any command starts, and on
+ * macOS a short name made there for a HOME that goes after the command
+ * (the release's signing run of `cawco --version`) stayed behind in the
+ * socket root. sessiond makes its short name itself as it starts.
  */
 const sessiondSocket = (): string =>
-  process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
+  process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpointPath();
 
 /**
  * The whole stack, as four services this machine can run for you, in the order

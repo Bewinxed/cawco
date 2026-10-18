@@ -156,12 +156,20 @@ if (review !== null) {
 }
 const seconds = ((performance.now() - started) / 1000).toFixed(0);
 const notes = run.notes > 0 ? `, ${run.notes} note(s)` : "";
+const ran = chosen.length - run.onHost.length;
 if (run.failed.length > 0) {
   console.log(`FAILED ASSERTIONS:\n${run.failed.join("\n")}`);
 }
+if (run.onHost.length > 0) {
+  console.log(`NOT RUN HERE, each runs on the host: ${run.onHost.join(", ")}`);
+}
 console.log(
   run.failures === 0
-    ? `ALL PASS (${chosen.length} specs, ${seconds}s${notes})`
-    : `${run.failures} FAILED (${chosen.length} specs, ${seconds}s${notes})`
+    ? `ALL PASS (${ran} specs, ${seconds}s${notes})`
+    : `${run.failures} FAILED (${ran} specs, ${seconds}s${notes})`
 );
-process.exit(run.failures === 0 ? 0 : 1);
+if (run.failures > 0) {
+  process.exit(1);
+}
+// 3: nothing failed, but a spec asked for was not run here.
+process.exit(run.onHost.length > 0 ? 3 : 0);

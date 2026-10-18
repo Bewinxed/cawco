@@ -650,4 +650,8 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default { name: "attach-continue", run } satisfies Spec;
+export default {
+  name: "attach-continue",
+  host: "its attempts cut workspaces",
+  run,
+} satisfies Spec;

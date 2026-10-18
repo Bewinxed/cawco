@@ -388,5 +388,9 @@ const run = async (kit: Kit) => {
   }
 };
 
-const spec: Spec = { name: "session-sheet", run };
+const spec: Spec = {
+  name: "session-sheet",
+  host: "its stage runs in a place, a boundary of its own",
+  run,
+};
 export default spec;

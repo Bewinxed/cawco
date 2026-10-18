@@ -715,4 +715,8 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default { name: "landing-cutoff", run } satisfies Spec;
+export default {
+  name: "landing-cutoff",
+  host: "it delegates, so its fleet cuts workspaces",
+  run,
+} satisfies Spec;

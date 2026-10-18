@@ -101,7 +101,7 @@ const ROUTED =
 /** The hub's log lines step 7 reads. */
 const HUB_LINE = /caw|artifacts|marks|lead/i;
 /** The host's refusal of a sandbox inside another (core boundary-nesting.ts). */
-const NESTED = /inside another bwrap sandbox|unpriv_bwrap/;
+const NESTED = /inside another (bwrap|macOS) sandbox|unpriv_bwrap/;
 /** The project's lead's reply in 7b. */
 const LEAD_WORDS = "The project's lead: I'll take this one.";
 const CAW_WORDS = "Caw here: its writer has ended, so I'll take this one.";

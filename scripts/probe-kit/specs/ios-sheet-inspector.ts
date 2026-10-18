@@ -25,7 +25,8 @@
  * The sheet's stage runs in a place over the session's folder, a boundary
  * of its own: like session-sheet, leg 2 runs only outside every workspace
  * boundary (README "A spec that delegates runs on the host"); inside one
- * the stage's start is refused (`EPERM … symlink …/.cawco/tmp/…`).
+ * the stage's start is refused ("…runs inside another macOS sandbox
+ * (Seatbelt), and Seatbelt does not nest…", core boundary-nesting.ts).
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-sheet-inspector

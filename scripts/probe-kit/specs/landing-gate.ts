@@ -347,4 +347,8 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default { name: "landing-gate", run } satisfies Spec;
+export default {
+  name: "landing-gate",
+  host: "it delegates, so its fleet cuts workspaces",
+  run,
+} satisfies Spec;

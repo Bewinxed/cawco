@@ -41,6 +41,7 @@ import {
   socketPathProblem,
   workspaceFleetDir,
 } from "../packages/core/src/paths";
+import { forgetSessiondLink } from "../packages/core/src/sessiond";
 import {
   listedPid,
   type Pid,
@@ -726,6 +727,8 @@ class FleetDirs {
     for (const dir of this.dirs.splice(0)) {
       // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
       await rm(dir, { recursive: true, force: true });
+      // A service HOME's short name in the socket root goes with it (macOS).
+      forgetSessiondLink(dir);
     }
     this.#unlockAll();
   }
@@ -735,6 +738,7 @@ class FleetDirs {
     LIVE.delete(this);
     for (const dir of this.dirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
+      forgetSessiondLink(dir);
     }
     this.#unlockAll();
   }
@@ -856,6 +860,7 @@ export async function sweepDeadFleets(): Promise<string[]> {
           continue;
         }
         await rm(dir, { recursive: true, force: true });
+        forgetSessiondLink(dir);
         removed.push(dir);
       } finally {
         unlock(fd);

@@ -476,6 +476,7 @@ const aheadGoesFrom = async (
 
 const spec: Spec = {
   name: "delegate-lifecycle",
+  host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
     const jev = jevMock();
     try {

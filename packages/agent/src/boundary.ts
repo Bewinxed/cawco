@@ -88,6 +88,7 @@ import type { WorkspaceRef } from "@cawco/core";
 import { invariant, WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
+import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { isGitDir } from "@cawco/core/git-dir";
 import {
@@ -1944,6 +1945,19 @@ const missingHostTools = (): string[] =>
       ).map(([tool, pkg]) => `${tool} (install the ${pkg} package)`)
     : [];
 
+/**
+ * macOS: why this process can start no boundary at all, asked once: a
+ * process under a Seatbelt profile stays under it for its whole life, and
+ * one under none never gains one. Asked before anything of a boundary is
+ * made, so the person reads why, not the EPERM the profile it runs under
+ * answers a write into the socket root with (`linkWorkspaceTmp`).
+ */
+let seatbeltNested: { reason: string | undefined } | undefined;
+const nestedSeatbelt = (): string | undefined => {
+  seatbeltNested ??= { reason: nestedSeatbeltRefusal() };
+  return seatbeltNested.reason;
+};
+
 /** Says, as the agent starts, what this machine needs before it can hold a workspace boundary. */
 export const checkBoundaryHost = (): void => {
   const missing = missingHostTools();
@@ -2129,6 +2143,10 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   const missing = missingHostTools();
   if (missing.length > 0) {
     throw refusal(ref.id, `this machine has no ${missing.join(" and no ")}`);
+  }
+  const nested = process.platform === "darwin" ? nestedSeatbelt() : undefined;
+  if (nested) {
+    throw refusal(ref.id, nested);
   }
   await placeReady(ref);
   // Asked before the keeper is: the endpoint only ever moves on to this

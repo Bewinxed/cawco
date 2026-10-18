@@ -510,4 +510,8 @@ const run = async (kit: Kit) => {
   await staleLeg(kit, fleet);
 };
 
-export default { name: "landing-recut", run } satisfies Spec;
+export default {
+  name: "landing-recut",
+  host: "it delegates, so its fleet cuts workspaces",
+  run,
+} satisfies Spec;

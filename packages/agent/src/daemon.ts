@@ -87,6 +87,7 @@ import {
   writeMachineKey,
 } from "@cawco/core/machine-key";
 import { userLayerPath } from "@cawco/core/paths";
+import { sweepDeadSessiondLinks } from "@cawco/core/sessiond";
 import {
   type ServeSpec,
   type SheetWrite,
@@ -2698,6 +2699,14 @@ export const startDaemon = (rediscover = false) =>
       )
     );
     checkBoundaryHost();
+    // macOS: short names in the socket root whose HOME is gone (a scratch
+    // fleet's, a release run's), each a `c-` link CawCo made; nothing else.
+    const deadLinks = sweepDeadSessiondLinks();
+    if (deadLinks.length > 0) {
+      console.info(
+        `[agent] removed ${deadLinks.length} short name(s) of sessiond's dir whose HOME is gone: ${deadLinks.join(", ")}`
+      );
+    }
     const url = process.env[CAWCO_ENV.hubUrl] ?? DEFAULT_HUB_URL;
     // Re-pinned by the rediscovery trigger below (discovered hubs only), read fresh by every attempt
     // `reconnecting` makes — see its own doc for why a plain closure variable

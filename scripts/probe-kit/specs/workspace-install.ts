@@ -315,4 +315,8 @@ const run = async (kit: Kit) => {
   await cannotList(kit, fleet, "B", b, a);
 };
 
-export default { name: "workspace-install", run } satisfies Spec;
+export default {
+  name: "workspace-install",
+  host: "it delegates, so its fleet cuts workspaces",
+  run,
+} satisfies Spec;

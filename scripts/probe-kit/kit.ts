@@ -151,10 +151,26 @@ function pinnedWebkit(revision: string): string {
 
 /** A spec: one surface, a short list of assertions on the kit's helpers. */
 export interface Spec {
+  /**
+   * Why the spec runs on the host, outside every workspace, when it does:
+   * it starts workspace boundaries (a delegate's, a stage's, a place's), and
+   * no boundary starts inside another (README "A spec that delegates runs on
+   * the host"). Inside a workspace such a spec is not run: the run says it
+   * runs on the host, with its command.
+   */
+  host?: string;
   /** The spec's name: its file's, its baselines' folder. */
   name: string;
   run: (kit: Kit) => Promise<void>;
 }
+
+/**
+ * Why a spec cannot start a boundary of its own where this run is: inside a
+ * workspace, on Linux bwrap is refused the namespaces it needs and on macOS
+ * Seatbelt does not nest (core boundary-nesting.ts). The host is not.
+ */
+export const BOUNDARY_INSIDE =
+  "a workspace boundary cannot start inside another (bwrap on Linux is refused its namespaces, macOS's Seatbelt does not nest)";
 
 /**
  * What `--approve` asks of one spec: every baseline it writes
@@ -382,6 +398,8 @@ export class Run {
   /** Each failed assertion's line, said again over the run's last line (a report that quotes the run's tail keeps them). */
   readonly failed: string[] = [];
   notes = 0;
+  /** The specs not run here because they run on the host ({@link Spec.host}). */
+  readonly onHost: string[] = [];
   /** Every capture this run that differs from its baseline, in run order. */
   readonly changed: Changed[] = [];
   private devServer: Served | null = null;
@@ -480,6 +498,13 @@ export class Run {
 
   /** Runs one spec with its own pages and fleets, closed after it however it ends. */
   async spec(spec: Spec, approval: Approval | null): Promise<void> {
+    if (spec.host && process.env.CAWCO_WORKSPACE) {
+      this.onHost.push(spec.name);
+      console.log(
+        `HOST ${spec.name}: runs on the host, not in this workspace: ${spec.host}, and ${BOUNDARY_INSIDE}. Run it from a shell outside every workspace, on a checkout of this commit: bun scripts/probe-kit/run.ts ${spec.name}`
+      );
+      return;
+    }
     const named = approval === null || approval === "all" ? [] : approval;
     const asked = named.map(entrySlug);
     /** Every entry the spec asked `approves` of: what it could write. */
