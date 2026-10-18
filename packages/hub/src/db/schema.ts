@@ -75,6 +75,11 @@ import type {
 } from "@cawco/core";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type {
+  RelayPortHealth,
+  RelayPorts,
+  StreamRelayState,
+} from "@cawco/core/stream-relay";
 import { UPSTREAM_POSTS } from "@cawco/core/upstream-guard";
 import type {
   AuthorizationServerMetadata,
@@ -2803,6 +2808,13 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
    * is when a new project's setup page asks for them.
    */
   choicesSetAt: timestamp("choices_set_at"),
+  /**
+   * When the fleet's stream relay was last offered on a new project's setup
+   * page and answered (a machine picked, or Later); null while never, so the
+   * page offers it (fleet-choices.ts). Settings › Browsers is where it is
+   * finished afterwards.
+   */
+  relayAskedAt: timestamp("relay_asked_at"),
   updatedAt: timestamp("updated_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -3593,6 +3605,46 @@ export const previewPorts = sqliteTable("preview_ports", {
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   port: integer("port").notNull().unique(),
+});
+
+/**
+ * The fleet's stream relay (stream-relay.ts) — one row, keyed `'relay'`,
+ * following the {@link previewSettings} precedent: the machine that runs it,
+ * the address and DNS name it is reached by, the shared secret coturn checks
+ * credentials against (sealed), and what its machine and the hub's health
+ * check last said. No row: the fleet has no relay.
+ */
+export const streamRelay = sqliteTable("stream_relay", {
+  /** Always `'relay'`. */
+  id: text("id").primaryKey(),
+  machineId: text("machine_id")
+    .notNull()
+    .references(() => agents.machineId, { onDelete: "cascade" }),
+  /** The address its URLs name. */
+  address: text("address").notNull(),
+  /** A DNS name pointing at the machine: TLS answers for it once its certificate stands. */
+  hostname: text("hostname"),
+  /** coturn's `external-ip`, when the address is not one of the machine's own. */
+  externalIp: text("external_ip"),
+  /** Sealed: whoever holds it mints credentials the relay accepts. Null when the hub's key does not open it. */
+  secret: sealedText("secret").notNull(),
+  /** Whether the person wants it running: Stop relay sets it false, Start relay true. */
+  wanted: integer("wanted", { mode: "boolean" }).notNull().default(true),
+  state: text("state").$type<StreamRelayState>().notNull().default("starting"),
+  /** What its machine has bound, as its last frame said. */
+  ports: text("ports", { mode: "json" }).$type<RelayPorts>(),
+  why: text("why"),
+  /** Each port's last STUN answer. */
+  health: text("health", { mode: "json" })
+    .$type<RelayPortHealth[]>()
+    .notNull()
+    .default(sql`'[]'`),
+  checkedAt: timestamp("checked_at"),
+  /** When its certificate ends, as its last renewal said. */
+  certificateEndsAt: timestamp("certificate_ends_at"),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
 });
 
 /**

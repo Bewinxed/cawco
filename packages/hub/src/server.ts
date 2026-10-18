@@ -357,6 +357,7 @@ import {
   type StageState,
   type StageStatus,
 } from "@cawco/core/stage";
+import type { RelayFrame } from "@cawco/core/stream-relay";
 import {
   otherWrite,
   type UpstreamRules,
@@ -701,6 +702,7 @@ import { createSshDoor } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
 import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
+import { createStreamRelay, streamRelayRoutes } from "./stream-relay";
 import { suggest } from "./suggest";
 import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
@@ -10322,6 +10324,29 @@ export const createServer = (
   };
 
   /**
+   * The fleet's stream relay (stream-relay.ts): coturn on a machine with a
+   * public address, its secret kept here, its health asked every minute.
+   */
+  const streamRelay = createStreamRelay({
+    db: db.streamRelay,
+    call: callAgent,
+    machines: () =>
+      db.listAgents().map((agent) => {
+        const seen = registry.address(agent.machineId);
+        return {
+          machineId: agent.machineId,
+          name: machineName(agent.machineId),
+          online: registry.agent(agent.machineId) !== undefined,
+          ...(agent.machineCapabilities
+            ? { capabilities: agent.machineCapabilities }
+            : {}),
+          ...(seen ? { seen } : {}),
+        };
+      }),
+  });
+  streamRelay.watch();
+
+  /**
    * Another checkout of a project's repository: named by hand
    * (`POST /api/projects/:id/places`) or picked on its setup page. A
    * refusal throws a {@link PlaceRefusal}.
@@ -10888,6 +10913,20 @@ export const createServer = (
     sending: (instance, artifact, state) =>
       applySetupPicks(artifact, instance.projectId, state, {
         fleet: (choices) => setFleetChoices(fleetChoices, choices),
+        // The relay's own record says how its start went (Settings › Browsers).
+        relay: (pick) => {
+          db.streamRelay.asked();
+          if (pick === "later") {
+            return;
+          }
+          streamRelay
+            .setup(pick)
+            .catch((error: unknown) =>
+              console.warn(
+                `[stream-relay] the setup page's relay on ${machineName(pick.machineId)} did not start: ${error instanceof Error ? error.message : String(error)}`
+              )
+            );
+        },
         // A refusal is an ArtifactRefusal too: the send answers it.
         place: async (projectId, place) => {
           await addProjectPlace(projectId, place.machineId, place.path);
@@ -18959,6 +18998,10 @@ export const createServer = (
       decisionsChanged(projectId);
     },
     fleetChoicesSet: () => db.getSupervisorConfig().choicesSetAt !== null,
+    relayOffer: () =>
+      db.streamRelay.read() || db.streamRelay.askedAt() !== null
+        ? null
+        : streamRelay.answer().candidates,
     upstreamAnswered: () => db.upstreamPosts() !== null,
     projectsChanged,
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
@@ -22091,6 +22134,7 @@ export const createServer = (
           db.listProjects().some((project) => project.id === id)
         ),
         fleetChoicesRoutes(fleetChoices),
+        streamRelayRoutes(streamRelay),
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
           (id) => {
@@ -26842,6 +26886,9 @@ export const createServer = (
                 peekBuild(message.payload)?.protocol
               );
               flushOwedStarts(message.machineId);
+              // The relay's machine back: a relay that should run starts again
+              // (kept as it is when its container runs).
+              streamRelay.connected(message.machineId);
               // A question parked by a process that is gone cannot be answered:
               // the reply would arrive at a daemon with no such session. Drop them
               // with the sessions they belonged to, or they replay to every
@@ -27547,6 +27594,14 @@ export const createServer = (
               // A machine's browsers, whole: the hub's browser registry is
               // where they are read (Projects spec §5.11); no screen is sent them.
               if (kind === "browsers") {
+                break;
+              }
+              // The stream relay on its machine: the relay's record follows it.
+              if (kind === "stream_relay") {
+                streamRelay.heard({
+                  ...(message.payload as RelayFrame),
+                  machineId: message.machineId,
+                });
                 break;
               }
               if (kind === "move_progress") {

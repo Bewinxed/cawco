@@ -5100,6 +5100,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/RelayPortName`.
+    public enum RelayPortName: OpenEnum {
+        case tcp3478
+        case tcp443
+        case tls
+        case udp3478
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "tcp 3478": self = .tcp3478
+            case "tcp 443": self = .tcp443
+            case "tls": self = .tls
+            case "udp 3478": self = .udp3478
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .tcp3478: "tcp 3478"
+            case .tcp443: "tcp 443"
+            case .tls: "tls"
+            case .udp3478: "udp 3478"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.tcp3478, .tcp443, .tls, .udp3478]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/RelayProvider`.
     public enum RelayProvider: OpenEnum {
         case generic
@@ -6379,6 +6423,53 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.commit, .event, .path, .routine, .task, .thread]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/StreamRelayState`.
+    public enum StreamRelayState: OpenEnum {
+        case failed
+        case live
+        case pulling
+        case starting
+        case stopped
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "failed": self = .failed
+            case "live": self = .live
+            case "pulling": self = .pulling
+            case "starting": self = .starting
+            case "stopped": self = .stopped
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .failed: "failed"
+            case .live: "live"
+            case .pulling: "pulling"
+            case .starting: "starting"
+            case .stopped: "stopped"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.failed, .live, .pulling, .starting, .stopped]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -11,6 +11,8 @@
  * - `fleet-upstream`: whether agents may post to other people's
  *   repositories (core upstream-guard.ts), asked once, while nobody has
  *   answered it (`upstream_settings`).
+ * - `fleet-relay`: the fleet's stream relay (fleet-choices.ts `relayCard`),
+ *   offered once, while the fleet has none and nobody has answered it.
  * - `stages`: the template's stages, names editable (`cawco.set`).
  * - `delegates`: delegate types the template suggests beyond the ones its
  *   stages run (already written with it), several picks; none, no card.
@@ -18,11 +20,13 @@
  *   stored as `{ machineId, label, path }`).
  */
 import type { ChoiceEntry } from "@cawco/core";
+import type { RelayCandidate } from "@cawco/core/stream-relay";
 import {
   UPSTREAM_POSTS,
   UPSTREAM_WORDS,
   type UpstreamPosts,
 } from "@cawco/core/upstream-guard";
+import { relayCard, relayPickOf } from "./fleet-choices";
 import { type StagesTemplate, templateText } from "./stages";
 import { templateTypes } from "./template-types";
 
@@ -57,6 +61,12 @@ export interface SetupApply {
     projectId: string,
     place: { machineId: string; path: string }
   ) => Promise<void>;
+  /**
+   * The relay card's answer: the relay set up on the machine picked (its
+   * outcome is the relay's to say, in Settings › Browsers), or Later. Never
+   * refuses the page: a relay that does not start leaves the project set up.
+   */
+  relay: (pick: { machineId: string; hostname?: string } | "later") => void;
 }
 
 const onOff = (
@@ -116,6 +126,10 @@ export const applySetupPicks = async (
       ...(upstream === undefined ? {} : { upstream }),
     });
   }
+  const relay = relayPickOf(state);
+  if (relay) {
+    apply.relay(relay);
+  }
   const place = placeOf(state);
   if (place) {
     await apply.place(projectId, place);
@@ -130,6 +144,8 @@ export interface SetupAsk {
   /** Where the project came from: New project's prompt, or a session's offer. */
   from: "prompt" | "offer";
   projectName: string;
+  /** The machines the relay card offers, while it is to be asked; null when it is not. */
+  relay: readonly RelayCandidate[] | null;
   /** The template it was made from; the code template stands in when none. */
   template: StagesTemplate | null;
   threadId: string;
@@ -165,6 +181,7 @@ export const setupEvent = (ask: SetupAsk): string => {
     [
       ...(ask.askFleet ? [fleetCards] : []),
       ...(ask.askUpstream ? [upstreamCard] : []),
+      ...(ask.relay ? [relayCard(ask.relay)] : []),
       `- \`stages\`: the project's stages, from the ${template} template below, adjusted to their words. Show each stage's name in an editable text field and store the list with \`cawco.set("stages", [{ "name": …, "kind": … }, …])\` on every edit (kinds stay as the template has them; show each kind in words: to do, active, waiting, you, done, dropped).`,
       ...(types.length > 0
         ? [
@@ -172,7 +189,7 @@ export const setupEvent = (ask: SetupAsk): string => {
           ]
         : []),
       `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\` as \`{ machineId, label, path }\`, \`label\` being the name CawCo shows the machine by. Once picked, the card reads "<label> — <path>", from \`cawco.on("picks", …)\` (\`picks.place.value\`).`,
-      "No routines, relays or other cards.",
+      "No routines, webhook relays or other cards.",
       'Write the page in CawCo\'s voice (WORDS.md): sentence case, no "I", options named for what they do (never Yes or No), no folder paths inside sentences.',
     ].join("\n"),
     `The ${template} template's stages.md:\n\n\`\`\`\n${templateText(template)}\`\`\``,

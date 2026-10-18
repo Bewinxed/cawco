@@ -314,6 +314,7 @@ export const measureRoles = (): RoleSize[] => {
         inTurn: () => false,
         interrupt: () => undefined,
         fleetChoicesSet: () => false,
+        relayOffer: () => null,
         upstreamAnswered: () => false,
         folderChanged: () => undefined,
         leadHome: () => Promise.resolve(undefined),

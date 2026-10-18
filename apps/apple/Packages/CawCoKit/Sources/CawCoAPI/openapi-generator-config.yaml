@@ -125,6 +125,7 @@ typeOverrides:
     PropKind: OpenEnums.PropKind
     QueueSlot: OpenEnums.QueueSlot
     RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow
+    RelayPortName: OpenEnums.RelayPortName
     RelayProvider: OpenEnums.RelayProvider
     RelayState: OpenEnums.RelayState
     RepoInfoVisibility: OpenEnums.RepoInfoVisibility
@@ -153,6 +154,7 @@ typeOverrides:
     StarterGlyph: OpenEnums.StarterGlyph
     StarterPlace: OpenEnums.StarterPlace
     StarterSourceKind: OpenEnums.StarterSourceKind
+    StreamRelayState: OpenEnums.StreamRelayState
     TailnetHttpsState: OpenEnums.TailnetHttpsState
     TailnetHttpsStep: OpenEnums.TailnetHttpsStep
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover

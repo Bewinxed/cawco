@@ -101,6 +101,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
+import type { RelayCandidate } from "@cawco/core/stream-relay";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
@@ -659,6 +660,8 @@ export interface CawDeps {
    * machine cannot hold it: the wake does not go out.
    */
   readonly refreshPlace: (lead: InstanceRow) => Promise<void>;
+  /** The machines the setup page's stream relay card offers, while it is to be asked; null once the fleet has a relay or the card was answered. */
+  readonly relayOffer: () => readonly RelayCandidate[] | null;
   /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
   readonly send: (envelope: Envelope<SendPayload>) => boolean;
   /** Starts a session in `mode` where its harness has modes, resolved once its machine says it is in place. */
@@ -712,6 +715,7 @@ export const createCaw = ({
   db,
   end,
   fleetChoicesSet,
+  relayOffer,
   upstreamAnswered,
   folderChanged,
   inTurn,
@@ -2157,6 +2161,7 @@ export const createCaw = ({
         askFleet: !fleetChoicesSet(),
         askUpstream: !upstreamAnswered(),
         from,
+        relay: relayOffer(),
         projectName: project.name,
         template,
         threadId,

@@ -232,6 +232,7 @@ import {
 import { sealAtRest } from "./seal-at-rest";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
+import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
@@ -2102,6 +2103,8 @@ export interface DbShape {
   }) => FleetSkillMeta;
   /** A project's starters as last written, and what was done with them (project-starters.ts). */
   readonly starters: StartersDb;
+  /** The fleet's stream relay (stream-relay.ts). */
+  readonly streamRelay: StreamRelayDb;
   /**
    * `running`/`starting` → `unknown` at the hub's start, answering how many
    * rows moved: this process holds no sockets on its first line, so it cannot
@@ -9022,6 +9025,7 @@ const make = async (path: string): Promise<DbShape> => {
     artifacts: artifactsDb(db),
     find: findDb(db),
     previews: previewsDb(db),
+    streamRelay: streamRelayDb(db),
     actions: actionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>
