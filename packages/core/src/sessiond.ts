@@ -400,14 +400,27 @@ export const forgetSessiondLink = (home: string): void => {
 };
 
 /**
- * macOS: removes each short name of sessiond's dir in the socket root whose
- * HOME is gone: only a link named as {@link sessiondLinkName} names one,
- * whose target is a `.cawco` dir that is no longer there. This HOME's own is
- * kept whatever it names, and every other entry of the root (each
- * workspace's door dir, its `t-` link, the git credential socket) is never
- * looked at. Which links went; none elsewhere.
+ * Whether `target`, a short name's, is where CawCo points one of that kind:
+ * a `c-` name at a HOME's `.cawco` ({@link sessiondLinkDir}), a `t-<id8>`
+ * name at a workspace's scratch dir `<HOME>/.cawco/tmp/<id8>` (paths.ts
+ * `linkWorkspaceTmp`), the HOME being any (a scratch fleet's agents run
+ * under HOMEs of their own).
  */
-export const sweepDeadSessiondLinks = (
+const cawcoTarget = (name: string, target: string): boolean =>
+  name.startsWith("t-")
+    ? target.endsWith(`/.cawco/tmp/${name.slice(2)}`)
+    : basename(target) === ".cawco";
+
+/**
+ * macOS: removes each short name in the socket root CawCo made whose target
+ * is gone: a `c-` (sessiond's dir under a HOME) or `t-` (a workspace's
+ * scratch dir) link named with 8 hex, pointing where CawCo points one of its
+ * kind ({@link cawcoTarget}), at nothing that is there. This HOME's own `c-`
+ * name is kept whatever it names, and every other entry of the root (each
+ * workspace's door dir, the git credential socket, a link of another name
+ * or target) is left as it is. Which links went; none elsewhere.
+ */
+export const sweepDeadShortLinks = (
   root: string = darwinSocketRoot()
 ): string[] => {
   if (process.platform !== "darwin") {
@@ -420,9 +433,9 @@ export const sweepDeadSessiondLinks = (
     return [];
   }
   const own = sessiondLinkName();
-  // A short name sessiondLinkName gives: `c-` and 8 hex. Built here, as
-  // paths.ts and this module import each other.
-  const given = new RegExp(`^${SESSIOND_LINK}-[0-9a-f]{8}$`);
+  // `c-` (sessiondLinkName) or `t-` (paths.ts scratchLinkName) and 8 hex.
+  // Built here, as paths.ts and this module import each other.
+  const given = new RegExp(`^(${SESSIOND_LINK}|t)-[0-9a-f]{8}$`);
   return names.filter((name) => {
     if (name === own || !given.test(name)) {
       return false;
@@ -433,7 +446,7 @@ export const sweepDeadSessiondLinks = (
         return false;
       }
       const target = readlinkSync(link);
-      if (basename(target) !== ".cawco" || existsSync(resolve(root, target))) {
+      if (!cawcoTarget(name, target) || existsSync(resolve(root, target))) {
         return false;
       }
       unlinkSync(link);

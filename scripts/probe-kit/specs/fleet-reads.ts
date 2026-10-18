@@ -484,6 +484,7 @@ const report = (kit: Kit, fleet: Fleet, { answers, leg, placed }: Answered) => {
 
 const spec: Spec = {
   name: "fleet-reads",
+  host: "a delegate per harness reads skills from inside its workspace's boundary",
   run: async (kit) => {
     const { check } = kit;
     if (process.platform === "linux") {

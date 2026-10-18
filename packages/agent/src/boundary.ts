@@ -108,6 +108,7 @@ import {
 import {
   AGENT_SOCKET_ENV,
   darwinUserDirs,
+  forgetWorkspaceTmp,
   hostCaEnv,
   linkWorkspaceTmp,
   scratchSocketProblem,
@@ -5080,9 +5081,9 @@ const closeAll = async (ref: WorkspaceRef): Promise<void> => {
   }
   await rm(stateDir(ref.id), { recursive: true, force: true });
   // Its scratch dir, with whatever its commands left there, and its short
-  // name on macOS (the link alone: `rm` takes a link, not what it names).
+  // name on macOS when it names that dir (the link alone).
   await rm(scratchOf(ref.id), { recursive: true, force: true });
-  await rm(workspaceTmpDir(ref.id), { force: true });
+  forgetWorkspaceTmp(ref.id);
   // Its sockets' dir, once nothing listens there (`workspaceDoorDir`).
   await rm(workspaceDoorDir(ref.id), { recursive: true, force: true });
 };

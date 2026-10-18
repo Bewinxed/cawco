@@ -924,4 +924,8 @@ const runningBuild = async (
   );
 };
 
-export default { name: "machine-pause", run } satisfies Spec;
+export default {
+  name: "machine-pause",
+  host: "its delegates cut workspaces on both machines",
+  run,
+} satisfies Spec;

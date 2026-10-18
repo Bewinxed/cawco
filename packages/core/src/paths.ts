@@ -584,6 +584,26 @@ export const linkWorkspaceTmp = (id: string): string =>
     ? shortLink(scratchLinkName(id), workspaceScratchDir(id))
     : workspaceScratchDir(id);
 
+/**
+ * macOS: removes workspace `id`'s short name ({@link workspaceTmpDir}) as
+ * the workspace goes, when it names that workspace's scratch dir and nothing
+ * else; a name pointed elsewhere is not this workspace's to take. Nothing
+ * elsewhere.
+ */
+export const forgetWorkspaceTmp = (id: string): void => {
+  if (process.platform !== "darwin") {
+    return;
+  }
+  const link = workspaceTmpDir(id);
+  try {
+    if (readlinkSync(link) === workspaceScratchDir(id)) {
+      unlinkSync(link);
+    }
+  } catch {
+    // Not there, or not a link: nothing of this workspace's to remove.
+  }
+};
+
 /** Why a socket in workspace `id`'s `TMPDIR` would not fit, or nothing ({@link socketPathProblem}). */
 export const scratchSocketProblem = (id: string): string | undefined =>
   socketPathProblem(

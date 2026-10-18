@@ -87,7 +87,7 @@ import {
   writeMachineKey,
 } from "@cawco/core/machine-key";
 import { userLayerPath } from "@cawco/core/paths";
-import { sweepDeadSessiondLinks } from "@cawco/core/sessiond";
+import { sweepDeadShortLinks } from "@cawco/core/sessiond";
 import {
   type ServeSpec,
   type SheetWrite,
@@ -2699,12 +2699,13 @@ export const startDaemon = (rediscover = false) =>
       )
     );
     checkBoundaryHost();
-    // macOS: short names in the socket root whose HOME is gone (a scratch
-    // fleet's, a release run's), each a `c-` link CawCo made; nothing else.
-    const deadLinks = sweepDeadSessiondLinks();
+    // macOS: short names in the socket root CawCo made whose target is gone
+    // (a scratch fleet's or a release run's HOME, an archived workspace's
+    // scratch dir), each a `c-` or `t-` link; nothing else.
+    const deadLinks = sweepDeadShortLinks();
     if (deadLinks.length > 0) {
       console.info(
-        `[agent] removed ${deadLinks.length} short name(s) of sessiond's dir whose HOME is gone: ${deadLinks.join(", ")}`
+        `[agent] removed ${deadLinks.length} short name(s) in the socket root whose target is gone: ${deadLinks.join(", ")}`
       );
     }
     const url = process.env[CAWCO_ENV.hubUrl] ?? DEFAULT_HUB_URL;

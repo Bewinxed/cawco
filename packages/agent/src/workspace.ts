@@ -36,6 +36,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import {
+  forgetWorkspaceTmp,
   isSecretFileName,
   workspaceCacheDir,
   workspaceCarriesDir,
@@ -1124,6 +1125,7 @@ const closeClone = async (
         ...(fleet ? [fleet] : []),
       ].map((dir) => rm(dir, { recursive: true, force: true }))
     );
+    forgetWorkspaceTmp(request.id);
     return { carry: null };
   }
   const workspace: WorkspaceRef = { id: request.id, path };

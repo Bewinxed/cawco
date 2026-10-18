@@ -173,6 +173,7 @@ interface Scene {
 
 const spec: Spec = {
   name: "workspace-excluded",
+  host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
     for (const tag of Object.keys(steps)) {
       delete steps[tag];

@@ -243,6 +243,7 @@ type Turn = (
 
 const spec: Spec = {
   name: "document-scope",
+  host: "its delegates cut workspaces",
   run: async (kit) => {
     let step: Step | undefined;
     let repo = "";

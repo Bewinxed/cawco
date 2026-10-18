@@ -507,4 +507,8 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default { name: "limit-delegate-work", run } satisfies Spec;
+export default {
+  name: "limit-delegate-work",
+  host: "it delegates once per leg, so its fleet cuts workspaces",
+  run,
+} satisfies Spec;
