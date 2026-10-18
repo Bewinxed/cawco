@@ -489,10 +489,7 @@ export const copyOwnSecrets = async (
   }
 };
 
-/**
- * Trees that hold packages and builds: their secret-named files are not the
- * repository's own, and a place's first commit (place-repo.ts) takes none.
- */
+/** Trees that hold packages and builds: their secret-named files are not the repository's own. */
 export const PACKAGE_TREES = new Set([
   "node_modules",
   ".venv",

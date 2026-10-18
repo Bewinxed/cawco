@@ -25,10 +25,7 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
     case "subagents":
       return store.fleet.value?.agents.length ?? null;
     case "cli-tools":
-      return (
-        store.tools.value?.catalog.filter((spec) => !spec.dependencyOnly)
-          .length ?? null
-      );
+      return store.tools.value?.catalog.length ?? null;
     case "mcp":
       return store.fleet.value?.config.mcp.length ?? null;
     case "skills": {

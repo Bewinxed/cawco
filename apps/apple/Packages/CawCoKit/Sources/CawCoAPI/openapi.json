@@ -44920,7 +44920,7 @@
             "type": "string"
           },
           "dependencyOnly": {
-            "description": "True for tools that exist only to satisfy a `requires` — they stay out of\nthe policy list until something needs them, and the dashboard shows them\nonly where they explain another tool's state.",
+            "description": "Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is.",
             "type": "boolean"
           },
           "exactVersion": {
@@ -44945,7 +44945,7 @@
             "type": "string"
           },
           "requires": {
-            "description": "Catalog tools that must be present first. A missing requirement installs\nautomatically (depth 1 — requirements do not have requirements); one that\nis present but below `min` does not: silently replacing a machine's Node\nis ruder than telling the user exactly what is too old.",
+            "description": "Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ToolRequirement"
@@ -44977,7 +44977,7 @@
         "type": "object",
         "properties": {
           "command": {
-            "description": "The install command, run through the Bun shell. Exactly one of `command`\nand `native` is set.",
+            "description": "The install command, run through the Bun shell.",
             "type": "string"
           },
           "footprint": {
@@ -45054,11 +45054,11 @@
             "type": "string"
           },
           "native": {
-            "description": "The name of a routine the agent implements in code, for the installs a\nportable shell one-liner cannot express (resolving the right Node tarball\nfor an arch, say). The escape hatch that keeps `command` honest.",
+            "description": "Set on no method. Declared only because installable TestFlight builds'\nschema has it (hub `openapi:check`); it goes in the change a TestFlight\nbuild is made from, with `ToolSpec.dependencyOnly` and `requires`.",
             "type": "string"
           },
           "needs": {
-            "description": "A binary that must already be on the machine for this method to be\neligible — 'npm', 'brew', 'winget'. Absent means always eligible.",
+            "description": "A binary that must already be on the machine for this method to be\neligible — 'npm', 'brew', 'winget'. Absent means always eligible. CawCo\nnever installs it: a machine without it takes the next method, or is told\nwhat is missing.",
             "type": "string"
           },
           "pinnedCommand": {
@@ -45073,6 +45073,7 @@
           }
         },
         "required": [
+          "command",
           "label",
           "platforms"
         ]
@@ -45087,14 +45088,13 @@
         ]
       },
       "ToolRequirement": {
-        "description": "A catalog tool another tool needs first, with the version floor it needs.",
+        "description": "The shape of {@link ToolSpec.requires}, which no tool sets.",
         "type": "object",
         "properties": {
           "id": {
             "type": "string"
           },
           "min": {
-            "description": "Semver floor, compared major-first against the probed version.",
             "type": "string"
           }
         },

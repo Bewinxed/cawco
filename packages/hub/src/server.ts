@@ -23159,10 +23159,7 @@ export const createServer = (
           }),
         },
         ({ params, body, status }) => {
-          const spec = toolSpec(params.id);
-          // A tool that only exists to satisfy a `requires` is not something the
-          // fleet has an opinion about — it arrives with whatever needs it.
-          if (!spec || spec.dependencyOnly) {
+          if (!toolSpec(params.id)) {
             return status(404, `no tool ${params.id}`);
           }
 

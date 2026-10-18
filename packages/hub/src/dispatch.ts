@@ -372,22 +372,11 @@ export const parentProblem = (
 const HOST_CHECK = /^host:\s*/;
 
 /**
- * A unit-test runner: the owner forbids unit tests, so an attempt never runs
- * one a task lists (`bun test`, `vitest`, `jest`, `pytest`, `go test`, …).
- */
-const UNIT_TEST =
-  /\b(bun test|bun run test|npm (run )?test|yarn test|pnpm test|vitest|jest|mocha|pytest|go test|cargo test|swift test|xcodebuild test)\b/;
-
-/**
- * The brief's line for one task check: the command to run and quote, a
- * `host:` one as what the attempt lists under "Not run", a unit-test runner
- * as what it does not run.
+ * The brief's line for one task check: the command to run and quote, or a
+ * `host:` one as what the attempt lists under "Not run".
  */
 const checkLine = (written: string): string => {
   const command = written.replace(HOST_CHECK, "");
-  if (UNIT_TEST.test(command)) {
-    return `- \`${command}\`: a unit-test runner. The owner forbids unit tests, so do not run it; say so in your summary.`;
-  }
   return command === written
     ? `- \`${command}\``
     : `- \`${command}\`: marked host, so it cannot run inside your boundary; list it under "Not run:" for whoever runs it on the host.`;

@@ -1742,9 +1742,6 @@ export const CONTROL_PLACE_REPO = "placeRepo";
 /** The most a place's first commit may weigh; a place past it stays a folder. */
 export const PLACE_REPO_LIMIT_BYTES = 500 * 1024 * 1024;
 
-/** The largest file a place's first commit takes; a bigger one is left out. */
-export const PLACE_REPO_FILE_LIMIT_BYTES = 10 * 1024 * 1024;
-
 /** One path a place's first commit leaves out, from the place's root, and why. */
 export interface PlaceLeftOut {
   /** From the place's root; a folder ends with `/`. */
@@ -1788,15 +1785,15 @@ export const CONTROL_PLACE_PUSH = "placePush";
 
 /**
  * What {@link CONTROL_PLACE_PUSH} read, or pushed. Refused, naming them,
- * when the branch's commits hold what the first commit's rules or the
- * credential scan keep out, or a secret's name anywhere in its history.
+ * when any commit the branch reaches holds text that reads as a credential
+ * (core secret-text.ts).
  */
 export interface PlacePush {
   branch: string;
   bytes: number;
   commit: string;
   files: number;
-  /** What stays out: every path in the place the first commit's rules keep out, with why. */
+  /** What stays out: every uncommitted path in the place the first commit's rules keep out, with why. */
   leftOut: PlaceLeftOut[];
   pushed: boolean;
   root: string;
