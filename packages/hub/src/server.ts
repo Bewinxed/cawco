@@ -626,6 +626,8 @@ import {
 } from "./plugins";
 import {
   createPreviewListeners,
+  embedKey,
+  isEmbed,
   noteParent,
   type PreviewListenerDeps,
   type PreviewReach,
@@ -635,6 +637,7 @@ import {
   previewSourceKey,
   previewTargets,
 } from "./preview";
+import { mintTicket } from "./preview-access";
 import { previewRoutes } from "./preview-routes";
 import { createCaps } from "./project-caps";
 import {
@@ -9489,6 +9492,11 @@ export const createServer = (
     state: "open" | "closed",
     target: Pick<PreviewTarget, "artifact" | "revision" | "source">
   ) => {
+    // An embedded preview is a decision page's, never a session's panel: no
+    // view follows it, and it has no session port to name.
+    if (isEmbed(instanceId)) {
+      return previewFrame(instanceId, state, target, null, [], null);
+    }
     const frame = previewFrame(
       instanceId,
       state,
@@ -9557,6 +9565,23 @@ export const createServer = (
   const endPreviews = (instanceId: string): void => {
     closePreview(instanceId).catch(console.error);
     previewListeners.release(instanceId);
+    // Its decision pages' embedded previews go with it, their machines'
+    // listeners too.
+    for (const key of previewListeners.releaseEmbeds(instanceId)) {
+      const target = previewTargets.get(key);
+      previewTargets.delete(key);
+      if (target && !("page" in target.source)) {
+        detach(
+          callAgent(
+            target.machineId,
+            PREVIEW_STOP,
+            [{ instanceId: key }],
+            BUSY_TIMEOUT_MS
+          ),
+          "embedded preview stop"
+        );
+      }
+    }
   };
 
   /** What starting a machine's listener for a preview answered: where it listens, or the hop that failed and why. */
@@ -11056,6 +11081,57 @@ export const createServer = (
     }
   };
 
+  /**
+   * A decision page's Preview of a dev-server preview or a sheet of its
+   * session's: its target kept under its own key ({@link embedKey}), its
+   * origin's listener started, and its address as the page reached it, the
+   * source's start path on it. On the session's own port: the same name, the
+   * embed's port. On a host-mode name: the embed's name, through the entry
+   * that spends a ticket for it, so the person's pass covers it. Nothing
+   * when the hub no longer holds it or every port is taken: the page says so.
+   */
+  const embedAt = (artifactId: string, reachedAt: URL): { embed?: string } => {
+    const row = db.artifacts.get(artifactId);
+    if (!(row?.machineId && "port" in row.source)) {
+      return {};
+    }
+    const key = embedKey(artifactId);
+    const now = previewTargets.get(key);
+    if (
+      !now ||
+      previewSourceKey(now.source) !== previewSourceKey(row.source) ||
+      now.machineId !== row.machineId
+    ) {
+      previewTargets.set(key, {
+        artifact: { id: row.id, kind: row.kind, name: row.name },
+        machineId: row.machineId,
+        source: row.source,
+        revision: crypto.randomUUID(),
+      });
+    }
+    let at: ReturnType<typeof previewListeners.embed>;
+    try {
+      at = previewListeners.embed(key, row.instanceId);
+    } catch (error) {
+      if (error instanceof PreviewRefusal) {
+        console.warn(`[preview] ${error.message}`);
+        return {};
+      }
+      throw error;
+    }
+    const path = row.source.path ?? "/";
+    const ownPort = previewListeners.address(row.instanceId).port;
+    if (reachedAt.port === String(ownPort) || !at.origin) {
+      return {
+        embed: `${reachedAt.protocol}//${reachedAt.hostname}:${at.port}${path}`,
+      };
+    }
+    const { ticket } = mintTicket(key);
+    return {
+      embed: `${at.origin}/__cawco/enter?ticket=${encodeURIComponent(ticket)}&next=${encodeURIComponent(path)}`,
+    };
+  };
+
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
     ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
@@ -11067,11 +11143,22 @@ export const createServer = (
     send: artifactSend(artifacts.send),
     socket: artifactSocket(artifactDocs),
     state: artifactDocs.snapshot,
-    program: (artifactId) => {
+    program: (artifactId, reachedAt) => {
       const served = artifacts.programServed(artifactId);
-      return served
-        ? { hash: served.hash, media: scriptJson("cawco-media", served.media) }
-        : null;
+      if (!served) {
+        return null;
+      }
+      const media: Record<
+        string,
+        { embed?: string; kind: string; name: string } | null
+      > = {};
+      for (const [id, held] of Object.entries(served.media)) {
+        media[id] =
+          held && (held.kind === "preview" || held.kind === "sheet")
+            ? { ...held, ...embedAt(id, reachedAt) }
+            : held;
+      }
+      return { hash: served.hash, media: scriptJson("cawco-media", media) };
     },
     canvasFrom: (request, instanceId, artifactId) =>
       openDiagramAsCanvas(request, instanceId, artifactId),

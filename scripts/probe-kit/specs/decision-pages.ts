@@ -62,6 +62,7 @@ const programOf = (ids: {
   canvas: string;
   image: string;
   mockup: string;
+  site: string;
 }) => `root = Decisions("Shape the launch", [stack, host, later], "Three choices before the launch page is built.")
 stack = Decision("stack", "Which stack does the launch page use?", [svelte, astro], "Today: the landing is plain HTML.", [shot, flow])
 svelte = Option("svelte", "SvelteKit", "The dashboard's own stack.", true)
@@ -70,7 +71,8 @@ host = Decision("host", "Where does the page run?", [hub, edge], "It ships with 
 hub = Option("hub", "The hub", "Nothing new to run.")
 edge = Option("edge", "An edge host", "Closer to readers.")
 later = Section("Later", [plan])
-plan = Decision("plan", "When does the plan ship?", [now, after], "The waitlist opens with it.", [gantt, status], ["host"])
+plan = Decision("plan", "When does the plan ship?", [now, after], "The waitlist opens with it.", [gantt, status, site], ["host"])
+site = Preview("${ids.site}", "The site as it runs")
 status = Row([Text("Ships with the waitlist", "meta"), Badge("Planned", "attn")])
 now = Option("now", "With the page")
 after = Option("after", "A week after")
@@ -250,8 +252,27 @@ const mediaIn = (frame: Frame) =>
         (figure) => !!figure.querySelector("button.open")
       ),
       theme: document.documentElement.dataset.theme ?? "",
+      site:
+        document.querySelector<HTMLIFrameElement>(
+          "#decision-plan iframe.screen"
+        )?.src ?? "",
     };
   });
+
+/** The words of the frame at `src` inside the page: an embedded preview on an origin of its own. */
+const wordsAt = async (page: Page, src: string): Promise<string> => {
+  if (!src) {
+    return "";
+  }
+  const { origin } = new URL(src);
+  const frame = page.frames().find((one) => one.url().startsWith(origin));
+  return frame
+    ? ((await frame
+        .locator("h1")
+        .textContent({ timeout: 2000 })
+        .catch(() => "")) ?? "")
+    : "";
+};
 
 /** A node's fill against the house token it is drawn in, in the frame's theme now. */
 const diagramInk = (frame: Frame) =>
@@ -415,7 +436,28 @@ const publish = async (
   png.data.fill(200);
   const image = join(pictures, "landing.png");
   writeFileSync(image, PNG.sync.write(png));
-  const program = programOf({ canvas: canvas.id, mockup: mockup.id, image });
+  // A dev server on the machine's host, shown as a preview of its port.
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(
+        "<!doctype html><html><body><h1>The live site</h1></body></html>",
+        { headers: { "content-type": "text/html" } }
+      ),
+  });
+  const site = await make<{ id: string }>({
+    kind: "preview",
+    name: "launch-site",
+    port: server.port,
+    machine: MACHINE,
+  });
+  const program = programOf({
+    canvas: canvas.id,
+    mockup: mockup.id,
+    image,
+    site: site.id,
+  });
   const made = await make<{ decisions?: string[]; id: string }>({
     kind: "page",
     name: NAME,
@@ -449,7 +491,11 @@ const mediaLeg = async (
   const { kit } = on;
   const leg = `${view === "desk" ? 1440 : 390} ${theme}`;
   const shown = await kit.page(view, { theme });
-  shown.on("pageerror", (error) => on.said.push(`${leg}: ${String(error)}`));
+  shown.on("pageerror", (error) =>
+    on.said.push(
+      `${leg}: ${String(error)} ${error.stack?.split("\n").slice(1, 4).join(" ")}`
+    )
+  );
   await open(shown, `${on.base}/session/${on.writer}`, '[data-slot="pane"]');
   const frame = await frameWith(shown, 3).catch(() => null);
   if (!frame) {
@@ -475,6 +521,32 @@ const mediaLeg = async (
   ).catch(() => undefined);
   await settle(shown, 400);
   const media = await mediaIn(frame);
+  const site = await until(
+    `${leg}: the dev server live in the plan card`,
+    () => wordsAt(shown, media.site),
+    (words) => words === "The live site",
+    30_000
+  ).catch(() => "");
+  kit.check(
+    `(a) ${leg}: Preview shows a dev server's preview live, on an origin of its own`,
+    site === "The live site" &&
+      new URL(media.site || "http://x").port !== new URL(frame.url()).port,
+    JSON.stringify({
+      src: media.site,
+      site,
+      frames: shown.frames().map((one) => one.url().slice(0, 80)),
+      hub:
+        site === "The live site"
+          ? ""
+          : (await on.fleet.logs("hub"))
+              .split("\n")
+              .filter(
+                (line) => line.includes("embed-") || line.includes("[preview]")
+              )
+              .slice(-6)
+              .join(" | "),
+    })
+  );
   kit.check(
     `(a) ${leg}: three cards, the picture loaded, three diagrams, the canvas live, the mockup live, the DialKit panel up, in the host's theme`,
     media.image === 64 &&

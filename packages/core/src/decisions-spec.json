@@ -315,7 +315,7 @@
           "artifact"
         ],
         "additionalProperties": false,
-        "description": "A page artifact of yours live in a frame: an animated mockup you made with artifact_create (kind page, html), say."
+        "description": "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet."
       },
       "Text": {
         "type": "object",

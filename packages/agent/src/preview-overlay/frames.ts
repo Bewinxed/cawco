@@ -310,7 +310,11 @@ export function watchFrames(changed: () => void): void {
       // Its history moving it in place; its pushes are told through its mark (boot.ts).
       view.addEventListener("popstate", changed);
       view.addEventListener("hashchange", changed);
-      grown.observe(doc.documentElement);
+      // A frame's first blank document can stand with no root yet (an
+      // iframe about to load another origin's page): nothing to watch there.
+      if (doc.documentElement) {
+        grown.observe(doc.documentElement);
+      }
     }
     // A frame added after load (a route that mounts one) is watched as it comes.
     new MutationObserver((records) => {

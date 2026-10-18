@@ -94,6 +94,18 @@ export interface PreviewTarget {
 export const previewTargets = new Map<string, PreviewTarget>();
 
 /**
+ * A decision page's Preview of a session's dev-server preview or sheet: its
+ * target in {@link previewTargets} and its listener on an origin of its own
+ * are keyed by the embedded artifact, apart from every session's. A dev
+ * server and a stage serve from their root, so the page cannot show one under
+ * a path of its own origin; the machine keys its listener by the same key.
+ */
+const EMBED_PREFIX = "embed-";
+export const embedKey = (artifactId: string): string =>
+  `${EMBED_PREFIX}${artifactId}`;
+export const isEmbed = (key: string): boolean => key.startsWith(EMBED_PREFIX);
+
+/**
  * The dashboard origins this hub is reached from: each one a dashboard or an
  * artifact's tab opened its socket from (server.ts, from the origin the
  * dashboard's relay gated), and the operator's dashboard address. Only these
@@ -142,12 +154,13 @@ export const previewParents = (): string[] => [...parents];
  * (https, or localhost): over plain http to an address the page stays in the
  * dashboard's process, and WebKit runs no frame in a process of its own.
  */
-const PREVIEW_HEADERS = (): [string, string][] => [
+const PREVIEW_HEADERS = (ancestors: string[] = []): [string, string][] => [
   // `'self'` too: every ancestor is checked, and a page's own frames (an
-  // app's inner frame) have the preview's origin among theirs.
+  // app's inner frame) have the preview's origin among theirs. An embed's
+  // decision page is an ancestor of its own (`ancestors`).
   [
     "content-security-policy",
-    `frame-ancestors 'self' ${previewParents().join(" ")}`.trim(),
+    `frame-ancestors 'self' ${[...previewParents(), ...ancestors].join(" ")}`.trim(),
   ],
   ["origin-agent-cluster", "?1"],
 ];
@@ -156,8 +169,8 @@ const PREVIEW_HEADERS = (): [string, string][] => [
  * `answer` with {@link PREVIEW_HEADERS}. A response a hop made with headers
  * it holds fixed goes on as a copy.
  */
-const framedBy = (answer: Response): Response => {
-  const headers = PREVIEW_HEADERS();
+const framedBy = (answer: Response, ancestors: string[] = []): Response => {
+  const headers = PREVIEW_HEADERS(ancestors);
   try {
     for (const [name, value] of headers) {
       answer.headers.set(name, value);
@@ -233,6 +246,8 @@ async function servePage(
   artifactId: string,
   pathname: string,
   deps: Pick<PreviewListenerDeps, "program" | "state">,
+  /** The page's address as the browser asked for it: an embed's address is built from it. */
+  reachedAt: URL,
   /** Where the page stands on its origin: its root, or the Decisions tab's `/__cawco/page/<id>/`. */
   mount = "/"
 ): Promise<Response> {
@@ -276,7 +291,7 @@ async function servePage(
   // The overlay hashes the page as it was written, before its files are
   // keyed; a decision page's hash is its program's, and it carries what the
   // artifacts its media show are now.
-  const program = deps.program(artifactId);
+  const program = deps.program(artifactId, reachedAt);
   const injected = injectOverlay(
     await body.text(),
     { artifact: artifactId, state: deps.state(artifactId) },
@@ -303,7 +318,8 @@ const HUB_SERVES: Record<
   (
     artifactId: string,
     pathname: string,
-    deps: PreviewListenerDeps
+    deps: PreviewListenerDeps,
+    reachedAt: URL
   ) => Promise<Response>
 > = {
   page: servePage,
@@ -342,9 +358,13 @@ export interface PreviewListenerDeps {
   /**
    * A decision page's program: its hash (the page's, for the overlay) and
    * the script tag naming what the artifacts its Canvas and Preview pieces
-   * show are now; null for any other page.
+   * show are now, an embedded preview's address built from where the page
+   * was reached (`reachedAt`); null for any other page.
    */
-  program: (artifactId: string) => { hash: string; media: string } | null;
+  program: (
+    artifactId: string,
+    reachedAt: URL
+  ) => { hash: string; media: string } | null;
   /** Where a shown preview of a machine's is served now, its listener started when it has none. */
   reach: (instanceId: string) => Promise<PreviewReach>;
   send: ReturnType<typeof artifactSend>;
@@ -653,7 +673,7 @@ async function artifactById(
     const [, artifactId, rest] = paged;
     return deps.ownerOf(artifactId) === instanceId &&
       deps.kindOf(artifactId) === "page"
-      ? servePage(artifactId, rest, deps, `/__cawco/page/${artifactId}/`)
+      ? servePage(artifactId, rest, deps, url, `/__cawco/page/${artifactId}/`)
       : new Response("This session has no such page.", { status: 404 });
   }
   return null;
@@ -696,7 +716,12 @@ async function serveSession(
     return downResponse("closed", 404);
   }
   if ("page" in target.source && target.artifact.kind !== "sheet") {
-    return HUB_SERVES[target.artifact.kind](target.artifact.id, pathname, deps);
+    return HUB_SERVES[target.artifact.kind](
+      target.artifact.id,
+      pathname,
+      deps,
+      url
+    );
   }
   // No listener serves it now (its machine restarted, or the last start
   // failed): started here, or the hop that failed says why.
@@ -928,7 +953,9 @@ export function createPreviewListeners(
   const listen = (
     port: number,
     route: (request: Request) => string | undefined,
-    lock?: PassCookie
+    lock?: PassCookie,
+    /** The origins that may frame what it serves beside the dashboards: an embed's decision page. */
+    ancestors: () => string[] = () => []
   ): Listener => {
     const fetch = async (
       request: Request,
@@ -961,7 +988,7 @@ export function createPreviewListeners(
       return (
         answer &&
         compressed(
-          framedBy(await withKeyedOverlay(answer)),
+          framedBy(await withKeyedOverlay(answer), ancestors()),
           request.headers.get("accept-encoding")
         )
       );
@@ -1011,8 +1038,27 @@ export function createPreviewListeners(
       `[preview] ${HOP}: the host pattern ${was} now names its scheme, ${settings.pattern}; set https:// in Settings › Previews if those names are served over HTTPS.`
     );
   }
+  /**
+   * Whether no socket holds `port` on the listeners' address now: a bind
+   * without `reusePort`, closed at once. A listener binds with `reusePort`
+   * (its tailnet twin needs it), and such a bind succeeds silently on a port
+   * another process holds the same way, the kernel then splitting
+   * connections between the two: a scratch hub beside another took half of
+   * an embed's requests that way, its frame left on the browser's error page.
+   */
+  const unheld = (port: number): boolean => {
+    try {
+      Bun.serve({ hostname, port, fetch: () => new Response(null) }).stop(true);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   /** Each session's listener on its own port, by session. */
   const sessions = new Map<string, Listener>();
+  /** Each embedded preview's listener on its own port (not kept: an embed is made again as its page is served), by its key, with its session. */
+  const embeds = new Map<string, { listener: Listener; owner: string }>();
   /** Host mode's one listener. */
   let byHost: Listener | undefined;
 
@@ -1022,6 +1068,9 @@ export function createPreviewListeners(
    * so no other port would open either: it is thrown, in one sentence.
    */
   const serveOn = (instanceId: string, port: number): boolean => {
+    if (!unheld(port)) {
+      return false;
+    }
     let refused: unknown;
     try {
       sessions.set(
@@ -1118,7 +1167,10 @@ export function createPreviewListeners(
       return value;
     }
     const port = Number(value);
-    return db.ports().find((row) => row.port === port)?.instanceId;
+    return (
+      db.ports().find((row) => row.port === port)?.instanceId ??
+      [...embeds].find(([, embed]) => embed.listener.port === port)?.[0]
+    );
   };
 
   /** Host mode's listener on the range's first port; why it didn't open, or null. */
@@ -1152,6 +1204,75 @@ export function createPreviewListeners(
       previewFailed(HOP, null, why);
       return why;
     }
+  };
+
+  /** A port that would not open for a reason no other port avoids, in one sentence. */
+  const portRefused = (port: number, thrown: unknown): PreviewRefusal =>
+    new PreviewRefusal(
+      503,
+      `Preview port ${port} didn't open on ${hostname} (${causeOf(thrown)}).`,
+      { cause: thrown }
+    );
+
+  /** An embed's listener on the lowest free preview port no session or other embed holds; refused when every port is taken. */
+  const openEmbed = (
+    key: string,
+    owner: string
+  ): { listener: Listener; owner: string } => {
+    const taken = new Set([
+      ...db.ports().map((row) => row.port),
+      ...[...embeds.values()].map((embed) => embed.listener.port),
+    ]);
+    for (
+      let port = PREVIEW_PORTS.first;
+      port <= PREVIEW_PORTS.last;
+      port += 1
+    ) {
+      if (taken.has(port) || barred(port) || !unheld(port)) {
+        continue;
+      }
+      try {
+        const opened = {
+          owner,
+          listener: listen(
+            port,
+            () => key,
+            undefined,
+            () => ancestorsOf(owner)
+          ),
+        };
+        embeds.set(key, opened);
+        return opened;
+      } catch (thrown) {
+        if ((thrown as { code?: unknown }).code !== "EADDRINUSE") {
+          throw portRefused(port, thrown);
+        }
+      }
+    }
+    throw new PreviewRefusal(
+      503,
+      `Every preview port (${PREVIEW_PORTS_TEXT}) is taken: end a session that has a preview or a canvas, then show this page again.`
+    );
+  };
+
+  /**
+   * The origins session `owner`'s decision page is served on, which may frame
+   * its embeds: its own port on any name it is reached by (a LAN address, the
+   * tailnet's name, its HTTPS twin), and in host mode its name.
+   */
+  const ancestorsOf = (owner: string): string[] => {
+    const port = sessions.get(owner)?.port;
+    const origins =
+      port === undefined ? [] : [`http://*:${port}`, `https://*:${port}`];
+    if (settings.mode === "host" && settings.pattern) {
+      const pattern = parsePattern(settings.pattern);
+      if (pattern.key === "session" || port !== undefined) {
+        origins.push(
+          originFor(pattern, pattern.key === "port" ? (port as number) : owner)
+        );
+      }
+    }
+    return origins;
   };
 
   /** Each session that keeps a port and has no listener yet gets one on it (`bind`). */
@@ -1212,6 +1333,35 @@ export function createPreviewListeners(
         return { port, origin, host: new URL(origin).host, ...onTailnet };
       }
       return { port, ...onTailnet };
+    },
+
+    /**
+     * An embedded preview's origin (`key`, {@link embedKey}) for session
+     * `owner`'s decision page: its listener on a free preview port of its
+     * own, started when it has none, which that session's origins may
+     * frame; in host mode its whole origin too, named by its key or port.
+     */
+    embed(key: string, owner: string): PreviewAddress {
+      const held = embeds.get(key) ?? openEmbed(key, owner);
+      const { port } = held.listener;
+      const secure = tailnet.origin(port);
+      const onTailnet = secure ? { tailnet: secure } : {};
+      if (settings.mode === "host") {
+        const pattern = parsePattern(settings.pattern ?? "");
+        const origin = originFor(pattern, pattern.key === "port" ? port : key);
+        return { port, origin, host: new URL(origin).host, ...onTailnet };
+      }
+      return { port, ...onTailnet };
+    },
+
+    /** Session `owner`'s embeds stop with it: their keys, so their machines' listeners stop too. */
+    releaseEmbeds(owner: string): string[] {
+      const gone = [...embeds].filter(([, embed]) => embed.owner === owner);
+      for (const [key, embed] of gone) {
+        detach(embed.listener.stop(), "embedded preview listener stop");
+        embeds.delete(key);
+      }
+      return gone.map(([key]) => key);
     },
 
     /** The session ended: its listener stops and its port is free again. */

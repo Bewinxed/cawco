@@ -1148,16 +1148,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const mediaHeld = (owner: InstanceRow, program: BuiltProgram) => {
     const problems = program.read.artifacts.flatMap(({ component, id }) => {
       const held = db.get(id);
-      const kind = component === "Canvas" ? "canvas" : "page";
+      const kinds: ArtifactKind[] =
+        component === "Canvas" ? ["canvas"] : ["page", "preview", "sheet"];
       if (!held || held.instanceId !== owner.id) {
         return [
           `${component}("${id}"): this session's panel has no artifact ${id}.`,
         ];
       }
-      return held.kind === kind
+      return kinds.includes(held.kind)
         ? []
         : [
-            `${component}("${id}") is ${named(held)}: a ${component} shows a ${kind}.`,
+            `${component}("${id}") is ${named(held)}: a ${component} shows ${component === "Canvas" ? "a canvas" : "a page, a preview or a sheet"}.`,
           ];
     });
     if (problems.length > 0) {

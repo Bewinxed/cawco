@@ -122,9 +122,9 @@ export const decisionLibrary = <C>(
   );
   const Preview = define(
     "Preview",
-    "A page artifact of yours live in a frame: an animated mockup you made with artifact_create (kind page, html), say.",
+    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet.",
     z.object({
-      artifact: z.string().describe("The page's id."),
+      artifact: z.string().describe("Its id."),
       caption,
     })
   );

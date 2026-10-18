@@ -10,7 +10,12 @@ import type { ChoiceEntry } from "@cawco/core/choices";
 export const picks = $state<{ now: Record<string, ChoiceEntry> }>({ now: {} });
 
 /** An artifact a Canvas or Preview names, as the hub has it; null when it is gone. */
-export type MediaArtifact = { kind: string; name: string } | null;
+export type MediaArtifact = {
+  /** A dev server's preview or a sheet: the address of the origin the hub opened for it. */
+  embed?: string;
+  kind: string;
+  name: string;
+} | null;
 
 export const served = $state<{
   /** Each Image's file as written, to its address beside the page. */
