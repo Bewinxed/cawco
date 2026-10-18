@@ -131,7 +131,7 @@ const HOOK_ID = "lint-written";
 const BENCH_MACHINE = "machine-bench";
 /** The second machine: a Mac, offline, its keychain locked. */
 export const STUDIO_HOST = "studio";
-const STUDIO_MACHINE = "machine-studio-mac";
+export const STUDIO_MACHINE = "machine-studio-mac";
 /** The file Caw says he wrote in the cawco project's folder (his message's `files`). */
 const BRIEF_FILE = "notes/tray-brief.md";
 const BRIEF = `# The tray's brief
