@@ -263,8 +263,41 @@ public final class KitBadge: UIView {
     public enum Variant: Sendable { case plain, secondary, outline, attn, done, fail, live }
 
     private var label: KitLabel!
+    private var mark: GlyphView?
     private var row: UIStackView!
     private var trailing: NSLayoutConstraint!
+
+    /// Its variant, said anew (a count whose news changed): the ground and ink turn with it.
+    public var variant: Variant {
+        didSet { paint() }
+    }
+
+    /// A count's face (`num text-meta`): meta type in tabular figures, not label.
+    public var numeral = false {
+        didSet {
+            label.role = numeral ? TypeScale.typeMeta : TypeScale.typeLabel
+            label.tabular = numeral
+        }
+    }
+
+    /// The variant's ground and ink: the recess, or its status pair.
+    public var pair: (ground: UIColor, ink: UIColor) {
+        switch variant {
+        case .plain, .outline: (Palette.surfaceRecess, Palette.inkStrong)
+        case .secondary: (Palette.surfaceRecess, Palette.inkMuted)
+        case .attn: (Palette.statusAttnBg, Palette.statusAttnInk)
+        case .done: (Palette.statusDoneBg, Palette.statusDoneInk)
+        case .fail: (Palette.statusFailBg, Palette.statusFailInk)
+        case .live: (Palette.statusLiveBg, Palette.statusLiveInk)
+        }
+    }
+
+    private func paint() {
+        let (ground, ink) = pair
+        backgroundColor = ground
+        label.ink = ink
+        mark?.tintColor = ink
+    }
 
     /// A control standing inside the badge at its end (TaskLabels.svelte's
     /// remove button in the Badge): 2pt after the words, the badge's end
@@ -288,26 +321,23 @@ public final class KitBadge: UIView {
 
     /// `glyph`: the icon a badge leads with (`[&>svg]:size-3`, `gap-1`).
     public init(_ text: String, variant: Variant = .plain, glyph: Glyph? = nil) {
+        self.variant = variant
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusXs
         layer.cornerCurve = .continuous
-        let (ground, ink): (UIColor, UIColor) = switch variant {
-        case .plain, .outline: (Palette.surfaceRecess, Palette.inkStrong)
-        case .secondary: (Palette.surfaceRecess, Palette.inkMuted)
-        case .attn: (Palette.statusAttnBg, Palette.statusAttnInk)
-        case .done: (Palette.statusDoneBg, Palette.statusDoneInk)
-        case .fail: (Palette.statusFailBg, Palette.statusFailInk)
-        case .live: (Palette.statusLiveBg, Palette.statusLiveInk)
-        }
-        backgroundColor = ground
-        let label = KitLabel(TypeScale.typeLabel, ink: ink)
+        let label = KitLabel(TypeScale.typeLabel, ink: pair.ink)
         label.text = text
         self.label = label
         let row = UIStackView(arrangedSubviews: [label])
         row.spacing = Space.space1
         row.alignment = .center
-        if let glyph { row.insertArrangedSubview(GlyphView(glyph, size: 12, tint: ink), at: 0) }
+        if let glyph {
+            let mark = GlyphView(glyph, size: 12, tint: pair.ink)
+            self.mark = mark
+            row.insertArrangedSubview(mark, at: 0)
+        }
+        paint()
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
         self.row = row

@@ -90,11 +90,11 @@ final class StatusCell: HomeCell {
 // MARK: Work tabs
 
 /// The Working and Finished switch (WorkTabs.svelte's head): the folder tabs,
-/// each count a pill in its status hue, and the delegates switch at the end,
-/// the section's seam under the row.
+/// each count the kit's badge in its tab's status pair, and the delegates
+/// switch at the end, the section's seam under the row.
 final class TabsCell: HomeCell {
     let tabs = FolderTabs(HomeModel.Tab.allCases.map { FolderTabs.Tab(label: $0.label) }, selected: 0)
-    private let counts = [CountChip(), CountChip()]
+    private let counts = [KitBadge("", variant: .live), KitBadge("", variant: .done)]
     private let delegates = UIButton(type: .custom)
     private let delegatesGlyph = GlyphView(.structure, size: Size.iconMd)
     var onTab: (HomeModel.Tab) -> Void = { _ in }
@@ -105,14 +105,14 @@ final class TabsCell: HomeCell {
         didSet {
             guard tight != oldValue else { return }
             tabs.tight = tight
-            for chip in counts { chip.tight = tight }
         }
     }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        for (index, chip) in counts.enumerated() {
-            tabs.setTrail(chip, at: index)
+        for (index, badge) in counts.enumerated() {
+            badge.numeral = true
+            tabs.setTrail(badge, at: index)
         }
         tabs.onChoose = { [weak self] index in
             self?.onTab(HomeModel.Tab.allCases[index])
@@ -148,8 +148,25 @@ final class TabsCell: HomeCell {
 
     func configure(tab: HomeModel.Tab, working: Int, finished: Int, finishedFailed: Bool, delegatesOn: Bool) {
         tabs.select(tab == .working ? 0 : 1, animated: window != nil)
-        counts[0].configure(count: working, fill: Palette.countFillLive)
-        counts[1].configure(count: finished, fill: finishedFailed ? Palette.countFillFail : Palette.countFillDone)
+        show(working, on: counts[0])
+        counts[1].variant = finishedFailed ? .fail : .done
+        show(finished, on: counts[1])
+        #if DEBUG
+        // Each badge's pair as resolved in its scheme, and the numeral's contrast on its ground.
+        for (tab, badge) in zip(["working", "finished"], counts) {
+            let traits = badge.traitCollection
+            func rgb(_ color: UIColor) -> (text: String, luminance: Double) {
+                var (r, g, b, a) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+                color.resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a)
+                let linear = [r, g, b].map { v in v <= 0.04045 ? Double(v) / 12.92 : pow((Double(v) + 0.055) / 1.055, 2.4) }
+                return (String(format: "(%.0f,%.0f,%.0f a %.2f)", r * 255, g * 255, b * 255, a), 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2])
+            }
+            let ground = rgb(badge.pair.ground)
+            let ink = rgb(badge.pair.ink)
+            let ratio = (max(ground.luminance, ink.luminance) + 0.05) / (min(ground.luminance, ink.luminance) + 0.05)
+            HomeViewController.probeLog.notice("home count \(tab, privacy: .public) \(badge.text, privacy: .public) \(traits.userInterfaceStyle == .dark ? "dark" : "light", privacy: .public): ground \(ground.text, privacy: .public) ink \(ink.text, privacy: .public) \(String(format: "%.2f", ratio), privacy: .public):1")
+        }
+        #endif
         delegatesGlyph.glyph = delegatesOn ? .structureOn : .structure
         delegatesGlyph.tintColor = delegatesOn ? Palette.inkStrong : Palette.inkMuted
         delegates.accessibilityValue = delegatesOn ? "Shown" : "Hidden"
@@ -159,60 +176,17 @@ final class TabsCell: HomeCell {
     func scrub(from: HomeModel.Tab, to: HomeModel.Tab, progress: Double) {
         tabs.scrub(from: from == .working ? 0 : 1, to: to == .working ? 0 : 1, progress: progress)
     }
-}
 
-/// A tab's count (WorkTabs.svelte `.count`): a pill solid in its status hue, chosen or
-/// not, its numeral in `count-fill-ink`; it pops as it changes.
-final class CountChip: UIView {
-    private let figure = KitLabel(TypeScale.typeMeta)
-    private var count = -1
-    private var sides: [NSLayoutConstraint] = []
-
-    /// WorkTabs.svelte `.count`: `padding-inline: 3px − tight × 0.03`.
-    var tight = 0.0 {
-        didSet {
-            let pad = 3 - tight * 0.03
-            sides[0].constant = pad
-            sides[1].constant = -pad
-        }
-    }
-
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerRadius = Radius.radiusXs
-        layer.cornerCurve = .continuous
-        figure.tabular = true
-        figure.ink = Palette.countFillInk
-        figure.textAlignment = .center
-        addSubview(figure)
-        sides = [
-            figure.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-            figure.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
-        ]
-        NSLayoutConstraint.activate(sides + [
-            figure.centerYAnchor.constraint(equalTo: centerYAnchor),
-            widthAnchor.constraint(greaterThanOrEqualToConstant: 18),
-            heightAnchor.constraint(equalToConstant: 18),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("CountChip is built in code")
-    }
-
-    /// `fill`: its tab's `count-fill-*`.
-    func configure(count: Int, fill: UIColor) {
-        backgroundColor = fill
-        guard count != self.count else {
+    /// `count` on its tab's badge, which pops as it changes (WorkTabs.svelte's `{#key count}`).
+    private func show(_ count: Int, on badge: KitBadge) {
+        let text = "\(count)"
+        guard text != badge.text else {
             return
         }
-        let popping = self.count >= 0 && !UIAccessibility.isReduceMotionEnabled
-        self.count = count
-        figure.text = "\(count)"
+        let popping = !badge.text.isEmpty && !UIAccessibility.isReduceMotionEnabled
+        badge.text = text
         if popping {
-            Reflow.pop(figure)
+            Reflow.pop(badge)
         }
     }
 }

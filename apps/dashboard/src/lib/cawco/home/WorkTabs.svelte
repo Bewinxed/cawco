@@ -4,7 +4,7 @@
    * phone home's, reading one remembered choice (work-tab). The header is the
    * session tabs' own folder tabs (ui/fluid-tabs, hosted the way PaneTabs
    * hosts them in a bar: no shelf, the chosen sheet the only mark), each a
-   * label and a count, a pill solid in its status hue.
+   * label and a count, the kit's badge in its tab's status pair.
    *
    * The rows under a machine's header change in a relay (motion/list-swap):
    * the old lines leave top down, and each new line arrives the moment the
@@ -49,6 +49,7 @@
    * stands in as a quiet context line, not counted and taking no room.
    */
   import { flushSync, untrack } from "svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
   import {
@@ -386,8 +387,15 @@
    */
   const topOf = (tab: WorkTab): InstanceRow[] =>
     allOf(tab).filter((row) => !isDelegate(row));
-  /** Whether a top-level session listed as finished failed: its numeral says so. */
+  /** Whether a top-level session listed as finished failed: its count says so. */
   const finishedFailed = $derived(topOf("finished").some(isFailed));
+  /** A tab's count's status pair (DESIGN.md, Badge). */
+  const pairOf = (tab: WorkTab): "live" | "done" | "fail" => {
+    if (tab === "working") {
+      return "live";
+    }
+    return finishedFailed ? "fail" : "done";
+  };
 
   let plan = $state.raw<Plan | null>(null);
   const swap = new ListSwap<Line>();
@@ -749,14 +757,13 @@
                 <!-- No count until it is read: a 0 here would be a claim. -->
                 {#if !waiting}
                   {#key count}
-                    <span
+                    <Badge
                       data-num
                       data-slot="count"
-                      class="num count"
-                      data-failed={(tab.id === "finished" && finishedFailed) ||
-                        undefined}
+                      class="num text-meta"
                       data-flip="pop"
-                      data-tab={tab.id}>{count}</span
+                      data-tab={tab.id}
+                      variant={pairOf(tab.id)}><span>{count}</span></Badge
                     >
                   {/key}
                 {/if}
@@ -1007,34 +1014,13 @@
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .hit) {
     flex-shrink: 0;
   }
-  /* The count, a pill solid in its tab's status hue (count-fill-*), chosen
-     or not: it reads as a pill on whatever sheet it stands on, chosen,
-     recessed, hovered or pressed, and its numeral (count-fill-ink) holds
-     on it. A 6% wash of the ink read as a smudge on the sheet (owner: "the
-     count background is styled in an unreadable way"). */
-  .count {
-    --fill: var(--count-fill-live);
-    display: inline-grid;
-    place-items: center;
-    min-inline-size: 18px;
-    block-size: 18px;
-    padding-inline: calc(3px - var(--tight) * 0.03);
-    margin-inline-start: var(--space-1);
+  /* The count is the kit's badge in its tab's status pair (DESIGN.md,
+     Badge), its numeral meta in tabular figures: only its place in the tab
+     is the tab's. */
+  .head :global([data-slot="count"]) {
+    margin-inline: var(--space-1) max(0px, 2px - var(--tight) * 0.06);
     /* A press on the count is a press on its tab: it reaches the hit. */
     pointer-events: none;
-    margin-inline-end: max(0px, 2px - var(--tight) * 0.06);
-    border-radius: var(--radius-xs);
-    background: var(--fill);
-    color: var(--count-fill-ink);
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-  }
-  .count[data-tab="finished"] {
-    --fill: var(--count-fill-done);
-  }
-  /* Something listed as finished failed: the pill says so, chosen or not. */
-  .count[data-failed] {
-    --fill: var(--count-fill-fail);
   }
   /* The corner actions' icon button (Sidebar .head-action), at one size
      whatever it shows. Pressed, its glyph turns solid in strong ink: no

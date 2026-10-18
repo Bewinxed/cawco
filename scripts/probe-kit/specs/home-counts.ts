@@ -1,8 +1,9 @@
 /**
  * The home's Working count is of top-level sessions only (owner: "the
- * working count shouldn't count delegates"), and every count is a pill that
- * reads against its sheet, its numeral readable on it (owner: "the count
- * background is styled in an unreadable way").
+ * working count shouldn't count delegates"), and every count is the kit's
+ * Badge in its tab's status pair, its numeral readable on it (owner: "the
+ * count background is styled in an unreadable way"; "we have a design
+ * system").
  *
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
  * mock model) with one orchestrator holding three delegates (each spawned
@@ -14,15 +15,20 @@
  *     and on;
  *  b. each count, in each state a person puts it in (chosen and not, at
  *     rest, the unchosen one hovered and pressed, the chosen one pressed,
- *     and Finished failed, chosen and not): the pill holds 3:1 (WCAG 1.4.11)
- *     against the ground beside it and its numeral 4.5:1 on the pill. Read
- *     twice: from the engine (the page under the tab, the tab's sheet
- *     `.fold .sheet` and the count's own computed colours, rasterised
- *     through a canvas to the sRGB the page draws), and from the pixels
- *     drawn (the ground just past the pill's end, the pill's fill inside
- *     its start, and its numeral's strongest pixel). Finished's failure is
- *     the count's own `data-failed`, set on the drawn element: no turn of
- *     the mock fails a session.
+ *     and Finished failed, chosen and not): its computed ground and ink are
+ *     its pair's (`--status-live-*` on Working, `--status-done-*` on
+ *     Finished, `--status-fail-*` when anything finished failed), and its
+ *     numeral holds 4.5:1 on the ground. Read twice: from the engine (the
+ *     page under the tab, the tab's sheet `.fold .sheet` and the count's own
+ *     computed colours, rasterised through a canvas to the sRGB the page
+ *     draws), and from the numeral's strongest pixel. The badge against the
+ *     sheet beside it is noted, not held to a ratio: the design system's
+ *     badge is a tint, and its numeral carries the count. Finished's failure
+ *     is the Badge's `fail` variant on the drawn element (its done pair's
+ *     classes swapped for the fail pair's, all the variant changes): no turn
+ *     of the mock fails a session;
+ *  c. on the narrowest rail (Shell's RAIL_MIN, 216px) with three-digit
+ *     counts, both labels stand whole beside their counts.
  *
  *   bun scripts/probe-kit/run.ts home-counts
  */
@@ -30,11 +36,13 @@
 import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { box } from "../geom";
-import { at, capture, contrast, peakContrast, type Rgb } from "../ink";
+import { capture, contrast, peakContrast, type Rgb } from "../ink";
 import { type Kit, open, type Spec, settle, THEMES } from "../kit";
 
 /** A prompt the mock answers for minutes: its session stays working. */
 const WORK = "WORK";
+/** Shell.svelte's RAIL_MIN. */
+const RAIL_MIN = 216;
 
 const respond = (request: Seen): Reply =>
   // The harness opens the person's words with its own reminder.
@@ -49,57 +57,86 @@ const respond = (request: Seen): Reply =>
 interface Computed {
   ground: Rgb;
   numeral: Rgb;
+  pairGround: Rgb;
+  pairInk: Rgb;
   pill: Rgb;
   text: string;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-/** `tab`'s count as the engine says it is drawn, over the page under its tab. */
-function computed(page: Page, tab: string): Promise<Computed | null> {
-  return page.evaluate((selector): Computed | null => {
-    const el = document.querySelector(selector);
-    const item = el?.closest(".ff-tab");
-    if (!(el && item)) {
-      return null;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = 1;
-    canvas.height = 1;
-    const pen = canvas.getContext("2d", { willReadFrequently: true });
-    const paint = (stack: string[]): Rgb => {
-      pen?.clearRect(0, 0, 1, 1);
-      for (const layer of stack) {
-        if (pen) {
-          pen.fillStyle = layer;
-          pen.fillRect(0, 0, 1, 1);
+/**
+ * `tab`'s count as the engine says it is drawn, over the page under its tab,
+ * and the status pair `pair` resolved on the same page.
+ */
+function computed(
+  page: Page,
+  tab: string,
+  pair: string
+): Promise<Computed | null> {
+  return page.evaluate(
+    ([selector, name]): Computed | null => {
+      const el = document.querySelector(selector);
+      const item = el?.closest(".ff-tab");
+      if (!(el && item)) {
+        return null;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const pen = canvas.getContext("2d", { willReadFrequently: true });
+      const paint = (stack: string[]): Rgb => {
+        pen?.clearRect(0, 0, 1, 1);
+        for (const layer of stack) {
+          if (pen) {
+            pen.fillStyle = layer;
+            pen.fillRect(0, 0, 1, 1);
+          }
+        }
+        const [r = 0, g = 0, b = 0] = pen?.getImageData(0, 0, 1, 1).data ?? [];
+        return [r, g, b];
+      };
+      // The first opaque ground under the tab: the rail's or the home's.
+      let under = "white";
+      for (let up = item.parentElement; up; up = up.parentElement) {
+        const bg = getComputedStyle(up).backgroundColor;
+        if (paint(["black", bg]).join() === paint(["white", bg]).join()) {
+          under = bg;
+          break;
         }
       }
-      const [r = 0, g = 0, b = 0] = pen?.getImageData(0, 0, 1, 1).data ?? [];
-      return [r, g, b];
-    };
-    // The first opaque ground under the tab: the rail's or the home's.
-    let under = "white";
-    for (let up = item.parentElement; up; up = up.parentElement) {
-      const bg = getComputedStyle(up).backgroundColor;
-      if (paint(["black", bg]).join() === paint(["white", bg]).join()) {
-        under = bg;
-        break;
-      }
-    }
-    const sheet = item.querySelector(".fold .sheet");
-    const layers = [
-      under,
-      sheet ? getComputedStyle(sheet).fill : "transparent",
-    ];
-    const pill = [...layers, getComputedStyle(el).backgroundColor];
-    return {
-      ground: paint(layers),
-      pill: paint(pill),
-      numeral: paint([...pill, getComputedStyle(el).color]),
-      text: el.textContent ?? "",
-    };
-  }, `[data-slot="count"][data-tab="${tab}"]`);
+      const sheet = item.querySelector(".fold .sheet");
+      const layers = [
+        under,
+        sheet ? getComputedStyle(sheet).fill : "transparent",
+      ];
+      const pill = [...layers, getComputedStyle(el).backgroundColor];
+      // The pair as the tokens resolve it here, on an element of its own.
+      const probe = document.createElement("span");
+      probe.style.background = `var(--status-${name}-bg)`;
+      probe.style.color = `var(--status-${name}-ink)`;
+      item.append(probe);
+      const pairGround = paint([
+        ...layers,
+        getComputedStyle(probe).backgroundColor,
+      ]);
+      const pairInk = paint([
+        ...layers,
+        getComputedStyle(probe).backgroundColor,
+        getComputedStyle(probe).color,
+      ]);
+      probe.remove();
+      return {
+        ground: paint(layers),
+        pill: paint(pill),
+        numeral: paint([...pill, getComputedStyle(el).color]),
+        pairGround,
+        pairInk,
+        text: el.textContent ?? "",
+      };
+    },
+    [`[data-slot="count"][data-tab="${tab}"]`, pair] as const
+  );
 }
 
 /**
@@ -209,10 +246,10 @@ const spec: Spec = {
         page
           .locator(`.ff-tab:has([data-slot="count"][data-tab="${tab}"]) .hit`)
           .first();
-      /** Reads `tab`'s count in the state the page stands in, both ways. */
-      const read = async (tab: string, state: string) => {
+      /** Reads `tab`'s count, in pair `pair`, in the state the page stands in. */
+      const read = async (tab: string, pair: string, state: string) => {
         await settle(page);
-        const engine = await computed(page, tab);
+        const engine = await computed(page, tab, pair);
         const at0 = await box(page, `[data-slot="count"][data-tab="${tab}"]`);
         if (!(engine && at0)) {
           kit.check(
@@ -227,23 +264,21 @@ const spec: Spec = {
           width: at0.width + 8,
           height: at0.height,
         });
-        const mid = at0.top + at0.height / 2;
-        // Just past the pill's end, in the tab's own padding; and the pill's
-        // fill inside its start, before the numeral's first stroke.
-        const groundPx = at(raster, at0.right + 2, mid);
-        const pillPx = at(raster, at0.left + 1.5, mid);
         const numeralPeak = peakContrast(raster, at0);
         const label = `(b) ${theme}: the ${tab} count, ${state}`;
         kit.check(
-          `${label}: the pill holds 3:1 on its ground`,
-          contrast(engine.pill, engine.ground) >= 3 &&
-            contrast(pillPx, groundPx) >= 3,
-          `computed ${r2(contrast(engine.pill, engine.ground))}:1 (pill rgb(${engine.pill}) on rgb(${engine.ground})), drawn ${r2(contrast(pillPx, groundPx))}:1 (rgb(${pillPx}) on rgb(${groundPx}))`
+          `${label}: it is the ${pair} badge`,
+          engine.pill.join() === engine.pairGround.join() &&
+            engine.numeral.join() === engine.pairInk.join(),
+          `ground rgb(${engine.pill}), ink rgb(${engine.numeral}); --status-${pair}-bg rgb(${engine.pairGround}), --status-${pair}-ink rgb(${engine.pairInk})`
         );
         kit.check(
-          `${label}: its numeral holds 4.5:1 on the pill`,
+          `${label}: its numeral holds 4.5:1 on the badge`,
           contrast(engine.numeral, engine.pill) >= 4.5 && numeralPeak >= 4.5,
-          `computed ${r2(contrast(engine.numeral, engine.pill))}:1 (rgb(${engine.numeral})), drawn ${r2(numeralPeak)}:1 at its strongest pixel, reads ${engine.text}`
+          `computed ${r2(contrast(engine.numeral, engine.pill))}:1 (rgb(${engine.numeral}) on rgb(${engine.pill})), drawn ${r2(numeralPeak)}:1 at its strongest pixel, reads ${engine.text}`
+        );
+        kit.note(
+          `${label}: the badge on its sheet, ${r2(contrast(engine.pill, engine.ground))}:1 (rgb(${engine.pill}) on rgb(${engine.ground}))`
         );
       };
       const choose = async (tab: string) => {
@@ -263,30 +298,78 @@ const spec: Spec = {
 
       await choose("working");
       await page.mouse.move(0, 0);
-      await read("working", "chosen, at rest");
-      await read("finished", "not chosen, at rest");
+      await read("working", "live", "chosen, at rest");
+      await read("finished", "done", "not chosen, at rest");
       await hit("finished").hover();
-      await read("finished", "not chosen, hovered");
-      await pressed("finished", () => read("finished", "not chosen, pressed"));
-      await choose("working");
-      await pressed("working", () => read("working", "chosen, pressed"));
-      // Finished's failure, on the count the page draws.
-      await page.evaluate(() =>
-        document
-          .querySelector('[data-slot="count"][data-tab="finished"]')
-          ?.setAttribute("data-failed", "")
-      );
-      await page.mouse.move(0, 0);
-      await read("finished", "failed, not chosen, at rest");
-      await hit("finished").hover();
-      await read("finished", "failed, not chosen, hovered");
+      await read("finished", "done", "not chosen, hovered");
       await pressed("finished", () =>
-        read("finished", "failed, not chosen, pressed")
+        read("finished", "done", "not chosen, pressed")
+      );
+      await choose("working");
+      await pressed("working", () =>
+        read("working", "live", "chosen, pressed")
+      );
+      // Finished's failure: the drawn badge in the fail variant.
+      await page.evaluate(() => {
+        const el = document.querySelector(
+          '[data-slot="count"][data-tab="finished"]'
+        );
+        if (el) {
+          el.className = el.className.replaceAll("status-done", "status-fail");
+        }
+      });
+      await page.mouse.move(0, 0);
+      await read("finished", "fail", "failed, not chosen, at rest");
+      await hit("finished").hover();
+      await read("finished", "fail", "failed, not chosen, hovered");
+      await pressed("finished", () =>
+        read("finished", "fail", "failed, not chosen, pressed")
       );
       await choose("finished");
       await page.mouse.move(0, 0);
-      await read("finished", "failed, chosen, at rest");
-      await read("working", "not chosen, at rest (Finished chosen)");
+      await read("finished", "fail", "failed, chosen, at rest");
+      await read("working", "live", "not chosen, at rest (Finished chosen)");
+
+      // (c) The narrowest rail, with counts three digits long.
+      await page.evaluate((w) => {
+        document.documentElement.style.setProperty("--rail-w", `${w}px`);
+        for (const el of document.querySelectorAll(
+          '[data-slot="count"] > span'
+        )) {
+          el.textContent = "100";
+        }
+      }, RAIL_MIN);
+      await settle(page);
+      const fit = await page.evaluate(() =>
+        [...document.querySelectorAll(".work .head")].map((head) => {
+          const labels = [
+            ...head.querySelectorAll(
+              '[data-slot="tab-item-label"] > [data-slot="text"]:not(.strong)'
+            ),
+          ].map((el) => ({
+            text: el.textContent ?? "",
+            clipped: el.scrollWidth > el.clientWidth,
+          }));
+          const list = head.querySelector(".ff-tabs-list");
+          const delegates = head.querySelector("button[aria-label=Delegates]");
+          const listEnd = list?.getBoundingClientRect().right ?? 0;
+          const switchStart = delegates?.getBoundingClientRect().left ?? 0;
+          return {
+            width: Math.round(head.getBoundingClientRect().width),
+            labels,
+            clear: switchStart - listEnd,
+          };
+        })
+      );
+      for (const head of fit) {
+        kit.check(
+          `(c) ${theme}: a ${head.width}px head at the narrowest rail stands both labels whole beside 100 and 100`,
+          head.labels.length === 2 &&
+            head.labels.every((label) => !label.clipped) &&
+            head.clear >= 0,
+          `labels ${JSON.stringify(head.labels)}, the tabs end ${r2(head.clear)}px before the Delegates switch`
+        );
+      }
     }
   },
 };

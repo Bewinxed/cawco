@@ -239,12 +239,6 @@ public enum Palette {
     /// A near or over row's only tint: a faint wash of its status ink (owner: "the tints for yellow/red are too overwhelming").
     public static let meterWashNear = Palette.named("meter-wash-near")
     public static let meterWashOver = Palette.named("meter-wash-over")
-    /// A work tab's count pill (WorkTabs, the app's CountChip): solid in its status hue, chosen or not, so the pill reads against any sheet it stands on (3:1 non-text or more on the chosen sheet, the recess, hover and press, in both themes) and its numeral in count-fill-ink holds 4.5:1 or more on it. The 6% and 10% washes it replaces measured about 1.05:1 against the sheet and read as a smudge.
-    public static let countFillLive = Palette.named("count-fill-live")
-    public static let countFillDone = Palette.named("count-fill-done")
-    public static let countFillFail = Palette.named("count-fill-fail")
-    /// A count pill's numeral: the lightest neutral by day, the darkest at night, against the status fill.
-    public static let countFillInk = Palette.named("count-fill-ink")
     public static let presenceOnline = Palette.named("presence-online")
     public static let presenceAway = Palette.named("presence-away")
     public static let presenceOff = Palette.named("presence-off")
