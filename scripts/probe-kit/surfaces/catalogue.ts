@@ -1399,7 +1399,10 @@ export const SURFACES: Surface[] = [
       { name: "open", act: openJump, root: LAYER },
       {
         // A word typed, its results in, then ↓ to a session's row and → on
-        // it: its peek in place (Finder: → peeks the active row).
+        // it: its peek in place (Finder: → peeks the active row). All its
+        // results: the names come first and the machines' answers after
+        // (Finder's `searching` mark stands until they have), and rows
+        // that came in after the → moved the list and shut the peek.
         name: "peek",
         act: async (page) => {
           await openJump(page);
@@ -1409,6 +1412,10 @@ export const SURFACES: Surface[] = [
             .filter({ visible: true })
             .first()
             .waitFor();
+          await page
+            .locator("[data-slot=searching]")
+            .first()
+            .waitFor({ state: "detached" });
           await page.keyboard.press("ArrowDown");
           await page.keyboard.press("ArrowRight");
           await page.locator(FIND_PEEK).first().waitFor();
