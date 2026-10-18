@@ -598,7 +598,34 @@ function forcedSpans(
   return { x, y };
 }
 
-/** A forced state's changes against the other's, on the element or what it holds. */
+/**
+ * What `side` draws at a forced change's code with no change of its own:
+ * the element's (or its pseudo-element's) value at rest.
+ */
+function restAt(
+  on: string,
+  code: string,
+  side: Map<string, Row>
+): string | number | undefined {
+  const n = Number(code);
+  const row = side.get(on);
+  if (n >= 2000) {
+    return row?.after?.[n - 2000];
+  }
+  if (n >= 1000) {
+    return row?.before?.[n - 1000];
+  }
+  return row?.values[n];
+}
+
+/**
+ * A forced state's changes against the other's, on the element or what it
+ * holds: what each side draws in the state, its change or else its own
+ * value at rest. A change one side makes to the value the other already
+ * stands at draws the same: a `background` shorthand on hover resets the
+ * position to 0% 0% where the other side's hover sets only the colour over
+ * a position of 0% 0% at rest.
+ */
 function forcedDifferences(
   at: string,
   props: string[],
@@ -619,7 +646,9 @@ function forcedDifferences(
     const where = on === key ? "" : ` on ${on.slice(key.length + 3) || on}`;
     for (const code of new Set([...Object.keys(cx), ...Object.keys(cy)])) {
       const spans = forcedSpans(props, on, code, [cx, cy], sides);
-      if (!same(forcedProp(props, code), cx[code], cy[code], tally, spans)) {
+      const drawnX = cx[code] ?? restAt(on, code, sides[0]);
+      const drawnY = cy[code] ?? restAt(on, code, sides[1]);
+      if (!same(forcedProp(props, code), drawnX, drawnY, tally, spans)) {
         lines.push(
           `${at} · ${named}${where} ${forcedProp(props, code)} · ${cx[code] ?? "(as at rest)"} → ${cy[code] ?? "(as at rest)"}`
         );
