@@ -218,14 +218,15 @@ const judgeIn = async (id, tool, input, directory) => {
   if (!verdict.ok) throw new Error(verdict.reason);
 };
 
-// The file a call's result says this server saved: its metadata names it
-// (\`truncated\`, \`outputPath\`) and its content's hint names it again
-// ("full output saved to <file>"), in this server's tool-output dir.
+// The file a call's result says this server saved, in this server's
+// tool-output dir: its metadata names it (\`truncated\`, \`outputPath\`).
+// Its content names the path again for the model, whatever words go with it,
+// and that path is what a copy replaces.
 const contentOf = (result) => (Array.isArray(result.content) ? result.content : [{ type: "text", text: String(result.content ?? "") }]);
 const savedOutputOf = (result) => {
   const file = result?.metadata?.outputPath;
   if (result?.metadata?.truncated !== true || typeof file !== "string" || dirname(file) !== toolOutput) return undefined;
-  return contentOf(result).some((block) => block?.type === "text" && block.text.includes("full output saved to " + file)) ? file : undefined;
+  return file;
 };
 // The result with the output it saved copied into its session's own folder
 // in workspace \`id\` (the agent's workspaceSpillDir, made as the session
