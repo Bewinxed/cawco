@@ -143,12 +143,13 @@ const wholeFrom = (
  * Days a project's fact line may go unused (no brief carried it, no note
  * corroborated it) before a curator run proposes moving it to
  * `knowledge/archive/` (memory.ts). The default is the replay's pick
- * (scripts/probe-kit/specs/memory-replay.ts, 2026-10-18: this repository's
- * 539 curated lines, dated over 61 days, against 4,384 commits): with a use
- * as a later commit sharing four words, 30 days archives 19 lines (3.5%), 60
- * days 3, 90 days none under any reading of use. The owner's rule is "fold
- * first; archive a fact only after long disuse": 90 is the first candidate
- * that archives nothing still in use here.
+ * (scripts/probe-kit/specs/memory-replay.ts, 2026-10-18): over the 974
+ * bullet lines this repository's curated docs held since 2025-12-31, a use
+ * being a commit that shares three words with a line, 30 days archives 54
+ * lines of which 16 were needed again, 45 days 38 (6), 60 days 29 (3), and
+ * 60, 90 and 180 days the same 29 (3): the cost is at its floor from 60 on.
+ * The owner's rule is "fold first; archive a fact only after long disuse",
+ * so the default sits on that floor with room: 90.
  */
 export const MEMORY_ARCHIVE_DAYS = wholeFrom(
   CAWCO_ENV.memoryArchiveDays,

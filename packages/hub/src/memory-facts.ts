@@ -43,8 +43,10 @@ export const NOTE_ID = /^n-\d{8}-\d{6}-[0-9a-f]{6}$/;
 export const BRAND = /^knowledge\/brand(?:\/|[^/]*\.md$)/i;
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
-/** A fact line: its words, then one parenthesis of fields at its end. */
-const FACT = /^- (.+?) \(([^()]*)\)\s*$/;
+const TRAILING_SPACE = /\s+$/;
+/** One source in `from`: a note id, or a file's prose before it became fact lines. */
+const SOURCE =
+  /^(n-\d{8}-\d{6}-[0-9a-f]{6}|knowledge\/\S+\.md \(before facts\))(?:\s+|$)/;
 const HEADING = /^#{1,6}\s+(.*)$/;
 const SPACES = /\s+/g;
 const FIELD_SPLIT = /\s*,\s*/;
@@ -131,12 +133,11 @@ const readField = (
     return;
   }
   if (word === "from") {
-    const ids = value.split(" ").filter(Boolean);
-    const bad = ids.filter((id) => !NOTE_ID.test(id));
-    if (ids.length === 0 || bad.length > 0) {
-      return `\`from\` holds no note ids${bad.length > 0 ? `: ${bad.join(" ")}` : ""}`;
+    const sources = sourcesIn(value);
+    if (typeof sources === "string") {
+      return sources;
     }
-    fields.from = ids;
+    fields.from = sources;
     return;
   }
   if (word === "replaced" && rest[0] === "by") {
@@ -148,6 +149,24 @@ const readField = (
     return;
   }
   return `"${part}" is not since, until, from, used or replaced by`;
+};
+
+/** A file's prose as a source: what its lines rested on before they were fact lines. */
+export const beforeFacts = (path: string): string => `${path} (before facts)`;
+
+/** The sources a `from` names, each a note id or a file's prose before it became fact lines; or why they do not read. */
+const sourcesIn = (value: string): string[] | string => {
+  const sources: string[] = [];
+  let rest = value.trim();
+  while (rest) {
+    const source = SOURCE.exec(rest);
+    if (!source?.[1]) {
+      return `\`from\` holds no note id at "${rest}"`;
+    }
+    sources.push(source[1]);
+    rest = rest.slice(source[0].length);
+  }
+  return sources.length > 0 ? sources : "`from` holds no note ids";
 };
 
 /** The parenthesis's fields, or why they do not read. */
@@ -183,23 +202,48 @@ const sectionNamed = (heading: string): FactSection => {
   return name === "conflict" ? "conflict" : "current";
 };
 
+/**
+ * A line's words and the parenthesis of fields at its end: the last
+ * parenthesis whose brackets close at the line's end, so words may hold
+ * parentheses of their own, and a source may (`(before facts)`).
+ */
+const splitFact = (
+  raw: string
+): { inside: string; text: string } | undefined => {
+  const line = raw.replace(TRAILING_SPACE, "");
+  if (!(line.startsWith("- ") && line.endsWith(")"))) {
+    return;
+  }
+  let depth = 0;
+  for (let at = line.length - 1; at >= 2; at -= 1) {
+    depth += line[at] === ")" ? 1 : 0;
+    depth -= line[at] === "(" ? 1 : 0;
+    if (depth === 0) {
+      const text = line.slice(2, at).trim();
+      return line[at - 1] === " " && text
+        ? { text, inside: line.slice(at + 1, -1) }
+        : undefined;
+    }
+  }
+};
+
 /** One line in `section`, read: its words and fields, or why it does not read. */
 const readFactLine = (
   raw: string,
   section: FactSection
 ): { fields: Fields; text: string } | string => {
-  const fact = FACT.exec(raw);
+  const fact = splitFact(raw);
   if (!fact) {
     return "not a fact line: `- <fact> (since <date>, from <note ids>, …)`";
   }
-  const fields = fieldsOf(fact[2] ?? "");
+  const fields = fieldsOf(fact.inside);
   if (typeof fields === "string") {
     return fields;
   }
   if (section === "formerly" && !(fields.until && fields.replacedBy)) {
     return "a Formerly line needs `until` and `replaced by`";
   }
-  return { fields, text: (fact[1] ?? "").trim() };
+  return { fields, text: fact.text };
 };
 
 /** Every fact line of a file, its description, and the lines that do not read. */
@@ -718,3 +762,110 @@ export const unusedFacts = (
 /** Every note id a set of files' fact lines rest on: what a change must keep. */
 export const sourcesOf = (files: FactFile[]): Set<string> =>
   new Set(files.flatMap((file) => file.facts.flatMap((fact) => fact.from)));
+
+// --- prose from before fact lines ---------------------------------------------------
+
+/**
+ * Whether a fact file is still prose: written before fact lines, it holds
+ * none, only lines that do not read. Its conversion is proposed as a curator
+ * run starts (memory.ts `proposeConversions`); until the person approves it,
+ * a brief carries it as one block, marked (memory.ts `contextFor`).
+ */
+export const isProse = (file: FactFile): boolean =>
+  file.facts.length === 0 && file.unreadable.length > 0;
+
+const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.*)$/;
+const CONTINUED = /^\s+\S/;
+const FENCE = /^\s*(?:```|~~~)/;
+
+/** One claim of a prose file: its words on one line, and the file lines they came from. */
+interface ProseUnit {
+  heading: boolean;
+  lines: number[];
+  words: string[];
+}
+
+/**
+ * A prose file's claims, in order: each list item (with the lines it
+ * continues onto), each paragraph and each fenced block is one; a heading
+ * after the first line stays a heading; the first line, a heading, is the
+ * file's description, otherwise a claim like the rest.
+ */
+const proseUnits = (content: string): ProseUnit[] => {
+  const units: ProseUnit[] = [];
+  let open: ProseUnit | undefined;
+  let fenced = false;
+  let kind: "item" | "paragraph" = "paragraph";
+  const close = () => {
+    if (open) {
+      units.push(open);
+    }
+    open = undefined;
+  };
+  for (const [index, raw] of content.split("\n").entries()) {
+    const line = index + 1;
+    if (FENCE.test(raw)) {
+      fenced = !fenced;
+      open ??= { heading: false, lines: [], words: [] };
+      open.lines.push(line);
+      open.words.push(raw.trim());
+      continue;
+    }
+    if (fenced) {
+      open?.lines.push(line);
+      open?.words.push(raw.trim());
+      continue;
+    }
+    const item = LIST_ITEM.exec(raw);
+    if (raw.trim() === "" || HEADING.test(raw) || item) {
+      close();
+      if (HEADING.test(raw)) {
+        units.push({ heading: true, lines: [line], words: [raw.trim()] });
+      } else if (item) {
+        kind = "item";
+        open = { heading: false, lines: [line], words: [item[1] ?? ""] };
+      }
+      continue;
+    }
+    if (open && (kind === "paragraph" || CONTINUED.test(raw))) {
+      open.lines.push(line);
+      open.words.push(raw.trim());
+      continue;
+    }
+    close();
+    kind = "paragraph";
+    open = { heading: false, lines: [line], words: [raw.trim()] };
+  }
+  close();
+  return units.filter((unit) => unit.words.join(" ").trim() !== "");
+};
+
+/**
+ * A prose file rewritten as fact lines, word for word: every claim one line,
+ * `since` the newest day any of its lines was written (`writtenOn`, git
+ * blame or the file's mtime), `from` the file's prose before facts. Its
+ * headings stay; its first line, when a heading, is its description, else
+ * the file gets one and that line is a claim like the rest.
+ */
+export const factsFromProse = (
+  path: string,
+  content: string,
+  writtenOn: (line: number) => string
+): string => {
+  const units = proseUnits(content);
+  const [first] = units;
+  const description =
+    first?.heading === true
+      ? (first.words[0] ?? path)
+      : `${path.slice(KNOWLEDGE_DIR.length + 1, -".md".length)}: its facts, from its prose.`;
+  const body = (first?.heading === true ? units.slice(1) : units).map((unit) =>
+    unit.heading
+      ? `\n${unit.words[0]}\n`
+      : renderFact({
+          text: unit.words.join(" ").replace(SPACES, " ").trim(),
+          since: unit.lines.map(writtenOn).sort().at(-1) ?? writtenOn(1),
+          from: [beforeFacts(path)],
+        })
+  );
+  return `${description}\n\n${body.join("\n")}\n`.replace(/\n{3,}/g, "\n\n");
+};

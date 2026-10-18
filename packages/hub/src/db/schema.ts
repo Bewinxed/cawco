@@ -3723,6 +3723,39 @@ export const sessionProse = sqliteTable(
 );
 
 /**
+ * The project sessions whose stored transcripts were cut into
+ * `session_prose` after the fact (session-prose.ts `backfill`): one row per
+ * session done, with how many messages it gave, so a backfill stopped part
+ * way resumes where it was.
+ */
+export const proseBackfills = sqliteTable("prose_backfills", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  at: timestamp("at").notNull(),
+  messages: integer("messages").notNull(),
+});
+
+/**
+ * A knowledge file's prose the person declined to have rewritten as fact
+ * lines (memory.ts `proposeConversions`), by the hash of the words declined:
+ * its rewrite is proposed again only once the file says something else.
+ */
+export const declinedRewrites = sqliteTable(
+  "declined_rewrites",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    /** The declined prose, hashed (memory-facts.ts `factKey` of the whole file). */
+    words: text("words").notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.path] })]
+);
+
+/**
  * What became of one of Caw's shell or edit calls (lead-gate.ts): `asked`
  * while it waits on your Approve card, `ran` once it was let run (its exit
  * once its result came), `refused` by the hub's rules, `denied` by you.

@@ -14,6 +14,13 @@
  * the work that would have needed it in a brief. Today is the newest
  * commit's day.
  *
+ * Today's lines were all last written within a couple of months, so the
+ * archive is also measured over the docs' whole git history: every bullet
+ * line they ever held lives from the commit that added it to the one that
+ * removed it (or today). For each threshold, a line is archived when it goes
+ * that many days with no use; it was needed again when a use follows within
+ * its life. Archived and needed again is what a threshold costs.
+ *
  *   bun scripts/probe-kit/run.ts memory-replay
  */
 import { join } from "node:path";
@@ -114,6 +121,93 @@ const commitsOf = async (): Promise<{ day: string; words: Set<string> }[]> => {
     });
 };
 
+const COMMIT = "\x1e";
+const BULLET_CHANGE = /^([+-])\s*[-*] (.+)$/;
+const DAY_MS = 86_400_000;
+
+/** A bullet line's life in the docs: from the day a commit added it to the day one removed it, or today. */
+interface Life {
+  from: number;
+  to: number;
+  words: Set<string>;
+}
+
+/** The bullet lines one commit's diff added and removed, by their words. */
+const bulletChanges = (
+  diff: string[]
+): { added: Set<string>; removed: Set<string> } => {
+  const added = new Set<string>();
+  const removed = new Set<string>();
+  for (const row of diff) {
+    const change = BULLET_CHANGE.exec(row);
+    if (change?.[2] && !row.startsWith("+++") && !row.startsWith("---")) {
+      (change[1] === "+" ? added : removed).add(change[2].trim());
+    }
+  }
+  return { added, removed };
+};
+
+/** Every bullet line the docs ever held, by its words, with its life: adds and removals read from their whole history. */
+const livesOf = async (today: number): Promise<Life[]> => {
+  const log =
+    await Bun.$`git log --reverse --no-renames --unified=0 --format=${COMMIT}%at -p -- ${DOCS}`
+      .cwd(ROOT)
+      .quiet()
+      .text();
+  const alive = new Map<string, number>();
+  const lives: Life[] = [];
+  for (const commit of log.split(COMMIT).filter(Boolean)) {
+    const [time = "0", ...diff] = commit.split("\n");
+    const day = Number(time) * 1000;
+    const { added, removed } = bulletChanges(diff);
+    for (const text of removed) {
+      const from = alive.get(text);
+      if (from !== undefined && !added.has(text)) {
+        lives.push({ from, to: day, words: wordsOf(text) });
+        alive.delete(text);
+      }
+    }
+    for (const text of added) {
+      if (!alive.has(text)) {
+        alive.set(text, day);
+      }
+    }
+  }
+  for (const [text, from] of alive) {
+    lives.push({ from, to: today, words: wordsOf(text) });
+  }
+  return lives;
+};
+
+/**
+ * What archiving after `days` unused would have done over the lives:
+ * how many lines it archived, and how many of those a later use within
+ * their life needed again.
+ */
+const archiveCost = (
+  lives: Life[],
+  uses: Map<Life, number[]>,
+  days: number
+): { archived: number; neededAgain: number } => {
+  let archived = 0;
+  let neededAgain = 0;
+  for (const life of lives) {
+    const points = [life.from, ...(uses.get(life) ?? []), life.to];
+    let went = false;
+    let needed = false;
+    for (let at = 1; at < points.length; at += 1) {
+      const gap = (points[at] ?? 0) - (points[at - 1] ?? 0);
+      if (gap >= days * DAY_MS) {
+        went = true;
+        needed ||= at < points.length - 1;
+      }
+    }
+    archived += went ? 1 : 0;
+    neededAgain += needed ? 1 : 0;
+  }
+  return { archived, neededAgain };
+};
+
 const run = async (kit: Kit) => {
   const topics = (await Promise.all(DOCS.map(topicsOf))).flat();
   const commits = await commitsOf();
@@ -163,6 +257,41 @@ const run = async (kit: Kit) => {
     });
     kit.note(
       `replay archive, a use is a later commit sharing ${least}+ words (${used} of ${facts.length} lines used again): ${counts.join(", ")}`
+    );
+  }
+  const lives = await livesOf(Date.parse(`${today}T23:59:59Z`));
+  const dated = commits.map((commit) => ({
+    at: Date.parse(`${commit.day}T12:00:00Z`),
+    words: commit.words,
+  }));
+  const first = new Date(Math.min(...lives.map((life) => life.from)));
+  kit.note(
+    `replay over the docs' history: ${lives.length} bullet lines ever held, from ${dayOf(first)} to ${today}; ${lives.filter((life) => life.to - life.from >= 90 * DAY_MS).length} lived 90 days or more`
+  );
+  for (const least of SHARED) {
+    const uses = new Map(
+      lives.map((life) => [
+        life,
+        dated
+          .filter((commit) => {
+            if (commit.at <= life.from || commit.at > life.to) {
+              return false;
+            }
+            let shared = 0;
+            for (const word of life.words) {
+              shared += commit.words.has(word) ? 1 : 0;
+            }
+            return shared >= least;
+          })
+          .map((commit) => commit.at),
+      ])
+    );
+    const costs = ARCHIVE_DAYS.map((days) => {
+      const { archived, neededAgain } = archiveCost(lives, uses, days);
+      return `${days} days: ${archived} archived, ${neededAgain} needed again`;
+    });
+    kit.note(
+      `replay history, a use is a commit sharing ${least}+ words: ${costs.join("; ")}`
     );
   }
   for (const chars of FILE_CHARS) {

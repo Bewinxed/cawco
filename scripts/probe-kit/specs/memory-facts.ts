@@ -28,6 +28,20 @@
  * h. Session search returns a dated excerpt, with its session id, from
  *    another session's prose.
  * i. A question no past session answers: "not found in past sessions".
+ * j. A knowledge file written as prose before fact lines: the curator's run
+ *    proposes one card that rewrites it as fact lines, every line reading,
+ *    every claim kept word for word, `since` its git-blame day, `from` the
+ *    file's prose before facts; approved, the file is those lines.
+ * m. A rejected rewrite of a prose file, and a rejected archive of a line
+ *    unused for months, are not proposed again by the next curator run;
+ *    the archived line counts as used now; the rewrite comes back once the
+ *    file says something else.
+ * k. A memory proposal kept in the one-file shape from before (`path`,
+ *    `before`, `content`) is rewritten in the files shape as the hub starts,
+ *    and parked as a card with its diff.
+ * l. A session whose prose was never cut (stored before the table) is cut
+ *    from its stored transcript when its machine registers, and found by
+ *    memory_recall; a session cut live keeps nothing twice.
  * Jev off: the curator's run gets the note with the line grep found and no
  * card is made; a brief keeps grep's order; search says it is unranked, and
  * a question grep finds nothing for is not found; a withdrawal still
@@ -66,6 +80,35 @@ const LIMIT_100 = "The API rate limit is 100 requests a minute.";
 const LIMIT_60 = "The API rate limit is 60 requests a minute.";
 const UNREADABLE = "This line has no parenthesis.";
 
+/** A knowledge file as the curator wrote them before fact lines: prose. */
+const PROSE_PATH = "knowledge/release.md";
+const PROSE = `# Release notes
+
+Releases are cut from main every Tuesday.
+
+- The release checklist lives in RELEASE.md.
+- Hotfixes skip the Tuesday cut
+  and go out the same day.
+
+Tag names look like v1.2.3 (semver).
+`;
+/** Its claims, each as one fact line must keep its words. */
+const PROSE_CLAIMS = [
+  "Releases are cut from main every Tuesday.",
+  "The release checklist lives in RELEASE.md.",
+  "Hotfixes skip the Tuesday cut and go out the same day.",
+  "Tag names look like v1.2.3 (semver).",
+];
+/** A second prose file, whose rewrite the person declines, and a file whose one line went unused for months. */
+const HOWTO_PATH = "knowledge/howto.md";
+const HOWTO = "# How-to\n\nRun bun install before the first build.\n";
+const OLD_PATH = "knowledge/old.md";
+const OLD_FACT = "The legacy queue drains on Sundays.";
+const OLD = `Old: what was kept long ago.\n\n- ${OLD_FACT} (since 2025-01-01, from n-20250101-090000-f0f0f0)\n`;
+/** A proposal kept in the one-file shape from before proposals named their files. */
+const OLD_PROPOSAL_ID = "p-20261001-090000-0a0b0c";
+const OLD_PROPOSAL_WORDS = "PROBE-FACTS-OLD-PROPOSAL kept across the cutover.";
+
 const DEPLOYS = `Deploys: how releases go out.
 
 - ${SHIP} (since 2026-10-01, from ${ID.ship})
@@ -96,7 +139,11 @@ const SAY = {
   docker: "PROBE-FACTS-RECALL-DOCKER",
   recallOff: "PROBE-FACTS-RECALL-OFF",
   none: "PROBE-FACTS-RECALL-NONE",
+  old: "PROBE-FACTS-OLD what about the flaky e2e suite?",
+  recallOld: "PROBE-FACTS-RECALL-OLD",
 } as const;
+const OLD_REPLY =
+  "We quarantined the flaky e2e suite behind a nightly job; the PR checks skip it.";
 const CACHE_REPLY =
   "We tried caching the bun install in CI: builds went from 9 to 4 minutes, but the cache broke on every lockfile change, so we dropped it.";
 const QUESTION: Record<string, string> = {
@@ -104,6 +151,7 @@ const QUESTION: Record<string, string> = {
   [SAY.docker]: "have we tried caching the docker images in CI?",
   [SAY.recallOff]: "have we tried caching the install in CI?",
   [SAY.none]: "did anyone try kubernetes?",
+  [SAY.recallOld]: "what did we do about the flaky e2e suite?",
 };
 const NOT_FOUND = "not found in past sessions";
 
@@ -141,7 +189,7 @@ const ANSWER_JSON = /\{"answer":.*?"has_more":(?:true|false)[^}]*\}/s;
 
 /** Which mocked session a conversation is: the earliest marker in it. */
 const kindOf = (all: string): string | undefined =>
-  [SAY.cache, SAY.recall]
+  [SAY.cache, SAY.recall, SAY.old]
     .map((marker) => ({ marker, at: all.indexOf(marker) }))
     .filter(({ at }) => at >= 0)
     .sort((a, b) => a.at - b.at)[0]?.marker;
@@ -191,6 +239,9 @@ const respond = (request: Seen): Reply => {
   if (kind === SAY.cache) {
     return talker(request);
   }
+  if (kind === SAY.old) {
+    return text(OLD_REPLY);
+  }
   return kind === SAY.recall ? asker(request) : text("ok");
 };
 
@@ -207,8 +258,11 @@ const pathsOf = (ask: Ask | undefined): string[] =>
 const choose = (call_: JevCall, id: string, asked: JevAsked) => {
   if (id === "where") {
     const excerpts = call_.state.excerpts as Record<string, { text: string }>;
+    const answer = String(call_.state.question).includes("e2e")
+      ? "quarantined"
+      : "dropped it";
     const found = Object.entries(excerpts).find(([, each]) =>
-      each.text.includes("dropped it")
+      each.text.includes(answer)
     );
     return found ? { choice: found[0], p: 0.9 } : undefined;
   }
@@ -245,7 +299,7 @@ const bears = (call_: JevCall, id: string): number => {
   const asked = call_.questions[id]?.instructions as
     { fact?: string } | undefined;
   const fact = asked?.fact ?? "";
-  if (fact === RELEASE) {
+  if (fact === RELEASE || fact.startsWith("# Release notes")) {
     return 0.95;
   }
   if (fact === LIMIT_100) {
@@ -262,6 +316,7 @@ interface Ask {
   machineId: string;
   payload: {
     input: { files?: { content: string; path: string }[]; notes?: string[] };
+    presentation?: { changes: { after: string; path: string }[] };
     proposer?: string;
     toolName: string;
   };
@@ -321,7 +376,8 @@ const standUp = async (kit: Kit, jevUrl: string) => {
     (await fleet.api<Ask[]>("/api/pending")).filter(
       (ask) => ask.payload.toolName === PROPOSE
     );
-  const approve = (ask: Ask) =>
+  /** The person's answer to a card, as the dashboard sends it. */
+  const answer = (ask: Ask, result: object) =>
     fleet.post({
       type: "command",
       commandId: crypto.randomUUID(),
@@ -332,9 +388,11 @@ const standUp = async (kit: Kit, jevUrl: string) => {
         instanceId: ask.instanceId,
         requestId: ask.requestId,
         method: "resolvePermission",
-        args: [ask.requestId, { behavior: "allow", updatedInput: {} }],
+        args: [ask.requestId, result],
       },
     });
+  const approve = (ask: Ask) =>
+    answer(ask, { behavior: "allow", updatedInput: {} });
   /** Runs the curator routine now: its run, once it is past starting. */
   const curatorRun = async () => {
     const [routine] = fleet.query<{ id: string }>(
@@ -411,6 +469,7 @@ const standUp = async (kit: Kit, jevUrl: string) => {
     put,
     read,
     proposals,
+    answer,
     approve,
     curatorRun,
     briefOf,
@@ -423,6 +482,9 @@ type Probe = Awaited<ReturnType<typeof standUp>>;
 /** The person's fact file and the archived notes it rests on; the notes Jev sorts. */
 const seed = async (probe: Probe) => {
   await probe.put("knowledge/deploys.md", DEPLOYS);
+  await probe.put(PROSE_PATH, PROSE);
+  await probe.put(HOWTO_PATH, HOWTO);
+  await probe.put(OLD_PATH, OLD);
   for (const [id, words] of [
     [ID.ship, SHIP],
     [ID.staging, STAGING],
@@ -558,6 +620,127 @@ const sortLegs = async (kit: Kit, probe: Probe, backfillId: string) => {
   );
 };
 
+const FACT_SHAPE =
+  /^- (.+) \(since (\d{4}-\d{2}-\d{2}), from (.+?)(?:, used \d{4}-\d{2}-\d{2})?\)$/;
+
+/**
+ * j: the prose file's rewrite, made as the curator's run started: one card,
+ * every line a fact line, every claim kept word for word, dated by git
+ * blame (the file was committed today), resting on the file's prose; a
+ * brief before it is approved carries the prose as one block, marked;
+ * approved, the file is those lines.
+ */
+const proseLeg = async (kit: Kit, probe: Probe, parent: string) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const card = (await probe.proposals()).find(
+    (ask) => pathsOf(ask)[0] === PROSE_PATH
+  );
+  const proposed = card?.payload.input.files?.[0]?.content ?? "";
+  const [description, ...body] = proposed
+    .split("\n")
+    .filter((line) => line.trim() !== "");
+  const facts = body.map((line) => FACT_SHAPE.exec(line));
+  kit.check(
+    "j: a prose knowledge file gets one card rewriting it as fact lines that all read, every claim kept, dated by git blame, resting on its prose",
+    card !== undefined &&
+      description === "# Release notes" &&
+      facts.length === PROSE_CLAIMS.length &&
+      facts.every(
+        (fact) =>
+          fact?.[2] === today && fact[3] === `${PROSE_PATH} (before facts)`
+      ) &&
+      PROSE_CLAIMS.every((claim) => facts.some((fact) => fact?.[1] === claim)),
+    `card by ${card?.payload.proposer}:\n${proposed}`
+  );
+  const brief = await briefFor(
+    probe,
+    "Cut the Tuesday release from main",
+    parent
+  );
+  if (brief.written) {
+    kit.check(
+      "j: until it is approved, a brief carries the prose file as one block marked not yet fact lines",
+      brief.words.includes(`### ${PROSE_PATH} (not yet fact lines)`) &&
+        brief.words.includes("Hotfixes skip the Tuesday cut"),
+      brief.words.slice(0, 1600)
+    );
+  } else {
+    kit.note(
+      `j: the brief's prose block is checked only where a workspace can be cut (${brief.words.slice(0, 160)})`
+    );
+  }
+  if (card) {
+    await probe.approve(card);
+  }
+  const after = await until(
+    `${PROSE_PATH} as approved`,
+    () => probe.read(PROSE_PATH),
+    (content) => content.includes("(before facts)"),
+    20_000
+  ).catch(() => "(not approved)");
+  kit.check(
+    "j: approved, the prose file is its fact lines",
+    after === proposed,
+    after
+  );
+};
+
+/**
+ * m: the person rejects the curator run's rewrite of a second prose file
+ * and its archive of a line unused for months; the next run proposes
+ * neither again, and the line counts as used now; once the prose file
+ * changes, its rewrite is proposed again.
+ */
+const rejectLeg = async (kit: Kit, probe: Probe) => {
+  const cardFor = async (path: string) =>
+    (await probe.proposals()).find((ask) => pathsOf(ask)[0] === path);
+  const rewrite = await cardFor(HOWTO_PATH);
+  const archive = await cardFor(OLD_PATH);
+  for (const card of [rewrite, archive]) {
+    if (card) {
+      // biome-ignore lint/performance/noAwaitInLoops: one answer at a time, as the person gives them
+      await probe.answer(card, { behavior: "deny", message: "Not now" });
+    }
+  }
+  await until(
+    "both cards answered",
+    async () => (await cardFor(HOWTO_PATH)) ?? (await cardFor(OLD_PATH)),
+    (left) => left === undefined,
+    20_000
+  ).catch(() => undefined);
+  await probe.curatorRun().catch(() => undefined);
+  const again = {
+    rewrite: await cardFor(HOWTO_PATH),
+    archive: await cardFor(OLD_PATH),
+  };
+  const used = probe.fleet
+    .query<{ key: string }>(
+      "SELECT key FROM fact_uses WHERE project_id = ? AND path = ?",
+      probe.projectId,
+      OLD_PATH
+    )
+    .map((row) => row.key);
+  await probe.put(HOWTO_PATH, `${HOWTO}\nCache the install between builds.\n`);
+  await probe.curatorRun().catch(() => undefined);
+  const changed = await cardFor(HOWTO_PATH);
+  kit.check(
+    "m: a rejected rewrite and a rejected archive are not proposed again; the archived line counts as used; the rewrite returns once the file changes",
+    rewrite !== undefined &&
+      archive !== undefined &&
+      pathsOf(archive).includes("knowledge/archive/old.md") &&
+      again.rewrite === undefined &&
+      again.archive === undefined &&
+      used.includes(keyOf(OLD_FACT)) &&
+      changed !== undefined &&
+      Boolean(
+        changed.payload.input.files?.[0]?.content.includes(
+          "- Cache the install between builds. ("
+        )
+      ),
+    `first: rewrite ${rewrite?.requestId}, archive ${archive?.requestId} ${JSON.stringify(pathsOf(archive))}; next run: rewrite ${again.rewrite?.requestId}, archive ${again.archive?.requestId}; uses of ${OLD_PATH}: ${used.length}; after the change: ${changed?.requestId}`
+  );
+};
+
 /** Withdraws `id` and approves its card: the route's answer, the card, and the files after. */
 const withdraw = async (probe: Probe, id: string, applied: string) => {
   const before = new Set((await probe.proposals()).map((ask) => ask.requestId));
@@ -685,6 +868,119 @@ const briefLeg = async (kit: Kit, probe: Probe, parent: string) => {
       b(BACKFILL) < 0 &&
       b(STAGING) < 0,
     brief.words.slice(0, 1600)
+  );
+};
+
+/**
+ * k, l: what the hub converts and cuts as it starts and its machine
+ * registers again. A session whose prose was never cut (its rows gone, as
+ * for a session stored before the table) and a proposal kept in the
+ * one-file shape are put in place while the hub is down; then the hub and
+ * its agent come back.
+ */
+const restartLegs = async (
+  kit: Kit,
+  probe: Probe,
+  askerId: string,
+  talkerId: string
+) => {
+  const { fleet, projectId } = probe;
+  const oldId = await fleet.spawn("claude", "Flaky e2e", fleet.workdir, {
+    projectId,
+  });
+  await fleet.send(oldId, SAY.old);
+  const proseOf = (instanceId: string): number =>
+    fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM session_prose WHERE instance_id = ?",
+      instanceId
+    )[0]?.n ?? 0;
+  await until(
+    "the old session's reply in its prose",
+    () => proseOf(oldId),
+    (n) => n >= 2,
+    60_000
+  ).catch(() => 0);
+  const talked = proseOf(talkerId);
+  await probe.put(
+    `memory/proposals/${OLD_PROPOSAL_ID}.json`,
+    `${JSON.stringify(
+      {
+        id: OLD_PROPOSAL_ID,
+        projectId,
+        path: "AGENTS.md",
+        base: "",
+        before: "",
+        content: `# Agents\n\n${OLD_PROPOSAL_WORDS}\n`,
+        notes: [],
+        why: "An open proposal from before proposals named their files",
+        by: "Caw",
+        session: "",
+        time: "2026-10-01T09:00:00.000Z",
+      },
+      null,
+      2
+    )}\n`
+  );
+  await fleet.stop("hub");
+  fleet.write("DELETE FROM session_prose WHERE instance_id = ?", oldId);
+  try {
+    fleet.write("DELETE FROM prose_backfills WHERE instance_id = ?", oldId);
+  } catch {
+    // A hub from before the backfill keeps no marks.
+  }
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+  const parked = await until(
+    "the one-file proposal parked as a card",
+    async () =>
+      (await probe.proposals()).find(
+        (ask) => ask.requestId === OLD_PROPOSAL_ID
+      ),
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  const onDisk = await probe.read(`memory/proposals/${OLD_PROPOSAL_ID}.json`);
+  const kept = (() => {
+    try {
+      return JSON.parse(onDisk) as { files?: unknown; path?: unknown };
+    } catch {
+      return {};
+    }
+  })();
+  const [change] = parked?.payload.presentation?.changes ?? [];
+  kit.check(
+    "k: a proposal in the one-file shape is rewritten in the files shape as the hub starts, and parked as a card with its diff",
+    pathsOf(parked)[0] === "AGENTS.md" &&
+      change?.path === "AGENTS.md" &&
+      change.after.includes(OLD_PROPOSAL_WORDS) &&
+      Array.isArray(kept.files) &&
+      !("path" in kept),
+    `card ${JSON.stringify(parked?.payload.input.files?.map((file) => file.path))}, diff ${change?.path}\n${onDisk.slice(0, 400)}`
+  );
+  const cut = await until(
+    "the old session's prose cut from its stored transcript",
+    () => proseOf(oldId),
+    (n) => n >= 2,
+    60_000
+  ).catch(() => 0);
+  const found = await recallFor(probe, askerId, SAY.recallOld);
+  const [excerpt] = (found.excerpts ?? []) as {
+    session: string;
+    text: string;
+  }[];
+  kit.check(
+    "l: a session whose prose was never cut is cut from its stored transcript when its machine registers, and found by memory_recall",
+    cut >= 2 &&
+      found.answer === "answered" &&
+      excerpt?.session === oldId &&
+      excerpt.text.includes("quarantined the flaky e2e suite"),
+    `${cut} rows; ${JSON.stringify(found).slice(0, 600)}`
+  );
+  kit.check(
+    "l: a session cut live keeps nothing twice when its stored transcript is read",
+    proseOf(talkerId) === talked,
+    `the talker had ${talked} rows, now ${proseOf(talkerId)}`
   );
 };
 
@@ -836,6 +1132,8 @@ const run = async (kit: Kit) => {
     );
     const backfillId = await talk(kit, probe, talkerId);
     await sortLegs(kit, probe, backfillId);
+    await proseLeg(kit, probe, talkerId);
+    await rejectLeg(kit, probe);
     await withdrawLeg(kit, probe);
     await briefLeg(kit, probe, talkerId);
     const askerId = await probe.fleet.spawn(
@@ -845,6 +1143,7 @@ const run = async (kit: Kit) => {
       { projectId: probe.projectId }
     );
     await recallLegs(kit, probe, askerId, talkerId);
+    await restartLegs(kit, probe, askerId, talkerId);
     await offLegs(kit, probe, askerId, talkerId);
   } finally {
     jev.stop();

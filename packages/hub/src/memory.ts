@@ -115,6 +115,7 @@ import {
   archived as archivedLines,
   archivePath,
   BRAND,
+  beforeFacts,
   change as changeFact,
   conflict as conflictFact,
   corroborate as corroborateFact,
@@ -122,8 +123,11 @@ import {
   type FactFile,
   type FactLine,
   type FactNote,
+  factKey,
+  factsFromProse,
   grepScore,
   isFactFile,
+  isProse,
   KNOWLEDGE_ARCHIVE,
   KNOWLEDGE_DIR,
   NOTE_ID,
@@ -143,6 +147,7 @@ import {
   changeFolderFiles,
   type FolderAuthor,
   FolderRefusal,
+  folderBlame,
   folderFileNames,
   folderHistory,
   folderPath,
@@ -805,6 +810,12 @@ export interface Proposal {
   /** Every file it changes, in the order the card draws them. */
   files: ProposalFile[];
   id: string;
+  /**
+   * What the hub proposed it as, when its rejection says something to
+   * remember: an `archive` rejected keeps its lines as used now; a `rewrite`
+   * of a prose file rejected is not proposed again until the file changes.
+   */
+  kind?: "archive" | "rewrite";
   /** The inbox notes it comes from. */
   notes: string[];
   projectId: string;
@@ -1029,6 +1040,24 @@ const reasonOf = (raw: string): string => {
 
 const LEADING_SLASHES = /^\/+/;
 
+/**
+ * What a project's fact files cannot say yet, in the hub's log: each line
+ * that does not read, by file and line; a prose file once, as prose.
+ */
+const logUnread = (projectId: string, files: FactFile[]): void => {
+  for (const file of files) {
+    if (isProse(file)) {
+      console.warn(
+        `[memory] ${projectId}: ${file.path} is prose, not yet fact lines; a curator run proposes them`
+      );
+      continue;
+    }
+    for (const bad of file.unreadable) {
+      console.warn(`[memory] ${projectId}: ${lineWords(bad)}`);
+    }
+  }
+};
+
 /** A fact line as an error names it: `knowledge/x.md:12 (why): the line`. */
 const lineWords = (bad: Unreadable): string =>
   `${bad.path}:${bad.line} (${bad.why}): ${bad.text.trim()}`;
@@ -1080,8 +1109,12 @@ const checkFacts = (files: ProposalFile[], cites: string[]): void => {
       `The change drops what ${lost.join(", ")} grounded. A fact's change keeps its history: a replaced line moves under \`## Formerly\`, a merged line keeps every source, an unused one moves to ${KNOWLEDGE_ARCHIVE}/.`
     );
   }
+  // A prose file rewritten as fact lines rests on its own prose.
+  const converted = new Set(
+    before.filter((file) => isProse(file)).map((file) => beforeFacts(file.path))
+  );
   const unsourced = [...now].filter(
-    (id) => !(was.has(id) || cites.includes(id))
+    (id) => !(was.has(id) || cites.includes(id) || converted.has(id))
   );
   if (unsourced.length > 0) {
     refuse(
@@ -1315,6 +1348,55 @@ const briefShortlist = (
     .sort((a, b) => Number(b.named) - Number(a.named) || b.score - a.score)
     .slice(0, SHORTLIST)
     .map(({ fact }) => fact);
+};
+
+/** What a prose file's yes/no reads of it: its start. */
+const PROSE_ASKED = 2000;
+
+/** The prose files (from before fact lines) a brief may carry: those the task names, and those holding its words, the most first. */
+const proseShortlist = (
+  files: FactFile[],
+  task: BriefTask,
+  named: ReadonlySet<string>
+): FactFile[] => {
+  const words = wordsOf(
+    [task.title, task.description, task.acceptance].join("\n")
+  );
+  return files
+    .filter(isProse)
+    .map((file) => ({
+      file,
+      named: named.has(file.path),
+      score: grepScore(words, file.content),
+    }))
+    .filter((each) => each.named || each.score > 0)
+    .sort((a, b) => Number(b.named) - Number(a.named) || b.score - a.score)
+    .map(({ file }) => file);
+};
+
+/** The characters the admitted fact lines take. */
+const spentOn = (admitted: Map<string, FactLine[]>): number =>
+  [...admitted.values()]
+    .flat()
+    .reduce((sum, fact) => sum + fact.raw.length + 1, 0);
+
+/**
+ * Prose files from before fact lines, each one block marked as such, up to
+ * its budget, in the room the fact lines left: the one transitional read,
+ * gone for a file once its rewrite as fact lines is approved.
+ */
+const proseBlocks = (files: FactFile[], room: number): string[] => {
+  let left = room;
+  return files.flatMap((file) => {
+    if (left <= 0) {
+      return [];
+    }
+    const said = excerpt(file.content, Math.min(MEMORY_FILE_CHARS, left));
+    left -= said.length;
+    return [
+      `### ${file.path} (not yet fact lines)\n\nProse from before this project kept fact lines: its claims carry no dates or sources of their own.\n\n${said}`,
+    ];
+  });
 };
 
 /** Files a brief carries whole (AGENTS.md, a brand kit file the task names), each up to its budget, and the room left after them. */
@@ -1752,9 +1834,7 @@ export const createMemory = ({
     const files = (await knowledgeOf(projectId))
       .filter((file) => isFactFile(file.path))
       .map((file) => parseFactFile(file.path, file.content));
-    for (const bad of files.flatMap((file) => file.unreadable)) {
-      console.warn(`[memory] ${projectId}: ${lineWords(bad)}`);
-    }
+    logUnread(projectId, files);
     return files;
   };
 
@@ -1866,6 +1946,60 @@ export const createMemory = ({
   };
 
   /**
+   * Every prose fact file (written before fact lines) no open proposal
+   * touches: one proposal each, made as the curator's run starts, that
+   * rewrites it word for word as fact lines (memory-facts.ts
+   * `factsFromProse`), so every claim is kept: `since` the day git blame
+   * dates the claim's lines (the file's mtime where git has none), `from`
+   * the file's prose before facts. The person approves it like any other.
+   */
+  const proposeConversions = async (
+    project: ProjectRow,
+    files: FactFile[],
+    touched: ReadonlySet<string>
+  ): Promise<number> => {
+    let made = 0;
+    const declined = (file: FactFile): boolean =>
+      db.memoryFacts.declinedRewrite(project.id, file.path) ===
+      factKey(file.content);
+    for (const file of files.filter(
+      (each) => isProse(each) && !touched.has(each.path) && !declined(each)
+    )) {
+      // biome-ignore lint/performance/noAwaitInLoops: one proposal per file, each on the folder as the last left it
+      const written = await folderBlame(project.id, file.path);
+      const content = factsFromProse(file.path, file.content, (line) =>
+        dayOf(written.lines.get(line) ?? written.mtime)
+      );
+      const claims = parseFactFile(file.path, content).facts.length;
+      const [head] = (await folderHistory(project.id, "", 1)).commits;
+      const at = new Date();
+      await keep(
+        {
+          id: idAt("p", at),
+          projectId: project.id,
+          files: [
+            {
+              path: file.path,
+              before: file.content,
+              content: stampUses(project.id, file.path, content),
+            },
+          ],
+          base: head?.sha ?? "",
+          notes: [],
+          why: `${file.path} is prose from before fact lines: its ${claims} claim${claims === 1 ? "" : "s"} as fact lines, word for word`,
+          by: HUB.name,
+          kind: "rewrite",
+          session: "",
+          time: at.toISOString(),
+        },
+        project
+      );
+      made += 1;
+    }
+    return made;
+  };
+
+  /**
    * Every fact file no open proposal touches whose current lines went
    * unused past the archive's days (config.ts): one proposal each, moving
    * them whole, with their history, to `knowledge/archive/`.
@@ -1921,6 +2055,7 @@ export const createMemory = ({
           notes: [],
           why: `${unused.length} line${unused.length === 1 ? "" : "s"} of ${file.path} unused for ${MEMORY_ARCHIVE_DAYS} days move to ${into}`,
           by: HUB.name,
+          kind: "archive",
           session: "",
           time: at.toISOString(),
         },
@@ -2034,10 +2169,13 @@ export const createMemory = ({
         proposal.files.map((file) => file.path)
       )
     );
+    await proposeConversions(project, factFiles, touched);
     await proposeArchives(project, factFiles, touched);
     const fold = factFiles.filter(
       (file) =>
-        file.content.length > MEMORY_FILE_CHARS && !touched.has(file.path)
+        file.content.length > MEMORY_FILE_CHARS &&
+        !touched.has(file.path) &&
+        !isProse(file)
     );
     const reshape = factFiles.length > RESHAPE_ABOVE;
     if (left.length === 0 && fold.length === 0 && !reshape) {
@@ -2110,7 +2248,7 @@ export const createMemory = ({
         ? given.files
             .map(
               (file) =>
-                `- ${file.path}: ${file.description || "(no description)"} (${file.facts.length} line${file.facts.length === 1 ? "" : "s"}, ${file.content.length} characters)`
+                `- ${file.path}: ${file.description || "(no description)"} (${isProse(file) ? "prose, not yet fact lines: its rewrite as fact lines waits for the person; leave it" : `${file.facts.length} line${file.facts.length === 1 ? "" : "s"}`}, ${file.content.length} characters)`
             )
             .join("\n")
         : "knowledge/ holds no fact files yet.";
@@ -2125,7 +2263,9 @@ export const createMemory = ({
           ]
         : []),
     ];
-    const unreadable = given.files.flatMap((file) => file.unreadable);
+    const unreadable = given.files
+      .filter((file) => !isProse(file))
+      .flatMap((file) => file.unreadable);
     return [
       `## The inbox of “${project.name}”\n\n${
         notes.length > 0
@@ -2505,9 +2645,42 @@ export const createMemory = ({
     return written.sha;
   };
 
-  /** Reject: the proposal goes, its notes archived as rejected; a withdrawal's note stays where it was. */
+  /**
+   * What a rejected hub proposal leaves behind: an archive's lines are used
+   * now (the person kept them), so they wait out the archive's days again;
+   * a prose file's rewrite is declined for the words it had, and proposed
+   * again only once the file says something else.
+   */
+  const rememberRejection = (proposal: Proposal): void => {
+    const [file] = proposal.files;
+    if (!file) {
+      return;
+    }
+    if (proposal.kind === "archive") {
+      const kept = new Set(
+        parseFactFile(file.path, file.content).facts.map((fact) => fact.key)
+      );
+      db.memoryFacts.useFacts(
+        proposal.projectId,
+        file.path,
+        parseFactFile(file.path, file.before)
+          .facts.map((fact) => fact.key)
+          .filter((key) => !kept.has(key)),
+        new Date()
+      );
+    } else if (proposal.kind === "rewrite") {
+      db.memoryFacts.declineRewrite(
+        proposal.projectId,
+        file.path,
+        factKey(file.before)
+      );
+    }
+  };
+
+  /** Reject: the proposal goes, its notes archived as rejected; a withdrawal's note stays where it was; a hub proposal's rejection is remembered. */
   const reject = async (proposal: Proposal, reason: string): Promise<void> => {
     const { projectId } = proposal;
+    rememberRejection(proposal);
     const notes = await citedNotes(projectId, proposal);
     const outcome = `rejected${reason ? `: ${reason}` : ""}`;
     await changeFolderFiles(
@@ -2691,9 +2864,16 @@ export const createMemory = ({
           text: each.text,
         })),
         knowledge: (await knowledgeOf(projectId)).map((file) => file.path),
-        unreadable: (await factFilesOf(projectId))
-          .flatMap((file) => file.unreadable)
-          .map(lineWords),
+        ...(await (async () => {
+          const files = await factFilesOf(projectId);
+          return {
+            unreadable: files
+              .filter((file) => !isProse(file))
+              .flatMap((file) => file.unreadable)
+              .map(lineWords),
+            prose: files.filter(isProse).map((file) => file.path),
+          };
+        })()),
       };
     }
     const rel = folderPath(raw);
@@ -2747,8 +2927,24 @@ export const createMemory = ({
     key: JevAccess,
     projectId: string,
     task: BriefTask,
-    lines: FactLine[]
-  ): Promise<Map<FactLine, number>> => {
+    lines: FactLine[],
+    prose: FactFile[]
+  ): Promise<{
+    lines: Map<FactLine, number>;
+    prose: Map<FactFile, number>;
+  }> => {
+    const question = (fact: Record<string, unknown>) => ({
+      type: "noul" as const,
+      instructions: {
+        ...fact,
+        question:
+          "Does `fact`, a fact the project keeps, bear on doing `task`: would an agent doing it act differently, or avoid a mistake, for knowing it?",
+      },
+      criteria: {
+        true: "Knowing it changes how the task is done, checked or handed in.",
+        false: "It is about something the task does not touch.",
+      },
+    });
     const result = await askRow(
       "context",
       projectId,
@@ -2761,31 +2957,35 @@ export const createMemory = ({
           acceptance: task.acceptance,
         },
       },
-      Object.fromEntries(
-        lines.map((fact, index) => [
+      Object.fromEntries([
+        ...lines.map((fact, index) => [
           `l${index}`,
-          {
-            type: "noul" as const,
-            instructions: {
-              fact: fact.text,
-              since: fact.since,
-              ...(fact.until ? { until: fact.until } : {}),
-              file: fact.path,
-              question:
-                "Does `fact`, a fact the project keeps, bear on doing `task`: would an agent doing it act differently, or avoid a mistake, for knowing it?",
-            },
-            criteria: {
-              true: "Knowing it changes how the task is done, checked or handed in.",
-              false: "It is about something the task does not touch.",
-            },
-          },
-        ])
-      )
+          question({
+            fact: fact.text,
+            since: fact.since,
+            ...(fact.until ? { until: fact.until } : {}),
+            file: fact.path,
+          }),
+        ]),
+        // A prose file from before fact lines, asked of as one fact: its start.
+        ...prose.map((file, index) => [
+          `p${index}`,
+          question({
+            fact: excerpt(file.content, PROSE_ASKED),
+            file: file.path,
+          }),
+        ]),
+      ])
     );
     const answers = result.answers as Record<string, { noul: number }>;
-    return new Map(
-      lines.map((fact, index) => [fact, answers[`l${index}`]?.noul ?? 0])
-    );
+    return {
+      lines: new Map(
+        lines.map((fact, index) => [fact, answers[`l${index}`]?.noul ?? 0])
+      ),
+      prose: new Map(
+        prose.map((file, index) => [file, answers[`p${index}`]?.noul ?? 0])
+      ),
+    };
   };
 
   /**
@@ -2796,11 +2996,12 @@ export const createMemory = ({
   const orderForBrief = async (
     projectId: string,
     task: BriefTask,
-    shortlist: FactLine[]
-  ): Promise<{ how: string; ordered: FactLine[] }> => {
+    shortlist: FactLine[],
+    prose: FactFile[]
+  ): Promise<{ how: string; ordered: FactLine[]; prose: FactFile[] }> => {
     const key = jevAccess(db);
     if (!key) {
-      if (shortlist.length > 0) {
+      if (shortlist.length + prose.length > 0) {
         offLine(
           "context",
           projectId,
@@ -2809,17 +3010,21 @@ export const createMemory = ({
       }
       return {
         ordered: shortlist,
+        prose,
         how: "The facts the task's words find, the most words in common first (Jev is off).",
       };
     }
-    if (shortlist.length === 0) {
-      return { ordered: [], how: "" };
+    if (shortlist.length + prose.length === 0) {
+      return { ordered: [], prose: [], how: "" };
     }
-    const bears = await jevBears(key, projectId, task, shortlist);
+    const bears = await jevBears(key, projectId, task, shortlist, prose);
+    const likely = <T>(each: T[], by: Map<T, number>): T[] =>
+      each
+        .filter((one) => (by.get(one) ?? 0) >= BEARS)
+        .sort((a, b) => (by.get(b) ?? 0) - (by.get(a) ?? 0));
     return {
-      ordered: shortlist
-        .filter((fact) => (bears.get(fact) ?? 0) >= BEARS)
-        .sort((a, b) => (bears.get(b) ?? 0) - (bears.get(a) ?? 0)),
+      ordered: likely(shortlist, bears.lines),
+      prose: likely(prose, bears.prose),
       how: "Jev judged which facts the task's words find bear on it; the likeliest first.",
     };
   };
@@ -2831,7 +3036,9 @@ export const createMemory = ({
    * words (and every line of a fact file the task names), ordered by Jev's
    * yes/no on each (Jev on) or by grep's score (off); current lines before
    * Formerly ones, a Conflict line with its other side. Each line carried
-   * is a use. Nothing when the project has none of it.
+   * is a use. A prose file from before fact lines is carried as one block,
+   * marked, until its rewrite is approved. Nothing when the project has none
+   * of it.
    */
   const contextFor = async (
     projectId: string,
@@ -2844,13 +3051,12 @@ export const createMemory = ({
     const factFiles = knowledge
       .filter((file) => isFactFile(file.path))
       .map((file) => parseFactFile(file.path, file.content));
-    for (const bad of factFiles.flatMap((file) => file.unreadable)) {
-      console.warn(`[memory] ${projectId}: ${lineWords(bad)}`);
-    }
-    const { ordered, how } = await orderForBrief(
+    logUnread(projectId, factFiles);
+    const { ordered, prose, how } = await orderForBrief(
       projectId,
       task,
-      briefShortlist(factFiles, task, named)
+      briefShortlist(factFiles, task, named),
+      proseShortlist(factFiles, task, named)
     );
     const whole = wholeFiles(
       [
@@ -2882,6 +3088,7 @@ export const createMemory = ({
     }
     const parts = [
       ...whole.parts,
+      ...proseBlocks(prose, whole.room - spentOn(admitted)),
       ...(admitted.size > 0
         ? [
             `### Facts\n\n${[...admitted]
@@ -2900,11 +3107,72 @@ export const createMemory = ({
 
   // --- the hub starting, and the person answering --------------------------------------
 
+  /**
+   * Every open proposal kept in the one-file shape from before proposals
+   * named their files (`path`, `before`, `content`), rewritten in place as
+   * `files: [{ path, before, content }]`, in one commit: the cutover's
+   * conversion, run as the hub starts, so no open ask is dropped. Answers how
+   * many it rewrote.
+   */
+  const convertOneFileProposals = async (
+    project: ProjectRow
+  ): Promise<number> => {
+    const names = (await folderFileNames(project.id, PROPOSALS_DIR)).filter(
+      (name) => name.endsWith(".json")
+    );
+    const rewritten = (
+      await Promise.all(
+        names.map(async (name) => {
+          const path = `${PROPOSALS_DIR}/${name}`;
+          let kept: Record<string, unknown>;
+          try {
+            kept = JSON.parse(await fileOr(project.id, path)) as Record<
+              string,
+              unknown
+            >;
+          } catch {
+            // Not JSON: proposalsOf says so as it reads the folder.
+            return;
+          }
+          const { path: file, before, content, ...rest } = kept;
+          if (
+            "files" in kept ||
+            typeof file !== "string" ||
+            typeof before !== "string" ||
+            typeof content !== "string"
+          ) {
+            return;
+          }
+          return {
+            path,
+            content: `${JSON.stringify({ ...rest, files: [{ path: file, before, content }] }, null, 2)}\n`,
+          };
+        })
+      )
+    ).filter((write) => write !== undefined);
+    if (rewritten.length > 0) {
+      await changeFolderFiles(
+        project.id,
+        { writes: rewritten, deletes: [] },
+        {
+          author: HUB,
+          message: `memory: ${rewritten.length} open proposal${rewritten.length === 1 ? "" : "s"} rewritten to name ${rewritten.length === 1 ? "its file" : "their files"}`,
+        }
+      );
+      folderChanged(project.id);
+      console.log(
+        `[memory] ${project.name}: ${rewritten.length} open proposal${rewritten.length === 1 ? "" : "s"} rewritten in the files shape`
+      );
+    }
+    return rewritten.length;
+  };
+
   /** Every open proposal, parked again as the hub starts: the person's asks outlive it. */
   const start = async (): Promise<void> => {
     await Promise.all(
       db.listProjects().map(async (project) => {
         try {
+          await convertOneFileProposals(project);
           for (const proposal of await proposalsOf(project.id)) {
             parkProposal(proposal);
           }

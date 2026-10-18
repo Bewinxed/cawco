@@ -7,7 +7,9 @@
 #
 # A store package's own undeclared import is declared in the root package.json,
 # the one node_modules above the store, until bun ships packageExtensions
-# (oven-sh/bun#40053): bits-ui for vaul-svelte (huntabyte/vaul-svelte#130).
+# (oven-sh/bun#40053): bits-ui for vaul-svelte (huntabyte/vaul-svelte#130), and
+# drizzle-orm for drizzle-kit, whose `generate` imports drizzle-orm/version and
+# declares no dependency on it (packages/hub `db:generate`).
 # Inside a CawCo workspace bun's global store is on (its workspace bunfig), and
 # a package there realpaths into the cache, with no node_modules of ours above
 # it. So the dashboard resolves bits-ui from its own root whatever imports it:

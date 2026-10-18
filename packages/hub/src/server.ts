@@ -2956,7 +2956,11 @@ export const createServer = (
    * The prose cut of every project session (session-prose.ts): the person's
    * words its harness read and its own text, for memory_recall.
    */
-  const sessionProse = createSessionProse({ db });
+  const sessionProse = createSessionProse({
+    db,
+    // Made further down; a backfill reads only once a machine registers.
+    readHistory: (instanceId) => readHistory(instanceId),
+  });
   /**
    * The gate on a project's Caw's shell and edit calls (lead-gate.ts): each
    * of his asks is decided here before it parks, his wake's source read from
@@ -5434,7 +5438,8 @@ export const createServer = (
       sessionProse.heard(
         instanceId,
         row.body?.origin,
-        row.body?.message?.content
+        row.body?.message?.content,
+        row.acceptedAt
       );
       // Whose a lead's wake is: your words alone, or outside text (lead-gate.ts).
       if (reader && !isKeepAlive(row.body)) {
@@ -26226,6 +26231,12 @@ export const createServer = (
                 repairThread();
               });
               workItems.discardUnfiled(message.machineId);
+              // Its project sessions' stored transcripts the prose cut has
+              // not read yet (session-prose.ts), now that it can be asked.
+              detach(
+                sessionProse.backfill(message.machineId),
+                "session prose backfill"
+              );
               // Landings a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the
               // register asks of the agent.

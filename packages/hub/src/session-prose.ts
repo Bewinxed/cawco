@@ -25,13 +25,21 @@
  *   unranked. Excerpts from a session that read the web are marked
  *   untrusted.
  */
-import type { InstanceRow, NeutralMessage, NeutralOrigin } from "@cawco/core";
+import {
+  type InstanceRow,
+  type NeutralMessage,
+  type NeutralOrigin,
+  type SendRecord,
+  type SessionMessage,
+  transcriptUserText,
+} from "@cawco/core";
 import type { DbShape } from "./db";
 import type { SessionProseRow } from "./db/memory-facts";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
 import { grepScore, wordsOf } from "./memory-facts";
+import type { HistoryRead } from "./transcripts";
 
 /** Quiet this long ends a sitting (past.dev's split). */
 export const SITTING_GAP_MS = 30 * 60_000;
@@ -160,6 +168,66 @@ const sittingsOf = (
   };
 };
 
+/** Sessions one backfill batch reads, oldest first. */
+const BACKFILL_SESSIONS = 200;
+
+/** A message of a session as the prose cut keeps it, before it is stored. */
+interface ProseMessage {
+  at: Date;
+  text: string;
+  who: "person" | "agent";
+}
+
+/**
+ * A stored transcript's prose cut, by the live cut's rules: the person's
+ * sends the harness took up (a stored user entry's records of origin
+ * `human`, dated by when each was sent), and the session's own text (its
+ * top-level assistant entries' text blocks, dated by the entry); no
+ * subagent's, no error, no compaction summary, no keep-alive, no tool call
+ * or output.
+ */
+export const proseOfHistory = (
+  entries: SessionMessage[],
+  records: Record<string, SendRecord>
+): ProseMessage[] =>
+  entries.flatMap((entry): ProseMessage[] => {
+    if (
+      entry.parent_tool_use_id ||
+      entry.parent_agent_id ||
+      entry.error ||
+      entry.compactSummary ||
+      entry.keepAlive ||
+      entry.queued
+    ) {
+      return [];
+    }
+    if (entry.type === "user") {
+      return (entry.sends ?? []).flatMap((uuid) => {
+        const record = records[uuid];
+        const words =
+          record?.body.origin?.kind === "human" && !record.keepAlive
+            ? wordsOfSend(record.body.message.content).trim()
+            : "";
+        return words
+          ? [
+              {
+                at: new Date(record?.acceptedAt ?? 0),
+                who: "person",
+                text: words,
+              },
+            ]
+          : [];
+      });
+    }
+    const words =
+      entry.type === "assistant" && entry.timestamp
+        ? (transcriptUserText(entry.message) ?? "").trim()
+        : "";
+    return words
+      ? [{ at: new Date(entry.timestamp ?? 0), who: "agent", text: words }]
+      : [];
+  });
+
 /** A refusal `memory_recall` answers with: what failed, and a call that works. */
 export class RecallRefusal extends Error {}
 
@@ -272,9 +340,19 @@ const jevRecall = async (
   };
 };
 
+/** What one machine's backfill did: messages kept, sessions done, sessions left for its next register. */
+export interface BackfillCount {
+  left: number;
+  messages: number;
+  sessions: number;
+}
+
 export const createSessionProse = ({
   db,
+  readHistory,
 }: {
+  /** A session's whole stored transcript, from its machine (transcripts.ts `HistoryRead`). */
+  readonly readHistory: (instanceId: string) => Promise<HistoryRead>;
   readonly db: Pick<
     DbShape,
     | "getInstancesByIds"
@@ -284,12 +362,83 @@ export const createSessionProse = ({
     | "sessionTaint"
   >;
 }) => {
+  /** The backfill running for each machine: one at a time. */
+  const backfills = new Map<string, Promise<BackfillCount>>();
+
+  /**
+   * One session's stored transcript cut into its prose, marked done: how
+   * many messages it kept; undefined when its transcript did not read (left
+   * for the machine's next register). A session with no stored transcript
+   * is done with none.
+   */
+  const backfillSession = async (session: {
+    id: string;
+    projectId: string;
+  }): Promise<number | undefined> => {
+    const history = await readHistory(session.id);
+    if ("fault" in history && history.fault !== "missing") {
+      return;
+    }
+    const rows =
+      "fault" in history
+        ? []
+        : proseOfHistory(history.entries, history.records).map((message) => ({
+            ...message,
+            projectId: session.projectId,
+            instanceId: session.id,
+            text: kept(message.text),
+          }));
+    return db.memoryFacts.backfillProse(session.id, rows);
+  };
+
+  /** {@link SessionProse.backfill}'s run for one machine. */
+  const backfillMachine = async (machineId: string): Promise<BackfillCount> => {
+    const count: BackfillCount = { left: 0, messages: 0, sessions: 0 };
+    const tried = new Set<string>();
+    for (;;) {
+      const due = db.memoryFacts
+        .proseBackfillDue(machineId, BACKFILL_SESSIONS + tried.size)
+        .filter((session) => !tried.has(session.id))
+        .slice(0, BACKFILL_SESSIONS);
+      if (due.length === 0) {
+        break;
+      }
+      for (const session of due) {
+        tried.add(session.id);
+        // biome-ignore lint/performance/noAwaitInLoops: one transcript read at a time, oldest first, so a backfill never floods its machine
+        const cut = await backfillSession(session);
+        if (cut === undefined) {
+          count.left += 1;
+        } else {
+          count.messages += cut;
+          count.sessions += 1;
+        }
+      }
+    }
+    if (count.sessions + count.left > 0) {
+      console.log(
+        `[prose] ${machineId}: backfilled ${count.messages} message${count.messages === 1 ? "" : "s"} from ${count.sessions} session${count.sessions === 1 ? "" : "s"}; ${count.left} left for its next register (transcript unread)`
+      );
+    }
+    return count;
+  };
+
   const projectOfSession = (instanceId: string): string | null =>
     (db.getInstancesByIds([instanceId])[0] as InstanceRow | undefined)
       ?.projectId ?? null;
 
-  /** Keeps one message of a project session; a session in no project keeps none. */
-  const keep = (instanceId: string, who: "person" | "agent", text: string) => {
+  /**
+   * Keeps one message of a project session, dated by the clock its stored
+   * transcript shows for it too (a send's acceptance, the harness's record
+   * time), so a backfill of the same transcript lines up with it; a session
+   * in no project keeps none.
+   */
+  const keep = (
+    instanceId: string,
+    who: "person" | "agent",
+    text: string,
+    at: Date
+  ) => {
     const words = text.trim();
     const projectId = words ? projectOfSession(instanceId) : null;
     if (!projectId) {
@@ -298,7 +447,7 @@ export const createSessionProse = ({
     db.memoryFacts.addProse({
       projectId,
       instanceId,
-      at: new Date(),
+      at,
       who,
       text: kept(words),
     });
@@ -397,14 +546,15 @@ export const createSessionProse = ({
   };
 
   return {
-    /** A send a session's harness read: the person's words are kept. */
+    /** A send a session's harness read, accepted at `acceptedAt`: the person's words are kept. */
     heard(
       instanceId: string,
       origin: NeutralOrigin | undefined,
-      content: string | readonly unknown[] | undefined
+      content: string | readonly unknown[] | undefined,
+      acceptedAt: Date
     ): void {
       if (origin?.kind === "human" && content !== undefined) {
-        keep(instanceId, "person", wordsOfSend(content));
+        keep(instanceId, "person", wordsOfSend(content), acceptedAt);
       }
     },
 
@@ -422,13 +572,36 @@ export const createSessionProse = ({
       keep(
         instanceId,
         "agent",
-        message.message.content
-          .flatMap((block) => (block.type === "text" ? [block.text] : []))
-          .join("\n\n")
+        transcriptUserText(message.message) ?? "",
+        message.timestamp ? new Date(message.timestamp) : new Date()
       );
     },
 
     recall,
+
+    /**
+     * Cuts the stored transcripts of `machineId`'s project sessions into
+     * the prose (module header), each once: on every register of the
+     * machine, so a session whose machine was away is cut when it comes
+     * back. One run per machine at a time, one read at a time, oldest
+     * session first, {@link BACKFILL_SESSIONS} a batch, until none is due.
+     * A session's cut keeps only what is older than its earliest prose
+     * already kept (live, by the same clocks), and its done mark goes in
+     * with it (db `prose_backfills`); a session with no stored transcript
+     * is marked done with nothing; one whose read failed is left for the
+     * machine's next register. Logs what it did.
+     */
+    backfill(machineId: string): Promise<BackfillCount> {
+      const running = backfills.get(machineId);
+      if (running !== undefined) {
+        return running;
+      }
+      const run = backfillMachine(machineId).finally(() => {
+        backfills.delete(machineId);
+      });
+      backfills.set(machineId, run);
+      return run;
+    },
   };
 };
 
