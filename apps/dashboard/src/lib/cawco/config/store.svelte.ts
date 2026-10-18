@@ -97,7 +97,10 @@ export class ConfigStore {
     const payload = await read<DelegateTypesPayload>("/api/delegate-types");
     return payload.types;
   });
-  /** Each project's own types, read from its catalog; a project with none is left out. */
+  /**
+   * Each project's own types, read from its catalog, with the files under
+   * `delegates/` that did not make one; a project with neither is left out.
+   */
   readonly projectTypes = new Slot(
     "the projects' delegate types",
     async (): Promise<ProjectTypes[]> => {
@@ -112,10 +115,13 @@ export class ConfigStore {
             types: catalog.types.filter(
               (type): type is ProjectDelegateType => type.source === "project"
             ),
+            problems: catalog.problems,
           };
         })
       );
-      return catalogs.filter((entry) => entry.types.length > 0);
+      return catalogs.filter(
+        (entry) => entry.types.length > 0 || entry.problems.length > 0
+      );
     }
   );
   readonly fleet = new Slot(

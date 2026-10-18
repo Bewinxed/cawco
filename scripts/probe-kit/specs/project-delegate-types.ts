@@ -2,21 +2,28 @@
  * A project's own delegate types on Configure › Delegate types (Projects
  * spec §5.1, D16: "Delegate types are files in `delegates/` and shadow fleet
  * types of the same name"). On a scratch fleet, the built dashboard on the
- * desk: a project gets `delegates/writer.md` and a file named like one of
- * the fleet types the hub seeded, through its folder. The page lists the
- * fleet's types under "The fleet", and both files under the project's name,
- * each with its path; the one named like a fleet type says it shadows it,
- * and writer says nothing of the kind. Read from the DOM.
+ * desk: project Harbour gets `delegates/writer.md`, a file named like one of
+ * the fleet types the hub seeded, and `delegates/broken.md` with no front
+ * matter, through its folder; project Quay gets only a broken one. The page
+ * lists the fleet's types under "The fleet", and Harbour's two types under
+ * its name, each with its path; the one named like a fleet type says it
+ * shadows it, and writer says nothing of the kind. Each broken file is said
+ * under its project in the hub's words, and Quay, with no type at all, still
+ * has its group. Read from the DOM.
  *
  *   bun scripts/probe-kit/run.ts project-delegate-types
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply } from "../../scratch-fleet";
-import { type Kit, open, type Spec } from "../kit";
+import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const PROJECT = "Harbour";
+const BROKEN_ONLY = "Quay";
 const WRITER = "writer";
+const BROKEN = "delegates/broken.md";
+/** What the hub says of a type file with no front matter (project-delegate-types.ts). */
+const NO_FRONT_MATTER = `${BROKEN}: the file has no front matter (a --- block on top)`;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -24,6 +31,8 @@ const typeFile = (description: string) =>
   `---\nharness: claude\nmodel: claude-opus-5-5\neffort: high\nlands: none\n---\n${description}\n`;
 
 interface Group {
+  /** The fault lines under it. */
+  faults: string[];
   head: string;
   rows: {
     badge: string | null;
@@ -34,6 +43,41 @@ interface Group {
     meta: string;
     name: string;
   }[];
+}
+
+/** A project on a repository of its own, its folder holding `files`. */
+async function projectWith(
+  fleet: KitFleet,
+  name: string,
+  files: [path: string, content: string][]
+): Promise<string> {
+  const repo = join(fleet.sandbox, name.toLowerCase());
+  await mkdir(repo, { recursive: true });
+  await Bun.$`git init -q -b main && echo ${name} > README.md && git add -A && git -c user.name=Owner -c user.email=owner@probe.test commit -qm ${name}`
+    .cwd(repo)
+    .env({ ...process.env, HOME: fleet.env.HOME as string })
+    .quiet();
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name,
+    machineId: MACHINE,
+    cwd: repo,
+    caw: false,
+  });
+  for (const [path, content] of files) {
+    // biome-ignore lint/performance/noAwaitInLoops: a few files, in order
+    const put = await fetch(
+      `${fleet.base}/api/projects/${project.id}/folder/file`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path, content }),
+      }
+    );
+    if (!put.ok) {
+      throw new Error(`${path}: ${put.status} ${await put.text()}`);
+    }
+  }
+  return project.id;
 }
 
 async function probe(kit: Kit) {
@@ -56,47 +100,33 @@ async function probe(kit: Kit) {
     fleetTypes.join(", ")
   );
 
-  const repo = join(fleet.sandbox, "harbour");
-  await mkdir(repo, { recursive: true });
-  await Bun.$`git init -q -b main && echo harbour > README.md && git add -A && git -c user.name=Owner -c user.email=owner@probe.test commit -qm 'Harbour'`
-    .cwd(repo)
-    .env({ ...process.env, HOME: fleet.env.HOME as string })
-    .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: PROJECT,
-    machineId: MACHINE,
-    cwd: repo,
-    caw: false,
-  });
-  for (const [path, content] of [
+  const harbour = await projectWith(fleet, PROJECT, [
     [`delegates/${WRITER}.md`, typeFile("Draft posts in the brand voice.")],
     [`delegates/${shadowed}.md`, typeFile("Harbour's own take on it.")],
-  ]) {
-    // biome-ignore lint/performance/noAwaitInLoops: two files, in order
-    const put = await fetch(
-      `${fleet.base}/api/projects/${project.id}/folder/file`,
-      {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path, content }),
-      }
-    );
-    if (!put.ok) {
-      throw new Error(`${path}: ${put.status} ${await put.text()}`);
-    }
-  }
+    [BROKEN, "Just a brief, with no front matter.\n"],
+  ]);
+  await projectWith(fleet, BROKEN_ONLY, [
+    [BROKEN, "Just a brief, with no front matter.\n"],
+  ]);
   const catalog = await fleet.api<{
+    problems: { path: string; problem: string }[];
     types: { name: string; shadows?: boolean; source: string }[];
-  }>(`/api/projects/${project.id}/delegate-types`);
+  }>(`/api/projects/${harbour}/delegate-types`);
   kit.check(
-    "the hub's catalog holds both files as the project's types",
-    catalog.types.filter((type) => type.source === "project").length === 2,
-    JSON.stringify(catalog.types.map((type) => [type.name, type.source]))
+    "the hub's catalog holds two of Harbour's files as its types, and says why broken.md is none",
+    catalog.types.filter((type) => type.source === "project").length === 2 &&
+      catalog.problems.some(
+        (one) => `${one.path}: ${one.problem}` === NO_FRONT_MATTER
+      ),
+    JSON.stringify({
+      types: catalog.types.map((type) => [type.name, type.source]),
+      problems: catalog.problems,
+    })
   );
 
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
-  await open(page, `${base}/config/delegate-types`, `text=${PROJECT}`);
+  await open(page, `${base}/config/delegate-types`, `text=${BROKEN_ONLY}`);
   const { groups, faces } = await page.evaluate(() => {
     const faceOf = (element: Element | null) =>
       element ? getComputedStyle(element).fontFamily : null;
@@ -116,6 +146,11 @@ async function probe(kit: Kit) {
           head:
             group.querySelector('[data-slot="head"]')?.textContent?.trim() ??
             "",
+          faults: [
+            ...group.querySelectorAll(
+              ':scope > [data-slot="row-fault"] [data-slot="reason"]'
+            ),
+          ].map((reason) => reason.textContent?.trim() ?? ""),
           rows: [...group.querySelectorAll<HTMLElement>("[data-row-name]")].map(
             (row) => {
               const badge = row.querySelector('[data-slot="badge"]');
@@ -138,14 +173,25 @@ async function probe(kit: Kit) {
       ),
     };
   });
-  const said = JSON.stringify(groups);
+  /** The page's groups as heads, row names and fault lines: what each check failing prints. */
+  const said = JSON.stringify(
+    groups
+      .filter((group) => group.head !== "")
+      .map((group) => ({
+        head: group.head,
+        rows: group.rows.map((row) => row.name),
+        faults: group.faults,
+      }))
+  );
   const fleetGroup = groups.find((group) => group.head === "The fleet");
   const projectGroup = groups.find((group) => group.head === PROJECT);
+  const brokenGroup = groups.find((group) => group.head === BROKEN_ONLY);
   kit.check(
     "the fleet's types stand under “The fleet”, writer not among them",
     fleetGroup !== undefined &&
       fleetGroup.rows.length === fleetTypes.length &&
-      !fleetGroup.rows.some((row) => row.name === WRITER),
+      !fleetGroup.rows.some((row) => row.name === WRITER) &&
+      fleetGroup.faults.length === 0,
     said
   );
   kit.check(
@@ -170,6 +216,18 @@ async function probe(kit: Kit) {
     shadow?.meta.startsWith(`delegates/${shadowed}.md · `) === true &&
       shadow.badge === `shadows the fleet's ${shadowed}`,
     JSON.stringify(shadow)
+  );
+  kit.check(
+    `broken.md is said under “${PROJECT}” in the hub's words`,
+    projectGroup?.faults.join("|") === NO_FRONT_MATTER,
+    said
+  );
+  kit.check(
+    `“${BROKEN_ONLY}”, whose only file is broken, has its group with that line and no rows`,
+    brokenGroup !== undefined &&
+      brokenGroup.rows.length === 0 &&
+      brokenGroup.faults.join("|") === NO_FRONT_MATTER,
+    said
   );
   kit.check(
     "a fleet row's name keeps the mono face",

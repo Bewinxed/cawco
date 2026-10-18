@@ -31,13 +31,24 @@ export type ProjectDelegateType = DelegateType & {
   source: "project";
 };
 
-/** `GET /api/projects/:id/delegate-types`: the project's types first, then the fleet types they leave. */
+/** A file under `delegates/` that did not make a type, or a field one ignored. */
+export interface TypeFileProblem {
+  path: string;
+  problem: string;
+}
+
+/**
+ * `GET /api/projects/:id/delegate-types`: the project's types first, then
+ * the fleet types they leave, and the files that kept themselves out.
+ */
 export interface ProjectCatalogPayload {
+  problems: TypeFileProblem[];
   types: (ProjectDelegateType | (DelegateType & { source: "fleet" }))[];
 }
 
-/** One project's own types, under the project they apply in. */
+/** One project's own types, under the project they apply in, with its files that made none. */
 export interface ProjectTypes {
+  problems: TypeFileProblem[];
   project: { id: string; name: string };
   types: ProjectDelegateType[];
 }
