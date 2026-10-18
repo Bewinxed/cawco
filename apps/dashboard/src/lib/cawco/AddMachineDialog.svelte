@@ -150,9 +150,7 @@
     portNumber === undefined ||
       (Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65_535)
   );
-  const canStart = $derived(
-    target.trim() !== "" && hubUrl !== "" && portValid && !starting
-  );
+  const canStart = $derived(target.trim() !== "" && portValid && !starting);
 
   async function start(event: SubmitEvent) {
     event.preventDefault();
@@ -166,7 +164,6 @@
     try {
       await sshJoin.start({
         target: target.trim(),
-        hubUrl,
         ...(portNumber === undefined ? {} : { port: portNumber }),
         ...(typed === "" ? {} : { password: typed }),
       });
@@ -281,7 +278,7 @@
         };
       case "download":
         return {
-          text: `${hostOf(where)} can't reach this hub at ${job.hubUrl}. Pick an address it can reach, then Retry.`,
+          text: `${hostOf(where)} signed in, but the install script didn't come through this hub's SSH connection. Its last output is below. Retry.`,
           tail: job.lines.slice(-20),
         };
       case "step":
@@ -291,7 +288,7 @@
         };
       case "unregistered":
         return {
-          text: `CawCo installed on ${where}, but the machine never came online on this hub. Its last output is below. Check that it can reach ${job.hubUrl}, then Retry.`,
+          text: `CawCo installed on ${where}, but the machine never came online on this hub through its SSH connection. Its last output is below. Retry.`,
           tail: job.lines.slice(-20),
         };
       case "password": {
@@ -322,8 +319,9 @@
   });
 </script>
 
-<!-- The address the machine is told to reach this hub on, the same choice on
-     both tabs: the script is downloaded from it and `join` saves it. -->
+<!-- The address the machine is told to reach this hub on, for the command run
+     by hand: the script is downloaded from it and `join` saves it. An SSH add
+     needs none, the hub's own connection carries the machine to it. -->
 {#snippet addressField(id: string)}
   <div data-slot="add-machine-dialog-field" class="field">
     <Label for={id}>Hub address this machine should use</Label>
@@ -529,7 +527,6 @@
               </span>
             </div>
           </div>
-          {@render addressField("join-address-ssh")}
 
           {#if failure}
             <div class="flex flex-col gap-[var(--space-2)]" role="alert">
