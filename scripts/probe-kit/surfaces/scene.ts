@@ -1840,6 +1840,13 @@ export async function seedScene(
     "claude"
   );
   await mkdir(secondDir, { recursive: true });
+  // The machine's skill in this account's config too, as a person's own
+  // skill is in each login they keep: a session the rebalance carries here
+  // starts its next turn from this dir, and lists only what is in it (the
+  // suggesting state's chip is that skill).
+  const secondSkill = join(secondDir, "skills", SKILL_NAME);
+  await mkdir(secondSkill, { recursive: true });
+  await writeFile(join(secondSkill, "SKILL.md"), SKILL);
   await writeFile(
     join(secondDir, ".credentials.json"),
     JSON.stringify({
