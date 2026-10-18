@@ -2,6 +2,7 @@ import { dirname, resolve } from "node:path";
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
+  type CawcoEnvVar,
   localDashboardPort,
   mcpGatewayPort,
   readEnv,
@@ -118,3 +119,53 @@ export const ARTIFACTS_ROOT = resolve(dirname(DB_PATH), "artifacts");
  * other route is held to its own, smaller cap first (body-limits.ts).
  */
 export const MAX_REQUEST_BYTES = 64 * 1024 ** 3;
+
+/** A whole number from `name`, at least `least`; unset, `fallback`; anything else stops the hub at start, in so many words. */
+const wholeFrom = (
+  name: CawcoEnvVar,
+  fallback: number,
+  least: number
+): number => {
+  const raw = readEnv(name);
+  if (raw === undefined) {
+    return fallback;
+  }
+  const value = Number(raw.trim());
+  if (!Number.isInteger(value) || value < least) {
+    throw new Error(
+      `${name} is "${raw}": it takes a whole number, ${least} or more.`
+    );
+  }
+  return value;
+};
+
+/**
+ * Days a project's fact line may go unused (no brief carried it, no note
+ * corroborated it) before a curator run proposes moving it to
+ * `knowledge/archive/` (memory.ts). The default is the replay's pick
+ * (scripts/probe-kit/specs/memory-replay.ts, 2026-10-18: this repository's
+ * 539 curated lines, dated over 61 days, against 4,384 commits): with a use
+ * as a later commit sharing four words, 30 days archives 19 lines (3.5%), 60
+ * days 3, 90 days none under any reading of use. The owner's rule is "fold
+ * first; archive a fact only after long disuse": 90 is the first candidate
+ * that archives nothing still in use here.
+ */
+export const MEMORY_ARCHIVE_DAYS = wholeFrom(
+  CAWCO_ENV.memoryArchiveDays,
+  90,
+  1
+);
+
+/**
+ * A knowledge file's budget, in characters: what one brief carries of it,
+ * and the size past which a curator run is asked to fold it (memory.ts).
+ * The default is the replay's pick (scripts/probe-kit/specs/memory-replay.ts,
+ * 2026-10-18, 24 topic files): 8,000 and 12,000 fold the same 5 files, the
+ * ones past either; 6,000 adds three that sit just over it (6.4k to 6.9k);
+ * 8,000 is also what a brief carried of a file before.
+ */
+export const MEMORY_FILE_CHARS = wholeFrom(
+  CAWCO_ENV.memoryFileChars,
+  8000,
+  500
+);

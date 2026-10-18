@@ -675,6 +675,7 @@ import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
+import { createSessionProse } from "./session-prose";
 import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
@@ -2951,6 +2952,11 @@ export const createServer = (
     },
     put: (row) => db.putSessionTaint(row),
   });
+  /**
+   * The prose cut of every project session (session-prose.ts): the person's
+   * words its harness read and its own text, for memory_recall.
+   */
+  const sessionProse = createSessionProse({ db });
   /**
    * The gate on a project's Caw's shell and edit calls (lead-gate.ts): each
    * of his asks is decided here before it parks, his wake's source read from
@@ -5424,6 +5430,12 @@ export const createServer = (
       }
       // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
       memoryWatch.read(instanceId, row.body?.origin);
+      // The person's words, into the project session's prose (session-prose.ts).
+      sessionProse.heard(
+        instanceId,
+        row.body?.origin,
+        row.body?.message?.content
+      );
       // Whose a lead's wake is: your words alone, or outside text (lead-gate.ts).
       if (reader && !isKeepAlive(row.body)) {
         leadGate.read(reader, row.uuid, row.body?.origin);
@@ -18360,6 +18372,7 @@ export const createServer = (
     },
     threadOf: (actor) => lead?.askThread(actor),
     park: (envelope) => parkForPerson(envelope),
+    recall: (actor, asked) => sessionProse.recall(actor, asked),
     settle: (requestId) => {
       pending.resolve(requestId);
     },
@@ -27331,6 +27344,8 @@ export const createServer = (
                   admitted.message,
                   admitted.harness
                 );
+                // Its own words, into the project session's prose (session-prose.ts).
+                sessionProse.said(message.instanceId, admitted.message);
                 // A lead's web reads, his calls' results and his turn's end
                 // (lead-gate.ts): none of a stream's deltas carry them. A
                 // routine run's session's words, for a failure that gives no

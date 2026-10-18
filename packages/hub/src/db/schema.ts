@@ -3680,6 +3680,49 @@ export const sessionSubagents = sqliteTable(
 );
 
 /**
+ * When a brief last carried each of a project's fact lines (memory.ts
+ * `contextFor`), by its file and the hash of its words: the hub's own record
+ * of use, written into the line's `used` only inside a diff the curator or
+ * Jev's sort proposes anyway, so a brief commits nothing.
+ */
+export const factUses = sqliteTable(
+  "fact_uses",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** `knowledge/<topic>.md`. */
+    path: text("path").notNull(),
+    /** The fact's words, hashed (memory-facts.ts `factKey`): its parenthesis may change, its words not. */
+    key: text("key").notNull(),
+    usedAt: timestamp("used_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.path, table.key] })]
+);
+
+/**
+ * The prose cut of a project's sessions (session-prose.ts): the person's
+ * words a session read and the agent's own text, one row per message, no
+ * tool calls, no tool output, no thinking. Kept on the hub, never in the
+ * project's folder, for `memory_recall`.
+ */
+export const sessionProse = sqliteTable(
+  "session_prose",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    instanceId: text("instance_id").notNull(),
+    at: timestamp("at").notNull(),
+    /** `person`: words the person sent it; `agent`: its own text. */
+    who: text("who", { enum: ["person", "agent"] }).notNull(),
+    text: text("text").notNull(),
+  },
+  (table) => [index("session_prose_project_at").on(table.projectId, table.at)]
+);
+
+/**
  * What became of one of Caw's shell or edit calls (lead-gate.ts): `asked`
  * while it waits on your Approve card, `ran` once it was let run (its exit
  * once its result came), `refused` by the hub's rules, `denied` by you.

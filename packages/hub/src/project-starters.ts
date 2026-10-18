@@ -62,7 +62,8 @@ import { designShaped } from "./design-offers";
 import { jevAccess } from "./jev";
 import { JevFailed, jevStarters, startersOff } from "./jev-placement";
 import { projectDesign } from "./landed";
-import { AGENTS_FILE, fileOr, KNOWLEDGE_DIR } from "./memory";
+import { AGENTS_FILE, fileOr } from "./memory";
+import { KNOWLEDGE_DIR } from "./memory-facts";
 import { FolderRefusal, listFolder, refused } from "./project-folder";
 import {
   boundStarterInputs,

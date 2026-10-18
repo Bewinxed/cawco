@@ -289,12 +289,16 @@ async function run(kit: Kit): Promise<void> {
       path: `memory/proposals/${id}.json`,
       content: JSON.stringify({
         base: history.commits[0]?.sha ?? "",
-        before: "",
         by: "Memory curator",
-        content: `# Parity\n\n- ${cited} is kept.\n`,
+        files: [
+          {
+            path: `knowledge/${tag.toLowerCase()}.md`,
+            before: "",
+            content: `Parity: what this device keeps.\n\n- The parity note is kept. (since ${now.toISOString().slice(0, 10)}, from ${cited})\n`,
+          },
+        ],
         id,
         notes: [cited],
-        path: `knowledge/${tag.toLowerCase()}.md`,
         projectId,
         session: worker,
         time: now.toISOString(),

@@ -165,6 +165,8 @@ const once: Record<"agent" | "cron" | "delegate", boolean> = {
 const CURATOR = "You are this project's memory curator";
 const CAW = "You are Caw, the lead of the project";
 const NOTE_ID = /^(n-\d{8}-\d{6}-[0-9a-f]{6})/;
+/** The day a fact line the mock writes became true: the note's own. */
+const TODAY = new Date().toISOString().slice(0, 10);
 const CAW_ASK = /PROBE-MEMORY-CAW-PROPOSE (n-\d{8}-\d{6}-[0-9a-f]{6})/;
 const OUTCOME = /outcome: (.*)/;
 /** The hub's log lines a failure prints. */
@@ -248,15 +250,23 @@ const caw = (request: Seen): Reply => {
   if (asked && !all.includes('"path":"AGENTS.md"')) {
     const agents = between(all, "---AGENTS---", "---END---");
     return call(request, PROPOSE, {
-      path: "AGENTS.md",
-      content: `${agents}\n\n## About\n\n- The Memory project ships a small service.\n`,
+      files: [
+        {
+          path: "AGENTS.md",
+          content: `${agents}\n\n## About\n\n- The Memory project ships a small service.\n`,
+        },
+      ],
       why: "What the project is",
     });
   }
   if (asked && !all.includes('"path":"knowledge/caw.md"')) {
     return call(request, PROPOSE, {
-      path: "knowledge/caw.md",
-      content: `# Commits\n\n- ${WORKER_NOTE}\n`,
+      files: [
+        {
+          path: "knowledge/caw.md",
+          content: `Commits: how they are written.\n\n- ${WORKER_NOTE} (since ${TODAY}, from ${asked[1]})\n`,
+        },
+      ],
       notes: [asked[1]],
       why: "The commit convention",
     });
@@ -280,20 +290,29 @@ const curator = (request: Seen): Reply => {
     const agents = between(
       all,
       "## AGENTS.md as it stands",
-      "## knowledge/ as it stands"
+      "## The fact files as they stand"
     );
     return call(request, PROPOSE, {
-      path: "AGENTS.md",
-      content: `${agents}\n\n## Deploys\n\n- ${ATTEMPT_NOTE}\n`,
+      files: [
+        {
+          path: "AGENTS.md",
+          content: `${agents}\n\n## Deploys\n\n- ${ATTEMPT_NOTE}\n`,
+        },
+      ],
       notes: [ids.get("attempt") ?? "missing"],
       why: "How deploys go out",
     });
   }
   if (!all.includes('"path":"knowledge/time.md"')) {
+    const second = ids.get("second") ?? "missing";
     return call(request, PROPOSE, {
-      path: "knowledge/time.md",
-      content: `# Time\n\n- ${SECOND_NOTE}\n`,
-      notes: [ids.get("second") ?? "missing"],
+      files: [
+        {
+          path: "knowledge/time.md",
+          content: `Time: how the API tells it.\n\n- ${SECOND_NOTE} (since ${TODAY}, from ${second})\n`,
+        },
+      ],
+      notes: [second],
       why: "How the API tells time",
     });
   }
@@ -463,6 +482,10 @@ interface Note {
   content: string;
   path: string;
 }
+/** The one file a proposal's ask changes (memory.ts `Proposal.files`). */
+const pathOf = (ask: Ask): string | undefined =>
+  (ask.payload.input.files as { path: string }[] | undefined)?.[0]?.path;
+
 interface Ask {
   instanceId: string;
   machineId: string;
@@ -651,11 +674,11 @@ try {
   for (const [path, content] of [
     [
       "knowledge/deploy.md",
-      "# Deploys\n\nKNOWLEDGE-DEPLOY: ship from main, never on Fridays.\n",
+      "Deploys: how releases go out.\n\n- KNOWLEDGE-DEPLOY: ship from main, never on Fridays. (since 2026-10-01, from n-20261001-090000-aaaaaa)\n",
     ],
     [
       "knowledge/unrelated.md",
-      "# Office\n\nKNOWLEDGE-UNRELATED: the plants are watered on Mondays.\n",
+      "Office: the room.\n\n- KNOWLEDGE-UNRELATED: the plants are watered on Mondays. (since 2026-10-01, from n-20261001-090000-bbbbbb)\n",
     ],
   ]) {
     // biome-ignore lint/performance/noAwaitInLoops: two files, in order
@@ -918,12 +941,8 @@ try {
       (found) => found.length === 2,
       240_000
     );
-    const agentsAsk = asks.find(
-      (ask) => ask.payload.input.path === "AGENTS.md"
-    );
-    const knowledgeAsk = asks.find(
-      (ask) => ask.payload.input.path === "knowledge/caw.md"
-    );
+    const agentsAsk = asks.find((ask) => pathOf(ask) === "AGENTS.md");
+    const knowledgeAsk = asks.find((ask) => pathOf(ask) === "knowledge/caw.md");
     const change = agentsAsk?.payload.presentation?.changes[0];
     check(
       "c: a proposal is the person's ask, drawn as its diff",
@@ -995,7 +1014,7 @@ try {
       "e: an attempt's brief carries the knowledge file its task names",
       at >= 0 &&
         brief.includes("### AGENTS.md") &&
-        brief.includes("### knowledge/deploy.md") &&
+        brief.includes("From knowledge/deploy.md:") &&
         brief.includes("KNOWLEDGE-DEPLOY: ship from main") &&
         !brief.includes("KNOWLEDGE-UNRELATED"),
       brief.slice(at, at + 900)
@@ -1108,12 +1127,8 @@ try {
       "SELECT i.role FROM instances i JOIN work_items w ON w.instance_id = i.id WHERE w.parent_instance_id = ?",
       `routine:${curatorRow.id}`
     );
-    const agentsAsk = asks.find(
-      (ask) => ask.payload.input.path === "AGENTS.md"
-    );
-    const timeAsk = asks.find(
-      (ask) => ask.payload.input.path === "knowledge/time.md"
-    );
+    const agentsAsk = asks.find((ask) => pathOf(ask) === "AGENTS.md");
+    const timeAsk = asks.find((ask) => pathOf(ask) === "knowledge/time.md");
     const attemptId = idOf(noteWith(await inbox(), ATTEMPT_NOTE));
     check(
       "c: the curator run, in the curator role, proposes diffs citing the notes it read",

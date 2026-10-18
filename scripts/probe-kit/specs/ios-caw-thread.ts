@@ -230,8 +230,12 @@ const respond = (request: Seen): Reply => {
       return text("Asked.");
     }
     const proposal = call(request, PROPOSE, {
-      path: "AGENTS.md",
-      content: `# Caw threads\n\nPROBE-MEMORY-${proposing}: posts use the plain voice.\n`,
+      files: [
+        {
+          path: "AGENTS.md",
+          content: `# Caw threads\n\nPROBE-MEMORY-${proposing}: posts use the plain voice.\n`,
+        },
+      ],
       why: "The voice you chose.",
       ask: true,
     });

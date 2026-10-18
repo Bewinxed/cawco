@@ -185,11 +185,20 @@ import type { Tasks } from "./tasks";
  * 2026-10-16/17). About 60 tokens for the delegate (7,392 measured), the
  * words already cut twice. Raised deliberately for the delegate; the
  * worker's and the lead's fit as they stand.
+ * 2026-10-18: `memory_recall` (session-prose.ts), the owner's pick of the
+ * memory upgrade ("core and session search"): "have we tried this before",
+ * answered from a project's past sessions, for the worker, the delegate and
+ * the lead. memory_note gains `since`, memory_propose takes `files` and
+ * names the fact line's shape. Every new description cut to a clause and its
+ * parameters to a few words; the tool's schema alone is about 220 tokens.
+ * About 300 tokens for each (worker 24,877, delegate 7,624, lead 16,466
+ * measured). Raised deliberately for the delegate and the lead; the
+ * worker's fits.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 25_000,
-  delegate: 7400,
-  lead: 16_220,
+  delegate: 7650,
+  lead: 16_480,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -358,6 +367,7 @@ export const measureRoles = (): RoleSize[] => {
         folderChanged: () => undefined,
         notice: () => undefined,
         park: () => undefined,
+        recall: () => Promise.reject(new Error("measuring")),
         settle: () => undefined,
         threadOf: () => undefined,
         watch: createTurnWatch({

@@ -7,7 +7,8 @@
  * one, else its first option.
  * A starters call (hub jev-placement.ts `jevStarters`: its state holds
  * `shown` and `repository`) is answered by `starters`, which picks each
- * question's choice and probability, and may add answers of its own.
+ * question's choice and probability, and may add answers of its own. Any
+ * other call's choice is `choice`'s pick when it makes one.
  *
  * Jev is on once the hub holds a TypeSafe key: {@link jevOn}.
  */
@@ -79,10 +80,24 @@ export const firstAsk = (call: JevCall): Record<string, StarterPick> =>
     ])
   );
 
+/** A choice no hook picked: `none` when it offers one, else its first option. */
+const defaultPick = (asked: JevAsked): StarterPick => ({
+  choice: options(asked).includes("none")
+    ? "none"
+    : (options(asked)[0] ?? "none"),
+  p: 0.9,
+});
+
 export const jevMock = (
   starters: (call: JevCall) => Record<string, StarterPick> = firstAsk,
   /** Each noul question's answer, by its call and id. */
-  noul: (call: JevCall, id: string) => number = () => 0.05
+  noul: (call: JevCall, id: string) => number = () => 0.05,
+  /** A choice question's pick outside a starters call, by its call, id and question; none: the default. */
+  choice: (
+    call: JevCall,
+    id: string,
+    asked: JevAsked
+  ) => StarterPick | undefined = () => undefined
 ): JevMock => {
   const calls: JevCall[] = [];
   const server = Bun.serve({
@@ -113,12 +128,10 @@ export const jevMock = (
             probabilities: { "0": 1 },
           };
         } else {
-          const pick = picks[id] ?? {
-            choice: options(asked).includes("none")
-              ? "none"
-              : (options(asked)[0] ?? "none"),
-            p: 0.9,
-          };
+          const pick =
+            picks[id] ??
+            (isStartersCall(call) ? undefined : choice(call, id, asked)) ??
+            defaultPick(asked);
           answers[id] = choiceAnswer(asked, pick);
         }
       }

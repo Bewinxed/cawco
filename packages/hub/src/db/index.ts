@@ -110,6 +110,7 @@ import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import { type FindDb, findDb } from "./find";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
+import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
@@ -1186,6 +1187,8 @@ export interface DbShape {
     instances: (typeof instances.$inferSelect)[];
     runs: WorkflowRunRow[];
   };
+  /** A project's fact uses and its sessions' prose cut (memory.ts, session-prose.ts). */
+  readonly memoryFacts: MemoryFactsDb;
   /**
    * What each harness on the machine can do, as its daemon's report beat
    * said: every harness the beat names is replaced, and one it leaves out
@@ -9114,6 +9117,7 @@ const make = async (path: string): Promise<DbShape> => {
     ingress: ingressDb(db),
     relays: relaysDb(db),
     sshMachines: sshMachinesDb(db),
+    memoryFacts: memoryFactsDb(db),
     hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db),
     find: findDb(db),

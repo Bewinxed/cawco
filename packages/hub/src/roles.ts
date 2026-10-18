@@ -183,6 +183,8 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     // An attempt at a task hands in its result (task-tools.ts).
     "task_result",
     "memory_note",
+    // What its project's past sessions said (session-prose.ts).
+    "memory_recall",
     // Its own project's folder, read only (caw.ts): what an earlier delegate
     // handed in, from any machine.
     "folder_read",
@@ -199,6 +201,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...CAW_TOOLS,
     "memory_note",
     "memory_propose",
+    "memory_recall",
     // Decision pages: Caw builds them from his folder's decisions/<name>/page.html.
     ...ARTIFACT_TOOLS,
     ...ROUTINE,

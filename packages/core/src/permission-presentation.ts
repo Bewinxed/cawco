@@ -1051,25 +1051,49 @@ export const DELEGATE_TYPE_PROPOSAL_TOOL = "mcp__cawco__delegate_type_proposal";
 
 /**
  * A memory proposal (Projects spec §5.4): a change to the project's AGENTS.md
- * or a knowledge file, as the curator or Caw proposed it, citing the inbox
- * notes it comes from; and Caw's delegate type (§5.1, "a file diff you
- * approve"), drawn the same. The hub puts the file as it stood (`before`)
- * beside the proposed text (`content`) as it parks it.
+ * or its knowledge files, as the curator, Jev's sort, the hub's archive or
+ * withdrawal, or Caw proposed it, citing the inbox notes it comes from; and
+ * Caw's delegate type (§5.1, "a file diff you approve"), drawn the same. The
+ * hub puts each file as it stood (`before`) beside its proposed text
+ * (`content`) as it parks it: a fact moving between files is one card.
  */
 function memoryProposal(input: Record<string, unknown>): Presented {
-  const path = text(input.path) ?? "(no path)";
-  const before = typeof input.before === "string" ? input.before : "";
-  const content = typeof input.content === "string" ? input.content : "";
-  const { change: made, stat } = changeOf(path, before, content);
+  const files = Array.isArray(input.files)
+    ? input.files.filter(
+        (file): file is { before: string; content: string; path: string } =>
+          typeof file === "object" &&
+          file !== null &&
+          typeof (file as { path?: unknown }).path === "string" &&
+          typeof (file as { before?: unknown }).before === "string" &&
+          typeof (file as { content?: unknown }).content === "string"
+      )
+    : [];
+  const made = files.map((file) =>
+    changeOf(file.path, file.before, file.content)
+  );
+  const stat = made.reduce(
+    (sum, each) => ({
+      added: sum.added + each.stat.added,
+      removed: sum.removed + each.stat.removed,
+      sections: [],
+    }),
+    { added: 0, removed: 0, sections: [] } as LineStat
+  );
   const notes = Array.isArray(input.notes)
     ? input.notes.filter((note): note is string => typeof note === "string")
     : [];
+  const [first] = files;
+  let summary = `Change ${plural(files.length, "memory file")}`;
+  if (files.length === 1 && first) {
+    summary =
+      first.before === "" ? `Add ${first.path}` : `Change ${first.path}`;
+  }
   return {
-    summary: before === "" ? `Add ${path}` : `Change ${path}`,
+    summary,
     detail: statWords(stat),
-    changes: [made],
+    changes: made.map((each) => each.change),
     fields: [
-      ...fieldsOf(input, ["path", "before", "content", "notes", "project"]),
+      ...fieldsOf(input, ["files", "notes", "project"]),
       ...(notes.length > 0
         ? [{ key: "from notes", value: notes.join(", ") }]
         : []),
