@@ -856,10 +856,11 @@
     padding: 0;
     list-style: none;
   }
+  /* A step's lines stand on their own line heights: one entry, set apart
+     from the next by the list's gap. */
   .gate-check {
     display: flex;
     flex-direction: column;
-    gap: 2px;
     min-inline-size: 0;
   }
   .gate-name {
