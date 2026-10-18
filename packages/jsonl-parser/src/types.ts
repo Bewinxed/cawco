@@ -130,6 +130,27 @@ export interface SystemRecord extends RecordEnvelope {
   isMeta?: boolean;
 }
 
+/**
+ * What Claude Code attaches to the conversation chain. A `queued_command`
+ * attachment is a message that arrived while a turn ran, folded into it at a
+ * tool boundary: Claude Code writes no user record for it, so this is where
+ * its words are (agent claude-transcript.ts `absorbedMessage` reads it the
+ * same way for a transcript).
+ */
+export interface AttachmentRecord extends RecordEnvelope {
+  type: "attachment";
+  attachment?: {
+    type?: string;
+    /** The message as sent: its text, or content blocks when images rode with it. */
+    prompt?: string | ContentBlock[];
+    /** A command never shown, which nobody sent. */
+    isMeta?: boolean;
+    /** When it was sent. */
+    timestamp?: string;
+    [key: string]: unknown;
+  } | null;
+}
+
 /** Compaction summary; appears as the first line of compacted/resumed sessions. */
 export interface SummaryRecord {
   type: "summary";
@@ -147,6 +168,7 @@ export interface OtherRecord extends RecordEnvelope {
 export type TranscriptRecord =
   | UserRecord
   | AssistantRecord
+  | AttachmentRecord
   | SystemRecord
   | SummaryRecord
   | OtherRecord;

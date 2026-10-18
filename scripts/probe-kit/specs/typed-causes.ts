@@ -21,6 +21,19 @@
  *   hubs once wrote, `stage draft → review (by you)`, with no trailers. Its
  *   history reads the mover unknown and no stage move; a commit the hub made
  *   with trailers reads its mover and move.
+ * - F, an SSH add while ssh speaks German: a refused port and a name that
+ *   does not resolve are unreachable by the hub's own TCP connect's errno, a
+ *   host key the hub knows otherwise is `host-key` by ssh-keyscan against
+ *   ssh-keygen -F, and a refused sign-in is the sign-in step, ssh's words
+ *   under it. A scratch hub, a real loopback sshd.
+ * - G, a Claude credential: `authentication_failed` signs the account out
+ *   whatever its words; `server_error` is no sign-out and no race re-send.
+ * - H, a failed session's kind: A's conversation gone carries
+ *   `conversation-gone`; the realistic database migrated by an in-process hub
+ *   reads it in `last_error_kind`, and the hub refuses a relaunch by the kind
+ *   alone, never by `lastError`'s words.
+ * - I, words sent mid-turn: indexed as the person's from Claude Code's
+ *   `queued_command` record by the search index, with no English stripped.
  *
  * git speaks German through a stand-in on PATH that runs the real git and
  * gives its stderr in German words (as the scratch fleet's mock stands in
@@ -824,6 +837,73 @@ const lastErrorKinds = async (kit: Kit, scratch: string): Promise<void> => {
   }
 };
 
+/** Words a person sent while a turn ran, in the language CawCo did not write: what leg I searches for. */
+const MID_TURN_WORDS =
+  "Bitte prüfe zuerst die Zugriffsrechte im Lagerverzeichnis";
+
+/**
+ * I: a message the person sent while a turn ran is indexed as theirs from
+ * Claude Code's typed record of it, its `queued_command` attachment (Claude
+ * Code writes no user record for it), as the agent's transcript reader takes
+ * it (claude-transcript.ts `absorbedMessage`), never by stripping the English
+ * line Claude Code shows the model. A real transcript file, synced by the
+ * search index the agent runs (`TranscriptIndex`, its worker parse), then
+ * searched as "said by me".
+ */
+const midTurn = async (kit: Kit, scratch: string): Promise<void> => {
+  const { TranscriptIndex } =
+    await import("../../../packages/jsonl-parser/src/fts5");
+  const sessionId = crypto.randomUUID();
+  const at = new Date().toISOString();
+  const transcript = join(scratch, "transcripts", `${sessionId}.jsonl`);
+  await mkdir(join(scratch, "transcripts"), { recursive: true });
+  await writeFile(
+    transcript,
+    `${[
+      {
+        type: "user",
+        uuid: crypto.randomUUID(),
+        sessionId,
+        timestamp: at,
+        cwd: scratch,
+        message: { role: "user", content: "Räum das Lager auf." },
+      },
+      {
+        type: "attachment",
+        uuid: crypto.randomUUID(),
+        sessionId,
+        timestamp: at,
+        cwd: scratch,
+        attachment: {
+          type: "queued_command",
+          prompt: MID_TURN_WORDS,
+          source_uuid: crypto.randomUUID(),
+          timestamp: at,
+        },
+      },
+    ]
+      .map((record) => JSON.stringify(record))
+      .join("\n")}\n`
+  );
+  const index = new TranscriptIndex(join(scratch, "search.db"));
+  try {
+    await index.sync([transcript]);
+    const hits = index.search("Zugriffsrechte Lagerverzeichnis", {
+      author: "owner",
+    });
+    const moment = hits
+      .find((hit) => hit.sessionId === sessionId)
+      ?.moments.find((one) => one.snippet.includes("Zugriffsrechte"));
+    kit.check(
+      "I: words the person sent mid-turn are indexed as theirs from Claude Code's queued_command record, and found as said by me",
+      moment?.author === "owner" && moment.role === "user",
+      JSON.stringify(hits).slice(0, 400)
+    );
+  } finally {
+    index.close();
+  }
+};
+
 const spec: Spec = {
   name: "typed-causes",
   run: async (kit: Kit) => {
@@ -840,6 +920,7 @@ const spec: Spec = {
       await germanRace(kit, scratch);
       await credential(kit);
       await lastErrorKinds(kit, scratch);
+      await midTurn(kit, scratch);
       await trailerless(kit, scratch);
       await sshJoin(kit, scratch);
     } finally {

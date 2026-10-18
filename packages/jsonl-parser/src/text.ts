@@ -6,7 +6,13 @@
  * module defines the document shape the BM25 layers consume.
  */
 
-import type { AssistantRecord, ContentBlock, TranscriptRecord, UserRecord } from "./types.ts";
+import type {
+  AssistantRecord,
+  AttachmentRecord,
+  ContentBlock,
+  TranscriptRecord,
+  UserRecord,
+} from "./types.ts";
 
 /**
  * Who a document's words are: `owner`, the person's own; `agent`, a model's
@@ -86,12 +92,6 @@ const INJECTED = [
   /^Base directory for this skill: /,
 ];
 
-/**
- * The person's words sent while a turn ran, as CawCo hands them over
- * (scratch-fleet `MID_TURN`): what follows the line is theirs.
- */
-const MID_TURN = /^The user sent a new message while you were working:\s*/;
-
 /** Who wrote a user turn's `text`, and the words to index for it. */
 export function userAuthor(text: string): { author: DocAuthor; text: string } {
   const said = text.replace(SYSTEM_REMINDER, "").trim();
@@ -102,7 +102,7 @@ export function userAuthor(text: string): { author: DocAuthor; text: string } {
   if (INJECTED.some((marker) => marker.test(said))) {
     return { author: "injected", text: said };
   }
-  return { author: "owner", text: said.replace(MID_TURN, "") };
+  return { author: "owner", text: said };
 }
 
 function blocksToText(
@@ -148,6 +148,41 @@ function blocksToText(
 }
 
 /**
+ * The record types a document is made from, as the byte prefilter matches
+ * them (scan.ts `typeFilter`): a `queued_command` is matched by its
+ * attachment's own `type`, so no other attachment is parsed.
+ */
+export const DOC_TYPES = ["user", "assistant", "queued_command"] as const;
+
+/**
+ * A message that arrived while a turn ran, from Claude Code's `queued_command`
+ * attachment ({@link AttachmentRecord}): a user turn whose author is read as
+ * any user turn's, or null for any other attachment and for a meta command.
+ */
+function queuedDoc(record: AttachmentRecord, options: ExtractOptions): TranscriptDoc | null {
+  const command = record.attachment;
+  if (command?.type !== "queued_command" || command.isMeta === true) {
+    return null;
+  }
+  const words = blocksToText(command.prompt, options);
+  const said = userAuthor(words.text);
+  if (!said.text) {
+    return null;
+  }
+  return {
+    harness: "claude-code",
+    sessionId: record.sessionId ?? "",
+    id: record.uuid ?? "",
+    role: "user",
+    author: said.author,
+    timestamp: command.timestamp ?? record.timestamp,
+    text: said.text,
+    cwd: record.cwd,
+    sidechain: record.isSidechain === true ? true : undefined,
+  };
+}
+
+/**
  * Extract a searchable document from a record, or null when the record has
  * no indexable text (tool_result-only user records, metadata records, a turn
  * that was only reminders, ...).
@@ -156,6 +191,9 @@ export function extractDoc(
   record: TranscriptRecord,
   options: ExtractOptions = {},
 ): TranscriptDoc | null {
+  if (record.type === "attachment") {
+    return queuedDoc(record as AttachmentRecord, options);
+  }
   if (record.type !== "user" && record.type !== "assistant") {
     return null;
   }
