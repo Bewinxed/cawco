@@ -2320,6 +2320,18 @@ const LAUNCH = [
  * it. A `cancel <pgid>` ends that command's group; a pgid of 0, 1 or with a
  * leading zero is never one its launch made, and `kill -- -0` or `-1` would
  * be its own group or every process it may signal, so it is no request.
+ *
+ * A command's stdout and stderr are anonymous pipes, each copied by a `cat`
+ * into its request's FIFO (`$req/out`, `$req/err`), never those FIFOs opened
+ * as its own fds. A program with a confining AppArmor profile of its own
+ * passes an exec transition, and the kernel revalidates every fd it inherits
+ * against that profile, closing those it may not use: a FIFO or file is
+ * checked by its path, which no such profile names, while a pipe is not
+ * mediated by path. On Ubuntu, under bwrap-userns-restrict's
+ * `allow pix /** -> &bwrap//&unpriv_bwrap`, /etc/apparmor.d/ssh-keyscan
+ * (`profile ssh-keyscan /usr/bin/ssh-keyscan`) took `/usr/bin/ssh-keyscan`'s
+ * stdout away in every workspace: it printed nothing, its fd 1 free at its
+ * first `openat` (2026-10-18), and the hub's host-key check found no key.
  */
 const RUNNER = `fifo=$1
 CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|GIT_SSH_COMMAND|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
@@ -2339,7 +2351,7 @@ while :; do
     esac
     (
       printf '%s\\n' "$sandbox" > "$req/sandbox"
-      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
+      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > >(exec cat > "$req/out") 2> >(exec cat > "$req/err") < /dev/null &
       echo $! > "$req/pid"
       wait $!
       echo $? > "$req/status"
