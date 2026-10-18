@@ -34,6 +34,7 @@ typeOverrides:
     BrowserRuntimeKind: OpenEnums.BrowserRuntimeKind
     BrowserState: OpenEnums.BrowserState
     CallerKind: OpenEnums.CallerKind
+    CanvasDialKind: OpenEnums.CanvasDialKind
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawHarness: OpenEnums.CawHarness
@@ -48,6 +49,7 @@ typeOverrides:
     ConnectionTransport: OpenEnums.ConnectionTransport
     ContinuationJobStage: OpenEnums.ContinuationJobStage
     ContinueStep: OpenEnums.ContinueStep
+    CreatedBy: OpenEnums.CreatedBy
     DamagedRowRemedy: OpenEnums.DamagedRowRemedy
     DecisionSentTo: OpenEnums.DecisionSentTo
     DecisionState: OpenEnums.DecisionState
@@ -75,6 +77,7 @@ typeOverrides:
     FleetScope: OpenEnums.FleetScope
     FolderEntryKind: OpenEnums.FolderEntryKind
     FormName: OpenEnums.FormName
+    FrameState: OpenEnums.FrameState
     FsEntryKind: OpenEnums.FsEntryKind
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
     GetApiInstances200Kind: OpenEnums.GetApiInstances200Kind
@@ -91,6 +94,7 @@ typeOverrides:
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
     InstanceStatus: OpenEnums.InstanceStatus
+    Interaction: OpenEnums.Interaction
     IssueTracker: OpenEnums.IssueTracker
     ItemEnd: OpenEnums.ItemEnd
     KeepAliveState: OpenEnums.KeepAliveState
@@ -108,7 +112,6 @@ typeOverrides:
     NeutralTaskPriority: OpenEnums.NeutralTaskPriority
     OnCap: OpenEnums.OnCap
     PageAnchorFramework: OpenEnums.PageAnchorFramework
-    PageAnchorInteraction: OpenEnums.PageAnchorInteraction
     PageAnchorScheme: OpenEnums.PageAnchorScheme
     PermissionMode: OpenEnums.PermissionMode
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome

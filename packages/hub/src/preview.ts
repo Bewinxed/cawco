@@ -315,7 +315,7 @@ async function servePage(
  * preview: its source names no page, and it never comes here.
  */
 const HUB_SERVES: Record<
-  Exclude<ArtifactKind, "sheet">,
+  Exclude<ArtifactKind, "component">,
   (
     artifactId: string,
     pathname: string,
@@ -491,7 +491,7 @@ async function pingSession(
   const target = previewTargets.get(instanceId);
   if (
     !target ||
-    ("page" in target.source && target.artifact.kind !== "sheet")
+    ("page" in target.source && target.artifact.kind !== "component")
   ) {
     return ping();
   }
@@ -716,7 +716,7 @@ async function serveSession(
     previewFailed(HOP, instanceId, "its session shows no preview");
     return downResponse("closed", 404);
   }
-  if ("page" in target.source && target.artifact.kind !== "sheet") {
+  if ("page" in target.source && target.artifact.kind !== "component") {
     return HUB_SERVES[target.artifact.kind](
       target.artifact.id,
       pathname,

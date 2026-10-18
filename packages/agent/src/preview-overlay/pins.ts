@@ -171,7 +171,7 @@ export function startPins(deps: PinsDeps): Pins {
    * of its components (re-read after each HMR update), once it has laid out.
    */
   const settled = () =>
-    (artifact.kind() === "page" || artifact.kind() === "sheet") &&
+    (artifact.kind() === "page" || artifact.kind() === "component") &&
     document.readyState !== "loading";
 
   /** Each placed pin: where it stands; a disc is drawn for it while its frames show it. */

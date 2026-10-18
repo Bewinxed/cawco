@@ -29,6 +29,9 @@ export const REPORT_PATH = "/__cawco/report";
 /** The daemon's control method that draws a canvas in the machine's browser when no panel has (agent `stage-render.ts`). */
 export const STAGE_RENDER = "stageRender";
 
+/** How long a daemon's render of a canvas may take, page load to the last section's report, past the stage's own start. Ours: a screen's first load transforms its modules. */
+export const STAGE_RENDER_MS = 90_000;
+
 /** The states the canvas derives from a component's CSS, never authored: `rest` is the story as mounted. */
 export type Interaction = "rest" | "hover" | "focus" | "pressed";
 export const INTERACTIONS: readonly Interaction[] = [
@@ -489,6 +492,8 @@ export type StoryOp =
 /** What a write did: the story file's lines it changed (1-based, as written), and the sheet as it reads after. */
 export interface SheetWritten {
   file: string;
+  /** The project's formatter that shaped the changed statement, like "prettier 3.9.10"; null when the project has none. */
+  formatted: string | null;
   lines: { from: number; to: number };
   sheet: SheetRead;
 }
@@ -498,6 +503,70 @@ export interface Found {
   file: string;
   name: string;
   sheets: string[];
+}
+
+/**
+ * What `design_map` asks the stage (component canvas §4): the components
+ * under `dir` (from the toolchain root; omitted, its source folder), those
+ * whose name holds `query`, or the one card of `component` (a file);
+ * `limit` at a time from `cursor`, each a count line or (`detailed`) its
+ * card.
+ */
+export interface DesignQuery {
+  component?: string;
+  cursor?: string;
+  detailed?: boolean;
+  dir?: string;
+  limit?: number;
+  query?: string;
+}
+
+/** A design map's page bounds. The design's numbers. */
+export const DESIGN_MAP_LIMITS = { limit: 50, max: 200 } as const;
+
+/** Where a component is used, or what it renders: the other component, and the call site when a draw saw it. */
+export interface DesignLink {
+  at: string | null;
+  file: string;
+  name: string;
+}
+
+/** A component in the library, as the map answers it: counts, or its card. */
+export interface DesignCard {
+  /** Frames a browser drew of its states (rest and forced), from the stage's reports. */
+  drawn: number;
+  file: string;
+  madeOf: number | DesignLink[];
+  /** Flow moves its states files declare (`from` + `play`), detailed only. */
+  moves?: { from: string; to: string }[];
+  name: string;
+  /** Its props as docgen reads them, for one component's card only. */
+  props?: PropMeta[];
+  /** Stories across its states files. */
+  states: number;
+  /** Its states files, detailed only. */
+  statesFiles?: string[];
+  stories?: {
+    drawn: boolean;
+    interactions: Interaction[];
+    label: string | null;
+    name: string;
+  }[];
+  usedIn: number | DesignLink[];
+}
+
+/** A page of the design map. */
+export interface DesignMap {
+  components: DesignCard[];
+  /** The folder the page covers, from the toolchain root. */
+  dir: string;
+  has_more: boolean;
+  next_cursor: string | null;
+  /** The toolchain root, from the clone's root. */
+  root: string;
+  /** What to do when the page was cut, one sentence. */
+  steer?: string;
+  total: number;
 }
 
 /** What every stage's state says: where it is, where it runs, why it failed when it did, the compile errors standing now. */
@@ -565,6 +634,8 @@ export interface StageOpened {
   /** The sheet's story file, from the toolchain root. */
   file: string;
   port: number;
+  /** What a browser last drew of the canvas's states files, each `unseen` since its file or a component it mounts changed. */
+  report: RenderReport;
   sheet: SheetRead;
   state: StageState;
   /** What the sheet loads; null until a view has loaded it. */

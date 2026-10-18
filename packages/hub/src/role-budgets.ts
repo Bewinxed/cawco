@@ -122,7 +122,7 @@ import type { Tasks } from "./tasks";
  * component from its sheet, and the agent writes the same: artifact_update's
  * `args` (a story's values set and dropped) and `story` (add, duplicate,
  * remove, move), artifact_read's `sheet` (args and props), and
- * `components_list` (§6's discovery), deferred. Their words say only what
+ * `design_map` (the component library), deferred. Their words say only what
  * the schema does not (what a write answers, where `dir` starts), and the
  * story name's pattern is left to the route and the stage, which say why
  * they refuse: 305 tokens for the worker, the delegate and the lead (worker
@@ -211,11 +211,21 @@ import type { Tasks } from "./tasks";
  * 7,693, lead 16,270 measured beside `memory_recall` and the decision
  * programs). Raised deliberately for the worker and the lead, both at their
  * budgets.
+ * 2026-10-19: the component canvas (the owner's design system, "a canvas
+ * where the agent can interactively build components and show it to me"):
+ * artifact_create's and artifact_update's `about`, `edges`, `group` and
+ * `dials`, artifact_read's `detail`, `story`, `state` and `render`, and
+ * design_map in place of components_list (dir, query, component, paging).
+ * Every field description past an example was cut; what stays is the shape.
+ * About 1,260 tokens for the worker, the delegate and the lead (worker
+ * 26,577, delegate 8,956, lead 17,533 measured beside the decision
+ * programs, memory_recall and discard_workspace). Raised deliberately, by
+ * that, for each.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 25_320,
-  delegate: 7700,
-  lead: 16_280,
+  worker: 26_580,
+  delegate: 8960,
+  lead: 17_540,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

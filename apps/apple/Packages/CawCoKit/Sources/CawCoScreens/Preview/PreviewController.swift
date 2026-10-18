@@ -1036,7 +1036,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // `PreviewFrame.stage`; PreviewPane.svelte `served`, `staged`).
         let port = frame.source?.value1
         let servedPort = port.flatMap { $0.serve != nil ? Int($0.port) : nil }
-        let shownStage = frame.artifact.kind == .sheet || servedPort != nil ? frame.stage : nil
+        let shownStage = frame.artifact.kind == .component || servedPort != nil ? frame.stage : nil
         if shownStage != stage || servedPort != served {
             stage = shownStage
             served = servedPort
@@ -2675,7 +2675,7 @@ extension PreviewController {
         inspector?.removeFromSuperview()
         inspector = nil
         let id = frame.artifact.id
-        if frame.artifact.kind == .sheet {
+        if frame.artifact.kind == .component {
             inspection = SheetInspection(post: { [weak self] message in self?.deliver(message) },
                                          write: { [weak self] change in
                                              guard let self else { return }

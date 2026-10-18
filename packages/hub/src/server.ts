@@ -341,13 +341,16 @@ import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { DOWN_WORDS, type FolderWeight } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import {
-  type Found,
+  type DesignMap,
+  type RenderReport,
   type SheetWritten,
   STAGE_CLONE_MS,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
   STAGE_IDLE_MS,
   STAGE_READY_MS,
+  STAGE_RENDER,
+  STAGE_RENDER_MS,
   STAGE_SERVE,
   STAGE_UNSERVE,
   STAGE_WRITE,
@@ -1160,6 +1163,7 @@ const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
 const HUB_STAGE_CONTROLS: ReadonlySet<string> = new Set([
   STAGE_COMPONENTS,
   STAGE_ENSURE,
+  STAGE_RENDER,
   STAGE_WRITE,
 ]);
 /** Why a dashboard's control naming `method` is the hub's alone, or nothing when it may go to the machine. */
@@ -1171,7 +1175,7 @@ const hubOwnedControl = (method: string): string | undefined => {
     return `${method} is the hub's to send. A workspace retires on its own once its work lands; a held one is discarded with POST /api/workspaces/:id/archive and discard: true.`;
   }
   if (HUB_STAGE_CONTROLS.has(method)) {
-    return `${method} is the hub's to send. A stage runs where the hub places it, for a session's sheet or components_list.`;
+    return `${method} is the hub's to send. A stage runs where the hub places it, for a session's component canvas or design_map.`;
   }
 };
 /**
@@ -10837,7 +10841,10 @@ export const createServer = (
       machineId,
       method,
       [workspace, arg],
-      STAGE_READY_MS + (isPlace(workspace.id) ? STAGE_CLONE_MS : 0) + 15_000
+      STAGE_READY_MS +
+        (isPlace(workspace.id) ? STAGE_CLONE_MS : 0) +
+        (method === STAGE_RENDER ? STAGE_RENDER_MS : 0) +
+        15_000
     );
     switch (asked.kind) {
       case "unanswered":
@@ -10971,22 +10978,25 @@ export const createServer = (
     ownWorkspace: (instance) => workItems.workspaceOf(instance)?.id,
     workspaces: (needle) => db.workspacesNamed(needle),
     // A sheet runs on its workspace's stage, on that workspace's machine.
-    stage: async (at, file) => {
+    stage: async (at, file, files) => {
       const { machineId, workspace, result } = await onStage(
         at,
         STAGE_ENSURE,
-        file
+        files ? { file, files } : file
       );
       return { machineId, workspace, opened: result as StageOpened };
     },
+    // A component canvas drawn by its workspace's daemon in the machine's own Chromium.
+    stageRender: async (at, ask) =>
+      (await onStage(at, STAGE_RENDER, ask)).result as {
+        png?: string;
+        report: RenderReport;
+      },
     stageWrite: async (at, write) =>
       (await onStage(at, STAGE_WRITE, write)).result as SheetWritten,
-    stageComponents: async (instance, dir) =>
-      (await onStage({ session: instance }, STAGE_COMPONENTS, dir ?? null))
-        .result as {
-        components: Found[];
-        dir: string;
-      },
+    stageComponents: async (instance, ask) =>
+      (await onStage({ session: instance }, STAGE_COMPONENTS, ask))
+        .result as DesignMap,
     // A workspace preview's server, run and kept up on the workspace's machine.
     serve: async (machineId, workspace, serve) => {
       const asked = await callAgent(
@@ -11211,7 +11221,7 @@ export const createServer = (
       > = {};
       for (const [id, held] of Object.entries(served.media)) {
         media[id] =
-          held && (held.kind === "preview" || held.kind === "sheet")
+          held && (held.kind === "preview" || held.kind === "component")
             ? { ...held, ...embedAt(id, reachedAt) }
             : held;
       }

@@ -1730,6 +1730,13 @@
       "when": 1792360351049,
       "tag": "0254_stream_relay",
       "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "6",
+      "when": 1792360352049,
+      "tag": "0255_artifact_kind_component",
+      "breakpoints": true
     }
   ]
 }

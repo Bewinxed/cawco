@@ -113,6 +113,8 @@ const SETTLE_LIMIT_MS = 3000;
 /** How far past the view a section loads, and past which a loaded one is taken down (viewports). Ours. */
 const LOAD_MARGIN = 1;
 const UNMOUNT_MARGIN = 3;
+/** How many sections a stage's render keeps mounted as it sweeps. Ours: a whole canvas's picture holds a few. */
+const SWEEP_KEPT = 3;
 /** The quiet after the last change before a report is posted. Ours. */
 const REPORT_QUIET_MS = 200;
 
@@ -217,6 +219,8 @@ export interface CanvasState {
   report: RenderReport | null;
   reports: number;
   setView: (next: Partial<View>) => void;
+  /** Every section drawn once: a stage's render reads the stage's report then. */
+  swept: boolean;
   view: View;
   world: () => { x: number; y: number; z: number };
 }
@@ -866,6 +870,7 @@ export function boot(options: BootOptions): void {
    * drawn is a short placeholder, which would put the next one in view
    * before its time).
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one walk of the sections, in order, for a person's view and for the stage's sweep alike
   const pump = async () => {
     if (pumping) {
       return;
@@ -878,7 +883,7 @@ export function boot(options: BootOptions): void {
         }
         // A section taken down keeps its drawn height; one never drawn is a placeholder, past which nothing is judged yet.
         const asleep = section.el.dataset.cawcoAsleep !== undefined;
-        if (!nearView(section)) {
+        if (!(sweeping || nearView(section))) {
           if (asleep) {
             continue;
           }
@@ -887,9 +892,32 @@ export function boot(options: BootOptions): void {
         // biome-ignore lint/performance/noAwaitInLoops: each section laid out before the next is judged
         await loadSection(section);
         await frameTick();
+        if (sweeping) {
+          await settled(section);
+        }
+      }
+      if (sweeping) {
+        canvasState.swept = true;
       }
     } finally {
       pumping = false;
+    }
+  };
+  /**
+   * The stage's own render draws every section in turn, view or not, each
+   * reported before the next, at most {@link SWEEP_KEPT} kept mounted: the
+   * stage keeps each section's report, so one taken down is still said.
+   */
+  const sweeping = by === "stage";
+  const settled = async (section: Section) => {
+    // Its columns, probes and moves, then its report.
+    await columnsFor(section);
+    await probeAll(section);
+    await playAll(section);
+    await post();
+    const mounted = sections.filter((one) => one.loaded);
+    for (const one of mounted.slice(0, -SWEEP_KEPT)) {
+      sleepSection(one);
     }
   };
   const near = new IntersectionObserver(
@@ -913,7 +941,9 @@ export function boot(options: BootOptions): void {
   );
   for (const section of sections) {
     near.observe(section.el);
-    far.observe(section.el);
+    if (!sweeping) {
+      far.observe(section.el);
+    }
   }
 
   /* --- Probes: each story's states read off screen ----------------------- */
@@ -1820,6 +1850,7 @@ export function boot(options: BootOptions): void {
     view,
     report: null,
     reports: 0,
+    swept: false,
     go,
     setView,
     loaded: () => sections.filter((one) => one.loaded).map((one) => one.file),

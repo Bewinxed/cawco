@@ -161,8 +161,8 @@ const artifactsOf = (
             ? `\n\n\`\`\`html\n${found.html.length > PAGE_CHARS ? `${found.html.slice(0, PAGE_CHARS)}\n<!-- cut here -->` : found.html}\n\`\`\``
             : "";
           const sheet =
-            found.kind === "sheet"
-              ? " (its story file is among the changes: open it with artifact_create kind sheet on your own stage)"
+            found.kind === "component"
+              ? " (a component canvas: open its states file with artifact_create kind component on your own stage, then read what was drawn with artifact_read, each state's delta with state)"
               : "";
           return `- ${found.kind} “${found.name}”${sheet}${html}`;
         }
@@ -257,7 +257,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       `${VERIFIER_BRIEF} for project “${project}”. A builder session handed in ${task.id} “${task.title}”. Before the person sees it, you judge it against the project's design system. You never edit or fix the work: you judge, and the builder fixes.`,
       `## The work\n\nThe builder's work sits on commit ${at.head}, on top of origin/${base}; its objects are in your clone. ${setUp}\n\nThe task:\n\n${task.description.trim() || "(no description)"}\n\nThe builder's hand-in:\n\n${result?.summary.trim() || "(none)"}\n\nWhat it shows:\n\n${artifactsOf(result?.artifacts ?? [], deps.artifact)}`,
       "## The system\n\ndesign/ as the work has it: DESIGN.md (the rules and recipes), tokens.resolver.json and its token files, the generated tokens.css, specimens/, SKILL.md. Load the design-system skill with the Skill tool: its references/css.md holds the CSS practices the work must follow.",
-      "## How\n\nRender what the work changed in your own workspace: a sheet with artifact_create kind sheet on your stage; a page or screen with playwright-core and the cached Chromium. Read the computed styles of the elements it touched, and judge them as a designer against DESIGN.md, the tokens and the CSS practices: a value that is no token, a role used for the wrong job, a rule DESIGN.md states broken, a practice css.md asks for not followed. Nothing that would not block the work: no nits, no suggestions.",
+      "## How\n\nRender what the work changed in your own workspace: a component or screen with artifact_create kind component on your stage, read with artifact_read (what was drawn, a state's computed-style delta with state, the moves' animations; render: true draws it in the machine's browser when no panel has); a page with artifact_create kind page. Read the computed styles of the elements it touched, and judge them as a designer against DESIGN.md, the tokens and the CSS practices: a value that is no token, a role used for the wrong job, a rule DESIGN.md states broken, a practice css.md asks for not followed. Nothing that would not block the work: no nits, no suggestions.",
       "## Your answer\n\nCall design_verdict once. Each finding is a must-fix tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. No findings is a pass. When the result offers variants, name the one that holds to the system best in `pick`, and why. design_verdict finishes your item: then end your turn.",
     ].join("\n\n");
   };

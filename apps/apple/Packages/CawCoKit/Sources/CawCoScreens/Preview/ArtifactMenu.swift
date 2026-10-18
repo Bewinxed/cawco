@@ -9,7 +9,7 @@ extension ArtifactKind {
         switch self {
         case .canvas: .toolWrite
         case .preview: .window
-        case .sheet: .artifactSheet
+        case .component: .artifactSheet
         default: .toolRead
         }
     }

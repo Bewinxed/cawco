@@ -890,7 +890,7 @@ export function startInk(deps: InkDeps): Ink {
 
   /** Whether a group whose element is gone may be moved aside now: a page the agent wrote, or a sheet of its components, laid out. */
   const settled = () =>
-    (artifact.kind() === "page" || artifact.kind() === "sheet") &&
+    (artifact.kind() === "page" || artifact.kind() === "component") &&
     document.readyState !== "loading";
 
   /** Whether a group no anchor finds is gone, not waiting on a frame still loading. */

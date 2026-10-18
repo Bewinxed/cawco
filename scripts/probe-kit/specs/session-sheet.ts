@@ -14,11 +14,11 @@
  * stage's boundary holds read-only, so Vite's config load and caches must
  * write elsewhere), against the mock model:
  *
- * 1. `components_list` answers the repo's components, `src/Card.svelte`
+ * 1. `design_map` answers the repo's components, `src/Card.svelte`
  *    with its story file, never "this session runs in no workspace".
- * 2. `artifact_create(kind: "sheet", file: "src/Card.stories.js")` answers
- *    an id and its stage `live`, which states it is a sheet's on Vite
- *    (`runs: "sheet"`, `toolchain: "vite"`).
+ * 2. `artifact_create(kind: "component", file: "src/Card.stories.js", about)`
+ *    answers an id and its stage `live`, which states it is a states file's on
+ *    Vite (`runs: "sheet"`, `toolchain: "vite"`).
  * 3. A dashboard's raw `stageEnsure` control, naming a place id and a folder
  *    the hub never resolved (the same project, copied elsewhere), is refused
  *    at the hub's relay as the hub's to send, and never reaches the machine:
@@ -37,8 +37,8 @@
  * checkout it died "EROFS: read-only file system, open
  * '…/node_modules/$app/tsconfig.json'".
  *
- * 6. `components_list` answers `src/lib/Card.svelte` with its story file.
- * 7. `artifact_create(kind: "sheet", file: "src/lib/Card.stories.js")`
+ * 6. `design_map` answers `src/lib/Card.svelte` with its states file.
+ * 7. `artifact_create(kind: "component", file: "src/lib/Card.stories.js", about)`
  *    answers an id and its stage `live`.
  * 8. The checkout holds nothing the stage wrote: its `git status
  *    --ignored` as before the legs, and no `node_modules/$app`.
@@ -426,9 +426,11 @@ const run = async (kit: Kit) => {
   };
 
   // 1. The components of the session's folder.
-  const listed = await call("1", "mcp__cawco__components_list", {});
+  const listed = await call("1", "mcp__cawco__design_map", {
+    response_format: "detailed",
+  });
   kit.check(
-    "1: components_list answers the folder's components, Card.svelte with its story file",
+    "1: design_map answers the folder's components, Card.svelte with its states file",
     !listed.includes(REFUSAL) &&
       listed.includes('"src/Card.svelte"') &&
       listed.includes(`"${STORY}"`),
@@ -437,13 +439,14 @@ const run = async (kit: Kit) => {
 
   // 2. The sheet made, on a stage over the session's folder.
   const created = await call("2", "mcp__cawco__artifact_create", {
-    kind: "sheet",
+    kind: "component",
     name: "cards",
     file: STORY,
+    about: "The card in each of its states",
   });
   const id = created.match(ID)?.[1];
   kit.check(
-    "2: artifact_create(kind: sheet) answers an id and its stage live",
+    "2: artifact_create(kind: component) answers an id and its stage live",
     !!id && created.match(STATUS)?.[1] === "live",
     short(created)
   );
@@ -452,6 +455,55 @@ const run = async (kit: Kit) => {
     created.includes('"runs":"sheet"') &&
       created.includes('"toolchain":"vite"'),
     short(created)
+  );
+
+  // 2b. No panel drew it (this run opens no dashboard): the daemon did, in the machine's Chromium.
+  kit.check(
+    "2b: with no panel open, artifact_create's answer is the daemon's draw: by stage, every frame drawn",
+    created.includes('"by":"stage"') &&
+      created.includes('"state":"drawn"') &&
+      !created.includes('"state":"unseen"'),
+    short(created.slice(created.indexOf('"render"')))
+  );
+
+  // 2c. A canvas with no word on what it is for is refused, with the shape and an example.
+  const bare = await call("2c", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "bare",
+    file: STORY,
+  });
+  kit.check(
+    "2c: artifact_create(kind: component) with no about is refused with its shape and an example",
+    bare.includes("takes about") && bare.includes('kind: "component"'),
+    short(bare)
+  );
+
+  // 2d. One frame read: its state, its parts; a fresh draw on asking.
+  if (id) {
+    const frame = await call("2d", "mcp__cawco__artifact_read", {
+      id,
+      state: { story: "One", interaction: "rest" },
+      render: true,
+    });
+    kit.check(
+      "2d: artifact_read with state answers that frame, drawn, with the component chain it drew; render: true is the daemon's draw",
+      frame.includes('"frame":{"story":"One"') &&
+        frame.includes('"parts":[{') &&
+        frame.includes('"by":"stage"'),
+      short(frame.slice(frame.indexOf('"frame"')))
+    );
+  }
+
+  // 2e. The library's card of the component: its states file and stories.
+  const card = await call("2e", "mcp__cawco__design_map", {
+    component: "src/Card.svelte",
+  });
+  kit.check(
+    "2e: design_map with component answers its card: states file, stories, used in and made of",
+    card.includes(`"statesFiles":["${STORY}"]`) &&
+      card.includes('"stories":[{') &&
+      card.includes('"usedIn":['),
+    short(card)
   );
 
   // 3. A dashboard's raw stage control, on a folder the hub never resolved.
@@ -485,12 +537,12 @@ const run = async (kit: Kit) => {
   const kitSession = await fleet.spawn("claude", "Kit", kitDir);
   const kitListed = await call(
     "6",
-    "mcp__cawco__components_list",
-    {},
+    "mcp__cawco__design_map",
+    { response_format: "detailed" },
     kitSession
   );
   kit.check(
-    "6: components_list in a checkout read-only to its boundary answers src/lib/Card.svelte with its story file",
+    "6: design_map in a checkout read-only to its boundary answers src/lib/Card.svelte with its states file",
     kitListed.includes('"src/lib/Card.svelte"') &&
       kitListed.includes(`"${KIT_STORY}"`),
     short(kitListed)
@@ -500,11 +552,16 @@ const run = async (kit: Kit) => {
   const kitCreated = await call(
     "7",
     "mcp__cawco__artifact_create",
-    { kind: "sheet", name: "kit-cards", file: KIT_STORY },
+    {
+      kind: "component",
+      name: "kit-cards",
+      file: KIT_STORY,
+      about: "The kit's card in each of its states",
+    },
     kitSession
   );
   kit.check(
-    "7: artifact_create(kind: sheet) there answers an id and its stage live",
+    "7: artifact_create(kind: component) there answers an id and its stage live",
     !!kitCreated.match(ID)?.[1] && kitCreated.match(STATUS)?.[1] === "live",
     short(kitCreated)
   );

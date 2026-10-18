@@ -795,7 +795,7 @@
     source && "port" in source && source.serve ? source : null
   );
   const staged = $derived(
-    artifact?.kind === "sheet" || served ? (view?.stage ?? null) : null
+    artifact?.kind === "component" || served ? (view?.stage ?? null) : null
   );
   /** What the cover says while the page is on its way; null when nothing is. */
   const stageWaiting = $derived.by(() => {
@@ -835,7 +835,7 @@
     inspectOpen = open;
     store("local", inspectKey, open ? "open" : "shut");
   }
-  const isSheet = $derived(artifact?.kind === "sheet");
+  const isSheet = $derived(artifact?.kind === "component");
   /**
    * A page or a sheet draws in the dashboard's theme (the overlay's
    * `themed`): its frame's `color-scheme` is that theme too, so a page that

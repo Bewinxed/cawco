@@ -369,7 +369,7 @@ const run = async (kit: Kit) => {
       return;
     }
     const sheet = await call(CREATE, {
-      kind: "sheet",
+      kind: "component",
       name: "cards",
       file: STORY,
     });

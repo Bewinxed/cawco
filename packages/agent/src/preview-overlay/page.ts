@@ -424,14 +424,14 @@ function themed() {
 /** This page draws in the host's theme: a page artifact or a sheet, never a preview. */
 function themesWithHost(): boolean {
   const kind = artifact.kind();
-  return kind === "page" || kind === "sheet";
+  return kind === "page" || kind === "component";
 }
 
 /** `root` (this page's, or its copy's in schemes.ts) set to draw in `scheme`. */
 function themeRoot(root: HTMLElement, scheme: Scheme) {
   root.style.colorScheme = scheme;
   root.dataset.theme = scheme;
-  if (artifact.kind() === "sheet") {
+  if (artifact.kind() === "component") {
     root.classList.toggle("dark", scheme === "dark");
   }
 }

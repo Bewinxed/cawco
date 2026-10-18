@@ -51,8 +51,12 @@ import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
   AS_PAGE,
   COMPONENTS_PATH,
-  type Found,
+  type DesignCard,
+  type DesignMap,
+  type DesignQuery,
   HEALTH_PATH,
+  REPORT_PATH,
+  type RenderReport,
   SERVE_COMMAND_LIMIT,
   type ServeSpec,
   type SheetRead,
@@ -94,6 +98,7 @@ import {
   syncStageClone,
 } from "./stage-clone";
 import { stageHost } from "./stage-host/build";
+import { type RenderAsk, type Rendered, renderCanvas } from "./stage-render";
 import { keepPlace, workspaceRefs } from "./workspace-records";
 
 type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
@@ -1157,14 +1162,17 @@ async function stageAtRoot(
  */
 export async function ensureStage(
   workspace: WorkspaceRef,
-  file: string
+  file: string,
+  /** Every states file of the canvas (from the clone's root), whose report is read; omitted, `file` alone. */
+  files: string[] = [file]
 ): Promise<StageOpened> {
   const tree = await treeOf(workspace);
   const story = storyPath(tree, file);
   await installedFor(tree, dirname(story));
   const stage = await stageAtRoot(stageFor(tree, story), "a sheet's read");
   const rel = relative(stage.root, story);
-  const [sheet, weight] = await Promise.all([
+  const all = files.map((one) => relative(stage.root, storyPath(tree, one)));
+  const [sheet, weight, report] = await Promise.all([
     answerOf<SheetRead>(
       stage,
       `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
@@ -1172,6 +1180,12 @@ export async function ensureStage(
       `read ${rel}'s stories`
     ),
     sheetWeight(stage, rel),
+    answerOf<RenderReport>(
+      stage,
+      `${REPORT_PATH}?${all.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`,
+      READ_WAIT_MS,
+      "read what a browser drew"
+    ),
   ]);
   return {
     port: stage.port,
@@ -1180,6 +1194,7 @@ export async function ensureStage(
     state: stateOf(stage),
     sheet,
     weight,
+    report,
   };
 }
 
@@ -1231,16 +1246,50 @@ export async function writeSheet(
 }
 
 /**
- * The components in folder `dir` (from the clone's root; omitted, the clone's
- * own root), each with the story files that show it: spec §6's discovery,
- * read by the stage of the toolchain root it is in. A dir that is no folder,
- * or under no toolchain root (refused with the roots the clone has), is
- * refused in words.
+ * A canvas of `ask.files` (each from the clone's root) drawn by the daemon in
+ * the machine's own Chromium on its workspace's stage (stage-render.ts),
+ * started or woken first: the stage's report once every section has drawn,
+ * a picture when asked. A use of the stage. Every file must stand on one
+ * toolchain root, the one stage a canvas page is served from.
+ */
+export async function renderStage(
+  workspace: WorkspaceRef,
+  ask: RenderAsk
+): Promise<Rendered> {
+  const tree = await treeOf(workspace);
+  const stories = ask.files.map((file) => storyPath(tree, file));
+  const stage = await stageAtRoot(
+    stageFor(tree, stories[0] as string),
+    "a render"
+  );
+  const files = stories.map((story) => relative(stage.root, story));
+  const outside = files.find((file) => file.startsWith(".."));
+  if (outside) {
+    throw new StageRefusal(
+      `${outside} is under another toolchain root than ${stage.dir}: a canvas's states files stand on one stage.`
+    );
+  }
+  const reached = await reachWorkspace(
+    bridgeName(stage),
+    stage.boundary.id,
+    stage.port
+  );
+  const rendered = await renderCanvas(reached, stage.port, { ...ask, files });
+  used(stage, "a render");
+  return rendered;
+}
+
+/**
+ * The components of the toolchain root `dir` is in (`dir` from the clone's
+ * root; omitted, the clone's own root): spec §6's discovery, read by its
+ * stage. A dir under no toolchain root is refused with the roots the clone
+ * has.
  */
 export async function stageComponents(
   workspace: WorkspaceRef,
-  dir = "."
-): Promise<{ components: Found[]; dir: string }> {
+  ask: DesignQuery = {}
+): Promise<DesignMap> {
+  const dir = ask.dir ?? ".";
   const tree = await treeOf(workspace);
   const abs = inTree(tree, dir, "name a folder in it.");
   if (!statSync(abs, { throwIfNoEntry: false })?.isDirectory()) {
@@ -1263,20 +1312,54 @@ export async function stageComponents(
     stageFor(tree, join(root, "package.json"), true),
     "a components list"
   );
-  // The folder asked for, from the toolchain root: the stage lists only what is in it.
-  const asked = relative(root, abs) || ".";
-  const { components } = await answerOf<{ components: Found[] }>(
+  // The map's folder from the toolchain root; the clone's root itself is the root's source folder.
+  const inRoot = ask.dir ? relative(root, abs) : "";
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries({
+    dir: inRoot,
+    query: ask.query,
+    component: ask.component
+      ? relative(
+          root,
+          inTree(tree, ask.component, "name a component file in it.")
+        )
+      : undefined,
+    cursor: ask.cursor,
+    limit: ask.limit === undefined ? undefined : String(ask.limit),
+    detailed: ask.detailed ? "1" : undefined,
+  })) {
+    if (value) {
+      query.set(key, value);
+    }
+  }
+  const map = await answerOf<DesignMap>(
     stage,
-    `${COMPONENTS_PATH}?dir=${encodeURIComponent(asked)}`,
+    `${COMPONENTS_PATH}?${query}`,
     READ_WAIT_MS * 4,
-    "list its components"
+    "map its components"
   );
+  // Every file from the clone's root, as the session names them.
+  const fromClone = (file: string) => join(stage.dir, file);
+  const links = (value: DesignCard["usedIn"]) =>
+    Array.isArray(value)
+      ? value.map((one) => ({
+          ...one,
+          file: fromClone(one.file),
+          at: one.at && fromClone(one.at),
+        }))
+      : value;
   return {
-    dir: relative(tree.folder, abs) || ".",
-    components: components.map((one) => ({
-      ...one,
-      file: join(stage.dir, one.file),
-      sheets: one.sheets.map((sheet) => join(stage.dir, sheet)),
+    ...map,
+    root: stage.dir,
+    dir: fromClone(map.dir),
+    components: map.components.map((card) => ({
+      ...card,
+      file: fromClone(card.file),
+      usedIn: links(card.usedIn),
+      madeOf: links(card.madeOf),
+      ...(card.statesFiles
+        ? { statesFiles: card.statesFiles.map(fromClone) }
+        : {}),
     })),
   };
 }

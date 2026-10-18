@@ -205,18 +205,18 @@ public enum OpenEnums {
     /// `#/components/schemas/ArtifactKind`.
     public enum ArtifactKind: OpenEnum {
         case canvas
+        case component
         case page
         case preview
-        case sheet
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
         public init(rawValue: String) {
             switch rawValue {
             case "canvas": self = .canvas
+            case "component": self = .component
             case "page": self = .page
             case "preview": self = .preview
-            case "sheet": self = .sheet
             default: self = .unrecognized(rawValue)
             }
         }
@@ -224,9 +224,9 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .canvas: "canvas"
+            case .component: "component"
             case .page: "page"
             case .preview: "preview"
-            case .sheet: "sheet"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -235,7 +235,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.canvas, .page, .preview, .sheet]
+        public static let allCases: [Self] = [.canvas, .component, .page, .preview]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -1078,6 +1078,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/CanvasDialKind`.
+    public enum CanvasDialKind: OpenEnum {
+        case color
+        case number
+        case select
+        case toggle
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "color": self = .color
+            case "number": self = .number
+            case "select": self = .select
+            case "toggle": self = .toggle
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .color: "color"
+            case .number: "number"
+            case .select: "select"
+            case .toggle: "toggle"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.color, .number, .select, .toggle]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/CapPeriod`.
     public enum CapPeriod: OpenEnum {
         case day
@@ -1651,6 +1695,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.prepare, .start, .summary]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/CreatedBy`.
+    public enum CreatedBy: OpenEnum {
+        case panel
+        case stage
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "panel": self = .panel
+            case "stage": self = .stage
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .panel: "panel"
+            case .stage: "stage"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.panel, .stage]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -2840,6 +2922,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/FrameState`.
+    public enum FrameState: OpenEnum {
+        case drawn
+        case empty
+        case failed
+        case unseen
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "drawn": self = .drawn
+            case "empty": self = .empty
+            case "failed": self = .failed
+            case "unseen": self = .unseen
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .drawn: "drawn"
+            case .empty: "empty"
+            case .failed: "failed"
+            case .unseen: "unseen"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.drawn, .empty, .failed, .unseen]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/FsEntryKind`.
     public enum FsEntryKind: OpenEnum {
         case dir
@@ -3604,6 +3730,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/Interaction`.
+    public enum Interaction: OpenEnum {
+        case focus
+        case hover
+        case pressed
+        case rest
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "focus": self = .focus
+            case "hover": self = .hover
+            case "pressed": self = .pressed
+            case "rest": self = .rest
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .focus: "focus"
+            case .hover: "hover"
+            case .pressed: "pressed"
+            case .rest: "rest"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.focus, .hover, .pressed, .rest]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/IssueTracker`.
     public enum IssueTracker: OpenEnum {
         case github
@@ -4345,50 +4515,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.codeInspector, .react, .svelte, .vue]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/PageAnchorInteraction`.
-    public enum PageAnchorInteraction: OpenEnum {
-        case focus
-        case hover
-        case pressed
-        case rest
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "focus": self = .focus
-            case "hover": self = .hover
-            case "pressed": self = .pressed
-            case "rest": self = .rest
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .focus: "focus"
-            case .hover: "hover"
-            case .pressed: "pressed"
-            case .rest: "rest"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.focus, .hover, .pressed, .rest]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

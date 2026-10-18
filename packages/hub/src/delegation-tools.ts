@@ -17,7 +17,7 @@ import {
   commentRead,
   commentReply,
   commentResolve,
-  componentsList,
+  designMap,
 } from "./artifacts/tools";
 import {
   type HandoffDeps,
@@ -1113,10 +1113,14 @@ export function handoffTools(deps: HandoffDeps) {
       artifactUpdate.input,
       async ({ id, statements, ...change }) => {
         if (statements === undefined) {
+          // A component canvas's states file and its own spec have their own route.
+          const component = (
+            ["args", "story", "about", "edges", "group", "dials"] as const
+          ).some((key) => change[key] !== undefined);
           return json(
             await actions.artifactCall(
               "PATCH",
-              `/${encodeURIComponent(id)}`,
+              `/${encodeURIComponent(id)}${component ? "/component" : ""}`,
               change
             )
           );
@@ -1139,10 +1143,15 @@ export function handoffTools(deps: HandoffDeps) {
       artifactRead.name,
       artifactRead.description,
       artifactRead.input,
-      async ({ id, since, png }) => {
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each optional read field into the query, and a picture into an image block
+      async ({ id, since, png, detail, story, state, render }) => {
         const query = new URLSearchParams({
           ...(since === undefined ? {} : { since: String(since) }),
           ...(png ? { png: "true" } : {}),
+          ...(detail ? { detail } : {}),
+          ...(story ? { story } : {}),
+          ...(state ? { state: JSON.stringify(state) } : {}),
+          ...(render ? { render: "true" } : {}),
         }).toString();
         let target = id;
         if (target === undefined) {
@@ -1181,16 +1190,22 @@ export function handoffTools(deps: HandoffDeps) {
       }
     ),
     tool(
-      componentsList.name,
-      componentsList.description,
-      componentsList.input,
-      async ({ dir }) =>
-        json(
+      designMap.name,
+      designMap.description,
+      designMap.input,
+      async (ask) => {
+        const query = new URLSearchParams(
+          Object.entries(ask)
+            .filter(([, value]) => value !== undefined)
+            .map(([key, value]): [string, string] => [key, String(value)])
+        ).toString();
+        return json(
           await actions.artifactCall(
             "GET",
-            `/components${dir ? `?dir=${encodeURIComponent(dir)}` : ""}`
+            `/design-map${query ? `?${query}` : ""}`
           )
-        ),
+        );
+      },
       {
         readOnlyHint: true,
         destructiveHint: false,
@@ -1333,8 +1348,8 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
   },
   { prefixes: ["workflow_", "submit_result"], what: "workflows" },
   {
-    prefixes: ["artifact_", "comment_", "components_list"],
-    what: "artifacts you show, the person's pins on them, the components a sheet shows",
+    prefixes: ["artifact_", "comment_", "design_map"],
+    what: "artifacts you show, the person's pins on them; the components and their states on a canvas you build on and the person pins, design_map the library",
   },
   { prefixes: ["memory_"], what: "project memory" },
   { prefixes: ["thread_"], what: "your threads with the person" },

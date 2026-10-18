@@ -96,11 +96,13 @@ import {
 } from "@cawco/core/machine-key";
 import { userLayerPath } from "@cawco/core/paths";
 import { sweepDeadShortLinks } from "@cawco/core/sessiond";
+import type { DesignQuery } from "@cawco/core/stage";
 import {
   type ServeSpec,
   type SheetWrite,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
+  STAGE_RENDER,
   STAGE_SERVE,
   STAGE_UNSERVE,
   STAGE_WRITE,
@@ -223,6 +225,7 @@ import {
   ensureServed,
   ensureStage,
   networkOf,
+  renderStage,
   StageRefusal,
   setStageSink,
   stageComponents,
@@ -230,6 +233,7 @@ import {
   writeSheet,
 } from "./stage";
 import { setStageCloneSink } from "./stage-clone";
+import type { RenderAsk } from "./stage-render";
 import { makeUpstreamPost } from "./upstream-posts";
 
 /** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */
@@ -3050,16 +3054,27 @@ export const startDaemon = (rediscover = false) =>
     setStageCloneSink((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
-    supervisor.registerDaemonFunction(STAGE_ENSURE, (ref, file) =>
-      fenced()
-        ? Promise.reject(new Error(AGENT_RESTARTING))
-        : ensureStage(ref as WorkspaceRef, String(file))
-    );
+    // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads.
+    supervisor.registerDaemonFunction(STAGE_ENSURE, (ref, file) => {
+      if (fenced()) {
+        return Promise.reject(new Error(AGENT_RESTARTING));
+      }
+      const named = file as { file?: string; files?: string[] } | string;
+      return typeof named === "string"
+        ? ensureStage(ref as WorkspaceRef, named)
+        : ensureStage(ref as WorkspaceRef, String(named.file), named.files);
+    });
     // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved.
     supervisor.registerDaemonFunction(STAGE_WRITE, (ref, write) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : writeSheet(ref as WorkspaceRef, write as SheetWrite)
+    );
+    // A canvas drawn by the daemon's own Chromium when no panel has drawn it (stage-render.ts).
+    supervisor.registerDaemonFunction(STAGE_RENDER, (ref, ask) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : renderStage(ref as WorkspaceRef, ask as RenderAsk)
     );
     // A toolchain root's components, as its stage finds them (spec §6's discovery).
     supervisor.registerDaemonFunction(STAGE_COMPONENTS, (ref, dir) =>
@@ -3067,7 +3082,7 @@ export const startDaemon = (rediscover = false) =>
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : stageComponents(
             ref as WorkspaceRef,
-            typeof dir === "string" ? dir : undefined
+            dir && typeof dir === "object" ? (dir as DesignQuery) : {}
           )
     );
     // A workspace preview's server, started or woken and kept up there (stage.ts).

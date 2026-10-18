@@ -52,6 +52,11 @@ import {
   COMPONENT_BUDGET,
   COMPONENTS_PATH,
   type ComponentDoc,
+  DESIGN_MAP_LIMITS,
+  type DesignCard,
+  type DesignLink,
+  type DesignMap,
+  type DesignQuery,
   type Found,
   HEALTH_PATH,
   type PageError,
@@ -939,11 +944,17 @@ async function written(write: SheetWrite): Promise<SheetWritten> {
     out = writeStoryOp(file, text, op);
   }
   const printedInto = printedStory(write);
+  let by: string | null = null;
   if (printedInto) {
-    out = await inProjectStyle(file, abs, out.text, printedInto);
+    ({ by, ...out } = await inProjectStyle(file, abs, out.text, printedInto));
   }
   writeFileSync(abs, out.text);
-  return { file, lines: out.lines, sheet: await sheetRead(file, out.text) };
+  return {
+    file,
+    lines: out.lines,
+    formatted: by,
+    sheet: await sheetRead(file, out.text),
+  };
 }
 
 /** The story whose statement a write printed values into: an args write's, an added or duplicated one's; none for a removal or a move, which only move text. */
@@ -974,12 +985,14 @@ async function inProjectStyle(
   abs: string,
   text: string,
   story: string
-): Promise<{ lines: { from: number; to: number }; text: string }> {
+): Promise<{ by: string; lines: { from: number; to: number }; text: string }> {
   const { from, to } = storyStatement(file, text, story);
-  const styled = (await formatted(abs, text.slice(from, to))).trimEnd();
+  const shaped = await formatted(abs, text.slice(from, to));
+  const styled = shaped.code.trimEnd();
   const out = text.slice(0, from) + styled + text.slice(to);
   const lineAt = (offset: number) => out.slice(0, offset).split("\n").length;
   return {
+    by: shaped.by,
     text: out,
     lines: { from: lineAt(from), to: lineAt(from + styled.length) },
   };
@@ -1023,14 +1036,18 @@ const biomeConfigured = (): boolean => {
 };
 const BIOME_CONFIGS = ["biome.json", "biome.jsonc"];
 
-/** `code`, as story file `abs` holds it, formatted by the project's Prettier or Biome; refused in words when it has neither. */
-async function formatted(abs: string, code: string): Promise<string> {
+/** `code`, as story file `abs` holds it, formatted by the project's Prettier or Biome, with which; refused in words when it has neither. */
+async function formatted(
+  abs: string,
+  code: string
+): Promise<{ by: string; code: string }> {
   // The project's Prettier, from the toolchain root up; none installed, its Biome or none.
   const prettier = projectInstalled("prettier")
     ? projectPackage("prettier")
     : null;
   if (prettier) {
     const api = (await import(prettier.href)) as {
+      version: string;
       format: (code: string, options: object) => Promise<string>;
       resolveConfig: (
         file: string,
@@ -1038,7 +1055,10 @@ async function formatted(abs: string, code: string): Promise<string> {
       ) => Promise<object | null>;
     };
     const config = await api.resolveConfig(abs, { editorconfig: true });
-    return api.format(code, { ...config, filepath: abs });
+    return {
+      by: `prettier ${api.version}`,
+      code: await api.format(code, { ...config, filepath: abs }),
+    };
   }
   const biome = biomeConfigured() ? projectBiome() : null;
   if (biome) {
@@ -1052,7 +1072,7 @@ async function formatted(abs: string, code: string): Promise<string> {
         `The project's Biome could not format the story it wrote, so nothing was written: ${(ran.stderr || ran.stdout || `exit ${ran.status}`).trim().split("\n").slice(-3).join(" ")}`
       );
     }
-    return ran.stdout;
+    return { by: "biome", code: ran.stdout };
   }
   throw new StoryRefusal(
     `Neither Prettier nor Biome resolves from ${root}, so the sheet can't write ${relative(root, abs)} in the project's own style, and nothing was written: add the project's formatter, or edit the story file by hand.`
@@ -1130,6 +1150,11 @@ const fileName = (file: string): string =>
   (file.split(sep).at(-1) ?? file).replace(EXTENSION, "");
 const EXTENSION = /\.[^.]+$/;
 
+/** The toolchain root's source folder: Nuxt's own (`app/` from Nuxt 4, where it holds components, not routes), else `src/` when it has one. */
+const sourceTop = (): string =>
+  nuxtOptions?.srcDir ??
+  (existsSync(join(root, "src")) ? join(root, "src") : root);
+
 /**
  * The components in folder `under` (absolute, in the toolchain root) (spec
  * §6's discovery): every `.svelte` and `.vue` file of the root's source
@@ -1179,6 +1204,183 @@ async function discovered(under: string): Promise<Found[]> {
       ? [{ name, file: relative(root, file), sheets: sheets.get(file) ?? [] }]
       : [];
   });
+}
+
+/** A component file's imports of other files, as it writes them: its script's `import … from "…"` and `import "…"`. Ours: no parser, a component's imports are its first lines. */
+const IMPORT_FROM = /\bimport\s+(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/g;
+/** Each component file's resolved imports of other component files, kept by the file's time. */
+const importsKept = new Map<string, { at: number; to: string[] }>();
+
+/** The component files `file` imports (absolute), resolved as Vite resolves them. */
+async function componentImports(file: string): Promise<string[]> {
+  const at = statTime(file);
+  const kept = importsKept.get(file);
+  if (kept?.at === at) {
+    return kept.to;
+  }
+  const text = readFileSync(file, "utf8");
+  const sources = [
+    ...new Set([...text.matchAll(IMPORT_FROM)].map((one) => one[1] as string)),
+  ];
+  const to = (
+    await Promise.all(sources.map((source) => resolved(source, file)))
+  ).filter(
+    (one): one is string =>
+      !!one && COMPONENT_FILE.test(one) && !STORY_FILE.test(one)
+  );
+  importsKept.set(file, { at, to });
+  return to;
+}
+
+/** A component's name from its file. */
+const nameOf = (file: string): string => fileName(file);
+
+/**
+ * The design map (component canvas §4, `design_map`): the library under
+ * `dir`, each component with its states, what a browser drew of them, the
+ * components it renders (made of) and those that render it (used in), from
+ * the frames' component chains the stage's reports keep and, before any page
+ * has drawn, a static scan of each component's imports. Paged; one
+ * component's card when asked.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass joins the scan, the stories and the reports into each card
+async function designMap(ask: DesignQuery): Promise<DesignMap> {
+  const top = ask.dir ? resolve(root, ask.dir) : sourceTop();
+  const inside = relative(root, top);
+  if (inside.startsWith("..") || !existsSync(top)) {
+    throw new StoryRefusal(
+      `${ask.dir} is no folder inside ${root}: dir is a folder from the toolchain root, like src/lib.`
+    );
+  }
+  let found = await discovered(top);
+  if (ask.query) {
+    const needle = ask.query.toLowerCase();
+    found = found.filter((one) => one.name.toLowerCase().includes(needle));
+  }
+  if (ask.component) {
+    const wanted = relative(root, resolve(root, ask.component));
+    found = found.filter((one) => one.file === wanted);
+    if (found.length === 0) {
+      throw new StoryRefusal(
+        `${ask.component} is no component under ${inside || "."}: name its file from the toolchain root, like src/lib/Card.svelte, or call without component for the list.`
+      );
+    }
+  }
+  const total = found.length;
+  const limit = Math.min(
+    DESIGN_MAP_LIMITS.max,
+    Math.max(1, ask.limit ?? DESIGN_MAP_LIMITS.limit)
+  );
+  const start = Math.max(0, Number(ask.cursor ?? 0) || 0);
+  const page = found.slice(start, start + limit);
+  const detailed = ask.detailed || !!ask.component;
+  // Made of and used in: the static scan over the whole source folder, then each drawn frame's chain.
+  const madeOf = new Map<string, Map<string, DesignLink>>();
+  const usedIn = new Map<string, Map<string, DesignLink>>();
+  const link = (from: string, to: string, at: string | null) => {
+    if (from === to) {
+      return;
+    }
+    const made = madeOf.get(from) ?? new Map<string, DesignLink>();
+    const had = made.get(to);
+    made.set(to, { name: nameOf(to), file: to, at: at ?? had?.at ?? null });
+    madeOf.set(from, made);
+    const used = usedIn.get(to) ?? new Map<string, DesignLink>();
+    const was = used.get(from);
+    used.set(from, {
+      name: nameOf(from),
+      file: from,
+      at: at ?? was?.at ?? null,
+    });
+    usedIn.set(to, used);
+  };
+  const everything = componentFiles(sourceTop());
+  const imports = await Promise.all(everything.map(componentImports));
+  everything.forEach((file, at) => {
+    for (const to of imports[at] ?? []) {
+      link(relative(root, file), relative(root, to), null);
+    }
+  });
+  const statesOf = new Map<
+    string,
+    { file: string; read: ReturnType<typeof readStoryFile> }[]
+  >();
+  for (const one of found) {
+    for (const sheet of one.sheets) {
+      const abs = resolve(root, sheet);
+      const read = readStoryFile(abs, readFileSync(abs, "utf8"));
+      statesOf.set(one.file, [
+        ...(statesOf.get(one.file) ?? []),
+        { file: sheet, read },
+      ]);
+      for (const frame of reports.get(sheet)?.section.frames ?? []) {
+        for (const part of frame.parts) {
+          link(one.file, part.file, part.at);
+        }
+      }
+    }
+  }
+  const components: DesignCard[] = await Promise.all(
+    page.map(async (one) => {
+      const sheets = statesOf.get(one.file) ?? [];
+      const frames = one.sheets.flatMap(
+        (sheet) => reports.get(sheet)?.section.frames ?? []
+      );
+      const made = [...(madeOf.get(one.file)?.values() ?? [])];
+      const used = [...(usedIn.get(one.file)?.values() ?? [])];
+      const card: DesignCard = {
+        name: one.name,
+        file: one.file,
+        states: sheets.reduce(
+          (sum, sheet) => sum + sheet.read.stories.length,
+          0
+        ),
+        drawn: frames.filter((frame) => frame.state === "drawn").length,
+        usedIn: detailed ? used : used.length,
+        madeOf: detailed ? made : made.length,
+      };
+      if (!detailed) {
+        return card;
+      }
+      card.statesFiles = one.sheets;
+      card.stories = sheets.flatMap((sheet) =>
+        sheet.read.stories.map((story) => {
+          const own = (reports.get(sheet.file)?.section.frames ?? []).filter(
+            (frame) => frame.story === story.name
+          );
+          return {
+            name: story.name,
+            label: story.label,
+            interactions: [...new Set(own.map((frame) => frame.interaction))],
+            drawn: own.some((frame) => frame.state === "drawn"),
+          };
+        })
+      );
+      card.moves = sheets.flatMap((sheet) =>
+        sheet.read.stories
+          .filter((story) => story.from && story.play)
+          .map((story) => ({ from: story.from as string, to: story.name }))
+      );
+      if (ask.component) {
+        card.props = (await propsOf(resolve(root, one.file), one.name)).props;
+      }
+      return card;
+    })
+  );
+  const more = start + limit < total;
+  return {
+    root: ".",
+    dir: inside || ".",
+    components,
+    total,
+    has_more: more,
+    next_cursor: more ? String(start + limit) : null,
+    ...(more
+      ? {
+          steer: `${start + page.length} of ${total} under ${inside || "."}: narrow with dir or query, or pass cursor "${start + limit}".`,
+        }
+      : {}),
+  };
 }
 
 /** Every story file under `dir`, routes and builds left out. */
@@ -1406,19 +1608,16 @@ async function serveStage(
     return;
   }
   if (path === COMPONENTS_PATH) {
-    // `?dir=`: the folder asked for, from the root ("." the root itself).
-    const under = resolve(root, url.searchParams.get("dir") ?? "");
-    if (
-      !url.searchParams.has("dir") ||
-      relative(root, under).startsWith("..")
-    ) {
-      json(res, 400, {
-        error: `The components are read from a folder of ${root}, named as dir.`,
-      });
-      return;
-    }
-    await discovered(under).then(
-      (components) => json(res, 200, { components }),
+    const ask = url.searchParams;
+    await designMap({
+      dir: ask.get("dir") ?? undefined,
+      query: ask.get("query") ?? undefined,
+      component: ask.get("component") ?? undefined,
+      cursor: ask.get("cursor") ?? undefined,
+      limit: ask.has("limit") ? Number(ask.get("limit")) : undefined,
+      detailed: ask.get("detailed") === "1",
+    }).then(
+      (map) => json(res, 200, map),
       (error) => refusedWith(res, error)
     );
     return;

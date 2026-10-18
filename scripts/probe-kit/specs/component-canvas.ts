@@ -32,6 +32,11 @@
  * 11. At 1440 and 390, light and dark: both schemes drawn side by side; a
  *     phone shows one frame with its state strip, and a step plays the move.
  * 12. No console errors (the throwing story's page aside).
+ * 13. With no panel open, the daemon's render (stage-render.ts) draws the
+ *     canvas in the machine's own Chromium through a bridge socket shaped
+ *     as preview-bridge.ts makes it (socat, unix to the stage's port): the
+ *     stage's report says `by: "stage"`, every frame drawn, the move read,
+ *     and a frame's picture.
  *
  * Captures of the canvas (desk and phone, light and dark, its move's
  * timeline and its dials open) go to `$TMPDIR/caps/` and the clone's
@@ -48,6 +53,7 @@ import {
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import { renderCanvas } from "../../../packages/agent/src/stage-render";
 import type {
   CanvasSpec,
   FrameRender,
@@ -842,6 +848,54 @@ async function react(kit: Kit, stage: Stage): Promise<void> {
   await page.close();
 }
 
+/** Leg 13: the daemon draws the canvas with no panel open. */
+async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
+  const port = Number(new URL(stage.base).port);
+  const socket = join(SCRATCH, "bridge.sock");
+  const socat = Bun.spawn([
+    "socat",
+    `UNIX-LISTEN:${socket},fork,unlink-early`,
+    `TCP:127.0.0.1:${port}`,
+  ]);
+  try {
+    await until(
+      "the bridge's socket",
+      () => existsSync(socket),
+      Boolean,
+      10_000
+    );
+    const started = performance.now();
+    // Inside a workspace the boundary already holds the browser, which has no namespaces of its own to make.
+    const rendered = await renderCanvas(
+      socket,
+      port,
+      {
+        files: ["src/Button.stories.js", "src/Pairing.stories.js"],
+        spec: { name: "Kit", about: "The button and the pairing card" },
+        png: true,
+        state: { story: "Primary", interaction: "hover" },
+      },
+      !process.env.CAWCO_WORKSPACE
+    );
+    const frames = framesOf(rendered.report);
+    const move = rendered.report.sections.find(
+      (one) => one.file === "src/Pairing.stories.js"
+    )?.moves[0];
+    const png = Buffer.from(rendered.png ?? "", "base64");
+    kit.check(
+      "13: with no panel open, the daemon's render draws every section in the machine's Chromium through the bridge's socket: by stage, every frame drawn, the move read, a frame's picture",
+      rendered.report.by === "stage" &&
+        frames.length >= 14 &&
+        frames.every((one) => one.state === "drawn") &&
+        (move?.animations.length ?? 0) === 2 &&
+        png.subarray(1, 4).toString() === "PNG",
+      `${Math.round(performance.now() - started)} ms, by ${rendered.report.by}: ${frames.length} frames ${[...new Set(frames.map((one) => one.state))].join(",")}; move ${move?.from}→${move?.to} ${move?.animations.length} animations; picture ${png.length} bytes`
+    );
+  } finally {
+    socat.kill();
+  }
+}
+
 const spec: Spec = {
   name: "component-canvas",
   run: async (kit) => {
@@ -852,6 +906,7 @@ const spec: Spec = {
       await views(kit, svelte);
       await lazy(kit, svelte);
       await kept(kit, svelte);
+      await daemonRender(kit, svelte);
     } finally {
       svelte.stop();
     }

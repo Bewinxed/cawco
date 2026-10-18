@@ -53,7 +53,7 @@
     page: IconArtifactPage,
     canvas: IconArtifactCanvas,
     preview: IconWindow,
-    sheet: IconArtifactSheet,
+    component: IconArtifactSheet,
   };
 
   let open = $state(false);

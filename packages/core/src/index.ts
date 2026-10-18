@@ -1687,7 +1687,7 @@ export type PreviewSource =
  * server or folder shown live, and a sheet: a story file's stories, each a
  * real component mounted by the project's own toolchain (core `stage.ts`).
  */
-export type ArtifactKind = "page" | "canvas" | "preview" | "sheet";
+export type ArtifactKind = "page" | "canvas" | "preview" | "component";
 
 /** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
 export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;

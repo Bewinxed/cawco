@@ -10,14 +10,18 @@ import { ARTIFACT_NAME, PREVIEW_START_PATH, SHOWN_FAILURES } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import {
+  CANVAS_SPEC_LIMITS,
+  DESIGN_MAP_LIMITS,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
   type StoryOp,
 } from "@cawco/core/stage";
-import { Elysia, t } from "elysia";
+import { Elysia, t, ValidationError } from "elysia";
 import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
+import type { StateAsk } from "./component";
+import { COMPONENT_EXAMPLE } from "./component";
 import {
   ArtifactRefusal,
   type Artifacts,
@@ -27,6 +31,35 @@ import {
   type SkeletonElement,
 } from "./service";
 import { ARGS_LIMIT, PATCH_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
+
+const INTERACTION_NAMES = ["rest", "hover", "focus", "pressed"];
+
+/** A read's frame, from its JSON; refused with the shape when it is none. */
+const stateOf = (text: string): StateAsk => {
+  let value: Partial<StateAsk> | null = null;
+  try {
+    value = JSON.parse(text) as Partial<StateAsk>;
+  } catch {
+    value = null;
+  }
+  if (
+    !(
+      value &&
+      typeof value.story === "string" &&
+      STORY_NAME.test(value.story)
+    ) ||
+    (value.interaction !== undefined &&
+      !INTERACTION_NAMES.includes(value.interaction)) ||
+    (value.scheme !== undefined &&
+      value.scheme !== "light" &&
+      value.scheme !== "dark") ||
+    (value.width !== undefined &&
+      !(typeof value.width === "number" && value.width > 0))
+  ) {
+    throw new ArtifactRefusal(400, SHAPES.read as string);
+  }
+  return value as StateAsk;
+};
 
 const refused = (error: unknown) => {
   if (error instanceof ArtifactRefusal) {
@@ -72,6 +105,75 @@ const argValues = t.Record(
   }
 );
 
+/** A states file, from the clone's root or absolute. */
+const statesFile = t.String({
+  minLength: 1,
+  maxLength: 1000,
+  pattern: STORY_FILE.source,
+});
+
+/** A story on a canvas: `Story`, or `file:Story` across sections. */
+const storyRef = t.String({ minLength: 1, maxLength: 1100 });
+
+/** A component canvas's about, edges, groups and dials (core `CanvasSpec`), as create and update take them. */
+const canvasFields = {
+  about: t.Optional(
+    t.String({ minLength: 1, maxLength: CANVAS_SPEC_LIMITS.about })
+  ),
+  edges: t.Optional(
+    t.Array(
+      t.Object({
+        from: storyRef,
+        to: storyRef,
+        label: t.Optional(t.String({ maxLength: CANVAS_SPEC_LIMITS.label })),
+      }),
+      { maxItems: CANVAS_SPEC_LIMITS.edges }
+    )
+  ),
+  group: t.Optional(t.Record(storyRef, storyRef, { maxProperties: 200 })),
+  dials: t.Optional(
+    t.Array(
+      t.Object({
+        name: t.String({
+          minLength: 1,
+          maxLength: 60,
+          pattern: "^[A-Za-z][\\w-]*$",
+        }),
+        label: t.Optional(t.String({ maxLength: CANVAS_SPEC_LIMITS.label })),
+        kind: t.Union([
+          t.Literal("number"),
+          t.Literal("color"),
+          t.Literal("select"),
+          t.Literal("toggle"),
+        ]),
+        min: t.Optional(t.Number()),
+        max: t.Optional(t.Number()),
+        step: t.Optional(t.Number({ exclusiveMinimum: 0 })),
+        unit: t.Optional(t.String({ maxLength: 10 })),
+        options: t.Optional(
+          t.Array(t.String({ maxLength: 100 }), { maxItems: 24 })
+        ),
+        target: t.Union([
+          t.Object({
+            cssVar: t.String({ pattern: "^--[\\w-]+$", maxLength: 100 }),
+          }),
+          t.Object({ arg: t.String({ minLength: 1, maxLength: 100 }) }),
+        ]),
+      }),
+      { maxItems: CANVAS_SPEC_LIMITS.dials }
+    )
+  ),
+};
+
+/** What a malformed body was refused for, in the tool's words with its valid shape: never the validator's own text (component canvas G3). */
+const SHAPES: Record<string, string> = {
+  create: `artifact_create takes kind, name and that kind's fields. A component canvas: { kind: "component", name, file, about, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle", min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`,
+  update:
+    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or about, edges, group, dials (the canvas itself). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
+  read: 'artifact_read takes id?, since?, png?, detail ("summary" | "story"), story, state { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? }, render. Example: { id, state: { story: "Waiting", interaction: "hover" } }.',
+  map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
+};
+
 /** A sheet's change (core `SheetWrite` less its file): one story's args, or one story op. */
 const sheetChange = {
   args: t.Optional(
@@ -109,28 +211,22 @@ const sheetChangeOf = (body: {
   return body.args ? { args: body.args } : { story: body.story as StoryOp };
 };
 
-/** The one change an update names (a decision page's statements have their own route): a page's html or patch, a canvas's elements, delete or mermaid, a sheet's args or story. */
+/** The one change an update names (a decision page's statements and a component canvas each have their own route): a page's html or patch, a canvas's elements, delete or mermaid. */
 const changeOf = (body: {
-  args?: Extract<SheetChange, { args: unknown }>["args"];
   delete?: string[];
   elements?: SkeletonElement[];
   html?: string;
   mermaid?: string;
   patch?: unknown[];
-  story?: StoryOp;
-}):
-  Exclude<PageChange, { statements: string }> | CanvasChange | SheetChange => {
+}): Exclude<PageChange, { statements: string }> | CanvasChange => {
   const named = (
-    ["html", "patch", "elements", "delete", "mermaid", "args", "story"] as const
+    ["html", "patch", "elements", "delete", "mermaid"] as const
   ).filter((key) => body[key] !== undefined);
   if (named.length !== 1) {
     throw new ArtifactRefusal(
       400,
-      "Pass exactly one of statements (a decision page), html or patch (a page), elements, delete or mermaid (a canvas), or args or story (a sheet)."
+      "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements and a component's args, story, about, edges, group or dials go through their own routes."
     );
-  }
-  if (body.args !== undefined || body.story !== undefined) {
-    return sheetChangeOf(body);
   }
   if (body.html !== undefined) {
     return { html: body.html };
@@ -148,6 +244,22 @@ const changeOf = (body: {
 
 export const artifactRoutes = (artifacts: Artifacts) =>
   new Elysia()
+    // A body the validator refused: what the tool takes, never the validator's text.
+    .error(({ error, request }) => {
+      const { pathname: path } = new URL(request.url);
+      if (!(error instanceof ValidationError && path.includes("/artifacts"))) {
+        return;
+      }
+      let shape = SHAPES.read;
+      if (path.endsWith("/design-map")) {
+        shape = SHAPES.map;
+      } else if (path.endsWith("/artifacts")) {
+        shape = SHAPES.create;
+      } else if (!(path.endsWith("/sheet") || path.endsWith("/view"))) {
+        shape = SHAPES.update;
+      }
+      return new Response(shape, { status: 422 });
+    })
     .get("/api/instances/:id/artifacts", ({ params }) => {
       try {
         return artifacts.list(params.id);
@@ -173,10 +285,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         body: t.Object({
           kind: t.Union([
             t.Literal("page"),
-            t.Literal("sheet"),
+            t.Literal("component"),
             t.Literal("preview"),
             t.Literal("canvas"),
+            // Shipped apps' generated client still lists it (the wire guard): refused with the new shape.
+            t.Literal("sheet"),
           ]),
+          ...canvasFields,
           elements: t.Optional(skeletons),
           mermaid: t.Optional(mermaid),
           name: t.String({ pattern: ARTIFACT_NAME.source }),
@@ -185,11 +300,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             t.String({ minLength: 1, maxLength: PROGRAM_MAX })
           ),
           file: t.Optional(
-            t.String({
-              minLength: 1,
-              maxLength: 1000,
-              pattern: STORY_FILE.source,
-            })
+            t.Union([
+              statesFile,
+              t.Array(statesFile, {
+                minItems: 1,
+                maxItems: CANVAS_SPEC_LIMITS.files,
+              }),
+            ])
           ),
           dir: t.Optional(
             t.String({ minLength: 2, maxLength: 4096, pattern: "^/" })
@@ -216,10 +333,17 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       },
       async ({ params, body }) => {
         try {
-          if (body.draft && body.kind !== "canvas") {
+          const { kind } = body;
+          if (kind === "sheet") {
+            throw new ArtifactRefusal(
+              400,
+              `A component's states are a component canvas now: kind "component", with about. Example: ${COMPONENT_EXAMPLE}.`
+            );
+          }
+          if (body.draft && kind !== "canvas") {
             throw new ArtifactRefusal(400, "Only a canvas is a draft.");
           }
-          return await artifacts.create(params.id, body);
+          return await artifacts.create(params.id, { ...body, kind });
         } catch (error) {
           return refused(error);
         }
@@ -231,6 +355,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         query: t.Object({
           since: t.Optional(t.Numeric({ minimum: 0 })),
           png: t.Optional(t.BooleanString()),
+          detail: t.Optional(
+            t.Union([t.Literal("summary"), t.Literal("story")])
+          ),
+          story: t.Optional(storyName),
+          // A frame: JSON { story, interaction?, scheme?, width? }.
+          state: t.Optional(t.String({ maxLength: 400 })),
+          render: t.Optional(t.BooleanString()),
         }),
       },
       ({ params, query }) => {
@@ -239,7 +370,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             params.id,
             params.artifact,
             query.since,
-            query.png === true
+            query.png === true,
+            {
+              ...(query.detail ? { detail: query.detail } : {}),
+              ...(query.story ? { story: query.story } : {}),
+              ...(query.state ? { state: stateOf(query.state) } : {}),
+              ...(query.render ? { render: true } : {}),
+            }
           );
         } catch (error) {
           return refused(error);
@@ -262,15 +399,48 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             })
           ),
           mermaid: t.Optional(mermaid),
-          ...sheetChange,
         }),
       },
       async ({ params, body }) => {
         try {
-          const change = changeOf(body);
-          return "args" in change || "story" in change
-            ? await artifacts.sheetUpdate(params.id, params.artifact, change)
-            : await artifacts.update(params.id, params.artifact, change);
+          return await artifacts.update(
+            params.id,
+            params.artifact,
+            changeOf(body)
+          );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // A component canvas's change by its session (artifact_update): a states file's story args or op, or the canvas's own about, edges, groups or dials.
+    .patch(
+      "/api/instances/:id/artifacts/:artifact/component",
+      { body: t.Object({ ...sheetChange, ...canvasFields }) },
+      async ({ params, body }) => {
+        try {
+          const { about, edges, group, dials, args, story } = body;
+          const canvas = [about, edges, group, dials].some(
+            (one) => one !== undefined
+          );
+          if (canvas && (args !== undefined || story !== undefined)) {
+            throw new ArtifactRefusal(
+              400,
+              "about, edges, group and dials change the canvas itself: send them apart from a states file's args or story."
+            );
+          }
+          return canvas
+            ? await artifacts.canvasUpdate(params.id, params.artifact, {
+                about,
+                edges,
+                group,
+                dials,
+              })
+            : await artifacts.sheetUpdate(
+                params.id,
+                params.artifact,
+                sheetChangeOf({ args, story })
+              );
         } catch (error) {
           return refused(error);
         }
@@ -312,17 +482,33 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // The components a sheet can show in the session's workspace (components_list).
+    // The library of the session's workspace: its components, paged, or one's card (design_map).
     .get(
-      "/api/instances/:id/artifacts/components",
+      "/api/instances/:id/artifacts/design-map",
       {
         query: t.Object({
           dir: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
+          query: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+          component: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
+          limit: t.Optional(
+            t.Numeric({ minimum: 1, maximum: DESIGN_MAP_LIMITS.max })
+          ),
+          cursor: t.Optional(t.String({ maxLength: 20 })),
+          response_format: t.Optional(
+            t.Union([t.Literal("concise"), t.Literal("detailed")])
+          ),
         }),
       },
       async ({ params, query }) => {
         try {
-          return await artifacts.components(params.id, query.dir);
+          return await artifacts.designMap(params.id, {
+            ...(query.dir ? { dir: query.dir } : {}),
+            ...(query.query ? { query: query.query } : {}),
+            ...(query.component ? { component: query.component } : {}),
+            ...(query.limit ? { limit: query.limit } : {}),
+            ...(query.cursor ? { cursor: query.cursor } : {}),
+            ...(query.response_format === "detailed" ? { detailed: true } : {}),
+          });
         } catch (error) {
           return refused(error);
         }
