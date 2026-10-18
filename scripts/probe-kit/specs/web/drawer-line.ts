@@ -177,6 +177,12 @@ const snapshot = (page: Page): Promise<Record<string, string>> =>
         .map((n) => Math.round(n * 10) / 10)
         .join(",");
       out[path] = `${box}|${props.join(";")}`;
+      // The hub band's sentence carries its retry countdown, ticked by a
+      // real interval through MorphText's letters: the paragraph's own box
+      // and styles are read, the letters mid-tick are not.
+      if (el.matches(".band-slot p.words")) {
+        return;
+      }
       for (const [i, child] of [...el.children].entries()) {
         walk(child, `${path}>${child.tagName.toLowerCase()}:${i}`);
       }
