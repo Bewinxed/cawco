@@ -229,7 +229,9 @@
     height: 16px;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .side-head :global(:is(button, a):not([role="tab"]):active) {
+    /* `[data-pressed]`: a kit menu Trigger keeps its press while its menu takes focus (f5082a811). */
+    .side-head
+      :global(:is(button, a):not([role="tab"]):is(:active, [data-pressed])) {
       transform: scale(var(--press-scale));
     }
   }
