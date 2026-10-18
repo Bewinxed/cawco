@@ -1243,18 +1243,32 @@ const guardLines = (text: string): string[] =>
   );
 
 /**
- * A ran call's exit, from its result's `is_error`: a shell's `0` or
- * `failed`, an edit's `ok` or `failed`. A failed shell's code is not known:
- * no harness hands one over (Claude Code's Bash result, agent SDK 0.3.302
- * `BashOutput`, carries none; its number is only in the words the model
- * reads), and those words are never read.
+ * A ran call's exit: an edit's `ok` or `failed` by its result's `is_error`;
+ * a shell's by the exit its harness hands over. OpenCode's `shell` result
+ * carries it as `metadata.exit` (its built-in's code, CawCo's bounded
+ * shell's code or signal; agent `toolResultOf` passes the metadata on as
+ * `structuredContent`), and a command that exits non-zero there is still a
+ * completed call. Claude Code's Bash result carries none (agent SDK 0.3.302
+ * `BashOutput`), only `is_error`: its shell is `0` or `failed`, and the
+ * number in the words the model reads is never read.
  */
 const exitOf = (
   row: LeadCallRow,
-  block: { content: unknown; is_error?: boolean }
+  block: {
+    content: unknown;
+    is_error?: boolean;
+    structuredContent?: Record<string, unknown>;
+  }
 ): string => {
   if (!LEAD_SHELL_TOOLS.has(row.tool)) {
     return block.is_error ? "failed" : "ok";
+  }
+  const exit = block.structuredContent?.exit;
+  if (typeof exit === "number" && Number.isFinite(exit)) {
+    return String(exit);
+  }
+  if (typeof exit === "string" && exit) {
+    return exit;
   }
   return block.is_error ? "failed" : "0";
 };
@@ -1394,7 +1408,12 @@ export const createLeadGate = ({
   /** One of a lead's tool results: a web read's makes his wake external; a ran call's says its exit. */
   const resulted = (
     instanceId: string,
-    block: { content: unknown; is_error?: boolean; tool_use_id: string }
+    block: {
+      content: unknown;
+      is_error?: boolean;
+      structuredContent?: Record<string, unknown>;
+      tool_use_id: string;
+    }
   ): void => {
     const wake = wakes.get(instanceId);
     if (wake?.reading.delete(block.tool_use_id)) {
