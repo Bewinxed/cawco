@@ -8,6 +8,7 @@
   holds says so in words.
 -->
 <script lang="ts">
+  import { hubRefusal } from "../../hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { served } from "./page.svelte.js";
 
@@ -28,7 +29,8 @@
         method: "POST",
       });
       if (!response.ok) {
-        said = (await response.text()) || "The canvas didn't open.";
+        said = (await hubRefusal(response, "so the canvas didn't open."))
+          .message;
       }
     } catch {
       said = "The canvas didn't open: the hub didn't answer.";

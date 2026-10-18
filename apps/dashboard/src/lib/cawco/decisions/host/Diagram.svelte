@@ -10,6 +10,7 @@
 -->
 <script lang="ts">
   import type { Mounted } from "pele/lazy";
+  import { hubRefusal } from "../../hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { overlayTag } from "./page.svelte.js";
 
@@ -75,7 +76,8 @@
         body: JSON.stringify({ mermaid: text, from: statementId ?? null }),
       });
       if (!response.ok) {
-        said = (await response.text()) || "The canvas didn't open.";
+        said = (await hubRefusal(response, "so the canvas didn't open."))
+          .message;
       }
     } catch {
       said = "The canvas didn't open: the hub didn't answer.";
