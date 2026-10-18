@@ -2301,7 +2301,9 @@ export async function seedSheet(
       writeFile(join(fleet.repo, name), text)
     )
   );
-  await Bun.$`git -C ${fleet.repo} -c user.email=p@p -c user.name=p add -A && git -C ${fleet.repo} -c user.email=p@p -c user.name=p commit -qm 'The chip card'`.quiet();
+  // Pushed: a delegate's clone starts at origin's branch, never at what the
+  // session's repo holds (agent clone.ts `prepareClone`).
+  await Bun.$`git -C ${fleet.repo} -c user.email=p@p -c user.name=p add -A && git -C ${fleet.repo} -c user.email=p@p -c user.name=p commit -qm 'The chip card' && git -C ${fleet.repo} push -q origin HEAD`.quiet();
   // A person's identity for the delegate's workspace, as seedScene's.
   await writeFile(
     join(fleet.home, ".gitconfig"),
