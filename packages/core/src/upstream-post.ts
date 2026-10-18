@@ -3,19 +3,17 @@
  * the upstream choice's `ask` (upstream-guard.ts): exactly what CawCo makes
  * once it is approved, and what the ask in Needs you says it is.
  *
- * Each way a session posts is held where the guard already sees it, and
- * made, approved, by CawCo with a credential the session never holds:
- * - `gh`: the workspace's gh shim (agent upstream-shim.ts), its argv whole
- *   with every file it read in it; the host's gh runs it.
+ * Each way a session posts is held where its credential is, and made,
+ * approved, by CawCo with a credential the session never holds:
  * - `http`: a request to GitHub's API through the workspace's GitHub door
- *   (gh by its path, curl, a request by hand); the door sends it again with
- *   the host's token.
- * - `git`: a push to a GitHub repository that is not the project's, through
- *   the workspace's git door; the host pushes the same commits.
+ *   (gh, curl, a request by hand); the door sends it again with the host's
+ *   token.
+ * - `git`: a push to a repository that is not the project's, on any host,
+ *   through the workspace's git door; the host pushes the same commits with
+ *   its own credential.
  * - `mcp`: a write tool of a GitHub connection (hub connections.ts); the hub
  *   calls it once.
  */
-import { type GhPost, ghWords } from "./upstream-guard";
 
 /** A request to GitHub's API, as the door read it. */
 export interface HttpPost {
@@ -36,7 +34,7 @@ export interface PushedRef {
   readonly sha: string;
 }
 
-/** A push from the workspace's clone to a GitHub repository by URL. */
+/** A push from the workspace's clone to a repository by URL, on any host. */
 export interface GitPost {
   readonly refs: readonly PushedRef[];
   readonly url: string;
@@ -51,7 +49,7 @@ export interface McpPost {
   readonly via: "mcp";
 }
 
-export type UpstreamPost = GhPost | HttpPost | GitPost | McpPost;
+export type UpstreamPost = HttpPost | GitPost | McpPost;
 
 /** The tool name an upstream post's ask is parked under: the permission card draws it (permission-presentation.ts). */
 export const UPSTREAM_POST_TOOL = "mcp__cawco__upstream_post";
@@ -67,10 +65,10 @@ export interface PostMade {
 
 /** What the person reads on the ask: where it posts, what, as whom, and the post itself. */
 export interface UpstreamAskInput {
-  /** The account it posts as: the host's GitHub login, or the connection's account. */
+  /** The account it posts as: the host's GitHub login, the host's git sign-in for another host, or the connection's account. */
   readonly account: string;
   readonly body?: string;
-  /** The post itself in one line: the gh command, the request, the push, the tool call. */
+  /** The post itself in one line: the request, the push, the tool call. */
   readonly command: string;
   /** What it is: "issue", "comment", "pull request", "push", … */
   readonly kind: string;
@@ -78,67 +76,6 @@ export interface UpstreamAskInput {
   readonly repo: string;
   readonly title?: string;
 }
-
-/** A word as a shell would take it back: bare when it is plain, else single-quoted. */
-const PLAIN = /^[A-Za-z0-9_./:=@%+,-]+$/;
-const shellWord = (word: string): string =>
-  PLAIN.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
-
-/** The value of the last `-x VALUE`, `-xVALUE`, `--long VALUE` or `--long=VALUE`. */
-const flagValue = (
-  args: readonly string[],
-  short: string,
-  long: string
-): string | undefined => {
-  let found: string | undefined;
-  for (const [index, arg] of args.entries()) {
-    if (arg === short || arg === long) {
-      found = args[index + 1];
-    } else if (arg.startsWith(`${long}=`)) {
-      found = arg.slice(long.length + 1);
-    } else if (arg.startsWith(short) && !arg.startsWith("--")) {
-      found = arg.slice(short.length);
-    }
-  }
-  return found;
-};
-
-/** `gh api`'s raw and typed fields, by key. */
-const apiFields = (
-  args: readonly string[]
-): Partial<Record<string, string>> => {
-  const fields: Partial<Record<string, string>> = {};
-  for (const [index, arg] of args.entries()) {
-    let field: string | undefined;
-    if (["-f", "-F", "--raw-field", "--field"].includes(arg)) {
-      field = args[index + 1];
-    } else if (arg.startsWith("--raw-field=") || arg.startsWith("--field=")) {
-      field = arg.slice(arg.indexOf("=") + 1);
-    } else if (
-      (arg.startsWith("-f") || arg.startsWith("-F")) &&
-      !arg.startsWith("--") &&
-      arg.length > 2
-    ) {
-      field = arg.slice(2);
-    }
-    const at = field?.indexOf("=") ?? -1;
-    if (field && at > 0) {
-      fields[field.slice(0, at)] = field.slice(at + 1);
-    }
-  }
-  return fields;
-};
-
-const GH_KINDS: Readonly<Record<string, string>> = {
-  "issue create": "issue",
-  "issue comment": "comment",
-  "pr create": "pull request",
-  "pr comment": "comment",
-  "pr review": "review",
-  "pr merge": "merge",
-  "repo fork": "fork",
-  "release create": "release",
-};
 
 /** A REST path's kind, by what it posts to. */
 const REST_KINDS: readonly [RegExp, string][] = [
@@ -207,32 +144,6 @@ const mutationOf = (text: string | undefined): string | undefined => {
   }
 };
 
-const ghDescribed = (
-  post: GhPost
-): Omit<UpstreamAskInput, "account" | "repo"> => {
-  const words = ghWords(post.args);
-  const pair = `${words.command} ${words.sub}`;
-  const api = words.command === "api";
-  const fields = api ? apiFields(post.args) : {};
-  const fromInput = api ? titled(post.stdin) : {};
-  const title = api
-    ? (fields.title ?? fromInput.title)
-    : flagValue(post.args, "-t", "--title");
-  const body = api
-    ? (fields.body ?? fromInput.body)
-    : (flagValue(post.args, "-b", "--body") ??
-      flagValue(post.args, "-n", "--notes"));
-  const endpoint = words.endpoint ?? "";
-  return {
-    kind: api
-      ? (REST_KINDS.find(([path]) => path.test(endpoint))?.[1] ?? "API call")
-      : (GH_KINDS[pair] ?? pair),
-    command: ["gh", ...post.args].map(shellWord).join(" "),
-    ...(title === undefined ? {} : { title }),
-    ...(body === undefined ? {} : { body }),
-  };
-};
-
 const httpDescribed = (
   post: HttpPost
 ): Omit<UpstreamAskInput, "account" | "repo"> => {
@@ -287,9 +198,6 @@ export const describePost = (
 ): UpstreamAskInput => {
   let described: Omit<UpstreamAskInput, "account" | "repo">;
   switch (post.via) {
-    case "gh":
-      described = ghDescribed(post);
-      break;
     case "http":
       described = httpDescribed(post);
       break;
@@ -312,7 +220,7 @@ export const describePost = (
 /** One post as it is compared with another: two asks for the same post are one. */
 export const postKey = (post: UpstreamPost): string => JSON.stringify(post);
 
-/** Whether a value read off the wire is a post of one of the four kinds. */
+/** Whether a value read off the wire is a post of one of the three kinds. */
 export const isUpstreamPost = (value: unknown): value is UpstreamPost => {
   const post = value as { via?: unknown } | null;
   if (!post || typeof post !== "object") {
@@ -320,14 +228,6 @@ export const isUpstreamPost = (value: unknown): value is UpstreamPost => {
   }
   const one = post as Record<string, unknown>;
   switch (post.via) {
-    case "gh":
-      return (
-        Array.isArray(one.args) &&
-        one.args.every((arg) => typeof arg === "string") &&
-        typeof one.repo === "string" &&
-        typeof one.host === "string" &&
-        (one.stdin === undefined || typeof one.stdin === "string")
-      );
     case "http":
       return (
         typeof one.method === "string" &&

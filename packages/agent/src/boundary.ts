@@ -31,13 +31,16 @@
  * through: claude by a PreToolUse hook that rewrites the command (the
  * workspace's `hook` script, which asks its judge, `boundary-judge.ts`), OpenCode by its
  * plugin's `bash` tool, pi by its bash tool's operations, a workflow's
- * `runCommand`. The GitHub CLI's keyring is the host's, so the executor reads
- * its token on the host side, from a copy it keeps in the workspace's state
- * dir ({@link ghToken}), and hands it in as `GH_TOKEN`, with an empty config
- * dir of gh's own ({@link ghConfigOf}): pushes, through git's `gh auth
- * git-credential` helper, and `gh` keep working inside, on both OSes. The
- * hub lands a workspace's commits the same way: its `git push` is a command
- * the workspace's agent runs through this executor (`runWorkflowCommand`). `cawco tools` reaches the hub's tools through the
+ * `runCommand`. A workspace holds no credential of any host: its git reaches
+ * its clone's origin, on any host and over any transport, through the git
+ * door (hub-git.ts), which signs in on the host with the host's own. The
+ * GitHub CLI's keyring is the host's, so where the upstream guard lets
+ * sessions post, the executor reads gh's token on the host side, from a copy
+ * it keeps in the workspace's state dir ({@link ghToken}), and hands it in as
+ * `GH_TOKEN`, with an empty config dir of gh's own ({@link ghConfigOf}), so
+ * `gh` keeps working inside, on both OSes. The hub lands a workspace's
+ * commits through the same door: its `git push` is a command the workspace's
+ * agent runs through this executor (`runWorkflowCommand`). `cawco tools` reaches the hub's tools through the
  * workspace's tool door (`tool-door.ts`).
  *
  * sessiond holds the boundary and the workspace's judge, so an agent restart
@@ -157,11 +160,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
-import {
-  GUARDED_PROGRAMS,
-  type UpstreamRule,
-  type UpstreamRules,
-} from "@cawco/core/upstream-guard";
+import type { UpstreamRule, UpstreamRules } from "@cawco/core/upstream-guard";
 import { PROTECTED_NAMES, PROTECTED_UNDER } from "@cawco/core/workspace-judge";
 import {
   isPlace,
@@ -181,12 +180,11 @@ import { cawcoCommand } from "./git-credential";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import { hostGh } from "./host-gh";
 import {
-  askedPushParameters,
   closeGitDoor,
   gitDoorEnv,
   gitDoorOf,
   gitHelperDirOf,
-  guardedGitParameters,
+  guardedPushParameters,
   openGitDoor,
 } from "./hub-git";
 import { type HeldProc, KeeperPool } from "./keepers";
@@ -997,13 +995,6 @@ ${standalone ? "export BUN_BE_BUN=1\n" : ""}exec ${[runtime, client, String(port
   ]);
 };
 
-/**
- * The upstream guard's shims (core upstream-guard.ts), first on the PATH of
- * every command in the workspace's boundary on both OSes, after the hub's
- * git helper: read-only inside.
- */
-const guardShimsOf = (id: string): string => join(roOf(id), "guard");
-
 /** The workspace's upstream rule (`UpstreamRule`), written only here ({@link workspaceUpstreamRuleFile}). */
 const upstreamRuleOf = workspaceUpstreamRuleFile;
 
@@ -1061,87 +1052,6 @@ export const takeUpstreamRules = async (
           );
         })
       )
-  );
-};
-
-/**
- * The upstream guard's shims, one for each program it reads
- * (`GUARDED_PROGRAMS`), and the two scripts they run, written into the part
- * of the state dir a command reads. Each shim finds the program it stands in
- * for on the rest of the caller's PATH, has `upstream-shim.ts` judge the call
- * by the workspace's rule ({@link upstreamRuleOf}), and runs the program only
- * when the judge lets it; a refusal's reason is what the session reads. In
- * a guarded workspace, whose commands hold no GitHub token ({@link
- * guardedEnv}), gh runs with {@link guardedGhConfigOf}: it reaches GitHub
- * through the workspace's GitHub door, which judges each request again on
- * the host and signs in there (github-door.ts). A
- * `curl` naming none of GitHub's API hosts runs without asking, so a dev
- * server's poll costs nothing.
- */
-const writeGuardShims = async (id: string, runtime: string): Promise<void> => {
-  const dir = guardShimsOf(id);
-  await mkdir(dir, { recursive: true });
-  await writeScript(
-    roOf(id),
-    "upstream-guard.ts",
-    "boundary/upstream-guard.ts",
-    join(import.meta.dir, "..", "..", "core", "src", "upstream-guard.ts")
-  );
-  const shim = await writeScript(
-    roOf(id),
-    "upstream-shim.ts",
-    "boundary/upstream-shim.ts"
-  );
-  const door = githubDoorOf(id);
-  const judge = `${standalone ? "BUN_BE_BUN=1 " : ""}${[runtime, shim, upstreamRuleOf(id), door].map(shellQuote).join(" ")}`;
-  // The judge's exit (upstream-shim.ts): 0 runs the program, 4 is a post
-  // held for the person (nothing runs), 3 sends curl through the GitHub door
-  // (each GitHub API URL in the clear: the door reads plain HTTP), anything
-  // else is the call's own exit.
-  const viaDoor = `args=()
-    for arg in "$@"; do
-      case "$arg" in
-        https://api.github.com* | https://uploads.github.com*) arg=http://\${arg#https://} ;;
-        api.github.com* | uploads.github.com*) arg=http://$arg ;;
-      esac
-      args+=("$arg")
-    done
-    exec "$real" --unix-socket ${shellQuote(door)} "\${args[@]}" ;;`;
-  await Promise.all(
-    GUARDED_PROGRAMS.map((program) => {
-      const asks = `${judge} ${shellQuote(program)} "$@" < /dev/null
-  judged=$?
-  case $judged in
-    0) ;;
-    4) exit 0 ;;
-    3) ${program === "curl" ? viaDoor : "exit 1 ;;"}
-    *) exit $judged ;;
-  esac`;
-      return writeWhole(
-        join(dir, program),
-        `#!/bin/bash
-# CawCo workspace ${id}: ${program}, run once the upstream guard lets the call (upstream-shim.ts).
-real=
-IFS=: read -ra dirs <<< "$PATH"
-for dir in "\${dirs[@]}"; do
-  [ -z "$dir" ] || [ "$dir" = ${shellQuote(dir)} ] && continue
-  if [ -x "$dir/${program}" ] && [ ! -d "$dir/${program}" ]; then real=$dir/${program}; break; fi
-done
-if [ -z "$real" ]; then echo "${program}: command not found" >&2; exit 127; fi
-${
-  program === "curl"
-    ? `case " $* " in
-  *api.github.com* | *uploads.github.com*)
-  ${asks}
-  ;;
-esac`
-    : asks
-}
-exec "$real" "$@"
-`,
-        0o755
-      );
-    })
   );
 };
 
@@ -1218,7 +1128,6 @@ const armHookNow = async (
   if (process.platform === "darwin") {
     await writeShims(id, runtime);
   }
-  await writeGuardShims(id, runtime);
   await writeGuardedGhConfig(id);
   await writeUpstreamRule(id);
   // The system gitconfig names the host's gh as it is now.
@@ -4301,47 +4210,50 @@ const commandEnv = (id: string, clone: string): string[] => [
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
 ];
 
-/** The variables a GitHub token travels in: gh's (`GH_TOKEN`, `GH_ENTERPRISE_TOKEN`), hub's and the Actions convention's (`GITHUB_TOKEN`, `GITHUB_ENTERPRISE_TOKEN`). */
-const GITHUB_TOKEN_ENV = [
-  "GH_TOKEN",
-  "GITHUB_TOKEN",
-  "GH_ENTERPRISE_TOKEN",
-  "GITHUB_ENTERPRISE_TOKEN",
+/**
+ * The variables a forge's credential travels in, whatever the forge, as
+ * shell `case` patterns: gh's and hub's (`GH_TOKEN`, `GH_ENTERPRISE_TOKEN`,
+ * `GITHUB_TOKEN`, `GITHUB_ENTERPRISE_TOKEN`), glab's ("Environment
+ * variables, first one set wins: `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN`,
+ * `OAUTH_TOKEN`", and `CI_JOB_TOKEN` under CI auto-login,
+ * docs.gitlab.com/cli/config), and any other forge's token by its name
+ * (Gitea, Forgejo, Codeberg, Bitbucket): the forge-named token variables are
+ * my own call, as no list of every forge's names exists.
+ */
+const FORGE_TOKEN_ENV = [
+  "GH_*TOKEN",
+  "GITHUB_*TOKEN",
+  "GITLAB_*TOKEN",
+  "OAUTH_TOKEN",
+  "CI_JOB_TOKEN",
+  "GITEA_*TOKEN",
+  "FORGEJO_*TOKEN",
+  "CODEBERG_*TOKEN",
+  "BITBUCKET_*",
 ];
 
 /**
  * What a command of a workspace the upstream guard keeps off other
- * people's repositories runs with on top of {@link commandEnv}: no GitHub
- * token, its caller's included, so neither `/usr/bin/gh` by its path nor
- * curl nor any HTTP client has one to post with; and, when the clone's
- * origin is on GitHub, that origin sent through the git door
- * (hub-git.ts `guardedGitParameters`), which fetches and pushes it on the
- * host with the host's gh credential, its large files with it
- * (`GIT_LFS_SKIP_PUSH`: the door sends them). gh runs with the guarded
- * config dir ({@link guardedGhConfigOf}): its requests go through the
- * workspace's GitHub door, which signs in on the host to what it lets
- * through (github-door.ts). Under `ask` (`asks`), every push to GitHub goes
- * through the git door too (hub-git.ts `askedPushParameters`), which holds
- * one to another person's repository for the person.
+ * people's repositories, or asks first for, runs with on top of
+ * {@link commandEnv}: no forge's token, its caller's included
+ * ({@link FORGE_TOKEN_ENV}), so neither a forge CLI by its path nor curl nor
+ * any HTTP client has one to post with, on any host. gh runs with the
+ * guarded config dir ({@link guardedGhConfigOf}): its requests go through
+ * the workspace's GitHub door, which signs in on the host to what it lets
+ * through (github-door.ts). Every push across the network goes through the
+ * git door (hub-git.ts `guardedPushParameters`), which signs in on the host
+ * to the project's own repository, and refuses a push to another person's,
+ * or holds it for the person under `ask`.
  */
-const guardedEnv = (id: string, clone: string, asks: boolean): string[] => {
-  const github = guardedGitParameters(clone);
-  const words = [
-    gitDoorEnv(id, clone).CAWCO_GIT_PARAMETERS,
-    github,
-    asks ? askedPushParameters() : undefined,
-  ].filter((each): each is string => Boolean(each));
-  return [
-    `unset ${GITHUB_TOKEN_ENV.join(" ")}`,
-    `export GH_CONFIG_DIR=${shellQuote(guardedGhConfigOf(id))}`,
-    ...(github || asks
-      ? [
-          `export CAWCO_GIT_PARAMETERS=${shellQuote(words.join(" "))}`,
-          "export GIT_LFS_SKIP_PUSH=1",
-        ]
-      : []),
-  ];
-};
+const guardedEnv = (id: string, clone: string): string[] => [
+  `for name in $(compgen -e); do case $name in ${FORGE_TOKEN_ENV.join(" | ")}) unset "$name" ;; esac; done`,
+  `export GH_CONFIG_DIR=${shellQuote(guardedGhConfigOf(id))}`,
+  `export CAWCO_GIT_PARAMETERS=${shellQuote(
+    [gitDoorEnv(id, clone).CAWCO_GIT_PARAMETERS, guardedPushParameters()]
+      .filter(Boolean)
+      .join(" ")
+  )}`,
+];
 
 const stoppedLine = (id: string): string =>
   `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
@@ -4399,8 +4311,8 @@ take() {
  * The executor: hands a command, the caller's directory and environment to
  * the workspace's runner over its FIFO, streams the output back and exits
  * with the command's status. It finds its own tools on {@link SYSTEM_PATH};
- * the command runs with its caller's PATH, behind the upstream guard's
- * shims ({@link writeGuardShims}) and, on macOS, the toolchain shims.
+ * the command runs with its caller's PATH, behind the hub's git helper and,
+ * on macOS, the toolchain shims.
  */
 /** A place's guard, looking before its command ({@link PLACE_GUARD}): a place it cannot look at runs no command. Nothing for a clone. */
 const guardBefore = (id: string, held: Pick<Held, "gen" | "path">): string =>
@@ -4440,9 +4352,9 @@ const execScript = (
 ): string => {
   const linux = process.platform === "linux";
   const pid = held.pid === undefined ? "PID" : String(held.pid);
-  // The hub's git helper (`hub-git.ts`) first, then the upstream guard's
-  // shims ({@link writeGuardShims}), then on macOS the toolchain shims.
-  const helpers = `${gitHelperDirOf(id)}:${guardShimsOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
+  // The hub's git helper (`hub-git.ts`) first, then on macOS the toolchain
+  // shims.
+  const helpers = `${gitHelperDirOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
   const path = `printf 'export PATH=%q\\n' ${shellQuote(helpers)}"$caller_path"`;
   return `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
@@ -4465,7 +4377,7 @@ ${linux ? mountCheck(id, held.gen, pid) : ""}
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
 # Kept off other people's repositories, or asking the person first
-# (upstream-guard.ts isGuarded): no GitHub token.
+# (upstream-guard.ts isGuarded): no forge's token.
 posts=$(sed -n 's/.*"posts":"\\([a-z]*\\)".*/\\1/p' ${shellQuote(upstreamRuleOf(id))} 2>/dev/null)
 guarded=
 case "$posts" in off | ask) guarded=1 ;; esac
@@ -4478,12 +4390,8 @@ pwd -P > "$req/cwd"
 ${commandEnv(id, held.path)
   .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
-  if [ "$posts" = ask ]; then
-${guardedEnv(id, held.path, true)
-  .map((line) => `    echo ${shellQuote(line)}`)
-  .join("\n")}
-  elif [ -n "$guarded" ]; then
-${guardedEnv(id, held.path, false)
+  if [ -n "$guarded" ]; then
+${guardedEnv(id, held.path)
   .map((line) => `    echo ${shellQuote(line)}`)
   .join("\n")}
   fi

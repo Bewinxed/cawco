@@ -712,7 +712,7 @@ public enum Words {
         // packages/core/src/upstream-guard.ts `UPSTREAM_WORDS`
         public static let title = "Other people's repositories"
 
-        public static let risk = "Agents can open issues and pull requests on other people's repositories under your GitHub account."
+        public static let risk = "Agents can open issues and pull requests on other people's repositories under your git account."
 
         public static let keepOff = "Keep agents off other repositories"
 

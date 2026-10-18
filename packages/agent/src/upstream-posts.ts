@@ -3,27 +3,23 @@
  * (core upstream-post.ts), on the machine whose workspace held them: each is
  * raised to the hub as the person's ask ({@link raiseUpstreamAsk}), and made
  * here once they approve it ({@link makeUpstreamPost}), with this machine's
- * own GitHub sign-in, which no guarded workspace ever holds.
+ * own sign-in, which no guarded workspace ever holds.
  *
- * What is made is exactly what was asked: the held gh argv run by the host's
- * gh in an empty folder of CawCo's own, the repository it resolved to in the
- * workspace pinned (`GH_REPO`, `GH_HOST`); the held request sent again to
+ * What is made is exactly what was asked: the held request sent again to
  * GitHub's API with the host's token; the held commits pushed from the
- * workspace's clone to the same URL and refs. Nothing is retried.
+ * workspace's clone to the same URL and refs, on any host, with the host's
+ * own git credential. Nothing is retried.
  */
-import { mkdir, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { CAWCO_ENV } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { cawcoDataDir } from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
-import type { GhPost } from "@cawco/core/upstream-guard";
-import { GITHUB_API, ghPostProblem } from "@cawco/core/upstream-guard";
+import { GITHUB_API } from "@cawco/core/upstream-guard";
 import type {
   GitPost,
   HttpPost,
@@ -32,7 +28,7 @@ import type {
 } from "@cawco/core/upstream-post";
 import { toHttpBase } from "./discovery";
 import { hostGh, hostGhToken } from "./host-gh";
-import { hostGithubGitEnv } from "./hub-git";
+import { hostGitEnv, isNetworkRemote } from "./hub-git";
 import { provenFetch } from "./hub-proof";
 import { workspaceRefs } from "./workspace-records";
 
@@ -92,8 +88,17 @@ const madeBy = (read: Bounded<Ran>, what: string): PostMade => {
   }
 };
 
-/** The GitHub login this machine's gh posts as; a plain phrase when gh cannot say in time. */
-export const hostAccount = async (): Promise<string> => {
+/**
+ * Who a post to `repo` (`host/owner/repo`) is made as: on github.com, the
+ * login this machine's gh posts as, or a plain phrase when gh cannot say in
+ * time; on any other host, this machine's own git sign-in there, which only
+ * its credential helper or ssh knows.
+ */
+export const hostAccount = async (repo: string): Promise<string> => {
+  const host = repo.split("/")[0] ?? "";
+  if (host !== "github.com") {
+    return "this machine's git sign-in";
+  }
   const gh = await hostGh();
   if (!gh) {
     return "this machine's GitHub sign-in";
@@ -133,7 +138,7 @@ export const raiseUpstreamAsk = async (
       text: `cawco: \`${what}\` did not run: this machine has no hub to ask the owner through. Nothing was posted.`,
     };
   }
-  const account = await hostAccount();
+  const account = await hostAccount(repo);
   try {
     const answer = await provenFetch(`${hub}/api/upstream/asks`, {
       method: "POST",
@@ -151,39 +156,6 @@ export const raiseUpstreamAsk = async (
 
 const cut = (text: string): string =>
   text.length > SAID_MAX ? `${text.slice(0, SAID_MAX)}…` : text;
-
-/** A held gh post, run by the host's gh in an empty folder of CawCo's own, so nothing of the workspace's is read. */
-const makeGh = async (post: GhPost): Promise<PostMade> => {
-  const problem = ghPostProblem(post);
-  if (problem) {
-    return { ok: false, said: `CawCo did not run it: ${problem}.` };
-  }
-  const gh = await hostGh();
-  if (!gh) {
-    return { ok: false, said: "This machine has no gh to post with." };
-  }
-  const dir = join(cawcoDataDir(), "upstream-posts", crypto.randomUUID());
-  await mkdir(dir, { recursive: true, mode: 0o700 });
-  try {
-    const read = await runWithin(MAKE_MS, [gh, ...post.args], {
-      cwd: dir,
-      env: {
-        ...hostEnvironment(),
-        GH_REPO: post.repo,
-        GH_HOST: post.host,
-        GH_PROMPT_DISABLED: "1",
-        GH_NO_UPDATE_NOTIFIER: "1",
-        // No checkout above the empty folder is ever read as gh's.
-        GIT_CEILING_DIRECTORIES: dirname(dir),
-      },
-      stdin:
-        post.stdin === undefined ? "ignore" : Buffer.from(post.stdin, "utf8"),
-    });
-    return madeBy(read, "gh");
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-};
 
 const WRITE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 const TRAILING_SLASHES = /\/+$/;
@@ -250,16 +222,15 @@ const graphqlErrors = (post: HttpPost, text: string): boolean => {
   }
 };
 
-const GITHUB_HTTPS = /^https:\/\/github\.com\//;
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const REF = /^refs\/[A-Za-z0-9._/-]+$/;
 
-/** A held push, made from the workspace's clone to the same URL and refs, with the host's gh credential. */
+/** A held push, made from the workspace's clone to the same URL and refs, with the host's own credential for its host and transport. */
 const makeGit = async (id: string, post: GitPost): Promise<PostMade> => {
-  if (!GITHUB_HTTPS.test(post.url)) {
+  if (!isNetworkRemote(post.url)) {
     return {
       ok: false,
-      said: `CawCo did not push: ${post.url} is not GitHub.`,
+      said: `CawCo did not push: ${post.url} is no remote across the network, which is all a held push goes to.`,
     };
   }
   const bad = post.refs.find(
@@ -294,7 +265,7 @@ const makeGit = async (id: string, post: GitPost): Promise<PostMade> => {
     ]),
     {
       cwd: ref.path,
-      env: { ...(await hostGithubGitEnv()), ...SAFE_GIT_ENV, GIT_DIR: gitDir },
+      env: { ...(await hostGitEnv()), ...SAFE_GIT_ENV, GIT_DIR: gitDir },
       stdin: "ignore",
     }
   );
@@ -311,8 +282,6 @@ export const makeUpstreamPost = async (
 ): Promise<PostMade> => {
   console.log(`[upstream] ${id}: making an approved ${post.via} post`);
   switch (post.via) {
-    case "gh":
-      return await makeGh(post);
     case "http":
       return await makeHttp(post);
     case "git":

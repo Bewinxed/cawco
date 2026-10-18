@@ -1156,7 +1156,8 @@ const withArticle = (kind: string): string =>
 /**
  * A post to another person's repository held for the person (core
  * upstream-post.ts `UpstreamAskInput`): where it lands and what it is as the
- * summary, the account it posts as under it, its title and body as fields,
+ * summary, the account it posts as and its host under it, its title and
+ * body as fields,
  * and the post itself, whole, as the command CawCo makes once approved.
  */
 function upstreamPost(input: Record<string, unknown>): Presented {
@@ -1166,9 +1167,13 @@ function upstreamPost(input: Record<string, unknown>): Presented {
   const title = typeof input.title === "string" ? input.title : undefined;
   const body = typeof input.body === "string" ? input.body : undefined;
   const command = text(input.command);
+  const host = text(input.repo)?.split("/")[0];
+  const where = host === "github.com" ? "GitHub" : host;
   return {
     summary: `Post ${withArticle(kind)} on ${repo}`,
-    ...(account ? { detail: `As ${account} on GitHub` } : {}),
+    ...(account
+      ? { detail: where ? `As ${account} on ${where}` : `As ${account}` }
+      : {}),
     changes: [],
     ...(command ? { command } : {}),
     fields: [

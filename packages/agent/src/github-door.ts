@@ -27,18 +27,15 @@ import { workspaceDoorDir, workspaceUpstreamRuleFile } from "@cawco/core/paths";
 import {
   askRefusal,
   GITHUB_API,
-  ghPostProblem,
   type HttpWrite,
   isGuarded,
-  otherWrite,
   owns,
   readUpstreamRule,
   type UpstreamRule,
   upstreamHttpWrite,
-  upstreamWrite,
   writeRefusal,
 } from "@cawco/core/upstream-guard";
-import { type HttpPost, isUpstreamPost } from "@cawco/core/upstream-post";
+import type { HttpPost } from "@cawco/core/upstream-post";
 import { hostGhToken } from "./host-gh";
 import { socketPlace } from "./tool-door";
 import { raiseUpstreamAsk } from "./upstream-posts";
@@ -274,52 +271,6 @@ const hold = async (
   return refused(asked.graphql, raised.text);
 };
 
-/** The shim's hand-over of a gh post under `ask` (upstream-shim.ts): judged again here, then raised as the person's ask. */
-const takeGhPost = async (id: string, request: Request): Promise<Response> => {
-  const rule = upstreamRule(id);
-  const said = (text: string, status: number) =>
-    new Response(`${text}\n`, { status });
-  const asked = (await request.json().catch(() => ({}))) as {
-    post?: unknown;
-    what?: unknown;
-  };
-  const { post } = asked;
-  const what = typeof asked.what === "string" ? asked.what : "gh";
-  if (rule?.posts !== "ask") {
-    return said(
-      `cawco: \`${what}\` did not run: this workspace no longer asks the owner first; run it again to go by its rule as it is now.`,
-      409
-    );
-  }
-  if (!(isUpstreamPost(post) && post.via === "gh")) {
-    return said(
-      `cawco: \`${what}\` did not run: no gh post was handed over.`,
-      400
-    );
-  }
-  const problem = ghPostProblem(post);
-  if (problem) {
-    return said(askRefusal(what, problem), 400);
-  }
-  const write = otherWrite(
-    rule,
-    upstreamWrite({
-      program: "gh",
-      args: post.args,
-      env: { GH_REPO: post.repo, GH_HOST: post.host },
-      cwdRemotes: () => [],
-    })
-  );
-  if (!write?.repo) {
-    return said(
-      `cawco: \`${what}\` did not run: it writes to no other repository, so there is nothing to ask the owner.`,
-      400
-    );
-  }
-  const raised = await raiseUpstreamAsk(id, post, write.repo, write.what);
-  return said(raised.text, raised.ok ? 200 : 502);
-};
-
 /** The request sent on to GitHub: the placeholder login dropped, the host's token on an API host, no redirect followed. */
 const forward = async (
   request: Request,
@@ -360,13 +311,6 @@ const serve = async (id: string, request: Request): Promise<Response> => {
   const host = (request.headers.get("host") ?? url.host)
     .replace(PORT, "")
     .toLowerCase();
-  if (
-    host === "cawco" &&
-    request.method === "POST" &&
-    url.pathname === "/upstream/ask"
-  ) {
-    return await takeGhPost(id, request);
-  }
   if (!FORWARDED.test(host)) {
     return Response.json(
       {

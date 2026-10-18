@@ -1,8 +1,8 @@
 /**
  * Posts to other people's repositories held for the person under the
  * upstream choice's "Ask me first" (core upstream-post.ts). Every way a
- * session posts is held where the guard sees it (a workspace's gh shim, its
- * GitHub door, its git door; a GitHub connection's write tool here) and
+ * session posts is held where its credential is (a workspace's GitHub door,
+ * its git door for any host; a GitHub connection's write tool here) and
  * raised here as the session's ask: a `permission_request` naming exactly
  * what would be posted, where, and as whom, through the same pending
  * ledger, Needs you and push as any permission ask, drawn by the
@@ -11,8 +11,8 @@
  * The session is answered at once, that it waits for the person, and goes
  * on with its work: nothing blocks on the answer. Approved, CawCo makes the
  * post itself, once, as it was shown: the machine whose workspace held it
- * runs it with its own GitHub sign-in (agent upstream-posts.ts), or the hub
- * calls the connection's tool; the session is told what GitHub said. Denied,
+ * makes it with its own sign-in (agent upstream-posts.ts), or the hub calls
+ * the connection's tool; the session is told what the host said. Denied,
  * nothing is posted, and the session is told. The same post asked again
  * while one waits is that one ask.
  *
@@ -119,7 +119,7 @@ export const createUpstreamAsks = (deps: UpstreamAsksDeps) => {
     deps.tell(
       instanceId,
       made.ok
-        ? `The owner approved \`${held.what}\` to ${held.repo}. CawCo posted it once, exactly as written; GitHub said:\n\n${made.said}`
+        ? `The owner approved \`${held.what}\` to ${held.repo}. CawCo posted it once, exactly as written; ${held.repo.split("/")[0] === "github.com" ? "GitHub" : held.repo.split("/")[0]} said:\n\n${made.said}`
         : `The owner approved \`${held.what}\` to ${held.repo}, but posting it failed, so it may not be there; CawCo did not try again. What came back:\n\n${made.said}`
     );
   };

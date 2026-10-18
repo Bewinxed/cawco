@@ -3036,10 +3036,6 @@ export const createServer = (
     note: (instanceId, note) => lead?.noteCall(instanceId, note),
     shared: (row) => sharedPlace(row),
     thread: (row) => lead?.askThread(row),
-    upstream: (row) => {
-      const rules = upstreamRules(db);
-      return (row.projectId && rules.projects[row.projectId]) || rules.fleet;
-    },
     webContext: () => ({
       fleet: new Set(
         [
