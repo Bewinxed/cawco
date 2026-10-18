@@ -67,5 +67,5 @@
   {#if said}
     <span class="sr-only">{said},</span>
   {/if}
-  <span class="overflow-clip text-ellipsis">{text}</span>
+  <span class="min-w-0 overflow-clip text-ellipsis">{text}</span>
 </span>

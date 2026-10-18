@@ -821,7 +821,7 @@
                 aria-label="Delete {routine.name}"
                 class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none border-current px-space-3 pt-0 pb-space-2 type-meta text-ink-strong"
               >
-                <span
+                <span class="min-w-0 wrap-anywhere"
                   >Delete {routine.name}? It stops now; its past runs stay in
                   the project's history.</span
                 >
