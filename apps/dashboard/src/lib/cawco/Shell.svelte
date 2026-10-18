@@ -1351,7 +1351,8 @@
               >
             {:else}
               <span class="flex-auto min-w-0"
-                >Can't reach the hub at <code class="font-mono text-size-label"
+                >Can't reach the hub at <code
+                  class="font-mono text-size-label wrap-anywhere"
                   >{hubSocketUrl()}</code
                 ></span
               >
@@ -1388,7 +1389,7 @@
       <main
         data-slot="shell-content"
         data-floating={floating || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-[900px]:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-[900px]:data-floating:bg-(image:--shelf-band) max-[900px]:data-floating:bg-top max-[900px]:data-floating:bg-size-(--shelf-band-size) max-[900px]:data-floating:bg-no-repeat"
+        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto scrollbar-gutter-stable pe-(--content-end) max-[900px]:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-[900px]:data-floating:bg-(image:--shelf-band) max-[900px]:data-floating:bg-top max-[900px]:data-floating:bg-size-(--shelf-band-size) max-[900px]:data-floating:bg-no-repeat"
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"
