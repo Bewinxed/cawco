@@ -146,9 +146,9 @@ export interface StreamHubShape {
    * hub has already ingested under this epoch — a duplicate the caller must
    * drop rather than sequence.
    *
-   * A frame with no provenance is always admitted and advances nothing: an
-   * opencode session, a pi session and every agent that predates the field are
-   * unchanged, and their frames are not deduped by a mark that does not exist.
+   * A frame with no provenance (an opencode or a pi session's) is always
+   * admitted and advances nothing: it is not deduped by a mark that does not
+   * exist.
    *
    * THE DELIVERY LEDGER beside it (core stream.ts `DeliveryMark`): a frame
    * whose `sent` stamp this hub already took from the same agent process is

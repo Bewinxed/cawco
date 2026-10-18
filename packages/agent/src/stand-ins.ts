@@ -294,13 +294,14 @@ export const straysIn = async (
  * tool has written since, listed.
  */
 export const removeStandIns = async (ref: WorkspaceRef): Promise<void> => {
-  // Gone, or a delegate's clone that is no git clone any more: a husk goes
-  // whole with its workspace's archive (workspace.ts `closeClone`), and any
-  // other such folder is kept. A place is a plain folder as often as
-  // a repository, and its earlier stand-ins go as ever.
+  // A place, a person's own folder, has no stand-ins: an empty dir or file at
+  // a deny path there is theirs. Gone, or a delegate's clone that is no git
+  // clone any more: a husk goes whole with its workspace's archive
+  // (workspace.ts `closeClone`), and any other such folder is kept.
   if (
+    isPlace(ref.id) ||
     !(await statOf(ref.path)) ||
-    (!isPlace(ref.id) && (await noRepositoryAt(ref.path)))
+    (await noRepositoryAt(ref.path))
   ) {
     return;
   }

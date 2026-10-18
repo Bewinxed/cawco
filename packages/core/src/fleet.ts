@@ -1087,14 +1087,13 @@ export interface ConfigInspection {
   /**
    * The machine's own user CLAUDE.md, or null when it has none. `managed` says
    * cawco wrote what is there — an unmanaged one is worth adopting. `docs`
-   * is whatever the machine has under `~/.claude/memories/`, read the same way
-   * and absent from a daemon that predates the set.
+   * is whatever the machine has under `~/.claude/memories/`, read the same way.
    */
   memory?: {
     hash: string;
     bytes: number;
     managed: boolean;
-    docs?: { path: string; hash: string; bytes: number; managed: boolean }[];
+    docs: { path: string; hash: string; bytes: number; managed: boolean }[];
   } | null;
   /** Enabled plugin ids, as `plugin@marketplace`. */
   plugins: string[];

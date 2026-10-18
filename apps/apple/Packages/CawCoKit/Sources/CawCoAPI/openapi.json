@@ -41991,7 +41991,7 @@
             }
           },
           "memory": {
-            "description": "The machine's own user CLAUDE.md, or null when it has none. `managed` says\ncawco wrote what is there — an unmanaged one is worth adopting. `docs`\nis whatever the machine has under `~/.claude/memories/`, read the same way\nand absent from a daemon that predates the set.",
+            "description": "The machine's own user CLAUDE.md, or null when it has none. `managed` says\ncawco wrote what is there — an unmanaged one is worth adopting. `docs`\nis whatever the machine has under `~/.claude/memories/`, read the same way.",
             "type": "object",
             "properties": {
               "hash": {
@@ -42032,6 +42032,7 @@
             },
             "required": [
               "bytes",
+              "docs",
               "hash",
               "managed"
             ]
