@@ -530,7 +530,9 @@
                   in:unfold
                   out:unfold
                 >
-                  <p class="m-0 type-label text-ink-strong">{job.ask.title}</p>
+                  <p class="m-0 type-label text-ink-strong wrap-anywhere">
+                    {job.ask.title}
+                  </p>
                   <MoveAskBody ask={job.ask} />
                   <div
                     class="flex justify-between gap-space-8 group-data-phone/wait:gap-space-4"

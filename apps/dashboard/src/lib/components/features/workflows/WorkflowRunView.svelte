@@ -347,7 +347,7 @@
       >
         <Card.Root size="sm">
           <Card.Header>
-            <Card.Title>{ask.question}</Card.Title>
+            <Card.Title class="wrap-anywhere">{ask.question}</Card.Title>
           </Card.Header>
           <Card.Content class="flex flex-col" gap="section">
             {#if ask.options.length}
