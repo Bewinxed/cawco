@@ -1,6 +1,6 @@
 /**
  * A project's starters, in three places (core `StarterPlace`): what its
- * empty board (StarterCards) and Caw's panel hero (CawStarters) offer to say
+ * empty board (StarterCards) and Caw's panel hero (StarterCards' rows) offer to say
  * to him, what its empty Routines page offers as routines, and what its
  * empty Decisions tab offers to lay out as a decision page. Each is written
  * for that project from what it holds now. No list of starters exists; each

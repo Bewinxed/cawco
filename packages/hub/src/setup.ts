@@ -193,7 +193,7 @@ export const setupEvent = (ask: SetupAsk): string => {
       ...(ask.placed
         ? []
         : [
-      `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\` as \`{ machineId, label, path }\`, \`label\` being the name CawCo shows the machine by. Once picked, the card reads "<label> — <path>", from \`cawco.on("picks", …)\` (\`picks.place.value\`).`,
+            `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\` as \`{ machineId, label, path }\`, \`label\` being the name CawCo shows the machine by. Once picked, the card reads "<label> — <path>", from \`cawco.on("picks", …)\` (\`picks.place.value\`).`,
           ]),
       ask.placed
         ? "It was made from a folder, which is its place already: no card asks where its work happens. No routines, webhook relays or other cards."
