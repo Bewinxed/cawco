@@ -327,26 +327,30 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // Glyph-only segments, each a touch target's width.
         modes.segmentMinWidth = Self.target
         // More: what the head has no room for, in the head's order (HIG Toolbars, "Add a More menu").
-        moreButton = KitButton.make("", glyph: .more, variant: .ghost, height: .sm) {}
+        // Made with a word so it has the labelled button's insets, then shown as its glyph: its count goes after the dots.
+        moreButton = KitButton.make("More", glyph: .more, variant: .ghost, height: .sm) {}
+        // An empty title, as Comments' on a narrow pane: with none, iOS 26 lays the glyph out without the insets the count stands in.
+        KitButton.setTitle("", of: moreButton, variant: .ghost, height: .sm)
+        moreButton.configuration?.contentInsets.leading = Space.space2
+        moreButton.configuration?.contentInsets.trailing = Space.space2
         moreButton.accessibilityLabel = "More"
         moreButton.toolTip = "More"
         moreButton.showsMenuAsPrimaryAction = true
         moreButton.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
             MainActor.assumeIsolated { done(self?.overflowMenu() ?? []) }
         }])
-        // What More holds of Comments, its open count, stays on More (the pins' badge recipe).
+        // What More holds of Comments, its open count, stays on More after the dots (the Comments button's recipe).
         moreBadge.isUserInteractionEnabled = false
         moreBadge.isAccessibilityElement = false
         moreBadge.tabular = true
         moreBadge.translatesAutoresizingMaskIntoConstraints = false
         moreButton.addSubview(moreBadge)
         NSLayoutConstraint.activate([
-            moreBadge.centerYAnchor.constraint(equalTo: moreButton.topAnchor, constant: Space.space1),
-            moreBadge.leadingAnchor.constraint(equalTo: moreButton.centerXAnchor, constant: Space.space1),
+            moreBadge.centerYAnchor.constraint(equalTo: moreButton.centerYAnchor),
+            moreBadge.trailingAnchor.constraint(equalTo: moreButton.trailingAnchor, constant: -Space.space2),
         ])
-        // The mode where its three segments have no room: the chosen one's glyph, a pick of three.
-        modePick = KitButton.make("", glyph: mode.glyph, variant: .ghost, height: .sm) {}
-        modePick.showsMenuAsPrimaryAction = true
+        // The mode where its three segments have no room: the chosen one's glyph, a pop-up of three.
+        modePick = ModePick()
         modePick.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
             MainActor.assumeIsolated { done(self.map { [$0.modeMenu()] } ?? []) }
         }])
@@ -758,13 +762,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var moreButton: UIButton!
     private var moreSlot: HeadSlot!
     private let moreBadge = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-    private var modePick: UIButton!
+    private var modePick: ModePick!
     /// The page holds picks the session has not heard, or they are going (Send picks stands).
     private var sendWanted = false
     /// What is on show is a canvas: its own tools, no mode or Comments, and Undock.
     private var canvasShown = false
     /// The controls the head has no room for, in its order: More holds them.
     private var overflowed: [HeadItem] = []
+    /// More holding Comments carries its count after the dots; off where that room is the mode's.
+    private var countOnMore = true
     /// The width the name keeps while controls go to More: its own, up to `nameFloor`.
     private var nameKept = 0.0
     /// The name at `nameKept` or wider: the room the head's placing kept for it, held over the controls' own widths.
@@ -805,16 +811,32 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let name = nameKept + 8 - Space.space1
         let close = Self.target
         let all = wanted.reduce(0) { $0 + room($1) }
-        var shown = Set(wanted)
-        if name + all + close > width {
-            // First the room More takes, then each control by priority while it fits.
-            var left = width - name - close - Self.target
-            shown = []
+        // First the room More takes, then each control by priority while it fits.
+        let fit = { (more: Double) -> Set<HeadItem> in
+            var left = width - name - close - more
+            var shown: Set<HeadItem> = []
             for item in Self.priority where wanted.contains(item) {
                 let stands = item == .mode && room(.mode) > left ? HeadItem.modePick : item
                 guard room(stands) <= left else { continue }
                 shown.insert(stands)
                 left -= room(stands)
+            }
+            return shown
+        }
+        var shown = Set(wanted)
+        countOnMore = true
+        if name + all + close > width {
+            shown = fit(Self.target)
+            // More holding Comments is as wide as its count after the dots: placed again with that room,
+            // unless that room is the mode's (it outranks Comments): then the count stands in More's row.
+            if wanted.contains(.comments), !shown.contains(.comments) {
+                let counted = fit(moreWidth(holding: true))
+                let modeStands = { (set: Set<HeadItem>) in set.contains(.mode) || set.contains(.modePick) }
+                if modeStands(counted) || !modeStands(shown) {
+                    shown = counted
+                } else {
+                    countOnMore = false
+                }
             }
         }
         overflowed = wanted.filter { !shown.contains($0) && !($0 == .mode && shown.contains(.modePick)) }
@@ -831,12 +853,29 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func paintMore() {
         // As on Comments: the count stands always, 0 too.
         // Run on every layout: each is written only when it changed, as a label's words lay the head out again.
-        let holds = overflowed.contains(.comments)
+        let holds = overflowed.contains(.comments) && countOnMore
         let count = "\(comments.open)"
         if moreBadge.text != count { moreBadge.text = count }
         if moreBadge.isHidden == holds { moreBadge.isHidden = !holds }
+        let trailing = CGFloat(holds ? Space.space2 + countWidth : Space.space2)
+        if moreButton.configuration?.contentInsets.trailing != trailing {
+            moreButton.configuration?.contentInsets.trailing = trailing
+        }
         let words = holds ? "More, Comments \(count) open" : "More"
         if moreButton.accessibilityLabel != words { moreButton.accessibilityLabel = words }
+    }
+
+    /// The open count's width on More, with its gap after the dots.
+    private var countWidth: Double {
+        let count = "\(comments.open)"
+        if moreBadge.text != count { moreBadge.text = count }
+        return moreBadge.intrinsicContentSize.width + Space.space1
+    }
+
+    /// More's slot: the dots alone, or with Comments' count after them.
+    private func moreWidth(holding: Bool) -> Double {
+        let button = Space.space2 * 2 + Size.iconMd + (holding ? countWidth : 0)
+        return max(Self.target, button + Space.space1 * 2)
     }
 
     /// The three modes, the chosen one checked: the mode's pick, and More's when it holds the mode.
@@ -1530,7 +1569,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard isViewLoaded else { return }
         modes.namesShown = false
         modes.select(Mode.allCases.firstIndex(of: mode))
-        modePick.configuration?.image = mode.glyph.image.resized(to: Size.iconMd)
+        modePick.glyph = mode.glyph
         modePick.accessibilityLabel = "Preview mode"
         modePick.accessibilityValue = mode.name
         modePick.toolTip = "Preview mode: \(mode.name)"
@@ -2369,6 +2408,21 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             laidOpenTab = at
             PreviewProbe.say(at)
         }
+        // The open count's box where it stands, against the glyphs beside it.
+        let counts = "preview head counts open=\(comments.open) more-count=\(box(moreBadge)) dots=\(box(moreButton.imageView)) pins-count=\(box(pinsBadge)) pins-glyph=\(box(pinsButton.imageView)) close=\(box(closeButton.imageView)) mode-pick=\(PreviewProbe.centre(modePick))"
+        if counts != laidCounts {
+            laidCounts = counts
+            PreviewProbe.say(counts)
+        }
+    }
+
+    private var laidCounts = ""
+
+    /// A view's box in the window, `x,y,w,h`; "none" while it or what holds it is hidden.
+    private func box(_ part: UIView?) -> String {
+        guard let part, PreviewProbe.centre(part) != "none" else { return "none" }
+        let frame = part.convert(part.bounds, to: nil)
+        return [frame.minX, frame.minY, frame.width, frame.height].map { "\(Int($0.rounded()))" }.joined(separator: ",")
     }
 
     private var laidOpenTab = ""
@@ -2906,6 +2960,49 @@ final class HeadSlot: UIView {
         let box = control.frame.insetBy(dx: 1, dy: 1)
         let near = CGPoint(x: min(max(point.x, box.minX), box.maxX), y: min(max(point.y, box.minY), box.maxY))
         return control.hitTest(convert(near, to: control), with: event) ?? control
+    }
+}
+
+/// The mode where its three segments have no room: a pop-up button (HIG
+/// Pop-up buttons, "a flat list of mutually exclusive options or states"),
+/// the chosen mode's glyph in the strong ink and the kit Select's unfold
+/// mark after it in the muted, so it reads as the mode and as a choice.
+final class ModePick: UIButton {
+    private let mark = GlyphView(.toolScreen, size: Size.iconMd, tint: Palette.inkStrong)
+    private let unfold = GlyphView(.unfold, size: Size.iconSm, tint: Palette.inkMuted)
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        let line = UIStackView(arrangedSubviews: [mark, unfold])
+        line.spacing = Space.space1
+        line.alignment = .center
+        line.isUserInteractionEnabled = false
+        line.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(line)
+        layer.cornerRadius = Radius.radiusMd
+        layer.cornerCurve = .continuous
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: Size.cBtnHSm),
+            line.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space1),
+            line.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space1),
+            line.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        showsMenuAsPrimaryAction = true
+        accessibilityTraits = .button
+        addInteraction(UIPointerInteraction(delegate: nil))
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("ModePick is built in code") }
+
+    var glyph: Glyph? {
+        get { mark.glyph }
+        set { mark.glyph = newValue }
+    }
+
+    override var isHighlighted: Bool {
+        didSet { backgroundColor = isHighlighted ? Palette.surfaceHover : .clear }
     }
 }
 

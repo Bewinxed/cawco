@@ -18,6 +18,7 @@
         "axe-core": "^4.14.0",
         "bits-ui": "^2.19.5",
         "drizzle-orm": "^0.45.3",
+        "lib0": "0.2.119",
         "multicast-dns": "7.2.5",
         "pixelmatch": "^8.0.0",
         "playwright-core": "^1.64.1",
@@ -28,6 +29,8 @@
         "turn-server": "0.8.0",
         "typescript": "npm:@typescript/typescript6@^6.0.2",
         "ultracite": "7.12.2",
+        "y-protocols": "1.0.7",
+        "yjs": "13.6.33",
       },
     },
     "apps/cawrier": {
