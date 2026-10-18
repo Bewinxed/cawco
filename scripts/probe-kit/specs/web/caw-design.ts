@@ -421,7 +421,7 @@ const read = (page: Page): Promise<Read> =>
 
 /** Every capture unit: each state of a two-state option, else the option. */
 const UNITS =
-  "[data-design-option]:not(:has(.state)), [data-design-option] .state";
+  "[data-design-option]:not(:has(> .states)), [data-design-option] > .states > .state";
 
 /**
  * Scrolls each unit's row so the unit starts at the row's start, then reads
