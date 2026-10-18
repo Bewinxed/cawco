@@ -1,57 +1,92 @@
 <script lang="ts">
   /**
-   * The live frame: the task attempt advancing a beat at a time, so the
-   * person sees a step arrive, a tick draw, the ring move and a delegate's
-   * step fold open, then the whole run start again.
+   * The live frame: the task attempt moving on a beat at a time, so the
+   * person sees a sub-step tick, a delegate's step arrive and fold open, a
+   * to-do tick and the ring move on, then the run start again. Its caption
+   * says the beat it is on, and holds the demo's pause.
    */
   import { onMount } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import DeskPlan from "./DeskPlan.svelte";
-  import { LIVE_PHASES, livePhase } from "./fixtures";
+  import { LIVE_BEATS, livePhase } from "./fixtures";
   import ProposedPlan from "./ProposedPlan.svelte";
 
   let { loaded }: { loaded: number } = $props();
 
   const BEAT = 2400;
-  let phase = $state(0);
+  let beat = $state(0);
   let playing = $state(true);
-  const plan = $derived(livePhase(phase));
+  const plan = $derived(livePhase(beat));
 
   onMount(() => {
     const timer = setInterval(() => {
       if (playing) {
-        phase = (phase + 1) % LIVE_PHASES;
+        beat = (beat + 1) % LIVE_BEATS.length;
       }
     }, BEAT);
     return () => clearInterval(timer);
   });
 </script>
 
-<div class="live">
+<figure data-beat={beat} data-slot="live">
   <DeskPlan {plan}>
     <ProposedPlan {loaded} {plan} />
   </DeskPlan>
-  <Button
-    onclick={() => {
-      playing = !playing;
-    }}
-    size="sm"
-    variant="outline"
-    ><span class="both"
-      ><span aria-hidden={!playing} class:off={!playing}>Pause</span><span
-        aria-hidden={playing}
-        class:off={playing}>Play</span
-      ></span
-    ></Button
-  >
-</div>
+  <figcaption class="caption">
+    <span class="words">
+      Desk · Live: a sub-step ticks, a delegate's step arrives under the deposit
+      and folds open, then the to-do ticks and the ring moves on.
+      <span class="now" aria-live="polite"
+        >Beat {beat + 1} of {LIVE_BEATS.length}: {LIVE_BEATS[beat]}</span
+      >
+    </span>
+    <Button
+      onclick={() => {
+        playing = !playing;
+      }}
+      size="sm"
+      variant="outline"
+      ><span class="both"
+        ><span aria-hidden={!playing} class:off={!playing}>Pause the demo</span
+        ><span aria-hidden={playing} class:off={playing}>Play the demo</span
+        ></span
+      ></Button
+    >
+  </figcaption>
+</figure>
 
 <style>
-  .live {
+  figure {
     display: flex;
     flex-direction: column;
-    align-items: start;
     gap: var(--space-3);
+    min-inline-size: 0;
+    margin: 0;
+  }
+  .caption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
+    max-inline-size: 780px;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .words {
+    flex: 1 1 320px;
+    min-inline-size: 0;
+    text-wrap: pretty;
+  }
+  .now {
+    display: block;
+    margin-block-start: var(--space-1);
+    color: var(--ink-strong);
+  }
+  @media (width < 640px) {
+    .caption {
+      padding-inline: var(--space-4);
+    }
   }
   /* Both words stand in one cell as wide as the wider, so the button never
      changes width (DESIGN.md, The Steady Swap Rule). */
