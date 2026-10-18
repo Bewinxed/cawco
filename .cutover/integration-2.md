@@ -375,3 +375,17 @@ The eleven patches (S01, S04, S07, S08, S10, S11, S13, S16, S22, S24, O7-kit) ap
 
 ### Step 4: how long a walk takes
 57 surfaces, 176 states, about 1,164 state-passes. At PROBE_PARALLEL=2, about 28 s per state-pass per worker: about 4.5 h per full walk. A run in a background task is stopped at 2 h, so each full walk runs detached.
+
+### More walk fixes (both trees)
+- Stillness counts what each visible canvas draws: Caw's clips play on Rive's own loop, and a read mid-clip held different drawings in one state's walks (dumps apart in his clip canvas alone).
+- The walk's pages raster every tile whole (`--disable-partial-raster`, kit `wholeRaster`, a Chromium of its own). Partial raster's antialiasing at invalidated rects' edges followed each walk's change order: bench-usage-relay at the desk gave two pictures of one state, identical dumps, 5 px at max delta 15 on Caw's rim, on 8b as on 8c. With the switch, six walks gave one picture per capture.
+- A run in a background task stops at 2 h, and a full walk at PROBE_PARALLEL=2 takes about 4.5 h, so steps 4–7 run detached (`setsid nohup`).
+
+### 8c's proof (on its branch, merged after step 6 reads 0)
+- will-change spec: every layer `auto` at rest, its property mid-move (hang card at 50% of open and close, pinned card's wrapper during a strip scroll, swipe panes, deck cards, vaul drawer under a finger, recall wheel rows), and no element at rest holds one. The same spec on 8b fails at every site.
+- webkit-caw, the landing (the interval the card stood open in and the next), 20 opens: 8b median 4 ms, worst 5 and 6 ms over two runs; 8c median 4–5 ms, worst 6 ms over three runs. Every interval stays under 25 ms.
+- Six walks each of jump, bench-caw-notices and bench-usage-relay with no re-raster: 24 of 24 captures one picture by hash.
+- bits-ui 2.19.5 passes Floating UI no `transform` option, so every floating wrapper gets `will-change: transform` at DPR ≥ 1.5 (use-floating.svelte.js:9, :43). It is overridden at rest; WordPress/gutenberg#76899 reports the same layer.
+
+### 8b.1b: DESIGN.md decides each utility a scoped class name drew
+Of M's 35 collisions, the utilities that drew: `num` ×11 (DESIGN.md:624, kept), `shimmer` on the two thinking lines (DESIGN.md:842, kept), Finder's `sr-only` (kept), and `ring` ×3 (main's b839fcf25). Dropped: the shimmer on SuggestionChips' skeleton holder, and the typography plugin's `prose` on TranscriptSkeleton's three line blocks. The rest drew nothing their element's own rule or default didn't already set.
