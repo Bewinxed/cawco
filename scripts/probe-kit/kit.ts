@@ -412,7 +412,9 @@ const treeKey = async (): Promise<string> => {
       .filter((line) => line.includes(" blob "))
       .join("\n")
   );
-  hash.update(await gitSays(["diff", "HEAD", "--binary", "--", ...BUILD_READS]));
+  hash.update(
+    await gitSays(["diff", "HEAD", "--binary", "--", ...BUILD_READS])
+  );
   const untracked = (
     await gitSays([
       "ls-files",

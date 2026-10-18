@@ -84,20 +84,33 @@ function steady(page: Page, selector: string): Promise<boolean> {
  * builds a page's modules on its first request, so the walk's own load can
  * still be the server's markup, which carries no `__svelte_meta`): the whole
  * page steady, then the state's act run again, then its root steady.
+ *
+ * Page time runs while it does, and stands again after, where the walk's
+ * own act leaves it (walk.ts `acting`): the walk holds the page's clock
+ * between acts, and a layer an act opens comes up on the page's timers and
+ * frames (a dialog's or a popover's presence), so under a held clock every
+ * new-session, decisions and usage-popover state waited out its 60 s.
  */
 async function hydrated(
   page: Page,
   state: State,
   scene: Scene
 ): Promise<boolean> {
-  await page.reload({ waitUntil: "domcontentloaded" });
-  if (!(await steady(page, "body"))) {
-    return false;
+  await page.clock.resume();
+  try {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    if (!(await steady(page, "body"))) {
+      return false;
+    }
+    if (state.act) {
+      await state.act(page, scene);
+    }
+    return await steady(page, state.root);
+  } finally {
+    const moment = await page.evaluate(() => Date.now());
+    await page.clock.pauseAt(moment);
+    await page.clock.setFixedTime(moment);
   }
-  if (state.act) {
-    await state.act(page, scene);
-  }
-  return steady(page, state.root);
 }
 
 /** Every element under the state's root (as the snapshot picks it), by key, with its files. */

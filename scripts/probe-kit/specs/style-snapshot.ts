@@ -533,9 +533,7 @@ const SCOPE_MARK = "svelte-coverage-scope";
  * scoping class, a scoped rule carries it and a `:global` one does not, and
  * a selector nothing in the template can match is gone (`css_unused_selector`).
  */
-async function scopedFiles(
-  sources: Map<string, string>
-): Promise<Set<string>> {
+async function scopedFiles(sources: Map<string, string>): Promise<Set<string>> {
   const { compile } = (await import(
     createRequire(join(ROOT, "apps", "dashboard", "package.json")).resolve(
       "svelte/compiler"

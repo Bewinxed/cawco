@@ -31,7 +31,12 @@ const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
 const SCOPED = /^svelte-[a-z0-9]+-/;
 
 interface Reading {
-  frames: { fraction: number; filter: string; opacity: string; scale: string }[];
+  frames: {
+    fraction: number;
+    filter: string;
+    opacity: string;
+    scale: string;
+  }[];
   runs: string[];
 }
 
