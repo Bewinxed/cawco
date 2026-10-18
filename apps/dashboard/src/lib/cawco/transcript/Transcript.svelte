@@ -1568,9 +1568,10 @@
    * `itemAttrs`): the frame lays out the pane and those rows' boxes alone.
    * Once it has painted, `STAGE_ROWS` of them a task are styled, or let go
    * unstyled where virtua's range no longer holds them (web.dev, "Optimize
-   * long tasks"). While a far landing is on its way none is styled: it lets
-   * go of the view it leaves (`landFar`), and those rows go still skipped;
-   * what is left mounted once it has landed is styled, a step a task. A row virtua never measured (mounted while the pane was
+   * long tasks"). While a far landing is on its way they wait: it lets go
+   * of the view it leaves itself (`landFar`), and those rows go still
+   * skipped; once it has landed, what is held is let go and what is left
+   * mounted is styled, a step a task. A row virtua never measured (mounted while the pane was
    * skipped: virtua's `hide`, `visibility: hidden` on its item) is skipped
    * at virtua's estimate and goes first: its first measurement lands in the
    * first step, not in the frame that lays the pane out (six such rows, 300
@@ -1637,33 +1638,42 @@
   }
   /** One step of the staging (`parkRows`); answers whether another is due. */
   function stageStep(): boolean {
-    // A far landing on its way lets the view it leaves go (`landFar`): its
-    // rows go still skipped, never styled.
-    const landingFar = staging || narrow;
+    // A far landing on its way lets the view it leaves go itself, a step a
+    // task (`landFar`, `catchUpRest`): the held rows wait, still skipped,
+    // and go unstyled; let go here as well, their removal landed in the
+    // frame of the landing's own step (tab-return 1b: 14.2ms).
+    if (staging || narrow) {
+      return true;
+    }
     if (heldRows.length > 0) {
       const done = heldRows.slice(0, STAGE_ROWS);
       heldRows = heldRows.slice(STAGE_ROWS);
-      if (!landingFar) {
-        liftSkips(done);
-      }
-    } else if (!landingFar) {
+      liftSkips(done.filter((key) => onList().has(key)));
+    } else {
       liftSkips(stillMounted().slice(0, STAGE_ROWS));
     }
     return heldRows.length > 0 || skipping.size > 0;
   }
-  /** The rows still skipped that virtua has mounted; the skips of those it let go are dropped. */
-  function stillMounted(): string[] {
-    const onList = new Set<string>();
+  /** The keys of the rows virtua has mounted, read off their attributes. */
+  function onList(): Set<string> {
+    const keys = new Set<string>();
     for (const item of listing?.firstElementChild?.children ?? []) {
       const key = item.querySelector<HTMLElement>(":scope > [data-row]")
         ?.dataset.row;
       if (key) {
-        onList.add(key);
+        keys.add(key);
       }
     }
-    const kept = [...skipping.keys()].filter((key) => onList.has(key));
+    return keys;
+  }
+  /** The rows still skipped that virtua has mounted; the skips of those it let go are dropped. */
+  function stillMounted(): string[] {
+    const mountedKeys = onList();
+    const kept = [...skipping.keys()].filter((key) => mountedKeys.has(key));
     if (kept.length < skipping.size) {
-      skipping = new Map([...skipping].filter(([key]) => onList.has(key)));
+      skipping = new Map(
+        [...skipping].filter(([key]) => mountedKeys.has(key))
+      );
     }
     return kept;
   }
