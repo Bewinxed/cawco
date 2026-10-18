@@ -12,12 +12,15 @@
  * tsconfig.json'"; and a shared repository root is never a stage's to write.
  * So it runs in a clone of its own, as a delegate's does:
  *
- * - cut once ({@link cut}), at the checkout's HEAD (that one commit, fetched
- *   from the checkout) with its uncommitted changes and its own secret files,
- *   its dependencies linked from the workspaces' cache and installed inside
- *   its own boundary (seed-deps.ts), under a workspace id of its own
- *   ({@link stageCloneId}), never a place's: its `node_modules` are its own
- *   to write;
+ * - cut ({@link cut}) at the checkout's HEAD (that one commit, fetched from
+ *   the checkout, its `origin`) with its uncommitted changes and its own
+ *   secret files, under a workspace id of its own (core `stageCloneId`),
+ *   never a place's: its `node_modules` are its own to write;
+ * - installed by the project's own package manager inside its boundary
+ *   ({@link installStage}): the `packageManager` its package.json names
+ *   (Corepack's field), else the one its lockfile names, with that manager's
+ *   frozen install; a bun lockfile at its root is linked from the
+ *   workspaces' cache first (seed-deps.ts);
  * - kept in step with the checkout ({@link syncStageClone}): a new HEAD
  *   fetched and checked out, then every path the checkout's `git status`
  *   names, and every one it named the time before, made in the clone as it
@@ -26,14 +29,19 @@
  *   sheet through its HMR, as a delegate's own edits do;
  * - a sheet's write, made by the stage in the clone, copied to the
  *   checkout's story file ({@link copyBack}), in the same turn as the
- *   mirror, so neither undoes the other.
+ *   mirror, so neither undoes the other;
+ * - filed with the hub as a workspace of the stage kind on each use
+ *   ({@link setStageCloneSink}), so the hub's retire sweep settles it like
+ *   any workspace once its stage sleeps: what it holds that the checkout
+ *   lacks keeps it ({@link sameAsCheckout} names what it does not), and the
+ *   next sheet cuts it again.
  *
  * The checkout is only read: its status without optional locks (git writes
  * no index there), its HEAD fetched from it. Only the story file a person's
  * sheet edit names is written back.
  */
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, existsSync } from "node:fs";
 import {
   chmod,
   lstat,
@@ -49,17 +57,22 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-import { LOCKFILES, type WorkspaceRef } from "@cawco/core";
+import {
+  LOCKFILES,
+  WORKSPACE_INSTALL_TIMEOUT_MS,
+  type WorkspaceRef,
+} from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
-import { workspaceStateDir } from "@cawco/core/paths";
+import { workspaceScratchDir, workspaceStateDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { STAGE_CLONE_GIT_MS } from "@cawco/core/stage";
+import { STAGE_CLONE_GIT_MS, type StageCloneFrame } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { cloneDenies } from "@cawco/core/workspace-policy";
+import { cloneDenies, stageCloneId } from "@cawco/core/workspace-policy";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
 import { expandHome } from "./fs";
-import { finishInstall, seedDependencies } from "./seed-deps";
+import { seedDependencies } from "./seed-deps";
+import { runWorkflowCommand } from "./workflow-command";
 import { copyOwnSecrets, gitUntil } from "./workspace";
 
 /** How often a serving place stage's clone is brought in step with its checkout. Ours: an edit shows within a second, for one `git status` (20 ms on cockpit). */
@@ -72,10 +85,16 @@ export interface StageClone {
   readonly folder: string;
 }
 
+/** The form of the clone this build cuts: one of an earlier form (no `origin`) is cut again. */
+const FORM = 2;
+
 /** What the agent keeps of a stage clone beside its `create.json`, written once its cut is whole. */
 interface Kept {
+  form?: number;
   /** The checkout's HEAD the clone is at. */
   head: string;
+  /** Each folder the stage installed, from the clone's root, with what it installed from ({@link installAt}). */
+  installed?: Record<string, string>;
   /** The paths the checkout's status named at the last mirror, from the repository's root. */
   mirrored: string[];
   /** The checkout's repository root it was cut from, as a real path. */
@@ -84,20 +103,15 @@ interface Kept {
 
 const KEPT = "stage-clone.json";
 
-/**
- * Place `placeId`'s stage clone's workspace id: a workspace id of its own,
- * never a place's (core `isPlace`), its first 8 characters its own hash, so
- * its scratch and door dirs are its own and not the place's.
- */
-export const stageCloneId = (placeId: string): string => {
-  const hex = createHash("sha256").update(`stage\0${placeId}`).digest("hex");
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20, 32),
-  ].join("-");
+/** Whether workspace `id` is a place's stage clone this machine cut. */
+export const isStageClone = (id: string): boolean =>
+  existsSync(join(workspaceStateDir(id), KEPT));
+
+let filed: (frame: StageCloneFrame) => void = () => undefined;
+
+/** Where each clone's word goes: the daemon's socket to the hub, which files it as a workspace. */
+export const setStageCloneSink = (send: (frame: StageCloneFrame) => void) => {
+  filed = send;
 };
 
 /** Each clone's cut, mirror or write-back under way: one at a time per clone. */
@@ -181,7 +195,7 @@ const pathAfter = (entry: string, fields: number): string => {
 };
 
 /**
- * The checkout's HEAD and every path its status names (changed, staged,
+ * A checkout's HEAD and every path its status names (changed, staged,
  * deleted, unmerged, untracked; renames as the two paths they are), from
  * its repository's root. Ignored files are not named: they are no one's
  * change, as a delegate's clone has none either.
@@ -325,12 +339,6 @@ const mirrorOne = async (
   return changed;
 };
 
-/** The paths of `paths` that are a package manifest or a lockfile: a change to one installs again. */
-const manifests = (paths: readonly string[]): string[] =>
-  paths.filter((path) =>
-    ["package.json", ...LOCKFILES].includes(basename(path) as never)
-  );
-
 /** The clone's record, or nothing when its cut never finished. */
 const keptOf = async (id: string): Promise<Kept | undefined> =>
   await readRecord<Kept>(join(workspaceStateDir(id), KEPT)).catch(
@@ -343,12 +351,16 @@ const keep = (id: string, kept: Kept): Promise<void> =>
     `${JSON.stringify(kept)}\n`
   );
 
+/** The ref the checkout's HEAD is fetched to in the clone: on its `origin`, so a retirement's read finds nothing of the clone's own in it (workspace.ts `holding`). */
+const STAGE_REF = "refs/remotes/origin/stage";
+
 /**
  * The checkout's HEAD fetched into the clone and checked out, detached: one
- * commit, from the checkout itself. Its tracked files then stand as at that
- * commit, and the mirror lays the uncommitted changes on top.
+ * commit, from the checkout, which is the clone's `origin`. Its tracked files
+ * then stand as at that commit, and the mirror lays the uncommitted changes
+ * on top.
  */
-const atHead = async (clone: string, repo: string): Promise<void> => {
+const atHead = async (clone: string): Promise<void> => {
   const git = gitUntil(Date.now() + STAGE_CLONE_GIT_MS);
   await git(
     clone,
@@ -356,10 +368,10 @@ const atHead = async (clone: string, repo: string): Promise<void> => {
     "--quiet",
     "--depth=1",
     "--no-tags",
-    `file://${repo}`,
-    "HEAD"
+    "origin",
+    `+HEAD:${STAGE_REF}`
   );
-  await git(clone, "checkout", "--quiet", "--force", "--detach", "FETCH_HEAD");
+  await git(clone, "checkout", "--quiet", "--force", "--detach", STAGE_REF);
 };
 
 /**
@@ -373,7 +385,7 @@ const mirror = async (
 ): Promise<{ changed: string[]; kept: Kept }> => {
   const { head, paths } = await statusOf(kept.repo);
   if (head !== kept.head) {
-    await atHead(boundary.path, kept.repo);
+    await atHead(boundary.path);
   }
   const seen = copied.get(boundary.id) ?? new Map<string, string>();
   copied.set(boundary.id, seen);
@@ -394,33 +406,229 @@ const mirror = async (
   return { changed, kept: { ...kept, head, mirrored: paths } };
 };
 
+/** The package managers a stage clone installs with. */
+type Manager = "npm" | "pnpm" | "yarn" | "bun";
+
+const MANAGERS: readonly Manager[] = ["npm", "pnpm", "yarn", "bun"];
+
+/** Each lockfile and the manager it names, in core move.ts `LOCKFILES` order. */
+const LOCK_MANAGER: Record<(typeof LOCKFILES)[number], Manager> = {
+  "bun.lock": "bun",
+  "bun.lockb": "bun",
+  "pnpm-lock.yaml": "pnpm",
+  "package-lock.json": "npm",
+  "yarn.lock": "yarn",
+};
+
+/** How a machine gets each manager, from its own install page. */
+const HOW_TO_GET: Record<Manager, string> = {
+  npm: "install Node.js, which brings npm (nodejs.org/en/download)",
+  pnpm: "run `corepack enable pnpm` or `npm install -g pnpm` (pnpm.io/installation)",
+  yarn: "run `corepack enable yarn` or `npm install -g yarn` (yarnpkg.com/getting-started/install)",
+  bun: "run `curl -fsSL https://bun.com/install | bash` (bun.com/docs/installation)",
+};
+
+/** What a missing manager's check prints, for the daemon to read. */
+const NO_MANAGER = "cawco-stage: no package manager";
+
+/** The project a toolchain root installs as: its folder, its manager and what named it. */
+interface Install {
+  dir: string;
+  /** The major version its `packageManager` names, when it names one. */
+  major?: number;
+  manager: Manager;
+  /** What named the manager, in words: `its packageManager pnpm@9.1.0`, `its yarn.lock`. */
+  named: string;
+}
+
+/** A folder's package.json's `packageManager`, or nothing where it has no package.json or names none; one that does not parse is refused with why. */
+const packageManagerIn = async (dir: string): Promise<string | undefined> => {
+  const file = join(dir, "package.json");
+  const text = await readFile(file, "utf8").catch(() => undefined);
+  if (text === undefined) {
+    return;
+  }
+  let field: unknown;
+  try {
+    field = (JSON.parse(text) as { packageManager?: unknown }).packageManager;
+  } catch (error) {
+    throw new Error(
+      `${file} does not parse as JSON (${error instanceof Error ? error.message : String(error)}), so the stage can't read which package manager installs it.`,
+      { cause: error }
+    );
+  }
+  return typeof field === "string" && field ? field : undefined;
+};
+
+/**
+ * The project the toolchain root `from` installs as: the nearest folder from
+ * it up to the clone's root whose package.json names a `packageManager`
+ * (nodejs.org/api/corepack.html: it "defines which package manager is
+ * expected to be used"), else that holds a lockfile, which names it. Refused
+ * in words when none does: the stage never guesses a manager.
+ */
+const installOf = async (
+  clone: string,
+  repo: string,
+  from: string
+): Promise<Install> => {
+  for (let dir = from; ; dir = dirname(dir)) {
+    // biome-ignore lint/performance/noAwaitInLoops: the nearest folder that names its manager, one folder at a time
+    const field = await packageManagerIn(dir);
+    if (field) {
+      const [name = "", version = ""] = field.split("@");
+      const manager = MANAGERS.find((one) => one === name);
+      if (!manager) {
+        throw new Error(
+          `${join(repo, relative(clone, dir))}'s package.json names ${field} as its packageManager, and a sheet's stage installs with npm, pnpm, yarn or bun.`
+        );
+      }
+      const major = Number.parseInt(version, 10);
+      return {
+        dir,
+        manager,
+        named: `its packageManager ${field}`,
+        ...(Number.isNaN(major) ? {} : { major }),
+      };
+    }
+    const lock = LOCKFILES.find((name) => existsSync(join(dir, name)));
+    if (lock) {
+      return { dir, manager: LOCK_MANAGER[lock], named: `its ${lock}` };
+    }
+    if (dir === clone || relative(clone, dir).startsWith("..")) {
+      break;
+    }
+  }
+  throw new Error(
+    `${join(repo, relative(clone, from))} has no lockfile (${LOCKFILES.join(", ")}) and no packageManager in a package.json up to its repository's root, so the stage can't tell which package manager installs it: commit the project's lockfile, then call again.`
+  );
+};
+
+/** The files a project installs from: a change to one installs it again. */
+const MANIFESTS: ReadonlySet<string> = new Set(["package.json", ...LOCKFILES]);
+
+/** What an install leaves in its folder: `node_modules`, or Yarn Plug'n'Play's loader in its place. */
+const INSTALLED = ["node_modules", ".pnp.cjs"];
+
+/** A manager's frozen install: the lockfile as committed, never rewritten. */
+const frozenInstall = (install: Install): string => {
+  switch (install.manager) {
+    case "npm":
+      return "npm ci";
+    case "pnpm":
+      return "pnpm install --frozen-lockfile";
+    case "bun":
+      return "bun install --frozen-lockfile";
+    case "yarn":
+      // Yarn 2 on refuses `--frozen-lockfile` for `--immutable`; Yarn 1 has only the first.
+      if (install.major === undefined) {
+        return 'if [ "$(yarn --version | cut -d. -f1)" -ge 2 ]; then yarn install --immutable; else yarn install --frozen-lockfile; fi';
+      }
+      return install.major >= 2
+        ? "yarn install --immutable"
+        : "yarn install --frozen-lockfile";
+    default: {
+      const unhandled: never = install.manager;
+      throw new Error(`unhandled manager: ${String(unhandled)}`);
+    }
+  }
+};
+
+/** What the install at `dir` installs from: its command, lockfiles and package.json, hashed. */
+const inputsOf = async (dir: string, command: string): Promise<string> => {
+  const hash = createHash("sha256").update(command);
+  for (const name of ["package.json", ...LOCKFILES]) {
+    // biome-ignore lint/performance/noAwaitInLoops: a handful of small files, hashed in order
+    const bytes = await readFile(join(dir, name)).catch(() => undefined);
+    hash.update(`\0${name}\0`);
+    if (bytes) {
+      hash.update(bytes);
+    }
+  }
+  return hash.digest("hex");
+};
+
+/**
+ * The project the toolchain root `root` (absolute, in the clone) installs as
+ * ({@link installOf}), installed inside the clone's boundary by its manager's
+ * frozen install, unless it is installed from the same inputs already.
+ * Refused in words when the machine has no such manager, or the install
+ * fails. Answers the record with what it installed.
+ */
+const installAt = async (
+  boundary: WorkspaceRef,
+  kept: Kept,
+  root: string
+): Promise<Kept> => {
+  const install = await installOf(boundary.path, kept.repo, root);
+  const command = frozenInstall(install);
+  const key = relative(boundary.path, install.dir) || ".";
+  const inputs = await inputsOf(install.dir, command);
+  if (
+    kept.installed?.[key] === inputs &&
+    INSTALLED.some((name) => existsSync(join(install.dir, name)))
+  ) {
+    return kept;
+  }
+  const where = join(kept.repo, relative(boundary.path, install.dir));
+  const result = await runWorkflowCommand(
+    install.dir,
+    `command -v ${install.manager} >/dev/null 2>&1 || { echo '${NO_MANAGER}'; exit 127; }\n${command}`,
+    WORKSPACE_INSTALL_TIMEOUT_MS,
+    boundary
+  );
+  if (result.stdout.includes(NO_MANAGER)) {
+    throw new Error(
+      `${where} installs with ${install.manager} (${install.named}), and this machine has no ${install.manager}: ${HOW_TO_GET[install.manager]}, then call again.`
+    );
+  }
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `${where} did not install in the stage's clone: \`${command}\` (${install.named}) exited ${result.exitCode}: ${(result.stderr || result.stdout).trim().split("\n").slice(-3).join(" ")}`
+    );
+  }
+  console.info(
+    `[stage] ${boundary.id}: ${key} installed with \`${command}\` (${install.named})`
+  );
+  return { ...kept, installed: { ...kept.installed, [key]: inputs } };
+};
+
 /**
  * A whole clone brought in step ({@link mirror}), its record kept when
- * anything moved; a package manifest or lockfile among what changed
- * installs again inside its boundary (core `depsScript`, which installs
- * only when they changed). The paths it changed.
+ * anything moved; a package manifest or lockfile among what changed installs
+ * each project it installed before again ({@link installAt}, which installs
+ * only when its inputs changed). The paths it changed.
  */
 const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
-  const { changed, kept: now } = await mirror(boundary, kept);
-  if (
-    now.head !== kept.head ||
-    now.mirrored.join("\0") !== kept.mirrored.join("\0")
-  ) {
-    await keep(boundary.id, now);
+  const { changed, kept: mirrored } = await mirror(boundary, kept);
+  let now = mirrored;
+  const manifests = changed.some((path) => MANIFESTS.has(basename(path)));
+  if (manifests) {
+    for (const key of Object.keys(now.installed ?? {})) {
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one install at a time in one boundary
+        now = await installAt(boundary, now, join(boundary.path, key));
+      } catch (error) {
+        console.warn(
+          `[stage] ${boundary.id}: ${key} did not install again: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
   }
-  if (manifests(changed).length > 0) {
-    await finishInstall(boundary);
+  if (JSON.stringify(now) !== JSON.stringify(kept)) {
+    await keep(boundary.id, now);
   }
   return changed;
 };
 
 /**
- * Cuts place `place`'s stage clone at `path` from the checkout at `repo`
- * (both real paths): `git init`, the checkout's HEAD fetched and checked out
- * ({@link atHead}), its uncommitted changes mirrored, its own secret files
- * copied (workspace.ts `copyOwnSecrets`), its dependencies linked on this
- * host (seed-deps.ts) before its boundary starts and installed inside it,
- * as a delegate's are. A cut that fails is cut again whole at the next
+ * Cuts place `place`'s stage clone at `boundary.path` from the checkout at
+ * `repo` (a real path): `git init`, the checkout as its `origin`, its HEAD
+ * fetched and checked out ({@link atHead}), its uncommitted changes mirrored,
+ * its own secret files copied (workspace.ts `copyOwnSecrets`), a bun
+ * lockfile's dependencies linked on this host (seed-deps.ts) before its
+ * boundary starts. Its projects install as its stage first needs them
+ * ({@link installStage}). A cut that fails is cut again whole at the next
  * use, and says why.
  */
 const cut = async (
@@ -429,7 +637,7 @@ const cut = async (
   place: WorkspaceRef
 ): Promise<Kept> => {
   const state = workspaceStateDir(boundary.id);
-  // A cut that never finished, or one of another repository: nothing of it runs on.
+  // A cut that never finished, one of an earlier form or of another repository: nothing of it runs on.
   await stopWorkspaceBoundary(boundary);
   await rm(boundary.path, { recursive: true, force: true });
   await mkdir(state, { recursive: true });
@@ -444,22 +652,24 @@ const cut = async (
     const git = gitUntil(Date.now() + STAGE_CLONE_GIT_MS);
     await mkdir(dirname(boundary.path), { recursive: true });
     await git(dirname(boundary.path), "init", "--quiet", boundary.path);
+    await git(boundary.path, "remote", "add", "origin", `file://${repo}`);
     const { head } = await statusOf(repo);
     if (head === "(initial)" || !head) {
       throw new Error(
         `${repo} has no commit yet, and a sheet's stage runs in a clone cut from its HEAD: commit, then call again.`
       );
     }
-    await atHead(boundary.path, repo);
-    const { kept } = await mirror(boundary, { repo, head, mirrored: [] });
+    await atHead(boundary.path);
+    const { kept } = await mirror(boundary, {
+      form: FORM,
+      repo,
+      head,
+      mirrored: [],
+    });
     await copyOwnSecrets(repo, boundary.path, git);
-    // As a delegate's cut installs (workspace.ts `createWorkspace`): before
-    // the boundary, since inside it bun copies every file (seed-deps.ts).
-    const seeded = await seedDependencies(boundary.id, boundary.path);
+    // Before the boundary: inside it bun copies every file (seed-deps.ts).
+    await seedDependencies(boundary.id, boundary.path);
     await ensureBoundary(boundary);
-    if (seeded) {
-      await finishInstall(boundary);
-    }
     await keep(boundary.id, kept);
     console.info(
       `[stage] ${place.id}: its stage clone ${boundary.path} cut from ${repo} at ${kept.head.slice(0, 9)} with ${kept.mirrored.length} uncommitted path(s), in ${((Date.now() - started) / 1000).toFixed(1)}s`
@@ -487,9 +697,19 @@ const repoOf = async (folder: string): Promise<string> => {
   return await realpath(top.trim());
 };
 
+/** The clone's root as its `create.json` names it, or nothing. */
+const recordedPath = async (id: string): Promise<string | undefined> =>
+  (
+    await readRecord<{ path?: string }>(
+      join(workspaceStateDir(id), "create.json")
+    ).catch(() => undefined)
+  )?.path;
+
 /**
- * Place `place`'s stage clone, cut when it has none whole (or one of another
- * repository), and brought in step with the checkout: where its stage runs.
+ * Place `place`'s stage clone, cut when it has none whole (or one of an
+ * earlier form, or of another repository), and brought in step with the
+ * checkout: where its stage runs. The hub hears of it each time
+ * ({@link setStageCloneSink}).
  */
 export const stageCloneOf = (place: WorkspaceRef): Promise<StageClone> => {
   const id = stageCloneId(place.id);
@@ -497,15 +717,13 @@ export const stageCloneOf = (place: WorkspaceRef): Promise<StageClone> => {
     const repo = await repoOf(place.path);
     const sub = relative(repo, await realpath(place.path));
     const kept = await keptOf(id);
-    const recorded = await readRecord<{ path?: string }>(
-      join(workspaceStateDir(id), "create.json")
-    ).catch(() => undefined);
     const path =
-      recorded?.path ??
+      (await recordedPath(id)) ??
       expandHome(`~/.worktrees/${basename(repo)}-stage-${id.slice(0, 8)}`);
     const boundary: WorkspaceRef = { id, path };
     const whole =
       kept?.repo === repo &&
+      kept.form === FORM &&
       (await stat(join(path, ".git")).then(
         (found) => found.isDirectory(),
         () => false
@@ -516,9 +734,40 @@ export const stageCloneOf = (place: WorkspaceRef): Promise<StageClone> => {
       copied.delete(id);
       await cut(boundary, repo, place);
     }
+    filed({
+      kind: "stage-clone",
+      id,
+      place: place.id,
+      path,
+      repoRoot: repo,
+      tmp: workspaceScratchDir(id),
+    });
     return { boundary, folder: sub ? join(path, sub) : path };
   });
 };
+
+/**
+ * The project the stage at toolchain root `root` (absolute, in the clone)
+ * runs installed in place `place`'s stage clone ({@link installAt}), in the
+ * clone's turn.
+ */
+export const installStage = (
+  place: WorkspaceRef,
+  clone: StageClone,
+  root: string
+): Promise<void> =>
+  inCloneTurn(clone.boundary.id, async () => {
+    const kept = await keptOf(clone.boundary.id);
+    if (!kept) {
+      throw new Error(
+        `The stage for ${place.path} has no clone of its checkout to install: call again.`
+      );
+    }
+    const now = await installAt(clone.boundary, kept, root);
+    if (now !== kept) {
+      await keep(clone.boundary.id, now);
+    }
+  });
 
 /**
  * Brings place `place`'s stage clone in step with its checkout, when it has
@@ -528,21 +777,67 @@ export const syncStageClone = (place: WorkspaceRef): Promise<string[]> => {
   const id = stageCloneId(place.id);
   return inCloneTurn(id, async () => {
     const kept = await keptOf(id);
-    const recorded = await readRecord<{ path?: string }>(
-      join(workspaceStateDir(id), "create.json")
-    ).catch(() => undefined);
-    if (!(kept && recorded?.path)) {
+    const path = await recordedPath(id);
+    if (!(kept && path)) {
       return [];
     }
-    return step({ id, path: recorded.path }, kept);
+    return step({ id, path }, kept);
   });
+};
+
+/** Whether `a` (the checkout's) and `b` (the clone's) are the same entry: both absent, the same link, or files of the same bytes and mode. */
+const sameEntry = async (a: string, b: string): Promise<boolean> => {
+  const [x, y] = await Promise.all([
+    lstat(a).catch(() => undefined),
+    lstat(b).catch(() => undefined),
+  ]);
+  if (!(x && y)) {
+    return !(x || y);
+  }
+  if (x.isSymbolicLink() && y.isSymbolicLink()) {
+    return (await readlink(a)) === (await readlink(b));
+  }
+  if (x.isFile() && y.isFile()) {
+    return (
+      permissions(x.mode) === permissions(y.mode) &&
+      (await readFile(a)).equals(await readFile(b))
+    );
+  }
+  return false;
+};
+
+/**
+ * The paths stage clone `id` at `clone` changed against its HEAD that stand
+ * exactly as in its checkout: copies of the person's own work, which the
+ * checkout still holds, so a retirement passes over them (workspace.ts
+ * `holding`'s `skip`). What differs from the checkout (a write the stage made
+ * that never reached it) still counts as held. None for a clone with no
+ * record.
+ */
+export const sameAsCheckout = async (
+  id: string,
+  clone: string
+): Promise<string[]> => {
+  const kept = await keptOf(id);
+  if (!kept) {
+    return [];
+  }
+  const { paths } = await statusOf(clone);
+  const same = await Promise.all(
+    paths.map(async (path) =>
+      (await sameEntry(join(kept.repo, path), join(clone, path)))
+        ? path
+        : undefined
+    )
+  );
+  return same.filter((path): path is string => path !== undefined);
 };
 
 /**
  * A sheet's write, made by the stage in the clone at `written` (absolute),
  * copied to the same path in place `place`'s checkout: read without
  * following a link, a regular file of the clone's own, and written there as
- * the person's own file is. In `id`'s turn, after the write itself.
+ * the person's own file is. In the clone's turn, after the write itself.
  */
 export const copyBack = async (
   place: WorkspaceRef,

@@ -42,6 +42,21 @@
  * 8. The checkout holds nothing the stage wrote: its `git status
  *    --ignored` as before the legs, and no `node_modules/$app`.
  *
+ * Then a third session, in a checkout of a Vite + Svelte project committed
+ * with an npm package-lock.json and nothing installed: its stage clone
+ * installs with `npm ci` (the manager its lockfile names), not bun. The
+ * fleet's agent runs with `CAWCO_STAGE_IDLE_MS` short, so its stage sleeps
+ * within a minute of its last use.
+ *
+ * 9. `artifact_create(kind: "sheet")` there answers an id and its stage
+ *    `live`.
+ * 10. The hub's retire sweep (`POST /api/workspaces/retire`) holds the stage
+ *     clone, filed as a workspace, for its stage that serves.
+ * 11. Once the stage sleeps, a sweep retires the clone and its folder is
+ *     gone.
+ * 12. The next `components_list` there cuts it again and answers the card,
+ *     and the sweep holds it again.
+ *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
@@ -49,7 +64,7 @@
  *   bun scripts/probe-kit/run.ts session-sheet
  */
 import { existsSync } from "node:fs";
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { STAGE_ENSURE } from "../../../packages/core/src/stage";
@@ -196,6 +211,74 @@ const writeKit = async (dir: string) => {
   await writeFiles(dir, KIT_CARD);
 };
 
+/** How long the fleet's stages run unused before they sleep (agent stage.ts `CAWCO_STAGE_IDLE_MS`). */
+const IDLE_MS = 30_000;
+
+/** A Vite + Svelte project whose package-lock.json names npm as its manager. */
+const NPM: Record<string, string> = {
+  ".gitignore": "node_modules\n",
+  "package.json": JSON.stringify({
+    name: "probe-npm",
+    private: true,
+    type: "module",
+    devDependencies: {
+      "@sveltejs/vite-plugin-svelte": "^7.3.1",
+      svelte: "5.57.1",
+      vite: "^8.3.4",
+    },
+  }),
+  "vite.config.mjs": `import { svelte } from "@sveltejs/vite-plugin-svelte";
+export default { plugins: [svelte()] };
+`,
+  "index.html": PROJECT["index.html"] as string,
+  "src/Card.svelte": PROJECT["src/Card.svelte"] as string,
+  [STORY]: PROJECT[STORY] as string,
+};
+
+/** {@link NPM} committed in a checkout of its own at `dir` with the package-lock.json npm resolves for it, and nothing installed. */
+const writeNpm = async (dir: string) => {
+  await writeFiles(dir, NPM);
+  await Bun.$`npm install --package-lock-only --ignore-scripts --no-audit --no-fund`
+    .cwd(dir)
+    .quiet();
+  await Bun.$`git init -q && git add -A && git -c user.email=p@p -c user.name=p commit -q -m npm`
+    .cwd(dir)
+    .quiet();
+};
+
+/** The stage clone the fleet's machine cut from the checkout at `checkout`, by its record (agent stage-clone.ts): its workspace id and folder. */
+const stageCloneIn = async (
+  home: string,
+  checkout: string
+): Promise<{ id: string; path: string } | undefined> => {
+  const dir = join(home, ".cawco", "workspaces");
+  const repo = await realpath(checkout);
+  for (const id of await readdir(dir).catch(() => [] as string[])) {
+    // biome-ignore lint/performance/noAwaitInLoops: a handful of records, read until the one cut from the checkout
+    const kept = await Bun.file(join(dir, id, "stage-clone.json"))
+      .json()
+      .catch(() => undefined);
+    const made = await Bun.file(join(dir, id, "create.json"))
+      .json()
+      .catch(() => undefined);
+    if (kept?.repo === repo && typeof made?.path === "string") {
+      return { id, path: made.path };
+    }
+  }
+};
+
+/** One retire sweep of the hub's, as it answers (hub workspace-retire.ts `RetireSweep`). */
+const sweep = async (
+  base: string
+): Promise<{
+  held: unknown[];
+  kept: { hold: string; workspaceId: string }[];
+  retired: { workspaceId: string }[];
+}> =>
+  (await (
+    await fetch(`${base}/api/workspaces/retire`, { method: "POST" })
+  ).json()) as Awaited<ReturnType<typeof sweep>>;
+
 /** {@link PROJECT} written into `dir`, the dashboard's packages linked in. */
 const writeProject = async (dir: string) => {
   await writeFiles(dir, PROJECT);
@@ -217,7 +300,10 @@ const run = async (kit: Kit) => {
   fleet.launch("hub");
   await fleet.hubUp();
   fleet.fileAccount();
-  fleet.launch("agent");
+  const npmDir = join(fleet.sandbox, "npm");
+  await writeNpm(npmDir);
+  // Short enough that the npm stage sleeps within a minute of its last use (legs 10–12).
+  fleet.launch("agent", [], { CAWCO_STAGE_IDLE_MS: String(IDLE_MS) });
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Cards", fleet.repo);
@@ -328,6 +414,71 @@ const run = async (kit: Kit) => {
     "8: the checkout holds nothing the stage wrote: no entry in its status it lacked before, and no node_modules/$app",
     made.length === 0 && !app,
     `new in its status: ${JSON.stringify(made)}; node_modules/$app ${app ? "made" : "none"}`
+  );
+
+  // 9. A checkout whose package-lock.json names npm, nothing installed: its stage clone runs `npm ci`.
+  const npmSession = await fleet.spawn("claude", "Npm", npmDir);
+  const npmCreated = await call(
+    "9",
+    "mcp__cawco__artifact_create",
+    { kind: "sheet", name: "npm-cards", file: STORY },
+    npmSession
+  );
+  kit.check(
+    "9: artifact_create(kind: sheet) in an npm-lockfile checkout answers an id and its stage live",
+    !!npmCreated.match(ID)?.[1] && npmCreated.match(STATUS)?.[1] === "live",
+    short(npmCreated)
+  );
+
+  // 10. The hub holds the clone, filed as a workspace, while its stage serves.
+  const clone = await stageCloneIn(fleet.env.HOME as string, npmDir);
+  const serving = clone ? await sweep(fleet.base) : undefined;
+  const hold = serving?.kept.find((one) => one.workspaceId === clone?.id);
+  kit.check(
+    "10: the retire sweep keeps the npm stage clone for its stage that serves",
+    !!hold?.hold.includes("sheet stage"),
+    `clone ${clone ? `${clone.id} at ${clone.path}` : "not found"}; sweep ${JSON.stringify(serving).slice(0, 400)}`
+  );
+
+  // 11. Its stage sleeps, and the clone retires.
+  const gone = clone
+    ? await until(
+        "the npm stage clone retired",
+        async () => {
+          const swept = await sweep(fleet.base);
+          return existsSync(clone.path) ||
+            swept.kept.some((one) => one.workspaceId === clone.id) ||
+            swept.held.some((one) => JSON.stringify(one).includes(clone.id))
+            ? undefined
+            : swept;
+        },
+        Boolean,
+        IDLE_MS + 180_000
+      ).catch(() => undefined)
+    : undefined;
+  kit.check(
+    "11: once its stage sleeps, the sweep retires the stage clone and its folder is gone",
+    !!gone,
+    clone
+      ? `${clone.path} ${existsSync(clone.path) ? "still there" : "gone"}; last sweep ${JSON.stringify(gone ?? (await sweep(fleet.base))).slice(0, 400)}`
+      : "no clone found"
+  );
+
+  // 12. The next sheet call cuts it again, and the hub holds it again.
+  const relisted = await call(
+    "12",
+    "mcp__cawco__components_list",
+    {},
+    npmSession
+  );
+  const again = await sweep(fleet.base);
+  kit.check(
+    "12: the next components_list cuts the clone again and answers the card, and the sweep keeps it again",
+    relisted.includes('"src/Card.svelte"') &&
+      !!clone &&
+      existsSync(clone.path) &&
+      again.kept.some((one) => one.workspaceId === clone.id),
+    `${short(relisted)}; sweep ${JSON.stringify(again).slice(0, 300)}`
   );
 
   /** Legs 4 and 5, on the sheet `sheet` leg 2 made. */

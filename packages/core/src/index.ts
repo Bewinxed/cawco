@@ -1508,6 +1508,8 @@ export type FramePayload =
   | import("./harness").CommandQueueFrame
   /** Daemon-originated: a workspace's stage changed (live components). */
   | import("./stage").StageFrame
+  /** Daemon-originated: a place's stage clone is cut and in step (live components). */
+  | import("./stage").StageCloneFrame
   /** Daemon-originated: a borrowed sign-in near its expiry, asking for a fresh one. */
   | import("./accounts").AccountBorrowFrame
   /** Hub-originated workflow run transition (§7.2). */

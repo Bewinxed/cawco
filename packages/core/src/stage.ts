@@ -324,6 +324,26 @@ export interface StageFrame {
   workspace: string;
 }
 
+/**
+ * The daemon's word that a place's stage clone (agent `stage-clone.ts`) is
+ * cut and in step, sent on each use: the hub files it as a workspace of the
+ * stage kind (schema `workspaces.stageFor`), which its retire sweep settles
+ * once the place's stage sleeps.
+ */
+export interface StageCloneFrame {
+  /** The clone's workspace id (core workspace-policy.ts `stageCloneId`). */
+  id: string;
+  kind: "stage-clone";
+  /** The clone's root. */
+  path: string;
+  /** The place whose sheets' stage runs in it. */
+  place: string;
+  /** The repository root of the checkout it was cut from. */
+  repoRoot: string;
+  /** Its scratch dir, its commands' `TMPDIR`. */
+  tmp: string;
+}
+
 /** The daemon's answer to {@link STAGE_ENSURE}: the stage's port, root and state, and the sheet as it reads. */
 export interface StageOpened {
   /** The toolchain root, from the clone's root. */

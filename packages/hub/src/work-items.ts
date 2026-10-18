@@ -92,6 +92,8 @@ import {
   MachinePathRefused,
 } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import type { StageCloneFrame } from "@cawco/core/stage";
+import { stageCloneId } from "@cawco/core/workspace-policy";
 import { briefingFor } from "./briefings";
 import type {
   DbShape,
@@ -895,6 +897,12 @@ export interface WorkItemDeps {
    * `TurnWatch.spawned`): a routine run's turn makes its children the run's.
    */
   readonly spawnedUnder?: (instanceId: string, parentId: string) => void;
+  /**
+   * Why place `placeId`'s sheet stage holds its stage clone, in words: it
+   * starts, wakes or serves as its machine last said (core `StageFrame`).
+   * Nothing once every stage of the place sleeps, failed or was never heard.
+   */
+  readonly stageRuns?: (placeId: string) => string | undefined;
   /** A task's title as its project's index has it: a pull request's title. */
   readonly taskTitle?: (
     projectId: string,
@@ -1877,6 +1885,7 @@ export const createWorkItems = ({
   sessionUrl,
   spawn,
   spawnedUnder,
+  stageRuns,
   taskTitle,
   todos,
   types,
@@ -3146,6 +3155,78 @@ export const createWorkItems = ({
     | { kind: "failed"; reason: string }
     | { kind: "none" };
 
+  /**
+   * A place's stage clone filed as its machine says it is cut and in step
+   * (core `StageCloneFrame`): a new row of the stage kind, or one archived or
+   * held made active again (a sheet after it retired cut it again, or it is
+   * in use again). `createdBy` is a session working in the place.
+   */
+  const fileStage = (
+    machineId: string,
+    frame: StageCloneFrame,
+    createdBy: string
+  ): void => {
+    const [row] = db.workspacesNamed(frame.id);
+    if (!row) {
+      const path = cutPath(machineId, frame.path);
+      const filed = db.createWorkspace({
+        id: frame.id,
+        machineId,
+        repoRoot: cutPath(machineId, frame.repoRoot),
+        path,
+        // Detached at the checkout's HEAD: no branch of its own, nothing it lands.
+        branch: "",
+        base: "",
+        tmp: frame.tmp,
+        state: "active",
+        createdByInstanceId: createdBy,
+        stageFor: frame.place,
+      });
+      console.log(
+        `[workspaces] ${filed.id} on ${machineName(machineId)}: filed, the stage clone of place ${frame.place} at ${path}`
+      );
+      placesChanged(machineId);
+      workspaceChanged?.(filed);
+      return;
+    }
+    if (row.state === "active") {
+      return;
+    }
+    const active =
+      db.updateWorkspace(row.id, {
+        state: "active",
+        holding: null,
+        heldAt: null,
+        head: null,
+        tmp: frame.tmp,
+      }) ?? row;
+    console.log(
+      `[workspaces] ${row.id} on ${machineName(machineId)}: active again, the stage clone of place ${frame.place} at ${row.path}`
+    );
+    workspaceChanged?.(active);
+  };
+
+  /**
+   * Whether an active workspace is one to settle now: its items have all
+   * ended, or it is a stage clone, which has none (its place's sheet stage
+   * is what holds it).
+   */
+  const settlable = (
+    workspace: WorkspaceRow,
+    items: readonly WorkItemRow[]
+  ): boolean =>
+    (items.length > 0 || Boolean(workspace.stageFor)) &&
+    !items.some((item) => LIVE.has(item.state));
+
+  /** What holds a settlable workspace, in words: a stage clone's place's stage that runs, any other's {@link holdOn}. */
+  const holdOf = (
+    workspace: WorkspaceRow,
+    items: readonly WorkItemRow[]
+  ): string | undefined =>
+    workspace.stageFor
+      ? stageRuns?.(workspace.stageFor)
+      : holdOn(workspace, items);
+
   /** The last failure each workspace's settle logged: one line per change, not per sweep. */
   const settleFailures = new Map<string, string>();
 
@@ -3166,10 +3247,10 @@ export const createWorkItems = ({
       return { kind: "none" };
     }
     const items = db.workItemsIn(workspace.id);
-    if (items.length === 0 || items.some((item) => LIVE.has(item.state))) {
+    if (!settlable(workspace, items)) {
       return { kind: "none" };
     }
-    const hold = holdOn(workspace, items);
+    const hold = holdOf(workspace, items);
     if (hold) {
       return { kind: "deferred", hold };
     }
@@ -7023,6 +7104,35 @@ export const createWorkItems = ({
       const item = row ? itemOf(row) : undefined;
       if (item) {
         settleSoon(item.workspaceId);
+      }
+    },
+
+    /**
+     * A place's stage clone, as its machine says it is cut and in step
+     * (core `StageCloneFrame`), filed as a workspace of the stage kind: a new
+     * row, or one archived or held made active again (a sheet after it
+     * retired cut it again). `createdBy` is a session working in the place.
+     * In its turn, so no settle of it runs meanwhile.
+     */
+    fileStageClone(
+      machineId: string,
+      frame: StageCloneFrame,
+      createdBy: string
+    ): Promise<void> {
+      return inWorkspaceTurn(frame.id, () => {
+        fileStage(machineId, frame, createdBy);
+        return Promise.resolve();
+      });
+    },
+
+    /**
+     * Place `placeId`'s stage clones settled soon ({@link settleSoon}): its
+     * sheet stage slept, failed or stopped, and with it its hold.
+     */
+    settleStagesOf(placeId: string): void {
+      const [workspace] = db.workspacesNamed(stageCloneId(placeId));
+      if (workspace?.stageFor === placeId && workspace.state === "active") {
+        settleSoon(workspace.id);
       }
     },
 

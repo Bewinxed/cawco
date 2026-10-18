@@ -1293,6 +1293,15 @@ export const workspaces = sqliteTable("workspaces", {
    */
   checksFor: text("checks_for"),
   /**
+   * The place whose sheets' stage runs in this workspace: a stage clone, cut
+   * by its machine from the checkout a session with no workspace works in
+   * (agent stage-clone.ts) and filed on its word (core `StageCloneFrame`).
+   * It has no work items; it settles once that stage sleeps
+   * (work-items.ts `settle`), and the next sheet cuts it again. Null for a
+   * delegate's.
+   */
+  stageFor: text("stage_for"),
+  /**
    * What its clone held that is nowhere else when it was filed `held`, as
    * its machine read it once its boundary was closed; null in any other
    * state.
