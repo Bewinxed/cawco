@@ -104,7 +104,6 @@ const KIT: Record<string, string> = {
       vite: "^8.3.4",
     },
   }),
-  "svelte.config.js": "export default {};\n",
   "vite.config.ts": `import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 
