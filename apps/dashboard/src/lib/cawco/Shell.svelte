@@ -1076,8 +1076,9 @@
         <div aria-hidden="true" class="edge" onpointerdown={edgeSwipe}></div>
       {/if}
 
-      <!-- The one place the hub connection is spoken of (HubBand). -->
-      <HubBand />
+      <!-- The one place the hub connection is spoken of (HubBand): a row
+           under the bar that moves the page down, never over it. -->
+      <HubBand above={floating} />
 
       <!-- The old thumb bar is gone, so this region reclaims its height. On a
          session route the composer owns its own bottom inset; everywhere else
@@ -1695,10 +1696,13 @@
       min-inline-size: var(--c-bar-caw-glass-phone);
       block-size: var(--c-bar-caw-glass-phone);
     }
+    /* Floating, it lays out no room of its own: the page's first row
+       starts at its top, and the connection band, standing over both
+       (HubBand `above`), moves the two down together. */
     .top.floating {
-      position: absolute;
-      inset: 0 0 auto;
+      position: relative;
       z-index: 20;
+      margin-block-end: calc(-1 * var(--c-top-bar-h));
       border-bottom: 0;
       background: none;
       pointer-events: none;

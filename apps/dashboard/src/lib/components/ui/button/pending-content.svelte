@@ -22,11 +22,14 @@
   /**
    * What a button that runs something draws inside itself: the icon slot (its
    * icon at rest, the spinner while the work runs, a drawn check when it
-   * ends well, cross-fading in one cell) and the label, which cross-fades to
-   * `pendingLabel` and back in a cell as wide as the wider of the two, all
-   * on one clock (--dur-morph, ease-out), so the button keeps its width. A
-   * button with no rest icon keeps no slot: what the slot shows stands over
-   * its label's start while the words fade out. The kit Button draws it; a button in another skin (the
+   * ends well, cross-fading in one cell) and the label, which beside a rest
+   * icon cross-fades to `pendingLabel` and back in a cell as wide as the
+   * wider of the two, all on one clock (--dur-morph, ease-out), so the
+   * button keeps its width. A button with no rest icon keeps no slot: what
+   * the slot shows stands over its label's start while the words fade out,
+   * and its pending wording is its name alone, never drawn, so its label's
+   * cell is the label's own and stands at the button's centre. The kit
+   * Button draws it; a button in another skin (the
    * new-session dialog, a workflow form) draws it in its own element, sets
    * --btn-gap and --btn-icon to its gap and icon size, and takes presses
    * through `whileIdle`. An icon-only button passes no `label`: only its
@@ -106,10 +109,12 @@
     return done ? "done" : "idle";
   });
   /**
-   * The label has a pending wording of its own: both stand in one cell, so
-   * the button is as wide as the wider of them from the start and never
-   * changes width as the work starts or ends, and they cross-fade on one
-   * transition.
+   * The label has a pending wording of its own. Beside a rest icon both
+   * stand in one cell, so the button is as wide as the wider of them from
+   * the start and never changes width as the work starts or ends, and they
+   * cross-fade on one transition. With no rest icon the pending wording is
+   * never drawn (DESIGN.md, Pending), so only a reader is given it: the
+   * label's cell is the label's own.
    */
   const swapsLabel = $derived(
     pendingLabel !== undefined && pendingLabel !== label
@@ -228,7 +233,16 @@
 {:else}
   <span class="kit-label"
     ><span class="kit-text" data-covered={covered}
-      >{#if swapsLabel}
+      >{#if swapsLabel && Icon === undefined}
+        <!-- No rest icon: its pending wording is never drawn (the spinner
+             stands over the label's start instead), so it never stands in
+             the label's cell to widen it; a reader is still told it. -->
+        <span aria-hidden={pending || undefined}
+          ><MorphText text={label} /></span
+        ><span class="sr-only" aria-hidden={!pending || undefined}
+          >{pendingLabel}</span
+        >
+      {:else if swapsLabel}
         <span class="kit-words"
           ><span aria-hidden={pending || undefined} data-active={!pending}
             ><MorphText text={label} /></span
@@ -279,18 +293,10 @@
   /* The label and its pending wording in one cell, read from the start: the
      cell is as wide as the wider one, and the swap is one opacity and blur
      transition over --dur-morph on --ease-out, both words on the same
-     clock. With less motion the words still cross-fade, unblurred. Each
-     wording stands at the cell's centre, as the button centres its
-     content: at the start, a shorter one left the button's padding wider
-     on its end side (owner: "the retry button is lopsided"). Beside a rest
-     icon the words stay at the start, against the icon. */
+     clock. With less motion the words still cross-fade, unblurred. */
   .kit-words {
     display: inline-grid;
-    justify-items: center;
-
-    .kit-slot:not([data-over]) + .kit-label & {
-      justify-items: start;
-    }
+    justify-items: start;
 
     > * {
       grid-area: 1 / 1;

@@ -800,15 +800,21 @@
   {/if}
   <div data-slot="body" class="body">
     {#if finder.hubDown || finder.refused}
-      <div class="fault" role="alert">
-        {#if finder.hubDown}
-          Nothing can be searched until the hub is back.
-        {:else}
-          {finder.refused}.
-        {/if}
-        <button class="link" onclick={() => finder.retry()} type="button"
-          >Retry</button
-        >
+      <!-- Where an answer's one line stands ("No sessions for …"): the
+           list's own box and the line's, by the field on a phone too. -->
+      <div class={["list", { phone }]}>
+        <div class="nothing" role="alert">
+          <p data-slot="find-fault" class="nothing-line">
+            {#if finder.hubDown}
+              Nothing can be searched until the hub is back.
+            {:else}
+              {finder.refused}.
+            {/if}
+          </p>
+          <button class="link" onclick={() => finder.retry()} type="button"
+            >Retry</button
+          >
+        </div>
       </div>
     {:else}
       {#key finder.view}
@@ -1206,12 +1212,6 @@
   }
   .nothing-line {
     margin: 0;
-    color: var(--ink-strong);
-  }
-
-  .fault {
-    padding: var(--space-3);
-    font: var(--type-body);
     color: var(--ink-strong);
   }
 

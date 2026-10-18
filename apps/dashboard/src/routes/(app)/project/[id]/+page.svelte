@@ -135,7 +135,11 @@
     viewsOf,
     viewTool,
   } from "#lib/cawco/views-api.js";
-  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
+  import {
+    Alert,
+    AlertAction,
+    AlertDescription,
+  } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -184,6 +188,8 @@
   /** A refused read, as a sentence with its status for support. */
   const refusal = (read: HubRead<unknown>): string | null =>
     read.ok ? null : failureSentence(read);
+  /** A reason that already ends as a sentence does. */
+  const SENTENCE_END = /[.!?]$/;
 
   // --- the tasks: what the hub answered, from the load and each re-read ------
 
@@ -1294,10 +1300,48 @@
 
   // --- what the page says --------------------------------------------------------
 
-  const unreadLine = $derived(
-    `The tasks for ${project?.name ?? "this project"} could not be read: ${
-      listProblem ?? "the hub did not answer."
-    } Nothing was changed.`
+  /**
+   * What of the project the hub didn't give, and why, as one sentence: a
+   * read that fails fails for the tasks, the stages and the views at once
+   * (a tunnel's 502), so it is said once, where the board would be, with
+   * one Retry that reads all of them again (owner: "why does the error show
+   * up in two places on the screen?").
+   */
+  const unread = $derived.by((): string | null => {
+    const parts = [
+      listProblem === null ? null : "tasks",
+      stagesProblem === null ? null : "stages",
+      viewsProblem === null ? null : "views",
+    ].filter((part) => part !== null);
+    const reason = (listProblem ?? stagesProblem ?? viewsProblem ?? "").trim();
+    if (parts.length === 0 || reason === "") {
+      return null;
+    }
+    const named =
+      parts.length > 1
+        ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`
+        : parts[0];
+    const why = `${reason.charAt(0).toUpperCase()}${reason.slice(1)}`;
+    return `The ${named} for ${project?.name ?? "this project"} couldn't be read. ${
+      SENTENCE_END.test(why) ? why : `${why}.`
+    } Nothing was changed.`;
+  });
+  /** Retry: the tasks, the stages and the views read again, together. */
+  let rereading = $state(false);
+  async function readAgain() {
+    rereading = true;
+    try {
+      await Promise.all([refresh(), readViews()]);
+    } finally {
+      rereading = false;
+    }
+  }
+  /** The pane says it in the board's place: its tasks are what's missing. */
+  const paneSaysUnread = $derived(
+    list === null &&
+      !shown.startsWith("view:") &&
+      shown !== "routines" &&
+      shown !== "decisions"
   );
   const unreadStages = $derived(
     `stages.md in the project folder does not read: ${(stages?.problems ?? []).join(" ")} Tasks keep their stages meanwhile; fix the file and the board takes its columns from it.`
@@ -1700,11 +1744,18 @@
     <div class="state">
       <EmptyState
         icon={IconToolTodo}
-        line={unreadLine}
+        line={unread ??
+          `The tasks for ${project?.name ?? "this project"} couldn't be read. Nothing was changed.`}
         title="Tasks are not available"
       >
         {#snippet action()}
-          <Button onclick={refresh} variant="outline">Retry</Button>
+          <Button
+            label="Retry"
+            onclick={readAgain}
+            pending={rereading}
+            pendingLabel="Retrying…"
+            variant="outline"
+          />
         {/snippet}
       </EmptyState>
     </div>
@@ -1885,24 +1936,27 @@
           <Alert data-id-page-notice class="notice" variant="warning">
             <AlertDescription>{unreadStages}</AlertDescription>
           </Alert>
-        {:else if stagesProblem}
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription>
-              The project's stages could not be read: {stagesProblem}
-            </AlertDescription>
-          </Alert>
         {/if}
         {#if list && list.problems.length > 0}
           <Alert data-id-page-notice class="notice" variant="warning">
             <AlertDescription>{list.problems.join(" ")}</AlertDescription>
           </Alert>
         {/if}
-        {#if viewsProblem}
+        {#if unread && !paneSaysUnread}
+          <!-- The tasks stand, but the stages or the views didn't come: said
+               once, here, with its Retry. -->
           <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription
-              >The project's views could not be read:
-              {viewsProblem}</AlertDescription
-            >
+            <AlertDescription>{unread}</AlertDescription>
+            <AlertAction>
+              <Button
+                label="Retry"
+                onclick={readAgain}
+                pending={rereading}
+                pendingLabel="Retrying…"
+                size="sm"
+                variant="outline"
+              />
+            </AlertAction>
           </Alert>
         {/if}
 
