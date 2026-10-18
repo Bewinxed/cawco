@@ -86,6 +86,15 @@
  *    Each finishes, its picture drawn, with no main-thread task of the
  *    page's past 50ms, and its picture is the paragraph's box with its 24px
  *    margin, never the page.
+ *
+ * And the owner's report (2026-10-18: "also when commenting on sth in the
+ * preview the slhoettes don't line up?", on a page showing desks as frames
+ * drawn smaller than their own size):
+ * h. A page holding a frame drawn at half scale by a transform and one at
+ *    its own: hovering the transcript in each outlines its box on screen
+ *    (±1px), the label on the outline's top-left; a tap on the half-scale
+ *    one stores that box under its frame chain and stands its disc at the
+ *    tapped point (±2px).
  */
 import { join } from "node:path";
 import type { Frame, Locator } from "playwright-core";
@@ -372,6 +381,7 @@ const run = async (kit: Kit) => {
   for (const checks of [
     () => tapAndDeleteChecks(on, frame),
     () => frameChecks(on),
+    () => scaledFrameChecks(on),
     () => scrollChecks(on, "window"),
     () => scrollChecks(on, "container"),
     () => dismissChecks(on),
@@ -1407,6 +1417,202 @@ const frameChecks = async (on: On) => {
       "b: scrolling the inner frame 40px moves the pin's disc up 40px (±1px)",
       !!disc && !!scrolled && Math.abs(disc.y - 40 - scrolled.y) <= 1,
       `disc y ${disc?.y} → ${scrolled?.y}`
+    );
+  } finally {
+    await app.stop(true);
+  }
+};
+
+/**
+ * A page that shows other pages as frames drawn smaller than their own size,
+ * as the owner's files preview does (figures holding desks): one frame drawn
+ * at half its size by a transform, one at its own; each bordered and padded,
+ * so neither offset is a round number.
+ */
+const SCALED_APP = `<!doctype html><html lang="en"><head><title>Desks</title>
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; }
+  header { height: 41px; }
+  .desks { padding-left: 19px; }
+  figure { margin: 0 0 23px; overflow: hidden; }
+  iframe { display: block; border: 3px solid #999; padding: 5px; }
+  .half { width: 408px; height: 248px; }
+  .half iframe { width: 800px; height: 480px; transform: scale(0.5); transform-origin: 0 0; }
+  .whole iframe { width: 300px; height: 240px; }
+</style></head>
+<body><header>Desks</header><div class="desks"><figure class="half"><iframe src="desk/" title="Desk half"></iframe></figure><figure class="whole"><iframe src="desk/" title="Desk whole"></iframe></figure></div></body></html>`;
+const DESK_APP = `<!doctype html><html lang="en"><head><title>Desk</title>
+<style>
+  body { margin: 0; padding: 24px 29px; font: 16px/1.5 system-ui; }
+  .transcript { width: 200px; height: 120px; background: #eee; }
+</style></head>
+<body><p>A desk.</p><div class="transcript">The transcript.</div></body></html>`;
+/** Where a pin is tapped on the scaled desk's transcript, as fractions of its box. */
+const SCALED_TAP = { x: 0.3, y: 0.5 };
+
+/**
+ * (h) Comment mode in frames drawn at another scale: the hover outline, its
+ * label and a placed pin's disc and box stand on the element, at half scale
+ * and at its own.
+ */
+const scaledFrameChecks = async (on: On) => {
+  const app = Bun.serve({
+    port: 0,
+    fetch: (request) =>
+      new Response(
+        new URL(request.url).pathname.includes("/desk") ? DESK_APP : SCALED_APP,
+        { headers: { "content-type": "text/html" } }
+      ),
+  });
+  try {
+    await on.call(CREATE, { kind: "preview", name: "desks", port: app.port });
+    const outer = (await until(
+      "the desks page in the pane",
+      async () => {
+        const frame = await pageFrame(on);
+        return (await frame
+          .locator("iframe[title^='Desk']")
+          .count()
+          .catch(() => 0)) === 2
+          ? frame
+          : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+    /** The transcript in desk `title`, its box on the dashboard's screen (Playwright's, through every frame and transform). */
+    const transcriptIn = async (title: string) => {
+      const desk = await until(
+        `${title}'s transcript`,
+        async () => {
+          const handle = await outer
+            .locator(`iframe[title="${title}"]`)
+            .elementHandle()
+            .catch(() => null);
+          const inner = await handle?.contentFrame();
+          return inner && (await inner.locator(".transcript").count()) === 1
+            ? inner
+            : null;
+        },
+        Boolean,
+        30_000
+      );
+      const box = await desk?.locator(".transcript").boundingBox();
+      return box ? { x: box.x, y: box.y, w: box.width, h: box.height } : null;
+    };
+    await settle(on.page, 600);
+    await on.page
+      .locator(
+        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      )
+      .click();
+    await pageInComment(outer, true);
+    const pane = await on.page.locator(FRAME).boundingBox();
+    if (!pane) {
+      on.kit.check("h: the pane's frame has a box", false, "none");
+      return;
+    }
+    /** A box on the dashboard's screen, in the preview's viewport. */
+    const inPane = (screen: {
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }) => ({
+      ...screen,
+      x: screen.x - pane.x,
+      y: screen.y - pane.y,
+    });
+    for (const [title, scale] of [
+      ["Desk half", 0.5],
+      ["Desk whole", 1],
+    ] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one desk hovered after the other
+      const shown = await transcriptIn(title);
+      if (!shown) {
+        on.kit.check(`h: ${title}'s transcript has a box`, false, "none");
+        continue;
+      }
+      const centre = { x: shown.x + shown.w / 2, y: shown.y + shown.h / 2 };
+      await on.page.mouse.move(centre.x - 20, centre.y - 20);
+      await on.page.mouse.move(centre.x, centre.y, { steps: 4 });
+      await settle(on.page, 200);
+      const outline = await outlineOf(outer);
+      const label = await outer.evaluate(() => {
+        const el = document
+          .querySelector("cawco-overlay")
+          ?.shadowRoot?.querySelector<HTMLElement>(".label");
+        const r = el?.getBoundingClientRect();
+        return el && r
+          ? { text: el.textContent ?? "", x: r.x, bottom: r.bottom }
+          : null;
+      });
+      const want = inPane(shown);
+      on.kit.check(
+        `h: hovering the transcript in a frame drawn at ${scale}: the outline is its box on screen (±1px), and the label stands on the outline's top-left (±1px)`,
+        Math.abs(shown.w - 200 * scale) <= 1 &&
+          near(outline, want, 1) &&
+          !!label &&
+          label.text.includes("transcript") &&
+          Math.abs(label.x - want.x) <= 1 &&
+          Math.abs(label.bottom - want.y) <= 1,
+        `on screen ${JSON.stringify(want)}; outline ${JSON.stringify(outline)}; label ${JSON.stringify(label)}`
+      );
+    }
+
+    const half = await transcriptIn("Desk half");
+    if (!half) {
+      return;
+    }
+    const tap = {
+      x: half.x + half.w * SCALED_TAP.x,
+      y: half.y + half.h * SCALED_TAP.y,
+    };
+    await on.page.mouse.move(tap.x, tap.y, { steps: 4 });
+    const before = Object.keys((await docOf(outer)).pins).length;
+    await on.page.mouse.click(tap.x, tap.y);
+    const pins = await until(
+      "the scaled transcript's pin in the doc",
+      async () => (await docOf(outer)).pins,
+      (all) => Object.keys(all).length > before,
+      10_000
+    ).catch(() => ({}) as Pins);
+    const made = Object.values(pins).sort(
+      (a, b) => Number(b.number) - Number(a.number)
+    )[0] as
+      | {
+          anchor: {
+            box?: { h: number; w: number; x: number; y: number };
+            frames?: string[];
+          };
+          number: number;
+        }
+      | undefined;
+    if (!made) {
+      on.kit.check("h: a tap pins the scaled transcript", false, "no pin");
+      return;
+    }
+    await writeIn(on, made.number, "This desk.");
+    await on.page.keyboard.press("Escape");
+    await on.page.keyboard.press("Escape");
+    await settle(on.page, 300);
+    const disc = await discAt(outer, made.number);
+    const scroll = await outer.evaluate(() => ({ x: scrollX, y: scrollY }));
+    const want = inPane(half);
+    const at = { x: tap.x - pane.x, y: tap.y - pane.y };
+    const { box } = made.anchor;
+    on.kit.check(
+      "h: a pin tapped on the half-scale transcript stores its box on screen (±1px) under its frame chain, and its disc stands at the tapped point (±2px)",
+      made.anchor.frames?.length === 1 &&
+        near(
+          box ? { ...box, x: box.x - scroll.x, y: box.y - scroll.y } : null,
+          want,
+          1
+        ) &&
+        !!disc &&
+        Math.abs(disc.x - at.x) <= 2 &&
+        Math.abs(disc.y - at.y) <= 2,
+      `anchor ${JSON.stringify(made.anchor)}; on screen ${JSON.stringify(want)}; disc ${JSON.stringify(disc)}; tapped ${JSON.stringify(at)}`
     );
   } finally {
     await app.stop(true);
