@@ -24,7 +24,7 @@
  * - every delegate's rail hangs from the to-do it is under, and its own
  *   steps' rail from its tile.
  *
- * Each frame is captured to `$TMPDIR/caps/round3/`, the live frame at the
+ * Each frame is captured to `$TMPDIR/caps/round4/`, the live frame at the
  * beat its delegate's step has folded open and the beat its to-do ticks.
  *
  *   bun scripts/probe-kit/run.ts web plan-view-preview
@@ -37,7 +37,7 @@ import { open, ROOT, settle, THEMES } from "../../kit";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const OUT = join(DASHBOARD, "preview", "plan-view", "out");
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round3");
+const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round4");
 
 /** A caption names its frame first: "Desk · …" or "Phone · …". */
 const CAPTION = /^(Desk|Phone) · \S/;
@@ -360,11 +360,18 @@ const readInks = (page: Page): Promise<{ least: number; what: string }[]> =>
 interface Layout {
   /** Carried rows looked at. */
   carried: number;
+  /** Desk frames whose side card is not in view, or which show a quiet conversation on a phone. */
+  desksOff: string[];
+  desksShown: number;
+  /** Words broken onto a new line while the line above had room for the next word. */
+  early: string[];
   /** Desk heads with a task's title, and how far each stands off the "Plan" title's line. */
   heads: number;
   headsOff: string[];
   /** Rows of the delegates state outside what their frame shows. */
   hidden: string[];
+  /** Nested rows looked at. */
+  nested: number;
   /** Figures, desk scrollers or phone sheets past the viewport's sides. */
   outside: string[];
   pageWide: number;
@@ -508,49 +515,171 @@ const readDelegates = (
     [PROPOSED("delegates", "desk"), PROPOSED("delegates", "phone")]
   );
 
-/** Each delegate's rail against its to-do's mark, and its own steps' rail against its tile. */
-const readRails = (page: Page): Promise<Pick<Layout, "carried" | "railsOff">> =>
+/**
+ * Every nested row of the proposal, its parent's and its own: one nesting
+ * for a session's sub-steps and a delegate alike. The child's mark stands
+ * one --tree-step in from its parent's mark, the rail hangs from the
+ * parent's mark, and the elbow's arm ends on the child's drawn mark (a dot,
+ * a tick or a tile), neither short of it nor through it. A delegate stands
+ * under a to-do.
+ */
+const readNesting = (
+  page: Page
+): Promise<Pick<Layout, "carried" | "nested" | "railsOff">> =>
   page.evaluate(() => {
-    const railX = (list: Element) =>
-      list.getBoundingClientRect().left +
-      Number.parseFloat(getComputedStyle(list).getPropertyValue("--nest-x"));
+    const probe = document.createElement("div");
+    probe.style.inlineSize = "var(--tree-step)";
+    document.body.append(probe);
+    const step = probe.getBoundingClientRect().width;
+    probe.remove();
     const centre = (el: Element | null | undefined) => {
       const box = el?.getBoundingClientRect();
       return box ? box.left + box.width / 2 : Number.NaN;
     };
-    const offBy = (list: Element, mark: Element | null | undefined) =>
-      Math.abs(railX(list) - centre(mark));
-    const carried = [
+    const rows = [
       ...document.querySelectorAll(
-        'figure [data-slot="plan-row"][data-carried]'
+        'figure .kit-nest > li > [data-slot="plan-row"]'
       ),
-    ].filter((row) => !row.closest("[data-today]"));
-    const railsOff = carried.flatMap((row) => {
+    ].filter(
+      (row) =>
+        !row.closest("[data-today]") && row.getBoundingClientRect().width > 0
+    );
+    const railsOff = rows.flatMap((row) => {
+      const item = row.parentElement as HTMLElement;
+      const list = item.parentElement as HTMLElement;
+      const parentRow = list.parentElement?.querySelector(
+        ':scope > [data-slot="plan-row"]'
+      );
       const words = row.querySelector('[data-slot="words"]')?.textContent;
-      const item = row.parentElement;
-      const list = item?.parentElement;
-      const hostRow = list?.parentElement
-        ?.closest("li")
-        ?.querySelector(':scope > [data-slot="plan-row"]');
-      if (!(
-        list?.classList.contains("kit-nest") &&
-        hostRow?.querySelector(".tick-target")
-      )) {
-        return [`"${words}" is not under a to-do`];
+      const parentMark = centre(parentRow?.querySelector(".pv-mark"));
+      const indent = centre(row.querySelector(".pv-mark")) - parentMark;
+      const rail =
+        list.getBoundingClientRect().left +
+        Number.parseFloat(getComputedStyle(list).getPropertyValue("--nest-x"));
+      const elbow = getComputedStyle(item, "::before");
+      const armEnd =
+        item.getBoundingClientRect().left +
+        Number.parseFloat(elbow.left) +
+        Number.parseFloat(elbow.width);
+      const drawn = row
+        .querySelector(".pv-mark :is(.dot, .step-tick, .tree-mark)")
+        ?.getBoundingClientRect().left;
+      const off: string[] = [];
+      if (Math.abs(indent - step) > 1) {
+        off.push(
+          `"${words}" stands ${indent.toFixed(1)}px in from its parent, not ${step}px`
+        );
       }
-      const off = offBy(list, hostRow.querySelector(".pv-mark"));
-      const own = item?.querySelector(":scope > ul.kit-nest");
-      const away = own ? offBy(own, row.querySelector(".pv-mark")) : 0;
+      if (Math.abs(rail - parentMark) > 1) {
+        off.push(
+          `"${words}": its rail ${(rail - parentMark).toFixed(1)}px off its parent's mark`
+        );
+      }
+      if (drawn === undefined || Math.abs(armEnd - drawn) > 1.5) {
+        off.push(
+          `"${words}": its arm ends ${(armEnd - (drawn ?? 0)).toFixed(1)}px off its mark`
+        );
+      }
+      if (
+        row.hasAttribute("data-carried") &&
+        !parentRow?.querySelector(".tick-target")
+      ) {
+        off.push(`"${words}" is a delegate not under a to-do`);
+      }
+      return off;
+    });
+    return {
+      carried: rows.filter((row) => row.hasAttribute("data-carried")).length,
+      nested: rows.length,
+      railsOff,
+    };
+  });
+
+/**
+ * Words that wrap while their line had room for the next word: each line
+ * break of a proposal row's words, the next word's width (and a space)
+ * against what was left on the line above.
+ */
+const readEarlyWraps = (page: Page): Promise<Pick<Layout, "early">> =>
+  page.evaluate(() => {
+    const range = document.createRange();
+    const pen = document.createElement("canvas").getContext("2d");
+    /** One row's early breaks: each break whose next word fit the line above. */
+    const breaksIn = (words: Element): string[] => {
+      const text = words.firstChild;
+      const value = text?.textContent ?? "";
+      if (!text) {
+        return [];
+      }
+      const end = words.getBoundingClientRect().right;
+      // A space at a soft break hangs past the line and measures nothing
+      // there: its width comes from the words' own font.
+      if (pen) {
+        pen.font = getComputedStyle(words).font;
+      }
+      const space = pen?.measureText(" ").width ?? 0;
+      const boxOf = (from: number, to: number) => {
+        range.setStart(text, from);
+        range.setEnd(text, to);
+        return range.getBoundingClientRect();
+      };
+      const spaces = [...value].flatMap((char, at) =>
+        char === " " ? [at] : []
+      );
+      return spaces.flatMap((at, index) => {
+        const before = boxOf(
+          index === 0 ? 0 : (spaces[index - 1] ?? 0) + 1,
+          at
+        );
+        const nextEnd = spaces[index + 1] ?? value.length;
+        const next = boxOf(at + 1, nextEnd);
+        const room = end - before.right - space;
+        return next.top > before.top + 1 && next.width < room - 1
+          ? [
+              `"${value}" breaks before "${value.slice(at + 1, nextEnd)}" (${next.width.toFixed(0)}px) with ${room.toFixed(0)}px left`,
+            ]
+          : [];
+      });
+    };
+    const early = [...document.querySelectorAll('figure [data-slot="words"]')]
+      .filter(
+        (el) =>
+          !el.closest("[data-today]") && el.getBoundingClientRect().width > 0
+      )
+      .flatMap(breaksIn);
+    return { early: [...new Set(early)] };
+  });
+
+/**
+ * On a phone's page: each desk frame still shown has its side card whole
+ * in view, and no quiet stand-in conversation stands in its place.
+ */
+const readPhoneDesks = (
+  page: Page
+): Promise<Pick<Layout, "desksOff" | "desksShown">> =>
+  page.evaluate(() => {
+    const view = Math.min(window.innerWidth, screen.width);
+    const shown = (el: Element) => el.getBoundingClientRect().width > 0;
+    const frames = [
+      ...document.querySelectorAll('[data-slot="desk-frame"]'),
+    ].filter(shown);
+    const desksOff = frames.flatMap((frame) => {
+      const card = frame
+        .querySelector('[data-slot="side-card"]')
+        ?.getBoundingClientRect();
+      const quiet = frame.querySelector("[data-quiet]");
       return [
-        ...(off > 1.5
-          ? [`"${words}": rail ${off.toFixed(1)}px off its to-do's mark`]
-          : []),
-        ...(away > 1.5
-          ? [`"${words}": steps' rail ${away.toFixed(1)}px off its tile`]
+        ...(card && card.left >= -0.5 && card.right <= view + 0.5
+          ? []
+          : [
+              `a side card at ${Math.round(card?.left ?? 0)}–${Math.round(card?.right ?? 0)}`,
+            ]),
+        ...(quiet && shown(quiet) && view < 700
+          ? ["a quiet conversation shown on a phone"]
           : []),
       ];
     });
-    return { carried: carried.length, railsOff };
+    return { desksOff, desksShown: frames.length };
   });
 
 /**
@@ -584,7 +713,9 @@ const readLayout = async (page: Page): Promise<Layout> => ({
   ...(await readOutside(page)),
   ...(await readWraps(page)),
   ...(await readDelegates(page)),
-  ...(await readRails(page)),
+  ...(await readNesting(page)),
+  ...(await readEarlyWraps(page)),
+  ...(await readPhoneDesks(page)),
 });
 
 function checkLayout(kit: Kit, leg: string, seen: Layout): void {
@@ -614,9 +745,19 @@ function checkLayout(kit: Kit, leg: string, seen: Layout): void {
     seen.waitsOff.join(" | ")
   );
   kit.check(
-    `${leg}: all ${seen.carried} delegates hang from their to-do's mark, their steps from their tile`,
-    seen.carried > 0 && seen.railsOff.length === 0,
+    `${leg}: all ${seen.nested} nested rows (${seen.carried} of them delegates, each under a to-do) stand one step in from their parent, hang from its mark, and end their arm on their mark`,
+    seen.nested > 0 && seen.carried > 0 && seen.railsOff.length === 0,
     seen.railsOff.join(" | ")
+  );
+  kit.check(
+    `${leg}: no row's words break while the line above had room for the next word`,
+    seen.early.length === 0,
+    seen.early.join(" | ")
+  );
+  kit.check(
+    `${leg}: every desk frame shown (${seen.desksShown}) has its plan card in view and no stand-in conversation on a phone`,
+    seen.desksShown > 0 && seen.desksOff.length === 0,
+    seen.desksOff.join(" | ")
   );
 }
 
@@ -637,7 +778,9 @@ async function captureLive(page: Page, prefix: string): Promise<void> {
 
 async function capture(page: Page, prefix: string): Promise<void> {
   await page.screenshot({ path: join(CAPS, `${prefix}-00-intro.png`) });
-  const figures = await page.locator("figure:not([data-slot=live])").all();
+  const figures = await page
+    .locator("figure:not([data-slot=live]):visible")
+    .all();
   for (const [index, figure] of figures.entries()) {
     // biome-ignore lint/performance/noAwaitInLoops: one frame at a time, each scrolled into view and settled
     const section = await figure.evaluate(
