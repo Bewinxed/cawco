@@ -31,6 +31,10 @@
  *    The page names no viewport, as an agent's page may not: the panel lays
  *    it out at its own width and scale 1, as the web's iframe does
  *    (PreviewController `viewport`), before and after the morph.
+ * 4. A tap on the head's Open in new tab opens the form in a tab of its own
+ *    (`artifact:<id>`): the pane host builds it, its group mounts it in
+ *    front, the session's panel holds the artifact open and the tab's own
+ *    page answers for it.
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-canvas
@@ -77,6 +81,8 @@ const SWIPE_AT = /^canvas swipe at (\d+),(\d+)$/;
 const SENT = /^canvas ink sent canvas ([0-9a-f-]{36}) to /;
 /** PreviewController's `preview head room …`: the head's width, the name's, and the controls after it. */
 const ROOM = /^preview head room width=(\d+) title=(\d+) controls=(\d+):(\d+)$/;
+/** PreviewController's `preview head open-tab=x,y`: where Open in new tab stands in the window. */
+const OPEN_TAB = /^preview head open-tab=(\d+),(\d+)$/;
 /** PreviewController's `preview captured …`: how many bytes the page's thumbnail came to. */
 const BYTES = /bytes=(\d+)/;
 const DOC =
@@ -312,7 +318,8 @@ async function onRuntime(
     }
     await editStep(on, canvasId);
     await captureCanvas(on);
-    await formStep(on);
+    const pageId = await formStep(on);
+    await openTabStep(on, pageId);
     console.log(`  captures: ${shots}`);
   } finally {
     await Bun.write(
@@ -519,7 +526,7 @@ async function captureCanvas(on: On): Promise<void> {
 }
 
 /** 3. A form re-published keeps what was typed. */
-async function formStep(on: On): Promise<void> {
+async function formStep(on: On): Promise<string | undefined> {
   const { fleet, heard, kit, session, shots, tag, udid } = on;
   const after = (mark: number) => heard.slice(mark);
   const madeAt = heard.length;
@@ -599,6 +606,57 @@ async function formStep(on: On): Promise<void> {
       Number(captured?.match(BYTES)?.[1] ?? 0) > 0 &&
       Number(room?.match(ROOM)?.[2] ?? 0) > 0,
     `${captured ?? "no capture"}; ${room ?? "no head room line"}; ${clearance.join(" | ") || "no clearance line"}`
+  );
+  return pageId;
+}
+
+/**
+ * 4. Open in new tab (the panel head's ↗, PreviewPane `/artifact/<id>`): a
+ * finger's tap on it (axe) opens a tab whose id is `artifact:<id>` (the pane
+ * host builds it, its group mounts it in front), and that tab shows the
+ * artifact: its session's panel holds it open, and the tab's own page answers
+ * for it (`artifact tab ready`).
+ */
+async function openTabStep(on: On, pageId: string | undefined): Promise<void> {
+  const { heard, kit, tag, udid } = on;
+  const at = heard.findLast((line) => OPEN_TAB.test(line))?.match(OPEN_TAB);
+  const tabId = `artifact:${pageId ?? "-"}`;
+  const tapAt = heard.length;
+  const tapped = at
+    ? await sh(`${TAP} -x ${at[1]} -y ${at[2]} --udid ${udid} >/dev/null`)
+        .then(() => `tapped ${at[1]},${at[2]}`)
+        .catch((error: Error) => `axe tap: ${error.message}`)
+    : "the head said no open-tab place";
+  const ready = await until(
+    `${tag}: the artifact's own tab`,
+    () =>
+      heard
+        .slice(tapAt)
+        .find((line) => line.startsWith(`artifact tab ready ${pageId}`)),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  const lines = heard.slice(tapAt);
+  const built = lines.find(
+    (line) => line === `pane built ${tabId} kind=artifact`
+  );
+  const mounted = lines.find((line) =>
+    line.startsWith(`pane mounted ${tabId} active=true`)
+  );
+  const shows = lines.findLast((line) =>
+    line.startsWith(`artifact tab ${pageId} shows`)
+  );
+  await sh(
+    `xcrun simctl io ${udid} screenshot "${join(on.shots, "app-artifact-tab.png")}" >/dev/null`
+  );
+  kit.check(
+    `${tag} 4: the head's Open in new tab opens a tab of kind artifact:<id>, in front, and it shows the artifact`,
+    !!pageId &&
+      !!built &&
+      !!mounted &&
+      shows === `artifact tab ${pageId} shows ${pageId} state=open` &&
+      !!ready,
+    `${tapped}; ${built ?? "no pane built line"}; ${mounted ?? "no pane mounted line"}; ${shows ?? "no tab shows line"}; ${ready ?? "no tab ready line"}`
   );
 }
 

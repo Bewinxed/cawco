@@ -300,6 +300,12 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     private func mount(_ id: String) {
         Self.log.info("mount \(id.prefix(8), privacy: .public) \(self.stack.active ? "during a swipe" : "at rest", privacy: .public)")
         mounted.append(id)
+        #if DEBUG
+        // An artifact's own tab, as the group holds it: its kind and whether it is the one in front.
+        if ArtifactTabs.artifactId(of: id) != nil {
+            PreviewProbe.say("pane mounted \(id) active=\(id == leaf?.active) tabs=\(leaf?.tabs.count ?? 0)")
+        }
+        #endif
         let slot = UIView()
         slot.clipsToBounds = true
         slots[id] = slot

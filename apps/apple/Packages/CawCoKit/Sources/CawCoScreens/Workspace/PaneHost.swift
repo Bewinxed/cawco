@@ -64,6 +64,9 @@ final class PaneHost {
             tab.onReturnToFleet = { [weak self] in self?.onReturnToFleet(id) }
             tab.onNamed = { [weak self] name in self?.name(id, name) }
             made = tab
+            #if DEBUG
+            PreviewProbe.say("pane built \(id) kind=artifact")
+            #endif
         } else if let runId = BoardRun.runId(of: id) {
             let run = WorkflowRunViewController(hub: hub, runId: runId)
             run.onReturn = { [weak self] in self?.onReturnToFleet(id) }

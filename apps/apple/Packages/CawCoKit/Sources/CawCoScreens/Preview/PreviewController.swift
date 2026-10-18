@@ -1188,6 +1188,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintStage()
         #if DEBUG
         PreviewProbe.say("preview ready")
+        // The artifact's own tab: its page's overlay answered there, for this artifact.
+        if ownTab { PreviewProbe.say("artifact tab ready \(artifactId ?? "-") revision=\(revision ?? "-")") }
         PreviewMeter.ready(web)
         if byHost { PreviewProbe.lapse(web) }
         if PreviewProbe.menuRemove != nil, !menuAtLaunch {
@@ -2127,10 +2129,20 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard PreviewProbe.on, view.window != nil, let head = dragArea as? UIStackView, head.bounds.width > 0 else { return }
         let shown = head.arrangedSubviews.dropFirst().filter { !$0.isHidden }
         let room = "preview head room width=\(Int(head.bounds.width)) title=\(Int(titleButton.bounds.width)) controls=\(shown.count):\(Int(shown.reduce(0) { $0 + $1.bounds.width }))"
-        guard room != laidRoom else { return }
-        laidRoom = room
-        PreviewProbe.say(room)
+        if room != laidRoom {
+            laidRoom = room
+            PreviewProbe.say(room)
+        }
+        // Where Open in new tab stands in the window, where a simulator touch lands.
+        let openTab = openTabButton.isHidden ? "none" : PreviewProbe.centre(openTabButton)
+        let at = "preview head open-tab=\(openTab)"
+        if at != laidOpenTab {
+            laidOpenTab = at
+            PreviewProbe.say(at)
+        }
     }
+
+    private var laidOpenTab = ""
 
     /// The open card's lines: its controls, its question, and its footer's
     /// buttons against the keyboard's top, all in the window's points.

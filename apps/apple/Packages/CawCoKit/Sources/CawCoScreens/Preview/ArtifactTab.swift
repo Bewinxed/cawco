@@ -49,6 +49,7 @@ final class ArtifactTabController: ObservedViewController {
     }
 
     private func stand(_ instanceId: String, name: String) {
+        self.instanceId = instanceId
         onNamed(name)
         let preview = PreviewController(hub: hub, instanceId: instanceId, ownTab: true)
         preview.onBackToSession = { [weak self] in self?.onBackToSession(instanceId) }
@@ -84,7 +85,23 @@ final class ArtifactTabController: ObservedViewController {
     /// The session's preview as the hub says it now: the tab draws what its panel shows.
     override func refreshContent() {
         preview?.show()
+        #if DEBUG
+        if let instanceId {
+            let frame = hub.previews.byInstance[instanceId]
+            let line = "artifact tab \(artifactId) shows \(frame?.artifact.id ?? "-") state=\(frame?.state.rawValue ?? "-")"
+            if line != said {
+                said = line
+                PreviewProbe.say(line)
+            }
+        }
+        #endif
     }
+
+    /// The session the artifact is its, once found.
+    private var instanceId: String?
+    #if DEBUG
+    private var said = ""
+    #endif
 
     /// Whether its tab is the one in front of its group: behind, its page is let go, as a session's preview's is.
     func standsInFront(_ front: Bool) {

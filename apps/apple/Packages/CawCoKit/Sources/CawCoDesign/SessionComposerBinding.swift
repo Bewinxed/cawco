@@ -193,6 +193,15 @@ public final class SessionComposerBinding {
     }
 
     /// The draft's canvas as the screen kept it (a restored draft): back as its chip.
+    #if DEBUG
+    /// A probe's send: `words` typed into the field, then Send pressed as a finger presses it. Answers whether it took the press.
+    public func probeSend(_ words: String) -> Bool {
+        guard let composer else { return false }
+        composer.probeType(words)
+        return composer.probePressSend()
+    }
+    #endif
+
     /// The artifact panel gives the canvas `id` back to this message (ComposerView `takeBack`).
     public func takeBack(canvas id: String, name: String, folded: Bool, from box: CGRect?) {
         composer?.takeBack(id: id, name: name, folded: folded, from: box, of: self)
