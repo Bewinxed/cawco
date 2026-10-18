@@ -528,9 +528,7 @@ export const harnessNoteOf = (text: string): HarnessNote | undefined => {
       body: (notificationField(whole, "system-reminder") ?? "").trim(),
     };
   }
-  if (
-    !(whole.startsWith(SYSTEM_NOTIFICATION) || isTaskNotification(whole))
-  ) {
+  if (!(whole.startsWith(SYSTEM_NOTIFICATION) || isTaskNotification(whole))) {
     return;
   }
   const title = notificationField(whole, "summary")?.replace(

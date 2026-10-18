@@ -7,11 +7,7 @@
  * (`data_migrations`, db `migrateSendsOnce`). The line a reader reads stays
  * as it was; the tag goes before it, as a marker is written now.
  */
-import {
-  markerTag,
-  type NeutralUserMessage,
-  readMarkerTag,
-} from "@cawco/core";
+import { markerTag, type NeutralUserMessage, readMarkerTag } from "@cawco/core";
 
 /** The migration's name, as `data_migrations` keeps it. */
 export const TAG_MARKERS = "tag-markers";
@@ -27,8 +23,7 @@ const BEFORE: readonly {
   },
   {
     line: /^\[Hand-off from the (.+?) workflow — step (.+?), not the user\]/,
-    tag: ([, workflow, step]) =>
-      markerTag("workflow-step", { workflow, step }),
+    tag: ([, workflow, step]) => markerTag("workflow-step", { workflow, step }),
   },
   {
     line: /^\[CawCo\] Your message to (.+?) was not delivered: /,

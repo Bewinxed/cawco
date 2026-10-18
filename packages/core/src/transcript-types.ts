@@ -113,17 +113,17 @@ export interface BlockMetadata {
   exitCode?: number;
   handoffBrief?: string;
   handoffKind?: "handoff" | "start" | "delegate";
-  hookName?: string;
-  /** A stored transcript can name an image it no longer carries, hence the optional src. */
-  images?: Array<{ mediaType: string; src?: string }>;
-  isRedactedThinking?: boolean;
-  model?: string;
   /**
    * A `ui.system_note` that is a notice of the harness's in the user's role,
    * typed where its normaliser read it: what a reader draws it from, never
    * its `content`, which keeps its words for the shipped app.
    */
   harnessNote?: import("./harness").HarnessNote;
+  hookName?: string;
+  /** A stored transcript can name an image it no longer carries, hence the optional src. */
+  images?: Array<{ mediaType: string; src?: string }>;
+  isRedactedThinking?: boolean;
+  model?: string;
   /** Harness-injected user-role content (task notifications, reminders, compaction). */
   noteKind?: string;
   /** A task notification's Task `tool_use_id` — folds the note into its branch. */

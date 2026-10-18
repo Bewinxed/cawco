@@ -794,16 +794,21 @@ export class PiProfile {
     if (sidecar.memory !== undefined) {
       const file = Bun.file(PI_MEMORY);
       const hash = (await file.exists()) ? hashText(await file.text()) : null;
-      report.memory =
-        hash === sidecar.memory
-          ? { state: "applied" }
-          : hash === null
-            ? { state: "failed", cause: "absent", detail: "not on disk" }
-            : {
-                state: "failed",
-                cause: "drifted",
-                detail: "edited on this machine",
-              };
+      if (hash === sidecar.memory) {
+        report.memory = { state: "applied" };
+      } else if (hash === null) {
+        report.memory = {
+          state: "failed",
+          cause: "absent",
+          detail: "not on disk",
+        };
+      } else {
+        report.memory = {
+          state: "failed",
+          cause: "drifted",
+          detail: "edited on this machine",
+        };
+      }
     }
     return report;
   }

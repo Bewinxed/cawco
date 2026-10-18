@@ -1799,25 +1799,24 @@ const RUN_TOOL = /(?:^|_)workflow_run$/;
  * its first text block. Undefined for a result that is not that answer.
  */
 const startedRun = (result: unknown): string | undefined => {
-  const text =
-    typeof result === "string"
-      ? result
-      : Array.isArray(result)
-        ? (result as { type?: unknown; text?: unknown }[]).find(
-            (block) => block.type === "text" && typeof block.text === "string"
-          )?.text
-        : undefined;
+  let text: unknown = result;
+  if (Array.isArray(result)) {
+    text = (result as { type?: unknown; text?: unknown }[]).find(
+      (block) => block.type === "text" && typeof block.text === "string"
+    )?.text;
+  }
   if (typeof text !== "string") {
     return;
   }
+  let answer: unknown;
   try {
-    const answer: unknown = JSON.parse(text);
-    const runId = (answer as { runId?: unknown } | null)?.runId;
-    return typeof runId === "string" ? runId : undefined;
+    answer = JSON.parse(text);
   } catch {
     // Not the hub's answer (a refusal in words): it started no run.
     return;
   }
+  const runId = (answer as { runId?: unknown } | null)?.runId;
+  return typeof runId === "string" ? runId : undefined;
 };
 
 /** Folds a tool result into the `tool.use` it answers; returns the block it changed. */

@@ -658,7 +658,8 @@ if (role === "sessiond") {
     extra: object = {}
   ) =>
     entry(key, kind, text, { timestamp: new Date().toISOString(), ...extra });
-  type ProcessExit = import("../packages/agent/src/sessiond-client").ProcessExit;
+  type ProcessExit =
+    import("../packages/agent/src/sessiond-client").ProcessExit;
   /** A CLI that ended on SIGTERM, as sessiond reaps it: Claude Code catches it and exits 143. */
   const TERM_EXIT: ProcessExit = { code: 143, signal: null };
   /** How a CLI child ended, from sessiond's listing of it, as the bridge hands it to the adapter. */

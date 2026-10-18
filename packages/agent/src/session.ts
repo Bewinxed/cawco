@@ -4762,9 +4762,7 @@ export class SessionSupervisor {
     const all = listed.flat();
     all.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
     return {
-      sessions: (options.limit ? all.slice(0, options.limit) : all).map(
-        titled
-      ),
+      sessions: (options.limit ? all.slice(0, options.limit) : all).map(titled),
       unanswered,
       failed,
     };
@@ -4824,7 +4822,11 @@ export class SessionSupervisor {
               row.name,
               "unavailable" in launcher
                 ? { state: "pending", detail: launcher.unavailable }
-                : { state: "failed", cause: "unknown", detail: launcher.failure }
+                : {
+                    state: "failed",
+                    cause: "unknown",
+                    detail: launcher.failure,
+                  }
             );
             return { ...row, enabled: false };
           }

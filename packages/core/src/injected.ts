@@ -22,7 +22,7 @@ import type { ArtifactKind } from "./index";
 
 /** One marker's tag, read: its kind, its fields, and the text after the tag's line. */
 export interface MarkerTag {
-  fields: Readonly<Record<string, string>>;
+  fields: Readonly<Partial<Record<string, string>>>;
   kind: string;
   rest: string;
 }
@@ -38,7 +38,9 @@ export const markerTag = (
 ): string =>
   `[cawco:${kind}${Object.entries(fields)
     .flatMap(([key, value]) =>
-      value === undefined ? [] : [` ${key}=${encodeURIComponent(String(value))}`]
+      value === undefined
+        ? []
+        : [` ${key}=${encodeURIComponent(String(value))}`]
     )
     .join("")}]\n`;
 
@@ -120,8 +122,11 @@ const handoffEnd = (text: string): number => {
   ).trimEnd();
   const lineAt = text.length - tag.rest.length;
   const end = tag.rest.startsWith(line) ? lineAt + line.length : lineAt;
-  return end + (/^\s*/.exec(text.slice(end))?.[0].length ?? 0);
+  return end + (LEADING_SPACE.exec(text.slice(end))?.[0].length ?? 0);
 };
+
+/** The whitespace a text opens with. */
+const LEADING_SPACE = /^\s*/;
 
 /** `text` with `line` right after any hand-off marker it opens with. */
 const afterMarker = (text: string, line: string): string => {

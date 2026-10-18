@@ -843,16 +843,6 @@ export interface DbShape {
     owedAgain: (reason: string) => boolean
   ) => FoldedSession[];
   /**
-   * Runs the one-time migration `name` over every stored send, in one
-   * transaction, unless it has run (`data_migrations`): `rewrite` answers a
-   * send's message as it is to be kept, or null to leave it as it is. How
-   * many sends it changed; null when it had run already.
-   */
-  readonly migrateSendsOnce: (
-    name: string,
-    rewrite: (body: NeutralUserMessage) => NeutralUserMessage | null
-  ) => number | null;
-  /**
    * Folds a duplicate project into the one it duplicates (project-merge.ts),
    * in one transaction: its checkout and workspace places join `keepId`'s
    * (the same folder once), and every row that names it becomes `keepId`'s
@@ -1218,6 +1208,16 @@ export interface DbShape {
   ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
+  /**
+   * Runs the one-time migration `name` over every stored send, in one
+   * transaction, unless it has run (`data_migrations`): `rewrite` answers a
+   * send's message as it is to be kept, or null to leave it as it is. How
+   * many sends it changed; null when it had run already.
+   */
+  readonly migrateSendsOnce: (
+    name: string,
+    rewrite: (body: NeutralUserMessage) => NeutralUserMessage | null
+  ) => number | null;
   /** The move a session started from, as {@link noteMovedHere} kept it; null when none. */
   readonly movedHereOf: (id: string) => MovedHere | null;
   /** One project move's record (moves.ts). */

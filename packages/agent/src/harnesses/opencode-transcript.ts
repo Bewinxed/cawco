@@ -392,8 +392,7 @@ export const compactionFailure = (error: unknown): CompactionFailure => {
   };
   return typeof structured.message === "string"
     ? {
-        kind:
-          typeof structured.type === "string" ? structured.type : "unknown",
+        kind: typeof structured.type === "string" ? structured.type : "unknown",
         message: structured.message,
         ...(typeof structured.status === "number"
           ? { status: structured.status }

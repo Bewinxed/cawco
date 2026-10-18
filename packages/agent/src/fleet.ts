@@ -314,7 +314,7 @@ const failedOf = (problem: Problem): FleetItemState => ({
 /** The file, or why it could not be read. Missing is a machine with nothing in it. */
 const readClaudeJson = async (
   path = CLAUDE_JSON
-): Promise<({ ok: true; root: ClaudeJson }) | ({ ok: false } & Problem)> => {
+): Promise<{ ok: true; root: ClaudeJson } | ({ ok: false } & Problem)> => {
   const file = Bun.file(path);
   if (!(await file.exists())) {
     return { ok: true, root: {} };
@@ -1803,7 +1803,11 @@ const syncPlacedSkills = async (
       report[key] = { state: "removed" };
     } catch (error) {
       placed[key] = record;
-      report[key] = { state: "failed", cause: "unwritable", detail: said(error) };
+      report[key] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: said(error),
+      };
     }
   }
   return placed;
@@ -2143,10 +2147,10 @@ const syncMemoryDocs = async (
         written[path] = managed[path];
       }
       report[path] = {
-      state: "failed",
-      cause: "unwritable",
-      detail: tail(said(error)),
-    };
+        state: "failed",
+        cause: "unwritable",
+        detail: tail(said(error)),
+      };
     }
   }
   if (removed) {
@@ -2316,7 +2320,11 @@ const syncPlacedMemory = async (
       report[key] = { state: "removed" };
     } catch (error) {
       placed[key] = record;
-      report[key] = { state: "failed", cause: "unwritable", detail: said(error) };
+      report[key] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: said(error),
+      };
     }
   }
   return placed;
@@ -2556,7 +2564,11 @@ const syncHooks = async (
     );
     if (parseError) {
       keep(hook.id);
-      report[hook.id] = { state: "failed", cause: "unknown", detail: parseError };
+      report[hook.id] = {
+        state: "failed",
+        cause: "unknown",
+        detail: parseError,
+      };
       continue;
     }
     if (plan === "drift") {
@@ -2575,10 +2587,10 @@ const syncHooks = async (
       } catch (error) {
         keep(hook.id);
         report[hook.id] = {
-      state: "failed",
-      cause: "unwritable",
-      detail: tail(said(error)),
-    };
+          state: "failed",
+          cause: "unwritable",
+          detail: tail(said(error)),
+        };
         continue;
       }
     }
@@ -2905,7 +2917,11 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     // edit is told apart from the record alone.
     const drift = skillDrift(heldNow[name], recorded, recorded);
     if (heldNow[name] === undefined) {
-      skills[name] = { state: "failed", cause: "absent", detail: "not on disk" };
+      skills[name] = {
+        state: "failed",
+        cause: "absent",
+        detail: "not on disk",
+      };
     } else if (drift) {
       skills[name] = { state: "failed", cause: "drifted", detail: drift };
     } else {
