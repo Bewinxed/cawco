@@ -2796,6 +2796,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/FormName`.
+    public enum FormName: OpenEnum {
+        case custom
+        case desk
+        case phone
+        case tablet
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "custom": self = .custom
+            case "desk": self = .desk
+            case "phone": self = .phone
+            case "tablet": self = .tablet
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .custom: "custom"
+            case .desk: "desk"
+            case .phone: "phone"
+            case .tablet: "tablet"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.custom, .desk, .phone, .tablet]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/FsEntryKind`.
     public enum FsEntryKind: OpenEnum {
         case dir
@@ -4301,6 +4345,91 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.codeInspector, .react, .svelte, .vue]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/PageAnchorInteraction`.
+    public enum PageAnchorInteraction: OpenEnum {
+        case focus
+        case hover
+        case pressed
+        case rest
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "focus": self = .focus
+            case "hover": self = .hover
+            case "pressed": self = .pressed
+            case "rest": self = .rest
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .focus: "focus"
+            case .hover: "hover"
+            case .pressed: "pressed"
+            case .rest: "rest"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.focus, .hover, .pressed, .rest]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/PageAnchorScheme`.
+    public enum PageAnchorScheme: OpenEnum {
+        case dark
+        case light
+        case page
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "dark": self = .dark
+            case "light": self = .light
+            case "page": self = .page
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .dark: "dark"
+            case .light: "light"
+            case .page: "page"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.dark, .light, .page]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

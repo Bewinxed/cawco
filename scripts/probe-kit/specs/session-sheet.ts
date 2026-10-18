@@ -719,7 +719,7 @@ const run = async (kit: Kit) => {
     ).json()) as { port?: number };
     const page = await kit.page("desk");
     await page.goto(
-      `http://127.0.0.1:${port ?? 0}/@cawco/sheet?file=${encodeURIComponent(STORY)}`,
+      `http://127.0.0.1:${port ?? 0}/@cawco/canvas?file=${encodeURIComponent(STORY)}`,
       { waitUntil: "domcontentloaded" }
     );
     const heading = () =>

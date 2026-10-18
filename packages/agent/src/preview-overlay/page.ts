@@ -839,6 +839,7 @@ const STORY_PLACE = /^(.*):(\d+):(\d+)$/;
  * components; elsewhere, a stamped component root names its call site. Null
  * outside a sheet's frame.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the chain from either framework's marks, then the frame's story and state, in one walk
 function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
   const frame = el.closest<HTMLElement>("[data-cawco-story]");
   const story = frame?.dataset.cawcoStory;
@@ -881,11 +882,36 @@ function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
     line: Number(place[2]),
     column: Number(place[3]),
   });
-  const file =
-    el.ownerDocument.querySelector<HTMLElement>("#cawco-sheet")?.dataset
-      .cawcoChoice ?? place[1];
-  return { chain, sheet: { file, story } };
+  const file = frame.dataset.cawcoFile ?? place[1];
+  const interaction = frame.dataset.cawcoInteraction;
+  const scheme = frame.dataset.cawcoScheme;
+  const width = Number(frame.dataset.cawcoWidth);
+  return {
+    chain,
+    sheet: {
+      file,
+      story,
+      ...(interaction && scheme
+        ? {
+            state: {
+              interaction: FRAME_INTERACTIONS.includes(interaction)
+                ? (interaction as "rest")
+                : "rest",
+              scheme: scheme === "light" || scheme === "dark" ? scheme : "page",
+              // A frame at its story's own form is as wide as its body laid out (unscaled by the canvas's zoom).
+              width: Number.isFinite(width)
+                ? width
+                : (frame.querySelector<HTMLElement>(".cawco-frame-body")
+                    ?.offsetWidth ??
+                    0) ||
+                  null,
+            },
+          }
+        : {}),
+    },
+  };
 }
+const FRAME_INTERACTIONS = ["rest", "hover", "focus", "pressed"];
 
 function reactSource(
   el: Element

@@ -34104,12 +34104,20 @@
               "null",
               "string"
             ]
+          },
+          "title": {
+            "description": "CSF's `title`, the section's path (`Settings/Pairing`); null when it has none.",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "args",
           "code",
-          "component"
+          "component",
+          "title"
         ]
       },
       "Story": {
@@ -34133,11 +34141,33 @@
               "string"
             ]
           },
+          "form": {
+            "description": "Its form, from `parameters.viewport` (the story's, else the meta's); null when it names none.",
+            "$ref": "#/components/schemas/Form"
+          },
+          "from": {
+            "description": "The story its flow move starts from (`from`), when it declares one with a `play`.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "label": {
+            "description": "Its doc comment in plain words, the frame's label; null when it has none (`unnamed`).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "line": {
             "type": "number"
           },
           "name": {
             "type": "string"
+          },
+          "play": {
+            "description": "Whether it has a `play`: with `from`, a flow move.",
+            "type": "boolean"
           },
           "readOnly": {
             "description": "Why the inspector can't write this story's args, when it can't; null\nwhen it can. `read` false: the story file builds it with code the\nreader can't follow (an imported helper, a computed value), so\n`component` and `args` say nothing of it, though it mounts all the same;\n`reason` says \"args not readable here\" and why. `read` true: its\ncomponent and args were read through a spread or a local helper,\nshared code that is edited in the file.",
@@ -34161,8 +34191,27 @@
           "code",
           "column",
           "component",
+          "from",
+          "label",
           "line",
-          "name"
+          "name",
+          "play"
+        ]
+      },
+      "Form": {
+        "description": "A story's form: a preset's name and width, or a width of its own (`custom`).",
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/FormName"
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "width"
         ]
       },
       "SheetStageState": {
@@ -34590,9 +34639,32 @@
         "description": "What a sheet loads, read from the stage's Vite module graph from its story\nfile: the project's modules (its source and any package Vite serves file\nby file) and Vite's prebundled deps apart, which the browser keeps by\ntheir `?v=` address. `heaviest` is the story file's imports that bring\nthe most project code, each with all it brings that no earlier import\ndid: the import to cut. Vite transforms a module when a page asks for it,\nso a sheet has a weight once a view has loaded it.",
         "type": "object",
         "properties": {
+          "budget": {
+            "description": "The budget a component's states file keeps (the component-canvas skill's); a screen is judged against the page's ceiling instead.",
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "number"
+              },
+              "modules": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "bytes",
+              "modules"
+            ]
+          },
           "bytes": {
             "description": "Project code: its modules and their transformed bytes.",
             "type": "number"
+          },
+          "cut": {
+            "description": "Where to cut, one sentence: the import, or the seam in the component when it is the component's own; null under budget.",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "deps": {
             "type": "object",
@@ -34620,20 +34692,50 @@
           },
           "modules": {
             "type": "number"
+          },
+          "over": {
+            "description": "Past the component budget.",
+            "type": "boolean"
           }
         },
         "required": [
+          "budget",
           "bytes",
+          "cut",
           "deps",
           "heaviest",
           "measuredAt",
-          "modules"
+          "modules",
+          "over"
         ]
       },
       "SheetImport": {
         "description": "One of a story file's imports, as its sheet's weight names it.",
         "type": "object",
         "properties": {
+          "brings": {
+            "description": "The modules it imports directly that bring the most, each with all it brings: where its weight enters.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "bytes": {
+                  "type": "number"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "modules": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "bytes",
+                "file",
+                "modules"
+              ]
+            }
+          },
           "bytes": {
             "type": "number"
           },
@@ -34657,6 +34759,7 @@
           }
         },
         "required": [
+          "brings",
           "bytes",
           "file",
           "modules",
@@ -35035,11 +35138,33 @@
             "type": "string"
           },
           "sheet": {
-            "description": "On a sheet: its story file (from the toolchain root) and the story whose frame holds the element.",
+            "description": "On a component canvas: its states file (from the toolchain root), the\nstory whose frame holds the element, and the frame's state: the\ninteraction it is forced into, its scheme and its width (px; null when it\nfits its content).",
             "type": "object",
             "properties": {
               "file": {
                 "type": "string"
+              },
+              "state": {
+                "type": "object",
+                "properties": {
+                  "interaction": {
+                    "$ref": "#/components/schemas/PageAnchorInteraction"
+                  },
+                  "scheme": {
+                    "$ref": "#/components/schemas/PageAnchorScheme"
+                  },
+                  "width": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "interaction",
+                  "scheme",
+                  "width"
+                ]
               },
               "story": {
                 "type": "string"
@@ -54464,6 +54589,15 @@
           "link"
         ]
       },
+      "FormName": {
+        "type": "string",
+        "enum": [
+          "custom",
+          "desk",
+          "phone",
+          "tablet"
+        ]
+      },
       "FsEntryKind": {
         "type": "string",
         "enum": [
@@ -54578,6 +54712,23 @@
           "high",
           "low",
           "medium"
+        ]
+      },
+      "PageAnchorInteraction": {
+        "type": "string",
+        "enum": [
+          "focus",
+          "hover",
+          "pressed",
+          "rest"
+        ]
+      },
+      "PageAnchorScheme": {
+        "type": "string",
+        "enum": [
+          "dark",
+          "light",
+          "page"
         ]
       },
       "PageAnchorFramework": {

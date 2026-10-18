@@ -58,9 +58,9 @@ import { type GraphPlace, PLACES_KEY } from "@cawco/core/decisions";
 import type { InkGroup } from "@cawco/core/ink";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
 import {
+  CANVAS_PATH,
   type Found,
   type ServeSpec,
-  SHEET_PATH,
   type SheetRead,
   type SheetWeight,
   type SheetWrite,
@@ -639,9 +639,9 @@ const errorSection = (error: StageError): string => {
   ].join("\n");
 };
 
-/** The sheet's page on its stage, its story file in the query with its slashes kept. */
+/** The component canvas's page on its stage, its states file in the query with its slashes kept. */
 const sheetPath = (file: string): string =>
-  `${SHEET_PATH}?file=${encodeURIComponent(file).replaceAll("%2F", "/")}`;
+  `${CANVAS_PATH}?file=${encodeURIComponent(file).replaceAll("%2F", "/")}`;
 
 /** What `artifact_delete` and the panel's Remove answer: what the session's panel shows now, or null for nothing. */
 export interface Removed {

@@ -151,13 +151,13 @@ const stageChecks = async (kit: Kit) => {
     /** The sheet of `file` loaded and mounted, then its weight from the stage. */
     const weighed = async (file: string): Promise<SheetWeight | null> => {
       await page.goto(
-        `${base}/@cawco/sheet?file=${encodeURIComponent(`${SCRATCH}/${file}`)}`,
+        `${base}/@cawco/canvas?file=${encodeURIComponent(`${SCRATCH}/${file}`)}`,
         { waitUntil: "load" }
       );
       await page.waitForFunction(
         () =>
-          ((window as unknown as { __cawcoSheet?: { renders: number } })
-            .__cawcoSheet?.renders ?? 0) > 0
+          ((window as unknown as { __cawcoCanvas?: { reports: number } })
+            .__cawcoCanvas?.reports ?? 0) > 0
       );
       const answer = (await (
         await fetch(
@@ -237,8 +237,8 @@ const stageChecks = async (kit: Kit) => {
     kit.check(
       "4: goto logs that it does nothing and the frame stays on the sheet; the sheet loaded the cawco:kit stubs and no module of Kit's client runtime",
       logged.includes(GOTO_SAID) &&
-        loaded.path === "/@cawco/sheet" &&
-        loaded.page === "/@cawco/sheet" &&
+        loaded.path === "/@cawco/canvas" &&
+        loaded.page === "/@cawco/canvas" &&
         stubs.length === 2 &&
         kitClient.length === 0,
       `console: ${logged.filter((line) => line.startsWith("[cawco]")).join(" | ") || "nothing"}; at ${loaded.path}, page.url ${loaded.page}; stubs ${stubs.map((url) => url.slice(url.indexOf("cawco:kit/"))).join(", ")}; kit client modules ${kitClient.length} of ${loaded.resources.length}; ${said(goes)}`

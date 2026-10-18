@@ -10,12 +10,14 @@ import {
   type ShellShortcut,
   shellShortcutNamed,
 } from "@cawco/core/shell-shortcuts";
-import type {
-  ComponentDoc,
-  PropKind,
-  PropMeta,
-  SheetOnPage,
-  Story,
+import {
+  type ComponentDoc,
+  FORMS,
+  type Form,
+  type PropKind,
+  type PropMeta,
+  type SheetOnPage,
+  type Story,
 } from "@cawco/core/stage";
 
 const ERROR_MAX = 300;
@@ -273,6 +275,10 @@ function storyOf(value: unknown): Story | null {
     code: codeOf(raw.code),
     component: text(raw.component, SHEET_BOUNDS.text),
     readOnly: readOnlyOf(raw.readOnly),
+    label: text(raw.label, SHEET_BOUNDS.text),
+    form: formOf(raw.form),
+    from: text(raw.from, SHEET_BOUNDS.name),
+    play: raw.play === true,
   };
 }
 
@@ -281,6 +287,18 @@ function readOnlyOf(value: unknown): Story["readOnly"] {
   const raw = record(value);
   const reason = text(raw?.reason, SHEET_BOUNDS.text);
   return raw && reason ? { read: raw.read === true, reason } : null;
+}
+
+/** A story's form as its page says it: a preset's name or `custom`, and a width. */
+function formOf(value: unknown): Form | null {
+  const raw = record(value);
+  const width = finite(raw?.width);
+  const name = raw?.name;
+  return width !== null &&
+    width > 0 &&
+    (name === "custom" || (typeof name === "string" && name in FORMS))
+    ? { name: name as Form["name"], width }
+    : null;
 }
 
 /** A sheet as its page says it, checked and bounded; null when it is no sheet. */
@@ -300,6 +318,7 @@ export function previewSheet(value: unknown): SheetOnPage | null {
       args: argsOf(meta.args),
       code: codeOf(meta.code),
       component: text(meta.component, SHEET_BOUNDS.text),
+      title: text(meta.title, SHEET_BOUNDS.text),
     },
     components: list(raw.components, SHEET_BOUNDS.components).flatMap(
       (one) => componentOf(one) ?? []

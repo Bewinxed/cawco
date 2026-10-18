@@ -17,7 +17,13 @@
  * project's own formatter (host.ts `inProjectStyle`).
  */
 import { parse } from "@babel/parser";
-import type { Story, StoryOp } from "@cawco/core/stage";
+import {
+  FORMS,
+  type Form,
+  type FormName,
+  type Story,
+  type StoryOp,
+} from "@cawco/core/stage";
 
 /** A node of Babel's syntax tree, as far as a story file is read. */
 interface Node {
@@ -36,6 +42,7 @@ export interface StaticSheet {
     args: Record<string, unknown>;
     code: Record<string, string>;
     component: string | null;
+    title: string | null;
   };
   /** Each story, its `component` its local name when it names its own. */
   stories: Story[];
@@ -624,11 +631,122 @@ function importsOf(body: Node[]): Map<string, string> {
   return found;
 }
 
+/** A comment's words: a JSDoc block's lines without their stars, a line comment's text; blank lines and tags (`@param`) left out. */
+const commentWords = (comment: Node): string =>
+  String(comment.value ?? "")
+    .split("\n")
+    .map((line) => line.replace(COMMENT_STAR, "").trim())
+    .filter((line) => line && !line.startsWith("@"))
+    .join(" ")
+    .trim();
+const COMMENT_STAR = /^\s*\*+\s?/;
+
+/**
+ * A story's label: its doc comment in plain words, the comments right
+ * above its statement (a `/** … *\/` block, or a run of `//` lines), the
+ * last block when several stand apart. Null when it has none.
+ */
+function labelOf(text: string, statement: Node): string | null {
+  const comments = (statement.leadingComments as Node[] | undefined) ?? [];
+  // The comments that touch the statement: a blank line ends the run.
+  const run: Node[] = [];
+  let next = statement.start ?? 0;
+  for (const comment of comments.toReversed()) {
+    const between = text.slice(comment.end ?? 0, next);
+    if (BLANK_BETWEEN.test(between)) {
+      break;
+    }
+    run.unshift(comment);
+    next = comment.start ?? 0;
+  }
+  const words = run.map(commentWords).filter(Boolean).join(" ");
+  return words ? words.slice(0, LABEL_LIMIT) : null;
+}
+const BLANK_BETWEEN = /\n[ \t]*\n/;
+/** A label's longest. Ours: a frame's caption, one line. */
+const LABEL_LIMIT = 160;
+
+/**
+ * A story's form from `parameters.viewport`: a width (`390`), a preset's
+ * name (`"phone"`, `"tablet"`, `"desk"`), `{ width }`, or Storybook's
+ * `{ defaultViewport }` with its own preset names. Null when it names none.
+ */
+function formOf(parameters: Node | null): Form | null {
+  const viewport = bare(
+    child(propertyOf(parameters, "viewport") ?? { type: "" }, "value")
+  );
+  const value = literal(viewport)?.value;
+  const width = (n: unknown): Form | null =>
+    typeof n === "number" && n > 0 ? presetOf(n) : null;
+  if (typeof value === "number") {
+    return width(value);
+  }
+  if (typeof value === "string") {
+    return namedForm(value);
+  }
+  if (value && typeof value === "object") {
+    const one = value as { defaultViewport?: unknown; width?: unknown };
+    if (typeof one.width === "number") {
+      return width(one.width);
+    }
+    if (typeof one.defaultViewport === "string") {
+      return namedForm(one.defaultViewport);
+    }
+  }
+  return null;
+}
+
+/** Storybook's own viewport preset names (`MINIMAL_VIEWPORTS`), as the canvas's forms. */
+const STORYBOOK_VIEWPORTS: Record<string, FormName> = {
+  mobile1: "phone",
+  mobile2: "phone",
+  tablet: "tablet",
+  desktop: "desk",
+};
+
+const namedForm = (name: string): Form | null => {
+  const preset = name in FORMS ? (name as FormName) : STORYBOOK_VIEWPORTS[name];
+  return preset ? { name: preset, width: FORMS[preset] } : null;
+};
+
+/** A width as its preset when it is one, else its own. */
+const presetOf = (width: number): Form => {
+  const preset = (Object.keys(FORMS) as FormName[]).find(
+    (name) => FORMS[name] === width
+  );
+  return { name: preset ?? "custom", width };
+};
+
+/** `Story.play = …` and `Story.from = …` assignments at the top of the file, by story. */
+function assignedOf(body: Node[]): Map<string, Map<string, Node>> {
+  const found = new Map<string, Map<string, Node>>();
+  for (const node of body) {
+    const expression =
+      node.type === "ExpressionStatement" ? child(node, "expression") : null;
+    const target =
+      expression?.type === "AssignmentExpression"
+        ? child(expression, "left")
+        : null;
+    if (target?.type !== "MemberExpression" || target.computed) {
+      continue;
+    }
+    const story = identifier(child(target, "object"));
+    const field = identifier(child(target, "property"));
+    if (story && field) {
+      const fields = found.get(story) ?? new Map<string, Node>();
+      fields.set(field, child(expression as Node, "right") as Node);
+      found.set(story, fields);
+    }
+  }
+  return found;
+}
+
 /**
  * What story file `file` (absolute) says: each story by its export's name
- * and 1-based place, with its args; the meta's args and component. The
- * default export is the meta, a type is no story, and Storybook's
- * `__namedExportsOrder` is no story either.
+ * and 1-based place, with its args, its label (its doc comment), its form,
+ * and its flow move (`from` and `play`); the meta's args, component and
+ * title. The default export is the meta, a type is no story, and
+ * Storybook's `__namedExportsOrder` is no story either.
  */
 export function readStoryFile(file: string, text: string): StaticSheet {
   const body = parsed(file, text);
@@ -640,6 +758,34 @@ export function readStoryFile(file: string, text: string): StaticSheet {
     reading,
     metaArgs ? { node: metaArgs, env: NO_ENV } : null
   );
+  const assigned = assignedOf(body);
+  const metaParameters = bare(
+    child(propertyOf(meta, "parameters") ?? { type: "" }, "value")
+  );
+  const title = literal(
+    child(propertyOf(meta, "title") ?? { type: "" }, "value")
+  )?.value;
+  /** A story's canvas fields: its label (doc comment), form, and flow move. */
+  const canvasOf = (
+    one: Export
+  ): Pick<Story, "form" | "from" | "label" | "play"> => {
+    const later = assigned.get(one.name);
+    const from = literal(
+      later?.get("from") ??
+        child(propertyOf(one.object, "from") ?? { type: "" }, "value")
+    )?.value;
+    return {
+      label: labelOf(text, one.statement),
+      form:
+        formOf(
+          bare(
+            child(propertyOf(one.object, "parameters") ?? { type: "" }, "value")
+          )
+        ) ?? formOf(metaParameters),
+      from: typeof from === "string" ? from : null,
+      play: Boolean(propertyOf(one.object, "play") || later?.has("play")),
+    };
+  };
   return {
     imports: reading.imports,
     meta: {
@@ -654,12 +800,14 @@ export function readStoryFile(file: string, text: string): StaticSheet {
       component: identifier(
         child(propertyOf(meta, "component") ?? { type: "" }, "value")
       ),
+      title: typeof title === "string" ? title : null,
     },
     stories: exportsOf(body).map((one): Story => ({
       name: one.name,
       line: one.place.loc?.start.line ?? 1,
       column: (one.place.loc?.start.column ?? 0) + 1,
       ...storyRead(reading, one),
+      ...canvasOf(one),
     })),
   };
 }

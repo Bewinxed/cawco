@@ -6,5 +6,5 @@
     "jsx": "react-jsx",
     "types": ["bun"]
   },
-  "include": ["src/canvas-host", "src/preview-overlay"]
+  "include": ["src/canvas-host", "src/preview-overlay", "src/stage-host/canvas"]
 }

@@ -74,6 +74,7 @@ typeOverrides:
     FleetMcpServerState: OpenEnums.FleetMcpServerState
     FleetScope: OpenEnums.FleetScope
     FolderEntryKind: OpenEnums.FolderEntryKind
+    FormName: OpenEnums.FormName
     FsEntryKind: OpenEnums.FsEntryKind
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
     GetApiInstances200Kind: OpenEnums.GetApiInstances200Kind
@@ -107,6 +108,8 @@ typeOverrides:
     NeutralTaskPriority: OpenEnums.NeutralTaskPriority
     OnCap: OpenEnums.OnCap
     PageAnchorFramework: OpenEnums.PageAnchorFramework
+    PageAnchorInteraction: OpenEnums.PageAnchorInteraction
+    PageAnchorScheme: OpenEnums.PageAnchorScheme
     PermissionMode: OpenEnums.PermissionMode
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior

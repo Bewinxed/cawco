@@ -25,6 +25,10 @@ const STAT_TILE: SheetOnPage = {
       code: {},
       component: null,
       readOnly: null,
+      label: "Today's spend, at rest.",
+      form: null,
+      from: null,
+      play: false,
     },
     {
       name: "Live",
@@ -34,12 +38,17 @@ const STAT_TILE: SheetOnPage = {
       code: {},
       component: null,
       readOnly: null,
+      label: "Sessions running now, in the live tone.",
+      form: null,
+      from: null,
+      play: false,
     },
   ],
   meta: {
     args: { label: "Spend today", value: "4.20", unit: "USD" },
     code: {},
     component: "src/lib/cawco/StatTile.svelte",
+    title: "Kit/Stat tile",
   },
   components: [
     {

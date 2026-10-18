@@ -114,8 +114,21 @@ export interface PageAnchor {
   /** The frames it stands in, outermost first, each by its selector in its parent's document; none at the top. */
   frames?: string[];
   selector: string;
-  /** On a sheet: its story file (from the toolchain root) and the story whose frame holds the element. */
-  sheet?: { file: string; story: string };
+  /**
+   * On a component canvas: its states file (from the toolchain root), the
+   * story whose frame holds the element, and the frame's state: the
+   * interaction it is forced into, its scheme and its width (px; null when it
+   * fits its content).
+   */
+  sheet?: {
+    file: string;
+    state?: {
+      interaction: "rest" | "hover" | "focus" | "pressed";
+      scheme: "light" | "dark" | "page";
+      width: number | null;
+    };
+    story: string;
+  };
   source: PreviewElement["source"];
   /** The element's text, at most {@link COMMENT_LIMITS.anchorText} characters. */
   text?: string;
@@ -631,6 +644,11 @@ const standsOn = (pin: Pin, url: string): string[] => {
         ]
       : []),
     ...(chain ? [`- Inside: ${chain}`] : []),
+    ...(anchor.sheet?.state
+      ? [
+          `- State: ${anchor.sheet.story} · ${anchor.sheet.state.interaction} · ${anchor.sheet.state.scheme} · ${anchor.sheet.state.width === null ? "fit" : `${anchor.sheet.state.width}px`}`,
+        ]
+      : []),
     `- Page: ${url}`,
     ...(anchor.text?.trim()
       ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]
