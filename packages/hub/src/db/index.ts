@@ -94,7 +94,6 @@ import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
 import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
-import { DEFAULT_DENIED_TOOLS } from "../fleet-choices";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
 import type { MoveState } from "../moves";
