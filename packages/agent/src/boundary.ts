@@ -783,7 +783,12 @@ const watchHost = async (
           );
         }
       },
-      exit: () => {
+      exit: (exitCode, signal) => {
+        // Whatever ended it, the agent's own close or the host's own exit
+        // (its sandbox ended, an OOM kill): the one record of the latter.
+        console.info(
+          `[workspace] ${id}: its boundary ${held.pid} (${procId}) exited, ${signal ? `killed by ${signal}` : `status ${exitCode ?? "unknown"}`}`
+        );
         if (watchedHosts.get(procId) === client) {
           watchedHosts.delete(procId);
         }
@@ -2164,18 +2169,32 @@ const stopUnvouched = async (
   const kept = new Set(
     (await readRetiring(id)).map((old) => boundaryProcId(id, old.gen))
   );
+  const recorded =
+    held && (await keepers.holding(boundaryProcId(id, held.gen)));
   if (held) {
     await stopBoundary(id, held);
     await cleanGeneration(id, held);
   }
-  await Promise.all(
-    (await keepers.held())
-      .filter(
-        (proc) =>
-          proc.alive && isBoundaryOf(proc.procId, id) && !kept.has(proc.procId)
-      )
-      .map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
+  const unrecorded = (await keepers.held()).filter(
+    (proc) =>
+      proc.alive && isBoundaryOf(proc.procId, id) && !kept.has(proc.procId)
   );
+  await Promise.all(
+    unrecorded.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
+  );
+  const ended = [
+    ...(recorded
+      ? [
+          `${recorded.procId} (pid ${recorded.pid}, its record naming pid ${held?.pid})`,
+        ]
+      : []),
+    ...unrecorded.map((proc) => `${proc.procId} (pid ${proc.pid}, no record)`),
+  ];
+  if (ended.length > 0) {
+    console.info(
+      `[workspace] ${id}: before a boundary starts, what it cannot vouch for is killed: ${ended.join(", ")}`
+    );
+  }
   if (process.platform === "darwin" && kept.size === 0) {
     await killMarked(id);
   }

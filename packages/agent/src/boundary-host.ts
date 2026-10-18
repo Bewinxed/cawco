@@ -871,6 +871,14 @@ for (;;) {
   const lost = current?.detached;
   SandboxManager.cleanupAfterCommand();
   if (stopping || !lost) {
+    if (!stopping) {
+      // On stdout, as a line, as below: a sandbox that ends unasked (its
+      // runner exited, its outer bwrap killed) ends this boundary, and the
+      // agent's log is where that is said.
+      console.log(
+        `cawco: the sandbox ${current?.inner ?? "starting"} ended with status ${status}, so the workspace's boundary closes`
+      );
+    }
     await finish({ status });
   }
   // On stdout, as a line: the keeper drains stderr unread, and the agent
