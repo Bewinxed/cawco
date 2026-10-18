@@ -332,7 +332,7 @@
     }
     /* Under the drawer's line (DRAWER_QUERY), the top of the screen,
        over the bar: the same place on every phone screen. */
-    @media (max-width: 899px) {
+    @media (width < 900px) {
       order: -1;
     }
     @media (prefers-reduced-motion: no-preference) {

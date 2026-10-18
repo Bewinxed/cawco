@@ -9,8 +9,9 @@
  *    (Firefox, its headless window 2px per css px wide at 2 dppx, the one
  *    engine here that lays a page out at a fractional width), on the
  *    delegate-tray bench: the rail or the burger, the composer's width, the
- *    transcript's rail and its inset, and the stat tile's figure (the real
- *    StatTile, mounted there: no bench draws one without a hub) each read
+ *    transcript's rail and its inset, the stat tile's figure (the real
+ *    StatTile, mounted there: no bench draws one without a hub) and the hub
+ *    band's place (its slot's `order`, over the bar under the line) each read
  *    the side `DRAWER_QUERY` names, against the drawer's own reading
  *    (390px) and the desk's (1440px).
  * 2. At the same widths, every `@media` rule in the built dashboard's CSS that
@@ -121,6 +122,7 @@ const readParts = (page: Page): Promise<Reading> =>
         "transcript --x-rail": css(tr, "--x-rail"),
         "transcript padding-inline-start": css(tr, "padding-inline-start"),
         "stat tile value type": statType,
+        "hub band order": css(document.querySelector(".band-slot"), "order"),
       },
     };
   }, DRAWER_QUERY);
@@ -222,9 +224,10 @@ const mountStatTile = (page: Page): Promise<void> =>
     const url = "/src/lib/cawco/StatTile.svelte";
     const source = await (await fetch(url)).text();
     // The module's own import of Svelte's client, `"/node_modules/.vite/deps/svelte_internal_client.js?v=…"`.
-    const at = source.indexOf("/node_modules/.vite/deps/svelte_internal_client.js");
-    const internal =
-      at === -1 ? "" : source.slice(at, source.indexOf('"', at));
+    const at = source.indexOf(
+      "/node_modules/.vite/deps/svelte_internal_client.js"
+    );
+    const internal = at === -1 ? "" : source.slice(at, source.indexOf('"', at));
     if (!internal) {
       throw new Error("StatTile's module names no svelte client");
     }
@@ -474,7 +477,9 @@ async function onTheLine(kit: Kit, base: string): Promise<void> {
     await page.close();
   }
   const names = Object.keys(refs.drawer.parts);
-  const moved = names.filter((n) => refs.drawer.parts[n] !== refs.desk.parts[n]);
+  const moved = names.filter(
+    (n) => refs.drawer.parts[n] !== refs.desk.parts[n]
+  );
   kit.check(
     "the parts the line moves read differently on its two sides",
     moved.length === names.length,
