@@ -653,7 +653,7 @@ public enum Size {
     public static let focusRingInset: Double = -2
     public static let materialBlur: Double = 20
     public static let scrimBlur: Double = 2
-    /// The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 at 900px wide and under (tx-x-rail-narrow).
+    /// The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 under 900px wide (tx-x-rail-narrow).
     public static let txXRail: Double = 7
     public static let txXRailNarrow: Double = 0
     /// The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell.

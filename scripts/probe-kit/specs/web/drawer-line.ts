@@ -9,12 +9,13 @@
  *    (Firefox, its headless window 2px per css px wide at 2 dppx, the one
  *    engine here that lays a page out at a fractional width), on the
  *    delegate-tray bench: the rail or the burger, the composer's width, the
- *    transcript's rail and its inset each read the side `DRAWER_QUERY`
- *    names, against the drawer's own reading (390px) and the desk's (1440px).
+ *    transcript's rail and its inset, and the stat tile's figure (the real
+ *    StatTile, mounted there: no bench draws one without a hub) each read
+ *    the side `DRAWER_QUERY` names, against the drawer's own reading
+ *    (390px) and the desk's (1440px).
  * 2. At the same widths, every `@media` rule in the built dashboard's CSS that
  *    names the drawer's line (899, 900 or 901px) matches as `DRAWER_QUERY`
- *    does, its drawer side or its desk side: the stat tiles' rule among them,
- *    which no bench without a hub draws.
+ *    does, its drawer side or its desk side.
  * 3. With `PROBE_DRAWER_BEFORE=<file>`: every element on the benches, at 390,
  *    640, 1024 and 1440px, computes the styles and box it did in that file
  *    (this spec's `away.json` from another checkout): nothing away from the
@@ -50,7 +51,6 @@ const DRAWER_QUERY = (() => {
 })();
 
 const BENCH = "/motion/delegate-tray";
-const READY = 'form[data-slot="cin"]';
 const AWAY_ROUTES = [
   "/session",
   "/motion/recall",
@@ -90,6 +90,16 @@ const readParts = (page: Page): Promise<Reading> =>
       ?.closest(".composer");
     const dock = composer?.closest(".dock");
     const tr = document.querySelector(".tr");
+    // The stat tile's figure: its type role by its line height's share of
+    // its size (--type-title 1.25, --type-kpi 1); the size itself is fluid.
+    const figure = document.querySelector("[data-probe-stat] .st-value");
+    let statType = "absent";
+    if (figure) {
+      const s = getComputedStyle(figure);
+      const share =
+        Number.parseFloat(s.lineHeight) / Number.parseFloat(s.fontSize);
+      statType = `line-height ${Math.round(share * 100) / 100}× size`;
+    }
     return {
       drawer: matchMedia(q).matches,
       width: document.documentElement.getBoundingClientRect().width,
@@ -102,6 +112,7 @@ const readParts = (page: Page): Promise<Reading> =>
         "composer dock bottom": css(dock, "bottom"),
         "transcript --x-rail": css(tr, "--x-rail"),
         "transcript padding-inline-start": css(tr, "padding-inline-start"),
+        "stat tile value type": statType,
       },
     };
   }, DRAWER_QUERY);
@@ -194,13 +205,55 @@ function changed(was: string | undefined, now: string): string[] {
   );
 }
 
+/**
+ * The real StatTile mounted on the page (no bench draws one without a hub),
+ * through the dev server's own modules: its scoped styles come with it.
+ */
+const mountStatTile = (page: Page): Promise<void> =>
+  page.evaluate(async () => {
+    const url = "/src/lib/cawco/StatTile.svelte";
+    const source = await (await fetch(url)).text();
+    // The module's own import of Svelte's client, `"/node_modules/.vite/deps/svelte_internal_client.js?v=…"`.
+    const at = source.indexOf("/node_modules/.vite/deps/svelte_internal_client.js");
+    const internal =
+      at === -1 ? "" : source.slice(at, source.indexOf('"', at));
+    if (!internal) {
+      throw new Error("StatTile's module names no svelte client");
+    }
+    const [{ default: StatTile }, { mount }] = await Promise.all([
+      import(/* @vite-ignore */ url),
+      import(
+        /* @vite-ignore */ internal.replace(
+          "svelte_internal_client.js",
+          "svelte.js"
+        )
+      ),
+    ]);
+    const host = document.createElement("div");
+    host.dataset.probeStat = "";
+    document.body.append(host);
+    mount(StatTile, { target: host, props: { label: "Spend", value: 12 } });
+    await new Promise((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(done))
+    );
+  });
+
 async function openBench(page: Page, base: string, route = BENCH) {
   await open(
     page,
     `${base}${route}`,
-    route === BENCH ? READY : "body",
+    route === BENCH
+      ? () =>
+          Boolean(document.querySelector('form[data-slot="cin"]')) &&
+          getComputedStyle(document.documentElement).getPropertyValue(
+            "--type-kpi"
+          ) !== ""
+      : "body",
     120_000
   );
+  if (route === BENCH) {
+    await mountStatTile(page);
+  }
   await settle(page, 400);
 }
 

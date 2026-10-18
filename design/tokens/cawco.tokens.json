@@ -4512,7 +4512,7 @@
     "tx-x-rail": {
       "$type": "dimension",
       "$value": "{space.space-2}",
-      "$description": "The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 at 900px wide and under (tx-x-rail-narrow)."
+      "$description": "The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 under 900px wide (tx-x-rail-narrow)."
     },
     "tx-x-rail-narrow": {
       "$type": "dimension",

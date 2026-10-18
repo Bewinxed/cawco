@@ -810,7 +810,7 @@
     --focus-ring-inset: -2px;
     --material-blur: 20px;
     --scrim-blur: 2px;
-    /* The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 at 900px wide and under (tx-x-rail-narrow). */
+    /* The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 under 900px wide (tx-x-rail-narrow). */
     --tx-x-rail: var(--space-2);
     --tx-x-rail-narrow: 0px;
     /* The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell. */
