@@ -1044,17 +1044,16 @@
            itself raised even while hosting, so the shelf is the wide bar's
            alone (`min-[900px]:` with `not-coarse:` or `not-portrait:`).
            Floating over the phone's tab row it draws nothing. -->
-      <!-- literal: 100% 1px (the hairline's band) -->
+      <!-- literal: 100% 1px (the hairline's band, one layer over the shelf: the base's own shorthand) -->
       <header
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 pl-0 pr-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:min-[900px]:pl-space-7 max-[900px]:pl-(--top-inset-start) max-[900px]:pr-(--top-inset-end) max-[900px]:data-floating:absolute max-[900px]:data-floating:inset-x-0 max-[900px]:data-floating:top-0 max-[900px]:data-floating:bottom-auto max-[900px]:data-floating:z-20 max-[900px]:data-floating:pointer-events-none min-[900px]:not-coarse:data-hosting:border-b-none min-[900px]:not-coarse:data-hosting:bg-surface-shelf min-[900px]:not-coarse:data-hosting:bg-(image:--hosting-line) min-[900px]:not-coarse:data-hosting:bg-bottom min-[900px]:not-coarse:data-hosting:bg-size-(--hosting-line-size) min-[900px]:not-coarse:data-hosting:bg-no-repeat min-[900px]:not-portrait:data-hosting:border-b-none min-[900px]:not-portrait:data-hosting:bg-surface-shelf min-[900px]:not-portrait:data-hosting:bg-(image:--hosting-line) min-[900px]:not-portrait:data-hosting:bg-bottom min-[900px]:not-portrait:data-hosting:bg-size-(--hosting-line-size) min-[900px]:not-portrait:data-hosting:bg-no-repeat max-[900px]:data-floating:border-b-none max-[900px]:data-floating:bg-transparent"
+        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 pl-0 pr-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:min-[900px]:pl-space-7 max-[900px]:pl-(--top-inset-start) max-[900px]:pr-(--top-inset-end) max-[900px]:data-floating:absolute max-[900px]:data-floating:inset-x-0 max-[900px]:data-floating:top-0 max-[900px]:data-floating:bottom-auto max-[900px]:data-floating:z-20 max-[900px]:data-floating:pointer-events-none min-[900px]:not-coarse:data-hosting:border-b-none min-[900px]:not-coarse:data-hosting:background-(--hosting-bg) min-[900px]:not-portrait:data-hosting:border-b-none min-[900px]:not-portrait:data-hosting:background-(--hosting-bg) max-[900px]:data-floating:border-b-none max-[900px]:data-floating:bg-transparent"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"
-        style:--hosting-line={"linear-gradient(var(--border-hairline), var(--border-hairline))"}
-        style:--hosting-line-size="100% 1px"
+        style:--hosting-bg={"linear-gradient(var(--border-hairline), var(--border-hairline)) bottom / 100% 1px no-repeat, var(--surface-shelf)"}
       >
         <!-- The sidebar toggle; at the 900px line the rail returns and it
              retires (`min-[900px]:hidden`). On the phone's row it is a bare

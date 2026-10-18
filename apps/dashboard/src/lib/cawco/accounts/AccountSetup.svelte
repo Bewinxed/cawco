@@ -637,7 +637,7 @@
           >
         </button>
       {/snippet}
-      <li class="not-first:border-t not-first:border-t-border-hairline">
+      <li class="[li+&]:border-t [li+&]:border-t-border-hairline">
         {#if free}
           {@render button({})}
         {:else}

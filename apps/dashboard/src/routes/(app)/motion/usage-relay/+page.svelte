@@ -67,7 +67,7 @@
       ? document.querySelector("[data-bench-strip]")
       : document;
     const hit = scope?.querySelector<HTMLElement>(
-      ".strip-hit:not([data-state='open']):not([aria-expanded='true'])"
+      "[data-strip-hit]:not([data-state='open']):not([aria-expanded='true'])"
     );
     hit?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     hit?.click();
