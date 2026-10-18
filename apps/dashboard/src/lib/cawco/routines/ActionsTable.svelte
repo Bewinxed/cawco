@@ -76,13 +76,15 @@
     action.proposerTitle;
 </script>
 
-<!-- literal: 6rem -->
+<!-- literal: 6rem, 4.5rem, 8rem (RoutineDetail's narrow When and Outcome) -->
 <!-- literal: 0 -->
 <div
   data-slot="actions-ledger"
   style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
   style:--none="0"
+  style:--status-w-narrow="8rem"
   style:--when-w="6rem"
+  style:--when-w-narrow="4.5rem"
 >
   <Table.Root
     data-actions
@@ -103,13 +105,13 @@
         >
         <Table.Head
           data-slot="actions-table-col-status"
-          class="h-c-toolbar-ctl w-c-routine-time-w"
+          class="h-c-toolbar-ctl w-c-routine-time-w @max-routines-ledger-399px/routines-ledger:w-(--status-w-narrow)"
           scope="col"
           variant="caps">Status</Table.Head
         >
         <Table.Head
           data-slot="actions-table-col-when"
-          class="h-c-toolbar-ctl w-(--when-w)"
+          class="h-c-toolbar-ctl w-(--when-w) @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
           scope="col"
           variant="caps">When</Table.Head
         >

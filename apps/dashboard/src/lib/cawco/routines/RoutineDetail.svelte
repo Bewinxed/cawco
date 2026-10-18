@@ -126,7 +126,7 @@
     <div
       data-slot="instruction"
       bind:this={body}
-      class="type-body text-ink-strong data-clamped:max-h-(--clamp-h) data-clamped:overflow-hidden data-clamped:mask-(--fade-mask)"
+      class="type-body text-ink-strong wrap-anywhere data-clamped:max-h-(--clamp-h) data-clamped:overflow-hidden data-clamped:mask-(--fade-mask)"
       data-clamped={whole ? undefined : ""}
       id="instruction-{routine.id}"
       style:--clamp-h="calc(var(--lines) * 1lh)"
