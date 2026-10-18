@@ -202,6 +202,9 @@ const ID_KEYS = new Set([
   "requestId",
   "commandId",
   "clientId",
+  // The tab's presence, in a command's `provenance` (presence.ts
+  // `presenceClientId`, minted per tab in its sessionStorage).
+  "presenceId",
   // A preview pane's own id, in what it reports (`…/artifacts/<id>/shown`).
   "client",
   "nonce",
