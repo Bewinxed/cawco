@@ -1446,129 +1446,139 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     };
   };
 
-  const engine = createWorkflowEngine(deps.dbPath, {
-    run: (runId) => db.getWorkflowRun(runId),
-    async perform(runId, seq, kind, args) {
-      const run = runOf(runId);
-      let outcome: Outcome;
-      try {
-        outcome = { result: await perform(run, kind, args) };
-      } catch (error) {
-        outcome = { failure: failureOf(error) };
-      }
-      logCall(runId, seq, kind, args, outcome);
-      if (kind === "checkpoint" && "result" in outcome) {
-        const checkpoint = outcome.result as { data: unknown; label: string };
-        announce(runOf(runId), undefined, undefined, checkpoint);
-        notify(
-          runOf(runId),
-          `${workflowNoticeMarker(nameOf(run), `checkpoint ${checkpoint.label}`)}run ${runId} · ${receiptOf(checkpoint.data, seq)}`
-        );
-      } else {
+  const engine = createWorkflowEngine(
+    deps.dbPath,
+    {
+      run: (runId) => db.getWorkflowRun(runId),
+      async perform(runId, seq, kind, args) {
+        const run = runOf(runId);
+        let outcome: Outcome;
+        try {
+          outcome = { result: await perform(run, kind, args) };
+        } catch (error) {
+          outcome = { failure: failureOf(error) };
+        }
+        logCall(runId, seq, kind, args, outcome);
+        if (kind === "checkpoint" && "result" in outcome) {
+          const checkpoint = outcome.result as { data: unknown; label: string };
+          announce(runOf(runId), undefined, undefined, checkpoint);
+          notify(
+            runOf(runId),
+            `${workflowNoticeMarker(nameOf(run), `checkpoint ${checkpoint.label}`)}run ${runId} · ${receiptOf(checkpoint.data, seq)}`
+          );
+        } else {
+          announce(runOf(runId));
+        }
+        return outcome;
+      },
+      async open(runId, seq, kind, args) {
+        const run = runOf(runId);
+        if (!active(run)) {
+          throw new Error("This workflow run has ended.");
+        }
+        switch (kind) {
+          case "run":
+          case "spawn":
+            if (!db.getWorkflowLog(runId, seq)) {
+              logCall(runId, seq, kind, args);
+            }
+            await steps.open(run, seq, stepIdFor(runId, seq), {
+              ...(args as unknown as StepSpecJson),
+            });
+            return {};
+          case "ask":
+            openAsk(run, seq, args as AskArgs);
+            return {};
+          case "sleep":
+            logCall(runId, seq, kind, args, {
+              result: { due: Date.now() + Math.max(0, Number(args.ms) || 0) },
+            });
+            announce(run);
+            return {};
+          case "workflow":
+            return await openChild(run, seq, args);
+          default:
+            throw new Error(`${kind} is not a call a run waits on.`);
+        }
+      },
+      askTimedOut(runId, seq) {
+        const run = db.getWorkflowRun(runId);
+        const step = db.getWorkflowStep(stepIdFor(runId, seq));
+        if (!(run && step?.status === "waiting")) {
+          return;
+        }
+        deps.settle(step.id);
+        step.status = "failed";
+        step.failure = "ask-timeout";
+        step.endedAt = new Date();
+        if (run.status === "waiting" && !stillWaiting(run, step.id)) {
+          run.status = "running";
+        }
+        settleLog(runId, seq, {
+          failure: {
+            name: "AskError",
+            kind: "timeout",
+            message: "ask-timeout",
+          },
+        });
+        write(run, step);
+      },
+      childOutcome: childOutcomeOf,
+      hold: (runId, seq) => steps.holdOf(stepIdFor(runId, seq)),
+      holdExpired(runId, seq, hold) {
+        const failure = steps.holdExpired(stepIdFor(runId, seq), hold);
+        if (!failure) {
+          return;
+        }
+        settleLog(runId, seq, { failure });
         announce(runOf(runId));
-      }
-      return outcome;
+        return { failure };
+      },
+      async seed(runId, seq, kind, args, hash) {
+        const run = runOf(runId);
+        const from: RerunFrom | undefined =
+          run.rerunFromRunId !== null && run.rerunBefore !== null
+            ? { runId: run.rerunFromRunId, before: run.rerunBefore }
+            : undefined;
+        if (!from || seq >= from.before) {
+          return;
+        }
+        const recorded = await engine.recorded(from.runId, seq);
+        if (!recorded) {
+          throw new Error(
+            `The run this one re-runs (${from.runId}) has no record of effect ${seq}; re-run it from an earlier step.`
+          );
+        }
+        if (recorded.hash !== hash) {
+          // A different call here: the driver refuses it as the workflow changed.
+          return { hash: recorded.hash, outcome: { result: null } };
+        }
+        const outcome = recorded.outcome ?? waitOutcome(from.runId, seq, kind);
+        logCall(runId, seq, kind, args, outcome);
+        announce(run);
+        return { hash: recorded.hash, outcome };
+      },
+      finished(runId, outcome) {
+        const run = db.getWorkflowRun(runId);
+        if (!run) {
+          return;
+        }
+        if ("failure" in outcome) {
+          const failure: WorkflowFailure = outcome.failure;
+          finish(
+            run,
+            "failed",
+            failure.kind
+              ? `${failure.kind}: ${failure.message}`
+              : failure.message
+          );
+        } else {
+          finish(run, "done", null, outcome.result ?? null);
+        }
+      },
     },
-    async open(runId, seq, kind, args) {
-      const run = runOf(runId);
-      if (!active(run)) {
-        throw new Error("This workflow run has ended.");
-      }
-      switch (kind) {
-        case "run":
-        case "spawn":
-          if (!db.getWorkflowLog(runId, seq)) {
-            logCall(runId, seq, kind, args);
-          }
-          await steps.open(run, seq, stepIdFor(runId, seq), {
-            ...(args as unknown as StepSpecJson),
-          });
-          return {};
-        case "ask":
-          openAsk(run, seq, args as AskArgs);
-          return {};
-        case "sleep":
-          logCall(runId, seq, kind, args, {
-            result: { due: Date.now() + Math.max(0, Number(args.ms) || 0) },
-          });
-          announce(run);
-          return {};
-        case "workflow":
-          return await openChild(run, seq, args);
-        default:
-          throw new Error(`${kind} is not a call a run waits on.`);
-      }
-    },
-    askTimedOut(runId, seq) {
-      const run = db.getWorkflowRun(runId);
-      const step = db.getWorkflowStep(stepIdFor(runId, seq));
-      if (!(run && step?.status === "waiting")) {
-        return;
-      }
-      deps.settle(step.id);
-      step.status = "failed";
-      step.failure = "ask-timeout";
-      step.endedAt = new Date();
-      if (run.status === "waiting" && !stillWaiting(run, step.id)) {
-        run.status = "running";
-      }
-      settleLog(runId, seq, {
-        failure: { name: "AskError", kind: "timeout", message: "ask-timeout" },
-      });
-      write(run, step);
-    },
-    childOutcome: childOutcomeOf,
-    hold: (runId, seq) => steps.holdOf(stepIdFor(runId, seq)),
-    holdExpired(runId, seq, hold) {
-      const failure = steps.holdExpired(stepIdFor(runId, seq), hold);
-      if (!failure) {
-        return;
-      }
-      settleLog(runId, seq, { failure });
-      announce(runOf(runId));
-      return { failure };
-    },
-    async seed(runId, seq, kind, args, hash) {
-      const run = runOf(runId);
-      const from: RerunFrom | undefined =
-        run.rerunFromRunId !== null && run.rerunBefore !== null
-          ? { runId: run.rerunFromRunId, before: run.rerunBefore }
-          : undefined;
-      if (!from || seq >= from.before) {
-        return;
-      }
-      const recorded = await engine.recorded(from.runId, seq);
-      if (!recorded) {
-        throw new Error(
-          `The run this one re-runs (${from.runId}) has no record of effect ${seq}; re-run it from an earlier step.`
-        );
-      }
-      if (recorded.hash !== hash) {
-        // A different call here: the driver refuses it as the workflow changed.
-        return { hash: recorded.hash, outcome: { result: null } };
-      }
-      const outcome = recorded.outcome ?? waitOutcome(from.runId, seq, kind);
-      logCall(runId, seq, kind, args, outcome);
-      announce(run);
-      return { hash: recorded.hash, outcome };
-    },
-    finished(runId, outcome) {
-      const run = db.getWorkflowRun(runId);
-      if (!run) {
-        return;
-      }
-      if ("failure" in outcome) {
-        const failure: WorkflowFailure = outcome.failure;
-        finish(
-          run,
-          "failed",
-          failure.kind ? `${failure.kind}: ${failure.message}` : failure.message
-        );
-      } else {
-        finish(run, "done", null, outcome.result ?? null);
-      }
-    },
-  });
+    deps.lifetime
+  );
 
   // --------------------------------------------------------------- public
 
@@ -1679,7 +1689,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       workflowId: string,
       options: LaunchOptions
     ): Promise<{ runId: string }> {
-      await engine.ready;
+      await engine.up();
       const run = await prepare(workflowId, options);
       try {
         await engine.start(run.id);
@@ -1892,13 +1902,14 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     forget: (runIds: string[]) =>
       Promise.all(runIds.map((runId) => engine.forget(runId))),
     /**
-     * At hub start, once the engine is up: running attempts get their timeout
-     * back, parked questions go back in the ledger, and every top-level run
-     * is made sure of an execution — the engine resumes the rest itself.
+     * At a serving hub's start (server.ts `offBoot`): starts the engine, then
+     * running attempts get their timeout back, parked questions go back in
+     * the ledger, and every top-level run is made sure of an execution — the
+     * engine resumes the rest itself.
      */
     async resume() {
       // The engine logs its own failure to start; with it down nothing runs.
-      const up = await engine.ready.then(
+      const up = await engine.up().then(
         () => true,
         () => false
       );
