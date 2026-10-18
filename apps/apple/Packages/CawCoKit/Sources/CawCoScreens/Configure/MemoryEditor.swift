@@ -2,6 +2,7 @@ import CawCoAPI
 import CawCoCore
 import CawCoDesign
 import CawCoTranscript
+import GameController
 import UIKit
 
 /// A file's edits not saved yet (ConfigDrafts): leaving it and coming back finds them, and the list says so.
@@ -285,7 +286,10 @@ final class MemoryEditorController: ConfigEditorController {
         }
         let line = NSMutableAttributedString(string: parts.joined(separator: "   "), attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted))
         if dirty {
-            line.append(NSAttributedString(string: "   " + Words.Memory.unsaved, attributes: TypeScale.typeMeta.withWeight(.semibold).attributes(color: Palette.inkStrong)))
+            // ⌘S is said only while a keyboard is there to press it.
+            let shortcut = GCKeyboard.coalesced == nil ? "" : Words.Memory.saveShortcut
+            line.append(NSAttributedString(string: "   " + Words.Memory.unsaved + shortcut,
+                                           attributes: TypeScale.typeMeta.withWeight(.semibold).attributes(color: Palette.inkStrong)))
         }
         facts.attributedText = line
         facts.accessibilityHint = Words.Memory.tokensTitle

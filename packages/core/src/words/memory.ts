@@ -52,7 +52,9 @@ export const memoryWords = {
     "Roughly what this file costs every session that loads it, at about four bytes a token",
   savedAgo: (ago: string) => `saved ${ago}`,
   notWritten: "Not written yet",
-  unsaved: "Unsaved changes · ⌘S saves",
+  unsaved: "Unsaved changes",
+  /** Said after `unsaved` only where a keyboard can press it. */
+  saveShortcut: " · ⌘S saves",
   unsavedShort: " · unsaved",
   contents: "Contents",
   changedElsewhere:

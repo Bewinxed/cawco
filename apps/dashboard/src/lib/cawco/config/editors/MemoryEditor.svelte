@@ -509,7 +509,10 @@
         <span>{words.notWritten}</span>
       {/if}
       {#if dirty}
-        <span class="unsaved" in:crossIn out:crossOut>{words.unsaved}</span>
+        <span class="unsaved" in:crossIn out:crossOut
+          >{words.unsaved}<span class="shortcut">{words.saveShortcut}</span
+          ></span
+        >
       {/if}
     </p>
     <RowFault again={() => save()} reason={saveProblem} />
@@ -823,6 +826,12 @@
   .unsaved {
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
+  }
+  /* ⌘S is said only where a keyboard can press it: not on a touch-only phone. */
+  .shortcut {
+    @media not (any-pointer: fine) {
+      display: none;
+    }
   }
   .well {
     min-height: 320px;

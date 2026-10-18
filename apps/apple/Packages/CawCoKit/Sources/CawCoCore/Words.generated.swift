@@ -2164,7 +2164,10 @@ public enum Words {
 
         public static let notWritten = "Not written yet"
 
-        public static let unsaved = "Unsaved changes · ⌘S saves"
+        public static let unsaved = "Unsaved changes"
+
+        /// Said after `unsaved` only where a keyboard can press it.
+        public static let saveShortcut = " · ⌘S saves"
 
         public static let unsavedShort = " · unsaved"
 

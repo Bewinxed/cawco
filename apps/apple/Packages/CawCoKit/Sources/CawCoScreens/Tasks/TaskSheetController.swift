@@ -352,6 +352,11 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         titleField.isHidden = true
         stageSkeleton.widthAnchor.constraint(equalToConstant: 96).isActive = true
         stagePicker.accessibilityLabel = "Stage"
+        // Set once and made as it opens, from the task as it stands then: a refresh that set a new menu cancelled one a tap was opening.
+        stagePicker.menuOnOpen { [weak self] in
+            guard let self, let task else { return [] }
+            return stageMenu(task).children
+        }
         decidedLabel.accessibilityIdentifier = "task-decided"
         decidedLabel.isHidden = true
         decidedLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(decidedPressed)))
@@ -721,7 +726,6 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         if let shown {
             stagePicker.setValue(TaskWords.stage(shown.stage))
             stagePicker.isEnabled = !moving
-            stagePicker.menu = stageMenu(shown)
             facts.append(stagePicker)
             if shown.liveAttempt {
                 facts.append(KitBadge("Working", variant: .live, glyph: .working))

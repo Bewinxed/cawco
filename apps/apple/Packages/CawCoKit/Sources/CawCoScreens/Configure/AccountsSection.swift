@@ -277,6 +277,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         // Until the account is read, the page is its section's, as the web's skeleton is.
         super.init(section: section, context: context, title: now.map(FleetAccounts.name) ?? section.label,
                    saveLabel: Words.Accounts.Editor.save, deleteLabel: Words.Accounts.Editor.remove)
+        draftPath = ConfigDrafts.path("accounts", accountId)
         if let now { tile = providerMark(now.provider) }
     }
 
@@ -357,8 +358,13 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         }
         account = now
         let saved = Fields(now)
-        // A field nobody touched follows the hub; one being edited keeps its draft.
-        if fields == nil || fields == base { fields = saved }
+        // A field nobody touched follows the hub; one being edited keeps its draft,
+        // and edits left here unsaved come back as the editor opens (drafts.svelte.ts).
+        if fields == nil {
+            fields = draftPath.flatMap { ConfigDrafts.shared.kept($0, as: Fields.self) } ?? saved
+        } else if fields == base {
+            fields = saved
+        }
         base = saved
         navigationItem.title = FleetAccounts.name(now)
         nickname.attributedPlaceholder = NSAttributedString(string: now.label != nil ? Words.Accounts.Editor.nickname : FleetAccounts.name(now),
@@ -378,6 +384,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
 
     private func drawFields() {
         guard let fields else { return }
+        if let draftPath, base != nil { ConfigDrafts.shared.keep(draftPath, fields == base ? nil : fields) }
         if !nickname.isFirstResponder, nickname.text != fields.nickname { nickname.text = fields.nickname }
         swatches.set(fields.hue)
         (looksHead as? UIStackView)?.arrangedSubviews.first?.tintColor = AccountInk.color(fields.hue)
@@ -410,6 +417,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         do {
             try await hub.patchAccount(account.id, label: .some(label.isEmpty ? nil : label), hue: fields.hue,
                                        neverBackup: limits ? fields.neverBackup : nil, reservePct: limits ? .some(reserve) : .none)
+            if let draftPath { ConfigDrafts.shared.drop(draftPath) }
             self.fields = nil
             requestRefresh()
             return true
@@ -433,6 +441,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
 
     override func delete() async throws {
         try await hub.deleteAccount(accountId)
+        if let draftPath { ConfigDrafts.shared.drop(draftPath) }
         navigationController?.popViewController(animated: true)
     }
 

@@ -52,6 +52,7 @@ final class ConfigDrafts {
         case "delegate-types": return config.typeNames?.contains(key) ?? false
         case "mcp": return config.snapshot?.config.mcp.contains { $0.name == key } ?? false
         case "memory": return key == FleetMemory.main || (config.snapshot?.memoryDocs.contains { $0.path == key } ?? false)
+        case "accounts": return FleetAccounts.view(hub)?.accounts.contains { $0.id == key } ?? false
         default: return false
         }
     }

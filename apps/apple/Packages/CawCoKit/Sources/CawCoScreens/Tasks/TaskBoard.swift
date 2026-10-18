@@ -762,6 +762,7 @@ final class NewTaskForm: UIView {
         field.addAction(UIAction { [weak self] _ in self?.submit() }, for: .primaryActionTriggered)
         field.addAction(UIAction { [weak self] _ in self?.renderAdd() }, for: .editingChanged)
         picker.accessibilityLabel = "Stage"
+        picker.menuOnOpen { [weak self] in self?.pickerItems() ?? [] }
         let cancel = KitButton.make("Cancel", variant: .ghost, height: .sm) { [weak self] in self?.setOpen(false) }
         addButton = KitButton.make("Add task", variant: .action, height: .sm) { [weak self] in self?.submit() }
         let actions = UIStackView(arrangedSubviews: [picker, UIView(), cancel, addButton])
@@ -822,14 +823,18 @@ final class NewTaskForm: UIView {
     private func renderPicker() {
         guard picksStage else { return }
         picker.setValue(TaskWords.stage(into))
-        picker.menu = UIMenu(children: stages.map { each in
+    }
+
+    /// The stages, as the picker lists them when it opens.
+    private func pickerItems() -> [UIMenuElement] {
+        stages.map { each in
             let action = UIAction(title: TaskWords.stage(each.name)) { [weak self] _ in
                 self?.picked = each.name
                 self?.renderPicker()
             }
             action.state = each.name == into ? .on : .off
             return action
-        })
+        }
     }
 
     private func renderAdd() {

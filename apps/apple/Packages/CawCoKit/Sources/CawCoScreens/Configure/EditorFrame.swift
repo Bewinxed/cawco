@@ -136,14 +136,7 @@ class ConfigEditorController: ObservedViewController {
         // `.narrow-menu`: under 640px Delete leaves the commit row for the header's ⋯.
         if let deleteLabel {
             headMenu.showsMenuAsPrimaryAction = true
-            // Delete, as it can run when the menu opens.
-            headMenu.menuOnOpen { [weak self] in
-                guard let self else { return [] }
-                let blocked = hub.writesBlocked != nil || deleting || saving
-                return [UIAction(title: deleteLabel, image: Glyph.trash.image.resized(to: 16), attributes: blocked ? [.destructive, .disabled] : .destructive) { [weak self] _ in
-                    self?.runDelete()
-                }]
-            }
+            headMenu.menuOnOpen { [weak self] in self?.headMenuItems(deleteLabel) ?? [] }
             headMenu.accessibilityIdentifier = "editor.more"
             headMenu.setContentHuggingPriority(.required, for: .horizontal)
             head.addArrangedSubview(headMenu)
@@ -204,6 +197,14 @@ class ConfigEditorController: ObservedViewController {
         drawFooter()
     }
 
+    /// The header's ⋯ as it opens: Delete, as it can run then.
+    private func headMenuItems(_ deleteLabel: String) -> [UIMenuElement] {
+        let blocked = hub.writesBlocked != nil || deleting || saving
+        return [UIAction(title: deleteLabel, image: Glyph.trash.image.resized(to: 16), attributes: blocked ? [.destructive, .disabled] : .destructive) { [weak self] _ in
+            self?.runDelete()
+        }]
+    }
+
     private func buildFooter() {
         footer.spacing = 8
         footer.alignment = .center
@@ -251,8 +252,9 @@ class ConfigEditorController: ObservedViewController {
 
     /// Where Delete stands as drawn: the header's ⋯ menu and its items, or the commit row's button.
     var probeDelete: String {
-        if !headMenu.isHidden, headMenu.window != nil {
-            let items = headMenu.menu?.children.compactMap { ($0 as? UIAction)?.title } ?? []
+        if !headMenu.isHidden, headMenu.window != nil, let deleteLabel {
+            // What the menu lists as it opens: its items are made then, not held.
+            let items = headMenuItems(deleteLabel).compactMap { ($0 as? UIAction)?.title }
             return "header menu: " + items.joined(separator: ", ")
         }
         if let deleteButton, !deleteButton.isHidden, deleteButton.window != nil {

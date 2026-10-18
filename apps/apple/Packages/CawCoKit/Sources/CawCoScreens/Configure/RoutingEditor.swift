@@ -327,6 +327,8 @@ final class StrategyCard: UIControl {
     private let radio = UIView()
     private let dot = UIView()
     private let pin = KitSelect(small: true)
+    /// The account pinned as last drawn, which the pin's menu checks.
+    private var pinnedId: String?
     private var orderList: OrderListView?
     private let column = UIStackView()
     private let figure: StrategyFigureView
@@ -365,6 +367,13 @@ final class StrategyCard: UIControl {
         words.isUserInteractionEnabled = false
         pin.accessibilityLabel = Words.Accounts.RoutingEditor.pinnedAccount
         pin.accessibilityIdentifier = "routing.pin"
+        // Set once and made as it opens: a redraw that set a new menu cancelled one a tap was opening.
+        pin.menuOnOpen { [weak self] in
+            guard let self else { return [] }
+            return accounts.map { account in
+                UIAction(title: FleetAccounts.name(account), state: account.id == pinnedId ? .on : .off) { [weak self] _ in self?.onPin?(account.id) }
+            }
+        }
         pin.isHidden = true
         let top = UIStackView(arrangedSubviews: [radio, words])
         top.spacing = Space.space3
@@ -417,9 +426,7 @@ final class StrategyCard: UIControl {
         // Only the chosen Pinned card names its account: an unchosen one keeps no room for it.
         if strategy.id == "pinned" {
             pin.setValue(pinned.map(FleetAccounts.name) ?? "")
-            pin.menu = UIMenu(children: accounts.map { account in
-                UIAction(title: FleetAccounts.name(account), state: account.id == pinned?.id ? .on : .off) { [weak self] _ in self?.onPin?(account.id) }
-            })
+            pinnedId = pinned?.id
             fold(pin, open: now)
         }
         if strategy.id == "fill-first" {

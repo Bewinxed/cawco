@@ -64,10 +64,13 @@ export const mcpWords = {
   environment: "Environment",
   /** Backticks mark what is set in the code face (Coded.svelte, `coded`). */
   expanded:
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the words show the machine's own `${VAR}` syntax, which each machine expands; not a placeholder of this string.
     "`${VAR}` is expanded on each machine, from that machine's own environment — secrets never pass through the hub.",
   headerKey: "Authorization",
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: an example of the `${VAR}` a machine expands in a header.
   headerValue: "Bearer ${MY_TOKEN}",
   envKey: "API_KEY",
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: an example of the `${VAR}` a machine expands in its environment.
   envValue: "${MY_API_KEY}",
   addPair: "Add",
   removePair: (key: string) => `Remove ${key}`,

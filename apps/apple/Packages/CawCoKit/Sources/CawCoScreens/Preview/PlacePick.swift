@@ -48,6 +48,21 @@ final class PlacePickView: UIView {
         title.accessibilityTraits = .header
         title.isHidden = !titled
         machineSelect.accessibilityLabel = Words.PlacePick.machine
+        // Set once and made as it opens, from the machines online then: a repaint that set a new menu cancelled one a tap was opening.
+        machineSelect.menuOnOpen { [weak self] in
+            guard let self else { return [] }
+            let rows = online
+            let picked = machine?.machineId
+            return rows.isEmpty
+                ? [UIAction(title: Words.PlacePick.noMachines, attributes: .disabled) { _ in }]
+                : rows.map { row in
+                    UIAction(title: Words.PlacePick.machineOption(label: row.name, os: row.os),
+                             state: row.machineId == picked ? .on : .off) { [weak self] _ in
+                        self?.chosen = row.machineId
+                        self?.paintMachines()
+                    }
+                }
+        }
         folderField.accessibilityLabel = Words.PlacePick.folder
         folderField.addAction(UIAction { [weak self] _ in self?.clearProblem() }, for: .editingChanged)
         folderField.spellCheckingType = .no
@@ -126,15 +141,6 @@ final class PlacePickView: UIView {
         } else {
             machineSelect.setValue(rows.isEmpty ? Words.PlacePick.noMachines : Words.PlacePick.chooseMachine, placeholder: true)
         }
-        machineSelect.menu = UIMenu(children: rows.isEmpty
-            ? [UIAction(title: Words.PlacePick.noMachines, attributes: .disabled) { _ in }]
-            : rows.map { row in
-                UIAction(title: Words.PlacePick.machineOption(label: row.name, os: row.os),
-                         state: row.machineId == machine?.machineId ? .on : .off) { [weak self] _ in
-                    self?.chosen = row.machineId
-                    self?.paintMachines()
-                }
-            })
         browse.isHidden = machine == nil
         #if DEBUG
         PreviewProbe.say("place pick machine=\(machine.map { "\($0.machineId):\($0.name)" } ?? "-") online=\(rows.map(\.machineId).joined(separator: ","))")

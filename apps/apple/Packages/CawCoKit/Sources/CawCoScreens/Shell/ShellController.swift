@@ -566,6 +566,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// The wide screen's toggle: the rail's column steps aside, or back, as
     /// the split view moves its columns.
     private func toggleRail() {
+        // Under the rail's breakpoint the sidebar comes over the page as the sheet, as the web's burger brings it.
+        if railNarrow == true {
+            showRailSheet()
+            return
+        }
         let hidden = displayMode == .secondaryOnly
         preferredDisplayMode = hidden ? .oneBesideSecondary : .secondaryOnly
         railToggle.label = hidden ? "Hide sidebar" : "Show sidebar"
@@ -1206,6 +1211,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         #if targetEnvironment(macCatalyst)
         placeMacBar()
         #endif
+        fitRail()
         barTabs.relayout()
         placeGrip()
         // The split view lays its columns over what else is in its view on
@@ -1218,6 +1224,25 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     }
 
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
+
+    /// Which side of the rail's breakpoint the window stood on at the last pass.
+    private var railNarrow: Bool?
+
+    /// The web's rail breakpoint (design.json `rail`, `max-width: 900px`): at
+    /// or under it the sidebar's column stands aside and its toggle brings
+    /// the sidebar over the page as the sheet, as the web's burger does;
+    /// over it the column stands beside the page. The Mac keeps its column
+    /// at every width, as Configure keeps its rail there (ConfigSections.listed).
+    private func fitRail() {
+        #if !targetEnvironment(macCatalyst)
+        guard !compact, view.bounds.width > 0 else { return }
+        let narrow = view.bounds.width <= 900
+        guard narrow != railNarrow else { return }
+        railNarrow = narrow
+        preferredDisplayMode = narrow ? .secondaryOnly : .oneBesideSecondary
+        railToggle.label = narrow ? "Show sidebar" : "Hide sidebar"
+        #endif
+    }
 
     private var compact: Bool { traitCollection.horizontalSizeClass == .compact }
 
