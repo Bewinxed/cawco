@@ -29,7 +29,7 @@
     type="target"
   />
   <span data-slot="name" class="name">{node.name}</span>
-  <span aria-hidden="true" class="ring"></span>
+  <span aria-hidden="true" class="node-dot"></span>
   <span class="sr-only">{node.picked ? "Picked" : "Not picked"}</span>
   <Handle
     id="out-right"
@@ -70,14 +70,14 @@
     color: var(--ink-strong);
     overflow-wrap: anywhere;
   }
-  .ring {
+  .node-dot {
     flex: none;
     inline-size: 12px;
     block-size: 12px;
     border: 1.5px solid var(--ink-muted);
     border-radius: 50%;
   }
-  .decision-node[data-picked] .ring {
+  .decision-node[data-picked] .node-dot {
     border-color: var(--status-done-glyph);
     background: var(--status-done-glyph);
   }

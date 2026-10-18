@@ -85,7 +85,7 @@
 {#snippet face()}
   {#if uploading}
     <span data-slot="glyph" aria-hidden="true" class="glyph">
-      <svg aria-hidden="true" class="ring" viewBox="0 0 24 24">
+      <svg aria-hidden="true" class="progress-dial" viewBox="0 0 24 24">
         <circle class="track" cx="12" cy="12" r="9" />
         <circle
           class="arc"
@@ -252,25 +252,25 @@
   }
   /* The kit spinner's ring, filled as far as the upload has gone: the
      glyph's slot, a 16px ring in it, the track at a quarter. */
-  .glyph .ring {
+  .glyph .progress-dial {
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
     margin: var(--space-1);
     rotate: -90deg;
   }
-  .ring circle {
+  .progress-dial circle {
     fill: none;
     stroke: currentColor;
     stroke-width: 2.5;
   }
-  .ring .track {
+  .progress-dial .track {
     opacity: 0.25;
   }
-  .ring .arc {
+  .progress-dial .arc {
     stroke-linecap: round;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .ring .arc {
+    .progress-dial .arc {
       transition: stroke-dashoffset var(--dur-control) var(--ease-out);
     }
   }

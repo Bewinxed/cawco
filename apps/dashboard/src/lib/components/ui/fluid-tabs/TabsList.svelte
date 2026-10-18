@@ -1142,7 +1142,7 @@
     ></div>
   {/if}
   {#if focusRect}
-    <div aria-hidden="true" class="ring" style={px(focusRect)}></div>
+    <div aria-hidden="true" class="focus-mark" style={px(focusRect)}></div>
   {/if}
   {@render children()}
 </div>
@@ -1288,7 +1288,9 @@
      room. */
   :global([data-variant="folder"])
     .ff-tabs-list
-    > :global(:not(.segment, .ring, .kit-ghost, .kit-pill, .kit-pill-trail)) {
+    > :global(
+      :not(.segment, .focus-mark, .kit-ghost, .kit-pill, .kit-pill-trail)
+    ) {
     position: relative;
     z-index: var(--z, var(--z-rest, 1));
     isolation: isolate;
@@ -1298,7 +1300,7 @@
      compositor-only translate. Only the width change lays out, and it lays
      out one empty absolutely-positioned box. */
   .segment,
-  .ring {
+  .focus-mark {
     position: absolute;
     inset-block-start: 0;
     inset-inline-start: 0;
@@ -1349,7 +1351,7 @@
   }
   /* The focus ring, gliding from tab to tab: the app's one ring, drawn on
      the tab's own box (a tab sits flush in the strip). */
-  .ring {
+  .focus-mark {
     z-index: 4;
     border: var(--focus-ring-width) solid var(--focus-ring);
     border-radius: var(--shape);
@@ -1362,7 +1364,7 @@
     }
   }
   /* Above every tab and every outline a host draws on them. */
-  :global([data-variant="folder"]) .ring {
+  :global([data-variant="folder"]) .focus-mark {
     z-index: calc(var(--stack-top) + 2);
     border-radius: calc(var(--radius) + 2px) calc(var(--radius) + 2px) 0 0;
   }
