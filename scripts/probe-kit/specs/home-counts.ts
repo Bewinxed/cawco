@@ -23,10 +23,13 @@
  *     computed colours, rasterised through a canvas to the sRGB the page
  *     draws), and from the numeral's strongest pixel. The badge against the
  *     sheet beside it is noted, not held to a ratio: the design system's
- *     badge is a tint, and its numeral carries the count. Finished's failure
- *     is the Badge's `fail` variant on the drawn element (its done pair's
- *     classes swapped for the fail pair's, all the variant changes): no turn
- *     of the mock fails a session;
+ *     badge is a tint, and its numeral carries the count. The pairs as
+ *     measured: live 6.92, done 5.58, fail 6.36:1 by day; 6.18, 5.56,
+ *     6.92:1 at night. Finished fails by the product's own path: a fifth
+ *     top-level session's Claude Code process is ended from outside CawCo,
+ *     the hub starts it again with its turn, and ended again inside
+ *     SIGNAL_REPEAT_MS, so the hub fails the row ("something … keeps ending
+ *     it") and the page draws the Badge's `fail` variant;
  *  c. on the narrowest rail (Shell's RAIL_MIN, 216px) with three-digit
  *     counts, both labels stand whole beside their counts.
  *
@@ -199,23 +202,135 @@ export async function seedCounts(
   return { fleet, ids };
 }
 
+type Fleet = Awaited<ReturnType<typeof seedCounts>>["fleet"];
+
+/**
+ * A fifth top-level session, failed the way a person's would be: its
+ * process ended from outside CawCo mid-turn, started again by the hub with
+ * its turn, and ended again inside SIGNAL_REPEAT_MS: the hub fails its row.
+ */
+async function failOne(kit: Kit, fleet: Fleet): Promise<void> {
+  const id = await fleet.spawn("claude", "Counts failing");
+  await fleet.send(id, `${WORK} for a while.`);
+  const row = () =>
+    fleet.query<{
+      last_error: string | null;
+      status: string;
+      turn_open_at: number | null;
+    }>(
+      "SELECT status, last_error, turn_open_at FROM instances WHERE id = ?",
+      id
+    )[0];
+  await until("the failing session mid-turn", row, (r) =>
+    Boolean(r.turn_open_at)
+  );
+  const first = await until(
+    "the failing session's process",
+    () => fleet.sessionPid(id),
+    (pid) => pid > 0
+  );
+  process.kill(first, "SIGKILL");
+  const second = await until(
+    "the failing session started again with its turn",
+    () => fleet.sessionPid(id),
+    (pid) => pid > 0 && pid !== first,
+    90_000
+  );
+  process.kill(second, "SIGKILL");
+  const failed = await until(
+    "the failing session's row failed",
+    row,
+    (r) => r.status === "error",
+    60_000
+  ).catch(() => row());
+  kit.check(
+    "the fifth session, ended from outside CawCo twice, is failed on the hub",
+    failed?.status === "error",
+    `${failed?.status}: ${failed?.last_error}`
+  );
+}
+
 const spec: Spec = {
   name: "home-counts",
   async run(kit) {
     const { fleet } = await seedCounts(kit);
     const base = await fleet.dashboard();
+    const pages = new Map<(typeof THEMES)[number], Page>();
+
+    const hit = (page: Page, tab: string) =>
+      page
+        .locator(`.ff-tab:has([data-slot="count"][data-tab="${tab}"]) .hit`)
+        .first();
+    /** Reads `tab`'s count, in pair `pair`, in the state the page stands in. */
+    const read = async (
+      page: Page,
+      theme: string,
+      tab: string,
+      pair: string,
+      state: string
+    ) => {
+      await settle(page);
+      const engine = await computed(page, tab, pair);
+      const at0 = await box(page, `[data-slot="count"][data-tab="${tab}"]`);
+      if (!(engine && at0)) {
+        kit.check(`(b) ${theme}: the ${tab} count, ${state}, is drawn`, false);
+        return;
+      }
+      const raster = await capture(page, {
+        x: at0.left - 4,
+        y: at0.top,
+        width: at0.width + 8,
+        height: at0.height,
+      });
+      const numeralPeak = peakContrast(raster, at0);
+      const label = `(b) ${theme}: the ${tab} count, ${state}`;
+      kit.check(
+        `${label}: it is the ${pair} badge`,
+        engine.pill.join() === engine.pairGround.join() &&
+          engine.numeral.join() === engine.pairInk.join(),
+        `ground rgb(${engine.pill}), ink rgb(${engine.numeral}); --status-${pair}-bg rgb(${engine.pairGround}), --status-${pair}-ink rgb(${engine.pairInk})`
+      );
+      kit.check(
+        `${label}: its numeral holds 4.5:1 on the badge`,
+        contrast(engine.numeral, engine.pill) >= 4.5 && numeralPeak >= 4.5,
+        `computed ${r2(contrast(engine.numeral, engine.pill))}:1 (rgb(${engine.numeral}) on rgb(${engine.pill})), drawn ${r2(numeralPeak)}:1 at its strongest pixel, reads ${engine.text}`
+      );
+      kit.note(
+        `${label}: the badge on its sheet, ${r2(contrast(engine.pill, engine.ground))}:1 (rgb(${engine.pill}) on rgb(${engine.ground}))`
+      );
+    };
+    const choose = async (page: Page, tab: string) => {
+      await hit(page, tab).click();
+      await page.waitForSelector(
+        `.ff-tab.selected [data-slot="count"][data-tab="${tab}"]`
+      );
+    };
+    /** Holds `tab` pressed while `then` reads it, and lets go off the tab. */
+    const pressed = async (
+      page: Page,
+      tab: string,
+      then: () => Promise<void>
+    ) => {
+      await hit(page, tab).hover();
+      await page.mouse.down();
+      await then();
+      await page.mouse.move(0, 0);
+      await page.mouse.up();
+    };
+
     for (const theme of THEMES) {
       // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time, each on its own page
       const page = await kit.page("desk", { theme });
+      pages.set(theme, page);
       await open(page, `${base}/`, `[data-slot="count"][data-tab="working"]`);
       for (const delegatesOn of [false, true]) {
         // The switch as asked, then every Working count on the page read.
         // biome-ignore lint/performance/noAwaitInLoops: the switch changes what the next read sees
-        const pressed = await page
+        const on = await page
           .locator("button[aria-label=Delegates]")
           .first()
           .getAttribute("aria-pressed");
-        if ((pressed === "true") !== delegatesOn) {
+        if ((on === "true") !== delegatesOn) {
           await page.locator("button[aria-label=Delegates]").first().click();
         }
         const counts = await page
@@ -242,93 +357,70 @@ const spec: Spec = {
         );
       }
       await settle(page);
-      const hit = (tab: string) =>
-        page
-          .locator(`.ff-tab:has([data-slot="count"][data-tab="${tab}"]) .hit`)
-          .first();
-      /** Reads `tab`'s count, in pair `pair`, in the state the page stands in. */
-      const read = async (tab: string, pair: string, state: string) => {
-        await settle(page);
-        const engine = await computed(page, tab, pair);
-        const at0 = await box(page, `[data-slot="count"][data-tab="${tab}"]`);
-        if (!(engine && at0)) {
-          kit.check(
-            `(b) ${theme}: the ${tab} count, ${state}, is drawn`,
-            false
-          );
-          return;
-        }
-        const raster = await capture(page, {
-          x: at0.left - 4,
-          y: at0.top,
-          width: at0.width + 8,
-          height: at0.height,
-        });
-        const numeralPeak = peakContrast(raster, at0);
-        const label = `(b) ${theme}: the ${tab} count, ${state}`;
-        kit.check(
-          `${label}: it is the ${pair} badge`,
-          engine.pill.join() === engine.pairGround.join() &&
-            engine.numeral.join() === engine.pairInk.join(),
-          `ground rgb(${engine.pill}), ink rgb(${engine.numeral}); --status-${pair}-bg rgb(${engine.pairGround}), --status-${pair}-ink rgb(${engine.pairInk})`
-        );
-        kit.check(
-          `${label}: its numeral holds 4.5:1 on the badge`,
-          contrast(engine.numeral, engine.pill) >= 4.5 && numeralPeak >= 4.5,
-          `computed ${r2(contrast(engine.numeral, engine.pill))}:1 (rgb(${engine.numeral}) on rgb(${engine.pill})), drawn ${r2(numeralPeak)}:1 at its strongest pixel, reads ${engine.text}`
-        );
-        kit.note(
-          `${label}: the badge on its sheet, ${r2(contrast(engine.pill, engine.ground))}:1 (rgb(${engine.pill}) on rgb(${engine.ground}))`
-        );
-      };
-      const choose = async (tab: string) => {
-        await hit(tab).click();
-        await page.waitForSelector(
-          `.ff-tab.selected [data-slot="count"][data-tab="${tab}"]`
-        );
-      };
-      /** Holds `tab` pressed while `then` reads it, and lets go off the tab. */
-      const pressed = async (tab: string, then: () => Promise<void>) => {
-        await hit(tab).hover();
-        await page.mouse.down();
-        await then();
-        await page.mouse.move(0, 0);
-        await page.mouse.up();
-      };
+      await choose(page, "working");
+      await page.mouse.move(0, 0);
+      await read(page, theme, "working", "live", "chosen, at rest");
+      await read(page, theme, "finished", "done", "not chosen, at rest");
+      await hit(page, "finished").hover();
+      await read(page, theme, "finished", "done", "not chosen, hovered");
+      await pressed(page, "finished", () =>
+        read(page, theme, "finished", "done", "not chosen, pressed")
+      );
+      await choose(page, "working");
+      await pressed(page, "working", () =>
+        read(page, theme, "working", "live", "chosen, pressed")
+      );
+    }
 
-      await choose("working");
-      await page.mouse.move(0, 0);
-      await read("working", "live", "chosen, at rest");
-      await read("finished", "done", "not chosen, at rest");
-      await hit("finished").hover();
-      await read("finished", "done", "not chosen, hovered");
-      await pressed("finished", () =>
-        read("finished", "done", "not chosen, pressed")
+    // Something finished fails, by the product's own path.
+    await failOne(kit, fleet);
+
+    for (const [theme, page] of pages) {
+      // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
+      const drawn = await page
+        .waitForFunction(
+          () =>
+            document
+              .querySelector('[data-slot="count"][data-tab="finished"]')
+              ?.className.includes("status-fail") ?? false,
+          null,
+          { timeout: 60_000 }
+        )
+        .then(() => true)
+        .catch(() => false);
+      kit.check(
+        `(b) ${theme}: the failure reaches the page, its Finished count in the fail variant`,
+        drawn
       );
-      await choose("working");
-      await pressed("working", () =>
-        read("working", "live", "chosen, pressed")
-      );
-      // Finished's failure: the drawn badge in the fail variant.
-      await page.evaluate(() => {
-        const el = document.querySelector(
-          '[data-slot="count"][data-tab="finished"]'
-        );
-        if (el) {
-          el.className = el.className.replaceAll("status-done", "status-fail");
-        }
-      });
       await page.mouse.move(0, 0);
-      await read("finished", "fail", "failed, not chosen, at rest");
-      await hit("finished").hover();
-      await read("finished", "fail", "failed, not chosen, hovered");
-      await pressed("finished", () =>
-        read("finished", "fail", "failed, not chosen, pressed")
+      await read(
+        page,
+        theme,
+        "finished",
+        "fail",
+        "failed, not chosen, at rest"
       );
-      await choose("finished");
+      await hit(page, "finished").hover();
+      await read(
+        page,
+        theme,
+        "finished",
+        "fail",
+        "failed, not chosen, hovered"
+      );
+      await pressed(page, "finished", () =>
+        read(page, theme, "finished", "fail", "failed, not chosen, pressed")
+      );
+      await choose(page, "finished");
       await page.mouse.move(0, 0);
-      await read("finished", "fail", "failed, chosen, at rest");
-      await read("working", "live", "not chosen, at rest (Finished chosen)");
+      await read(page, theme, "finished", "fail", "failed, chosen, at rest");
+      await read(
+        page,
+        theme,
+        "working",
+        "live",
+        "not chosen, at rest (Finished chosen)"
+      );
 
       // (c) The narrowest rail, with counts three digits long.
       await page.evaluate((w) => {
