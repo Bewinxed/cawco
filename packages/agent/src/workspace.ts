@@ -17,7 +17,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type {
   CommandResult,
   WorkspaceArchive,
@@ -56,7 +56,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
-import { cloneDenies } from "@cawco/core/workspace-policy";
+import { excludedPaths, IGNORED_STATUS } from "@cawco/core/workspace-policy";
 import {
   addAccount,
   closeBoundary,
@@ -83,7 +83,6 @@ import {
   LFS_FILTERS,
   withoutCredential,
 } from "./move";
-import { placedMemoryDir } from "./placed-memory";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
 import { cloneHolding } from "./workspace-records";
@@ -739,53 +738,21 @@ type ClosedGit = Awaited<ReturnType<typeof closedCloneGit>>;
 const TRAILING_SLASH = /\/$/;
 
 /**
- * What CawCo writes into a clone and keeps out of its status itself, by path
- * in the clone: its deny paths, which no delegate writes (the stand-ins CawCo
- * made there, the placed skills and their store: core workspace-policy.ts
- * `cloneDenies`), the project's memory documents as the fleet places them
- * (placed-memory.ts), and its stage's host (stage.ts `writeHost`).
- */
-const cawcoWritten = (clone: string): string[] =>
-  [
-    ...cloneDenies(clone).map((deny) => deny.path),
-    placedMemoryDir(clone),
-    join(clone, ".cawco"),
-  ].map((path) => relative(clone, path));
-
-/**
  * The untracked paths in the clone kept out of git by no `.gitignore` the
- * repository tracks ({@link WorkspaceHolding} `excluded`): each path `git
- * status --ignored=matching` names (a folder a rule matches whole, as one),
- * the source of its rule read by `git check-ignore -v`. A path a tracked
- * `.gitignore` covers goes with the clone, as does one the owner's global
- * excludes file covers (an absolute source, outside every clone: no clone's
- * config may name one, safe-git.ts `repositoryConfigProblem`). The clone's
- * `.git/info/exclude` and an untracked `.gitignore` are its delegate's to
- * write. What CawCo wrote there ({@link cawcoWritten}) is CawCo's, and goes.
+ * repository tracks ({@link WorkspaceHolding} `excluded`; core
+ * workspace-policy.ts `excludedPaths`): each path `git status
+ * --ignored=matching` names, the source of its rule read by `git
+ * check-ignore -v`.
  */
 const excludedIn = async (
   clone: string,
   git: ClosedGit,
   pathspec: readonly string[]
 ): Promise<string[]> => {
-  const own = cawcoWritten(clone);
-  const ignored = (
-    await git([
-      "status",
-      "--porcelain=v1",
-      "-z",
-      "--ignored=matching",
-      "--untracked-files=all",
-      ...pathspec,
-    ])
-  )
+  const ignored = (await git([...IGNORED_STATUS, ...pathspec]))
     .split("\0")
     .filter((entry) => entry.startsWith("!! "))
-    .map((entry) => entry.slice("!! ".length))
-    .filter((path) => {
-      const bare = path.replace(TRAILING_SLASH, "");
-      return !own.some((one) => bare === one || bare.startsWith(`${one}/`));
-    });
+    .map((entry) => entry.slice("!! ".length));
   if (ignored.length === 0) {
     return [];
   }
@@ -798,28 +765,35 @@ const excludedIn = async (
       exits: [0, 1],
     }),
   ]);
-  const committed = new Set(tracked.split("\0").filter(Boolean));
-  // `-v -z`: source, line, pattern and path, each ended by a NUL.
-  const fields = rules.split("\0");
-  const excluded: string[] = [];
-  for (let at = 0; at + 3 < fields.length; at += 4) {
-    const source = fields[at] as string;
-    if (!(committed.has(source) || isAbsolute(source))) {
-      excluded.push(fields[at + 3] as string);
-    }
+  return excludedPaths(clone, tracked, rules);
+};
+
+/**
+ * The rev-list arguments that leave out what `landed` names: commits the hub
+ * knows are on the base branch through another workspace's landing
+ * ({@link WorkspaceArchive} `landed`), each a full commit id, never an option.
+ */
+const notLanded = (landed: readonly string[] | undefined): string[] => {
+  const shas = landed ?? [];
+  const bad = shas.find((sha) => !COMMIT.test(sha));
+  if (bad !== undefined) {
+    throw new Error(`"${bad}" is not a commit id`);
   }
-  return excluded;
+  return [...shas];
 };
 
 /**
  * What the workspace holds that is nowhere else ({@link WorkspaceHolding}),
  * read by git on this host once its boundary is closed
- * ({@link closedCloneGit}); `skip` are paths `git status` passes over. Files
- * a tracked `.gitignore` covers are not read: they go with the clone.
+ * ({@link closedCloneGit}); `skip` are paths `git status` passes over, and
+ * the commits `landed` reaches are not its own (their work is on the base
+ * branch through the workspace cut from it that landed them). Files a
+ * tracked `.gitignore` covers are not read: they go with the clone.
  */
 const holding = async (
   workspace: WorkspaceRef,
-  skip: readonly string[]
+  skip: readonly string[],
+  landed: readonly string[] | undefined
 ): Promise<Held> => {
   // A clone already deleted (an archive that died after its `rm`) holds nothing.
   const gone = await stat(workspace.path).then(
@@ -856,6 +830,7 @@ const holding = async (
       "--branches",
       "--not",
       "--remotes=origin",
+      ...notLanded(landed),
     ]),
     git(["status", "--porcelain", ...pathspec]),
     git(["stash", "list"]),
@@ -874,13 +849,16 @@ const holding = async (
  * once it is deleted ({@link WorkspaceCut}): its HEAD, on `origin`'s branch
  * `base` when that holds it, else the one most recently committed to among
  * those that do. Git on this host once its boundary is closed
- * ({@link closedCloneGit}). Nothing for a folder whose `.git` is gone. A HEAD
- * no branch of `origin` holds throws, and nothing is deleted: such a clone
+ * ({@link closedCloneGit}). Nothing for a folder whose `.git` is gone, nor
+ * for a HEAD `landed` reaches: its work went on in the workspace cut from it,
+ * which landed it, and is cut again from nowhere here. Any other HEAD no
+ * branch of `origin` holds throws, and nothing is deleted: such a clone
  * holds commits of its own, and {@link holding} said none.
  */
 const headOnOrigin = async (
   workspace: WorkspaceRef,
-  base: string | undefined
+  base: string | undefined,
+  landed: readonly string[] | undefined
 ): Promise<WorkspaceCut | undefined> => {
   if (!(await lstat(join(workspace.path, ".git")).catch(() => undefined))) {
     return;
@@ -900,6 +878,15 @@ const headOnOrigin = async (
     .split("\n")
     .filter((name) => name && name !== "HEAD");
   const branch = base && holders.includes(base) ? base : holders[0];
+  if (
+    !branch &&
+    landed?.length &&
+    Number(
+      await git(["rev-list", "--count", commit, "--not", ...notLanded(landed)])
+    ) === 0
+  ) {
+    return;
+  }
   if (!branch) {
     throw new Error(
       `Workspace ${workspace.id} was not archived: its HEAD ${commit.slice(0, 9)} is on no branch of origin, so its clone could not be cut again there, and nothing was deleted.`
@@ -1124,7 +1111,9 @@ const closeClone = async (
   // Nothing writes the clone from here on, and no boundary is started to
   // read it: git reads it on this host.
   await stopWorkspaceBoundary(workspace);
-  const held = read ? await holding(workspace, skip) : NOTHING_HELD;
+  const held = read
+    ? await holding(workspace, skip, request.landed)
+    : NOTHING_HELD;
   const holds = !holdsNothing({ ...held, bytes: 0 });
   if (holds && !carryHeld) {
     if (held.strays === undefined) {
@@ -1139,7 +1128,7 @@ const closeClone = async (
   // Read before the clone goes: where it is cut again.
   const head =
     read && !holds && held.strays === undefined
-      ? await headOnOrigin(workspace, request.base)
+      ? await headOnOrigin(workspace, request.base, request.landed)
       : undefined;
   let carry: string | null = null;
   if (holds) {

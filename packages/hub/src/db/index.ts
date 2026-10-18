@@ -2320,6 +2320,7 @@ export interface DbShape {
         | "boundaryPid"
         | "branch"
         | "carry"
+        | "cutFrom"
         | "head"
         | "heldAt"
         | "holding"
@@ -2411,6 +2412,8 @@ export interface DbShape {
   readonly workspaceCreatesOn: (
     machineId: string
   ) => (typeof workspaceCreates.$inferSelect)[];
+  /** The workspaces cut `from` workspace `workspaceId` (schema.ts `workspaces.cutFrom`), in any state. */
+  readonly workspacesCutFrom: (workspaceId: string) => WorkspaceRow[];
   /** The workspaces an id names: itself exactly, else every one it prefixes. */
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
@@ -8888,6 +8891,14 @@ const make = async (path: string): Promise<DbShape> => {
             eq(workspaces.checksFor, workspaceId),
             eq(workspaces.state, "active")
           )
+        )
+        .all(),
+    workspacesCutFrom: (workspaceId) =>
+      db
+        .select()
+        .from(workspaces)
+        .where(
+          sql`json_extract(${workspaces.cutFrom}, '$.workspace') = ${workspaceId}`
         )
         .all(),
     updateWorkspace: (id, change) =>

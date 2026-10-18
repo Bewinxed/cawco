@@ -27814,35 +27814,7 @@
                 "type": "object",
                 "properties": {
                   "held": {
-                    "type": "object",
-                    "properties": {
-                      "workspaceId": {
-                        "type": "string"
-                      },
-                      "holds": {
-                        "type": "string"
-                      },
-                      "size": {
-                        "type": "string"
-                      },
-                      "heldAt": {
-                        "type": "string"
-                      },
-                      "instanceId": {
-                        "type": "string"
-                      },
-                      "title": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "heldAt",
-                      "holds",
-                      "instanceId",
-                      "size",
-                      "title",
-                      "workspaceId"
-                    ]
+                    "$ref": "#/components/schemas/BridgedHeldPlace"
                   },
                   "id": {
                     "type": "string"
@@ -28056,35 +28028,7 @@
               "type": "object",
               "properties": {
                 "held": {
-                  "type": "object",
-                  "properties": {
-                    "workspaceId": {
-                      "type": "string"
-                    },
-                    "holds": {
-                      "type": "string"
-                    },
-                    "size": {
-                      "type": "string"
-                    },
-                    "heldAt": {
-                      "type": "string"
-                    },
-                    "instanceId": {
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "heldAt",
-                    "holds",
-                    "instanceId",
-                    "size",
-                    "title",
-                    "workspaceId"
-                  ]
+                  "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
                 "id": {
                   "type": "string"
@@ -28285,35 +28229,7 @@
               "type": "object",
               "properties": {
                 "held": {
-                  "type": "object",
-                  "properties": {
-                    "workspaceId": {
-                      "type": "string"
-                    },
-                    "holds": {
-                      "type": "string"
-                    },
-                    "size": {
-                      "type": "string"
-                    },
-                    "heldAt": {
-                      "type": "string"
-                    },
-                    "instanceId": {
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "heldAt",
-                    "holds",
-                    "instanceId",
-                    "size",
-                    "title",
-                    "workspaceId"
-                  ]
+                  "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
                 "id": {
                   "type": "string"
@@ -28534,35 +28450,7 @@
               "type": "object",
               "properties": {
                 "held": {
-                  "type": "object",
-                  "properties": {
-                    "workspaceId": {
-                      "type": "string"
-                    },
-                    "holds": {
-                      "type": "string"
-                    },
-                    "size": {
-                      "type": "string"
-                    },
-                    "heldAt": {
-                      "type": "string"
-                    },
-                    "instanceId": {
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "heldAt",
-                    "holds",
-                    "instanceId",
-                    "size",
-                    "title",
-                    "workspaceId"
-                  ]
+                  "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
                 "id": {
                   "type": "string"
@@ -28735,35 +28623,7 @@
               "type": "object",
               "properties": {
                 "held": {
-                  "type": "object",
-                  "properties": {
-                    "workspaceId": {
-                      "type": "string"
-                    },
-                    "holds": {
-                      "type": "string"
-                    },
-                    "size": {
-                      "type": "string"
-                    },
-                    "heldAt": {
-                      "type": "string"
-                    },
-                    "instanceId": {
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "heldAt",
-                    "holds",
-                    "instanceId",
-                    "size",
-                    "title",
-                    "workspaceId"
-                  ]
+                  "$ref": "#/components/schemas/BridgedHeldPlace"
                 },
                 "id": {
                   "type": "string"
@@ -29006,6 +28866,9 @@
           },
           "head": {
             "$ref": "#/components/schemas/WorkspaceCut"
+          },
+          "cutFrom": {
+            "$ref": "#/components/schemas/WorkspaceFrom"
           },
           "path": {
             "$ref": "#/components/schemas/MachinePath"
@@ -46709,6 +46572,38 @@
           "hash"
         ]
       },
+      "BridgedHeldPlace": {
+        "description": "A project place's `held` as installable apps' documents declare it, which\nthe places list once showed for the person's Continue and Discard: always\nnull now, its shape kept for the wire only. The wire check (openapi.ts\n`--check`) refuses to stop sending it while TestFlight 20261017 or\n20261018 can be installed, though no app reads it; it goes in the change\nthat expires them (bash apps/apple/scripts/testflight.sh --expire 20261018).",
+        "type": "object",
+        "properties": {
+          "heldAt": {
+            "type": "string"
+          },
+          "holds": {
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "heldAt",
+          "holds",
+          "instanceId",
+          "size",
+          "title",
+          "workspaceId"
+        ]
+      },
       "PlaceKind": {
         "description": "What a place is: a checkout on a machine, a delegate's workspace (kept\nwhile the workspace is active), or the project's folder on the hub (its\n`machineId` is `\"hub\"` (db `HUB_PLACE_MACHINE`) and its path `projects/<id>`, relative\nto the hub's data folder; every project has one from the moment it is\nmade).",
         "type": "string",
@@ -46830,7 +46725,7 @@
         ]
       },
       "WorkspaceState": {
-        "description": "A workspace's life, which is its work items' (work-items.ts `settle`):\n`active` while an item there is live, or ended a moment ago and the hub\nhas not settled it, or while something holds it (a session attached, an\nartifact showing what it serves); `held` once its item ended with work\nthat is nowhere else, which only the person ends, by continuing it or\ndiscarding it; `archived` once its boundary and clone are gone.",
+        "description": "A workspace's life, which is its work items' (work-items.ts `settle`):\n`active` while an item there is live, or ended a moment ago and the hub\nhas not settled it, or while something holds it (a session attached, an\nartifact showing what it serves); `held` once its item ended with work\nthat is nowhere else, which the session that started its work ends, told\nso, by continuing it or discarding it (work-items.ts `heldNotice`), or a\nworkspace cut from it ends by landing that work (`vouchLanded`);\n`archived` once its boundary and clone are gone.",
         "type": "string",
         "enum": [
           "active",
@@ -46887,6 +46782,28 @@
         "required": [
           "branch",
           "commit"
+        ]
+      },
+      "WorkspaceFrom": {
+        "description": "Where a workspace cut `from` another started ({@link workspaces.cutFrom}):\nthat workspace, and its HEAD then, which this one's clone took.",
+        "type": "object",
+        "properties": {
+          "commit": {
+            "description": "The source's HEAD as this clone took it.",
+            "type": "string"
+          },
+          "landed": {
+            "description": "Whether this workspace's landing put every patch of that commit's work\non the base branch (work-items.ts `vouchLanded`): then the source holds\nnone of it as its own, and an archive is told so (core\n`WorkspaceArchive.landed`).",
+            "type": "boolean"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "commit",
+          "landed",
+          "workspace"
         ]
       },
       "Account": {

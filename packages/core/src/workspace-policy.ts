@@ -42,6 +42,7 @@ import {
   dirname,
   isAbsolute,
   join,
+  relative,
   resolve,
 } from "node:path";
 import { binaryRoot } from "./binary-installation";
@@ -57,6 +58,7 @@ import {
   hostToolCaches,
   hubProjectsDir,
   isSecretFileName,
+  placedMemoryDir,
   placedSyncedPaths,
   projectClaudeDir,
   USER_LAYER_DIRS,
@@ -205,6 +207,73 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
     srt: true as const,
   })),
 ];
+
+/**
+ * What CawCo writes into a clone and keeps out of its status itself, by path
+ * in the clone: its deny paths, which no delegate writes ({@link
+ * cloneDenies}: the stand-ins CawCo made there, the placed skills and their
+ * store), the project's memory documents as the fleet places them (paths.ts
+ * `placedMemoryDir`), and its stage's host (agent stage.ts `writeHost`).
+ */
+export const cloneWritten = (clone: string): string[] =>
+  [
+    ...cloneDenies(clone).map((deny) => deny.path),
+    placedMemoryDir(clone),
+    join(clone, ".cawco"),
+  ].map((path) => relative(clone, path));
+
+/**
+ * The `git status` that names a clone's untracked paths git ignores, a
+ * folder a rule matches whole as one, NUL-ended: what {@link
+ * excludedPaths} reads, its `!! ` entries given to `git check-ignore -v -z
+ * --stdin`.
+ */
+export const IGNORED_STATUS = [
+  "status",
+  "--porcelain=v1",
+  "-z",
+  "--ignored=matching",
+  "--untracked-files=all",
+] as const;
+
+const TRAILING_SLASH = /\/$/;
+
+/**
+ * The paths of `git check-ignore -v -z` output (`rules`: source, line,
+ * pattern and path, each NUL-ended) kept out of git by no `.gitignore` the
+ * repository tracks (`tracked`, `git ls-files -z -- ':(glob)**\/.gitignore'`):
+ * the clone's `.git/info/exclude` or an untracked `.gitignore`, which its
+ * delegate writes. A path a tracked `.gitignore` covers goes with the clone,
+ * as does one the owner's global excludes file covers (an absolute source,
+ * outside every clone: no clone's config may name one, safe-git.ts
+ * `repositoryConfigProblem`). What CawCo wrote there ({@link cloneWritten})
+ * is CawCo's, and goes too. Each is work no remote has: it holds the
+ * workspace (agent workspace.ts `holding`), and finish_item names it (hub
+ * work-items.ts `leftoversIn`).
+ */
+export const excludedPaths = (
+  clone: string,
+  tracked: string,
+  rules: string
+): string[] => {
+  const own = cloneWritten(clone);
+  const committed = new Set(tracked.split("\0").filter(Boolean));
+  const fields = rules.split("\0");
+  const excluded: string[] = [];
+  for (let at = 0; at + 3 < fields.length; at += 4) {
+    const source = fields[at] as string;
+    const path = fields[at + 3] as string;
+    const bare = path.replace(TRAILING_SLASH, "");
+    if (!(
+      committed.has(source) ||
+      isAbsolute(source) ||
+      own.some((one) => bare === one || bare.startsWith(`${one}/`))
+    )) {
+      excluded.push(path);
+    }
+  }
+  return excluded;
+};
 
 /**
  * A place: the workspace id the hub gives the boundary of a person's own

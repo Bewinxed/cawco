@@ -736,7 +736,6 @@ import {
 } from "./wire-socket";
 import {
   createWorkItems,
-  type HeldWork,
   type ItemPlacement,
   LEAF_DELEGATE_REFUSAL,
   SESSION_TITLE_DESCRIPTION,
@@ -756,6 +755,23 @@ const NAME_TAIL = /-+$/;
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
+
+/**
+ * A project place's `held` as installable apps' documents declare it, which
+ * the places list once showed for the person's Continue and Discard: always
+ * null now, its shape kept for the wire only. The wire check (openapi.ts
+ * `--check`) refuses to stop sending it while TestFlight 20261017 or
+ * 20261018 can be installed, though no app reads it; it goes in the change
+ * that expires them (bash apps/apple/scripts/testflight.sh --expire 20261018).
+ */
+interface BridgedHeldPlace {
+  heldAt: string;
+  holds: string;
+  instanceId: string;
+  size: string;
+  title: string;
+  workspaceId: string;
+}
 
 /** A machine ask that got no answer: not connected ("dead") or silent past its deadline ("timeout"). */
 type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
@@ -18308,48 +18324,23 @@ export const createServer = (
 
   /**
    * A project as the API answers it: its places, and its primary checkout's
-   * id (`primaryPlaceId`, null while it has none).
+   * id (`primaryPlaceId`, null while it has none). A held workspace is no
+   * decision of the person's: the session that started its work is told
+   * (work-items.ts `heldNotice`). Each place's `held` is null, sent only
+   * while installable apps' documents declare it ({@link BridgedHeldPlace}).
    */
-  /** What a held workspace's place says in the places list (work-items.ts `settle`). */
-  const heldPlace = (work: HeldWork) => {
-    const [latest] = db.workItemsIn(work.workspaceId);
-    return {
-      workspaceId: work.workspaceId,
-      holds: work.holds,
-      size: work.size,
-      heldAt: work.heldAt,
-      instanceId: latest?.instanceId ?? null,
-      title: latest?.title ?? null,
-    };
-  };
-
-  /**
-   * A project as the dashboards read it: each place says, as `held`, what a
-   * held workspace there holds and which session goes on with it, for the
-   * places list's Continue and Discard; null for every other place.
-   */
-  const projectOut = (project: ProjectRow) => {
-    const held = new Map(
-      workItems
-        .heldWorkspaces()
-        .map((work) => [`${work.machineId}\n${work.path}`, work])
-    );
-    return {
-      ...project,
-      places: project.places.map((place) => {
-        const work =
-          place.kind === "workspace"
-            ? held.get(`${place.machineId}\n${place.path}`)
-            : undefined;
-        return { ...place, held: work ? heldPlace(work) : null };
-      }),
-      primaryPlaceId: checkoutOf(project)?.id ?? null,
-      // Read by nothing: the Apple build is a step a project declares in its
-      // gate.md (gate-file.ts). Kept for the shipped apps that require it
-      // (TestFlight 20261015.3 to 20261018); it goes once none is installable.
-      appleGate: false as boolean,
-    };
-  };
+  const projectOut = (project: ProjectRow) => ({
+    ...project,
+    places: project.places.map((place) => ({
+      ...place,
+      held: null as BridgedHeldPlace | null,
+    })),
+    primaryPlaceId: checkoutOf(project)?.id ?? null,
+    // Read by nothing: the Apple build is a step a project declares in its
+    // gate.md (gate-file.ts). Kept for the shipped apps that require it
+    // (TestFlight 20261015.3 to 20261018); it goes once none is installable.
+    appleGate: false as boolean,
+  });
 
   // Each project's spend cap: what holds its attempts and its Caw back (project-caps.ts).
   const caps = createCaps({
@@ -25835,7 +25826,8 @@ export const createServer = (
       // Spent workspaces kept for unlanded work, as the last sweep read them
       // (workspace-retire.ts); `delegate_list` shows the same list.
       // Every held workspace: its item ended with work that is nowhere else,
-      // and only the person continues it or discards it.
+      // and the session that started its work, told as it was held,
+      // continues it or discards it (work-items.ts `heldNotice`).
       .get("/api/workspaces/held", hidden, () => ({
         held: workItems.heldWorkspaces(),
       }))
@@ -25876,6 +25868,50 @@ export const createServer = (
             });
             workspaceArchived(workspace);
             return { ...workspace, carry };
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            return status(
+              error instanceof WorkItemRefusal ? error.status : 502,
+              message
+            );
+          }
+        }
+      )
+      // `discard_workspace`: a workspace a session's delegates worked in,
+      // archived with its unlanded work saved to a carry, by that session
+      // (or its project's lead) alone.
+      .post(
+        "/api/workspaces/:id/discard",
+        {
+          ...hidden,
+          body: t.Object({ from: t.String({ minLength: 1 }) }),
+        },
+        async ({ params, body, request, status }) => {
+          // A session's own credential, or none: the gate let through only
+          // a session, the person, or the hub acting for a session's tool.
+          const authorization = bearerOf(request);
+          const identity = identities.resolve(authorization);
+          if (authorization !== null && !identity) {
+            return status(401, "Invalid session credential");
+          }
+          if (identity && identity.instanceId !== body.from) {
+            return status(
+              403,
+              "Session credential does not belong to the discard's requester"
+            );
+          }
+          try {
+            const { workspace, carry } = await workItems.discardFor(
+              body.from,
+              params.id
+            );
+            workspaceArchived(workspace);
+            return {
+              text: carry
+                ? `Discarded workspace ${workspace.id}: what it held that was nowhere else is in the carry ${carry} on its machine, and its clone is gone.`
+                : `Archived workspace ${workspace.id}: it held nothing that is nowhere else, so no carry was written, and its clone is gone.`,
+            };
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);

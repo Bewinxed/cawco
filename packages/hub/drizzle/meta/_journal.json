@@ -1674,6 +1674,13 @@
       "when": 1792356139066,
       "tag": "0246_chosen_modes",
       "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "6",
+      "when": 1792337369662,
+      "tag": "0236_workspace_cut_from",
+      "breakpoints": true
     }
   ]
 }

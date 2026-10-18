@@ -909,6 +909,21 @@ export function handoffTools(deps: HandoffDeps) {
       })
     ),
     tool(
+      "discard_workspace",
+      "Let go of a held workspace of YOUR delegates' whose work you will not continue: what it holds is saved to a carry in ~/.cawco/carries on its machine, then its clone goes.",
+      {
+        workspace: z.string().describe("Its id, as the hub's notice names it."),
+      },
+      async ({ workspace }) => ({
+        content: [
+          {
+            type: "text" as const,
+            text: await actions.discardWorkspace(workspace),
+          },
+        ],
+      })
+    ),
+    tool(
       "interrupt_delegate",
       "Interrupt one of YOUR delegates mid-turn without ending it. It keeps its state and stays idle: " +
         "nothing automatic wakes it, only your handoff or the person's message.",

@@ -95,7 +95,11 @@ import {
 } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
-import { stageCloneId } from "@cawco/core/workspace-policy";
+import {
+  excludedPaths,
+  IGNORED_STATUS,
+  stageCloneId,
+} from "@cawco/core/workspace-policy";
 import { briefingFor } from "./briefings";
 import type {
   DbShape,
@@ -1187,6 +1191,9 @@ const QUIET_ERROR = "ended three turns in a row without finish_item";
 /** Runs of whitespace between the counts a git read prints. */
 const SPACES = /\s+/;
 
+/** A full commit id, as a machine names one: never an option or a ref. */
+const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
 /** A CawCo read by its name, the harness's prefix off: `list_*`, `*_list`, `*_read`. */
 const CAWCO_READ = /^list_|_list$|_read$/;
 /** The CawCo tools that say themselves what becomes of a wait. */
@@ -1714,7 +1721,7 @@ const stoppedLanding = (item: WorkItemRow): Landed => ({
 
 /** The text that hands uncommitted work back to the session, for a landing that takes only commits. */
 const dirtyText = (files: string, where: string): string =>
-  `Not landed: the workspace has changes that are not committed, new files included. The hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or add them to .gitignore, then call finish_item again.${fenced(files)}`;
+  `Not landed: the workspace has changes that are not committed, new files included. The hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or move scratch to $TMPDIR, then call finish_item again.${fenced(files)}`;
 
 /** The text that hands a failed landing gate back to the session. */
 const gateFailedText = (run: GateRun, where: string): string => {
@@ -2979,16 +2986,53 @@ export const createWorkItems = ({
     workspace.state === "held" && workspace.holding !== null;
 
   /**
+   * The commits of workspace `id` whose work is on its base branch through a
+   * workspace cut `from` it that landed them ({@link vouchLanded}): what its
+   * archive does not count as its own (core `WorkspaceArchive.landed`).
+   */
+  const landedFrom = (id: string): string[] =>
+    db
+      .workspacesCutFrom(id)
+      .flatMap((cut) => (cut.cutFrom?.landed ? [cut.cutFrom.commit] : []));
+
+  /**
+   * Tells the session that started a workspace's work, its latest item's
+   * parent, that the workspace was just held, through its report path as a
+   * notice: what it holds, and the two ways on. Only that session decides
+   * held work; nobody else is asked (2026-10-18: 38 held workspaces sat in
+   * the owner's list, every one his to sort).
+   */
+  const heldNotice = (workspace: WorkspaceRow, work: HeldWork): void => {
+    const [latest] = db.workItemsIn(workspace.id);
+    const [row] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
+    if (!(latest && row)) {
+      return;
+    }
+    const named = work.excluded?.length
+      ? ` Kept out of git by its own excludes: ${work.excluded.join(", ")}.`
+      : "";
+    report(
+      row,
+      `Workspace ${workspace.id} of “${latest.title}” on ${work.machine} holds ${work.holds} (${work.size} at ${workspace.path}) that is nowhere else, so it was kept, not retired.${named} It is yours to decide: continue it (delegate with workspace: "${workspace.id}", or with from: "${workspace.id}" for a fresh delegate on its commits), or discard it (discard_workspace with workspace: "${workspace.id}"), which saves that work to a carry in ~/.cawco/carries on ${work.machine} and removes the clone.`,
+      false,
+      true,
+      `Workspace ${workspace.id.slice(0, 8)} holds ${work.holds}: continue it or discard it.`
+    );
+  };
+
+  /**
    * A workspace closed on its machine ({@link CONTROL_WORKSPACE_ARCHIVE}):
    * its boundary killed first and never started, then what it holds that is
    * nowhere else read on the host, and done with as `unlanded` says
    * ({@link WorkspaceUnlanded}), or with `discard` saved to a carry first
    * ({@link CONTROL_WORKSPACE_DISCARD}, which an agent that cannot write
-   * one refuses); `skip`, its items' handed-over outputs. Archived, its
+   * one refuses); `skip`, its items' handed-over outputs. The commits its
+   * `from` cuts landed are not its own ({@link landedFrom}). Archived, its
    * places go with it and its row says so, with the carry and where its
    * clone's HEAD was ({@link recut} cuts it again there); holding work (only
    * a `keep` answers so) its row is held with what it holds, its clone and
-   * places standing.
+   * places standing, and the session that started its work is told
+   * ({@link heldNotice}) as it becomes held.
    */
   const closeWorkspace = async (
     workspace: WorkspaceRow,
@@ -2996,11 +3040,13 @@ export const createWorkItems = ({
     skip: string[] = []
   ): Promise<ArchivedWorkspace> => {
     const discard = unlanded === "discard";
+    const landed = landedFrom(workspace.id);
     const request: WorkspaceArchive = {
       ...refOf(workspace),
       base: workspace.base,
       unlanded: discard ? "keep" : unlanded,
       skip,
+      ...(landed.length > 0 ? { landed } : {}),
     };
     const { carry, head, held } = (await call(
       workspace.machineId,
@@ -3019,8 +3065,11 @@ export const createWorkItems = ({
       workspaceChanged?.(kept);
       const work = heldWork({ ...kept, holding: held });
       console.log(
-        `[workspaces] ${workspace.id} on ${work.machine}: held, ${work.holds} (${work.size} at ${workspace.path}); the person continues it or discards it`
+        `[workspaces] ${workspace.id} on ${work.machine}: held, ${work.holds} (${work.size} at ${workspace.path}); the session that started its work continues it or discards it`
       );
+      if (workspace.state !== "held") {
+        heldNotice(workspace, work);
+      }
       return { workspace: kept, carry: null, held: work };
     }
     db.removeWorkspacePlaces(workspace.machineId, workspace.path);
@@ -3377,6 +3426,43 @@ export const createWorkItems = ({
   };
 
   /**
+   * Workspace `id` read again, off the caller's step and in its turn, now
+   * that commits it held are on its base branch through a workspace cut from
+   * it ({@link vouchLanded}): held, it is closed again with those left out
+   * ({@link landedFrom}), and retires when they were all it held; active, its
+   * settle reads it the same way.
+   */
+  const resettleSoon = (id: string): void => {
+    const [workspace] = db.workspacesNamed(id);
+    if (workspace?.state === "active") {
+      settleSoon(id);
+      return;
+    }
+    if (workspace?.state !== "held") {
+      return;
+    }
+    const again = inWorkspaceTurn(id, async (): Promise<void> => {
+      const [now] = db.workspacesNamed(id);
+      if (now?.state !== "held") {
+        return;
+      }
+      const closed = await closeWorkspace(now, "keep", handedOver(now));
+      if (closed.held) {
+        return;
+      }
+      await Promise.all(
+        db
+          .checkWorkspacesOf(now.id)
+          .map((check) => closeWorkspace(check, "check"))
+      );
+      console.log(
+        `[workspaces] ${now.id} on ${machineName(now.machineId)}: retired, its commits landed through the workspace cut from it and nothing else of it anywhere but on its remote`
+      );
+    });
+    detach(again, `resettle ${id}`);
+  };
+
+  /**
    * What workspace `id` holds on no remote, in its turn
    * ({@link inWorkspaceTurn}), so no close of its boundary runs meanwhile.
    * Its settle comes first ({@link settle}): a workspace nothing holds any
@@ -3528,6 +3614,12 @@ export const createWorkItems = ({
     }
     if (workspace.checksFor) {
       return `its workspace ${workspace.id} is archived: its clone and boundary are gone.`;
+    }
+    const taker = db
+      .workspacesCutFrom(workspace.id)
+      .find((cut) => cut.cutFrom?.landed);
+    if (taker) {
+      return `its workspace ${workspace.id} retired: its work went on in workspace ${taker.id}, cut from it, which landed it, so it is not cut again; workspace ${taker.id} is where that work goes on.`;
     }
     return `its workspace ${workspace.id} retired with no word of the commit its clone was on, so it is not cut again: a cut anywhere else could leave its commits behind.`;
   };
@@ -3935,6 +4027,9 @@ export const createWorkItems = ({
           (set.stderr || set.stdout).trim() || `exit ${set.exitCode}`
         );
       }
+      db.updateWorkspace(workspace.id, {
+        cutFrom: { workspace: source.id, commit: made.head, landed: false },
+      });
     } catch (error) {
       await closeWorkspace(workspace, "unmade");
       const words = `Workspace ${workspace.id} could not be cut from workspace ${source.id}, so it was archived: ${error instanceof Error ? error.message : String(error)}`;
@@ -5090,6 +5185,77 @@ export const createWorkItems = ({
   };
 
   /**
+   * What `item`'s clone holds outside its commits that would keep its
+   * workspace held once the item ends (agent workspace.ts `holding`), read
+   * inside its boundary: changed and untracked files (`git status`), stashes,
+   * and files kept out of git by the clone's own excludes rather than a
+   * tracked `.gitignore` (core `excludedPaths`); the item's outputs, which
+   * the hub collects, pass. The words that send `finish_item` back naming
+   * them, or nothing when there are none. Before this, scratch a delegate
+   * left in its clone (eval output, captures, notes, a stash) held its
+   * workspace after its work had landed, for the owner to sort (2026-10-18).
+   */
+  const leftoversIn = async (
+    item: WorkItemRow
+  ): Promise<string | undefined> => {
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    if (workspace?.state !== "active") {
+      return;
+    }
+    const run = runIn(workspace, item);
+    const read = async (what: string, cmd: string): Promise<string> => {
+      const result = await run(cmd, GIT_TIMEOUT_MS);
+      if (result.exitCode !== 0) {
+        throw new Error(
+          `the hub could not read ${what} in workspace ${workspace.id}: ${failedWith(result)}`
+        );
+      }
+      return result.stdout;
+    };
+    const outputs = item.outputs ?? [];
+    const pathspec =
+      outputs.length > 0
+        ? ` -- .${outputs.map((path) => ` ${quote(`:(exclude,literal)${path}`)}`).join("")}`
+        : "";
+    const status = (
+      await read("its uncommitted files", statusCommand(outputs))
+    ).trimEnd();
+    const stashes = (await read("its stashes", "git stash list")).trimEnd();
+    // Exit 1 from check-ignore: nothing ignored, which is no failure.
+    const rules = await read(
+      "its excluded files",
+      `git ${IGNORED_STATUS.join(" ")}${pathspec} | tr '\\0' '\\n' | sed -n 's/^!! //p' | tr '\\n' '\\0' | git check-ignore -v -z --stdin; [ $? -le 1 ]`
+    );
+    const excluded = rules
+      ? excludedPaths(
+          workspace.path,
+          await read(
+            "its tracked .gitignore files",
+            "git ls-files -z -- ':(glob)**/.gitignore'"
+          ),
+          rules
+        )
+      : [];
+    if (!(status || stashes || excluded.length > 0)) {
+      return;
+    }
+    return [
+      "Not finished: your clone holds work that is in no commit, so its workspace would be kept after this item ends, for someone else to sort out. Commit what belongs to the work, delete what does not, or move scratch (notes, captures, eval output, logs) to $TMPDIR, which goes with the workspace; then call finish_item again.",
+      ...(status ? [`Changed and untracked files:${fenced(status)}`] : []),
+      ...(stashes
+        ? [
+            `Stashes (apply and commit, or \`git stash drop\`):${fenced(stashes)}`,
+          ]
+        : []),
+      ...(excluded.length > 0
+        ? [
+            `Kept out of git by the clone's own excludes (.git/info/exclude or an untracked .gitignore), not the repository's:${fenced(excluded.join("\n"))}`,
+          ]
+        : []),
+    ].join("\n\n");
+  };
+
+  /**
    * The project's repository on a machine, which a gate workspace there is
    * cut from: its checkout place there (the primary first), or the folder
    * the last workspace of the project cut there was cut from
@@ -5957,12 +6123,59 @@ export const createWorkItems = ({
   };
 
   /**
+   * After `workspace`'s item landed on its base: the commit each workspace
+   * up its `from` chain was cut at ({@link cutFrom}) is vouched landed when
+   * `git cherry` in this clone, against the branch it just pushed, finds
+   * every patch of it there (no `+` line), and that workspace is read again
+   * ({@link resettleSoon}). A landing rebases a workspace's own commits, so
+   * main carries new commits for them: the workspace it was cut from still
+   * had the originals, on no remote, and stayed held for good (2026-10-18,
+   * three of the 38 retired by hand). A patch the landing changed (a
+   * conflict resolved on the way) is not vouched: that source stays held,
+   * and its parent decides.
+   */
+  const vouchLanded = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<void> => {
+    const target = quote(`origin/${workspace.base}`);
+    let [row] = db.workspacesNamed(workspace.id);
+    while (row?.cutFrom && !row.cutFrom.landed) {
+      const from = row.cutFrom;
+      if (!COMMIT_ID.test(from.commit)) {
+        return;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one link of the chain at a time, each read in the clone that landed it
+      const cherry = await runIn(workspace, item)(
+        `git cherry ${target} ${from.commit}`,
+        GIT_TIMEOUT_MS
+      );
+      if (
+        cherry.exitCode !== 0 ||
+        cherry.stdout.split("\n").some((line) => line.startsWith("+"))
+      ) {
+        console.log(
+          `[workspaces] ${row.id}: the work of ${from.commit.slice(0, 9)}, cut from workspace ${from.workspace}, is not all on ${workspace.base}: ${cherry.exitCode === 0 ? "git cherry names patches not there" : failedWith(cherry)}`
+        );
+        return;
+      }
+      db.updateWorkspace(row.id, { cutFrom: { ...from, landed: true } });
+      console.log(
+        `[workspaces] ${row.id}: landed the work of workspace ${from.workspace} at ${from.commit.slice(0, 9)}; that workspace is read again`
+      );
+      resettleSoon(from.workspace);
+      [row] = db.workspacesNamed(from.workspace);
+    }
+  };
+
+  /**
    * A finished item whose gate passed at finish_item, to its end: its
    * outputs must be in its workspace (else it is back to running, told which
    * are not); then it lands as its row says (on its base, the rest of the
    * gate's steps run on the rebased tree) and its outputs are collected,
    * and it is done (or failed, when it could not land or its outputs did not
-   * arrive) with the report the hub builds sent to its parent.
+   * arrive) with the report the hub builds sent to its parent. Landed on its
+   * base, what it was cut `from` is vouched landed ({@link vouchLanded}).
    */
   const landAndReport = async (
     item: WorkItemRow,
@@ -6013,6 +6226,9 @@ export const createWorkItems = ({
         `[work-items] ${item.id}: its landing stopped as the item ended; nothing was landed or reported`
       );
       return { done: false, text: landing.text };
+    }
+    if (landing.kind === "done" && item.lands === "main") {
+      await vouchLanded(workspace, item);
     }
     const collected =
       landing.kind === "done"
@@ -7004,6 +7220,10 @@ export const createWorkItems = ({
         return open;
       }
       const { row, item } = open;
+      const left = await leftoversIn(item);
+      if (left) {
+        return left;
+      }
       clearWait(item);
 
       if (request.blocked) {
@@ -7309,6 +7529,31 @@ export const createWorkItems = ({
       // In its turn: no settle, bundle or read meets this close.
       return inWorkspaceTurn(namedWorkspace(needle).id, () =>
         archiveNow(needle, discard)
+      );
+    },
+
+    /**
+     * `discard_workspace` from session `from`: {@link archive} with
+     * `discard`, for a workspace that session cut or delegated an item into,
+     * or one of the project it leads. Refused, naming whose it is, for any
+     * other.
+     */
+    discardFor(from: string, needle: string): Promise<ArchivedWorkspace> {
+      const workspace = namedWorkspace(needle);
+      const items = db.workItemsIn(workspace.id);
+      const ours =
+        workspace.createdByInstanceId === from ||
+        items.some(
+          (item) => item.parentInstanceId === from || leadFor(item)?.id === from
+        );
+      if (!ours) {
+        throw new WorkItemRefusal(
+          403,
+          `Workspace ${workspace.id} is not one of yours: discard_workspace lets go of a workspace your own delegates worked in. Nothing was deleted.`
+        );
+      }
+      return inWorkspaceTurn(workspace.id, () =>
+        archiveNow(workspace.id, true)
       );
     },
 

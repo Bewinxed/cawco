@@ -96,6 +96,15 @@ export const sessionConfigDir = ({
 export const projectClaudeDir = (cwd: string, ...parts: string[]): string =>
   join(cwd, CLAUDE_DIR_NAME, ...parts);
 
+/**
+ * Where a project's memory documents are placed in a folder (agent
+ * placed-memory.ts): its `.claude/rules/cawco/`. Claude Code loads every
+ * rule file under `.claude/rules/` at a session's launch ("All `.md` files
+ * are discovered recursively", code.claude.com/docs/en/memory).
+ */
+export const placedMemoryDir = (cwd: string): string =>
+  projectClaudeDir(cwd, "rules", "cawco");
+
 /** The store of the trees the entries of `dir` link to (claude-dirs.ts {@link TREE_STORE_DIR}). */
 export const treeStoreOf = (dir: string): string =>
   join(dirname(dir), TREE_STORE_DIR, basename(dir));

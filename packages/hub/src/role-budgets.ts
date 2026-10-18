@@ -203,11 +203,19 @@ import type { Tasks } from "./tasks";
  * (worker 25,192, delegate 7,693, lead 16,148 measured, landed together
  * with memory_recall). Raised deliberately for the worker and the delegate,
  * both owner-picked features; the lead's lowered to what it measures.
+ * 2026-10-18, after them: `discard_workspace` (work-items.ts `discardFor`): a held
+ * workspace is its delegating session's to decide, told by a notice, no
+ * longer the owner's from the places list (38 sat there for him to sort),
+ * and a discard still writes a carry. One sentence and a one-line argument,
+ * about 70 tokens for the worker and the lead (worker 25,314, delegate
+ * 7,693, lead 16,270 measured beside `memory_recall` and the decision
+ * programs). Raised deliberately for the worker and the lead, both at their
+ * budgets.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 25_200,
+  worker: 25_320,
   delegate: 7700,
-  lead: 16_160,
+  lead: 16_280,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

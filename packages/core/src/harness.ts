@@ -1898,6 +1898,14 @@ export type WorkspaceUnlanded = "keep" | "check" | "unmade";
 export interface WorkspaceArchive {
   base?: string;
   id: string;
+  /**
+   * Commits of the clone whose work is on `base` though no ref of its
+   * `origin` holds them: each the commit a workspace was cut `from` this one
+   * at, once that workspace landed them, rebased onto the branch with every
+   * patch there (hub work-items.ts `vouchLanded`). What they reach is no
+   * work of this clone's own, and a HEAD they reach is cut again nowhere.
+   */
+  landed?: string[];
   path?: string;
   skip?: string[];
   unlanded: WorkspaceUnlanded;

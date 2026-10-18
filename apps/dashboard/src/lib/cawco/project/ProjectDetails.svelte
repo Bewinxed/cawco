@@ -11,8 +11,9 @@
    * - Place: where it lives, which CawCo can't move, and its places: a
    *   checkout other than the primary can be removed, another added (a
    *   machine and a folder on it). The primary and the project's folder on
-   *   the hub say they can't be removed; a held workspace keeps its Continue
-   *   and Discard.
+   *   the hub say they can't be removed. A held workspace is its delegating
+   *   session's to continue or discard, never yours (hub work-items.ts
+   *   `heldNotice`).
    * - Repository: read from the folder's remote, said so.
    * - Work lands: where its attempts land when their task says nothing.
    * - Landing checks: the steps the hub runs before work lands, read from
@@ -34,20 +35,15 @@
     machineLabel,
     type ProjectGate,
   } from "@cawco/core";
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import {
     addProjectPlace,
-    archiveWorkspace,
     cawco,
     editProject,
-    type HeldPlace,
     type Machine,
     type ProjectRow,
     removeProjectPlace,
   } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { conversationHref } from "#lib/cawco/links.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { folderFileHref, readGate } from "#lib/cawco/project-tasks.js";
@@ -288,23 +284,6 @@
     }
   }
 
-  /**
-   * A held workspace's Discard asks in the list, beside its row (The Open
-   * Page Rule); Continue opens the session its work ran in.
-   */
-  const placeAsker = new Asker<AskHereRequest>();
-  async function askDiscard(placeId: string, held: HeldPlace, where: string) {
-    await placeAsker.ask({
-      at: placeId,
-      title: "Discard this held workspace?",
-      body: `Its clone holds ${held.holds}. Discard writes that to a carry on ${where} (in ~/.cawco/carries), then deletes the clone, its boundary and its records.`,
-      confirmLabel: "Discard",
-      destructive: true,
-      pendingLabel: "Discarding…",
-      run: () => archiveWorkspace(held.workspaceId, { discard: true }),
-    });
-  }
-
   /** Escape inside it folds it, and goes no further. */
   function escapes(node: HTMLElement) {
     const onKey = (event: KeyboardEvent) => {
@@ -404,29 +383,6 @@
                     >Its folder on the hub: it can't be removed, and goes when
                     the project does.</span
                   >
-                {/if}
-                {#if each.held}
-                  {@const held = each.held}
-                  <span class="holds">Held: {held.holds} · {held.size}</span>
-                  <span class="held-acts">
-                    {#if held.instanceId}
-                      <Button
-                        href={conversationHref(
-                          held.instanceId,
-                          cawco.instanceIndex
-                        )}
-                        size="xs"
-                        variant="secondary">Continue</Button
-                      >
-                    {/if}
-                    <Button
-                      onclick={() =>
-                        askDiscard(each.id, held, hostWords(each.machineId))}
-                      size="xs"
-                      variant="destructive">Discard</Button
-                    >
-                  </span>
-                  <AskHere asker={placeAsker} at={each.id} />
                 {/if}
                 <RowFault
                   again={() => remove(each.id)}
@@ -802,15 +758,6 @@
   .kept {
     font: var(--type-meta);
     color: var(--ink-subtle);
-  }
-  .holds {
-    font: var(--type-meta);
-    color: var(--ink-strong);
-  }
-  .held-acts {
-    display: flex;
-    gap: var(--space-2);
-    padding-block-start: var(--space-1);
   }
   .add {
     display: grid;

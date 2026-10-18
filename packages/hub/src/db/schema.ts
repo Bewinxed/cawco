@@ -1251,8 +1251,10 @@ export const completedTurns = sqliteTable(
  * `active` while an item there is live, or ended a moment ago and the hub
  * has not settled it, or while something holds it (a session attached, an
  * artifact showing what it serves); `held` once its item ended with work
- * that is nowhere else, which only the person ends, by continuing it or
- * discarding it; `archived` once its boundary and clone are gone.
+ * that is nowhere else, which the session that started its work ends, told
+ * so, by continuing it or discarding it (work-items.ts `heldNotice`), or a
+ * workspace cut from it ends by landing that work (`vouchLanded`);
+ * `archived` once its boundary and clone are gone.
  */
 export type WorkspaceState = "active" | "held" | "archived";
 
@@ -1336,14 +1338,37 @@ export const workspaces = sqliteTable("workspaces", {
    */
   head: text("head", { mode: "json" }).$type<WorkspaceCut>(),
   /**
-   * The carry its discard wrote on its machine, the person letting its
-   * unlanded work go: such a workspace is never cut again.
+   * The carry its discard wrote on its machine, its parent or the person
+   * letting its unlanded work go: such a workspace is never cut again.
    */
   carry: text("carry"),
+  /**
+   * The workspace a `delegate` call's `from` cut this one from, and the
+   * commit its clone started at (work-items.ts `cutFrom`); null for one cut
+   * from its repository.
+   */
+  cutFrom: text("cut_from", { mode: "json" }).$type<WorkspaceFrom>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * Where a workspace cut `from` another started ({@link workspaces.cutFrom}):
+ * that workspace, and its HEAD then, which this one's clone took.
+ */
+export interface WorkspaceFrom {
+  /** The source's HEAD as this clone took it. */
+  commit: string;
+  /**
+   * Whether this workspace's landing put every patch of that commit's work
+   * on the base branch (work-items.ts `vouchLanded`): then the source holds
+   * none of it as its own, and an archive is told so (core
+   * `WorkspaceArchive.landed`).
+   */
+  landed: boolean;
+  workspace: string;
+}
 
 /**
  * Who began a piece of work, or a turn of Caw's: `you`, the person's own

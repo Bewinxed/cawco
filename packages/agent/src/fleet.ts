@@ -52,6 +52,7 @@ import {
   accountIds,
   claudeHomeJson,
   claudeSkillsDir,
+  placedMemoryDir,
   placedSkillsDir,
   projectClaudeDir,
   treeStoreOf,
@@ -71,7 +72,6 @@ import {
 } from "./denied-tools";
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
-import { placedMemoryDir } from "./placed-memory";
 import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, toolEnv, toolPath } from "./tools";
 import {

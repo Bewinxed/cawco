@@ -249,33 +249,12 @@ export type Machine = AgentRow;
 export type { InstanceRow } from "@cawco/core";
 
 /**
- * A delegate's workspace whose work item ended with work that is nowhere
- * else (hub work-items.ts `settle`): only you end it, by continuing it in
- * its session or discarding it.
- */
-export interface HeldPlace {
-  /** When its machine read what it holds, ISO. */
-  heldAt: string;
-  /** In words: "2 commits on no remote, 3 changed files, 1 stash". */
-  holds: string;
-  /** The session its latest work item ran in: Continue opens it. */
-  instanceId: string | null;
-  /** The clone's size on disk, in words. */
-  size: string;
-  /** Its latest work item's title. */
-  title: string | null;
-  workspaceId: string;
-}
-
-/**
  * Where a project's files are (WORDS.md: place): a checkout on a machine, a
  * delegate's workspace while it lives or is held, or the project's folder on
  * the hub.
  */
 export interface ProjectPlace {
   createdAt: string;
-  /** A held workspace's: what it holds and where it goes on; null for any other place. */
-  held?: HeldPlace | null;
   id: string;
   /** The project's primary checkout: exactly one once it has any. */
   isPrimary: boolean;

@@ -601,6 +601,7 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   "stop_delegate",
   "interrupt_delegate",
   "answer_delegate",
+  "discard_workspace",
   // It stops every turn on a machine: an orchestrator's, never a leaf's.
   "machine_pause",
 ]);
@@ -897,6 +898,12 @@ export interface HandoffActions {
     held: HeldWork[];
     queued: QueuedDelegate[];
   }>;
+  /**
+   * Lets go of a workspace one of this session's delegates worked in: what
+   * it holds that is nowhere else goes to a carry on its machine, then its
+   * clone goes (hub work-items.ts `discardFor`). Answers what the hub did.
+   */
+  readonly discardWorkspace: (workspace: string) => Promise<string>;
   /**
    * Finishes this session's work item: the hub runs its landing gate and
    * lands it, or fails it as blocked. Answers what the hub says of it.
@@ -2046,6 +2053,24 @@ export const handoffActions = ({
       },
       body: JSON.stringify({ instanceId, minutes, reason }),
     });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return ((await response.json()) as { text: string }).text;
+  },
+
+  async discardWorkspace(workspace: string): Promise<string> {
+    const response = await fetch(
+      `${hubHttpUrl()}/api/workspaces/${encodeURIComponent(workspace.trim())}/discard`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(authorization ? { Authorization: authorization } : {}),
+        },
+        body: JSON.stringify({ from: instanceId }),
+      }
+    );
     if (!response.ok) {
       throw new Error(await response.text());
     }

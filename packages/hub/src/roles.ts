@@ -164,6 +164,7 @@ const DELEGATE_SESSION = [
   "stop_delegate",
   "interrupt_delegate",
   "answer_delegate",
+  "discard_workspace",
   "show_image",
   ...ARTIFACT_TOOLS,
 ] as const;
@@ -213,6 +214,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "stop_delegate",
     "interrupt_delegate",
     "answer_delegate",
+    "discard_workspace",
   ]),
   overseer: new Set([...TRIAGE_TOOLS, "task_read", "list_sessions"]),
   "web-facing": new Set([
