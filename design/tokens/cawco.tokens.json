@@ -3399,6 +3399,14 @@
         "unit": "rem"
       }
     },
+    "text-input-touch": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1,
+        "unit": "rem"
+      },
+      "$description": "A field's words under a coarse pointer: 16px, the size under which iOS Safari zooms the page when the field takes focus."
+    },
     "text-code": {
       "$type": "dimension",
       "$value": {

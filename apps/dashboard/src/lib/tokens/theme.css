@@ -568,6 +568,10 @@
   font-size: var(--text-body);
 }
 
+@utility text-size-input-touch {
+  font-size: var(--text-input-touch);
+}
+
 @utility text-size-code {
   font-size: var(--text-code);
 }

@@ -101,7 +101,7 @@
       ? "Compacting context"
       : `Context ${shown}% used. Show the breakdown.`}
     class={[
-      "mark-line flex h-7 shrink-0 items-center gap-1.5 rounded-sm px-1.5 text-label tabular-nums hover:bg-neutral-2 transition-[background-color,color] duration-(--dur-control) ease-out",
+      "mark-line flex min-h-7 shrink-0 items-center gap-1.5 rounded-sm px-1.5 text-label tabular-nums hover:bg-neutral-2 transition-[background-color,color] duration-(--dur-control) ease-out",
       compacting && "text-ink-strong",
       !compacting && band === "critical" && "text-error-9",
       !compacting && band === "warn" && "text-warning-9",
@@ -146,7 +146,7 @@
       {#if usage}
         <span
           class={[
-            "ml-auto text-label tabular-nums",
+            "ms-auto text-label tabular-nums",
             band === "critical" && "text-error-9",
             band === "warn" && "text-warning-9",
             band !== "critical" && band !== "warn" && "text-ink-muted",
@@ -179,7 +179,9 @@
         </p>
       </div>
 
-      <ul class="max-h-56 overflow-y-auto border-t border-border px-3 py-2">
+      <ul
+        class="max-h-56 overflow-y-auto overscroll-contain scrollbar-gutter-stable border-t border-border px-3 py-2"
+      >
         {#each usage.categories as category, index (category.name)}
           <li class="flex items-center gap-2 py-space-1 text-label">
             <span

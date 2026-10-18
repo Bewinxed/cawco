@@ -405,6 +405,8 @@ public enum TypeScale {
     public static let textMeta: Double = 12
     public static let textLabel: Double = 13
     public static let textBody: Double = 14
+    /// A field's words under a coarse pointer: 16px, the size under which iOS Safari zooms the page when the field takes focus.
+    public static let textInputTouch: Double = 16
     /// Code runs a step under body: JetBrains Mono sets large.
     public static let textCode: Double = 12
     /// Fluid on the web (clamp); its bounds in points.
