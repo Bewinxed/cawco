@@ -364,12 +364,8 @@ const OUTPUT_WAIT_MS = 2000;
  * it imports, the design tokens and the root's own files (`bun.lock`,
  * `package.json`); a glob's `*` stops at a `/`.
  */
-const BUILD_READS = [
-  "apps/dashboard",
-  "packages",
-  "design",
-  ":(glob)*",
-];
+const BUILD_DIRS = ["apps/dashboard", "packages", "design"];
+const BUILD_READS = [...BUILD_DIRS, ":(glob)*"];
 
 /** Git's answer in the checkout, `input` on its stdin. */
 const gitSays = async (args: string[], input?: string): Promise<string> => {
@@ -392,15 +388,30 @@ const gitSays = async (args: string[], input?: string): Promise<string> => {
 };
 
 /**
- * The tree a build is built from, as one key: HEAD (the build writes its
- * short hash as its version, vite.config.ts `BUILD_VERSION`), and in what it
- * reads, every change to a tracked file and every untracked file's content.
- * The baselines a run writes are not in it, so an approve never makes the
- * next run's tree another.
+ * The tree a build is built from, as one key: what it reads as HEAD has it
+ * (every file's blob there), every change to one since, and every untracked
+ * one's content. Not HEAD itself: a commit to the kit alone made every run
+ * after it wait on every run still serving, for a build nothing it reads
+ * had changed. The build writes HEAD's short hash as its version
+ * (vite.config.ts `BUILD_VERSION`), which a page only compares with the
+ * version the server it came from serves (served-build.svelte.ts), the same
+ * build's, and draws nowhere. The baselines a run writes are not in it, so
+ * an approve never makes the next run's tree another.
  */
 const treeKey = async (): Promise<string> => {
   const hash = new Bun.CryptoHasher("sha256");
-  hash.update(await gitSays(["rev-parse", "HEAD"]));
+  const [tracked, root] = await Promise.all([
+    gitSays(["ls-tree", "-r", "HEAD", "--", ...BUILD_DIRS]),
+    gitSays(["ls-tree", "HEAD"]),
+  ]);
+  hash.update(tracked);
+  // The root's own files (`bun.lock`, `package.json`), its folders apart.
+  hash.update(
+    root
+      .split("\n")
+      .filter((line) => line.includes(" blob "))
+      .join("\n")
+  );
   hash.update(await gitSays(["diff", "HEAD", "--binary", "--", ...BUILD_READS]));
   const untracked = (
     await gitSays([
