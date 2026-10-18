@@ -19,3 +19,6 @@
 # in every Bun.build, so the root declares no react.
 [install]
 hoist = false
+# drizzle-kit loads drizzle-orm with a bare import() from its store dir; the root link
+# makes it reachable (drizzle-team/drizzle-orm#6156, open, no release fixes it).
+publicHoistPattern = ["drizzle-orm"]
