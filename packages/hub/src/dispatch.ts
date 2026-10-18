@@ -28,7 +28,10 @@
  *   dispatch and Caw on, up to `max_attempts` live attempts, and not while
  *   `review_limit` tasks or more wait in `you` stages.
  * - **Hooks.** A task entering an `active` stage with `runs: <type>`, by
- *   anyone's move but the hub's, or filed straight into one, starts an
+ *   anyone's move but the hub's own (a move the tracker sync brings from
+ *   GitHub or Linear is the person's who made it there: tracker.ts holds
+ *   back the issues of openers the tracker does not vouch for), or filed
+ *   straight into one, starts an
  *   attempt (of the task's own type when it names one, else that type),
  *   reporting to the session that moved it or else the lead. A start that
  *   cannot go, the lead's own start among them, is remembered on the task
@@ -1860,7 +1863,11 @@ export const createDispatcher = ({
     if (event.kind === "moved") {
       db.dropQueuedTaskStart(event.projectId, event.id);
     }
-    if (event.kind !== "changed" && event.actor.mover !== "hub") {
+    // The hub's own moves start nothing; one a tracker brings is a person's.
+    if (
+      event.kind !== "changed" &&
+      (event.actor.mover !== "hub" || event.actor.tracker !== undefined)
+    ) {
       const entered = event.kind === "moved" ? event.to : event.stage;
       hooked({ ...event, to: entered })
         .catch((error: unknown) =>

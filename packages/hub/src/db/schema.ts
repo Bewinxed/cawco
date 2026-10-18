@@ -539,8 +539,8 @@ export const projects = sqliteTable("projects", {
   remote: text("remote"),
   /**
    * Where the project's tasks live (§5.2 of the Projects spec): CawCo's own
-   * files in the project folder. GitHub Issues and Linear are named so the
-   * setting is ready for them; the hub refuses them until they are built.
+   * files in the project folder, alone or with GitHub Issues or Linear as
+   * the record of each task's issue fields (tracker.ts, `tracker_bindings`).
    */
   tracker: text("tracker").$type<Tracker>().notNull().default("cawco"),
   /**
@@ -657,8 +657,8 @@ export interface WorkBudget {
   usd?: number;
 }
 
-/** Where a project's tasks live: CawCo's files, or (later) an outside tracker. */
-export type Tracker = "cawco" | "github" | "linear";
+/** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts). */
+export type Tracker = import("@cawco/core").Tracker;
 
 /**
  * Attempts a stage's `runs:` hook asked for while the project already ran
@@ -4095,8 +4095,22 @@ export const routineRuns = sqliteTable(
   ]
 );
 
+/**
+ * An `app` connection's registration (connections.ts): a GitHub App's id,
+ * installation and private key, or a Linear OAuth app's client id and secret.
+ */
+export type ConnectionAppSecret =
+  | {
+      appId: string;
+      installationId: string;
+      privateKey: string;
+      service: "github";
+    }
+  | { clientId: string; clientSecret: string; service: "linear" };
+
 /** What a connection's sealed `secret` holds. */
 export interface ConnectionSecret {
+  app?: ConnectionAppSecret;
   client?: import("@modelcontextprotocol/sdk/shared/auth.js").OAuthClientInformationMixed;
   key?: string;
   tokens?: OAuthTokens;
@@ -4348,6 +4362,137 @@ export const connectorPollItems = sqliteTable(
     version: text("version").notNull(),
   },
   (table) => [primaryKey({ columns: [table.pollId, table.itemId] })]
+);
+
+/**
+ * Where a tracker binding's poll stands (tracker.ts): the newest change it
+ * took in, of issues and of their comments, and GitHub's ETag for each list
+ * as it last asked it.
+ */
+export interface TrackerCursor {
+  commentsEtag: string | null;
+  /** The newest comment taken in, ms. */
+  commentsSince: number;
+  etag: string | null;
+  /** The newest issue change taken in, ms. */
+  since: number;
+}
+
+/**
+ * A project's tracker (Projects spec D2, §5.2; tracker.ts): the connection
+ * it signs in with, the repository or team its tasks' issues are in, and
+ * where its poll stands. One per project; none while the project keeps its
+ * tasks in CawCo's files alone.
+ */
+export const trackerBindings = sqliteTable("tracker_bindings", {
+  projectId: text("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  provider: text("provider")
+    .$type<import("@cawco/core").IssueTracker>()
+    .notNull(),
+  /** The connection's name (connections.ts). */
+  connection: text("connection").notNull(),
+  /** GitHub: `owner/repo`; Linear: the team's id. */
+  target: text("target").notNull(),
+  targetName: text("target_name").notNull(),
+  targetUrl: text("target_url").notNull(),
+  /** Issues opened after it become tasks; nothing older is copied. */
+  boundAt: timestamp("bound_at").notNull(),
+  cursor: text("cursor", { mode: "json" }).$type<TrackerCursor>().notNull(),
+  state: text("state")
+    .$type<import("@cawco/core").TrackerSyncState>()
+    .notNull(),
+  /** Why it is refused, or why its last poll stopped short; null when all went through. */
+  reason: text("reason"),
+  polledAt: timestamp("polled_at"),
+  /** The tracker's rate limit holds polls back until then. */
+  resumeAt: timestamp("resume_at"),
+});
+
+/**
+ * What a task and its issue last agreed on (tracker.ts): each field the
+ * tracker is the record of, and the stage that agreed with the issue's
+ * state. A side whose value moved off it changed that field.
+ */
+export interface TrackerSynced {
+  description: string;
+  labels: string[];
+  /** The stage the task stood in when they agreed. */
+  stage: string;
+  /** The issue's state, as tracker.ts names it (`open`, `closed:completed`, a Linear state's id). */
+  state: string;
+  title: string;
+}
+
+/**
+ * A task linked to its issue (tracker.ts). The task file names the issue
+ * (`issue:`, its URL); this row keeps the issue's own key and what the two
+ * last agreed on.
+ */
+export const trackerLinks = sqliteTable(
+  "tracker_links",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The task, `tsk-12`. */
+    taskId: text("task_id").notNull(),
+    provider: text("provider")
+      .$type<import("@cawco/core").IssueTracker>()
+      .notNull(),
+    /** GitHub: the issue's number; Linear: the issue's id. */
+    issueKey: text("issue_key").notNull(),
+    /** `#12`, `ENG-123`. */
+    ref: text("ref").notNull(),
+    url: text("url").notNull(),
+    synced: text("synced", { mode: "json" }).$type<TrackerSynced>().notNull(),
+    /** The issue's `updated_at` when they last agreed, ms. */
+    remoteUpdatedAt: integer("remote_updated_at").notNull(),
+    /** Why the last sync of this task stopped short, in the tracker's words. */
+    problem: text("problem"),
+    syncedAt: timestamp("synced_at"),
+    /** Comments written after it, on either side, are carried to the other. */
+    linkedAt: timestamp("linked_at").notNull(),
+    /**
+     * Who opened the issue when the tracker does not vouch for them, in
+     * words; null when it does, or CawCo filed it. Set, the issue's pulls
+     * never put its task where an agent takes it: they wait for you.
+     */
+    unvouched: text("unvouched"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.taskId] }),
+    uniqueIndex("tracker_links_issue").on(
+      table.projectId,
+      table.provider,
+      table.issueKey
+    ),
+  ]
+);
+
+/**
+ * A comment carried between a task and its issue (tracker.ts), so it is
+ * carried once: the issue's comment id, and which entry of the task's
+ * `## Comments` it is (its heading's time).
+ */
+export const trackerComments = sqliteTable(
+  "tracker_comments",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    taskId: text("task_id").notNull(),
+    remoteId: text("remote_id").notNull(),
+    /** `cawco`: written on the task and posted to the issue; `tracker`: written on the issue and added to the task. */
+    origin: text("origin").$type<"cawco" | "tracker">().notNull(),
+    /** The task comment's heading time, ms. */
+    at: integer("at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.remoteId] }),
+    index("tracker_comments_task").on(table.projectId, table.taskId),
+  ]
 );
 
 /**

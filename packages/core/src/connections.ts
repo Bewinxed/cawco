@@ -37,10 +37,36 @@ export type ConnectionTransport = (typeof CONNECTION_TRANSPORTS)[number];
  * How the hub signs in: `none`; `bearer` (`Authorization: Bearer <key>`);
  * `header` (the key as the value of the header `header` names, or for
  * `stdio` the environment variable it names); `oauth` (the MCP authorization
- * flow, run and refreshed by the hub).
+ * flow, run and refreshed by the hub); `app` (an app the owner registered
+ * with the service, acting as itself: a GitHub App's installation, whose
+ * private key mints an hour's token, or a Linear OAuth app authorized with
+ * `actor=app`, its 24-hour tokens refreshed by the hub).
  */
-export const CONNECTION_AUTHS = ["none", "bearer", "header", "oauth"] as const;
+export const CONNECTION_AUTHS = [
+  "none",
+  "bearer",
+  "header",
+  "oauth",
+  "app",
+] as const;
 export type ConnectionAuth = (typeof CONNECTION_AUTHS)[number];
+
+/** The services an `app` connection is built for. */
+export const APP_SERVICES = ["github", "linear"] as const;
+export type AppService = (typeof APP_SERVICES)[number];
+
+/**
+ * An `app` connection's registration, as every route answers it: what names
+ * the app, never its private key or client secret.
+ * - GitHub: "Get the ID of the installation that you want to authenticate
+ *   as" and the app's own ID (docs.github.com, generating an installation
+ *   access token).
+ * - Linear: the OAuth app's client ID; "Resources are created as the
+ *   application" with `actor=app` (linear.app/developers/oauth-2-0-authentication).
+ */
+export type ConnectionApp =
+  | { appId: string; installationId: string; service: "github" }
+  | { clientId: string; service: "linear" };
 
 /** `signed-in`: its tools answer. `needs-sign-in`: a key or a sign-in is owed. `error`: `reason` says what failed. */
 export type ConnectionState = "signed-in" | "needs-sign-in" | "error";
@@ -49,6 +75,8 @@ export type ConnectionState = "signed-in" | "needs-sign-in" | "error";
 export interface ConnectionView {
   /** Which account of the service it is, in the owner's words (`@brand`). */
   account: string;
+  /** For `app` auth, once its registration is held: what names the app. */
+  app?: ConnectionApp;
   args?: string[];
   auth: ConnectionAuth;
   /** For `stdio`: the command the hub runs. */

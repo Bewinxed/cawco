@@ -8,6 +8,12 @@
 /** GitHub's REST API, which the pollers, the relay and the publisher call. */
 export const GITHUB_API = "https://api.github.com";
 
+/**
+ * Linear's API: its `/graphql`, which the tracker sync calls, and its
+ * `/oauth/token`, which a Linear app's sign-in calls.
+ */
+export const LINEAR_API = "https://api.linear.app";
+
 /** TypeSafe's System One, which Jev's typesafe route posts to. */
 export const TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone";
 

@@ -4696,161 +4696,6 @@
         }
       }
     },
-    "/api/projects/{id}/tracker": {
-      "put": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "tracker": {
-                    "type": "string",
-                    "enum": [
-                      "cawco",
-                      "github",
-                      "linear"
-                    ]
-                  }
-                },
-                "required": [
-                  "tracker"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "putApiProjectsByIdTracker",
-        "responses": {
-          "200": {
-            "description": "putApiProjectsByIdTracker 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/putApiProjectsByIdTracker200"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "putApiProjectsByIdTracker 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "putApiProjectsByIdTracker 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "putApiProjectsByIdTracker 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "putApiProjectsByIdTracker 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "putApiProjectsByIdTracker 413",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "415": {
-            "description": "putApiProjectsByIdTracker 415",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "putApiProjectsByIdTracker 422",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "putApiProjectsByIdTracker 500",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "putApiProjectsByIdTracker 503",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "putApiProjectsByIdTracker 504",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/instances/{id}/artifacts": {
       "get": {
         "parameters": [
@@ -10694,7 +10539,8 @@
                       "none",
                       "bearer",
                       "header",
-                      "oauth"
+                      "oauth",
+                      "app"
                     ]
                   },
                   "header": {
@@ -10806,7 +10652,8 @@
                       "none",
                       "bearer",
                       "header",
-                      "oauth"
+                      "oauth",
+                      "app"
                     ]
                   },
                   "header": {
@@ -10959,6 +10806,103 @@
         }
       }
     },
+    "/api/connections/{name}/app": {
+      "put": {
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "appId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "installationId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "privateKey": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "appId",
+                      "installationId",
+                      "privateKey"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clientId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "clientSecret": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "clientId",
+                      "clientSecret"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiConnectionsByNameApp",
+        "responses": {
+          "200": {
+            "description": "putApiConnectionsByNameApp 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiConnectionsByNameApp 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiConnectionsByNameApp 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/connections/{name}/sign-in": {
       "post": {
         "parameters": [
@@ -11047,6 +10991,181 @@
           },
           "400": {
             "description": "getApiConnectionsByNameTools 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tracker": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdTracker",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdTracker 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tracker": {
+                    "type": "string",
+                    "enum": [
+                      "cawco",
+                      "github",
+                      "linear"
+                    ]
+                  },
+                  "connection": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tracker"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdTracker",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdTracker 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdTracker 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdTracker 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tracker/sync": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdTrackerSync",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTrackerSync 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackerView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTrackerSync 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections/{name}/targets": {
+      "get": {
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiConnectionsByNameTargets",
+        "responses": {
+          "200": {
+            "description": "getApiConnectionsByNameTargets 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiConnectionsByNameTargets200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiConnectionsByNameTargets 400",
             "content": {
               "text/plain": {
                 "schema": {
@@ -24756,17 +24875,6 @@
           "$ref": "#/components/schemas/StagesTemplateView"
         }
       },
-      "putApiProjectsByIdTracker200": {
-        "type": "object",
-        "properties": {
-          "tracker": {
-            "$ref": "#/components/schemas/Tracker"
-          }
-        },
-        "required": [
-          "tracker"
-        ]
-      },
       "getApiInstancesByIdArtifacts200": {
         "type": "array",
         "items": {
@@ -25196,6 +25304,20 @@
         },
         "required": [
           "tools"
+        ]
+      },
+      "getApiConnectionsByNameTargets200": {
+        "type": "object",
+        "properties": {
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackerTarget"
+            }
+          }
+        },
+        "required": [
+          "targets"
         ]
       },
       "deleteApiEventRoutesById200": {
@@ -32398,7 +32520,7 @@
         ]
       },
       "Tracker": {
-        "description": "Where a project's tasks live: CawCo's files, or (later) an outside tracker.",
+        "description": "Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts).",
         "type": "string",
         "enum": [
           "cawco",
@@ -32483,6 +32605,10 @@
           },
           "id": {
             "type": "string"
+          },
+          "issue": {
+            "description": "The GitHub or Linear issue it is one record with (tracker.ts): its ref,\nits link, and why its last sync stopped short; null when it has none.",
+            "$ref": "#/components/schemas/TaskIssueLink"
           },
           "kind": {
             "$ref": "#/components/schemas/StageKind",
@@ -32792,6 +32918,51 @@
           "id",
           "mover",
           "name"
+        ]
+      },
+      "TaskIssueLink": {
+        "description": "A task's linked issue, as the task's view carries it.",
+        "type": "object",
+        "properties": {
+          "problem": {
+            "description": "Why the last sync of this task stopped short, in the tracker's words; null when it went through.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/IssueTracker"
+          },
+          "ref": {
+            "description": "`#12` on GitHub, `ENG-123` on Linear.",
+            "type": "string"
+          },
+          "syncedAt": {
+            "description": "When this task and its issue last agreed, ms epoch; null before they first did.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "problem",
+          "provider",
+          "ref",
+          "syncedAt",
+          "url"
+        ]
+      },
+      "IssueTracker": {
+        "description": "A tracker that is an outside service.",
+        "type": "string",
+        "enum": [
+          "github",
+          "linear"
         ]
       },
       "TaskResult": {
@@ -37646,6 +37817,51 @@
             "description": "Which account of the service it is, in the owner's words (`@brand`).",
             "type": "string"
           },
+          "app": {
+            "description": "For `app` auth, once its registration is held: what names the app.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "appId": {
+                    "type": "string"
+                  },
+                  "installationId": {
+                    "type": "string"
+                  },
+                  "service": {
+                    "type": "string",
+                    "enum": [
+                      "github"
+                    ]
+                  }
+                },
+                "required": [
+                  "appId",
+                  "installationId",
+                  "service"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string"
+                  },
+                  "service": {
+                    "type": "string",
+                    "enum": [
+                      "linear"
+                    ]
+                  }
+                },
+                "required": [
+                  "clientId",
+                  "service"
+                ]
+              }
+            ]
+          },
           "args": {
             "type": "array",
             "items": {
@@ -37729,6 +37945,7 @@
       "ConnectionAuth": {
         "type": "string",
         "enum": [
+          "app",
           "bearer",
           "header",
           "none",
@@ -37750,6 +37967,114 @@
           "http",
           "sse",
           "stdio"
+        ]
+      },
+      "TrackerView": {
+        "description": "A project's tracker, as the dashboard reads it.",
+        "type": "object",
+        "properties": {
+          "binding": {
+            "description": "Set while the tracker is GitHub Issues or Linear.",
+            "$ref": "#/components/schemas/TrackerBindingView"
+          },
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          }
+        },
+        "required": [
+          "tracker"
+        ]
+      },
+      "TrackerBindingView": {
+        "description": "A project's binding: one connection and one target on it.",
+        "type": "object",
+        "properties": {
+          "boundAt": {
+            "description": "When the project was bound, ms epoch: issues opened after it become tasks.",
+            "type": "number"
+          },
+          "connection": {
+            "description": "The connection's name (hub connections.ts).",
+            "type": "string"
+          },
+          "linked": {
+            "description": "Issues linked to the project's tasks.",
+            "type": "number"
+          },
+          "polledAt": {
+            "description": "When its last poll answered, ms epoch; null before its first.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/IssueTracker"
+          },
+          "reason": {
+            "description": "Why it is `refused`, or why its last poll stopped short, in the tracker's words; null when all went through.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/TrackerSyncState"
+          },
+          "target": {
+            "description": "GitHub: `owner/repo`; Linear: the team's id.",
+            "type": "string"
+          },
+          "targetName": {
+            "description": "What a person reads: `owner/repo`, or the team's key and name (`ENG · Engineering`).",
+            "type": "string"
+          },
+          "targetUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "boundAt",
+          "connection",
+          "linked",
+          "polledAt",
+          "provider",
+          "reason",
+          "state",
+          "target",
+          "targetName",
+          "targetUrl"
+        ]
+      },
+      "TrackerSyncState": {
+        "description": "Where a project's sync stands: `syncing` until its first poll answers,\n`synced` while the tracker answers, `refused` when the tracker refused the\nconnection's sign-in or scope, whose words are its `reason`.",
+        "type": "string",
+        "enum": [
+          "refused",
+          "synced",
+          "syncing"
+        ]
+      },
+      "TrackerTarget": {
+        "description": "A target a connection reaches, offered when a project is bound: a repository, or a team.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "GitHub: `owner/repo`; Linear: the team's id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "`owner/repo`, or `ENG · Engineering`.",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url"
         ]
       },
       "IngressView": {
@@ -52030,6 +52355,10 @@
             ]
           },
           "projectId": {
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The one task that changed, when the change named one (a move, a write,\na comment); absent, any of them (its folder was written). An open task\nreads itself again on either: its times are whole seconds, so two\nchanges in one second (a tracker's sync beside you) show no newer time.",
             "type": "string"
           }
         },

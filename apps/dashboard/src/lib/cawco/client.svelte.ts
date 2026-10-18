@@ -924,6 +924,13 @@ const state = $state({
    */
   tasksChanged: {} as Record<string, number>,
   /**
+   * How many `tasks.changed` frames have named each task, by
+   * `projectId/taskId`, and how many named none, by project id: an open
+   * task reads itself again when either moves (`taskChangedOf`).
+   */
+  taskChanged: {} as Record<string, number>,
+  tasksChangedUnnamed: {} as Record<string, number>,
+  /**
    * How many times each project's decision pages have changed since this
    * page connected (`decisions.changed` frames): the Decisions tab reads them
    * again when it moves.
@@ -3141,6 +3148,13 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "tasks.changed") {
     state.tasksChanged[frame.projectId] =
       (state.tasksChanged[frame.projectId] ?? 0) + 1;
+    if (frame.taskId) {
+      const named = `${frame.projectId}/${frame.taskId}`;
+      state.taskChanged[named] = (state.taskChanged[named] ?? 0) + 1;
+    } else {
+      state.tasksChangedUnnamed[frame.projectId] =
+        (state.tasksChangedUnnamed[frame.projectId] ?? 0) + 1;
+    }
     return;
   }
 
@@ -8508,6 +8522,10 @@ export const cawco = {
   /** A count that moves each time the project's tasks change (`tasks.changed`). */
   tasksChangedOf: (projectId: string): number =>
     state.tasksChanged[projectId] ?? 0,
+  /** A count that moves each time a `tasks.changed` frame names the task, or names none of the project's. */
+  taskChangedOf: (projectId: string, taskId: string): number =>
+    (state.taskChanged[`${projectId}/${taskId}`] ?? 0) +
+    (state.tasksChangedUnnamed[projectId] ?? 0),
   /** A count that moves each time the project's decision pages change (`decisions.changed`). */
   decisionsChangedOf: (projectId: string): number =>
     state.decisionsChanged[projectId] ?? 0,

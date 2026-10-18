@@ -21,9 +21,11 @@
  *   a stage change is checked against the file's moves for who is making it
  *   (you at the dashboard, a session through the tools). Needs you is worked
  *   out on every read from the stage's kind and never stored.
- * - **Tracker.** A project keeps its tasks in CawCo's files (`tracker:
- *   cawco`). GitHub Issues and Linear are named in the setting and refused
- *   until they are built.
+ * - **Tracker.** Every task is a file whatever the project's tracker. With
+ *   GitHub Issues or Linear (tracker.ts), a task's issue fields (title,
+ *   description, labels, stage, comments) are one record with its issue,
+ *   which its file names (`issue:`); the sync writes what the tracker holds
+ *   through the same calls as everyone, as an actor marked `tracker`.
  * - **Attempts** are work items at a task (dispatch.ts starts them). Every
  *   read carries a task's attempts and what follows from them and its edges:
  *   a live attempt, the tasks it still waits for, a last attempt that failed
@@ -40,11 +42,13 @@ import {
   type AttemptResult,
   type EndedBy,
   type InstanceRow,
+  type IssueTracker,
   type LandsMode,
   type ProjectStarter,
   type ResultArtifact,
   STARTER_PLACES,
   type StarterPlace,
+  type TaskIssueLink,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
@@ -162,6 +166,11 @@ export interface TaskActor {
   reason?: string;
   /** The routine making the move, for the mover `routine` (waits.ts: `waits`). */
   routineId?: string;
+  /**
+   * The tracker sync writing what the project's tracker holds (tracker.ts):
+   * its own changes are never sent back to the tracker they came from.
+   */
+  tracker?: IssueTracker;
 }
 
 /** The operator, at the dashboard. */
@@ -374,6 +383,16 @@ export interface TaskStore {
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
   /**
+   * The issue a task is one record with, as its view shows it (tracker.ts):
+   * its link, or the issue its file names (`issue:`, a URL) when the project
+   * keeps no link for it; null when neither.
+   */
+  readonly issueOf?: (
+    projectId: string,
+    taskId: string,
+    named: string | null
+  ) => TaskIssueLink | null;
+  /**
    * Why a task may not close or pass review on anyone's move but yours: its
    * only changes are Caw's own, not all approved by you (lead-gate.ts
    * `reviewProblem`); nothing when it may.
@@ -409,7 +428,6 @@ export interface TaskStore {
   readonly saveResult: (workItemId: string, result: AttemptResult) => void;
   /** Records the template a project's stages came from: its starter skills follow it. */
   readonly setTemplate: (id: string, template: StagesTemplate) => void;
-  readonly setTracker: (id: string, tracker: Tracker) => void;
   /** The project's starters for a place as they were last written for it (project-starters.ts); none while Jev is off. */
   readonly starters: (
     projectId: string,
@@ -555,6 +573,11 @@ export interface TaskView extends TaskFlags, TaskTimes {
   /** sha256 hex of the file as read. */
   hash: string;
   id: string;
+  /**
+   * The GitHub or Linear issue it is one record with (tracker.ts): its ref,
+   * its link, and why its last sync stopped short; null when it has none.
+   */
+  issue: TaskIssueLink | null;
   /** The kind of its stage; null when its stage is not one of the project's. */
   kind: StageKind | null;
   labels: string[];
@@ -1085,12 +1108,14 @@ const viewOf = (
   stages: Stages | undefined,
   flags: TaskFlags,
   times: TaskTimes,
-  result: TaskResult | null
+  result: TaskResult | null,
+  issue: TaskIssueLink | null
 ): TaskView => ({
   id: taskId(number),
   number,
   path,
   title,
+  issue,
   stage: parsed.fields.stage ?? "",
   kind: kindIn(stages, parsed.fields.stage ?? ""),
   needsYou: kindIn(stages, parsed.fields.stage ?? "") === "you",
@@ -1668,17 +1693,6 @@ export const createTasks = (store: TaskStore) => {
       refuse(
         404,
         `The project "${projectId}" was deleted, so its tasks can't change. Pick another.`
-      );
-    }
-  };
-
-  /** Refuses a change while the project's tasks live somewhere other than its files. */
-  const writable = (projectId: string): void => {
-    const tracker = known(projectId);
-    if (tracker !== "cawco") {
-      refuse(
-        409,
-        `This project's tracker is ${tracker}, which the hub cannot write yet; set it back to cawco to keep tasks in the project folder.`
       );
     }
   };
@@ -2537,7 +2551,8 @@ export const createTasks = (store: TaskStore) => {
         store
           .attempts(projectId)
           .filter((item) => item.taskId === taskId(number))
-      )
+      ),
+      store.issueOf?.(projectId, taskId(number), parsed.fields.issue) ?? null
     );
   };
 
@@ -2717,7 +2732,7 @@ export const createTasks = (store: TaskStore) => {
     apply: (doc: TaskDoc, id: string) => Promise<string | Did> | string | Did
   ): Promise<TaskView> =>
     inTurn(projectId, async () => {
-      writable(projectId);
+      known(projectId);
       const { path, number } = await locate(projectId, ref, true);
       const id = taskId(number);
       const read = (await readFolderFile(projectId, path)).content;
@@ -3091,7 +3106,7 @@ export const createTasks = (store: TaskStore) => {
       actor: TaskActor
     ): Promise<TaskView> {
       return inTurn(projectId, async () => {
-        writable(projectId);
+        known(projectId);
         const title = oneLine("title", draft.title, TITLE_LIMIT);
         const stage = await startStage(projectId, draft.stage, actor);
         const fields: Partial<TaskFields> = {
@@ -3160,7 +3175,7 @@ export const createTasks = (store: TaskStore) => {
       from: string
     ): Promise<Map<string, string>> {
       return inTurn(projectId, async () => {
-        writable(projectId);
+        known(projectId);
         const numbered = files
           .map((file) => ({ file, was: fileTaskNumber(file.path) }))
           .filter(
@@ -3202,7 +3217,7 @@ export const createTasks = (store: TaskStore) => {
         : patch;
       return change(projectId, ref, actor, (doc) =>
         applyPatch(doc, checked)
-      ).then((task) => told({ kind: "changed", projectId }, task));
+      ).then((task) => told({ kind: "changed", projectId, id: task.id }, task));
     },
 
     /**
@@ -3456,7 +3471,7 @@ export const createTasks = (store: TaskStore) => {
       archived = true
     ): Promise<TaskView> {
       return inTurn(projectId, () => {
-        writable(projectId);
+        known(projectId);
         return archived
           ? archiveFile(projectId, ref, actor)
           : unarchiveFile(projectId, ref, actor);
@@ -3477,7 +3492,7 @@ export const createTasks = (store: TaskStore) => {
       actor: TaskActor
     ): Promise<{ id: string; path: string }> {
       return inTurn(projectId, async () => {
-        writable(projectId);
+        known(projectId);
         const { rows } = await sync(projectId);
         const { path, number } = await locate(projectId, ref);
         const id = taskId(number);
@@ -3535,7 +3550,7 @@ export const createTasks = (store: TaskStore) => {
       message?: string
     ): Promise<StagesView> {
       return inTurn(projectId, async () => {
-        writable(projectId);
+        known(projectId);
         const reading = readStages(content);
         if (!reading.ok) {
           refuse(422, `stages.md was not saved. ${reading.problems.join(" ")}`);
@@ -3569,7 +3584,7 @@ export const createTasks = (store: TaskStore) => {
       actor: TaskActor
     ): Promise<StagesView & { stranded: string[] }> {
       return inTurn(projectId, async () => {
-        writable(projectId);
+        known(projectId);
         const content = templateText(template);
         const message = `stages: apply the ${template} template ${byWhom(actor)}`;
         const types = await missingTypes(projectId, templateTypes(template));
@@ -3630,17 +3645,24 @@ export const createTasks = (store: TaskStore) => {
       }));
     },
 
-    /** Sets where the project's tasks live; only CawCo's files are built. */
-    setTracker(projectId: string, tracker: Tracker): { tracker: Tracker } {
-      known(projectId);
-      if (tracker !== "cawco") {
-        refuse(
-          409,
-          `${tracker === "github" ? "GitHub Issues" : "Linear"} as a tracker is not built yet; this project keeps its tasks in CawCo's files (tracker: cawco).`
-        );
-      }
-      store.setTracker(projectId, tracker);
-      return { tracker };
+    /**
+     * Names the issue a task is one record with (`issue:`, its URL), or
+     * takes the name out: the tracker sync's own write (tracker.ts), never a
+     * person's or a session's, so the link is the issue the sync made or
+     * read. Listeners hear the task changed.
+     */
+    setIssue(
+      projectId: string,
+      ref: string,
+      url: string | null,
+      actor: TaskActor
+    ): Promise<TaskView> {
+      return change(projectId, ref, actor, (doc) => {
+        doc.setField("issue", url);
+        return url ? `issue ${url}` : "issue unlinked";
+      }).then((task) =>
+        told({ kind: "changed", projectId, id: task.id }, task)
+      );
     },
 
     /**
@@ -3720,16 +3742,10 @@ const fieldParams = (params: URLSearchParams): Record<string, string> => {
   }
   return fields;
 };
-const TRACKER = t.Union([
-  t.Literal("cawco"),
-  t.Literal("github"),
-  t.Literal("linear"),
-]);
-
 /**
  * The dashboard's routes for a project's tasks, under
- * `/api/projects/:id/tasks`, its stages and tracker setting, and the stage
- * templates. Changes from here are the operator's ("you").
+ * `/api/projects/:id/tasks`, its stages, and the stage templates (its
+ * tracker's are tracker.ts's). Changes from here are the operator's ("you").
  */
 export const taskRoutes = (tasks: Tasks) =>
   new Elysia()
@@ -4062,15 +4078,4 @@ export const taskRoutes = (tasks: Tasks) =>
         }
       }
     )
-    .get("/api/stage-templates", () => tasks.templates())
-    .put(
-      "/api/projects/:id/tracker",
-      { body: t.Object({ tracker: TRACKER }) },
-      ({ params, body }) => {
-        try {
-          return tasks.setTracker(params.id, body.tracker);
-        } catch (error) {
-          return refused(error);
-        }
-      }
-    );
+    .get("/api/stage-templates", () => tasks.templates());

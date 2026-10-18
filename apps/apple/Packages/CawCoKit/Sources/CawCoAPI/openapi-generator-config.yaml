@@ -89,6 +89,7 @@ typeOverrides:
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
     InstanceStatus: OpenEnums.InstanceStatus
+    IssueTracker: OpenEnums.IssueTracker
     ItemEnd: OpenEnums.ItemEnd
     KeepAliveState: OpenEnums.KeepAliveState
     KeepAliveTtl: OpenEnums.KeepAliveTtl
@@ -161,6 +162,7 @@ typeOverrides:
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState
     Tracker: OpenEnums.Tracker
+    TrackerSyncState: OpenEnums.TrackerSyncState
     TranscriptBlockState: OpenEnums.TranscriptBlockState
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock

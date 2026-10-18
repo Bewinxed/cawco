@@ -714,6 +714,7 @@ import {
   YOU_ACTOR,
 } from "./tasks";
 import { createThreadRepair } from "./thread-repair";
+import { createTrackers, trackerRoutes } from "./tracker";
 import {
   createTranscripts,
   type HistoryFault,
@@ -18737,6 +18738,8 @@ export const createServer = (
   /** Set once the design system exists (below, design-system.ts `approvalRefusal`). */
   let designApproval: NonNullable<TaskStore["approvalRefusal"]> = () =>
     Promise.resolve(undefined);
+  /** Set once the tracker sync exists (below, tracker.ts `issueOf`). */
+  let trackerIssue: NonNullable<TaskStore["issueOf"]> = () => null;
   const tasks = createTasks({
     actionMove: (projectId, taskId, to, actionId) =>
       actionMoves(projectId, taskId, to, actionId),
@@ -18748,7 +18751,8 @@ export const createServer = (
     waiters: db.taskWaiters,
     put: db.putTaskIndex,
     drop: db.dropTaskIndex,
-    setTracker: db.setProjectTracker,
+    issueOf: (projectId, taskId, named) =>
+      trackerIssue(projectId, taskId, named),
     starters: (projectId, place) => projectStarters.read(projectId, place),
     // The template's starter skills go to the project's places, and the old one's leave.
     setTemplate: (id, template) => {
@@ -19020,33 +19024,30 @@ export const createServer = (
       ),
     tasksWaiting: async () => {
       const read = await Promise.all(
-        db
-          .listProjects()
-          .filter((project) => project.tracker === "cawco")
-          .map(async (project) => {
-            try {
-              const list = await tasks.list(project.id);
-              return {
-                missing: [],
-                tasks: list.tasks
-                  .filter((task) => task.kind === "you")
-                  .map((task) => ({
-                    id: task.id,
-                    projectId: project.id,
-                    title: task.title,
-                    stage: task.stage,
-                    since: task.updatedAt,
-                  })),
-              };
-            } catch (error) {
-              return {
-                missing: [
-                  `${project.name}'s tasks could not be read: ${error instanceof Error ? error.message : String(error)}`,
-                ],
-                tasks: [],
-              };
-            }
-          })
+        db.listProjects().map(async (project) => {
+          try {
+            const list = await tasks.list(project.id);
+            return {
+              missing: [],
+              tasks: list.tasks
+                .filter((task) => task.kind === "you")
+                .map((task) => ({
+                  id: task.id,
+                  projectId: project.id,
+                  title: task.title,
+                  stage: task.stage,
+                  since: task.updatedAt,
+                })),
+            };
+          } catch (error) {
+            return {
+              missing: [
+                `${project.name}'s tasks could not be read: ${error instanceof Error ? error.message : String(error)}`,
+              ],
+              tasks: [],
+            };
+          }
+        })
       );
       return {
         missing: read.flatMap((each) => each.missing),
@@ -19201,12 +19202,17 @@ export const createServer = (
   tasks.listen(dispatcher.taskChanged);
   tasks.listen(push.taskChanged);
   tasks.listen(caw.taskChanged);
-  // Every dashboard showing the project reads its tasks again, whoever moved them.
+  // Every dashboard showing the project reads its tasks again, whoever moved
+  // them; one showing the task the change names reads it again too.
   tasks.listen((event) =>
     registry.broadcast({
       verb: "frames",
       machineId: "hub",
-      payload: { kind: "tasks.changed", projectId: event.projectId },
+      payload: {
+        kind: "tasks.changed",
+        projectId: event.projectId,
+        ...(event.id ? { taskId: event.id } : {}),
+      },
     })
   );
   // The project page's Decisions tab (decisions.ts): its pages, their sends
@@ -19861,6 +19867,10 @@ export const createServer = (
       return { content: [{ type: "text", text }] };
     },
   });
+  // Tracker sync (tracker.ts): a project's tasks one record with their
+  // GitHub or Linear issues, through each service's own SDK.
+  const trackers = createTrackers({ connections, db, lifetime, tasks });
+  trackerIssue = trackers.issueOf;
   // Ingress (ingress.ts): events from GitHub and polled connections, each
   // stored once and routed to a routine or the lead's next wake.
   const ingress = createIngress({
@@ -22132,6 +22142,7 @@ export const createServer = (
         memoryRoutes(projectMemory),
         routineRoutes(routines),
         connectionRoutes(connections),
+        trackerRoutes(trackers),
         ingressRoutes(ingress),
         relayRoutes(relays),
         actionRoutes(actions),

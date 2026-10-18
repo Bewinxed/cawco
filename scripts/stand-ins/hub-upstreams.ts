@@ -10,6 +10,8 @@ const asked = standIns();
 
 export const GITHUB_API = asked.githubApi ?? "https://api.github.com";
 
+export const LINEAR_API = asked.linearApi ?? "https://api.linear.app";
+
 export const TYPESAFE_URL =
   asked.typesafeUrl ?? "https://api.typesafe.ai/v1/systemone";
 

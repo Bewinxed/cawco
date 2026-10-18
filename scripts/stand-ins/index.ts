@@ -14,6 +14,8 @@ export const STAND_INS_ENV = "SCRATCH_FLEET_STAND_INS";
 export interface StandIns {
   /** GitHub's REST API origin the hub's pollers, relay and publisher call: a fake one in the spec's process. */
   githubApi?: string;
+  /** Linear's API origin the tracker sync and a Linear app's sign-in call: a fake one in the spec's process. */
+  linearApi?: string;
   /**
    * How long a project's starters wait for quiet, and the least time
    * between two of its asks of Jev, in ms (hub project-starters.ts).

@@ -16,18 +16,37 @@
  * {@link Connections.callConnection} and {@link Connections.listConnectionTools};
  * an approved action's one call through {@link Connections.callOnce}.
  * The GitHub poller speaks REST, not MCP: it alone opens a `github`
- * connection's token ({@link Connections.githubToken}), in the hub.
+ * connection's token ({@link Connections.githubToken}), in the hub. The
+ * tracker sync (tracker.ts) speaks each service's own API through its
+ * official SDK, and is handed a client signed in here
+ * ({@link Connections.githubClient}, {@link Connections.linearClient}), never
+ * the key.
  *
  * OAuth is the MCP authorization flow the SDK runs (`auth()`: discovery,
  * registration, PKCE, exchange, refresh) over a provider whose storage is the
  * row: the redirect lands on the hub (`/api/connections/oauth/callback`), and
  * a 401 on a call refreshes the tokens here before the call is retried.
+ *
+ * An `app` connection is an app the owner registered, acting as itself. A
+ * GitHub App's private key mints its installation's token, an hour long,
+ * which Octokit's app auth caches and renews ("The SDK will take care of
+ * generating an installation access token for you and will regenerate the
+ * token once it expires", docs.github.com); GitHub's MCP server takes it as
+ * a bearer (github/github-mcp-server#696: "You can now use `ghs_` tokens to
+ * authorize against remote MCP server"). A Linear app signs in through
+ * Linear's own OAuth with `actor=app`, its 24-hour access token refreshed
+ * here and its rotated refresh token kept; Linear's MCP server takes the
+ * token as a bearer ("You can use this to interact with the MCP server as an
+ * `app` user", linear.app/docs/mcp).
  */
-import { createHash } from "node:crypto";
+import { createHash, createPrivateKey } from "node:crypto";
 import {
+  APP_SERVICES,
+  type AppService,
   CONNECTION_AUTHS,
   CONNECTION_NAME,
   CONNECTION_TRANSPORTS,
+  type ConnectionApp,
   type ConnectionAuth,
   type ConnectionTransport,
   type ConnectionView,
@@ -38,10 +57,14 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import { LinearClient } from "@linear/sdk";
 import {
   auth,
+  exchangeAuthorization,
   type OAuthClientProvider,
   type OAuthDiscoveryState,
+  refreshAuthorization,
+  startAuthorization,
   UnauthorizedError,
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -57,6 +80,7 @@ import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   type CallToolResult,
@@ -64,16 +88,81 @@ import {
   McpError,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { createAppAuth } from "@octokit/auth-app";
+import { Octokit } from "@octokit/rest";
 import { Elysia, status, t } from "elysia";
 import type { ConnectionRow, ConnectionsDb } from "./db/connections";
-import type { ConnectionSecret } from "./db/schema";
+import type { ConnectionAppSecret, ConnectionSecret } from "./db/schema";
 import { undoable } from "./db/trash";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
 import { connectionToolsFor, roleOf } from "./roles";
+import { GITHUB_API, LINEAR_API } from "./upstreams";
 
 /** Where an OAuth sign-in's redirect lands: on the hub, never a session. */
 export const CONNECTION_CALLBACK_PATH = "/api/connections/oauth/callback";
+
+/**
+ * What a Linear app asks for: "`read` … This scope will always be present";
+ * "`write` - Write access", which a task's stage, title and labels moving
+ * on Linear need (`issues:create` "Allows creating new issues" and no more),
+ * and which takes in `issues:create` and `comments:create`
+ * (linear.app/developers/oauth-2-0-authentication).
+ */
+export const LINEAR_APP_SCOPE = "read,write";
+
+/**
+ * Linear's OAuth server, as the MCP SDK's token helpers read one: the
+ * authorize page, the token endpoint, PKCE ("Linear supports the PKCE
+ * flow"), and the client's id and secret in the form body ("Pass parameters
+ * in body … `client_id`, `client_secret`"), as Linear's docs write them.
+ */
+const linearOAuth = () => ({
+  issuer: "https://linear.app",
+  authorization_endpoint: "https://linear.app/oauth/authorize",
+  token_endpoint: `${LINEAR_API}/oauth/token`,
+  response_types_supported: ["code"],
+  grant_types_supported: ["authorization_code", "refresh_token"],
+  code_challenge_methods_supported: ["S256"],
+  token_endpoint_auth_methods_supported: ["client_secret_post"],
+});
+
+/** A Linear access token is refreshed this long before it runs out. Our choice. */
+const LINEAR_REFRESH_EARLY_MS = 5 * 60_000;
+/** An app connection's MCP client is let go this long before its token runs out. Our choice. */
+const APP_TOKEN_EARLY_MS = 60_000;
+const PEM_BLOCK =
+  /-----BEGIN ([A-Z ]*PRIVATE KEY)-----([\s\S]*?)-----END \1-----/;
+const BASE64 = /^[A-Za-z0-9+/=]+$/;
+const WHITESPACE = /\s+/g;
+const PEM_LINE = /.{1,64}/g;
+const DIGITS = /^\d{1,20}$/;
+
+/**
+ * A private key as PKCS#8 PEM, however it was pasted: a password field
+ * takes it on one line, its line breaks spaces, and a copy from an env file
+ * carries literal `\n`s; its body goes back on 64-character lines. GitHub
+ * hands out PKCS#1 (`BEGIN RSA PRIVATE KEY`), which the app JWT's WebCrypto
+ * signer refuses ("only PKCS#8 is supported", universal-github-app-jwt), so
+ * it is kept as PKCS#8. Undefined when it is no private key that reads.
+ */
+const pemOf = (text: string): string | undefined => {
+  const [, kind, raw] = PEM_BLOCK.exec(text.replaceAll("\\n", "\n")) ?? [];
+  const body = raw?.replace(WHITESPACE, "") ?? "";
+  if (!(kind && BASE64.test(body))) {
+    return;
+  }
+  const pem = `-----BEGIN ${kind}-----\n${(body.match(PEM_LINE) ?? []).join("\n")}\n-----END ${kind}-----\n`;
+  try {
+    return createPrivateKey(pem)
+      .export({ type: "pkcs8", format: "pem" })
+      .toString();
+  } catch {
+    // Not a key that reads: no private key.
+  }
+};
+/** A GitHub App's id: its number, or its client id (`Iv23li…`), which "may also be used and is recommended" (octokit/auth-app.js). */
+const GITHUB_APP_ID = /^(?:\d{1,20}|Iv[0-9A-Za-z.]{4,40})$/;
 
 /** How long a sign-in waits for its redirect. Our choice, as fleet MCP's. */
 const SIGN_IN_MS = 10 * 60_000;
@@ -209,6 +298,10 @@ const httpProblem = (input: ConnectionInput): string | undefined => {
   return undefined;
 };
 
+/** The service an `app` connection is for, from its row's words; undefined for any other. */
+export const appServiceOf = (service: string): AppService | undefined =>
+  APP_SERVICES.find((each) => each === service.trim().toLowerCase());
+
 /** Why `input` cannot be a connection, or nothing when it can. */
 const inputProblem = (input: ConnectionInput): string | undefined => {
   if (!CONNECTION_NAME.test(input.name)) {
@@ -223,8 +316,72 @@ const inputProblem = (input: ConnectionInput): string | undefined => {
   if (!CONNECTION_AUTHS.includes(input.auth)) {
     return `auth is one of ${CONNECTION_AUTHS.join(", ")}.`;
   }
+  if (
+    input.auth === "app" &&
+    !(appServiceOf(input.service) && input.transport === "http")
+  ) {
+    return "An app connection is a GitHub App or a Linear app: its service is github or linear, reached over http.";
+  }
   return input.transport === "stdio" ? stdioProblem(input) : httpProblem(input);
 };
+
+/**
+ * A Linear client signed in as a connection, made for one request: its
+ * signal, when given, goes with each fetch, so a request let go is aborted.
+ */
+export type LinearClientFor = (signal?: AbortSignal) => LinearClient;
+
+/** An app's registration as the person gives it, for {@link Connections.setApp}. */
+export type AppInput =
+  | { appId: string; installationId: string; privateKey: string }
+  | { clientId: string; clientSecret: string };
+
+/** `input` as `service`'s registration, or why it is not one. */
+const appOf = (
+  service: AppService,
+  input: AppInput
+): ConnectionAppSecret | string => {
+  if (service === "github") {
+    if (!("appId" in input)) {
+      return "A GitHub App is set with its app id, its installation id and its private key.";
+    }
+    const appId = input.appId.trim();
+    const installationId = input.installationId.trim();
+    const privateKey = pemOf(input.privateKey);
+    if (!GITHUB_APP_ID.test(appId)) {
+      return "The app id is the number on the GitHub App's settings page, or its client id (Iv…).";
+    }
+    if (!DIGITS.test(installationId)) {
+      return "The installation id is the number at the end of the installation's settings URL (…/installations/12345678).";
+    }
+    if (!privateKey || privateKey.length > 8192) {
+      return "The private key is the .pem file the GitHub App's settings generate, -----BEGIN … PRIVATE KEY----- and all.";
+    }
+    return { service, appId, installationId, privateKey };
+  }
+  if (!("clientId" in input)) {
+    return "A Linear app is set with its client id and client secret.";
+  }
+  const clientId = input.clientId.trim();
+  const clientSecret = input.clientSecret.trim();
+  if (
+    !(clientId && clientSecret) ||
+    `${clientId}${clientSecret}`.length > 512
+  ) {
+    return "A Linear app is set with the client id and client secret its settings page shows.";
+  }
+  return { service, clientId, clientSecret };
+};
+
+/** What names an app, for a view: never its private key or client secret. */
+const appView = (app: ConnectionAppSecret): ConnectionApp =>
+  app.service === "github"
+    ? {
+        service: app.service,
+        appId: app.appId,
+        installationId: app.installationId,
+      }
+    : { service: app.service, clientId: app.clientId };
 
 /** An update laid over a row: what the connection would be. */
 const merged = (
@@ -373,7 +530,175 @@ export const createConnections = (deps: ConnectionsDeps) => {
       sealed.tokens?.access_token,
       sealed.tokens?.refresh_token,
       sealed.client?.client_secret,
+      sealed.app?.service === "github" ? sealed.app.privateKey : undefined,
+      sealed.app?.service === "linear" ? sealed.app.clientSecret : undefined,
     ].filter((one): one is string => typeof one === "string" && one.length > 0);
+  };
+
+  /** Keeps a sign-in's tokens, and when the access token runs out as their response said. */
+  const keepTokens = (id: string, tokens: OAuthTokens) => {
+    reseal(id, (sealed) => ({ ...sealed, tokens }));
+    db.update(id, {
+      tokensExpireAt:
+        tokens.expires_in === undefined
+          ? null
+          : new Date(Date.now() + tokens.expires_in * 1000),
+    });
+  };
+
+  /**
+   * Each GitHub App connection's Octokit, by row id, with the registration
+   * it was made from: the installation token it mints lives in it, cached
+   * and renewed by its app auth, so it is made again only when that moves.
+   */
+  const githubApps = new Map<string, { made: string; octokit: Octokit }>();
+
+  const githubAppOctokit = (
+    r: ConnectionRow,
+    app: Extract<ConnectionAppSecret, { service: "github" }>
+  ): Octokit => {
+    const made = createHash("sha256")
+      .update(JSON.stringify([app, GITHUB_API]))
+      .digest("hex");
+    const held = githubApps.get(r.id);
+    if (held?.made === made) {
+      return held.octokit;
+    }
+    const octokit = new Octokit({
+      authStrategy: createAppAuth,
+      auth: {
+        appId: app.appId,
+        installationId: Number(app.installationId),
+        privateKey: app.privateKey,
+      },
+      baseUrl: GITHUB_API,
+      userAgent: "CawCo-hub",
+    });
+    githubApps.set(r.id, { made, octokit });
+    return octokit;
+  };
+
+  /** A Linear app's refresh under way, by row id: two callers share one. */
+  const refreshing = new Map<string, Promise<string>>();
+
+  /**
+   * A Linear app's access token, refreshed when it is near its end. Linear
+   * hands back a new refresh token with each ("Requests to consume a refresh
+   * token and obtain a new one"), which is kept at once; a refused refresh
+   * marks the connection needs-sign-in, in Linear's words.
+   */
+  const linearAccess = (r: ConnectionRow): Promise<string> => {
+    const sealed = opened(r);
+    const { app, tokens } = sealed;
+    if (app?.service !== "linear") {
+      return Promise.reject(
+        new ConnectionProblem(
+          `${r.name} needs its Linear app: set its client id and client secret.`
+        )
+      );
+    }
+    if (!tokens) {
+      return Promise.reject(
+        new ConnectionProblem(
+          `${r.name} is not signed in: ${r.reason ?? "Sign in."}`
+        )
+      );
+    }
+    if (
+      !r.tokensExpireAt ||
+      r.tokensExpireAt.getTime() > Date.now() + LINEAR_REFRESH_EARLY_MS
+    ) {
+      return Promise.resolve(tokens.access_token);
+    }
+    const under = refreshing.get(r.id);
+    if (under !== undefined) {
+      return under;
+    }
+    const refreshToken = tokens.refresh_token;
+    const refresh = (async () => {
+      if (!refreshToken) {
+        setState(r, "needs-sign-in", "Its sign-in ran out. Sign in again.");
+        return problem(`${r.name}'s sign-in ran out. Sign in again.`);
+      }
+      try {
+        const fresh = await refreshAuthorization(LINEAR_API, {
+          metadata: linearOAuth(),
+          clientInformation: {
+            client_id: app.clientId,
+            client_secret: app.clientSecret,
+          },
+          refreshToken,
+        });
+        keepTokens(r.id, fresh);
+        drop(r.id);
+        return fresh.access_token;
+      } catch (error) {
+        const said = scrub(
+          r,
+          error instanceof Error ? error.message : String(error)
+        ).slice(0, 300);
+        setState(
+          r,
+          "needs-sign-in",
+          `Linear refused to refresh its sign-in (${said}). Sign in again.`
+        );
+        // biome-ignore lint/style/useErrorCause: the token response may carry tokens; only scrubbed words go on
+        throw new ConnectionProblem(
+          `${r.name}: Linear refused to refresh its sign-in (${said}). Sign in again.`
+        );
+      }
+    })();
+    refreshing.set(r.id, refresh);
+    const done = () => refreshing.delete(r.id);
+    refresh.then(done, done);
+    return refresh;
+  };
+
+  /** Each app connection's MCP client's token, when it runs out, ms: the client is let go before. */
+  const appExpiry = new Map<string, number>();
+
+  /**
+   * An app connection's token and when it runs out: a GitHub App's
+   * installation token (minted, or the one its Octokit holds), or a Linear
+   * app's access token. GitHub's refusal of the app marks the connection
+   * needs-sign-in, in GitHub's words.
+   */
+  const appToken = async (
+    r: ConnectionRow
+  ): Promise<{ expiresAt: number; token: string }> => {
+    const { app } = opened(r);
+    if (!app) {
+      setState(r, "needs-sign-in", "Set its app.");
+      return problem(`${r.name} needs its app: ${NO_SECRET}.`);
+    }
+    if (app.service === "linear") {
+      const token = await linearAccess(r);
+      const fresh = db.byId(r.id);
+      return {
+        token,
+        expiresAt: fresh?.tokensExpireAt?.getTime() ?? Number.POSITIVE_INFINITY,
+      };
+    }
+    try {
+      const minted = (await githubAppOctokit(r, app).auth({
+        type: "installation",
+      })) as { expiresAt: string; token: string };
+      return { token: minted.token, expiresAt: Date.parse(minted.expiresAt) };
+    } catch (error) {
+      const said = scrub(
+        r,
+        error instanceof Error ? error.message : String(error)
+      ).slice(0, 300);
+      setState(
+        r,
+        "needs-sign-in",
+        `GitHub refused the app's token (${said}). Set its app again.`
+      );
+      // biome-ignore lint/style/useErrorCause: GitHub's error may echo the JWT; only scrubbed words go on
+      throw new ConnectionProblem(
+        `${r.name}: GitHub refused the app's token (${said}). Set its app again.`
+      );
+    }
   };
 
   /** `text` with each of the row's secrets replaced. */
@@ -396,10 +721,11 @@ export const createConnections = (deps: ConnectionsDeps) => {
       ...(r.command ? { command: r.command } : {}),
       ...(r.args?.length ? { args: r.args } : {}),
       auth: r.auth,
+      ...(sealed.app ? { app: appView(sealed.app) } : {}),
       ...(r.header ? { header: r.header } : {}),
       state: r.state,
       ...(r.reason ? { reason: r.reason } : {}),
-      hasSecret: Boolean(sealed.key || sealed.tokens),
+      hasSecret: Boolean(sealed.key || sealed.tokens || sealed.app),
       projects: db.projectsOf(r.id),
       ...(tools ? { tools: tools.map((tool) => tool.name) } : {}),
       createdAt: r.createdAt.getTime(),
@@ -482,15 +808,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       saveClientInformation: (client) =>
         reseal(id, (sealed) => ({ ...sealed, client })),
       tokens: () => opened(fresh()).tokens,
-      saveTokens: (tokens) => {
-        reseal(id, (sealed) => ({ ...sealed, tokens }));
-        db.update(id, {
-          tokensExpireAt:
-            tokens.expires_in === undefined
-              ? null
-              : new Date(Date.now() + tokens.expires_in * 1000),
-        });
-      },
+      saveTokens: (tokens) => keepTokens(id, tokens),
       saveCodeVerifier: (verifier) => {
         if (signIn) {
           reseal(id, (sealed) => ({ ...sealed, verifier }));
@@ -546,8 +864,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return r.auth === "header" && r.header ? { [r.header]: key } : {};
   };
 
-  /** The transport that reaches a row's server, carrying its key. */
-  const transportOf = (r: ConnectionRow): Transport => {
+  /** The transport that reaches a row's server, carrying its key, or for an app the token `bearer` names. */
+  const transportOf = (r: ConnectionRow, bearer?: string): Transport => {
     const sealed = opened(r);
     if ((r.auth === "bearer" || r.auth === "header") && !sealed.key) {
       setState(r, "needs-sign-in", "Set its key.");
@@ -564,7 +882,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
     const options = {
       requestInit: {
-        headers: keyHeaders(r, sealed.key),
+        headers: bearer
+          ? { Authorization: `Bearer ${bearer}` }
+          : keyHeaders(r, sealed.key),
         redirect: "error" as const,
       },
       ...(r.auth === "oauth" ? { authProvider: provider(r.id) } : {}),
@@ -604,8 +924,13 @@ export const createConnections = (deps: ConnectionsDeps) => {
         },
       }
     );
-    const transport = transportOf(r);
     return readWithin(CONNECT_MS, async (signal) => {
+      // An app's token is minted or refreshed within the same time.
+      const bearer = r.auth === "app" ? await appToken(r) : undefined;
+      if (bearer) {
+        appExpiry.set(r.id, bearer.expiresAt);
+      }
+      const transport = transportOf(r, bearer?.token);
       // The SDK's own clock (60 s unless given) never decides: readWithin does.
       await client.connect(transport, { signal, timeout: SDK_CLOCK_OFF });
       return client;
@@ -614,9 +939,17 @@ export const createConnections = (deps: ConnectionsDeps) => {
 
   /**
    * A connection's client, connected once and shared; forgotten when its
-   * transport closes, or when it did not connect in time.
+   * transport closes, or when it did not connect in time. An app's client
+   * is let go before its token runs out, and the next connects with a new.
    */
   const clientOf = (r: ConnectionRow): Promise<Bounded<Client>> => {
+    if (
+      (appExpiry.get(r.id) ?? Number.POSITIVE_INFINITY) <=
+      Date.now() + APP_TOKEN_EARLY_MS
+    ) {
+      appExpiry.delete(r.id);
+      drop(r.id);
+    }
     const live = clients.get(r.id);
     if (live !== undefined) {
       return live;
@@ -718,6 +1051,19 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
   };
 
+  /** What a refused sign-in asks of the person, by how the row signs in. */
+  const againOf = (r: ConnectionRow): string => {
+    if (r.auth === "oauth") {
+      return "Sign in again.";
+    }
+    if (r.auth === "app") {
+      return appServiceOf(r.service) === "linear"
+        ? "Sign in again."
+        : "Set its app again.";
+    }
+    return "Set its key again.";
+  };
+
   /** "<name> did not answer within N s": a use of a connection that was not answered. */
   const unanswered = (r: ConnectionRow, after: number): ConnectionProblem =>
     new ConnectionProblem(
@@ -742,8 +1088,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
     drop(r.id);
     if (refusedSignIn(error)) {
-      const again =
-        r.auth === "oauth" ? "Sign in again." : "Set its key again.";
+      const again = againOf(r);
       setState(r, "needs-sign-in", `The service refused the sign-in. ${again}`);
       return new ConnectionProblem(
         `${r.name} refused the hub's sign-in. ${again}`
@@ -1066,10 +1411,13 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (authKind === "none") {
       return { state: "error", reason: "Not looked at yet." };
     }
-    return {
-      state: "needs-sign-in",
-      reason: authKind === "oauth" ? "Sign in." : "Set its key.",
+    const reasons: Record<Exclude<ConnectionAuth, "none">, string> = {
+      oauth: "Sign in.",
+      app: "Set its app.",
+      bearer: "Set its key.",
+      header: "Set its key.",
     };
+    return { state: "needs-sign-in", reason: reasons[authKind] };
   };
 
   const create = async (input: ConnectionInput): Promise<ConnectionView> => {
@@ -1156,9 +1504,12 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const setKey = async (name: string, key: string): Promise<ConnectionView> => {
     const r = row(name);
     if (r.auth !== "bearer" && r.auth !== "header") {
-      problem(
-        `${name} signs in with ${r.auth}, not a key: ${r.auth === "oauth" ? "start its sign-in instead." : "it takes none."}`
-      );
+      const instead: Record<"none" | "oauth" | "app", string> = {
+        none: "it takes none.",
+        oauth: "start its sign-in instead.",
+        app: "set its app instead.",
+      };
+      problem(`${name} signs in with ${r.auth}, not a key: ${instead[r.auth]}`);
     }
     if (!key.trim() || key.length > 8192) {
       problem("A key is between 1 and 8192 characters.");
@@ -1173,6 +1524,96 @@ export const createConnections = (deps: ConnectionsDeps) => {
   };
 
   /**
+   * Holds an `app` connection's registration: a GitHub App's id,
+   * installation and private key, which is looked at at once (its token
+   * minted, its MCP server's tools listed), or a Linear app's client id and
+   * secret, which then signs in. What it held before is let go.
+   */
+  const setApp = async (
+    name: string,
+    input: AppInput
+  ): Promise<ConnectionView> => {
+    const r = row(name);
+    const service = appServiceOf(r.service);
+    if (r.auth !== "app" || !service) {
+      return problem(`${name} signs in with ${r.auth}, not as an app.`);
+    }
+    const app = appOf(service, input);
+    if (typeof app === "string") {
+      return problem(app);
+    }
+    reseal(r.id, () => ({ app }));
+    drop(r.id);
+    appExpiry.delete(r.id);
+    githubApps.delete(r.id);
+    db.update(r.id, {
+      tokensExpireAt: null,
+      ...(service === "github"
+        ? { state: "error", reason: "Not looked at yet." }
+        : { state: "needs-sign-in", reason: "Sign in." }),
+    });
+    console.info(`[connections] ${name}: app set`);
+    if (service === "github") {
+      await probe(name);
+      reached(name, db.projectsOf(r.id));
+    }
+    deps.changed();
+    return view(row(name));
+  };
+
+  /**
+   * A Linear app's sign-in: Linear's own authorize page with `actor=app`
+   * ("Resources are created as the application"), PKCE, and `prompt=consent`
+   * so the person picks the workspace each time. The redirect must be one
+   * the app's settings list.
+   */
+  const startAppSignIn = async (
+    r: ConnectionRow,
+    redirect: string
+  ): Promise<{ authorizationUrl: string }> => {
+    const { app } = opened(r);
+    if (app?.service !== "linear") {
+      return problem(
+        appServiceOf(r.service) === "github"
+          ? `${r.name} is a GitHub App, which signs in with its private key: set its app instead.`
+          : `${r.name} needs its Linear app first: set its client id and client secret.`
+      );
+    }
+    const state = crypto.randomUUID();
+    let started: { authorizationUrl: URL; codeVerifier: string };
+    try {
+      started = await startAuthorization(LINEAR_API, {
+        metadata: linearOAuth(),
+        clientInformation: { client_id: app.clientId },
+        redirectUrl: redirect,
+        scope: LINEAR_APP_SCOPE,
+        state,
+      });
+    } catch (error) {
+      return problem(
+        `${r.name}'s sign-in could not start: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    started.authorizationUrl.searchParams.set("actor", "app");
+    started.authorizationUrl.searchParams.set("prompt", "consent");
+    reseal(r.id, (sealed) => ({
+      app: sealed.app,
+      verifier: started.codeVerifier,
+    }));
+    db.update(r.id, {
+      signInState: state,
+      signInRedirect: redirect,
+      signInExpiresAt: new Date(Date.now() + SIGN_IN_MS),
+      tokensExpireAt: null,
+    });
+    drop(r.id);
+    appExpiry.delete(r.id);
+    setState(r, "needs-sign-in", "A sign-in is under way.");
+    console.info(`[connections] ${r.name}: Linear app sign-in started`);
+    return { authorizationUrl: started.authorizationUrl.toString() };
+  };
+
+  /**
    * Starts an OAuth sign-in: the URL the person opens. Its redirect lands on
    * the hub at `origin` (where their browser reaches it), else the hub's own
    * address. Any tokens held are let go first: this is a new sign-in.
@@ -1182,7 +1623,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     origin?: string
   ): Promise<{ authorizationUrl: string }> => {
     const r = row(name);
-    if (r.auth !== "oauth") {
+    if (r.auth !== "oauth" && r.auth !== "app") {
       problem(`${name} signs in with ${r.auth}, not OAuth.`);
     }
     let base: URL;
@@ -1195,6 +1636,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
       problem("origin is an http or https address.");
     }
     const redirect = `${base.origin}${CONNECTION_CALLBACK_PATH}`;
+    if (r.auth === "app") {
+      return startAppSignIn(r, redirect);
+    }
     const state = crypto.randomUUID();
     reseal(r.id, (sealed) => ({
       // A client registered for another redirect cannot come back to this one.
@@ -1249,6 +1693,62 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
     // Spent before the exchange: a second redirect with the same state finds nothing.
     db.update(r.id, { signInState: null, signInExpiresAt: null });
+    if (r.auth === "app") {
+      await exchangeApp(r, code);
+    } else {
+      await exchangeMcp(r, code, state, iss);
+    }
+    reseal(r.id, (sealed) => ({ ...sealed, verifier: undefined }));
+    db.update(r.id, { state: "error", reason: "Not looked at yet." });
+    drop(r.id);
+    console.info(`[connections] ${r.name}: signed in`);
+    await probe(r.name);
+    reached(r.name, db.projectsOf(r.id));
+    return view(row(r.name));
+  };
+
+  /** A Linear app's code, exchanged at Linear's token endpoint with its client secret and the sign-in's verifier. */
+  const exchangeApp = async (r: ConnectionRow, code: string): Promise<void> => {
+    const { app, verifier } = opened(r);
+    if (app?.service !== "linear" || !verifier) {
+      return problem(
+        "This sign-in's app was changed while it was under way. Start sign-in again."
+      );
+    }
+    try {
+      keepTokens(
+        r.id,
+        await exchangeAuthorization(LINEAR_API, {
+          metadata: linearOAuth(),
+          clientInformation: {
+            client_id: app.clientId,
+            client_secret: app.clientSecret,
+          },
+          authorizationCode: code,
+          codeVerifier: verifier,
+          redirectUri: redirectOf(r),
+        })
+      );
+    } catch (error) {
+      const said = scrub(
+        r,
+        error instanceof Error ? error.message : String(error)
+      ).slice(0, 300);
+      setState(r, "needs-sign-in", `Linear refused the sign-in (${said}).`);
+      // biome-ignore lint/style/useErrorCause: the token response may carry tokens; only scrubbed words go on
+      throw new ConnectionProblem(
+        `Linear refused this sign-in (${said}). Start sign-in again.`
+      );
+    }
+  };
+
+  /** An MCP server's code, exchanged through the SDK's flow over the row's discovery. */
+  const exchangeMcp = async (
+    r: ConnectionRow,
+    code: string,
+    state: string,
+    iss: string | undefined
+  ): Promise<void> => {
     const metadata = r.discovery?.authorizationServerMetadata as
       | {
           authorization_response_iss_parameter_supported?: boolean;
@@ -1280,13 +1780,80 @@ export const createConnections = (deps: ConnectionsDeps) => {
         "The authorization server refused this sign-in. Start sign-in again."
       );
     }
-    reseal(r.id, (sealed) => ({ ...sealed, verifier: undefined }));
-    db.update(r.id, { state: "error", reason: "Not looked at yet." });
-    drop(r.id);
-    console.info(`[connections] ${r.name}: signed in`);
-    await probe(r.name);
-    reached(r.name, db.projectsOf(r.id));
-    return view(row(r.name));
+  };
+
+  /**
+   * An Octokit signed in as a `github` connection, for the tracker sync: a
+   * fine-grained personal access token's, or a GitHub App installation's,
+   * whose tokens it mints and renews itself. Refused in words for any other
+   * sign-in: an MCP OAuth token is for GitHub's MCP server.
+   */
+  const githubClient = (name: string): Octokit => {
+    const r = row(name);
+    if (appServiceOf(r.service) !== "github") {
+      return problem(`${name} is a ${r.service} connection, not a GitHub one.`);
+    }
+    const sealed = opened(r);
+    if (r.auth === "app") {
+      return sealed.app?.service === "github"
+        ? githubAppOctokit(r, sealed.app)
+        : problem(
+            `${name} needs its GitHub App: set its app id, installation id and private key.`
+          );
+    }
+    if (r.auth === "bearer") {
+      return new Octokit({
+        auth: sealed.key ?? problem(`${name} needs its key: ${NO_SECRET}.`),
+        baseUrl: GITHUB_API,
+        userAgent: "CawCo-hub",
+      });
+    }
+    return problem(
+      `${name} signs in with ${r.auth}; a tracker reads GitHub through a GitHub App or a fine-grained personal access token.`
+    );
+  };
+
+  /**
+   * Linear clients signed in as a `linear` connection, one per request, for
+   * the tracker sync: a personal API key's ("`Authorization: <API_KEY>`"),
+   * or a Linear app's access token, refreshed first when near its end.
+   * Refused in words for any other sign-in: an MCP OAuth token is for
+   * Linear's MCP server.
+   */
+  const linearClient = async (name: string): Promise<LinearClientFor> => {
+    const r = row(name);
+    if (appServiceOf(r.service) !== "linear") {
+      return problem(`${name} is a ${r.service} connection, not a Linear one.`);
+    }
+    const apiUrl = `${LINEAR_API}/graphql`;
+    let signedIn: { accessToken: string } | { apiKey: string };
+    if (r.auth === "bearer") {
+      signedIn = {
+        apiKey:
+          opened(r).key ?? problem(`${name} needs its key: ${NO_SECRET}.`),
+      };
+    } else if (r.auth === "app") {
+      signedIn = { accessToken: await linearAccess(r) };
+    } else {
+      return problem(
+        `${name} signs in with ${r.auth}; a tracker reads Linear through a Linear app or a personal API key.`
+      );
+    }
+    // The client hands its options to each fetch, a request's signal with them.
+    return (signal) =>
+      new LinearClient({ ...signedIn, apiUrl, ...(signal ? { signal } : {}) });
+  };
+
+  /**
+   * The service refused the connection's sign-in to the hub's own call (the
+   * tracker sync's): it needs a key or sign-in again, in the service's words.
+   */
+  const refusedBy = (name: string, words: string): void => {
+    const r = db.byName(name);
+    if (r) {
+      drop(r.id);
+      setState(r, "needs-sign-in", `${words} ${againOf(r)}`);
+    }
   };
 
   /** Lets it go into the hub's trash (db/trash.ts); answers the entry its Undo names. */
@@ -1294,6 +1861,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const r = row(name);
     drop(r.id);
     listed.delete(r.id);
+    githubApps.delete(r.id);
+    appExpiry.delete(r.id);
     const restore =
       deps.trash(name) ?? problem(`There is no connection ${name}.`);
     console.info(`[connections] removed ${name}`);
@@ -1325,6 +1894,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
     toolNamed,
     listConnectionTools,
     githubToken,
+    githubClient,
+    linearClient,
+    refusedBy,
     sessionTools,
     callAs,
     list: () => db.list().map(view),
@@ -1332,6 +1904,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     create,
     update,
     setKey,
+    setApp,
     startSignIn,
     completeSignIn,
     remove,
@@ -1361,6 +1934,7 @@ const INPUT = {
     t.Literal("bearer"),
     t.Literal("header"),
     t.Literal("oauth"),
+    t.Literal("app"),
   ]),
   header: t.Optional(t.String()),
   projects: t.Optional(t.Array(t.String())),
@@ -1410,6 +1984,32 @@ export const connectionRoutes = (connections: Connections) =>
       async ({ params, body }) => {
         try {
           return await connections.setKey(params.name, body.key);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // An app connection's registration: a GitHub App's id, installation
+    // and private key, or a Linear app's client id and secret. Answered as
+    // the view, which names the app and never holds its secret.
+    .put(
+      "/api/connections/:name/app",
+      {
+        body: t.Union([
+          t.Object({
+            appId: t.String({ minLength: 1 }),
+            installationId: t.String({ minLength: 1 }),
+            privateKey: t.String({ minLength: 1 }),
+          }),
+          t.Object({
+            clientId: t.String({ minLength: 1 }),
+            clientSecret: t.String({ minLength: 1 }),
+          }),
+        ]),
+      },
+      async ({ params, body }) => {
+        try {
+          return await connections.setApp(params.name, body);
         } catch (error) {
           return refused(error);
         }

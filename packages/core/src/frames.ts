@@ -709,6 +709,13 @@ export interface TasksChangedFrame {
    */
   kind: "tasks.changed";
   projectId: string;
+  /**
+   * The one task that changed, when the change named one (a move, a write,
+   * a comment); absent, any of them (its folder was written). An open task
+   * reads itself again on either: its times are whole seconds, so two
+   * changes in one second (a tracker's sync beside you) show no newer time.
+   */
+  taskId?: string;
 }
 
 export interface DecisionsChangedFrame {

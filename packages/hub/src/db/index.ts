@@ -206,7 +206,6 @@ import {
   skills,
   spendSettings,
   supervisorConfig,
-  type Tracker,
   taskCommentIds,
   threadMessages,
   threadMessageTasks,
@@ -232,6 +231,7 @@ import {
 import { sealAtRest } from "./seal-at-rest";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
+import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 
@@ -2010,8 +2010,6 @@ export interface DbShape {
   readonly setProjectRemote: (id: string, remote: string) => void;
   /** The stage template a project last had applied: its starter skills follow it. */
   readonly setProjectTemplate: (id: string, template: StagesTemplate) => void;
-  /** Where the project's tasks live; tasks.ts refuses a tracker not built yet. */
-  readonly setProjectTracker: (id: string, tracker: Tracker) => void;
   /** The fleet's session limits, whole: a field absent is no limit. */
   readonly setSessionLimits: (limits: SessionLimits) => void;
   /**
@@ -2153,6 +2151,8 @@ export interface DbShape {
   readonly touchInstanceActivity: (id: string) => void;
   /** A fleet MCP relay session was used now. */
   readonly touchMcpSession: (id: string) => void;
+  /** Trackers: a project's binding to GitHub Issues or Linear, and its tasks' links (tracker.ts). */
+  readonly trackers: TrackersDb;
   /** Deleted config items, kept whole for their Undo (trash.ts). */
   readonly trash: TrashDb;
   /**
@@ -6867,9 +6867,6 @@ const make = async (path: string): Promise<DbShape> => {
           .run();
       }
     },
-    setProjectTracker: (id, tracker) => {
-      db.update(projects).set({ tracker }).where(eq(projects.id, id)).run();
-    },
     setProjectAccounts: (id, list) => {
       db.transaction((tx) => {
         tx.update(projects)
@@ -8997,6 +8994,7 @@ const make = async (path: string): Promise<DbShape> => {
     relays: relaysDb(db),
     sshMachines: sshMachinesDb(db),
     memoryFacts: memoryFactsDb(db),
+    trackers: trackersDb(db),
     hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db),
     find: findDb(db),

@@ -11,11 +11,16 @@
  */
 import {
   type AttemptResult,
+  type IssueTracker,
   outputArtifacts,
   type ProjectGate,
   type ProjectStarter,
   type StarterGlyph,
   type StarterPlace,
+  type TaskIssueLink,
+  type Tracker,
+  type TrackerTarget,
+  type TrackerView,
 } from "@cawco/core";
 import {
   HUB_UNREACHABLE,
@@ -269,7 +274,7 @@ export interface TaskList {
   problems: string[];
   stagesProblems: string[];
   tasks: TaskSummary[];
-  tracker: "cawco" | "github" | "linear";
+  tracker: Tracker;
 }
 
 /** One to-do, flat in file order; `depth` nests it. */
@@ -301,6 +306,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   /** sha256 hex of the file as read. */
   hash: string;
   id: string;
+  /** The GitHub or Linear issue it is one record with (the hub's tracker.ts); null when none. */
+  issue: TaskIssueLink | null;
   kind: StageKind | null;
   labels: string[];
   /** Where an attempt's work lands, as the file says; null: the project's default. */
@@ -428,6 +435,29 @@ const one = (projectId: string, taskId: string) =>
 
 export const listTasks = (projectId: string): Promise<TaskList> =>
   send(`${base(projectId)}/tasks`);
+
+/** Where the project's tasks live, and its binding to GitHub Issues or Linear (the hub's tracker.ts). */
+export const readTracker = (projectId: string): Promise<TrackerView> =>
+  send(`${base(projectId)}/tracker`);
+
+/** Binds the project to a connection's repository or team, or `cawco` lets the binding go. */
+export const setTracker = (
+  projectId: string,
+  binding:
+    | { tracker: "cawco" }
+    | { connection: string; target: string; tracker: IssueTracker }
+): Promise<TrackerView> =>
+  send(`${base(projectId)}/tracker`, json("PUT", binding));
+
+/** The project's tasks and their issues synced now; answers where the binding stands after. */
+export const syncTracker = (projectId: string): Promise<TrackerView> =>
+  send(`${base(projectId)}/tracker/sync`, { method: "POST" });
+
+/** The repositories or teams a connection reaches, for a project to be bound to one. */
+export const trackerTargets = (
+  connection: string
+): Promise<{ targets: TrackerTarget[] }> =>
+  send(`/api/connections/${encodeURIComponent(connection)}/targets`);
 
 /** The project's archived tasks, instead of the board's. */
 export const listArchived = (projectId: string): Promise<TaskList> =>

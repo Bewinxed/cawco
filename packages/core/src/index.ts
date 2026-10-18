@@ -100,6 +100,8 @@ export * from "./tailnet-https";
 export * from "./threads";
 // The workflow-tool catalog and its status/policy shapes (NEW.md §10).
 export * from "./tools";
+// Where a project's tasks live (Projects spec D2): CawCo's files, GitHub Issues or Linear.
+export * from "./trackers";
 // Transcripts: the hub folds each session's frames into blocks once
 // (TranscriptBuilder) and every client renders what it serves.
 export { TRANSCRIPT_PAGE, TranscriptBuilder } from "./transcript";
