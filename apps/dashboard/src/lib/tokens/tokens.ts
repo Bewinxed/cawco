@@ -293,6 +293,7 @@ export type TokenSize =
   | "size.c-panel-w"
   | "size.c-signin-pop-w"
   | "size.c-caw-panel-h"
+  | "size.c-notice-caw"
   | "size.c-top-bar-h"
   | "size.c-bar-toggle-glyph"
   | "size.c-bar-phone-edge"

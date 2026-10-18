@@ -10,8 +10,8 @@
    *
    * - `grip` (A): the house's corner grip at the bottom-trailing corner, a
    *   24px zone (WCAG 2.5.8's least target), an L of 12px legs in a 1.5px
-   *   control line standing in the gutter between the panel's edge and the
-   *   message box, clear of the box's corner.
+   *   muted line, square, past the panel's corner curve and short of the
+   *   message box.
    * - `wide` (B): a "Wide panel" item in the head's More menu, 380 ↔ 560.
    *   A menu item, not a button in the head: a worded button there leaves
    *   the thread's name no room on a 380px panel.
@@ -183,15 +183,14 @@
 {/if}
 
 <style>
-  /* The house corner grip (DESIGN.md's tokens: c-corner-grip-leg,
-     c-corner-grip-stroke, border-control), in a 24px zone (WCAG 2.5.8's
-     least target) at the bottom-trailing corner. Its L stands in the
-     gutter between the panel's drawn edge and the message box's (the
-     panel's --space-2 inset), centred across it and concentric with the
-     panel's radius, so it never touches the box's corner. */
+  /* The house corner grip (DESIGN.md's c-corner-grip-leg and
+     c-corner-grip-stroke) in a 24px zone (WCAG 2.5.8's least target) at the
+     bottom-trailing corner. It is a control, so its L is drawn in the
+     muted ink (4.5:1 on the panel's field, where border-control measured
+     about 1.5:1), square-cornered and standing --space-1 in from both
+     edges: past the panel's 12px corner curve (3.06px in at that line) and
+     short of the message box's edge (--space-2 in). */
   .grip {
-    --in: calc((var(--space-2) - var(--c-corner-grip-stroke)) / 2);
-
     position: absolute;
     inset-block-end: 0;
     inset-inline-end: 0;
@@ -204,17 +203,18 @@
   .grip::after {
     content: "";
     position: absolute;
-    inset-block-end: var(--in);
-    inset-inline-end: var(--in);
+    inset-block-end: var(--space-1);
+    inset-inline-end: var(--space-1);
     inline-size: var(--c-corner-grip-leg);
     block-size: var(--c-corner-grip-leg);
-    border-inline-end: var(--c-corner-grip-stroke) solid var(--border-control);
-    border-block-end: var(--c-corner-grip-stroke) solid var(--border-control);
-    border-end-end-radius: calc(var(--radius-lg) - var(--in));
+    border-inline-end: var(--c-corner-grip-stroke) solid var(--ink-muted);
+    border-block-end: var(--c-corner-grip-stroke) solid var(--ink-muted);
     transition: border-color var(--dur-control) var(--ease-out);
   }
   @media (hover: hover) and (pointer: fine) {
-    .grip:hover::after,
+    .grip:hover::after {
+      border-color: var(--ink-strong);
+    }
     .edge:hover::after {
       border-color: var(--ink-muted);
     }

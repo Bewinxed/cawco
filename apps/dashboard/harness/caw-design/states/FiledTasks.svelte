@@ -162,14 +162,14 @@
     min-inline-size: 0;
     font: var(--type-meta);
   }
-  /* The needs-you hand beside meta words: 12px (DESIGN.md, the Solar
-     Duotone Rule's sizes), in the needs-you ink with its second layer at
-     the status glyphs' weight, so it reads as a mark on a disc, not a
-     yellow blob. */
+  /* The needs-you hand beside meta words: Solar's duotone glyph at 12px
+     (DESIGN.md, the Solar Duotone Rule's sizes) in the meta line's own ink,
+     its second layer at the status glyphs' weight. In the needs-you ink
+     (dark by day, yellow at night) it read as a colour emoji. */
   .why :global(.attn) {
     inline-size: var(--icon-sm);
     block-size: var(--icon-sm);
-    color: var(--status-attn-ink);
+    color: var(--ink-muted);
   }
   .why :global(.attn [opacity]) {
     opacity: var(--glyph-duo-status-opacity);

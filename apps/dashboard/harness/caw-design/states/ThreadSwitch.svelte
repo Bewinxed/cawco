@@ -7,9 +7,10 @@
    *   are one menu button, the thread's name in the meta role with a linear
    *   chevron, stepping to `ink-strong` under the pointer.
    * - `row` (A2): the conversation's first line, not a second toolbar: a
-   *   16px glyph, the thread's name and its chevron beside it, as wide as
-   *   its words on the prose's text column, with no seam under it; the
-   *   hover ghost round it; it scrolls away with the thread.
+   *   16px glyph (the icon recipe: muted ink, the duotone's second layer at
+   *   its own 50%), the thread's name in the body role and its chevron
+   *   beside it, as wide as its words on the prose's text column, with no
+   *   seam under it; the hover ghost round it; it scrolls away with it.
    *
    * With one thread there is nothing to switch to: the name stands as text.
    */
@@ -194,11 +195,8 @@
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
   }
-  .glyph :global(svg [opacity]) {
-    opacity: var(--glyph-duo-status-opacity);
-  }
   .row-name {
-    font: var(--type-label);
+    font: var(--type-body);
     color: var(--ink-strong);
   }
   .row :global(.chev) {

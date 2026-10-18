@@ -3976,6 +3976,14 @@
       },
       "$description": "Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters and earlier threads; shorter where the room under his seat is less."
     },
+    "c-notice-caw": {
+      "$type": "dimension",
+      "$value": {
+        "value": 48,
+        "unit": "px"
+      },
+      "$description": "Caw as a notice's mark in his panel (the alert row with Caw beside its words or above them) and beside his greeting on an empty thread: his still at the height of the title and the line together (16.9 + 4 + 20.3 = 41.2px), so he stands beside both words."
+    },
     "c-top-bar-h": {
       "$type": "dimension",
       "$value": {

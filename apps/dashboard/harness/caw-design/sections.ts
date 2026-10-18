@@ -32,6 +32,7 @@ export const DECISIONS: Decision[] = [
     question: "What does the panel's head say?",
     differs:
       "Whose panel it is and which thread, with the thread's name as the switcher, or Caw's name alone with the thread as the first row of the conversation. On a phone the sheet adds its grabber and Close, Close at the trailing edge.",
+    note: "On a phone, Close sits at the trailing edge, as DESIGN's sheet recipe has it. Earlier replies to your pins said a leading Close and a centred title; DESIGN wins over them.",
     options: [
       {
         id: "who-and-which",
@@ -46,10 +47,11 @@ export const DECISIONS: Decision[] = [
     question: "How does the panel say what's stopping Caw?",
     differs:
       "The app's alert row with Caw beside the words, tinted by how bad it is, or Caw saying it in the conversation. Each shows a thread that can't be read and Caw unable to start.",
-    note: "Caw stands beside the words, as an avatar does beside a message, so the title, the line and the buttons keep one edge.",
+    note: "Beside the words, Caw stands as an avatar does beside a message, so the title, the line and the buttons keep one edge after him. Saying it, he speaks in the conversation, his mark on his own line. Above the words, he is the notice's mark, centred over it, and the words keep one start edge under him.",
     options: [
       { id: "alert-row", name: "An alert row with Caw", recommended: true },
       { id: "caw-says", name: "Caw says it" },
+      { id: "caw-above", name: "Caw above the words" },
     ],
   },
   {

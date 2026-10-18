@@ -17,8 +17,8 @@
    * - The message box (decided: the panel's last row): the real Composer as
    *   the panel's last grid row, an opaque shell (no glass: nothing passes
    *   under it) the inset in from the panel's edge at every window width,
-   *   the body ending against it with the house's 40px edge fade at its
-   *   head and foot while more is past them.
+   *   the body ending against it with no fade there; the house's 40px
+   *   edge fade only at its head while it is scrolled.
    * - `notice` stands in the foot over the message box (a can't-start row).
    * - `end`: the body scrolled this far short of its end, so its foot is
    *   drawn mid-scroll; unset, it rests at its top.
@@ -194,14 +194,15 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-drawer);
   }
-  /* Hanging (DESIGN.md, Caw's panel): its top edge on the bar's floor, its
+  /* Hanging (DESIGN.md, Caw's panel): its top edge lying on the bar's
+     floor line (the bar's hairline), so the two read as one line, its
      trailing side the screen's edge with no edge drawn there, its leading
      side the 12px margin; never taller than the room over the home bar. */
   :global(.hang) .phone-panel {
     --safe: 0px;
 
     inset-inline: var(--c-bar-phone-edge) 0;
-    inset-block: calc(var(--status-bar) + var(--c-top-bar-h)) auto;
+    inset-block: calc(var(--status-bar) + var(--c-top-bar-h) - 1px) auto;
     block-size: min(
       var(--c-caw-panel-h),
       calc(
@@ -221,10 +222,15 @@
     min-block-size: 0;
     background: var(--surface-recess);
   }
+  /* The house edge fade at the body's head only, while it is scrolled:
+     at its foot the body ends against the message box with no fade, so
+     no faded line reads as a gradient there ("wtf is this gradient?"). */
   .scroll {
     min-block-size: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    animation-name: kit-edge-fade-start;
+    animation-range: 0% 6%;
   }
   .column {
     display: flex;

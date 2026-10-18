@@ -537,6 +537,8 @@ public enum Size {
     public static let cSigninPopW: Double = 340
     /// Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters and earlier threads; shorter where the room under his seat is less.
     public static let cCawPanelH: Double = 640
+    /// Caw as a notice's mark in his panel (the alert row with Caw beside its words or above them) and beside his greeting on an empty thread: his still at the height of the title and the line together (16.9 + 4 + 20.3 = 41.2px), so he stands beside both words.
+    public static let cNoticeCaw: Double = 48
     /// The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top.
     public static let cTopBarH: Double = 44
     /// The phone bar's sidebar toggle: a bare glyph, its leading edge c-bar-phone-edge from the screen's and its centre on the tabs' centre line, in a 44px touch area.

@@ -15,7 +15,7 @@
    */
   import type { ThreadMessage } from "@cawco/core";
   import type { Snippet } from "svelte";
-  import Caw from "#lib/cawco/home/Caw.svelte";
+  import CawFace from "#lib/cawco/home/CawFace.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -41,6 +41,7 @@
   import Resize from "./states/Resize.svelte";
   import StarterChips from "./states/StarterChips.svelte";
   import StarterRows from "./states/StarterRows.svelte";
+  import { noticeCaw } from "./states/size";
   import TodayTasks from "./TodayTasks.svelte";
 
   // The thread on show: his reply that filed three tasks, among three threads.
@@ -181,9 +182,10 @@
           form={drawn}
           {threads}
         >
-          {#if id === "alert-row"}
+          {#if id !== "caw-says"}
             <Notice
               act="Retry"
+              caw={id === "caw-above" ? "above" : "beside"}
               line={READ.line}
               onsecond={() => fill(`read-${id}`)(ASK_CAW)}
               raw={READ_RAW}
@@ -219,9 +221,10 @@
             </div>
           {/if}
           {#snippet notice()}
-            {#if id === "alert-row"}
+            {#if id !== "caw-says"}
               <Notice
                 act="Check machines"
+                caw={id === "caw-above" ? "above" : "beside"}
                 line={START.line}
                 rows={MACHINES}
                 tint="warning"
@@ -243,7 +246,7 @@
     >
       <div class="greet" data-design-greeting>
         <span class="greet-caw" data-caw-status="ready"
-          ><Caw size={48} status="ready" /></span
+          ><CawFace size={noticeCaw()} status="ready" /></span
         >
         <p class="greet-words">What's next for {PROJECT_NAME}?</p>
       </div>

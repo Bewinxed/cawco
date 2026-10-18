@@ -1,13 +1,12 @@
 <script lang="ts">
   /**
    * PROPOSED (suggestions, C2): the project's starters as a list of the
-   * panel's rows, directly above the message box: the starter's 16px glyph
-   * centred in the 28px lead column, its sentence on the text column, and a
-   * trailing arrow that says the row goes somewhere. 44px tall; the
-   * hairlines between rows start on the text column, as a list's
-   * separators do, so they never run under the glyphs; the hover ghost and
-   * the press tint take the whole row. A press puts the sentence in the
-   * message box, unsent.
+   * panel's rows, directly above the message box and as wide as it: the
+   * starter's 16px glyph on its start edge, the sentence taking the width,
+   * and a trailing arrow on its end edge that says the row goes somewhere.
+   * 44px tall; the hairlines between rows run from the words' start to the
+   * box's end edge; the hover ghost and the press tint take the whole row.
+   * A press puts the sentence in the message box, unsent.
    */
   import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   import type { Starter } from "#lib/cawco/project-tasks.js";
@@ -38,8 +37,10 @@
 </ul>
 
 <style>
+  /* The rows run the message box's width: the glyph on its start edge, the
+     arrow's ink on its end edge, the words taking all between. */
   .rows {
-    --text-x: calc(var(--space-3) + var(--lead-col) + var(--space-3));
+    --text-x: calc(var(--icon-md) + var(--space-3));
 
     display: flex;
     flex-direction: column;
@@ -48,19 +49,21 @@
     padding: 0;
     list-style: none;
   }
-  /* The separator from the text column to the row's end. */
+  /* The separator from the words' start to the box's end edge. */
   .rows li + li {
     background: linear-gradient(var(--border-hairline), var(--border-hairline))
       no-repeat var(--text-x) 0 / calc(100% - var(--text-x)) 1px;
   }
+  /* The hover ghost reaches --space-2 past the row on each side as a
+     shadow, which takes no room, so the words keep the box's edges. */
   .row {
     display: grid;
-    grid-template-columns: var(--lead-col) minmax(0, 1fr) auto;
+    grid-template-columns: var(--icon-md) minmax(0, 1fr) var(--icon-md);
     align-items: center;
     column-gap: var(--space-3);
     inline-size: 100%;
     min-block-size: var(--c-btn-h-lg);
-    padding: var(--space-2) var(--space-3);
+    padding: var(--space-2) 0;
     border: 0;
     border-radius: var(--radius-sm);
     background: none;
@@ -70,16 +73,20 @@
     cursor: pointer;
 
     @media (prefers-reduced-motion: no-preference) {
-      transition: background-color var(--dur-control) var(--ease-out);
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        box-shadow var(--dur-control) var(--ease-out);
     }
     @media (hover: hover) and (pointer: fine) {
       &:hover {
         background: var(--surface-hover);
+        box-shadow:
+          calc(var(--space-2) * -1) 0 0 0 var(--surface-hover),
+          var(--space-2) 0 0 0 var(--surface-hover);
       }
     }
   }
   .glyph {
-    justify-self: center;
     color: var(--ink-muted);
   }
   .glyph :global(svg) {
@@ -92,7 +99,6 @@
   .text {
     min-inline-size: 0;
     overflow-wrap: anywhere;
-    text-wrap: pretty;
   }
   .go {
     color: var(--ink-muted);

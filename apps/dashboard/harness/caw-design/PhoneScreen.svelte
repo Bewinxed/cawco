@@ -62,8 +62,13 @@
   <span class="glass" aria-hidden="true" data-design-tab
     ><CawFace size={24} status="ready" /></span
   >
-  {#if !hang}<span class="scrim" aria-hidden="true"></span>{/if}
+  {#if hang}
+    <span class="flare" aria-hidden="true" data-design-flare></span>
+  {:else}
+    <span class="scrim" aria-hidden="true"></span>
+  {/if}
   {@render children()}
+  <span class="rim" aria-hidden="true"></span>
 </div>
 
 <style>
@@ -78,7 +83,41 @@
     overflow: hidden;
     border-radius: var(--radius-panel);
     background: var(--surface-page);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
+  }
+  /* Hanging, the glass's leading foot flares out by radius-lg into the
+     panel's top edge (DESIGN.md, Caw's panel): a radius-lg square at the
+     glass's foot, over its leading edge's last pixel, filled with the
+     panel's surface outside a quarter circle centred up and out from it,
+     the control edge drawn along that circle. The glass's flank runs down
+     into the arc on one tangent and the arc out into the panel's top edge
+     on another. */
+  .flare {
+    --r: var(--radius-lg);
+
+    position: absolute;
+    z-index: 2;
+    inset-inline-end: calc(var(--c-bar-caw-glass-phone) + var(--space-3) - 1px);
+    inset-block-start: calc(var(--status-bar) + var(--c-top-bar-h) - var(--r));
+    inline-size: var(--r);
+    block-size: var(--r);
+    background: radial-gradient(
+      circle at 0 0,
+      transparent calc(var(--r) - 1px),
+      var(--border-control) calc(var(--r) - 1px),
+      var(--border-control) var(--r),
+      var(--surface-raised) var(--r)
+    );
+  }
+  /* The phone's edge, drawn over everything on it: what stands flush with
+     the screen's edge (his glass, the hanging panel's trailing side, the
+     sheet) meets this line instead of seeming cut off at it. */
+  .rim {
+    position: absolute;
+    z-index: 3;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px var(--border-control);
+    pointer-events: none;
   }
   .behind {
     position: absolute;

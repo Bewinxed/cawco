@@ -48,13 +48,15 @@ import {
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const DIST = join(DASHBOARD, "dist-harness", "caw-design");
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round2");
+const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round3");
 const FORMS = ["desk", "phone"] as const;
 const LEGS: { name: string; view: View; size?: { w: number; h: number } }[] = [
   { name: "1440", view: "desk" },
   { name: "1920", view: "desk", size: { w: 1920, h: 1080 } },
   { name: "390", view: "phone" },
 ];
+/** A pictograph: an emoji's code point, which no copy here carries. */
+const EMOJI = /\p{Extended_Pictographic}/u;
 /** A task's id as the hub writes it. */
 const TASK_ID = /\b(?:hb|tsk)-\d+\b/;
 const NOT_LETTERS = /[^a-z]+/g;
@@ -132,6 +134,7 @@ interface Read {
   ids: string[];
   meta: Pair[];
   notices: {
+    above: boolean;
     act: Pair;
     caw: { left: number; right: number; top: number };
     foot: number;
@@ -356,6 +359,7 @@ const read = (page: Page): Promise<Read> =>
         const line = one.querySelector("[data-design-notice-line]") as Element;
         const act = one.querySelector("[data-design-notice-act]") as Element;
         return {
+          above: one.getAttribute("data-design-notice-caw") === "above",
           caw: { left: caw.left, top: caw.top, right: caw.right },
           title: {
             ...pair(title, "title"),
@@ -419,6 +423,217 @@ const read = (page: Page): Promise<Read> =>
     };
   }, TASK_ID.source);
 
+/** What round three's assertions read, from the engine. */
+interface More {
+  emoji: string[];
+  fades: { fadeEnd: number; footImage: string; footMask: string }[];
+  grip: Pair[];
+  notices: {
+    above: boolean;
+    cawCentre: number;
+    cawRight: number;
+    clear: number | null;
+    h: number;
+    rowCentre: number;
+    words: number;
+  }[];
+  past: string[];
+  starterRows: {
+    glyph: number;
+    li: number;
+    shellLeft: number;
+    shellRight: number;
+    text: number;
+    textRoom: number;
+  }[];
+}
+
+const readMore = (page: Page): Promise<More> =>
+  page.evaluate((emojiSource) => {
+    const r = (el: Element) => el.getBoundingClientRect();
+    const pictograph = new RegExp(emojiSource, "u");
+    const emoji: string[] = [];
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT
+    );
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (pictograph.test(node.textContent ?? "")) {
+        emoji.push((node.textContent ?? "").trim().slice(0, 40));
+      }
+    }
+    const notices = [...document.querySelectorAll("[data-design-notice]")].map(
+      (one) => {
+        const mark = one.querySelector("[data-caw-status]") as Element;
+        const drawn = [mark, ...mark.querySelectorAll("canvas")].map(r);
+        const box = r(one);
+        const foot = one.closest("[data-design-foot]");
+        const shell = foot?.querySelector(
+          "[data-design-composer] .kit-dock-shell"
+        );
+        return {
+          above: one.getAttribute("data-design-notice-caw") === "above",
+          cawRight: Math.max(...drawn.map((b) => b.right)),
+          cawCentre: r(mark).left + r(mark).width / 2,
+          rowCentre: box.left + box.width / 2,
+          words: r(one.querySelector("[data-design-notice-title]") as Element)
+            .left,
+          h: box.height,
+          clear: shell ? r(shell).top - box.bottom : null,
+        };
+      }
+    );
+    const fades = [...document.querySelectorAll("[data-design-room]")].map(
+      (room) => {
+        const foot = room
+          .closest("[data-design-panel]")
+          ?.querySelector("[data-design-foot]");
+        const style = foot ? getComputedStyle(foot) : null;
+        return {
+          fadeEnd:
+            Number.parseFloat(
+              getComputedStyle(room).getPropertyValue("--fade-end")
+            ) || 0,
+          footImage: style?.backgroundImage ?? "none",
+          footMask: style?.maskImage ?? "none",
+        };
+      }
+    );
+    const starterRows = [
+      ...document.querySelectorAll("[data-design-starter-rows]"),
+    ].map((list) => {
+      const panel = list.closest("[data-design-panel]") as Element;
+      const shell = r(
+        panel.querySelector("[data-design-composer] .kit-dock-shell") as Element
+      );
+      const li = list.querySelector("li") as Element;
+      const row = r(li);
+      const text = li.querySelector(".text") as Element;
+      const glyph = li.querySelector(".glyph svg") as Element;
+      const go = li.querySelector(".go svg") as Element;
+      return {
+        shellLeft: shell.left,
+        shellRight: shell.right,
+        glyph: r(glyph).left,
+        li: row.right,
+        text: r(text).width,
+        textRoom: r(go).left - r(glyph).right,
+      };
+    });
+    const past = [...document.querySelectorAll("[data-design-screen]")].flatMap(
+      (screen) => {
+        const edge = r(screen).right;
+        return [...screen.querySelectorAll("*")]
+          .filter((el) => {
+            const b = r(el);
+            return b.width > 0 && b.height > 0 && b.right > edge + 0.5;
+          })
+          .map(
+            (el) =>
+              `${el.tagName.toLowerCase()}.${el.className.toString().split(" ")[0]} ${(r(el).right - edge).toFixed(1)}px`
+          );
+      }
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext("2d", {
+      willReadFrequently: true,
+    }) as CanvasRenderingContext2D;
+    const paint = (layers: string[]): [number, number, number] => {
+      ctx.clearRect(0, 0, 1, 1);
+      for (const layer of layers) {
+        ctx.fillStyle = "#000";
+        ctx.fillStyle = layer;
+        ctx.fillRect(0, 0, 1, 1);
+      }
+      const [red = 0, green = 0, blue = 0] = ctx.getImageData(0, 0, 1, 1).data;
+      return [red, green, blue];
+    };
+    const grip = [...document.querySelectorAll("[data-design-grip]")].map(
+      (one) => {
+        const ground = getComputedStyle(
+          one
+            .closest("[data-design-panel]")
+            ?.querySelector("[data-design-foot]") as Element
+        ).backgroundColor;
+        return {
+          what: "the resize grip",
+          bg: paint([ground]),
+          fg: paint([
+            ground,
+            getComputedStyle(one, "::after").borderRightColor,
+          ]),
+        };
+      }
+    );
+    return { emoji, notices, fades, starterRows, past, grip };
+  }, EMOJI.source);
+
+/** Round three's assertions on one form of one leg. */
+function assertMore(kit: Kit, more: More, at: string): void {
+  kit.check(
+    `${at}: no emoji code point in any rendered text`,
+    more.emoji.length === 0,
+    more.emoji.join(" | ")
+  );
+  const wide = more.notices.filter(
+    (one) =>
+      (!one.above && (one.words > one.cawRight + 11.5 || one.h > 120)) ||
+      (one.above && Math.abs(one.cawCentre - one.rowCentre) > 1) ||
+      (one.clear !== null && one.clear < 6.5)
+  );
+  kit.check(
+    `${at}: every alert row (${more.notices.length}): beside Caw, its words start within the house gap of his drawn edge and the row is 120px or less; above, he is centred; in the foot it stands --space-2 clear of the message box`,
+    more.notices.length > 0 && wide.length === 0,
+    more.notices
+      .map(
+        (one) =>
+          `${one.above ? "above" : "beside"}: words ${one.words.toFixed(1)} vs caw ${one.cawRight.toFixed(1)}, ${one.h.toFixed(1)}px, centre ${one.cawCentre.toFixed(1)}/${one.rowCentre.toFixed(1)}, clear ${one.clear?.toFixed(1) ?? "-"}`
+      )
+      .join("; ")
+  );
+  const faded = more.fades.filter(
+    (one) =>
+      one.fadeEnd > 0 || one.footImage !== "none" || one.footMask !== "none"
+  );
+  kit.check(
+    `${at}: no fade, mask or gradient over any body's foot (${more.fades.length})`,
+    more.fades.length > 0 && faded.length === 0,
+    faded
+      .map((one) => `${one.fadeEnd}px, ${one.footImage}, ${one.footMask}`)
+      .join("; ")
+  );
+  const off = more.starterRows.filter(
+    (one) =>
+      Math.abs(one.glyph - one.shellLeft) > 0.5 ||
+      Math.abs(one.li - one.shellRight) > 0.5 ||
+      Math.abs(one.text - (one.textRoom - 22)) > 1
+  );
+  kit.check(
+    `${at}: the starter rows run the message box's width, glyph on its start edge, row on its end edge, words taking the room between`,
+    more.starterRows.length > 0 && off.length === 0,
+    more.starterRows
+      .map(
+        (one) =>
+          `glyph ${one.glyph.toFixed(1)} vs ${one.shellLeft.toFixed(1)}, end ${one.li.toFixed(1)} vs ${one.shellRight.toFixed(1)}, words ${one.text.toFixed(1)} of ${(one.textRoom - 22).toFixed(1)}`
+      )
+      .join("; ")
+  );
+  kit.check(
+    `${at}: nothing in a phone frame stands past its right edge`,
+    more.past.length === 0,
+    more.past.slice(0, 5).join("; ")
+  );
+  for (const one of more.grip) {
+    const ratio = contrast(one.fg, one.bg);
+    kit.check(
+      `${at}: the resize grip holds ${ratio.toFixed(2)}:1 on the panel (3:1)`,
+      ratio >= 3
+    );
+  }
+}
+
 /** Every capture unit: each state of a two-state option, else the option. */
 const UNITS =
   "[data-design-option]:not(:has(> .states)), [data-design-option] > .states > .state";
@@ -466,6 +681,39 @@ async function assertPlaced(kit: Kit, page: Page, at: string): Promise<void> {
 }
 
 /** Each unit, scrolled to its row's start, captured whole. */
+/**
+ * Each decision's whole section (its question, its line, every option's
+ * caption with its form, name and Pick, and its panels), the decided fix
+ * and the decided board, at a window wide enough to hold the whole row.
+ */
+async function captureSections(page: Page, name: string): Promise<void> {
+  const view = page.viewportSize() ?? { width: 1440, height: 900 };
+  const sections = await page
+    .locator("[data-cawco-choice], [data-design-fix], [data-design-decided]")
+    .all();
+  for (const section of sections) {
+    const [label, need] = await section.evaluate((el) => {
+      const row = el.matches(".row") ? el : el.querySelector(".row");
+      return [
+        el.getAttribute("data-cawco-choice") ??
+          (el.hasAttribute("data-design-fix")
+            ? "fixed-decided"
+            : "decided-board"),
+        (row?.scrollWidth ?? 0) + 2 * 25 + 32,
+      ] as const;
+    });
+    await page.setViewportSize({
+      width: Math.max(view.width, need),
+      height: view.height,
+    });
+    await settle(page, 150);
+    await section.screenshot({
+      path: join(CAPS, `${name}-section-${label}.png`),
+    });
+  }
+  await page.setViewportSize(view);
+}
+
 async function capture(page: Page, name: string): Promise<void> {
   const units = await page.locator(UNITS).all();
   for (const [at, unit] of units.entries()) {
@@ -497,6 +745,20 @@ async function capture(page: Page, name: string): Promise<void> {
         el.closest("[data-design-row], .row") as HTMLElement
       ).style.scrollSnapType = "";
     });
+  }
+}
+
+/** The leg's captures: whole sections at 1440, the phone's panels at 390. */
+async function captureForm(
+  page: Page,
+  leg: string,
+  name: string,
+  form: (typeof FORMS)[number]
+): Promise<void> {
+  if (leg === "1440") {
+    await captureSections(page, name);
+  } else if (leg === "390" && form === "phone") {
+    await capture(page, name);
   }
 }
 
@@ -572,16 +834,18 @@ function assertForm(
     (one) =>
       Math.abs(one.title.left - one.line.left) > 0.5 ||
       Math.abs(one.title.left - one.foot) > 0.5 ||
-      one.caw.right > one.title.left ||
-      Math.abs(one.caw.top - one.title.top) > 3
+      (!one.above &&
+        (one.caw.right > one.title.left ||
+          Math.abs(one.caw.top - one.title.top) > 3)) ||
+      (one.above && one.caw.top >= one.title.top)
   );
   kit.check(
-    `${at}: in every alert row (${seen.notices.length}) the title, line and buttons share one start edge, Caw beside them from the title's top`,
+    `${at}: in every alert row (${seen.notices.length}) the title, line and buttons share one start edge, Caw beside them from the title's top or above them`,
     seen.notices.length > 0 && skew.length === 0,
     skew
       .map(
         (one) =>
-          `caw ${one.caw.left.toFixed(0)}–${one.caw.right.toFixed(0)}; title ${one.title.left.toFixed(1)}, line ${one.line.left.toFixed(1)}, foot ${one.foot.toFixed(1)}`
+          `${one.above ? "above" : "beside"}: caw ${one.caw.left.toFixed(0)}–${one.caw.right.toFixed(0)} top ${one.caw.top.toFixed(0)}; title ${one.title.left.toFixed(1)} top ${one.title.top.toFixed(0)}, line ${one.line.left.toFixed(1)}, foot ${one.foot.toFixed(1)}`
       )
       .join("; ")
   );
@@ -667,15 +931,16 @@ const spec: Spec = {
             );
             await settle(page, 400);
             assertForm(kit, await read(page), at, form, coarse);
+            assertMore(kit, await readMore(page), at);
             if (leg.name === "390") {
               await assertPlaced(kit, page, at);
             }
-            if (
-              leg.name === "1440" ||
-              (leg.name === "390" && form === "phone")
-            ) {
-              await capture(page, `${leg.name}-${theme}-${form}`);
-            }
+            await captureForm(
+              page,
+              leg.name,
+              `${leg.name}-${theme}-${form}`,
+              form
+            );
           }
           kit.check(
             `${leg.name} ${theme}: no console or page error`,
