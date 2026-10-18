@@ -866,6 +866,9 @@ async function hangChecks(kind: Kind, udid: string, closed: Pixels) {
   );
 }
 
+/** A pid as the Mac's shell prints it (`echo $!`): digits alone. */
+const DIGITS = /^\d+$/;
+
 /**
  * A recording of the panel closing and opening twice on the phone
  * (simctl's recordVideo, at the display's rate), saved beside the captures,
@@ -880,7 +883,7 @@ async function recordOpenClose(udid: string, cawFrame: Frame) {
   ).trim();
   // The Mac's own pid for the recording, which its `kill` below is sent to on
   // the Mac: one that is not an integer above 1 is no process to stop there.
-  if (!/^\d+$/.test(pid) || Number(pid) <= 1) {
+  if (!DIGITS.test(pid) || Number(pid) <= 1) {
     throw new Error(
       `the phone's recording on the Mac gave no pid to stop it by (${JSON.stringify(pid)})`
     );
