@@ -1258,4 +1258,409 @@ public enum Words {
 
         public static let newSession = "New session"
     }
+
+    public enum Routines {
+        // packages/core/src/words/routines.ts `routinesWords`
+        /// The strip's tab, and the page's first block.
+        public static let tab = "Routines"
+
+        public static let sources = "Event sources"
+
+        public static let actions = "Approved actions"
+
+        /// A block's needs-you mark, in words.
+        public static func failing(count: Int) -> String {
+            "\(count) failing"
+        }
+
+        public static func waiting(count: Int) -> String {
+            "\(count) waiting on you"
+        }
+
+        /// The Routines block's own action: the composer to Caw over the ledger.
+        public static let newRoutine = "New routine"
+
+        /// The Event sources block's badge: events arrive as they happen, or only when polled.
+        public static let relayLive = "Relay live"
+
+        public static let relayOff = "Relay off"
+
+        public static let polledOnly = "Only polled events arrive"
+
+        /// The composer's placeholder: a routine in a sentence.
+        public static let placeholder = "Every weekday at 09:00, triage…"
+
+        public static let columnState = "State"
+
+        public static let columnRoutine = "Routine"
+
+        public static let columnLastRun = "Last run"
+
+        public static let columnNextRun = "Next run"
+
+        public static let columnActions = "Actions"
+
+        public static let columnService = "Service"
+
+        public static let columnSource = "Source"
+
+        public static let columnLastRead = "Last read"
+
+        public static let columnAction = "Action"
+
+        public static let columnStatus = "Status"
+
+        public static let columnWhen = "When"
+
+        public static let columnOutcome = "Outcome"
+
+        public static let columnTook = "Took"
+
+        public static let columnResult = "Result"
+
+        /// A routine's lead glyph, said: whether it runs, and how.
+        public static let leadOn = "On, on a schedule"
+
+        public static let leadEvent = "On, on a schedule and when an event comes"
+
+        public static let leadPaused = "Paused"
+
+        public static let leadExpiring = "On, turning itself off"
+
+        /// An agent's routine turning itself off, after its schedule.
+        public static func offIn(days: Int) -> String {
+            "Off in \(days) \(days == 1 ? "day" : "days")"
+        }
+
+        /// The schedule's hover: the exact next run, and each event that also runs it.
+        public static func next(exact: String) -> String {
+            "next \(exact)"
+        }
+
+        public static func alsoWhen(event: String) -> String {
+            "also when \(event)"
+        }
+
+        /// A route's event in words: its source's kinds, or events.
+        public static let events = "events"
+
+        public static func onBranch(branch: String) -> String {
+            "on \(branch)"
+        }
+
+        public static func byAuthor(author: String) -> String {
+            "by \(author)"
+        }
+
+        /// On a narrow ledger, Last and Next fold into the schedule's line.
+        public static let lastShort = "Last"
+
+        public static let nextShort = "Next"
+
+        public static let never = "Never"
+
+        public static let notRunYet = "Not run yet"
+
+        public static let running = "Running"
+
+        public static func runningSince(at: String) -> String {
+            "Running since \(at)"
+        }
+
+        public static let queued = "Queued"
+
+        public static let skipped = "Skipped"
+
+        public static let failed = "Failed"
+
+        public static let stopped = "Stopped"
+
+        public static let silent = "Nothing to report"
+
+        public static let delivered = "Delivered"
+
+        public static let paused = "Paused"
+
+        /// A run's word and its exact time, for a hover.
+        public static func wordAt(word: String, at: String) -> String {
+            "\(word) · \(at)"
+        }
+
+        public static let runNow = "Run now"
+
+        public static let pause = "Pause"
+
+        public static let resume = "Resume"
+
+        public static let keep = "Keep"
+
+        public static let remove = "Delete routine…"
+
+        public static func removeAsk(name: String) -> String {
+            "Delete \(name)? It stops now; its past runs stay in the project's history."
+        }
+
+        public static let removeConfirm = "Delete routine"
+
+        /// The ask's own name, read out.
+        public static func removeLabel(name: String) -> String {
+            "Delete \(name)"
+        }
+
+        public static let removing = "Deleting…"
+
+        public static let cancel = "Cancel"
+
+        public static let empty = "No routines yet"
+
+        public static func emptyCaw(project: String) -> String {
+            "Caw runs work for \(project) on a schedule, or when something happens. Say what, and when."
+        }
+
+        public static func emptyOff(problem: String) -> String {
+            "Caw makes routines, and he can't start: \(problem)."
+        }
+
+        public static let away = "his machine is away"
+
+        public static let startersLabel = "Routines to ask Caw for"
+
+        public static let noSources = "No event sources yet. Caw connects one when a routine should start on an event, like a merged pull request."
+
+        public static let noActions = "Nothing yet. Caw asks you before a routine posts, emails or closes anything, and what you decide is kept here."
+
+        public static let noEvents = "No events yet"
+
+        public static let notReadYet = "Not read yet"
+
+        public static let read = "Read"
+
+        /// How often a poll reads.
+        public static let readByHub = "Read by the hub"
+
+        public static let everyMinute = "Read every minute"
+
+        public static func everyMinutes(minutes: Int) -> String {
+            "Read every \(minutes) minutes"
+        }
+
+        public static let hourly = "Read hourly"
+
+        public static func everyHours(hours: Int) -> String {
+            "Read every \(hours) hours"
+        }
+
+        /// The repository's GitHub poller, before it knows its repository.
+        public static let theRepository = "The repository"
+
+        public static let unavailable = "Routines are not available"
+
+        public static func unavailableLine(project: String, problem: String) -> String {
+            "The routines for \(project) could not be read: \(problem) Nothing was changed."
+        }
+
+        public static let retry = "Retry"
+
+        public static let recentRuns = "Recent runs"
+
+        public static let more = "More"
+
+        public static let less = "Less"
+
+        public static let readRun = "Read the run"
+
+        /// How long a run ran: under a minute, minutes, hours and minutes.
+        public static let tookUnder = "<1m"
+
+        public static func tookMinutes(minutes: Int) -> String {
+            "\(minutes)m"
+        }
+
+        public static func tookHours(hours: Int, minutes: Int) -> String {
+            "\(hours)h \(minutes)m"
+        }
+
+        public static let actionWaiting = "Waiting on you"
+
+        public static let actionApproved = "Approved"
+
+        public static let actionRunning = "Running"
+
+        public static let actionRan = "Ran"
+
+        public static let actionFailed = "Failed"
+
+        public static let actionUnknown = "Outcome unknown"
+
+        public static let actionDenied = "Denied"
+
+        public static let actionCancelled = "Cancelled"
+
+        public static func from(who: String) -> String {
+            "From \(who)"
+        }
+
+        /// How long ago (rules.ts `since`): under a minute, then minutes, hours, days.
+        public static let justNow = "just now"
+
+        public static func ago(span: String) -> String {
+            "\(span) ago"
+        }
+
+        public static let neverAt = "never"
+
+        public static let daily = "Daily"
+
+        public static let weekdays = "Weekdays"
+
+        public static let weekends = "Weekends"
+
+        /// Sunday first, as a cron counts them.
+        public static let dayNames: [String] = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"]
+
+        public static func daysAt(days: String, time: String) -> String {
+            "\(days) at \(time)"
+        }
+
+        public static func hourlyAt(minute: String) -> String {
+            "Hourly at :\(minute)"
+        }
+
+        /// The schedule in its own zone, for a hover: `Daily at 06:30 New York time`.
+        public static func zoneTime(words: String, place: String) -> String {
+            "\(words) \(place) time"
+        }
+
+        public static func placeTime(place: String) -> String {
+            "\(place) time"
+        }
+
+        /// A time near now, said near.
+        public static func today(time: String) -> String {
+            "Today \(time)"
+        }
+
+        public static func tomorrow(time: String) -> String {
+            "Tomorrow \(time)"
+        }
+
+        public static func yesterday(time: String) -> String {
+            "Yesterday \(time)"
+        }
+    }
+
+    public enum Views {
+        // packages/core/src/words/views.ts `viewsWords`
+        /// The strip's ghost action, and the head's ⋯ on a phone, while Caw can start.
+        public static let ask = "Ask Caw for a view"
+
+        /// The ask's composer, a view in a sentence.
+        public static let placeholder = "A view of what is scheduled this week…"
+    }
+
+    public enum Made {
+        // packages/core/src/words/made.ts `madeWords`
+        /// The strip's tab, while a task has made something.
+        public static let tab = "Made"
+
+        /// A file output's row: Open shows the file itself.
+        public static let open = "Open"
+
+        /// An image output, read out as the way to it whole.
+        public static func openFile(name: String) -> String {
+            "Open \(name)"
+        }
+
+        /// A `*.post.json` that does not read as a post, and why.
+        public static func notPost(name: String, problem: String) -> String {
+            "\(name) does not read as a post. \(problem)"
+        }
+
+        public static func notJson(error: String) -> String {
+            "It is not JSON: \(error)"
+        }
+
+        public static let noObject = "It holds no post object."
+
+        public static let notXPost = "Its kind is not \"x-post\"."
+
+        public static let noText = "It has no text or no account."
+
+        /// A post's alternates: the first paragraph as written, or another.
+        public static let firstParagraph = "First paragraph"
+
+        public static let asWritten = "As written"
+
+        public static func alternate(index: Int) -> String {
+            "Alternate \(index)"
+        }
+
+        public static let thread = "Thread"
+
+        public static let post = "Post"
+
+        /// The post's length against the limit, as X counts it.
+        public static let countTitle = "As X counts it: a link is 23, a line break is one"
+
+        public static let community = "Community"
+
+        public static let media = "Media"
+
+        public static let mediaPlan = "Media plan"
+    }
+
+    public enum Blocks {
+        // packages/core/src/words/blocks.ts `blocksWords`
+        /// A block's ⋯, read out with its title.
+        public static func more(title: String) -> String {
+            "More for \(title)"
+        }
+
+        public static let moveUp = "Move up"
+
+        public static let moveDown = "Move down"
+
+        public static let narrow = "Narrow"
+
+        public static let wide = "Wide"
+
+        /// On one column a block's width changes nothing here: its ⋯ keeps it for wider screens.
+        public static let widerScreens = "On wider screens"
+
+        public static let hide = "Hide"
+
+        /// A custom view's block, back to its own tab.
+        public static let showAsTab = "Show as a tab"
+
+        /// The page's end: its hidden blocks, each shown again from there.
+        public static let hidden = "Hidden"
+
+        public static func show(title: String) -> String {
+            "Show \(title)"
+        }
+
+        /// A block a newer build drew: it keeps its place.
+        public static let newer = "Update CawCo to see this block."
+
+        /// A kept view's ⋯ places it on a page, as a block.
+        public static let placeOnPage = "Place on a page"
+
+        /// A placement the hub refused without saying why.
+        public static let notPlaced = "The hub did not place the view."
+
+        // packages/core/src/blocks.ts `BLOCK_PAGE_TITLES`
+        /// Each page as its tab names it.
+        public enum PageTitles {
+            public static let board = "Board"
+
+            public static let table = "Table"
+
+            public static let pipeline = "Pipeline"
+
+            public static let routines = "Routines"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["board": board, "table": table, "pipeline": pipeline, "routines": routines]
+        }
+    }
 }

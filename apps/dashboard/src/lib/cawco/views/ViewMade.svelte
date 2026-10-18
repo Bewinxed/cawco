@@ -7,6 +7,7 @@
    * an image's thumbnail). One press opens the task, where each is drawn
    * whole.
    */
+  import { madeWords } from "@cawco/core";
   import { IconNeedsYou } from "#lib/icons.js";
   import { stageLabel, type TaskSummary } from "../project-tasks";
   import TaskOutput from "../tasks/TaskOutput.svelte";
@@ -33,7 +34,7 @@
   );
 </script>
 
-<ul aria-label="Made" class="made">
+<ul aria-label={madeWords.tab} class="made">
   {#each made as task (task.id)}
     <li data-slot="tile" class="tile" data-open={task.id === open || undefined}>
       <a

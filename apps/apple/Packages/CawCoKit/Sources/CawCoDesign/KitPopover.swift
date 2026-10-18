@@ -257,10 +257,14 @@ open class KitPopoverController: UIViewController {
     /// content folds open sets the fold's own pace (default `durMorph` on the out curve).
     public var resize: (duration: TimeInterval, curve: TimingCurve)?
     private let material: Bool
+    /// Its content is the surface (Ask Caw for a view's Composer, `.view-ask-pop`):
+    /// no padding, edge, fill or shadow of its own.
+    private let chromeless: Bool
     private var blur: UIVisualEffectView?
 
-    public init(material: Bool = false) {
+    public init(material: Bool = false, chromeless: Bool = false) {
         self.material = material
+        self.chromeless = chromeless
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -296,14 +300,20 @@ open class KitPopoverController: UIViewController {
         // card's frame, casts it.
         view.layer.cornerRadius = Radius.radiusLg
         view.layer.cornerCurve = .continuous
-        view.boxShadow = Shadow.shadowOverlay
+        view.boxShadow = chromeless ? [] : Shadow.shadowOverlay
+        if chromeless {
+            card.layer.borderWidth = 0
+            card.clipsToBounds = false
+        }
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: KitPopoverController, _: UITraitCollection) in controller.paint() }
         paint()
     }
 
     private func paint() {
         card.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
-        if material {
+        if chromeless {
+            card.backgroundColor = .clear
+        } else if material {
             card.backgroundColor = UIAccessibility.isReduceTransparencyEnabled ? Palette.background : Palette.materialPanel
         } else {
             card.backgroundColor = Palette.surfaceRaised

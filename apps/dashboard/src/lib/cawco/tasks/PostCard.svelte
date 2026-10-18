@@ -16,6 +16,7 @@
     type PostFile,
     postLength,
     withFirstParagraph,
+    madeWords as words,
   } from "@cawco/core";
   import {
     TabItem,
@@ -59,15 +60,18 @@
       size="compact"
       value={choice}
     >
-      <TabsList aria-label="First paragraph">
-        <TabItem label="As written" value="0" />
+      <TabsList aria-label={words.firstParagraph}>
+        <TabItem label={words.asWritten} value="0" />
         {#each post.alternates ?? [] as _, index (index)}
-          <TabItem label="Alternate {index + 1}" value={String(index + 1)} />
+          <TabItem
+            label={words.alternate(index + 1)}
+            value={String(index + 1)}
+          />
         {/each}
       </TabsList>
     </Tabs>
   {/if}
-  <ol aria-label={parts.length > 1 ? "Thread" : "Post"} class="parts">
+  <ol aria-label={parts.length > 1 ? words.thread : words.post} class="parts">
     {#each parts as text, index (index)}
       {@const length = postLength(text)}
       <li data-slot="post-card-card" class="card" data-part={index}>
@@ -88,7 +92,7 @@
             data-num
             data-slot="count"
             class="count num"
-            title="As X counts it: a link is 23, a line break is one"
+            title={words.countTitle}
             class:over={length > POST_LIMIT}>{length}/{POST_LIMIT}</span
           >
         {/if}
@@ -99,13 +103,13 @@
     <dl class="about">
       {#if post.community}
         <div class="fact">
-          <dt>Community</dt>
+          <dt>{words.community}</dt>
           <dd data-slot="name" class="name">{post.community}</dd>
         </div>
       {/if}
       {#if media.length > 0}
         <div class="fact">
-          <dt>Media</dt>
+          <dt>{words.media}</dt>
           <!-- mark-line: each media file stands on its own, a picture or a player, beside no words -->
           <dd class="media">
             {#each media as file (file)}
@@ -130,7 +134,7 @@
         </div>
       {:else if post.media}
         <div class="fact">
-          <dt>Media plan</dt>
+          <dt>{words.mediaPlan}</dt>
           <dd data-slot="sentence" class="sentence">{post.media.plan}</dd>
         </div>
       {/if}

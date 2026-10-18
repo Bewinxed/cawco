@@ -19,12 +19,16 @@ import UIKit
 final class ProjectViewController: ObservedViewController {
     enum Tab: Hashable {
         case board, table, pipeline
+        /// The project's routines, its event sources and approved actions: always there.
+        case routines
         /// The project's decision pages, always: an empty one starts Caw on one.
         case decisions
+        /// What the project's tasks made, while one has made something.
+        case made
         /// A project's own view, by its name.
         case custom(String)
 
-        static let fixed: [Tab] = [.board, .table, .pipeline, .decisions]
+        static let fixed: [Tab] = [.board, .table, .pipeline, .routines, .decisions]
 
         /// The tab's name (`viewLabel`: a view's name as a stage's is said).
         var label: String {
@@ -32,7 +36,9 @@ final class ProjectViewController: ObservedViewController {
             case .board: "Board"
             case .table: "Table"
             case .pipeline: "Pipeline"
+            case .routines: Words.Routines.tab
             case .decisions: Words.Decisions.tab
+            case .made: Words.Made.tab
             case let .custom(name): TaskWords.stage(name)
             }
         }
@@ -87,6 +93,8 @@ final class ProjectViewController: ObservedViewController {
     private let rule = UIView()
     private let needs = NeedsYouToggle()
     private var newTask: UIButton!
+    /// Ask Caw for a view, while he can start.
+    private var askView: UIButton!
     private let pane = UIView()
     private let board = TaskBoardView()
     private let scroller = UIScrollView()
@@ -96,6 +104,12 @@ final class ProjectViewController: ObservedViewController {
     private var custom: ProjectViewPane!
     /// The Decisions tab: its grid of pages, or the page open in it.
     private var decisionsPane: DecisionsPane!
+    /// Pages are blocks: each page's arrangement as the hub keeps it.
+    private lazy var blocks = ProjectBlocks(hub: context.hub, projectId: projectId)
+    /// The Routines tab: its three blocks.
+    private var routinesPane: RoutinesPane!
+    /// The Made tab: each task's outputs.
+    private var madePane: MadePane!
     private let tableAdd = UIView()
     private var boardForm: NewTaskForm!
     private var tableForm: NewTaskForm!
@@ -166,11 +180,15 @@ final class ProjectViewController: ObservedViewController {
                 guard let self, self.view.window != nil else { return }
                 Task { await self.store.refresh() }
                 Task { await self.decisionsPane.decisions.read() }
+                Task { await self.routinesPane.routines.read() }
+                Task { await self.blocks.read() }
             }
         }
         if context.hub.state == .connected {
             Task { await store.refresh() }
             Task { await decisionsPane.decisions.read() }
+            Task { await routinesPane.routines.read() }
+            Task { await blocks.read() }
         }
     }
 
@@ -292,10 +310,14 @@ final class ProjectViewController: ObservedViewController {
             if current != .table { choose(.board) }
             setAdding(true)
         }
+        askView = KitButton.make(Words.Views.ask, glyph: .sparkles, variant: .ghost, height: .sm) { [weak self] in
+            guard let self else { return }
+            askForView(from: askView)
+        }
         let rest = UIView()
         rest.setContentHuggingPriority(.init(1), for: .horizontal)
-        for part in [tabsScroll, rule, needs, newTask!, rest] as [UIView] { strip.addArrangedSubview(part) }
-        for part in [needs, newTask!] as [UIView] {
+        for part in [tabsScroll, rule, needs, newTask!, askView!, rest] as [UIView] { strip.addArrangedSubview(part) }
+        for part in [needs, newTask!, askView!] as [UIView] {
             part.setContentCompressionResistancePriority(.required, for: .horizontal)
             part.setContentHuggingPriority(.required, for: .horizontal)
         }
@@ -367,6 +389,19 @@ final class ProjectViewController: ObservedViewController {
         decisionsPane.isHidden = true
         pane.addSubview(decisionsPane)
 
+        // A block naming a view no longer kept is dropped from its page.
+        blocks.kept = { [weak self] in self?.store.views.map { $0.filter { !$0.draft }.map(\.name) } }
+        routinesPane = RoutinesPane(hub: context.hub, projectId: projectId, blocks: blocks)
+        routinesPane.onChange = { [weak self] in self?.requestRefresh() }
+        routinesPane.openThread = { [weak self] id in self?.context.openSession(ThreadTabs.tabId(id)) }
+        routinesPane.isHidden = true
+        pane.addSubview(routinesPane)
+
+        madePane = MadePane(hub: context.hub, projectId: projectId)
+        madePane.onOpenTask = { [weak self] id in self?.open(id) }
+        madePane.isHidden = true
+        pane.addSubview(madePane)
+
         board.translatesAutoresizingMaskIntoConstraints = false
         pane.addSubview(board)
         scroller.translatesAutoresizingMaskIntoConstraints = false
@@ -385,6 +420,14 @@ final class ProjectViewController: ObservedViewController {
             decisionsPane.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
             decisionsPane.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
             decisionsPane.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
+            routinesPane.topAnchor.constraint(equalTo: pane.topAnchor),
+            routinesPane.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
+            routinesPane.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
+            routinesPane.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
+            madePane.topAnchor.constraint(equalTo: pane.topAnchor),
+            madePane.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
+            madePane.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
+            madePane.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
             board.topAnchor.constraint(equalTo: pane.topAnchor),
             board.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
             board.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
@@ -475,6 +518,11 @@ final class ProjectViewController: ObservedViewController {
         KitPopover.present(panel, from: source ?? seat, in: self, align: .start)
     }
 
+    /// Ask Caw for a view: his Composer in a popover from where it was asked, at its end.
+    private func askForView(from source: UIView) {
+        KitPopover.present(ViewAskController(hub: context.hub, projectId: projectId), from: source, in: self, align: .end)
+    }
+
     /// You can talk to Caw, on or off: only a reason he cannot start (no machine) stops it.
     private var canTalk: Bool { lead.view != nil && lead.view?.problem == nil }
 
@@ -511,7 +559,9 @@ final class ProjectViewController: ObservedViewController {
     private var shownTab: Tab { stripTabs.contains(current) ? current : .board }
 
     private func showStrip() {
-        stripTabs = Tab.fixed + views.map { Tab.custom($0.name) }
+        // What the project's tasks made, while one has made something.
+        let made: [Tab] = store.tasks.contains { !$0.outputs.isEmpty } ? [.made] : []
+        stripTabs = Tab.fixed + made + views.map { Tab.custom($0.name) }
         let waitingPages = decisionsPane.decisions.waiting
         let items = stripTabs.map { tab in
             if case let .custom(name) = tab, views.first(where: { $0.name == name })?.draft == true {
@@ -536,9 +586,10 @@ final class ProjectViewController: ObservedViewController {
         needs.configure(count: waiting, on: filtering)
         // New task stands in the strip whenever there is no form for it on the board.
         let stripped = store.list != nil && !store.empty
-        // Under 640pt New task is in the head's ⋯; the rule stands only while Needs you follows it.
+        // Under 640pt New task and Ask Caw for a view are in the head's ⋯; the rule stands only while Needs you follows it.
         newTask.isHidden = !stripped || phone
-        rule.isHidden = phone ? waiting == 0 : (waiting == 0 && !stripped)
+        askView.isHidden = !canTalk || phone
+        rule.isHidden = phone ? waiting == 0 : (waiting == 0 && !stripped && !canTalk)
         #if DEBUG
         probeStrip()
         #endif
@@ -559,6 +610,11 @@ final class ProjectViewController: ObservedViewController {
             what = "view:\(name)"
             surface = custom
             custom.show(shown, projectId: projectId)
+        } else if shownTab == .routines, let project {
+            what = "routines"
+            surface = routinesPane
+            routinesPane.show(projectName: project.name, canTalk: canTalk, cawProblem: lead.view?.problem,
+                              starters: context.hub.startersOf(projectId, .routines, read: store.stages?.routineStarters))
         } else if shownTab == .decisions {
             what = "decisions"
             surface = decisionsPane
@@ -587,7 +643,7 @@ final class ProjectViewController: ObservedViewController {
                                                     line: "Add a task, or turn Caw on to plan it with him.", action: first))
         } else {
             switch shownTab {
-            case .board, .custom, .decisions:
+            case .board, .custom, .decisions, .routines:
                 what = "board"
                 surface = board
                 boardForm.stage = store.newIn ?? ""
@@ -609,6 +665,10 @@ final class ProjectViewController: ObservedViewController {
                 what = "pipeline"
                 pipeline.show(stages: stages, tasks: shownTasks, phone: phone)
                 column.addArrangedSubview(pipeline)
+            case .made:
+                what = "made"
+                surface = madePane
+                madePane.show(shownTasks)
             }
         }
         // The panes cross over each other as the view changes.
@@ -617,7 +677,7 @@ final class ProjectViewController: ObservedViewController {
             shown = what
             let showing = surface
             let place: @MainActor @Sendable () -> Void = {
-                for each in [self.board, self.scroller, self.custom!, self.decisionsPane!] as [UIView] { each.isHidden = each !== showing }
+                for each in [self.board, self.scroller, self.custom!, self.decisionsPane!, self.routinesPane!, self.madePane!] as [UIView] { each.isHidden = each !== showing }
             }
             if !first, view.window != nil, !UIAccessibility.isReduceMotionEnabled {
                 UIView.transition(with: pane, duration: Motion.durFade, options: [.transitionCrossDissolve, .allowUserInteraction], animations: place)
@@ -666,6 +726,8 @@ final class ProjectViewController: ObservedViewController {
         board.inset = leading
         custom.inset(leading: leading, trailing: trailing)
         decisionsPane.inset(leading: leading, trailing: trailing)
+        routinesPane.inset(leading: leading, trailing: trailing)
+        madePane.inset(leading: leading, trailing: trailing)
         NSLayoutConstraint.deactivate(edgeConstraints)
         edgeConstraints = [
             column.leadingAnchor.constraint(equalTo: scroller.frameLayoutGuide.leadingAnchor, constant: leading),
@@ -694,6 +756,9 @@ final class ProjectViewController: ObservedViewController {
     }
 
     private func open(_ taskId: String) {
+        #if DEBUG
+        ViewsProbe.say("views open-task \(taskId)")
+        #endif
         context.openTask(projectId, taskId)
     }
 
@@ -756,10 +821,17 @@ final class ProjectViewController: ObservedViewController {
                 return action
             }
             sections.append(UIMenu(title: "View", options: .displayInline, children: views))
-            sections.append(UIMenu(options: .displayInline, children: [UIAction(title: "New task", image: Glyph.plus.image) { [weak self] _ in
+            var adds: [UIMenuElement] = [UIAction(title: "New task", image: Glyph.plus.image) { [weak self] _ in
                 self?.choose(.board)
                 self?.setAdding(true)
-            }]))
+            }]
+            if canTalk {
+                adds.append(UIAction(title: Words.Views.ask, image: Glyph.sparkles.image) { [weak self] _ in
+                    guard let self else { return }
+                    askForView(from: more)
+                })
+            }
+            sections.append(UIMenu(options: .displayInline, children: adds))
         }
         if store.stages?.source == .template {
             sections.append(UIMenu(options: .displayInline, children: [UIAction(title: "Pick stages…") { [weak self] _ in self?.pickStages() }]))
@@ -879,6 +951,7 @@ final class ProjectViewController: ObservedViewController {
         }.joined(separator: ";")
         let room = tabsScroll.convert(tabsScroll.bounds, to: nil)
         var line = "views strip chosen=\(shownTab.label) phone=\(phone) room=\(Int(room.minX.rounded()))-\(Int(room.maxX.rounded())) items=\(items)"
+        if !askView.isHidden { line += " ask=\(ViewsProbe.centre(askView))" }
         if phone, let list = moreMenu().first as? UIMenu {
             line += " more=\(ViewsProbe.centre(more)) menu=" + list.children.compactMap { $0 as? UIAction }.map {
                 "\($0.title)\($0.subtitle.map { "+\($0)" } ?? "")\($0.state == .on ? "*" : "")"

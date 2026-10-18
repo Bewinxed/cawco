@@ -49,7 +49,12 @@
    * Hidden blocks wait at the page's end, each shown again from there; a
    * refused write is said there in the hub's words.
    */
-  import type { BlockPage, BlockPlace, BlockWidth } from "@cawco/core";
+  import {
+    type BlockPage,
+    type BlockPlace,
+    type BlockWidth,
+    blocksWords as words,
+  } from "@cawco/core";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
@@ -317,8 +322,8 @@
               })} mark-line touch-hit"
             >
               <span
-                >Hidden <span data-slot="num" class="num">{hidden.length}</span
-                ></span
+                >{words.hidden}
+                <span data-slot="num" class="num">{hidden.length}</span></span
               >
               <IconChevronDown />
             </DropdownMenu.Trigger>
@@ -329,7 +334,11 @@
                     blocks.change(page, place.block, { hidden: false })}
                 >
                   <IconEye />
-                  <span>Show {items[place.block]?.title ?? place.block}</span>
+                  <span
+                    >{words.show(
+                      items[place.block]?.title ?? place.block
+                    )}</span
+                  >
                 </DropdownMenu.Item>
               {/each}
             </DropdownMenu.Content>
@@ -341,7 +350,7 @@
 {/if}
 
 {#snippet newer()}
-  <p class="newer">Update CawCo to see this block.</p>
+  <p class="newer">{words.newer}</p>
 {/snippet}
 
 <style>

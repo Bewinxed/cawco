@@ -6,10 +6,11 @@
  * proposed (actions.ts). A row's actions are the hub's routine routes; a
  * refusal is thrown in the hub's own sentence.
  */
-import type {
-  ApprovedActionView,
-  ConnectionView,
-  RelayView,
+import {
+  type ApprovedActionView,
+  type ConnectionView,
+  type RelayView,
+  routinesWords,
 } from "@cawco/core";
 import { json, send } from "#lib/cawco/project-tasks.js";
 
@@ -163,7 +164,7 @@ export async function readRoutinesPage(
       id: "github",
       service: "github",
       tool: null,
-      what: github.repo ?? "The repository",
+      what: github.repo ?? routinesWords.theRepository,
       everyS: null,
       polledAt: github.polledAt,
       failure: github.polled ? null : github.state,

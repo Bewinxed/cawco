@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ApprovedActionView } from "@cawco/core";
+  import { type ApprovedActionView, routinesWords as words } from "@cawco/core";
   /**
    * A routine opened in place under its row: only what the row does not say
    * (the owner: "why are you repeating this info that is already up
@@ -48,24 +48,24 @@
   /** A run's outcome, in the page's status vocabulary. */
   function outcomeOf(run: RoutineRun): { status: Status; word: string } {
     if (run.state === "running" || run.state === "starting") {
-      return { status: "running", word: "Running" };
+      return { status: "running", word: words.running };
     }
     if (run.state === "queued") {
-      return { status: "neutral", word: "Queued" };
+      return { status: "neutral", word: words.queued };
     }
     if (run.state === "skipped") {
-      return { status: "neutral", word: "Skipped" };
+      return { status: "neutral", word: words.skipped };
     }
     if (run.outcome === "failed") {
-      return { status: "failed", word: "Failed" };
+      return { status: "failed", word: words.failed };
     }
     if (run.outcome === "cancelled") {
-      return { status: "neutral", word: "Stopped" };
+      return { status: "neutral", word: words.stopped };
     }
     if (run.outcome === "silent") {
-      return { status: "done", word: "Nothing to report" };
+      return { status: "done", word: words.silent };
     }
-    return { status: "done", word: "Delivered" };
+    return { status: "done", word: words.delivered };
   }
 
   /** What the run set, or why it had nothing. */
@@ -83,11 +83,11 @@
     }
     const minutes = Math.round((run.endedAt - run.startedAt) / 60_000);
     if (minutes < 1) {
-      return "<1m";
+      return words.tookUnder;
     }
     return minutes < 60
-      ? `${minutes}m`
-      : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+      ? words.tookMinutes(minutes)
+      : words.tookHours(Math.floor(minutes / 60), minutes % 60);
   }
 
   // --- the instruction's clamp --------------------------------------------------
@@ -132,14 +132,14 @@
           whole = !whole;
         }}
         size="xs"
-        variant="ghost">{whole ? "Less" : "More"}</Button
+        variant="ghost">{whole ? words.less : words.more}</Button
       >
     {/if}
   </div>
 
   {#if recent.length > 0}
     <section data-slot="runs" aria-labelledby="runs-{routine.id}" class="runs">
-      <h4 class="runs-head" id="runs-{routine.id}">Recent runs</h4>
+      <h4 class="runs-head" id="runs-{routine.id}">{words.recentRuns}</h4>
       <div class="runs-ledger">
         <Table.Root
           data-runs
@@ -149,13 +149,21 @@
           <Table.Header>
             <Table.Row class="band border-0">
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-when" scope="col">When</Table.Head>
+              <Table.Head class="col-when" scope="col"
+                >{words.columnWhen}</Table.Head
+              >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-outcome" scope="col">Outcome</Table.Head>
+              <Table.Head class="col-outcome" scope="col"
+                >{words.columnOutcome}</Table.Head
+              >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-took" scope="col">Took</Table.Head>
+              <Table.Head class="col-took" scope="col"
+                >{words.columnTook}</Table.Head
+              >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-result" scope="col">Result</Table.Head>
+              <Table.Head class="col-result" scope="col"
+                >{words.columnResult}</Table.Head
+              >
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -184,7 +192,7 @@
                       data-slot="result"
                       class="result"
                       {href}
-                      title={result || undefined}>{result || "Read the run"}</a
+                      title={result || undefined}>{result || words.readRun}</a
                     >
                   {:else}
                     <span
@@ -208,9 +216,9 @@
       aria-labelledby="actions-{routine.id}"
       class="runs"
     >
-      <h4 class="runs-head" id="actions-{routine.id}">Actions</h4>
+      <h4 class="runs-head" id="actions-{routine.id}">{words.columnActions}</h4>
       <div class="runs-ledger">
-        <ActionsTable {actions} label="Actions" />
+        <ActionsTable {actions} label={words.columnActions} />
       </div>
     </section>
   {/if}

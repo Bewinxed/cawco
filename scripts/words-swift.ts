@@ -133,6 +133,29 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     swift: "Decisions",
     members: [{ file: "words/decisions.ts", export: "decisionsWords", as: "" }],
   },
+  {
+    // A project's Routines page: its blocks, its ledgers, a schedule in words.
+    swift: "Routines",
+    members: [{ file: "words/routines.ts", export: "routinesWords", as: "" }],
+  },
+  {
+    // A project's own views: asking Caw for one.
+    swift: "Views",
+    members: [{ file: "words/views.ts", export: "viewsWords", as: "" }],
+  },
+  {
+    // A task's outputs as drawn (TaskOutput, PostCard) and the project's Made list.
+    swift: "Made",
+    members: [{ file: "words/made.ts", export: "madeWords", as: "" }],
+  },
+  {
+    // A project page of blocks: a block's ⋯, the page's end, Place on a page.
+    swift: "Blocks",
+    members: [
+      { file: "words/blocks.ts", export: "blocksWords", as: "" },
+      { file: "blocks.ts", export: "BLOCK_PAGE_TITLES", as: "pageTitles" },
+    ],
+  },
 ];
 
 /** The helpers a word may call, and their Swift twins. */

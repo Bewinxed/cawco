@@ -177,6 +177,7 @@ const SOLAR_ICONS = [
   "widget-2-bold-duotone", // IconColumns
   "ruler-cross-pen-bold-duotone", // IconRulerPen
   "microphone-bold-duotone", // IconMic
+  "minus-circle-bold-duotone", // IconMinusCircle: a run that never ran, skipped or stopped
 ];
 
 /**
@@ -213,6 +214,10 @@ const BRANDS: Record<string, [set: string, name: string]> = {
   "logo-kimi": ["thesvg-color", "kimi"],
   "logo-vercel": ["thesvg-color", "vercel-light"],
   "logo-xiaomi": ["thesvg-color", "xiaomi"],
+  // A service a routine's source or an approved action names (ProviderLogo.svelte's LOGOS).
+  "logo-linear": ["logos", "linear-icon"],
+  "logo-slack": ["logos", "slack-icon"],
+  "logo-gmail": ["thesvg-color", "gmail"],
 };
 
 /** OpenCodeLogo.svelte's official favicon geometry, in its own colours. */

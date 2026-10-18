@@ -30,8 +30,10 @@
   import {
     BLOCK_PAGES,
     type BlockPage as BlockPageId,
+    madeWords,
     type ProjectView,
     viewOfBlock,
+    viewsWords,
   } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -462,7 +464,7 @@
       : []),
     // What the project's tasks made, while one has made something.
     ...(tasks.some((task) => task.outputs.length > 0)
-      ? [{ value: "made", label: "Made", draft: false }]
+      ? [{ value: "made", label: madeWords.tab, draft: false }]
       : []),
     // A view placed on a page stands there as a block, and is no tab.
     ...views
@@ -1544,7 +1546,7 @@
           variant="ghost"
         >
           <IconSparkles />
-          <span>Ask Caw for a view</span>
+          <span>{viewsWords.ask}</span>
         </Button>
       {/if}
     </div>
@@ -2125,7 +2127,7 @@
             // biome-ignore lint/complexity/noVoid: the ask's own state is the composer's sending and its refusal
             void askView(text);
           }}
-          placeholder="A view of what is scheduled this week…"
+          placeholder={viewsWords.placeholder}
           sendAgain={viewAgain}
           sendError={viewRefused}
           sending={viewSending}

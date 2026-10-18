@@ -1960,20 +1960,24 @@ export * from "./image-generation";
 // The words the dashboard and the native app share (Words.generated.swift).
 export * from "./words/accounts";
 export * from "./words/artifacts";
+export * from "./words/blocks";
 export * from "./words/catalog";
 export * from "./words/configure";
 export * from "./words/connection";
 export * from "./words/decisions";
 export * from "./words/helpers";
+export * from "./words/made";
 export * from "./words/offers";
 export * from "./words/pairing";
 export * from "./words/place";
 export * from "./words/plan";
 export * from "./words/preview";
+export * from "./words/routines";
 export * from "./words/sheet";
 export * from "./words/side";
 export * from "./words/sidebar";
 export * from "./words/tailnet";
+export * from "./words/views";
 export * from "./workflow";
 export * from "./workflow-compile";
 

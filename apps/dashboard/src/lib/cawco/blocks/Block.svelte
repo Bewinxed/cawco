@@ -20,7 +20,7 @@
    * across that edge in the gap, its dot at the leading end. A width change
    * tweens the box (`morph`, while `resizing`).
    */
-  import type { BlockWidth } from "@cawco/core";
+  import { type BlockWidth, blocksWords as words } from "@cawco/core";
   import type { Component, Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
@@ -137,7 +137,7 @@
       {@render action?.()}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
-          aria-label="More for {title}"
+          aria-label={words.more(title)}
           class="{buttonVariants({
             variant: 'ghost',
             size: 'icon-sm',
@@ -148,11 +148,11 @@
         <DropdownMenu.Content align="end" class="w-auto min-w-48">
           <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
             <IconArrowUp />
-            <span>Move up</span>
+            <span>{words.moveUp}</span>
           </DropdownMenu.Item>
           <DropdownMenu.Item disabled={last} onSelect={() => onmove(1)}>
             <IconArrowDown />
-            <span>Move down</span>
+            <span>{words.moveDown}</span>
           </DropdownMenu.Item>
           {#if !wideOnly}
             <DropdownMenu.Separator />
@@ -161,12 +161,14 @@
               value={width}
             >
               <DropdownMenu.RadioItem value="narrow"
-                >Narrow</DropdownMenu.RadioItem
+                >{words.narrow}</DropdownMenu.RadioItem
               >
-              <DropdownMenu.RadioItem value="wide">Wide</DropdownMenu.RadioItem>
+              <DropdownMenu.RadioItem value="wide"
+                >{words.wide}</DropdownMenu.RadioItem
+              >
             </DropdownMenu.RadioGroup>
             {#if columns === 1}
-              <p class="aside">On wider screens</p>
+              <p class="aside">{words.widerScreens}</p>
             {/if}
           {/if}
           {#if hideable || view}
@@ -175,13 +177,13 @@
           {#if hideable}
             <DropdownMenu.Item onSelect={onhide}>
               <IconEyeClosed />
-              <span>Hide</span>
+              <span>{words.hide}</span>
             </DropdownMenu.Item>
           {/if}
           {#if view}
             <DropdownMenu.Item onSelect={ontab}>
               <IconWindow />
-              <span>Show as a tab</span>
+              <span>{words.showAsTab}</span>
             </DropdownMenu.Item>
           {/if}
         </DropdownMenu.Content>

@@ -326,9 +326,6 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
     func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], body["type"] as? String == "cawco:open-task",
               let task = body["task"] as? String, !task.isEmpty, task.count <= 200 else { return }
-        #if DEBUG
-        ViewsProbe.say("views open-task \(task)")
-        #endif
         onOpenTask(task)
     }
 
@@ -400,6 +397,16 @@ enum ViewsProbe {
     static func centre(_ view: UIView) -> String {
         let box = view.convert(view.bounds, to: nil)
         return "\(Int(box.midX.rounded())),\(Int(box.midY.rounded()))"
+    }
+
+    /// What a touch at a view's centre lands on: `self` when the view or one
+    /// inside it takes it, else the taker and its two nearest holders by type.
+    static func hit(_ view: UIView) -> String {
+        guard let window = view.window else { return "none" }
+        let box = view.convert(view.bounds, to: nil)
+        guard let taker = window.hitTest(CGPoint(x: box.midX, y: box.midY), with: nil) else { return "nothing" }
+        if taker.isDescendant(of: view) { return "self" }
+        return sequence(first: taker, next: \.superview).prefix(3).map { String(describing: type(of: $0)) }.joined(separator: "<")
     }
 
     /// The route's words, its address, and its first task link's centre in

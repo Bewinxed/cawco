@@ -236,6 +236,19 @@ final class DocThumb: UIControl {
     }
 }
 
+/// The lightbox for a picture outside a transcript (a task's output in the
+/// project's Made list, TaskOutput.svelte `openImage`): presented over
+/// whatever stands in `source`'s window, as the transcript presents it.
+@MainActor
+public enum LightboxPresenter {
+    public static func image(_ url: URL, caption: String?, path: String?, from source: UIView) {
+        guard var host = source.window?.rootViewController else { return }
+        while let shown = host.presentedViewController { host = shown }
+        let picture = Lightbox.Picture(url: url, caption: caption, path: path)
+        host.present(Lightbox(.images([picture], index: 0), env: RowEnv()), animated: !UIAccessibility.isReduceMotionEnabled)
+    }
+}
+
 /// The lightbox (Lightbox.svelte): a message's pictures over the scrim,
 /// swiped between, zoomed out of the thumbnail tapped; or a document — an
 /// attached file, a diff in full — on a sheet.

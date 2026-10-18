@@ -39,6 +39,15 @@
  *     picked"); a tile opens its page in place, live, with I'm done picking;
  *     I'm done picking reaches the page's writer session (the hub answers
  *     `to: session`), and the hub then holds the page as sent.
+ *  routines. The Routines tab stands its three blocks in their order, a
+ *     seeded routine in its ledger with the hub's runs; Run now from its ⋯
+ *     makes a run row, the hub's newest run.
+ *  made. With a task that made a note and a post, the strip carries Made;
+ *     its tile draws the note as words and the post as a post card, and
+ *     its head opens the task.
+ *  ask. Ask Caw for a view (the strip's, or the ⋯'s on a phone) opens his
+ *     Composer; the words typed and sent go to him as a view request, in a
+ *     thread the hub then holds.
  *
  * On the iPhone each view is chosen from the ⋯ menu (the strip is wider
  * than the screen), on the iPad from the strip.
@@ -88,11 +97,11 @@ title = Text("${words}", "title")
 table = Table(tasks.rows, [{label: "Task", field: "title"}])`;
 /** The strip as every reading of it starts: the fixed tabs, the kept view, the drafts. */
 const WANTED_STRIP =
-  "Board,Table,Pipeline,Decisions,Probe week,Probe draft+draft,Probe scrap+draft";
+  "Board,Table,Pipeline,Routines,Decisions,Probe week,Probe draft+draft,Probe scrap+draft";
 const WANTED_MENU =
-  "Board*,Table,Pipeline,Decisions,Probe week,Probe draft+draft,Probe scrap+draft";
+  "Board*,Table,Pipeline,Routines,Decisions,Probe week,Probe draft+draft,Probe scrap+draft";
 /** The tab's own items before the views: how many the strip must list before a reading counts. */
-const FIXED_TABS = 4;
+const FIXED_TABS = 5;
 const DECISIONS_PROJECT = "Decisions probe";
 /** The page each device sends on: one still picked on, so each device's send is its own. */
 const SENDS_ON: Record<string, string> = {
@@ -109,7 +118,7 @@ const ALL_THREE = /All tasks\s*\|?\s*3/;
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const POINT = /^(\d+),(\d+)$/;
 const STRIP_LINE =
-  /views strip chosen=(.*?) phone=(true|false) room=(-?\d+)-(-?\d+) items=(\S.*?)(?: more=(\d+),(\d+) menu=(.*))?$/;
+  /views strip chosen=(.*?) phone=(true|false) room=(-?\d+)-(-?\d+) items=(\S.*?)(?: ask=(\d+),(\d+))?(?: more=(\d+),(\d+) menu=(.*))?$/;
 /** How far inside the strip's room a tab's centre must stand for a touch to land on it. */
 const ROOM_MARGIN = 24;
 const PAGE_LINE = /views page name=(\S+) href=(\S*) task=(\S+) text=(.*)$/;
@@ -130,6 +139,8 @@ interface Node {
 
 /** `views strip …`: the chosen tab, whether it is a phone, each item's words and centre, the menu's list. */
 interface Strip {
+  /** Ask Caw for a view's centre in the window, wider than a phone while Caw can start. */
+  ask?: [number, number];
   chosen: string;
   items: {
     at: [number, number];
@@ -197,8 +208,9 @@ function stripOf(line: string): Strip | undefined {
     phone: match[2] === "true",
     room: [Number(match[3]), Number(match[4])],
     items,
-    more: match[6] ? [Number(match[6]), Number(match[7])] : undefined,
-    menu: match[8] ? match[8].split(";") : [],
+    ask: match[6] ? [Number(match[6]), Number(match[7])] : undefined,
+    more: match[8] ? [Number(match[8]), Number(match[9])] : undefined,
+    menu: match[10] ? match[10].split(";") : [],
   };
 }
 
@@ -214,6 +226,9 @@ const centre = (box: NonNullable<Node["frame"]>): [number, number] => [
 
 /** What every step on one simulator reads and does. */
 interface Device {
+  /** An open menu's row, by its words. */
+  /** A control by its words, once it holds still: a menu's row, or with `narrow` a button or a field. */
+  choose: (label: string, narrow?: boolean) => Promise<void>;
   /** The app's ViewsProbe lines so far. */
   heard: string[];
   /** The newest line since `since` that `read` makes something of, waited for. */
@@ -229,6 +244,8 @@ interface Device {
   relaunch: (projectId: string) => Promise<void>;
   tag: string;
   tap: (point: [number, number]) => Promise<string>;
+  /** Words typed where the caret is. */
+  type: (text: string) => Promise<void>;
 }
 
 /** What the steps know of the project. */
@@ -653,8 +670,280 @@ async function launch(
       60_000
     );
   };
+  /**
+   * A control by its words, once it holds still: by default an open menu's
+   * row, which spans the menu's width; `narrow` for a button or a field.
+   */
+  const choose = async (label: string, narrow = false) => {
+    /** What the screen last named, for a row that never came. */
+    let seen: string[] = [];
+    /** Where the row stood at the last read: a menu still opening moves it, and takes no tap. */
+    let was = "";
+    const entry = await until<Node | undefined>(
+      `${tag}: ${label} in the open menu, at rest`,
+      async () => {
+        const nodes = await tree();
+        seen = nodes.flatMap((node) =>
+          node.label && node.frame
+            ? [
+                `${node.label}@${centre(node.frame).join(",")}/${node.frame.width}`,
+              ]
+            : []
+        );
+        const found = nodes.find(
+          (node) =>
+            node.frame !== undefined &&
+            node.label === label &&
+            (narrow || node.frame.width > 120)
+        );
+        const at = found?.frame ? JSON.stringify(found.frame) : "";
+        const still = at !== "" && at === was;
+        was = at;
+        return still ? found : undefined;
+      },
+      Boolean,
+      15_000
+    ).catch((error: unknown) => {
+      throw new Error(
+        `${error}; axe's last refusal: ${axeRefused}; on screen: ${seen.slice(-30).join(" | ")}`
+      );
+    });
+    await tap(centre(entry?.frame as NonNullable<Node["frame"]>));
+  };
+  /** Words typed where the caret is. */
+  const type = async (text: string) => {
+    await sh(`${AXE} type ${JSON.stringify(text)} --udid ${udid}`);
+  };
+
   await relaunch(projectId);
-  return { device: { tag, heard, next, pick, relaunch, tap }, stream };
+  return {
+    device: { tag, heard, next, pick, relaunch, tap, choose, type },
+    stream,
+  };
+}
+
+// ── routines: the tab's three blocks, a routine, Run now ─────────────────
+const ROUTINE = "Probe triage";
+const ROUTINES_PANE =
+  /routines pane routines=(.*?) sources=(\d+) actions=(\d+)$/;
+const BLOCKS_PAGE = /blocks page=(\S+) blocks=(.*)$/;
+
+interface RoutineRow {
+  last: string;
+  menu: [number, number] | null;
+  name: string;
+  on: boolean;
+  runs: number;
+}
+
+const routinesOf = (said: string): RoutineRow[] =>
+  said
+    .split(";")
+    .filter(Boolean)
+    .map((part) => {
+      const [name = "", on = "", runs = "", last = ""] = part.split("|");
+      const [lastState = "", at = "none"] = last
+        .replace("last=", "")
+        .split("@");
+      const point = POINT.exec(at);
+      return {
+        name,
+        on: on === "on",
+        runs: Number(runs.replace("runs=", "")),
+        last: lastState,
+        menu: point ? [Number(point[1]), Number(point[2])] : null,
+      };
+    });
+
+interface HubRoutine {
+  id: string;
+  name: string;
+  runs: { id: string; state: string }[];
+}
+
+// ── made: a task's outputs, drawn small, its head opening it ─────────────
+const MADE_TITLE = "Probe launch kit";
+const MADE_NOTE = "notes.md";
+const MADE_POST = "hero.post.json";
+const MADE_PANE = /made pane columns=(\d+) tiles=(.*)$/;
+
+// ── ask: Ask Caw for a view files a view request ─────────────────────────
+const ASKED = /views asked (\S+)/;
+
+async function askViewLeg(
+  kit: Kit,
+  device: Device,
+  projectId: string,
+  read: <T>(path: string) => Promise<T>
+): Promise<void> {
+  const words = `A view of the routines, asked from the ${device.tag}`;
+  const strip = await device
+    .next("a strip line", 0, stripOf)
+    .catch(() => undefined);
+  let since = device.heard.length;
+  // From the strip wider than a phone; from the head's ⋯ on one.
+  if (strip?.ask) {
+    await device.tap(strip.ask);
+  } else if (strip?.more) {
+    await device.tap(strip.more);
+    await device.choose("Ask Caw for a view");
+  }
+  const opened = await device
+    .next("the ask's popover", since, (line) =>
+      line.includes("views ask open") ? line : undefined
+    )
+    .catch(() => undefined);
+  if (
+    !kit.check(
+      `${device.tag} ask: Ask Caw for a view opens his Composer${strip?.ask ? " from the strip" : " from the ⋯"}`,
+      opened !== undefined,
+      opened ?? `strip ask ${strip?.ask}, more ${strip?.more}`
+    )
+  ) {
+    return;
+  }
+  await device.choose("Message Caw", true);
+  await device.type(words);
+  since = device.heard.length;
+  await device.choose("Send message", true);
+  const thread = await device
+    .next(
+      "the hub's thread for the ask",
+      since,
+      (line) => ASKED.exec(line)?.[1]
+    )
+    .catch(() => undefined);
+  const threads = await read<{ id: string; title?: string | null }[]>(
+    `/api/projects/${projectId}/threads`
+  ).catch(() => []);
+  kit.check(
+    `${device.tag} ask: the words go to Caw as a view request, in a thread the hub holds`,
+    thread !== undefined && threads.some((one) => one.id === thread),
+    `thread ${thread}; hub threads ${threads.map((one) => one.id).join(",")}`
+  );
+}
+
+async function madeLeg(
+  kit: Kit,
+  device: Device,
+  taskId: string
+): Promise<void> {
+  let since = device.heard.length;
+  await device.pick("Made");
+  const tile = await device
+    .next("the Made tile with both outputs drawn", since, (line) => {
+      const match = MADE_PANE.exec(line);
+      const found = (match?.[2] ?? "")
+        .split(";")
+        .find((part) => part.startsWith(`${taskId}=`));
+      if (!found) {
+        return;
+      }
+      // The head's centre follows the last `@` (a post's account carries one too).
+      const said = found.slice(taskId.length + 1);
+      const split = said.lastIndexOf("@");
+      const drawn = said.slice(0, split);
+      const point = POINT.exec(said.slice(split + 1));
+      return drawn.includes(`${MADE_NOTE}:markdown:`) &&
+        drawn.includes(`${MADE_POST}:post:@cawco`) &&
+        point
+        ? {
+            drawn,
+            head: [Number(point[1]), Number(point[2])] as [number, number],
+          }
+        : undefined;
+    })
+    .catch(() => undefined);
+  kit.check(
+    `${device.tag} made: the Made tab shows the task's tile, its note drawn as words and its post as a post card`,
+    tile !== undefined,
+    tile ? tile.drawn : device.heard.slice(-4).join(" / ")
+  );
+  if (!tile) {
+    return;
+  }
+  since = device.heard.length;
+  await device.tap(tile.head);
+  const opened = await device
+    .next(
+      "the task opened from its tile",
+      since,
+      (line) => OPEN_TASK.exec(line)?.[1]
+    )
+    .catch(() => undefined);
+  kit.check(
+    `${device.tag} made: the tile's head opens its task`,
+    opened === taskId,
+    `opened ${opened}`
+  );
+}
+
+async function routinesLeg(
+  kit: Kit,
+  device: Device,
+  projectId: string,
+  read: <T>(path: string) => Promise<T>
+): Promise<void> {
+  const listed = async () =>
+    (
+      await read<HubRoutine[]>(
+        `/api/routines?projectId=${encodeURIComponent(projectId)}`
+      )
+    ).find((one) => one.name === ROUTINE);
+  const before = await listed();
+  let since = device.heard.length;
+  await device.pick("Routines");
+  const shown = await device
+    .next("the Routines page with the seeded routine", since, (line) => {
+      const match = ROUTINES_PANE.exec(line);
+      const row = match
+        ? routinesOf(match[1] ?? "").find((one) => one.name === ROUTINE)
+        : undefined;
+      return row?.menu ? row : undefined;
+    })
+    .catch(() => undefined);
+  const page = await device
+    .next("the Routines page's blocks", since, (line) => {
+      const match = BLOCKS_PAGE.exec(line);
+      return match?.[1] === "routines" ? (match[2] ?? "") : undefined;
+    })
+    .catch(() => undefined);
+  const blockIds = (page ?? "")
+    .split(";")
+    .map((part) => part.split("/")[0])
+    .join(",");
+  kit.check(
+    `${device.tag} routines: the tab's three blocks stand in their order, the seeded routine in its ledger with the hub's runs`,
+    shown !== undefined &&
+      blockIds === "routines,sources,actions" &&
+      shown.on &&
+      shown.runs === (before?.runs.length ?? -1),
+    `blocks ${blockIds}; row ${shown ? `${shown.name} on=${shown.on} runs=${shown.runs} last=${shown.last}` : device.heard.slice(-4).join(" / ")}; hub runs ${before?.runs.length}`
+  );
+  if (!shown?.menu) {
+    return;
+  }
+  since = device.heard.length;
+  await device.tap(shown.menu);
+  await device.choose("Run now");
+  const after = await device
+    .next("the routine's new run", since, (line) => {
+      const match = ROUTINES_PANE.exec(line);
+      const row = match
+        ? routinesOf(match[1] ?? "").find((one) => one.name === ROUTINE)
+        : undefined;
+      return row && row.runs > shown.runs ? row : undefined;
+    })
+    .catch(() => undefined);
+  const hub = await listed();
+  kit.check(
+    `${device.tag} routines: Run now makes a run row, the hub's newest run`,
+    after !== undefined &&
+      hub !== undefined &&
+      hub.runs.length === after.runs &&
+      hub.runs[0]?.id !== before?.runs[0]?.id,
+    `app runs ${after?.runs} last=${after?.last}; hub runs ${hub?.runs.length}, newest ${hub?.runs[0]?.id} (${hub?.runs[0]?.state}), before ${before?.runs[0]?.id}`
+  );
 }
 
 // ── decisions: the tab, a tile, its page, I'm done picking ───────────────
@@ -836,6 +1125,48 @@ async function run(kit: Kit): Promise<void> {
     machineId: MACHINE,
     name: DECISIONS_PROJECT,
   });
+  // A routine on the same project: Caw is off there, so each run is skipped, never a session.
+  await fleet.api("/api/routines", {
+    projectId: decisions.projectId,
+    name: ROUTINE,
+    cron: "0 9 * * 1-5",
+    timeZone: "UTC",
+    target: "lead",
+    prompt: "Triage the inbox.",
+    keep: true,
+  });
+  // A task that made something: a note and a post, where the hub serves outputs from.
+  const madeTask = await fleet.api<{ id: string }>(
+    `/api/projects/${decisions.projectId}/tasks`,
+    { title: MADE_TITLE, outputs: [MADE_NOTE, MADE_POST] }
+  );
+  for (const [name, content] of [
+    [MADE_NOTE, "# Launch notes\n\nThe hero leads with the fleet at a glance."],
+    [
+      MADE_POST,
+      JSON.stringify({
+        kind: "x-post",
+        account: "@cawco",
+        text: "The fleet at a glance.",
+      }),
+    ],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: each file is a commit in the project's folder
+    const wrote = await fetch(
+      `${fleet.base}/api/projects/${decisions.projectId}/folder/file`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          path: `assets/${madeTask.id}/${name}`,
+          content,
+        }),
+      }
+    );
+    if (!wrote.ok) {
+      throw new Error(`writing ${name}: ${wrote.status} ${await wrote.text()}`);
+    }
+  }
 
   const made = await fleet.api<{ id: string }>("/api/projects", {
     name: PROJECT,
@@ -911,6 +1242,13 @@ async function run(kit: Kit): Promise<void> {
         await taskOpens(kit, device, project);
       }
       await decisionsLeg(kit, device, decisions.projectId, (path) =>
+        fleet.api(path)
+      );
+      await routinesLeg(kit, device, decisions.projectId, (path) =>
+        fleet.api(path)
+      );
+      await madeLeg(kit, device, madeTask.id);
+      await askViewLeg(kit, device, decisions.projectId, (path) =>
         fleet.api(path)
       );
     } finally {

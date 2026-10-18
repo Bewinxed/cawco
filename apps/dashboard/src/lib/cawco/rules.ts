@@ -1,9 +1,10 @@
-import type {
-  Deleted,
-  RULE_TEMPLATES,
-  Rule,
-  RuleDraft,
-  RuleRow,
+import {
+  type Deleted,
+  type RULE_TEMPLATES,
+  type Rule,
+  type RuleDraft,
+  type RuleRow,
+  routinesWords,
 } from "@cawco/core";
 import { hubFailure } from "#lib/cawco/hub-read.js";
 
@@ -139,21 +140,21 @@ export const draftOf = (rule: Rule): RuleDraft => ({
 /** "3 minutes ago", and "never" for a rule that has not caught anything yet. */
 export function since(at: number | null): string {
   if (at === null) {
-    return "never";
+    return routinesWords.neverAt;
   }
   const seconds = Math.round((Date.now() - at) / 1000);
   if (seconds < 60) {
-    return "just now";
+    return routinesWords.justNow;
   }
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) {
-    return `${minutes}m ago`;
+    return routinesWords.ago(`${minutes}m`);
   }
   const hours = Math.round(minutes / 60);
   if (hours < 24) {
-    return `${hours}h ago`;
+    return routinesWords.ago(`${hours}h`);
   }
-  return `${Math.round(hours / 24)}d ago`;
+  return routinesWords.ago(`${Math.round(hours / 24)}d`);
 }
 
 /** `1 time` / `4 times`, because "4 time" in a settings list is a tell. */

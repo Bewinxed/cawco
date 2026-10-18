@@ -172,6 +172,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case columns = "widget-2-bold-duotone" // IconColumns
     case rulerPen = "ruler-cross-pen-bold-duotone" // IconRulerPen
     case mic = "microphone-bold-duotone" // IconMic
+    case minusCircle = "minus-circle-bold-duotone" // IconMinusCircle
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)
@@ -231,6 +232,9 @@ public enum BrandLogo: String, Sendable {
     case kimi = "logo-kimi"
     case vercel = "logo-vercel"
     case xiaomi = "logo-xiaomi"
+    case linear = "logo-linear"
+    case slack = "logo-slack"
+    case gmail = "logo-gmail"
 
     /// ProviderLogo.svelte's `INK` and accounts/marks.ts: upstream these carry
     /// a fixed dark fill that vanishes on the dark theme, or no colour of
@@ -280,9 +284,15 @@ public enum BrandLogo: String, Sendable {
         return image.withRenderingMode(inked ? .alwaysTemplate : .alwaysOriginal)
     }
 
-    /// ProviderLogo.svelte's LOGOS, by the lab `providerOf` names.
+    /// ProviderLogo.svelte's LOGOS, by the lab `providerOf` names, or a
+    /// service named outright (a routine's source, an approved action's);
+    /// nil for one nobody draws, which then shows no mark.
     public static func provider(_ lab: String?) -> BrandLogo? {
         switch lab {
+        case "github": .github
+        case "linear": .linear
+        case "slack": .slack
+        case "gmail": .gmail
         case "anthropic": .claude
         case "openai": .openai
         case "deepseek": .deepseek
