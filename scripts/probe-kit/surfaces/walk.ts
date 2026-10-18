@@ -10,6 +10,7 @@
  * against a recorder in front of a scratch fleet's hub instead.
  */
 import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { BrowserContext, Page, Request } from "playwright-core";
 import { heavySlot } from "../../lib/heavy-run";
@@ -22,7 +23,7 @@ import {
   type TapeHold,
 } from "../hub-tape";
 import { type Kit, open, ROOT, type Theme, type View } from "../kit";
-import type { State, Surface, Width } from "./catalogue";
+import { actHolds, type State, type Surface, type Width } from "./catalogue";
 import { holdStill, installReader, PROPS } from "./read";
 import { type Scene, VARIANTS, type Variant } from "./scene";
 
@@ -122,7 +123,11 @@ export class Servers {
   /**
    * Whether `request` is one the hub holds back (a loading placeholder's
    * read: `config-memory/reading`, `home/connecting`): it is never
-   * answered, on purpose, so a wait on the tape counts it answered.
+   * answered, on purpose, so a wait on the tape counts it answered. The
+   * page asks its own dashboard's server, which relays to the hub (vite
+   * `server.proxy`), so a held path is held on any server this walk owns:
+   * matched against the hub's host alone, none ever was, and every such
+   * state waited out `quiet`'s 15 s on it.
    */
   holds(request: Request): boolean {
     const paths = this.held?.http;
@@ -130,7 +135,7 @@ export class Servers {
       return false;
     }
     const url = new URL(request.url());
-    return url.host === new URL(this.hub).host && paths.includes(url.pathname);
+    return this.own.has(url.host) && paths.includes(url.pathname);
   }
 
   async close(): Promise<void> {
@@ -153,6 +158,12 @@ async function devServer(hub: string) {
   });
   const port = lease.port as number;
   await lease.stop(true);
+  // What it prints goes beside the run's output, as the kit's own servers'
+  // does (kit.ts `serve`): a dev server that reloads a page under a read
+  // ("optimized dependencies changed. reloading") says so only there.
+  const logs = join(process.env.TMPDIR ?? join(ROOT, ".probe"), "probe-kit");
+  await mkdir(logs, { recursive: true });
+  const log = join(logs, `vite-walk-dev-${port}`);
   const child = Bun.spawn(
     [
       "bunx",
@@ -167,8 +178,8 @@ async function devServer(hub: string) {
     {
       cwd: join(ROOT, "apps", "dashboard"),
       env: { ...process.env, CAWCO_DEV_HUB_URL: hub, CAWCO_HUB_URL: hub },
-      stdout: "ignore",
-      stderr: "ignore",
+      stdout: Bun.file(`${log}.out.log`),
+      stderr: Bun.file(`${log}.err.log`),
     }
   );
   const base = `http://127.0.0.1:${port}`;
@@ -396,8 +407,15 @@ const LAND_MS = 50;
 async function quiet(page: Page): Promise<void> {
   const pending = inFlight.get(page);
   const holds = heldOn.get(page);
+  const held = (request: Request) => {
+    const url = new URL(request.url());
+    return (
+      holds?.(request) === true ||
+      (actHolds.get(page) ?? []).some((holding) => holding(url))
+    );
+  };
   const unanswered = () =>
-    pending ? [...pending].filter((request) => !holds?.(request)) : [];
+    pending ? [...pending].filter((request) => !held(request)) : [];
   let calm = 0;
   for (let i = 0; i < 300 && calm < 2; i += 1) {
     calm = unanswered().length > 0 ? 0 : calm + 1;
@@ -408,7 +426,10 @@ async function quiet(page: Page): Promise<void> {
     const url = request.url().replace(ORIGIN_PORT, ":<port>");
     if (!gaveUp.has(url)) {
       gaveUp.add(url);
-      console.log(`  quiet: gave up after 15 s on ${request.method()} ${url}`);
+      const on = new URL(page.url());
+      console.log(
+        `  quiet: gave up after 15 s on ${request.method()} ${url} (the page at ${on.pathname}${on.search})`
+      );
     }
   }
 }
