@@ -1145,6 +1145,18 @@ export const cacheHit = ({
   input > 0 && read >= input * 0.9;
 
 /**
+ * How a compaction failed, as its harness typed the error it failed on:
+ * `kind`, the harness's own sort of it (OpenCode's error `type`, as
+ * `provider.timeout`), or `unknown` when it gave none; `status`, the
+ * provider's HTTP status when there was one; `message`, its words as said.
+ */
+export interface CompactionFailure {
+  kind: string;
+  message: string;
+  status?: number;
+}
+
+/**
  * A `system` frame. One loose interface rather than a subtype union: the folding
  * layer switches on `subtype` and reads the fields each subtype carries, and a
  * harness that emits a subtype nothing here names degrades to a generic line.
@@ -1158,7 +1170,10 @@ export interface NeutralSystemMessage {
   account_id?: string | null;
   // commands_changed
   commands?: SlashCommand[];
+  /** A failed compaction's words; {@link compact_failure} is what a reader decides on. */
   compact_error?: string;
+  /** How a compaction failed, typed ({@link CompactionFailure}); with `compact_result: "failed"`. */
+  compact_failure?: CompactionFailure;
   // compact_boundary. `result` and `error`: how it ended, on a boundary read
   // back from a harness that stores that (opencode); live, a `status` frame's
   // `compact_result` says it.
@@ -1167,6 +1182,7 @@ export interface NeutralSystemMessage {
     pre_tokens?: number;
     result?: "success" | "failed";
     error?: string;
+    failure?: CompactionFailure;
   };
   compact_result?: "success" | "failed";
   // model_fallback

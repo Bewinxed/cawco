@@ -106,6 +106,7 @@ import { OPENCODE_DIR } from "./opencode-plugin";
 import {
   codeModeCalls,
   compactBoundary,
+  compactionFailure,
   summaryId,
   toolInputOf,
   toolNameOf,
@@ -1367,6 +1368,7 @@ export class OpencodeSession implements HarnessSession {
           status: null,
           compact_result: "failed",
           compact_error: errorText(event.data.error),
+          compact_failure: compactionFailure(event.data.error),
           session_id: this.sessionId ?? undefined,
         });
         break;

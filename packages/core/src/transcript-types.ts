@@ -80,6 +80,8 @@ export interface BlockMetadata {
     | import("./attachments").ShownFile
   >;
   compactError?: string;
+  /** {@link compactError} typed, as its harness typed the error ({@link import("./harness").CompactionFailure}). */
+  compactFailure?: import("./harness").CompactionFailure;
   /**
    * A compaction boundary read back from a harness that stores how it ended
    * (opencode): `failed` with the harness's words in `compactError`.
@@ -286,6 +288,7 @@ export interface TranscriptFacts {
     trigger: "manual" | "auto";
     result?: "success" | "failed";
     error?: string;
+    failure?: import("./harness").CompactionFailure;
   } | null;
   /** The last turn came back an error — the SDK's `is_error`. */
   lastTurnFailed: boolean;

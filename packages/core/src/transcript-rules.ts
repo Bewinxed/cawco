@@ -12,6 +12,7 @@
 import { accountMoveWords } from "./accounts";
 import { attachedFiles } from "./attachments";
 import type {
+  CompactionFailure,
   NeutralAssistantMessage,
   NeutralMessage,
   NeutralStatus,
@@ -128,8 +129,12 @@ export interface FrameMapping {
    * it — a skill that was deleted has to leave the menu too.
    */
   commands?: SlashCommand[];
-  /** How a compaction ended, on the `status` frame that closes it. */
-  compaction?: { result: "success" | "failed"; error?: string };
+  /** How a compaction ended, on the `status` frame that closes it; a failure typed in `failure`. */
+  compaction?: {
+    result: "success" | "failed";
+    error?: string;
+    failure?: CompactionFailure;
+  };
   /**
    * The cumulative cost a `result` frame reported, in dollars. Carried on every
    * result regardless of subtype, because only error results push a transcript
@@ -862,6 +867,7 @@ export function mapFrame(
             mapping.compaction = {
               result: sdk.compact_result,
               error: sdk.compact_error,
+              ...(sdk.compact_failure ? { failure: sdk.compact_failure } : {}),
             };
           }
           break;
@@ -946,6 +952,7 @@ export function mapFrame(
               trigger: sdk.compact_metadata?.trigger,
               compactResult: sdk.compact_metadata?.result,
               compactError: sdk.compact_metadata?.error,
+              compactFailure: sdk.compact_metadata?.failure,
             })
           );
           break;
