@@ -1,40 +1,71 @@
 /**
  * A workspace's cut installs nothing, and its delegate's own install links
- * from the workspaces' bun cache inside its boundary, never copying the
+ * from the workspaces' cache inside its boundary, never copying the
  * project's packages into each clone. On a scratch fleet (real hub, agent
  * and sessiond; Claude Code against the mock model). This spec delegates, so
  * its fleet cuts workspaces: it runs on the host, outside every boundary.
  *
- * One project, this repository at the commit under test (its tracked tree,
- * one commit). Two delegates, A then B, each cut a workspace of it:
+ * Two legs, each one project and two delegates, A then B, each cutting a
+ * workspace of it:
  *
- * - at its first command its clone has no `node_modules`: nothing installed
- *   at the cut (on a main with agent seed-deps.ts, the cut's seed had
- *   installed them: red);
- * - its own `bun install --frozen-lockfile`, run in its boundary, finishes;
- * - its `node_modules/.bun` entries are links into the workspaces' cache's
- *   global store (`<cache>/bun/links/`, agent boundary.ts `writeBunConfig`);
+ * - bun: this repository at the commit under test (its tracked tree, one
+ *   commit), installed with `bun install --frozen-lockfile`; its
+ *   `node_modules/.bun` entries are links into the cache's bun global store
+ *   (`<cache>/bun/links/`, agent boundary.ts `writeBunConfig`);
+ * - pnpm: a project of {@link PNPM_PACKAGE}'s packages, its lockfile made on
+ *   the host as the leg starts, installed with pnpm {@link PNPM}'s
+ *   `install --frozen-lockfile`; each of its `node_modules` packages resolves
+ *   into pnpm's global virtual store in the cache (`<cache>/pnpm/store/`,
+ *   agent boundary.ts `writePnpmConfig`), and no store is made in the clone.
+ *
+ * In each leg:
+ *
+ * - at its first command a clone has no `node_modules`: nothing installed
+ *   at the cut;
+ * - its own frozen install, run in its boundary, finishes;
+ * - its packages link into the cache, as above;
  * - B adds under {@link SECOND_CLONE_LIMIT_KB} to the disk, counted by
  *   unique inodes (`du` counts each inode once across all its paths): the
- *   cache and A's `node_modules` before B's install, against the cache, A's
- *   and B's after it. A copied install adds about 2 GB;
- * - neither boundary can list the other's clone.
+ *   manager's cache and A's `node_modules` before B's install, against the
+ *   cache, A's and B's after it. A copied install adds about 2 GB for this
+ *   repository, about 115 MB for the pnpm project;
+ * - (bun leg) neither boundary can list the other's clone.
  *
  *   bun scripts/probe-kit/run.ts workspace-install
  */
-import { lstat, readdir, readlink, writeFile } from "node:fs/promises";
+import { lstat, readdir, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-type Tag = "A" | "B";
-const TAG = /PROBE-INSTALL-(?:LIST-)?([AB])\b/g;
-const LIST = /PROBE-INSTALL-LIST-[AB]: (\S+)/g;
-/** The most a second clone of this repository may add, in KiB: a copied install adds about 2 GB. */
+type Tag = "A" | "B" | "PA" | "PB";
+const TAG = /PROBE-INSTALL-(?:LIST-)?(P?[AB])\b/g;
+const LIST = /PROBE-INSTALL-LIST-P?[AB]: (\S+)/g;
+/** The most a second clone may add, in KiB: a copied install adds about 2 GB. */
 const SECOND_CLONE_LIMIT_KB = 100 * 1024;
 /** A cold install fetches every package into the scratch fleet's empty cache. */
 const INSTALL_MS = 900_000;
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
+/** The pnpm the pnpm leg installs with, through npx (the host has none of its own). */
+const PNPM = "pnpm@12.14.0";
+/** The pnpm leg's project: a Svelte and Vite app's packages, 138 of them. */
+const PNPM_PACKAGE = {
+  name: "probe-pnpm",
+  private: true,
+  version: "0.0.0",
+  dependencies: {
+    "@sveltejs/kit": "2.37.1",
+    "@sveltejs/vite-plugin-svelte": "6.1.4",
+    "date-fns": "4.1.0",
+    eslint: "9.35.0",
+    lodash: "4.17.21",
+    svelte: "5.38.10",
+    tailwindcss: "4.1.13",
+    typescript: "5.9.2",
+    vite: "7.1.5",
+    zod: "4.1.5",
+  },
+};
 
 /** `marker` spelled apart in a command, so only the command's output carries it whole. */
 const apart = (marker: string): string =>
@@ -47,11 +78,17 @@ const tool = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
+/** The frozen install `tag`'s delegate runs. */
+const installOf = (tag: Tag): string =>
+  tag.startsWith("P")
+    ? `npx -y ${PNPM} install --frozen-lockfile`
+    : "bun install --frozen-lockfile";
+
 /** The delegate's install: whether the cut left `node_modules`, then its own frozen install and its exit. */
 const installCommand = (tag: Tag): string =>
   [
     `if [ -e node_modules ]; then echo ${apart(`AT-CUT-HAD-${tag}`)}; else echo ${apart(`AT-CUT-NONE-${tag}`)}; fi`,
-    `bun install --frozen-lockfile > "$TMPDIR/install.log" 2>&1; echo ${apart(`INSTALLED-${tag}:`)}$?`,
+    `${installOf(tag)} > "$TMPDIR/install.log" 2>&1; echo ${apart(`INSTALLED-${tag}:`)}$?`,
     `tail -n 3 "$TMPDIR/install.log"`,
   ].join("; ");
 
@@ -93,6 +130,23 @@ interface Delegated {
   workspaceId: string;
 }
 
+/** How a clone's packages stand: how many, and how many link into the cache. */
+interface Linked {
+  entries: number;
+  /** Where the links should lead. */
+  into: string;
+  linked: number;
+}
+
+/** One manager's leg: its project and how its clone's packages are read. */
+interface Leg {
+  /** The manager's part of the workspaces' cache, counted with each clone's `node_modules`. */
+  cache: string;
+  linked: (clone: string) => Promise<Linked>;
+  name: string;
+  tags: readonly [Tag, Tag];
+}
+
 /** The first request that read `marker`: its words, else nothing. */
 const read = (fleet: Fleet, marker: string): string | undefined =>
   fleet.seen.find((one) => one.all.includes(marker))?.all;
@@ -116,23 +170,54 @@ const unique = async (paths: readonly string[]): Promise<number> => {
   );
 };
 
-/** How `clone`'s isolated store entries stand: links into `links`, and folders of its own. */
-const storeOf = async (clone: string, links: string) => {
-  const store = join(clone, "node_modules", ".bun");
-  const names = (await readdir(store).catch(() => [] as string[])).filter(
-    (name) => name !== "node_modules"
-  );
-  const into = await Promise.all(
-    names.map(async (name) => {
-      const at = join(store, name);
-      return (
-        (await lstat(at)).isSymbolicLink() &&
-        (await readlink(at)).startsWith(`${links}/`)
-      );
-    })
-  );
-  return { entries: names.length, linked: into.filter(Boolean).length };
-};
+/** Whether `at` is a link whose target, followed whole, lies under `into`. */
+const linksInto = async (at: string, into: string): Promise<boolean> =>
+  (await lstat(at)).isSymbolicLink() &&
+  (await realpath(at).catch(() => "")).startsWith(`${into}/`);
+
+/** bun: how `clone`'s isolated store entries stand, links into `into` (`node_modules/.bun`). */
+const bunStoreOf =
+  (into: string) =>
+  async (clone: string): Promise<Linked> => {
+    const store = join(clone, "node_modules", ".bun");
+    const names = (await readdir(store).catch(() => [] as string[])).filter(
+      (name) => name !== "node_modules"
+    );
+    const linked = await Promise.all(
+      names.map((name) => linksInto(join(store, name), into))
+    );
+    return {
+      entries: names.length,
+      linked: linked.filter(Boolean).length,
+      into,
+    };
+  };
+
+/** pnpm: how `clone`'s packages stand, each in `node_modules` (a scope's within it), links into `into`. */
+const pnpmPackagesOf =
+  (into: string) =>
+  async (clone: string): Promise<Linked> => {
+    const modules = join(clone, "node_modules");
+    const top = (await readdir(modules).catch(() => [] as string[])).filter(
+      (name) => !name.startsWith(".")
+    );
+    const scoped = await Promise.all(
+      top.map(async (name) =>
+        name.startsWith("@")
+          ? (await readdir(join(modules, name))).map((inner) =>
+              join(modules, name, inner)
+            )
+          : [join(modules, name)]
+      )
+    );
+    const packages = scoped.flat();
+    const linked = await Promise.all(packages.map((at) => linksInto(at, into)));
+    return {
+      entries: packages.length,
+      linked: linked.filter(Boolean).length,
+      into,
+    };
+  };
 
 /** The tracked tree of the commit under test, one commit in a repository of its own (no origin: the hub becomes it). */
 const makeRepo = async (fleet: Fleet): Promise<string> => {
@@ -144,6 +229,47 @@ const makeRepo = async (fleet: Fleet): Promise<string> => {
     .env(env)
     .quiet();
   return repo;
+};
+
+/** The pnpm leg's project, its lockfile made on the host by {@link PNPM}, one commit in a repository of its own. */
+const makePnpmRepo = async (fleet: Fleet): Promise<string> => {
+  const repo = join(fleet.sandbox, "pnpm-probe");
+  const env = { ...process.env, HOME: fleet.env.HOME as string };
+  await Bun.$`mkdir -p ${repo}`.quiet();
+  await writeFile(
+    join(repo, "package.json"),
+    `${JSON.stringify(PNPM_PACKAGE, null, 2)}\n`
+  );
+  // esbuild's install script fetches its binary: pnpm 11 and later run a
+  // dependency's build only when the project allows it.
+  await writeFile(
+    join(repo, "pnpm-workspace.yaml"),
+    "allowBuilds:\n  esbuild: true\n"
+  );
+  await writeFile(join(repo, ".gitignore"), "node_modules\n");
+  await Bun.$`npx -y ${PNPM} install --lockfile-only`
+    .cwd(repo)
+    .env(env)
+    .quiet();
+  await Bun.$`git init -q -b main && git add -A && git commit -qm 'Snapshot'`
+    .cwd(repo)
+    .env(env)
+    .quiet();
+  return repo;
+};
+
+/** A parent session in a project of its own on `repo`. */
+const parentOn = async (
+  fleet: Fleet,
+  repo: string,
+  name: string
+): Promise<string> => {
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name,
+    machineId: MACHINE,
+    cwd: repo,
+  });
+  return fleet.spawn("claude", "Parent", repo, { projectId: project.id });
 };
 
 /** A delegate of `parent` on `repo`, and where its workspace's clone is once cut. */
@@ -177,13 +303,13 @@ const delegate = async (
   return { ...started, path: row?.path ?? "" };
 };
 
-/** `tag`'s install: nothing at the cut, its own install finished, its store linked from the cache. */
+/** `tag`'s install: nothing at the cut, its own install finished, its packages linked from the cache. */
 const installed = async (
   kit: Kit,
   fleet: Fleet,
+  leg: Leg,
   tag: Tag,
-  clone: string,
-  links: string
+  clone: string
 ): Promise<boolean> => {
   const said = await until(
     `${tag}'s install finished`,
@@ -199,17 +325,50 @@ const installed = async (
   const exit = new RegExp(`INSTALLED-${tag}:(\\d+)`).exec(said ?? "")?.[1];
   const tail = said?.slice(said.indexOf(`INSTALLED-${tag}:`)).slice(0, 400);
   kit.check(
-    `${tag}: its own bun install --frozen-lockfile, inside its boundary, finishes`,
+    `${tag}: its own ${installOf(tag)}, inside its boundary, finishes`,
     exit === "0",
     tail ?? "no install read"
   );
-  const store = await storeOf(clone, links);
+  const store = await leg.linked(clone);
   kit.check(
-    `${tag}: its node_modules/.bun entries are links into the workspaces' cache's global store`,
+    `${tag}: its ${leg.name} packages are links into the workspaces' cache`,
     store.entries > 0 && store.linked / store.entries >= 0.9,
-    `${store.linked} of ${store.entries} entries link into ${links}`
+    `${store.linked} of ${store.entries} entries link into ${store.into}`
   );
   return exit === "0";
+};
+
+/** One leg: A's install, then B's, and what B added to the disk. Answers both delegates. */
+const runLeg = async (
+  kit: Kit,
+  fleet: Fleet,
+  leg: Leg,
+  parent: string,
+  repo: string
+): Promise<[Delegated, Delegated]> => {
+  const [tagA, tagB] = leg.tags;
+  const a = await delegate(fleet, parent, repo, tagA);
+  const aDone = await installed(kit, fleet, leg, tagA, a.path);
+  const aModules = await nodeModulesOf(a.path);
+  const before = await unique([leg.cache, ...aModules]);
+
+  const b = await delegate(fleet, parent, repo, tagB);
+  const bDone = await installed(kit, fleet, leg, tagB, b.path);
+  const after = await unique([
+    leg.cache,
+    ...aModules,
+    ...(await nodeModulesOf(b.path)),
+  ]);
+  const added = after - before;
+  kit.check(
+    `${leg.name}: ${tagB}, the second clone, adds under ${SECOND_CLONE_LIMIT_KB / 1024} MiB counted by unique inodes (the cache and ${tagA}'s node_modules, then with ${tagB}'s)`,
+    aDone && bDone && added >= 0 && added < SECOND_CLONE_LIMIT_KB,
+    `before ${tagB}: ${before} KiB; after: ${after} KiB; ${tagB} added ${added} KiB`
+  );
+  kit.note(
+    `${leg.name}: the cache and ${tagA}'s node_modules came to ${(before / 1024).toFixed(0)} MiB; ${tagB} added ${(added / 1024).toFixed(1)} MiB`
+  );
+  return [a, b];
 };
 
 /** `tag`'s listing of the other clone: refused from inside its boundary. */
@@ -267,43 +426,56 @@ const run = async (kit: Kit) => {
     join(home, ".gitconfig"),
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
-  const repo = await makeRepo(fleet);
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Workspace install",
-    machineId: MACHINE,
-    cwd: repo,
-  });
-  const parent = await fleet.spawn("claude", "Parent", repo, {
-    projectId: project.id,
-  });
   const cache = join(home, ".cawco", "workspace-cache");
-  const links = join(cache, "bun", "links");
 
-  const a = await delegate(fleet, parent, repo, "A");
-  const aDone = await installed(kit, fleet, "A", a.path, links);
-  const aModules = await nodeModulesOf(a.path);
-  const before = await unique([cache, ...aModules]);
-
-  const b = await delegate(fleet, parent, repo, "B");
-  const bDone = await installed(kit, fleet, "B", b.path, links);
-  const after = await unique([
+  const bunLeg: Leg = {
+    name: "bun",
+    tags: ["A", "B"],
     cache,
-    ...aModules,
-    ...(await nodeModulesOf(b.path)),
-  ]);
-  const added = after - before;
-  kit.check(
-    `B, the second clone, adds under ${SECOND_CLONE_LIMIT_KB / 1024} MiB counted by unique inodes (the cache and A's node_modules, then with B's)`,
-    aDone && bDone && added >= 0 && added < SECOND_CLONE_LIMIT_KB,
-    `before B: ${before} KiB; after: ${after} KiB; B added ${added} KiB`
+    linked: bunStoreOf(join(cache, "bun", "links")),
+  };
+  const repo = await makeRepo(fleet);
+  const [a, b] = await runLeg(
+    kit,
+    fleet,
+    bunLeg,
+    await parentOn(fleet, repo, "Workspace install"),
+    repo
   );
-  kit.note(
-    `the cache and A's node_modules came to ${(before / 1024).toFixed(0)} MiB; B added ${(added / 1024).toFixed(1)} MiB`
+
+  const pnpmStore = join(cache, "pnpm", "store");
+  const pnpmLeg: Leg = {
+    name: "pnpm",
+    tags: ["PA", "PB"],
+    cache: join(cache, "pnpm"),
+    linked: pnpmPackagesOf(pnpmStore),
+  };
+  const pnpmRepo = await makePnpmRepo(fleet);
+  const [pa, pb] = await runLeg(
+    kit,
+    fleet,
+    pnpmLeg,
+    await parentOn(fleet, pnpmRepo, "Workspace install (pnpm)"),
+    pnpmRepo
+  );
+  const ownStores = (
+    await Promise.all(
+      [pa, pb].map(async (one) =>
+        (await lstat(join(one.path, ".pnpm-store")).catch(() => undefined))
+          ? [one.path]
+          : []
+      )
+    )
+  ).flat();
+  kit.check(
+    "pnpm: neither clone holds a store of its own (.pnpm-store): the store is the workspaces' cache's",
+    ownStores.length === 0,
+    ownStores.join(", ") || "none"
   );
 
   const log = await fleet.logs("agent");
   kit.check(
-    "the agent's log says no dependencies were linked or installed at either cut",
+    "the agent's log says no dependencies were linked or installed at any cut",
     !(
       log.includes("its dependencies linked from the workspaces' cache") ||
       log.includes("its install inside its boundary failed")

@@ -4495,8 +4495,9 @@ exit "$status"
  * fit is said in the log: everything else in the workspace still runs. The
  * workspace writes its scratch dir, so a folder of it that a link the
  * workspace planted leads out of it ({@link ownInScratch}) is never made
- * through or written into, and the log says so; the git config link and the
- * bunfig go only into a config home of the scratch dir's own.
+ * through or written into, and the log says so; the git config link, the
+ * bunfig and pnpm's config go only into a config home of the scratch dir's
+ * own, and yarn's link only into a data home of its own.
  */
 export const makeDirs = async (id: string): Promise<void> => {
   const tooLong = scratchSocketProblem(id);
@@ -4529,6 +4530,10 @@ export const makeDirs = async (id: string): Promise<void> => {
   if (!planted.includes(xdg.config)) {
     await linkGitConfig(xdg.config);
     await writeBunConfig(xdg.config);
+    await writePnpmConfig(id, xdg.config);
+  }
+  if (!planted.includes(xdg.data)) {
+    await linkYarnFolder(id, xdg.data);
   }
   // Its `TMPDIR`'s short name on macOS, made again after a restart cleared it.
   linkWorkspaceTmp(id);
@@ -4591,10 +4596,122 @@ const writeBunConfig = async (configHome: string): Promise<void> => {
   if (process.platform !== "linux") {
     return;
   }
+  await writeNew(join(configHome, ".bunfig.toml"), BUN_GLOBAL_STORE);
+};
+
+/** Writes `path` only as a new file: one there already is the workspace's to keep. */
+const writeNew = async (path: string, content: string): Promise<void> => {
   try {
-    await writeFile(join(configHome, ".bunfig.toml"), BUN_GLOBAL_STORE, {
-      flag: "wx",
-    });
+    await writeFile(path, content, { flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+  }
+};
+
+/** pnpm's store in the workspaces' cache: its content-addressable files and, under `links/`, its global virtual store. */
+const pnpmStore = (): string => join(workspaceCacheDir(), "pnpm", "store");
+
+/**
+ * Linux: pnpm's global config in the workspace's config home (its
+ * `XDG_CONFIG_HOME`), turning pnpm's global virtual store on with its store
+ * in the workspaces' cache. pnpm's store defaults to
+ * `$XDG_DATA_HOME/pnpm/store` (pnpm.io/settings/store#storedir), the
+ * workspace's own data home: every workspace fetched every package again,
+ * and since link(2) refuses across the boundary's mounts (EXDEV,
+ * {@link writeBunConfig}), copied each one into its clone ("A store on a
+ * genuinely different filesystem from `node_modules` cannot be hardlinked
+ * from at all — the attempt fails with `EXDEV` — so `auto` already falls
+ * back to copying", pnpm.io/settings/node-modules#packageimportmethod). With
+ * the global virtual store pnpm hardlinks each package once into
+ * `<store>/links/`, inside the cache's own mount, and a clone's
+ * `node_modules` is symlinks into it ("Each project's `node_modules`
+ * contains only symlinks pointing into this shared location",
+ * pnpm.io/global-virtual-store): a clone of 138 packages took 780 KB where a
+ * copy took 119 MB, 2026-10-18.
+ *
+ * Two files, one for each config pnpm has had. pnpm 11 and later read
+ * `$XDG_CONFIG_HOME/pnpm/config.yaml` and take only auth and registry
+ * settings from `rc` (pnpm.io/blog/releases/11.0: "Other settings must live
+ * in `pnpm-workspace.yaml` or the new global `config.yaml`");
+ * `enableGlobalVirtualStore` is the spelling every 11 and 12 reads
+ * (`virtualStoreType` came in 11.23.0, and 11.22 warns at every install that
+ * it "cannot be set in the global config file"). pnpm 10 reads every setting
+ * from `$XDG_CONFIG_HOME/pnpm/rc` (`enable-global-virtual-store` since
+ * 10.12.1). A config file and never the env's `pnpm_config_*`, which
+ * overrides `pnpm-workspace.yaml` (pnpm.io/configuring#environment-variables):
+ * a project's own `virtualStoreType: project` (or `.npmrc` on pnpm 10) still
+ * installs into its own `node_modules/.pnpm`. Each written only as a new file,
+ * in a config home of the scratch dir's own ({@link makeDirs}).
+ */
+const writePnpmConfig = async (
+  id: string,
+  configHome: string
+): Promise<void> => {
+  if (process.platform !== "linux") {
+    return;
+  }
+  const dir = join(configHome, "pnpm");
+  if (!(await ownInScratch(id, dir))) {
+    console.warn(
+      `[workspace] ${id}: ${dir} leads out of its scratch dir through a link in it, so pnpm's config was not written there`
+    );
+    return;
+  }
+  await mkdir(dir, { recursive: true });
+  const store = pnpmStore();
+  const said =
+    "# CawCo: pnpm's global virtual store, in the workspaces' cache, so this workspace's\n# installs link from it. A project's own setting overrides it.\n";
+  await Promise.all([
+    writeNew(
+      join(dir, "config.yaml"),
+      `${said}storeDir: ${JSON.stringify(store)}\nenableGlobalVirtualStore: true\n`
+    ),
+    writeNew(
+      join(dir, "rc"),
+      `${said}store-dir=${store}\nenable-global-virtual-store=true\n`
+    ),
+  ]);
+};
+
+/** Yarn's global folder in the workspaces' cache: its global cache of package zips and its metadata. */
+const yarnGlobalFolder = (): string =>
+  join(workspaceCacheDir(), "yarn", "berry");
+
+/**
+ * Linux: `<data home>/yarn/berry`, a link to yarn's global folder in the
+ * workspaces' cache. Yarn (2 and later) keeps every package as a zip in its
+ * global cache (`enableGlobalCache`, true by default), inside `globalFolder`,
+ * whose default is `$XDG_DATA_HOME/yarn/berry` (yarnpkg/berry
+ * folderUtils.ts `getDefaultGlobalFolder`): the workspace's own data home, so
+ * every workspace fetched every package again into its scratch dir. Through
+ * the link they share one cache, and Plug'n'Play, yarn's default linker,
+ * loads each package from its zip there: a clone holds `.pnp.cjs` and only
+ * what a package's build unplugs (16 MB of 138 packages, 2026-10-18).
+ * Yarn has no global config file outside the home dir (it reads
+ * `~/.yarnrc.yml` and the project's own), and its env settings override the
+ * project's ("such values will overwrite any that might have been defined in
+ * the RC files", yarnpkg.com/configuration/yarnrc), so the default path is
+ * where this goes: a project's own `globalFolder` or `enableGlobalCache:
+ * false` still wins. Made only in a data home of the scratch dir's own
+ * ({@link makeDirs}); a `berry` the workspace made is its own to keep.
+ */
+const linkYarnFolder = async (id: string, dataHome: string): Promise<void> => {
+  if (process.platform !== "linux") {
+    return;
+  }
+  const dir = join(dataHome, "yarn");
+  if (!(await ownInScratch(id, dir))) {
+    console.warn(
+      `[workspace] ${id}: ${dir} leads out of its scratch dir through a link in it, so yarn's link was not made there`
+    );
+    return;
+  }
+  await mkdir(dir, { recursive: true });
+  await mkdir(yarnGlobalFolder(), { recursive: true });
+  try {
+    await symlink(yarnGlobalFolder(), join(dir, "berry"));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
       throw error;
