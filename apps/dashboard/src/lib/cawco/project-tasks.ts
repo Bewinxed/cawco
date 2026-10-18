@@ -17,7 +17,13 @@ import {
   type StarterGlyph,
   type StarterPlace,
 } from "@cawco/core";
-import { HUB_UNREACHABLE, HubUnreachable, unreachedAnswer } from "./hub-read";
+import {
+  HUB_UNREACHABLE,
+  HubUnreachable,
+  hubFailure,
+  noAnswer,
+  unreachedAnswer,
+} from "./hub-read";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind). */
 export type StageKind =
@@ -383,21 +389,9 @@ export interface TaskPatch {
 export type TaskEdge =
   "after" | "parent" | "related" | "found_in" | "duplicate_of";
 
-/** Elysia refuses with a bare string; JSON only when something else went wrong. */
+/** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
 async function said(response: Response): Promise<string> {
-  const body = (await response.text()).trim();
-  try {
-    const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === "string") {
-      return parsed;
-    }
-    if (parsed && typeof parsed === "object" && "message" in parsed) {
-      return String((parsed as { message: unknown }).message);
-    }
-  } catch {
-    // Not JSON, which is the ordinary case: the string is the sentence.
-  }
-  return body || `The hub answered ${response.status}. Try again.`;
+  return (await hubFailure(response)).detail;
 }
 
 /**
@@ -413,12 +407,10 @@ export async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
     throw new HubUnreachable(HUB_UNREACHABLE);
   }
   if (!response.ok) {
-    throw new Error(await said(response));
+    throw new Error(`${await said(response)}.`);
   }
   if (!response.headers.get("content-type")?.includes("application/json")) {
-    throw new Error(
-      `The hub answered ${response.status} without JSON: ${(await response.text()).trim().slice(0, 200)}`
-    );
+    throw new Error(`${noAnswer(response.status)}.`);
   }
   return (await response.json()) as T;
 }
@@ -732,7 +724,7 @@ export async function readOutputText(
     throw new HubUnreachable(HUB_UNREACHABLE);
   }
   if (!response.ok) {
-    throw new Error(await said(response));
+    throw new Error(`${await said(response)}.`);
   }
   return response.text();
 }

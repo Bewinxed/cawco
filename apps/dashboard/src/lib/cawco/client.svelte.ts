@@ -138,9 +138,9 @@ import { currentClientId } from "./client-id";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   deadlineIn,
-  failureReason,
   type HubFailure,
   hubFailure,
+  hubRefusal,
   machineAway,
   failureWords as messageOf,
 } from "./hub-read";
@@ -872,6 +872,13 @@ const state = $state({
    * it. A deadline, not a flag: `cawco.hub` reads it against the clock.
    */
   outageAt: null as number | null,
+  /**
+   * The hub said it restarts for an update (`hub.restart`), and by when it
+   * answers again (epoch ms, on this clock). A close before then is the
+   * update: the outage is said from the deadline, not from the close.
+   * Null once the hub answers again, or takes it back.
+   */
+  restart: null as { until: number; version: string | null } | null,
   /**
    * This page was built for an older wire than the hub's, so it reads nothing
    * more off the socket ({@link olderThanHub}): `reloading` while its reload
@@ -2115,10 +2122,7 @@ async function workItemAct(
     }
   );
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, ${outcome}.`
-    );
+    throw await hubRefusal(response, `${outcome}.`);
   }
   const item = (await response.json()) as WorkItemSummary;
   state.workItems[item.id] = item;
@@ -2332,9 +2336,7 @@ async function accountsWrite<T>(
         }),
   });
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) || `The hub answered ${response.status}.`
-    );
+    throw await hubRefusal(response);
   }
   const answer = (await response.json()) as T;
   await readAccounts();
@@ -2461,7 +2463,7 @@ export async function placementFor(query: {
   );
   const response = await fetch(`/api/accounts/placement?${params}`);
   if (response.status === 400 || response.status === 503) {
-    throw new Error(await response.text());
+    throw await hubRefusal(response);
   }
   return response.ok
     ? ((await response.json()) as PlacementPreview)
@@ -3096,6 +3098,16 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "laws.broken") {
     state.lawsBroken = frame.broken;
+    return;
+  }
+
+  if (frame.kind === "hub.restart") {
+    state.restart = frame.restart
+      ? {
+          until: Date.now() + frame.restart.withinMs,
+          version: frame.restart.version,
+        }
+      : null;
     return;
   }
 
@@ -4785,6 +4797,7 @@ function hubReached(): void {
   state.starters = {};
   state.failed = false;
   state.outageAt = null;
+  state.restart = null;
   globalThis.__cawcoReconnectAttempts = 0;
   readFleet();
   rereadFollowed();
@@ -4914,7 +4927,11 @@ function socketClosed(): void {
   // A socket that closed is an attempt that is over, one way or the other.
   state.failed = true;
   cancelFleetRead();
-  state.outageAt ??= Date.now() + OUTAGE_GRACE;
+  // An announced update is the hub on its way back until its deadline.
+  state.outageAt ??=
+    state.restart && state.restart.until > Date.now()
+      ? state.restart.until
+      : Date.now() + OUTAGE_GRACE;
   abandonInflight("The connection to the hub dropped before that finished.");
   for (const listener of fleetFetchListeners) {
     listener.dropped();
@@ -5542,17 +5559,6 @@ export async function discardSession(
 }
 
 /**
- * The hub's refusal in its own sentence when it gave one (a text body),
- * else `fallback` naming its status.
- */
-async function refusalOf(response: Response, fallback: string): Promise<Error> {
-  const said = response.headers.get("content-type")?.startsWith("text/")
-    ? (await response.text()).trim()
-    : "";
-  return new Error(said || fallback);
-}
-
-/**
  * Moves a session whole to another account of its provider
  * (`POST /api/instances/:id/account`): now when it is at rest, else at its
  * next turn boundary. A refusal is thrown in the hub's own sentence; an
@@ -5571,13 +5577,7 @@ export async function moveInstanceAccount(
     }
   );
   if (!response.ok) {
-    const said = response.headers.get("content-type")?.startsWith("text/")
-      ? (await response.text()).trim()
-      : "";
-    throw new Error(
-      said ||
-        `The hub answered ${response.status}, so the session stayed on its account.`
-    );
+    throw await hubRefusal(response, "so the session stayed on its account.");
   }
 }
 
@@ -5596,10 +5596,7 @@ export async function renameInstance(
     body: JSON.stringify({ title }),
   });
   if (!response.ok) {
-    throw await refusalOf(
-      response,
-      `Not renamed: the hub answered ${response.status}.`
-    );
+    throw await hubRefusal(response, "so it was not renamed.");
   }
 }
 
@@ -5625,10 +5622,7 @@ export async function editProject(
     body: JSON.stringify(change),
   });
   if (!response.ok) {
-    throw await refusalOf(
-      response,
-      `Not changed: the hub answered ${response.status}.`
-    );
+    throw await hubRefusal(response, "so it was not changed.");
   }
   const row = (await response.json()) as ProjectRow;
   keepProject(row);
@@ -5663,10 +5657,7 @@ export async function addProjectPlace(
     }
   );
   if (!response.ok) {
-    throw await refusalOf(
-      response,
-      `Not added: the hub answered ${response.status}.`
-    );
+    throw await hubRefusal(response, "so it was not added.");
   }
   const row = (await response.json()) as ProjectRow;
   keepProject(row);
@@ -5687,10 +5678,7 @@ export async function removeProjectPlace(
     { method: "DELETE" }
   );
   if (!response.ok) {
-    throw await refusalOf(
-      response,
-      `Not removed: the hub answered ${response.status}.`
-    );
+    throw await hubRefusal(response, "so it was not removed.");
   }
   await readProjects();
 }
@@ -5709,10 +5697,7 @@ export async function keepSession(instanceId: string): Promise<Bounded<void>> {
     body: JSON.stringify({ kind: "mainline" }),
   });
   if (!response.ok) {
-    throw await refusalOf(
-      response,
-      `Not kept: the hub answered ${response.status}.`
-    );
+    throw await hubRefusal(response, "so it was not kept.");
   }
 
   target.scratch = false;
@@ -5830,10 +5815,7 @@ export async function createProject(project: {
     body: JSON.stringify({ ...project, caw: true }),
   });
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so the project was not made. Try again.`
-    );
+    throw await hubRefusal(response, "so the project was not made. Try again.");
   }
   const created = (await response.json()) as ProjectRow & {
     place: ProjectPlace;
@@ -5862,9 +5844,9 @@ export async function projectAtFolder(project: {
     body: JSON.stringify(project),
   });
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so the project was not saved. Try again.`
+    throw await hubRefusal(
+      response,
+      "so the project was not saved. Try again."
     );
   }
   const created = (await response.json()) as ProjectRow & {
@@ -5884,10 +5866,7 @@ export async function planOf(instanceId: string): Promise<SessionPlan> {
     `/api/instances/${encodeURIComponent(instanceId)}/plan`
   );
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so the plan is not known.`
-    );
+    throw await hubRefusal(response, "so the plan is not known.");
   }
   return (await response.json()) as SessionPlan;
 }
@@ -5981,9 +5960,7 @@ export async function decideAction(
     }
   );
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) || `The hub answered ${response.status}.`
-    );
+    throw await hubRefusal(response);
   }
 }
 
@@ -6012,10 +5989,7 @@ export async function answerProjectOffer(
     { method: "POST" }
   );
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so nothing changed. Try again.`
-    );
+    throw await hubRefusal(response, "so nothing changed. Try again.");
   }
   if (answer === "dismiss") {
     delete state.projectOffers[instanceId];
@@ -6309,9 +6283,9 @@ export const setProjectBudget = (
 export async function deleteProject(id: string): Promise<void> {
   const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `Could not forget this project — the hub answered ${response.status}. Try again.`
+    throw await hubRefusal(
+      response,
+      "so the project was not forgotten. Try again."
     );
   }
 }
@@ -6363,9 +6337,9 @@ export interface RunningSession {
 export async function projectRunning(id: string): Promise<RunningSession[]> {
   const response = await fetch(`/api/projects/${id}/running`);
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `Could not list this project's sessions — the hub answered ${response.status}. Try again.`
+    throw await hubRefusal(
+      response,
+      "so its sessions were not listed. Try again."
     );
   }
   return ((await response.json()) as { sessions: RunningSession[] }).sessions;
@@ -6416,9 +6390,9 @@ export async function stopProjectSessions(
     body: JSON.stringify({ instanceIds }),
   });
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `Could not stop this project's sessions — the hub answered ${response.status}. Try again.`
+    throw await hubRefusal(
+      response,
+      "so its sessions were not stopped. Try again."
     );
   }
 }
@@ -6433,9 +6407,9 @@ export async function removeMachine(machineId: string): Promise<void> {
     method: "DELETE",
   });
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so the machine was not removed. Try again.`
+    throw await hubRefusal(
+      response,
+      "so the machine was not removed. Try again."
     );
   }
   await refresh();
@@ -6460,9 +6434,9 @@ export async function pauseMachine(
     }
   );
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so the machine's pause did not change. Try again.`
+    throw await hubRefusal(
+      response,
+      "so the machine's pause did not change. Try again."
     );
   }
   await refresh();
@@ -6514,10 +6488,7 @@ export async function workspaceHeld(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/held`
   );
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so what the workspace holds is unread.`
-    );
+    throw await hubRefusal(response, "so what the workspace holds is unread.");
   }
   return (await response.json()) as WorkspaceHeld;
 }
@@ -6544,9 +6515,9 @@ export async function archiveWorkspace(
     }
   );
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so the workspace was not archived. Try again.`
+    throw await hubRefusal(
+      response,
+      "so the workspace was not archived. Try again."
     );
   }
   await refresh();
@@ -6558,9 +6529,9 @@ export async function removeSession(instanceId: string): Promise<void> {
     { method: "DELETE" }
   );
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so the session was not removed. Try again.`
+    throw await hubRefusal(
+      response,
+      "so the session was not removed. Try again."
     );
   }
   await refresh();
@@ -6835,7 +6806,7 @@ export type ServerTail =
 
 /**
  * Why a transcript read failed, said the way the pane says it: one sentence
- * of why ({@link failureReason}), never the hub's body as it came. `away` is
+ * of why ({@link hubFailure}), never the hub's body as it came. `away` is
  * the machine a 503 named: that is the hub saying the machine is not
  * connected, a state of the fleet, not a fault in the read, and a different
  * sentence. `reconnectingUntil`: the machine on its way back, until when.
@@ -6853,7 +6824,7 @@ export function readFaultOf(
       message: `${machineName(away)} is offline, so its stored transcript can't be read right now`,
     };
   }
-  return { reason: "failed", message: failureReason(failure) };
+  return { reason: "failed", message: failure.detail };
 }
 
 /** A machine as the fleet list names it (its label), else its id. */
@@ -8327,6 +8298,15 @@ export const cawco = {
     return state.outageAt !== null && !ahead(state.outageAt)
       ? "unreachable"
       : "connecting";
+  },
+  /**
+   * The update the hub said it restarts for, while its deadline is ahead:
+   * the build it goes to (null when unnamed) and when it is back by. Null
+   * otherwise: no update, the hub back, or the deadline passed (then the
+   * hub is unreachable like any other).
+   */
+  get restart(): { until: number; version: string | null } | null {
+    return state.restart && ahead(state.restart.until) ? state.restart : null;
   },
   /**
    * Whether the last attempt to reach the hub came back empty-handed. What

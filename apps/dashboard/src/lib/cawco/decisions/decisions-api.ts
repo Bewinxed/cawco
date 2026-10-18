@@ -9,15 +9,14 @@ import type {
   DecisionSent,
   DecisionsList,
 } from "@cawco/core/decisions";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 
 const base = (projectId: string) =>
   `/api/projects/${encodeURIComponent(projectId)}/decisions`;
 
 async function answered<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) || `The hub answered ${response.status}.`
-    );
+    throw await hubRefusal(response);
   }
   return (await response.json()) as T;
 }

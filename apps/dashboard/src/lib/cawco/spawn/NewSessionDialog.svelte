@@ -20,7 +20,7 @@
   import { Dialog as DialogPrimitive } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
   import { mirror } from "#lib/cawco/page-marks.js";
   import {
     Alert,
@@ -1124,7 +1124,7 @@
         loadModelWindows(),
       ]);
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw await hubRefusal(response);
       }
       const sized = (await response.json()) as NonNullable<typeof estimate>;
       if (current()) {

@@ -15,6 +15,7 @@ import type {
   HarnessKind,
   PermissionMode,
 } from "@cawco/core";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { cawco, followContinuations, type SendExtras } from "./client.svelte";
 import { conversationHref } from "./links";
 import { faultOn, noteOn, pendingOn } from "./session-acts.svelte";
@@ -100,7 +101,7 @@ export async function startContinuation(
     }
   );
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw await hubRefusal(response);
   }
   const { continuationId } = (await response.json()) as {
     continuationId: string;
@@ -128,7 +129,7 @@ export async function cancelContinuation(id: string): Promise<void> {
     method: "DELETE",
   });
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw await hubRefusal(response);
   }
   started.delete(id);
 }

@@ -1496,6 +1496,8 @@ export type FramePayload =
   | import("./frames").BlocksChangedFrame
   | import("./starters").StartersChangedFrame
   | import("./frames").ProjectsChangedFrame
+  /** Hub-originated: the hub restarts for an update now, and is back within a deadline. */
+  | import("./frames").HubRestartFrame
   | import("./frames").FleetUpstreamFrame
   | import("./frames").TailnetHttpsFrame
   | import("./frames").FleetFetchFrame

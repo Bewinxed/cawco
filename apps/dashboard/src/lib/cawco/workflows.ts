@@ -11,6 +11,7 @@ import type {
   WorkflowRunSummary,
   WorkflowStep,
 } from "@cawco/core";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 
 export type WorkflowDetail = Workflow & { problems: Problem[] };
 
@@ -57,12 +58,11 @@ async function request<T>(
         }),
   });
   if (!response.ok) {
-    const text = await response.text();
-    const problems = diagnostics(text);
+    const problems = diagnostics(await response.clone().text());
     if (problems) {
       throw new WorkflowProblems(problems);
     }
-    throw new Error(text || `The hub answered ${response.status}.`);
+    throw await hubRefusal(response);
   }
   return response.json() as Promise<T>;
 }

@@ -1,5 +1,5 @@
 import type { Deleted } from "@cawco/core";
-import { failureReason, failureWords, hubFailure } from "../hub-read";
+import { failureWords, hubRefusal } from "../hub-read";
 import { toast } from "../toasts";
 
 export type { Deleted } from "@cawco/core";
@@ -14,7 +14,7 @@ async function restoreDeleted<T>(deleted: Deleted): Promise<T> {
   });
   if (!response.ok) {
     // The hub says why in a sentence: its window ran out, or its name is taken.
-    throw new Error(`${failureReason(await hubFailure(response))}.`);
+    throw await hubRefusal(response);
   }
   return ((await response.json()) as { row: T }).row;
 }

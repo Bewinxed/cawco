@@ -31,6 +31,7 @@ import {
   topsIn,
 } from "@cawco/core";
 import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 import {
   type BlockedRequest,
   cawco,
@@ -146,11 +147,11 @@ async function postSeen(
     body: JSON.stringify({ ids, kind }),
   });
   if (!response.ok) {
-    let said = (await response.text()).trim();
+    let { message } = await hubRefusal(response);
     for (const id of ids) {
-      said = said.replaceAll(`${id}: `, "");
+      message = message.replaceAll(`${id}: `, "");
     }
-    throw new Error(said || `The hub answered ${response.status}.`);
+    throw new Error(message);
   }
   const { at } = (await response.json()) as { at: number | null };
   return at;

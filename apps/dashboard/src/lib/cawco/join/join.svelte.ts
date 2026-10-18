@@ -6,6 +6,7 @@
  */
 import type { JoinInfo, SshJoinJob, SshJoinRequest } from "@cawco/core";
 import type { Component } from "svelte";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { IconServer, IconTerminal } from "#lib/icons.js";
 import { cawco, type Machine } from "../client.svelte";
 
@@ -163,8 +164,7 @@ export const sshJoin = {
       return;
     }
     if (!response.ok) {
-      ssh.refused =
-        (await response.text()) || `The hub answered ${response.status}.`;
+      ssh.refused = (await hubRefusal(response)).message;
       return;
     }
     ssh.job = (await response.json()) as SshJoinJob;
@@ -190,7 +190,7 @@ export const sshJoin = {
       return;
     }
     ssh.refused = response
-      ? (await response.text()) || `The hub answered ${response.status}.`
+      ? (await hubRefusal(response)).message
       : "The hub did not answer, so the add was not stopped. Check that it is running, then Stop again.";
   },
   /** One read of the run in flight; the dialog calls it every second while it is open. */

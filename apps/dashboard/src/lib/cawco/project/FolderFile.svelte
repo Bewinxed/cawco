@@ -9,7 +9,7 @@
    * A path the hub refuses (not in the folder, outside it) says so in the
    * hub's words; only the hub reads the folder.
    */
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Markdown from "#lib/components/ui/markdown/markdown.svelte";
@@ -47,10 +47,7 @@
     )
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error(
-            (await response.text()) ||
-              `The hub answered ${response.status}, so ${at} could not be read.`
-          );
+          throw await hubRefusal(response, `so ${at} could not be read.`);
         }
         return ((await response.json()) as { content: string }).content;
       })

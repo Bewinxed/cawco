@@ -15,7 +15,11 @@
   import { readWithin } from "@cawco/core/bounded";
   import { type PreviewMode, previewMode } from "@cawco/core/comments";
   import { type Snippet, untrack } from "svelte";
-  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
+  import {
+    failureClause,
+    failureWords,
+    hubRefusal,
+  } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -516,7 +520,7 @@
     })
       .then(async (answer) => {
         if (!answer.ok) {
-          throw new Error((await answer.text()) || `HTTP ${answer.status}`);
+          throw await hubRefusal(answer);
         }
         return (await answer.json()) as PreviewTicket;
       })

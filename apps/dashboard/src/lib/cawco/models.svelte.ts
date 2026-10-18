@@ -10,7 +10,7 @@
 import type { HarnessKind, InstanceRow, ModelInfo } from "@cawco/core";
 import { isEffortLevel } from "@cawco/core";
 import { untrack } from "svelte";
-import { failureWords } from "#lib/cawco/hub-read.js";
+import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
 import {
   cawco,
   didntAnswer,
@@ -308,7 +308,7 @@ function catalog(): HarnessModel[] {
 export async function loadModelWindows(): Promise<void> {
   const response = await fetch("/api/model-windows");
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw await hubRefusal(response);
   }
   store.claudeWindows = (
     (await response.json()) as { claude: Record<string, number> }

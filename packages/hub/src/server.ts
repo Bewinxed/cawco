@@ -523,6 +523,7 @@ import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
 import { addressOf, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
+import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
 import { createHubTools } from "./hub-tools";
 import { createIngress, ingressRoutes } from "./ingress";
@@ -2570,6 +2571,35 @@ export const createServer = (
         payload: { kind: "laws.broken", broken },
       } satisfies Envelope<FramePayload>),
   });
+
+  /**
+   * An update about to restart this hub, told to every dashboard before it
+   * goes (hub-restart.ts): heard on its own machine's update state.
+   */
+  const restarts = hubRestarts((payload) =>
+    registry.broadcast({
+      verb: "frames",
+      machineId: "hub",
+      payload,
+    } satisfies Envelope<FramePayload>)
+  );
+
+  /**
+   * What a dashboard is owed after its board: every law caught broken
+   * before it, and an update about to restart this hub (one that connects
+   * in its last moments hears it as the rest did).
+   */
+  const owedAfterBoard = (
+    broken: ReturnType<typeof laws.broken>
+  ): FramePayload[] => {
+    const restart = restarts.frame();
+    return [
+      ...(broken.length > 0
+        ? [{ kind: "laws.broken", broken } satisfies FramePayload]
+        : []),
+      ...(restart ? [restart] : []),
+    ];
+  };
 
   /**
    * The work a serving hub starts off the boot path (resumes, catch-ups,
@@ -21623,6 +21653,7 @@ export const createServer = (
                 known
               );
               binaryUpdateStates.set(machineId, known);
+              restarts.note(known);
               flushOwedStarts(machineId);
               if (moved) {
                 publishInstances(machineId);
@@ -26251,6 +26282,7 @@ export const createServer = (
               const registered = peekBinaryUpdate(message.payload);
               if (registered) {
                 binaryUpdateStates.set(message.machineId, registered);
+                restarts.note(registered);
               }
               // The contract this connection's agent speaks, read before any
               // start goes to it ({@link startHold}).
@@ -26731,6 +26763,7 @@ export const createServer = (
                 );
               if (beaten) {
                 binaryUpdateStates.set(message.machineId, beaten);
+                restarts.note(beaten);
               }
               // The machine's damaged records: the rows they belong to say so
               // from the next publish, and stop saying it once the machine's
@@ -28684,11 +28717,11 @@ export const createServer = (
           const broken = laws.broken();
           if (board) {
             sendFrame(ws, board);
-            if (broken.length > 0) {
+            for (const payload of owedAfterBoard(broken)) {
               sendFrame(ws, {
                 verb: "frames",
                 machineId: "hub",
-                payload: { kind: "laws.broken", broken },
+                payload,
               } satisfies Envelope<FramePayload>);
             }
           }

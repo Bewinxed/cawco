@@ -20,7 +20,11 @@
     readAuth,
     setPairingRequired,
   } from "#lib/cawco/hub-auth.svelte.js";
-  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
+  import {
+    failureClause,
+    failureWords,
+    hubRefusal,
+  } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -48,7 +52,7 @@
       await readAuth();
       const response = await fetch("/api/devices");
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw await hubRefusal(response);
       }
       ({ devices, current } = (await response.json()) as {
         current: string | null;
@@ -97,7 +101,7 @@
         { method: "DELETE" }
       );
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw await hubRefusal(response);
       }
     });
   }

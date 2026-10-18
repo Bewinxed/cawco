@@ -51,6 +51,7 @@
     ProjectDecisions,
   } from "#lib/cawco/decisions/decisions.svelte.js";
   import {
+    failureSentence,
     type HubRead,
     failureWords as message,
     THREAD_SEND_UNREACHED,
@@ -182,7 +183,7 @@
 
   /** A refused read, as a sentence with its status for support. */
   const refusal = (read: HubRead<unknown>): string | null =>
-    read.ok ? null : `${read.detail} (${read.status}).`;
+    read.ok ? null : failureSentence(read);
 
   // --- the tasks: what the hub answered, from the load and each re-read ------
 

@@ -279,10 +279,18 @@
   /* The label and its pending wording in one cell, read from the start: the
      cell is as wide as the wider one, and the swap is one opacity and blur
      transition over --dur-morph on --ease-out, both words on the same
-     clock. With less motion the words still cross-fade, unblurred. */
+     clock. With less motion the words still cross-fade, unblurred. Each
+     wording stands at the cell's centre, as the button centres its
+     content: at the start, a shorter one left the button's padding wider
+     on its end side (owner: "the retry button is lopsided"). Beside a rest
+     icon the words stay at the start, against the icon. */
   .kit-words {
     display: inline-grid;
-    justify-items: start;
+    justify-items: center;
+
+    .kit-slot:not([data-over]) + .kit-label & {
+      justify-items: start;
+    }
 
     > * {
       grid-area: 1 / 1;

@@ -594,6 +594,27 @@ export interface ProjectStopFrame {
   projectId: string;
 }
 
+/**
+ * Hub-originated: the hub is about to restart for an update, or no longer
+ * is. Sent to every dashboard the moment its own machine says it is
+ * installing (binary-update.ts `#tellHub`, before the helper restarts it),
+ * to each that connects while it does, and with `restart: null` when the
+ * install ends without restarting it. `withinMs` is relative, so no two
+ * clocks are compared: the dashboard makes it a deadline on its own, and
+ * reads the hub as on its way back, not unreachable, until it passes.
+ */
+export interface HubRestartFrame {
+  instanceId?: undefined;
+  kind: "hub.restart";
+  restart: {
+    reason: "update";
+    /** The build it restarts onto, when the machine named one. */
+    version: string | null;
+    /** How long from now it answers again, or the build before it does: the update's trial (UPDATE_TRIAL_MS). */
+    withinMs: number;
+  } | null;
+}
+
 export interface ProjectsChangedFrame {
   instanceId?: undefined;
   /**
