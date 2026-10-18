@@ -2665,9 +2665,10 @@
 /* A changing figure: digits of one width, so a count or a price that
    ticks does not move what stands beside it. A role's utility
    (`type-<role>`) is the `font` shorthand, which resets
-   font-variant-numeric, and sorts before this one, so `num` beside it wins.
-   Important, because a component's own (unlayered) rule that sets a role by
-   the shorthand resets it too and would otherwise win over any utility. */
+   font-variant-numeric, and sorts before this one, so `num` beside it wins
+   by order. Important for one unlayered rule that resets it on an element
+   carrying `num`: SideSurface's head controls (`font: inherit`, its
+   `[data-slot="side-head"]` recipe) take PreviewPane's Comments button. */
 @utility num {
   font-variant-numeric: tabular-nums !important;
 }
