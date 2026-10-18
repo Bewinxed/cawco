@@ -222,9 +222,14 @@ const makeRepo = async (
       2
     )}\n`
   );
+  // No global types but its own: TypeScript below 6.0 includes every
+  // `node_modules/@types` of any enclosing folder, and a home with its own
+  // (`~/node_modules/@types/bun`) failed this project's typecheck on the Mac.
+  // typescriptlang.org/tsconfig/types.html: "If `types` is specified, only
+  // packages listed will be included in the global scope."
   await writeFile(
     join(repo, "tsconfig.json"),
-    `${JSON.stringify({ compilerOptions: { strict: true, noEmit: true, module: "esnext", target: "es2022" }, include: ["src"] }, null, 2)}\n`
+    `${JSON.stringify({ compilerOptions: { strict: true, noEmit: true, module: "esnext", target: "es2022", types: [] }, include: ["src"] }, null, 2)}\n`
   );
   await writeFile(join(repo, "src", "index.ts"), "export const ok = true;\n");
   await writeFile(join(repo, ".gitignore"), "node_modules\n");
