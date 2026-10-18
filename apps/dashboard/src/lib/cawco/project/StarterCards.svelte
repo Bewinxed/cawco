@@ -16,18 +16,22 @@
     IconMic,
     IconPalette,
     IconPen,
-    IconRefresh,
+    IconRenew,
     IconRocket,
     IconRulerPen,
     IconSearch,
     IconSend,
     IconSort,
     IconStars,
-    IconToolTodo,
+    IconTaskList,
     IconWindow,
   } from "#lib/icons.js";
 
-  /** Each kind of work a starter names (the hub's `STARTER_GLYPHS`), as its Solar duotone glyph. */
+  /**
+   * Each kind of work a starter names (the hub's `STARTER_GLYPHS`), as its
+   * Solar duotone glyph: each one a mark on its half-ink body (The Solar
+   * Duotone Rule), never strokes alone beside a filled one.
+   */
   export const GLYPHS: Record<
     StarterGlyph,
     Component<SVGAttributes<SVGSVGElement>>
@@ -42,7 +46,7 @@
     mail: IconSend,
     palette: IconPalette,
     people: IconAccounts,
-    refresh: IconRefresh,
+    refresh: IconRenew,
     reply: IconChat,
     rocket: IconRocket,
     routine: IconClock,
@@ -51,7 +55,7 @@
     site: IconGlobe,
     stages: IconColumns,
     system: IconRulerPen,
-    tasks: IconToolTodo,
+    tasks: IconTaskList,
     triage: IconSort,
     voice: IconMic,
   };
@@ -208,7 +212,11 @@
     text-wrap: pretty;
   }
   /* Suggestion rows: one under the other, each as wide as its words (never
-     past the column), at a row's height rather than a card's. */
+     past the column), at a row's height rather than a card's. Each is a
+     button on the panel's own raised surface, so it takes the outline
+     button's edge (DESIGN.md, Buttons: `border-button-outline`, 3:1 against
+     the raised surface by day and at night) for the tile's drop, which the
+     same surface under it hides. */
   [data-rows] .cards {
     display: flex;
     flex-direction: column;
@@ -223,7 +231,9 @@
     max-inline-size: 100%;
     block-size: auto;
     min-block-size: var(--c-btn-h);
-    padding: var(--space-2) var(--space-3);
+    padding: calc(var(--space-2) - 1px) calc(var(--space-3) - 1px);
+    border: 1px solid var(--border-button-outline);
     border-radius: var(--radius-md);
+    box-shadow: none;
   }
 </style>

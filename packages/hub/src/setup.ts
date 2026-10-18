@@ -143,6 +143,8 @@ export interface SetupAsk {
   askUpstream: boolean;
   /** Where the project came from: New project's prompt, or a session's offer. */
   from: "prompt" | "offer";
+  /** It has its checkout already (made from a folder): no card asks for its place. */
+  placed: boolean;
   projectName: string;
   /** The machines the relay card offers, while it is to be asked; null when it is not. */
   relay: readonly RelayCandidate[] | null;
@@ -188,8 +190,14 @@ export const setupEvent = (ask: SetupAsk): string => {
             `- \`delegates\`: the delegate types to set up, several picks (\`data-cawco-multiple\`), each option a type with one line on the work it takes: ${types.map((type) => `\`${type}\``).join(", ")}${types.length > 1 ? ", all recommended" : ", recommended"}; add one only when their words call for it.`,
           ]
         : []),
+      ...(ask.placed
+        ? []
+        : [
       `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\` as \`{ machineId, label, path }\`, \`label\` being the name CawCo shows the machine by. Once picked, the card reads "<label> — <path>", from \`cawco.on("picks", …)\` (\`picks.place.value\`).`,
-      "No routines, webhook relays or other cards.",
+          ]),
+      ask.placed
+        ? "It was made from a folder, which is its place already: no card asks where its work happens. No routines, webhook relays or other cards."
+        : "No routines, webhook relays or other cards.",
       'Write the page in CawCo\'s voice (WORDS.md): sentence case, no "I", options named for what they do (never Yes or No), no folder paths inside sentences.',
     ].join("\n"),
     `The ${template} template's stages.md:\n\n\`\`\`\n${templateText(template)}\`\`\``,

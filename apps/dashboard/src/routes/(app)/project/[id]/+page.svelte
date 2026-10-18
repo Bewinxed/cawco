@@ -331,18 +331,8 @@
       untrack(() => lead.arrive(blank));
     }
   });
-  /**
-   * The empty board's block, while Caw stands over it: his panel stands
-   * beside it on a desk (CawFloat), not over it.
-   */
-  function besideHim(node: HTMLElement) {
-    lead.beside = node;
-    return () => {
-      if (lead.beside === node) {
-        lead.beside = null;
-      }
-    };
-  }
+  /** His panel stands docked beside the page, which yields it its room (CawFloat). */
+  const docked = $derived(lead.open && lead.anchor !== null);
 
   /** The project's views, kept then drafted, once read. */
   let views = $state<ProjectView[]>([]);
@@ -1784,19 +1774,13 @@
     {#if !lead.view}
       <Skeleton class="h-48 w-full max-w-xl rounded-[var(--radius-lg)]" />
     {:else if canTalk}
-      <!-- His panel stands beside this block on a desk while it is open
-           (CawFloat, lead.beside), the project's starters in it; put away,
-           they stand here and open it with their words. -->
-      <div
-        data-slot="caw-empty"
-        class="state caw-empty"
-        data-beside={lead.open || undefined}
-        {@attach besideHim}
-      >
+      <!-- While his panel is open the project's starters are in it (CawFloat);
+           put away, they stand here and open it with their words. -->
+      <div data-slot="caw-empty" class="state caw-empty">
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
             <!-- He stands here instead of sitting in the head, and is the
-                 same seat at 80: a press opens his panel beside the board
+                 same seat at 80: a press opens his panel beside the page
                  (CawFloat). His switch is under the head's ⋯, empty board
                  or not. -->
             <div
@@ -1814,16 +1798,12 @@
             </div>
           {/snippet}
           {#snippet action()}
-            <!-- A starter opens his panel with its words in his composer;
-                 a press on one is no press outside the panel (CawFloat,
-                 data-caw-asks), so another starter replaces the words. -->
+            <!-- A starter opens his panel with its words in his composer. -->
             {#if starters.length > 0 && !lead.open}
-              <div class="contents" data-caw-asks>
-                <StarterCards
-                  onpick={(text) => lead.ask(text, "board")}
-                  {starters}
-                />
-              </div>
+              <StarterCards
+                onpick={(text) => lead.ask(text, "board")}
+                {starters}
+              />
             {/if}
           {/snippet}
         </EmptyState>
@@ -1832,7 +1812,7 @@
       <div class="state">
         <EmptyState
           icon={IconToolTodo}
-          line="Add a task by hand while Caw can't start."
+          line="Add a task by hand while Caw can’t start."
           title="Nothing on the board yet"
         >
           {#snippet action()}
@@ -1896,6 +1876,13 @@
     </p>
   </div>
 {:else}
+  <!-- The page and Caw's panel docked beside it (CawFloat): beside the page
+       where it has the room for both, under it where it has not; the page
+       yields the panel its room, so it never covers a column or the head.
+       On a phone the panel is the bottom sheet, and the page keeps it all. -->
+  <div class="caw-host">
+    <div class="caw-docked" data-caw-open={docked || undefined}>
+      <div class="caw-page">
   {#if phone && openFile}
     <!-- A phone: the folder's file is its own page, with Back to the view. -->
     <div data-slot="project-page" class="project-page task-only">
@@ -2046,9 +2033,10 @@
       {/if}
     </div>
   {/if}
-
-  <!-- Caw's panel floats over the page, from whichever seat stands. -->
-  <CawFloat {lead} {projectId} projectName={project?.name ?? ""} />
+      </div>
+      <CawFloat {lead} {projectId} projectName={project?.name ?? ""} />
+    </div>
+  </div>
 {/if}
 
 {#snippet sideCard()}
@@ -2164,6 +2152,58 @@
 {/if}
 
 <style>
+  /* The page and Caw's panel (CawFloat): the host is the container the
+     panel's place is chosen by, so the rail's width counts. */
+  .caw-host {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+    min-inline-size: 0;
+    container-type: inline-size;
+  }
+  .caw-docked {
+    display: grid;
+    flex: 1;
+    grid-template: "page" minmax(0, 1fr) / minmax(0, 1fr);
+    min-block-size: 0;
+  }
+  .caw-page {
+    grid-area: page;
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    min-inline-size: 0;
+  }
+  /* Open where the page has no room beside it: a row of its own under the
+     page, the column's width, at most half the height, inside the page's
+     own inline padding and --space-6 over the foot, as a desk's stands. A
+     phone's panel is the bottom sheet, which takes no room of the page. */
+  @media (min-width: 640px) {
+    .caw-docked[data-caw-open] {
+      grid-template:
+        "page" minmax(0, 1fr)
+        "dock" min(var(--c-caw-panel-h), 50%)
+        / minmax(0, 1fr);
+    }
+    .caw-docked[data-caw-open] :global(.caw-dock) {
+      margin: 0 var(--space-5) var(--space-6);
+    }
+  }
+  /* Room for the board beside it: a column of its own at the page's end,
+     a conversation's width, from the head's top to --space-6 over the
+     foot, the page's own end padding between the two. */
+  @container (min-width: 56rem) {
+    .caw-docked[data-caw-open] {
+      grid-template:
+        "page dock" minmax(0, 1fr)
+        / minmax(0, 1fr) calc(var(--c-panel-w) + var(--space-6));
+    }
+    .caw-docked[data-caw-open] :global(.caw-dock) {
+      margin: var(--space-6) var(--space-6) var(--space-6) 0;
+    }
+  }
   /* What the page stands in: the box a phone's views bar docks at the foot of. */
   .project-frame {
     position: relative;
@@ -2373,11 +2413,6 @@
   .caw-empty {
     inline-size: 100%;
     max-inline-size: var(--c-starters-w);
-  }
-  /* His panel beside it: the block as wide as its words, so the panel
-     stands clear of them (CawFloat places it at the block's end). */
-  .caw-empty[data-beside] {
-    inline-size: fit-content;
   }
   .caw-empty :global(.kit-empty-action) {
     align-self: stretch;

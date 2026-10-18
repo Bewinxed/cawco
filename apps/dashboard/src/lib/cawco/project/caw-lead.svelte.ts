@@ -49,6 +49,14 @@ import { resetLabel } from "../usage";
 /** Where a project's panel being open or put away is kept, in this browser. */
 const openKey = (projectId: string): string => `cawco.caw.open.${projectId}`;
 
+/**
+ * A project's page to open on Caw's panel when it is next drawn here: New
+ * project lands on it with his panel open on the Setup thread.
+ */
+export const openOnArrival = (projectId: string): void => {
+  store("local", openKey(projectId), "1");
+};
+
 /** The statuses the head Caw changes between, fetched once he is on screen. */
 export const HEAD_NEXT: CawStatus[] = [
   "working",
@@ -90,10 +98,10 @@ export class CawLead {
    */
   waited = $state(false);
   /**
-   * His panel floats over the page (CawFloat). One panel whichever seat
-   * opened it: the head's at 48, or the 80 he stands at over an empty
-   * board or an empty Decisions tab. `anchor` is the seat on screen now,
-   * so the panel moves to the head when he sits down and stays open.
+   * His panel stands beside the page (CawFloat), the page yielding it its
+   * room. One panel whichever seat opened it: the head's at 48, or the 80
+   * he stands at over an empty board or an empty Decisions tab. `anchor` is
+   * the seat on screen now: focus goes back to it as the panel is put away.
    * Open or put away by the person is kept per project, so the
    * conversation is where they left it when they come back (caw-assistant
    * design, "Open/closed is remembered per project"); a project they never
@@ -112,12 +120,6 @@ export class CawLead {
     }
   }
   anchor = $state<HTMLElement | null>(null);
-  /**
-   * What the panel stands by instead of under his seat: the empty board's
-   * block, while he stands over it, so the panel never covers the board's
-   * words (CawFloat: beside them where there is room, else under them).
-   */
-  beside = $state<HTMLElement | null>(null);
   /**
    * A New thread asked for (the head's New session, the views bar's "+"):
    * his panel shows a thread not yet started, its composer taking the

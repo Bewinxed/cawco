@@ -504,6 +504,30 @@
     message?.author === "event" && message.event?.kind === "caw"
       ? message.event.notWoken
       : undefined;
+  /**
+   * A not-woken note's sentence, by why: one plain line the person reads.
+   * The hub's own words for it (a machine's error, its paths and ids) wait
+   * under Show details; the spend cap's line is plain already, and stands
+   * as the hub says it.
+   */
+  const notWokenLine = (
+    why: NonNullable<ReturnType<typeof notWokenOf>>
+  ): string => {
+    switch (why.reason) {
+      case "no-machine":
+        return "No machine was online when you wrote. He reads it when one is back.";
+      case "capped":
+        return why.words;
+      case "could-not-start":
+        return "Caw couldn’t start on his machine.";
+      case "place":
+        return "Caw couldn’t be kept to the project’s folder on his machine.";
+      case "not-taken":
+        return "His session didn’t take your words.";
+      default:
+        return "Caw couldn’t be woken.";
+    }
+  };
   /** The note Try again was pressed on and went: its wake is under way, so it is not offered twice. */
   let retried = $state<string | null>(null);
   /**
@@ -660,7 +684,7 @@
   const binding: ComposerBinding = {
     draft,
     agentName: "Caw",
-    placeholder: "Message the project…",
+    placeholder: "Message Caw…",
     commands: [],
     mentionsFrom: null,
     suggest: { candidates: [] },
@@ -779,22 +803,23 @@
 {/snippet}
 
 {#snippet eventUnder(id: string)}
-  <!-- A not-woken note: why, and the way on with the words he has not read
-       (only on the note that still stands for them). With no machine
-       online it says what happens next; every other reason is the hub's
-       own words. -->
+  <!-- A not-woken note: why, in one plain sentence, the hub's own words
+       under Show details, and the way on with the words he has not read
+       (only on the note that still stands for them). -->
   {@const why = notWokenOf(
     (messages ?? []).find((message) => message.id === id)
   )}
   {#if why}
+    {@const line = notWokenLine(why)}
     <RowFault
       class="not-woken"
       again={retryable === id ? () => wakeAgain(id) : undefined}
       againPending="Waking Caw…"
       data-not-woken={why.reason}
-      reason={why.reason === "no-machine"
-        ? "No machine was online when you wrote. He reads it when one is back."
+      details={why.words === line || why.reason === "no-machine"
+        ? null
         : why.words}
+      reason={line}
     />
   {/if}
 {/snippet}
@@ -914,7 +939,7 @@
           line={view && !view.on
             ? "Caw is off, so he acts only when you write to him."
             : undefined}
-          title="What's next for {projectName}?"
+          title="What’s next for {projectName}?"
         >
           {#snippet mark()}
             <div

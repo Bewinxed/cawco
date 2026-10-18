@@ -2161,6 +2161,7 @@ export const createCaw = ({
         askFleet: !fleetChoicesSet(),
         askUpstream: !upstreamAnswered(),
         from,
+        placed: project.places.some((place) => place.kind === "checkout"),
         relay: relayOffer(),
         projectName: project.name,
         template,
@@ -2443,7 +2444,9 @@ export const createCaw = ({
     /**
      * Starts a thread with your first message, answered once it is kept, and
      * wakes Caw with it behind that answer ({@link wakeForYou}); "Make a
-     * note: …" goes to AGENTS.md instead. `sent`: the message's id, the send
+     * note: …" goes to AGENTS.md instead. A project's first thread is its
+     * Setup thread, Caw woken to set the project up ({@link wakeForSetup}).
+     * `sent`: the message's id, the send
      * to his session it came as ({@link personSent}), and what rode with
      * your words, which the message keeps ({@link keepCarried}) and the wake
      * carries to him. The same `id` again is the same message ({@link once}).
@@ -2463,6 +2466,27 @@ export const createCaw = ({
           return { ...opened.said, thread: summaryOf(opened.row) };
         }
         listening(projectId);
+        // A project's first words to him, where nothing opened its Setup
+        // thread (one made from a folder): they open it, and wake him to set
+        // the project up, as New project's prompt does (setup).
+        if (db.projectThreads(projectId).length === 0) {
+          const project = projectOf(projectId);
+          const made = db.createThread({
+            id: crypto.randomUUID(),
+            projectId,
+            title: `Set up ${project.name}`,
+            setup: true,
+            first: {
+              author: "you",
+              body,
+              ...keepCarried(carried),
+              ...(id ? { id } : {}),
+            },
+          });
+          const opened = said(made.thread, made.message, false);
+          wakeForSetup(project, made.thread.id, "prompt", project.template);
+          return { ...opened, thread: summaryOf(made.thread) };
+        }
         const opened = open(projectId, body, id, keepCarried(carried));
         wakeForYou(projectId, opened.row.id, opened.said.message.id, {
           by: "you",

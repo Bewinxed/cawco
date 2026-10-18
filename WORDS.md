@@ -2,7 +2,7 @@
 
 **UI wordmark:** “Caw&Co”, set in the landing's Nunito Variable face. Product names in sentences, page titles and notices remain “CawCo”.
 
-**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs) · 2026-10-18 (browser take-over, projects §5.11: *browser*, *take over*, *private*, *hand back*, *browser ask*, *stream relay*, *container runtime* / *local browser*; Take over and Hand back join the button verbs)
+**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs) · 2026-10-18 (browser take-over, projects §5.11: *browser*, *take over*, *private*, *hand back*, *browser ask*, *stream relay*, *container runtime* / *local browser*; Take over and Hand back join the button verbs) · 2026-10-18 (Ask joins the button verbs: the project head's Ask Caw)
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
 formula per Yifrah (2017), plain language per Redish (2007), destructive confirmation per Nielsen
 #5 (1994) and the microcopy-patterns catalog. **Pairs with DESIGN.md** (visual tokens, LOCKED) and
@@ -284,8 +284,9 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
 Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy, Draw, Dock, Undock, Annotate,
-Comment, Illustrate, Erase, Done, Admit, Require*, and the phrasal *Take over* and *Hand back* (each
-[Verb]+[Object] read as one act: the browser). "Continue" is acceptable only where the
+Comment, Illustrate, Erase, Done, Admit, Require, Ask*, and the phrasal *Take over* and *Hand back* (each
+[Verb]+[Object] read as one act: the browser). "Ask" takes its object by name: "Ask Caw", the project
+head's way to tell him new work (his panel on a new thread), and "Ask Caw for a view". "Continue" is acceptable only where the
 next step is already visible in context (microcopy-patterns catalog).
 
 **Composer exception (recorded):** the transcript composer's `<textarea>` carries `aria-label="Message

@@ -354,7 +354,7 @@
     <Popover.Content
       data-caw-lead-card
       align="start"
-      aria-label="Caw's session"
+      aria-label="Caw’s session"
       class="caw-lead-card"
       collisionPadding={12}
       customAnchor={cardAnchor}

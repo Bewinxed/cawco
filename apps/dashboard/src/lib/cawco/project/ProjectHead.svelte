@@ -12,16 +12,19 @@
 
 <script lang="ts">
   /**
-   * The project's head (design §2 Fit, fable-lead-switch.md §3): Caw at
-   * 48px on the leading edge, the project's name, and one line under it.
+   * The project's head (design §2 Fit, fable-lead-switch.md §3): the
+   * project's name, and one line under it. The name wraps at its spaces
+   * only and never under the actions, which wrap under it first.
    * The line is where the project lives — its machine and folder, `· N
    * places` when it has more — and Caw's words take its place only while he
    * has something to say: what his session is doing, his question as a
    * link to its thread, a task that landed. The name is renamed where it
    * stands; the line opens the project's details under the head
-   * (ProjectDetails), `· N places` opens them at its places. Then New
-   * session (Caw's panel on a new thread, the caret in his composer: work
-   * in a project starts by telling Caw, PRD §5.6), Spin off, and `⋯`
+   * (ProjectDetails), `· N places` opens them at its places. Then Caw at
+   * 48px, sitting at the head's end so the name's start edge stays where it
+   * is when he stands over the empty board instead, Ask Caw (his panel on a
+   * new thread, the caret in his composer: work in a project starts by
+   * telling Caw, PRD §5.6), Spin off, and `⋯`
    * holding Pick stages (while the code
    * stages stand in), Project details…, Caw's settings (CawPanel, off `⋯`:
    * a popover on a desk, the bottom sheet on touch), Spend, Other people's
@@ -30,7 +33,7 @@
    * tasks… and Ask Caw for a view), each with its glyph. One tray stands
    * under the head at a time: the details or a forget.
    *
-   * Under 640px the head carries no button but `⋯`: New session is the
+   * Under 640px the head carries no button but `⋯`: Ask Caw is the
    * coral "+" of the page's views bar (ViewBar), which opens Caw's panel as
    * this one does, and Spin off is in `⋯` (Apple HIG,
    * Toolbars: "Prioritize only the most important items for inclusion in
@@ -317,14 +320,6 @@
 
 <header data-slot="project-head" class="project-head">
   <div data-slot="who" class="who">
-    <!-- His seat holds its place while he is read, so the name never moves
-         as he lands; a read the hub refused draws no one, so the name takes
-         the head's start rather than standing after an empty seat. -->
-    {#if seated && !(lead.refused !== null && lead.view === null)}
-      <div data-slot="seat" class="seat" transition:slot>
-        <CawSeat {lead} projectId={project.id} projectName={project.name} />
-      </div>
-    {/if}
     <div data-slot="txt" class="txt">
       <h1 data-slot="title" class="title">
         {#if draft !== null}
@@ -363,7 +358,7 @@
             data-slot="name"
             class="name press-tint"
             onclick={editName}
-            title="Rename"
+            title="Rename {project.name}"
             type="button"
           >
             {project.name}
@@ -426,15 +421,21 @@
     </div>
   </div>
   <div data-slot="acts" class="acts">
+    <!-- He sits at the head's end, by Ask Caw, so the name's start edge is
+         the same whether he sits here or stands over the empty board. His
+         seat holds its place while he is read; a read the hub refused draws
+         no one, so no empty seat stands by Ask Caw. -->
+    {#if seated && !(lead.refused !== null && lead.view === null)}
+      <div data-slot="seat" class="seat" transition:slot>
+        <CawSeat {lead} projectId={project.id} projectName={project.name} />
+      </div>
+    {/if}
     <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
-         thread, the caret in his composer. A press here is no press outside
-         his panel (CawFloat, data-caw-asks). -->
+         thread, the caret in his composer. -->
     <Button
-      aria-haspopup="dialog"
       class="head-act pressable"
-      data-caw-asks
       data-new-session
-      onclick={() => lead.newThread()}>New session</Button
+      onclick={() => lead.newThread()}>Ask Caw</Button
     >
     {#if primary}
       <Button
@@ -647,10 +648,12 @@
     gap: var(--space-1);
     min-inline-size: 0;
   }
+  /* The name wraps at its spaces only; a word longer than the column ends
+     in an ellipsis, the whole name in its tooltip and read out whole. */
   .title {
+    min-inline-size: 0;
     font: var(--type-title);
     color: var(--ink-strong);
-    overflow-wrap: anywhere;
   }
   /* The name and the field it becomes are one box: the same type, the same
      inset (a space-1 pad pulled back by a space-1 margin, so the words stand
@@ -659,6 +662,8 @@
   .name {
     display: block;
     max-inline-size: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     margin-inline: calc(var(--space-1) * -1);
     padding-inline: var(--space-1);
     border: 1px solid transparent;

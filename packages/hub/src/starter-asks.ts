@@ -415,13 +415,13 @@ const routineSubject = (
   at: `failures (the routine ${failure.id})`,
   asks: {
     fix: {
-      about: "The routine's last run failed: find why, and fix it.",
+      about: "The routine’s last run failed: find why, and fix it.",
       glyph: "bug",
       text: text(
         (name) => `Find out why the “${name}” routine failed and fix it`,
         failure.name
       ),
-      reason: "This routine's last run failed.",
+      reason: "This routine’s last run failed.",
       sources: [{ kind: "routine", ref: failure.id }],
     },
   },
@@ -523,7 +523,7 @@ const projectSubject = (inputs: StarterInputs): Subject | undefined => {
           "It has no open tasks, and its notes say what it is for: read them and file its first tasks.",
         glyph: "tasks",
         text: text(
-          (name) => `Read ${name}'s notes and file its first tasks`,
+          (name) => `Read ${name}’s notes and file its first tasks`,
           inputs.name
         ),
         reason: "It has no open tasks, and its notes say what it is for.",
@@ -671,7 +671,7 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
             "Tasks of this kind keep being filed: a weekly routine could triage them as they come.",
           glyph: "triage",
           text: text(
-            (name) => `Every Monday, triage the week's new “${name}” tasks`,
+            (name) => `Every Monday, triage the week’s new “${name}” tasks`,
             kind.name
           ),
           reason: `${kind.count} tasks like these were filed in the last ${STARTER_RECENT_DAYS} days.`,
@@ -712,7 +712,7 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
           glyph: "bug",
           text: text(
             (title) =>
-              `Every morning, run “${title}”'s checks and tell me what fails`,
+              `Every morning, run “${title}”’s checks and tell me what fails`,
             failure.name
           ),
           reason:

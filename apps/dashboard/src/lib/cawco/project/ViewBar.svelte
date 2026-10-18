@@ -175,7 +175,6 @@
     <button
       aria-label="New session"
       class="kit-send new-session touch-hit pressable"
-      data-caw-asks
       onclick={onnewsession}
       type="button"
     >
