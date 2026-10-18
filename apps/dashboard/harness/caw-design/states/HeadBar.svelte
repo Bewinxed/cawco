@@ -1,24 +1,28 @@
 <script lang="ts">
   /**
-   * PROPOSED (pins 7 and 9: "this whole title bar needs to be rethought",
-   * "i haven't seen anyone design a modal like this before"): the panel's
-   * head as the platform draws each of its two shapes.
+   * PROPOSED (head, A; pins: "this whole title bar needs to be rethought",
+   * "i haven't seen anyone design a modal like this before", "is this phone
+   * view? desktop view?"): the panel's toolbar. It answers who (Caw), which
+   * thread, and what you can do to the panel, in one 44px row; no status
+   * words (his pose is his status).
    *
-   * - On a desk the panel is a popover, which closes on a press outside it
-   *   or Escape (CawFloat); HIG, Popovers: "Use a Close button for
-   *   confirmation and guidance only." So no Close: the thread's title at
-   *   the leading edge, on the content's start edge, and New thread (+)
-   *   and More (…) trailing.
-   * - On a phone it is a sheet (DESIGN.md, Drawer): the 100×6 grabber, then
-   *   the iOS sheet toolbar. HIG, Sheets: "the Cancel button belongs on the
-   *   leading edge of the top toolbar", so Close leads, the title is
-   *   centred between two sides of one width, and New thread and More
-   *   trail. Swiping down still dismisses (the kit sheet).
-   * - The title is one line, truncated: "New thread" for one not yet
-   *   started. With more than one thread it is the control that opens the
-   *   thread list (chevron); with one it is plain text.
-   * - More holds Caw's session (his lead session's card: harness and
-   *   model) and Open as a tab.
+   * It stands on the panel's row grid (DESIGN.md, Caw's panel): Caw's 28px
+   * mark centred in the 28px lead column, the words on the text column
+   * --space-3 after it, and the last control's ink on the trailing edge
+   * --space-3 in from the panel's (its box hangs past by its glyph's inset).
+   *
+   * - `who` (A1): "Caw" (label, ink-strong) over the thread's name (meta,
+   *   ink-muted, chevron), the two lines one menu button (ThreadSwitch).
+   * - `name` (A2): Caw's mark and "Caw" alone; the thread is the body's
+   *   first row (Panel draws it).
+   * - Desk: the panel is a popover, which a press outside or Escape closes
+   *   (HIG, Popovers: "Use a Close button for confirmation and guidance
+   *   only"), so New thread and More trail and there is no Close.
+   * - Phone: DESIGN.md's Drawer, the sheet's 100×6 grabber over the row and
+   *   Close last at the trailing edge, a 28px ghost with a 16px glyph and
+   *   44px under a finger. Hanging from his tab (`grabber` off) it is the
+   *   same row with Close and no grabber.
+   * - More holds Caw's session (his lead session's card) and Open as a tab.
    */
   import {
     CAW_DENIED_TOOLS,
@@ -26,7 +30,7 @@
     type HarnessKind,
     type ThreadSummary,
   } from "@cawco/core";
-  import { clock } from "#lib/cawco/home/home-state.svelte.js";
+  import CawFace from "#lib/cawco/home/CawFace.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -35,20 +39,20 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import {
-    IconCheck,
-    IconChevronDown,
     IconClose,
     IconMaximize,
     IconMore,
     IconPlus,
     IconUser,
   } from "#lib/icons.js";
-  import { formatAgeShort } from "#lib/utils/time.js";
   import type { Form } from "../form";
   import Resize from "./Resize.svelte";
+  import ThreadSwitch from "./ThreadSwitch.svelte";
 
   let {
     form,
+    kind,
+    grabber,
     threads,
     current,
     lead,
@@ -57,29 +61,23 @@
   }: {
     /** The panel's form, as its frame names it: the desk's popover or the phone's sheet. */
     form: Form;
+    /** A1, Caw over the thread, or A2, Caw alone. */
+    kind: "who" | "name";
+    /** The phone sheet's grabber over the row. */
+    grabber: boolean;
     threads: ThreadSummary[];
     /** The thread on show; "" for a new thread not yet started. */
     current: string;
     lead: CawLead;
     projectName: string;
-    /** The panel resizes by a "Wide panel" item in More (pin 11, option B). */
+    /** The panel resizes by a "Wide panel" item in More (the resize decision's option). */
     wide?: boolean;
   } = $props();
 
   const phone = $derived(form === "phone");
-  /** Wide panel is a desk item only: a phone's sheet has no size to choose. */
+  /** Wide panel is a desk item only: a phone's panel has no size to choose. */
   const widens = $derived(wide && !phone);
-  const on = $derived(threads.find((one) => one.id === current) ?? null);
-  const title = $derived(on?.title ?? "New thread");
   const leadId = $derived(lead.view?.leadInstanceId ?? null);
-
-  let bar = $state<HTMLElement | null>(null);
-  /** The panel's own controls, which the toolbar's act through. */
-  const press = (label: string) =>
-    bar
-      ?.closest("[data-caw-panel]")
-      ?.querySelector<HTMLElement>(`[data-caw-head] [aria-label="${label}"]`)
-      ?.click();
 
   // His session's card, opened from More, anchored to it.
   let more = $state<HTMLElement | null>(null);
@@ -120,127 +118,78 @@
   );
 </script>
 
-<div
-  bind:this={bar}
-  class="flex min-w-0 flex-none flex-col border-[var(--border-hairline)] border-b"
-  data-design-toolbar
->
-  {#if phone}
-    <span
-      aria-hidden="true"
-      class="mx-auto mt-(--space-2) block h-1.5 w-[100px] max-w-[40%] rounded-full bg-[var(--border-control)]"
-      data-design-grabber
-    ></span>
+<div class={["head", { phone }]} data-design-head={kind} data-design-toolbar>
+  {#if grabber}
+    <span aria-hidden="true" class="grabber" data-design-grabber></span>
   {/if}
-  <div class={["row", { phone }]} data-design-toolbar-row>
-    {#if phone}
+  <div class="row" data-design-toolbar-row>
+    {#if kind === "who"}
+      <ThreadSwitch {current} look="line" {threads} />
+    {:else}
+      <div class="alone">
+        <span class="mark" data-design-head-mark
+          ><CawFace size={28} status="ready" /></span
+        >
+        <span class="who">Caw</span>
+      </div>
+    {/if}
+    <div class="trail" data-design-trail>
       <Button
-        aria-label="Close"
-        class="justify-self-start"
-        icon={IconClose}
-        onclick={() => {
-          lead.open = false;
-        }}
+        aria-label="New thread"
+        icon={IconPlus}
         size="icon-sm"
         variant="ghost"
       />
-    {/if}
-    <div class="title" data-design-title>
-      {#if threads.length > 1 && on}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props })}
-              <!-- Its words on the title's edge: the ghost button's own
-                   1px edge and 11px inset are taken back on a desk. -->
-              <Button
-                {...props}
-                aria-label={title}
-                class={["min-w-0 max-w-full shrink", !phone && "-ms-[12px]"]}
-                press="tint"
-                size="sm"
-                variant="ghost"
-              >
-                <span
-                  class={[
-                    "min-w-0 truncate",
-                    phone ? "text-title" : "text-label",
-                  ]}>{title}</span
-                >
-                <IconChevronDown aria-hidden="true" class="shrink-0" />
-              </Button>
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content
-            align={phone ? "center" : "start"}
-            class="w-[min(20rem,calc(100vw-24px))]"
-          >
-            {#each threads as one (one.id)}
-              <DropdownMenu.Item class="min-w-0 gap-(--space-2)">
-                <span class="grid size-(--icon-md) shrink-0 place-items-center">
-                  {#if one.id === on?.id}<IconCheck aria-hidden="true" />{/if}
-                </span>
-                <span class="min-w-0 flex-1 truncate">{one.title}</span>
-                <span class="shrink-0 text-[var(--ink-subtle)] text-meta"
-                  >{formatAgeShort(one.lastAt, clock.now)}</span
-                >
-              </DropdownMenu.Item>
-            {/each}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      {:else}
-        <span
-          class={[
-            "min-w-0 truncate text-[var(--ink-strong)]",
-            phone ? "text-title" : "text-label",
-          ]}>{title}</span
-        >
-      {/if}
-    </div>
-    <div class="trail">
-      {#if on}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              aria-label="More"
+              icon={IconMore}
+              size="icon-sm"
+              variant="ghost"
+              bind:ref={more}
+            />
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="min-w-44">
+          {#if leadId}
+            <DropdownMenu.Item
+              onSelect={() => {
+                setTimeout(() => {
+                  cardOpen = true;
+                });
+              }}
+            >
+              <IconUser aria-hidden="true" />
+              <span>Caw's session</span>
+            </DropdownMenu.Item>
+          {/if}
+          <DropdownMenu.Item>
+            <IconMaximize aria-hidden="true" />
+            <span>Open as a tab</span>
+          </DropdownMenu.Item>
+          {#if widens}
+            <DropdownMenu.Separator />
+            <Resize {form} mode="wide" />
+          {/if}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+      {#if phone}
+        <!-- The Drawer's Close: a 28px ghost, a 16px glyph, 44px under a
+             finger (the kit button's .touch-hit). -->
         <Button
-          aria-label="New thread"
-          icon={IconPlus}
-          onclick={() => press("New thread")}
+          aria-label="Close"
+          class="close size-7"
+          data-design-close
+          icon={IconClose}
+          onclick={() => {
+            lead.open = false;
+          }}
           size="icon-sm"
           variant="ghost"
         />
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props })}
-              <Button
-                {...props}
-                aria-label="More"
-                icon={IconMore}
-                size="icon-sm"
-                variant="ghost"
-                bind:ref={more}
-              />
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" class="min-w-44">
-            {#if leadId}
-              <DropdownMenu.Item
-                onSelect={() => {
-                  setTimeout(() => {
-                    cardOpen = true;
-                  });
-                }}
-              >
-                <IconUser aria-hidden="true" />
-                <span>Caw's session</span>
-              </DropdownMenu.Item>
-            {/if}
-            <DropdownMenu.Item onSelect={() => press("Open as a tab")}>
-              <IconMaximize aria-hidden="true" />
-              <span>Open as a tab</span>
-            </DropdownMenu.Item>
-            {#if widens}
-              <DropdownMenu.Separator />
-              <Resize {form} mode="wide" />
-            {/if}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
       {/if}
     </div>
   </div>
@@ -278,40 +227,68 @@
 {/if}
 
 <style>
-  /* A desk: the title on the content's start edge (the composer's: --space-7
-     in a panel), its actions trailing. */
+  .head {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    min-inline-size: 0;
+    border-block-end: 1px solid var(--border-hairline);
+  }
+  /* DESIGN.md, Drawer: a 100×6 grabber. */
+  .grabber {
+    display: block;
+    inline-size: 100px;
+    max-inline-size: 40%;
+    block-size: 6px;
+    margin: var(--space-2) auto 0;
+    border-radius: var(--radius-pill);
+    background: var(--border-control);
+  }
+  /* 44px: label over meta is 35.1px of words, --space-1 above and below. */
   .row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: var(--space-1);
-    min-block-size: calc(var(--c-btn-h-sm) + var(--space-2) * 2);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-7) var(--space-2);
+    column-gap: var(--space-2);
+    min-block-size: var(--c-btn-h-lg);
+    padding-block: var(--space-1);
+    padding-inline: var(--head-inset);
   }
-  .title {
-    display: flex;
+  .alone {
+    display: grid;
+    grid-template-columns: var(--lead-col) minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-3);
     min-inline-size: 0;
   }
+  .mark {
+    display: grid;
+    place-items: center;
+  }
+  .who {
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  /* The last control's glyph ink on the trailing edge: the ghost's box
+     hangs past by the glyph's inset in it, its hover fill and hit area
+     whole. */
   .trail {
+    --ink-inset: calc((var(--c-btn-h-sm) - var(--icon-md)) / 2);
     display: flex;
     align-items: center;
     gap: var(--space-1);
+    margin-inline-end: calc(var(--ink-inset) * -1);
   }
-  /* A phone's sheet: Close leading, the title centred between two sides
-     of one width (two icon buttons), the actions trailing. */
-  .row.phone {
-    --side: calc(var(--c-btn-h-sm) * 2 + var(--space-1));
-    grid-template-columns:
-      minmax(var(--side), 1fr) minmax(0, max-content)
-      minmax(var(--side), 1fr);
-    padding-inline: var(--space-2);
-
-    & .title {
-      justify-content: center;
+  /* Under a finger each control keeps its whole 44px area without meeting
+     the next one's (The 44 Touch Rule): a 30px ghost reaches 7px past its
+     edge, the 28px Close 8px, so they stand --space-5 apart. */
+  @media (pointer: coarse) {
+    .trail {
+      --hit-gap-x: var(--space-5);
+      gap: var(--space-5);
     }
-    & .trail {
-      justify-content: end;
-    }
+  }
+  .phone .trail {
+    --ink-inset: calc((28px - var(--icon-md)) / 2);
   }
 </style>

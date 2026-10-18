@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
-   * PROPOSED: the Details disclosure, the kit's link button open or shut
-   * (it never turns into a filled control), with the transcript's chevron
-   * turning a half turn as it opens (--dur-control).
+   * PROPOSED: the Details disclosure, the kit's `sm` ghost as the update
+   * notice's Show changes ⌄: its words and its chevron say it is open (the
+   * chevron turning a half turn over --dur-control), never the ghost's
+   * expanded fill.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronDown } from "#lib/icons.js";
@@ -11,25 +12,22 @@
     open = $bindable(false),
     shut = "Show details",
     shown = "Hide details",
-    flush = false,
   }: {
     open?: boolean;
     shut?: string;
     shown?: string;
-    /** Starts a line: its words on the edge, its 1px edge and 11px inset taken back. */
-    flush?: boolean;
   } = $props();
 </script>
 
 <Button
   aria-expanded={open}
-  class={["details-toggle", flush && "-ms-[12px]"]}
+  class="details-toggle aria-expanded:bg-transparent"
   onclick={() => {
     open = !open;
   }}
   press="tint"
   size="sm"
-  variant="link"
+  variant="ghost"
 >
   <span>{open ? shown : shut}</span>
   <span class={["chev", { open }]} data-box><IconChevronDown /></span>

@@ -3,44 +3,42 @@
    * Caw's panel: what to pick, the board he decided, then what was fixed
    * from his pins. Every frame is drawn in one form, which the control
    * under the intro picks and the address keeps (`?form=phone`): the
-   * desk's floating panel at 380 × 640, or the sheet on a 390 × 844 phone.
+   * desk's floating panel at 380 × 640, or the panel on a 390 × 844 phone.
    * Each frame's caption says its form first. A decision's options share
    * one row, which scrolls sideways where the window can't hold them, so
-   * no option ever wraps under another.
+   * no option ever wraps under another. The phone's frame (E) is drawn on
+   * a phone whatever the switch says.
    *
    * A decision is a section with `data-cawco-choice`, each option's Pick a
    * `data-option` (the hub's overlay keeps the picks and reflects them; the
    * page mirrors them through `cawco.on("picks")` where it is served).
    */
+  import type { ThreadMessage } from "@cawco/core";
   import type { Snippet } from "svelte";
-  import Caw from "#lib/cawco/home/Caw.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { FORMS, type Form, formIn, formWords } from "./form";
   import Panel from "./Panel.svelte";
-  import { DECIDED, DECISIONS, FIXES, type Fix } from "./sections";
-  import Blocked from "./states/Blocked.svelte";
+  import { DECIDED, DECISIONS, FIXES } from "./sections";
+  import CawSays from "./states/CawSays.svelte";
+  import Conversation from "./states/Conversation.svelte";
   import FiledTasks from "./states/FiledTasks.svelte";
   import {
     fixtureOf,
     MACHINES,
-    MANY_MACHINES,
     PROJECT_ID,
-    READ_PROBLEM,
     READ_RAW,
-    SUGGESTED,
     SUGGESTED_MANY,
-    type Suggestion,
   } from "./states/fixtures";
-  import ReadFailed from "./states/ReadFailed.svelte";
+  import Notice from "./states/Notice.svelte";
   import Resize from "./states/Resize.svelte";
-  import Suggestions from "./states/Suggestions.svelte";
-  import TodayAlert from "./TodayAlert.svelte";
+  import StarterChips from "./states/StarterChips.svelte";
+  import StarterRows from "./states/StarterRows.svelte";
   import TodayTasks from "./TodayTasks.svelte";
 
   // The thread on show: his reply that filed three tasks, among three threads.
@@ -50,11 +48,22 @@
     tasks: filed,
   } = fixtureOf("reply-tasks-described", "a", 3);
   const current = threads[0].id;
-  const reply =
-    Object.values(messages)
-      .flat()
-      .find((one) => one.author === "caw" && one.tasks?.length)?.body ?? "";
+  const said: ThreadMessage[] = messages[current] ?? [];
+  /** A longer thread, for the frames that scroll: an earlier exchange first. */
+  const longer: ThreadMessage[] = [...(messages[threads[1].id] ?? []), ...said];
   const COMPOSER = { placeholder: "Message the project…" };
+  /** While no machine can run him, the box keeps your words for him. */
+  const KEPT = { placeholder: "Caw reads it when a machine is back" };
+  const READ = {
+    title: "This thread couldn't be read",
+    line: "The hub couldn't open its history. Your messages are kept.",
+  };
+  const START = {
+    title: "Caw can't start",
+    line: "No machine is online to run him.",
+  };
+  const ASK_CAW =
+    "This thread's history won't open. Can you find out why from the hub's log?";
 
   /** The form every frame draws, kept in the address. */
   let form = $state<Form>(formIn(location.search));
@@ -67,7 +76,8 @@
     url.searchParams.set("form", next);
     history.replaceState(history.state, "", url);
   };
-  const words = $derived(formWords(form));
+  const formOf = (phoneOnly: boolean | undefined): Form =>
+    phoneOnly ? "phone" : form;
 
   /** The empty board's frame: a device's size, scaled to fit the column. */
   const BOARD = {
@@ -128,158 +138,183 @@
   };
 </script>
 
-{#snippet said()}
-  <p class="m-0 text-[var(--ink-strong)] text-body [text-wrap:pretty]">
-    {reply}
-  </p>
+<!-- The thread as every frame draws it: his reply and the tasks it filed,
+     as rows (the advisor's pick for them). -->
+{#snippet thread(list: ThreadMessage[] = said)}
+  <div class="words-col">
+    <Conversation messages={list}>
+      {#snippet tasks()}
+        <FiledTasks form="rows" projectId={PROJECT_ID} tasks={filed} />
+      {/snippet}
+    </Conversation>
+  </div>
 {/snippet}
 
-{#snippet hero(key: string, line: string | undefined, items: Suggestion[])}
-  <EmptyState
-    class="[&_.kit-empty-action]:self-stretch"
-    {line}
-    title="What's next for Harbour site?"
-  >
-    {#snippet mark()}
-      <div class="mb-(--space-3)" data-caw-status="ready">
-        <Caw size={80} status="ready" />
-      </div>
-    {/snippet}
-    {#snippet action()}
-      <Suggestions {items} onpick={fill(key)} />
-    {/snippet}
-  </EmptyState>
+<!-- One state's frame inside an option that shows two. -->
+{#snippet stateFrame(label: string, panel: Snippet)}
+  <div class="state">
+    <p class="state-name">{label}</p>
+    {@render panel()}
+  </div>
 {/snippet}
 
-{#snippet option(choice: string, id: string)}
-  {#if choice === "filed-tasks"}
-    <Panel {form} composer={COMPOSER} {current} {threads}>
-      {@render said()}
-      {#if id === "today"}
-        <TodayTasks tasks={filed} />
-      {:else}
-        <FiledTasks
-          form={id === "rows" ? "rows" : "cards"}
-          projectId={PROJECT_ID}
-          tasks={filed}
-        />
-      {/if}
-    </Panel>
-  {:else if choice === "read-failed"}
+{#snippet option(choice: string, id: string, drawn: Form)}
+  {#if choice === "head"}
     <Panel
-      {form}
       composer={COMPOSER}
       {current}
-      draft={draftOf(`read-${id}`)}
+      form={drawn}
+      head={id === "name-only" ? "name" : "who"}
       {threads}
     >
-      {#if id === "today"}
-        <p
-          class="m-0 max-w-[60ch] py-(--space-6) text-[var(--ink-muted)] text-body"
-        >
-          The thread could not be read: {READ_PROBLEM}
-        </p>
-      {:else}
-        <ReadFailed
-          mark={id === "caw" ? "caw" : "solar"}
-          onask={id === "caw" ? fill(`read-${id}`) : null}
-          raw={READ_RAW}
-        />
-      {/if}
+      {@render thread()}
     </Panel>
-  {:else if choice === "cannot-start"}
+  {:else if choice === "notices"}
+    <div class="states">
+      {#snippet read()}
+        <Panel
+          composer={COMPOSER}
+          {current}
+          draft={draftOf(`read-${id}`)}
+          form={drawn}
+          {threads}
+        >
+          {#if id === "alert-row"}
+            <Notice
+              act="Retry"
+              line={READ.line}
+              onsecond={() => fill(`read-${id}`)(ASK_CAW)}
+              raw={READ_RAW}
+              second="Ask Caw"
+              tint="destructive"
+              title={READ.title}
+            />
+          {:else}
+            <div class="words-col">
+              <CawSays
+                acts={["Retry", "Ask Caw"]}
+                line={READ.line}
+                onact={(act) =>
+                  act === "Ask Caw" ? fill(`read-${id}`)(ASK_CAW) : undefined}
+                raw={READ_RAW}
+                title={READ.title}
+              />
+            </div>
+          {/if}
+        </Panel>
+      {/snippet}
+      {#snippet start()}
+        <Panel composer={KEPT} {current} form={drawn} {threads}>
+          {@render thread()}
+          {#if id === "caw-says"}
+            <div class="words-col">
+              <CawSays
+                acts={["Check machines"]}
+                line={START.line}
+                rows={MACHINES}
+                title={START.title}
+              />
+            </div>
+          {/if}
+          {#snippet notice()}
+            {#if id === "alert-row"}
+              <Notice
+                act="Check machines"
+                line={START.line}
+                rows={MACHINES}
+                tint="warning"
+                title={START.title}
+              />
+            {/if}
+          {/snippet}
+        </Panel>
+      {/snippet}
+      {@render stateFrame("The thread can't be read", read)}
+      {@render stateFrame("Caw can't start", start)}
+    </div>
+  {:else if choice === "suggestions"}
     <Panel
-      {form}
-      composer={id === "box-stays"
-        ? { placeholder: "Caw reads it when a machine is back" }
-        : null}
-      {current}
+      composer={COMPOSER}
+      draft={draftOf(`starters-${id}`)}
+      form={drawn}
       {threads}
     >
-      {@render said()}
-      {#snippet foot()}
-        {#if id === "today"}
-          <TodayAlert words="No machine is online, so Caw can't start." />
+      <div class="starters">
+        {#if id === "chips"}
+          <StarterChips
+            onpick={fill(`starters-${id}`)}
+            starters={SUGGESTED_MANY}
+          />
         {:else}
-          <Blocked
-            act="Check machines"
-            line="No machine is online to run him."
-            mono
-            rows={MACHINES}
-            shell
-            status="needs-you"
-            title="Caw can't start"
+          <StarterRows
+            onpick={fill(`starters-${id}`)}
+            starters={SUGGESTED_MANY}
           />
         {/if}
-      {/snippet}
+      </div>
+    </Panel>
+  {:else if choice === "composer"}
+    <Panel
+      composer={COMPOSER}
+      {current}
+      end={48}
+      foot={id === "overlay" ? "overlay" : "dock"}
+      form={drawn}
+      {threads}
+    >
+      {@render thread(longer)}
+    </Panel>
+  {:else if choice === "phone-frame"}
+    <Panel
+      composer={COMPOSER}
+      {current}
+      form={drawn}
+      frame={id === "hang" ? "hang" : "sheet"}
+      {threads}
+    >
+      {@render thread()}
+    </Panel>
+  {:else if choice === "filed-tasks"}
+    <Panel composer={COMPOSER} {current} form={drawn} {threads}>
+      <div class="words-col">
+        <Conversation messages={said}>
+          {#snippet tasks()}
+            {#if id === "today"}
+              <TodayTasks tasks={filed} />
+            {:else}
+              <FiledTasks
+                form={id === "rows" ? "rows" : "cards"}
+                projectId={PROJECT_ID}
+                tasks={filed}
+              />
+            {/if}
+          {/snippet}
+        </Conversation>
+      </div>
     </Panel>
   {:else if choice === "resize"}
     <Panel
-      {form}
       composer={COMPOSER}
       {current}
+      form={drawn}
       {threads}
       wide={id === "wide-in-menu"}
     >
-      {@render said()}
-      <FiledTasks form="cards" projectId={PROJECT_ID} tasks={filed} />
+      {@render thread()}
       {#snippet extra()}
-        {#if id === "corner-grip"}<Resize {form} mode="grip" />{/if}
-        {#if id === "edge-handles"}<Resize {form} mode="edges" />{/if}
+        {#if id === "corner-grip"}<Resize form={drawn} mode="grip" />{/if}
+        {#if id === "edge-handles"}<Resize form={drawn} mode="edges" />{/if}
       {/snippet}
     </Panel>
   {/if}
 {/snippet}
 
-{#snippet fixed(shows: NonNullable<Fix["shows"]>)}
-  {#if shows === "suggestions"}
-    <Panel {form} composer={COMPOSER} draft={draftOf("suggestions")} {threads}>
-      {@render hero("suggestions", undefined, SUGGESTED_MANY)}
-    </Panel>
-  {:else if shows === "title-bar"}
-    <Panel {form} composer={COMPOSER} {current} {threads}
-      >{@render said()}</Panel
-    >
-  {:else if shows === "why-cannot-start"}
-    <Panel {form} {current} {threads}>
-      {@render said()}
-      {#snippet foot()}
-        <Blocked
-          act="Check machines"
-          line="No machine is online to run him."
-          mono
-          open
-          rows={MANY_MACHINES}
-          shell
-          status="needs-you"
-          title="Caw can't start"
-        />
-      {/snippet}
-    </Panel>
-  {:else if shows === "off"}
-    <Panel {form} composer={COMPOSER} draft={draftOf("off")} {threads}>
-      {@render hero(
-        "off",
-        "Caw is off, so he acts only when you write to him.",
-        SUGGESTED
-      )}
-    </Panel>
-  {/if}
-{/snippet}
-
-{#snippet his(said: string[])}
+{#snippet his(words: string[])}
   <ul class="said">
-    {#each said as one, at (at)}
+    {#each words as one, at (at)}
       <li><q>{one}</q></li>
     {/each}
   </ul>
-{/snippet}
-
-{#snippet stage(caption: Snippet, panel: Snippet)}
-  <figure class="frame" data-design-frame={form}>
-    <figcaption class="caption">{@render caption()}</figcaption>
-    {@render panel()}
-  </figure>
 {/snippet}
 
 <!-- The app's tooltip provider, as its layout stands it over every page. -->
@@ -288,8 +323,10 @@
     <header class="intro">
       <h1 class="h1">Caw's panel</h1>
       <p class="lede">
-        Four choices to make, the board you decided, then what changed from your
-        pins. Every panel is at its real size, as a desk or a phone draws it.
+        Seven choices, the board you decided, then what changed from your pins.
+        Every panel is at its real size, as a desk or a phone draws it. Each
+        choice changes one part; the rest of every panel is drawn as
+        recommended.
       </p>
       <ToggleGroup.Root
         aria-label="Draw every panel as"
@@ -306,30 +343,39 @@
     </header>
 
     {#each DECISIONS as decision (decision.id)}
+      {@const drawn = formOf(decision.phoneOnly)}
       <section class="part" data-cawco-choice={decision.id}>
         <header class="head">
           <h2 class="h2">{decision.question}</h2>
           <p class="why">{decision.differs}</p>
         </header>
-        <div class="row" data-design-row>
+        <div class="row" data-design-row data-form={drawn}>
           {#each decision.options as one (one.id)}
-            {#snippet caption()}
-              <span class="name"
-                ><span class="form">{words}</span> · {one.name}</span
-              >
-              <Button
-                aria-pressed={picks[decision.id] === one.id}
-                data-option={one.id}
-                label={picks[decision.id] === one.id ? "Picked" : "Pick"}
-                onclick={pick(decision.id, one.id)}
-                size="sm"
-                variant={picks[decision.id] === one.id ? "default" : "outline"}
-              />
-            {/snippet}
-            {#snippet panel()}
-              {@render option(decision.id, one.id)}
-            {/snippet}
-            {@render stage(caption, panel)}
+            <figure class="frame" data-design-frame={drawn}>
+              <figcaption class="caption">
+                <span class="name"
+                  ><span class="form">{formWords(drawn)}</span> · {one.name}</span
+                >
+                <span class="acts">
+                  {#if one.recommended}
+                    <Badge data-design-recommended>Recommended</Badge>
+                  {/if}
+                  <Button
+                    aria-pressed={picks[decision.id] === one.id}
+                    data-option={one.id}
+                    label={picks[decision.id] === one.id ? "Picked" : "Pick"}
+                    onclick={pick(decision.id, one.id)}
+                    size="sm"
+                    variant={picks[decision.id] === one.id
+                      ? "default"
+                      : "outline"}
+                  />
+                </span>
+              </figcaption>
+              <div class="frames" data-design-option={one.id}>
+                {@render option(decision.id, one.id, drawn)}
+              </div>
+            </figure>
           {/each}
         </div>
       </section>
@@ -376,23 +422,8 @@
       <header class="head">
         <h2 class="h2">Fixed from your pins</h2>
       </header>
-      <div class="row" data-design-row>
-        {#each FIXES.filter((one) => one.shows) as fix (fix.shows)}
-          {#snippet caption()}
-            <div class="fix">
-              <span class="name"><span class="form">{words}</span></span>
-              {@render his(fix.said)}
-              <p class="changed">{fix.changed}</p>
-            </div>
-          {/snippet}
-          {#snippet panel()}
-            {@render fixed(fix.shows as NonNullable<Fix["shows"]>)}
-          {/snippet}
-          {@render stage(caption, panel)}
-        {/each}
-      </div>
       <ul class="notes">
-        {#each FIXES.filter((one) => !one.shows) as fix (fix.changed)}
+        {#each FIXES as fix (fix.changed)}
           <li class="fix">
             {@render his(fix.said)}
             <p class="changed">{fix.changed}</p>
@@ -409,7 +440,6 @@
      or a 390 × 844 phone's screen (a device's size, not a design length). */
   .page {
     --pad: var(--space-7);
-    --frame-w: var(--c-panel-w);
 
     display: flex;
     flex-direction: column;
@@ -418,10 +448,6 @@
     padding: var(--space-8) var(--pad);
     background: var(--surface-page);
     color: var(--ink-strong);
-
-    &[data-form="phone"] {
-      --frame-w: 390px;
-    }
 
     @media (width < 640px) {
       --pad: var(--space-3);
@@ -467,8 +493,10 @@
      peeks there. Each frame takes the row's two tracks (subgrid), so the
      captions share one height and the panels start on one line. */
   .row {
+    --frame-w: var(--c-panel-w);
+
     display: grid;
-    grid-auto-columns: var(--frame-w);
+    grid-auto-columns: max-content;
     grid-auto-flow: column;
     grid-template-rows: auto auto;
     column-gap: var(--space-7);
@@ -480,11 +508,13 @@
     overscroll-behavior-x: contain;
     scroll-snap-type: x mandatory;
 
+    &[data-form="phone"] {
+      --frame-w: 390px;
+    }
     @media (width < 640px) {
       column-gap: var(--space-4);
     }
   }
-  /* A frame in a row snaps its start to the row's. */
   .frame {
     display: grid;
     grid-row: span 2;
@@ -501,7 +531,13 @@
     justify-content: space-between;
     gap: var(--space-2);
     min-inline-size: 0;
+    inline-size: var(--frame-w);
     min-block-size: var(--c-btn-h-sm);
+  }
+  .acts {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
   .name {
     min-inline-size: 0;
@@ -512,6 +548,37 @@
   /* The form leads every caption, a step under the option's name. */
   .form {
     color: var(--ink-muted);
+  }
+  .frames {
+    display: flex;
+    min-inline-size: 0;
+  }
+  /* An option that shows two states: each its own panel, side by side,
+     named over it in the meta role. */
+  .states {
+    display: flex;
+    gap: var(--space-4);
+  }
+  .state {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .state-name {
+    margin: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  /* Caw's prose on the text column the message box's words stand on. */
+  .words-col {
+    min-inline-size: 0;
+    padding-inline: var(--space-3);
+  }
+  /* The starters stand at the foot of an empty thread, on the message
+     box. */
+  .starters {
+    margin-block-start: auto;
+    min-inline-size: 0;
   }
   /* The empty board: a device's whole screen, scaled down to the column
      where it is wider, its scale said in the caption. */

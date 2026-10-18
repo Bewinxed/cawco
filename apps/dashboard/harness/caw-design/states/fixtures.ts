@@ -65,7 +65,6 @@ export interface Fixture {
 // --- the project ---------------------------------------------------------------
 
 export const project = (cap: ProjectCap | null): ProjectRow => ({
-  appleGate: false,
   cap,
   caw: true,
   createdAt: new Date(Date.now() - 9 * DAY).toISOString(),

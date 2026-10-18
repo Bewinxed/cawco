@@ -4,7 +4,7 @@
  * `?board=desk` or `?board=phone` it is the empty board alone (Board.svelte),
  * which the page frames at a device's size.
  */
-// biome-ignore assist/source/organizeImports: ./assets keeps the browser's own fetch, so it loads before the guard
+// ./assets keeps the browser's own fetch, so it loads before the guard
 import { keepCawsFiles } from "./assets";
 import "../guard";
 import "./page.css";
