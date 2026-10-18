@@ -916,23 +916,38 @@ export interface NamedMachine {
 }
 
 /**
- * A machine as a sentence names it among `fleet`: its {@link machineLabel},
- * never its id. Machines that show the same name (machines on one host do, a
- * scratch fleet's all of them) are told apart by their place in `fleet`,
- * which the hub lists in join order: the first is "obelisk", the next
- * "obelisk · 2", so the sentence never names two machines alike.
+ * A machine's {@link machineLabel} and its place, from 0, among the machines
+ * in `fleet` that show the same name (machines on one host do, a scratch
+ * fleet's all of them); the hub lists `fleet` in join order.
+ */
+const placeAmong = (
+  machine: NamedMachine,
+  fleet: readonly NamedMachine[]
+): { name: string; place: number } => {
+  const name = machineLabel(machine.hostname);
+  const alike = fleet.filter(
+    (other) => machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
+  );
+  return {
+    name,
+    place: Math.max(
+      0,
+      alike.findIndex((other) => other.machineId === machine.machineId)
+    ),
+  };
+};
+
+/**
+ * A machine as a list names it among `fleet`: its {@link machineLabel},
+ * never its id. Machines that show the same name are told apart by their
+ * place ({@link placeAmong}): the first is "obelisk", the next "obelisk · 2",
+ * so a list never names two machines alike.
  */
 export function namedAmong(
   machine: NamedMachine,
   fleet: readonly NamedMachine[]
 ): string {
-  const name = machineLabel(machine.hostname);
-  const alike = fleet.filter(
-    (other) => machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
-  );
-  const place = alike.findIndex(
-    (other) => other.machineId === machine.machineId
-  );
+  const { name, place } = placeAmong(machine, fleet);
   return place > 0 ? `${name} · ${place + 1}` : name;
 }
 
@@ -972,18 +987,41 @@ export function machineFaultWords(
   return `${name ?? "That machine"} ${cause}${next ? ` ${step}` : ""}`;
 }
 
+/** Ordinals a sentence spells out; past them it says "machine number 11". */
+const ORDINALS = [
+  "first",
+  "second",
+  "third",
+  "fourth",
+  "fifth",
+  "sixth",
+  "seventh",
+  "eighth",
+  "ninth",
+  "tenth",
+];
+
 /**
- * A machine as a sentence names it when the hub may not know it: its
- * {@link namedAmong} among `fleet`, else words for a stranger, never its id.
+ * A machine as a sentence names it when the hub may not know it: its name,
+ * else words for a stranger, never its id. Where machines share a name, the
+ * roster's {@link namedAmong} tells them apart as "obelisk-of-light · 2",
+ * which inside a sentence reads like a count; a sentence says
+ * "obelisk-of-light (the second machine with that name)".
  */
 export function machineCalled(
   machineId: string,
   fleet: readonly NamedMachine[]
 ): string {
   const machine = fleet.find((each) => each.machineId === machineId);
-  return machine
-    ? namedAmong(machine, fleet)
-    : "a machine this hub doesn't know";
+  if (!machine) {
+    return "a machine this hub doesn't know";
+  }
+  const { name, place } = placeAmong(machine, fleet);
+  if (place === 0) {
+    return name;
+  }
+  const nth = ORDINALS[place];
+  return `${name} (${nth ? `the ${nth} machine` : `machine number ${place + 1}`} with that name)`;
 }
 
 /** What a daemon reports about the checkout it was started from. */

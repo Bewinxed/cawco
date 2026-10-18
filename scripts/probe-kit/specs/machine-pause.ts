@@ -889,9 +889,16 @@ const runningBuild = async (
     (status) => status.includes("paused"),
     10_000
   ).catch(() => undefined);
+  // It waits while gating on top of main, after finish_item (work-items
+  // landingHow, stepWaitWords); B shares its host's name with A, so it is
+  // named in words (core machineCalled), never "obelisk · 2".
   check(
-    "p7: the stopped build reads waiting: … paused until",
-    waiting?.startsWith("waiting:") === true && waiting.includes(words),
+    `p7: the stopped build reads: gating on top of main: the step “${GATE}” is waiting: … paused until`,
+    waiting?.startsWith(
+      `gating on top of main: the step “${GATE}” is waiting: `
+    ) === true &&
+      waiting.includes(words) &&
+      !waiting.includes(" · "),
     waiting ?? "no wait said"
   );
   const during = row();

@@ -1504,6 +1504,16 @@ interface GateHow {
 }
 
 /**
+ * A gate step's wait as its item's status says it: `the step “iOS build
+ * compiles” is waiting: obelisk-of-light is paused until 18:52`, `… is
+ * queued for the Mac's build slot behind …`; the wait alone when no step
+ * waits. Before 2026-10-18 the step's name ran straight into the wait
+ * ("iOS build compiles waiting: …").
+ */
+const stepWaitWords = (words: string, step: string | undefined): string =>
+  step ? `the step “${step}” is ${words}` : words;
+
+/**
  * The turn runs only what runs in the workspace itself: a due step on
  * another machine (one that `needs:` a Mac) is the gate's, outside the queue.
  * Throws {@link WouldWait} naming the first such step, before any of them
@@ -1958,8 +1968,9 @@ export const createWorkItems = ({
    * What an item's landing waits for, as its status says it (WorkItemSummary
    * `checkQueue`): a shared slot ("queued for …"), its machine's pause
    * ("waiting: Omars-MacBook-Pro is paused until 00:57"), another command in
-   * its folder, its gate on top of the branch ("gating on top of main: iOS
-   * build compiles queued for the Mac's build slot behind …"), or its turn
+   * its folder, its gate on top of the branch ("gating on top of main: the
+   * step “iOS build compiles” is waiting: Omars-MacBook-Pro is paused until
+   * 00:57", {@link stepWaitWords}), or its turn
    * to land ("queued to land on main behind …"); null once it waits no more.
    * Every wait between `finish_item` and the item's
    * outcome comes here: before 2026-10-16 only a step's own slot and pause
@@ -5491,7 +5502,7 @@ export const createWorkItems = ({
       say: (words, step) =>
         landingWait(
           itemId,
-          words ? `${gating}: ${step ? `${step} ` : ""}${words}` : gating
+          words ? `${gating}: ${stepWaitWords(words, step)}` : gating
         ),
     };
   };
@@ -6154,7 +6165,11 @@ export const createWorkItems = ({
       item,
       item.lands === "main" ? { ...gate, steps: [] } : gate,
       "at finish_item",
-      { inTurn: false, say: (words) => landingWait(item.id, words) }
+      {
+        inTurn: false,
+        say: (words, step) =>
+          landingWait(item.id, words && stepWaitWords(words, step)),
+      }
     );
     if (runFailed(run)) {
       update(item.id, settled);
