@@ -121,6 +121,7 @@ import {
 import { leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
+  branchPushCheck,
   type Failed,
   type GateStep,
   type LandingTurn,
@@ -133,7 +134,12 @@ import {
   statusCommand,
 } from "./landing";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { type CommandOptions, WouldWait } from "./machine-pause";
+import {
+  type CommandOptions,
+  CommandStopped,
+  WouldWait,
+  whenStopped,
+} from "./machine-pause";
 import {
   FOLDER_FILE_LIMIT,
   FolderRefusal,
@@ -1713,6 +1719,7 @@ const refusedLine = (
   const { head, target } = landing;
   const step: Record<Refusal["step"], string> = {
     fetch: `the fetch of origin/${workspace.base}`,
+    "push check": `the push check (git push --dry-run to ${target}, before any landing gate step)`,
     push: `the push to ${target}`,
     read: "reading the workspace's git",
     "pull request": "opening the pull request",
@@ -1724,6 +1731,8 @@ const refusedLine = (
     said = `${target} moved on origin before each of the hub's ${refusal.tries} pushes, so every one was turned down as behind it`;
   } else if (refusal.cause === "cut-off") {
     said = `${step.push} was cut off, and ${target} does not hold the commits`;
+  } else if (refusal.step === "push check") {
+    said = `${step["push check"]} from ${machine} was refused, so no gate step ran`;
   } else if (refusal.step === "push") {
     said = `${step.push} was refused`;
   }
@@ -1923,6 +1932,15 @@ export const createWorkItems = ({
   };
   /** Items whose landing this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
+  /**
+   * Each landing this hub process runs, by item: aborted as its item ends
+   * ({@link finish}), which cancels every command the landing has running,
+   * its gate's steps on every machine included, through the runner that
+   * started each (server.ts `runOnMachine`, `how.stop`). Before 2026-10-18 a
+   * stop ended a landing only at its next turn or push: three stopped items'
+   * iOS steps waited on in the Mac's heavy-run queue, one for 1 h 22 m.
+   */
+  const landingStops = new Map<string, AbortController>();
   /**
    * Items whose landing waits for something now: what its status says, and
    * since when. In memory: a hub that starts runs the landing again from the
@@ -4648,6 +4666,8 @@ export const createWorkItems = ({
     if (!LIVE.has(item.state)) {
       return item;
     }
+    // Its landing, if one runs, ends with it: every command of it stops.
+    landingStops.get(item.id)?.abort();
     const { landed } = db.workItem(item.id) ?? item;
     const kept =
       landed && (change.state === "failed" || change.state === "cancelled")
@@ -4966,12 +4986,12 @@ export const createWorkItems = ({
         "the landing gate is already running for this item; its outcome comes to you when it settles"
       );
     }
-    // A stop ends its landing at the next turn or push; a gate step running
-    // then runs to its end first, and one landing at a time per item.
+    // A stop cancels every command its landing has running (landingStops);
+    // the landing settles once they answer, and one runs at a time per item.
     if (finishing.has(item.id)) {
       throw new WorkItemRefusal(
         409,
-        "the landing this item's stop cut short is still ending (a landing gate step runs to its end); call finish_item again in a minute"
+        "the landing this item's stop cut short is still ending (its commands are being cancelled); call finish_item again in a minute"
       );
     }
     return { row, item };
@@ -5059,20 +5079,26 @@ export const createWorkItems = ({
     /** What a step waits for, as the item's status says it ({@link GateHow}). */
     const queued = (words: string | null): void =>
       how.say(words, current?.name);
+    /** The item's end, which cancels every step running ({@link landingStops}). */
+    const stop = landingStops.get(item.id)?.signal;
     /**
      * How a step's commands run: a pause that cancels one hands it back
-     * here; in the turn, one that would wait throws {@link WouldWait}.
+     * here; in the turn, one that would wait throws {@link WouldWait}; the
+     * item's end cancels it; a heavy run it starts goes first, as a gate's
+     * (core heavy-run.ts).
      */
-    const asStep = {
+    const asStep = (step: GateStep): CommandOptions => ({
       onWait: queued,
       what: "landing gate",
       movable: true,
       noWait: how.inTurn,
-    } as const;
+      gate: `the landing gate of “${item.title}” (${item.id.slice(0, 8)}): ${step.name}`,
+      stop,
+    });
     /**
      * Waits out a pause of the machine a step runs on, the item's status
      * saying it; at once when it is not paused. In the turn it throws
-     * {@link WouldWait} instead.
+     * {@link WouldWait} instead; the item's end throws {@link CommandStopped}.
      */
     const unpaused = async (machineId: string): Promise<void> => {
       const words = machinePaused(machineId);
@@ -5083,8 +5109,13 @@ export const createWorkItems = ({
         throw new WouldWait(words);
       }
       queued(`waiting: ${words}`);
-      await machineFree(machineId);
+      await Promise.race([machineFree(machineId), whenStopped(stop)]);
       queued(null);
+      if (stop?.aborted) {
+        throw new CommandStopped(
+          `${item.title} ended while its landing gate waited out a pause`
+        );
+      }
     };
     /** A memo per machine: the first call for a machine runs `make`, every later one shares it. */
     const once = <T>(
@@ -5141,12 +5172,16 @@ export const createWorkItems = ({
           step.command,
           limit,
           refOf(at),
-          asStep
+          asStep(step)
         );
         return complete.cancelled
           ? undefined
           : { where: `${on} at ${head.slice(0, 9)}`, complete };
       } catch (error) {
+        // The item's end cancelled it: the landing stops, no step failed.
+        if (error instanceof CommandStopped) {
+          throw error;
+        }
         return {
           where: on,
           complete: {
@@ -5187,7 +5222,7 @@ export const createWorkItems = ({
         step.command,
         limit,
         refOf(workspace),
-        asStep
+        asStep(step)
       );
       return complete.cancelled ? undefined : { complete, where: undefined };
     };
@@ -5408,18 +5443,29 @@ export const createWorkItems = ({
    * wrote runs for the hub. Each wait it makes (its machine's pause, another
    * command in the folder, a boundary starting) is the item's status
    * ({@link landingWait}); `noWait`, in a landing turn, it makes none and
-   * throws {@link WouldWait} instead.
+   * throws {@link WouldWait} instead. The item's end cancels it while its
+   * landing runs ({@link landingStops}), all but a push (`lands`), which
+   * runs to its end.
    */
   const runIn =
     (workspace: WorkspaceRow, item: WorkItemRow) =>
-    (cmd: string, timeoutMs: number, noWait = false): Promise<CommandResult> =>
+    (
+      cmd: string,
+      timeoutMs: number,
+      noWait = false,
+      lands = false
+    ): Promise<CommandResult> =>
       command(
         workspace.machineId,
         workspace.path,
         `${SAFE_GIT_SHELL}${cmd}`,
         timeoutMs,
         refOf(workspace),
-        { onWait: (words) => landingWait(item.id, words), noWait }
+        {
+          onWait: (words) => landingWait(item.id, words),
+          noWait,
+          ...(lands ? {} : { stop: landingStops.get(item.id)?.signal }),
+        }
       );
 
   /**
@@ -5853,8 +5899,27 @@ export const createWorkItems = ({
       update(item.id, settled);
       return { done: false, text: landing.text };
     }
+    return await reportLanding(item, row, workspace, submission, landing);
+  };
+
+  /**
+   * A landing that went or was refused, to the item's end: its outputs
+   * collected when it went, the report built and sent, the item done or
+   * failed. A stopped landing's item is settled already: its text alone.
+   */
+  const reportLanding = async (
+    item: WorkItemRow,
+    row: InstanceRow,
+    workspace: WorkspaceRow,
+    submission: WorkItemSubmission,
+    landing: Exclude<Landed, { kind: "retry" }>
+  ): Promise<{ done: boolean; text: string }> => {
+    const settled = { landingSince: null, submission: null };
     // Its stop settled the row already.
     if (landing.kind === "stopped") {
+      console.log(
+        `[work-items] ${item.id}: its landing stopped as the item ended; nothing was landed or reported`
+      );
       return { done: false, text: landing.text };
     }
     const collected =
@@ -6022,47 +6087,19 @@ export const createWorkItems = ({
     item: WorkItemRow,
     submission: WorkItemSubmission
   ): Promise<{ done: boolean; text: string }> => {
-    const [row] = db.getInstancesByIds([item.instanceId]);
-    const [workspace] = db.workspacesNamed(item.workspaceId);
-    const settled = { landingSince: null, submission: null };
     finishing.add(item.id);
+    const stop = new AbortController();
+    landingStops.set(item.id, stop);
     try {
-      const gate = await gateSteps(workspace, item);
-      if ("refusal" in gate) {
-        update(item.id, settled);
-        return { done: false, text: gate.refusal };
-      }
-      const run = await gateOnce(
-        workspace,
-        item,
-        item.lands === "main" ? { ...gate, steps: [] } : gate,
-        "at finish_item",
-        { inTurn: false, say: (words) => landingWait(item.id, words) }
-      );
-      if (runFailed(run)) {
-        update(item.id, settled);
-        return { done: false, text: gateFailedText(run, "your commits") };
-      }
-      // The gate took its time: the item may have been stopped since.
-      const current = db.workItem(item.id) ?? item;
-      if (landingStopped(current)()) {
-        return {
-          done: false,
-          text: `${current.title} is ${current.state} now; nothing was landed or reported.`,
-        };
-      }
-      return await landAndReport(
-        current,
-        row,
-        workspace,
-        gate,
-        submission,
-        run
-      );
+      return await landSubmitted(item, submission);
     } catch (error) {
-      update(item.id, settled);
+      update(item.id, { landingSince: null, submission: null });
+      if (error instanceof CommandStopped) {
+        return stoppedWith(item, error);
+      }
       throw error;
     } finally {
+      landingStops.delete(item.id);
       finishing.delete(item.id);
       // A wait an error cut short leaves no words behind it.
       landingWait(item.id, null);
@@ -6071,6 +6108,97 @@ export const createWorkItems = ({
         settleSoon(item.workspaceId);
       }
     }
+  };
+
+  /**
+   * A landing its item's end cancelled ({@link landingStops}): a stop, not a
+   * failure. The item's end settled its row; the text is what the delegate
+   * reads.
+   */
+  const stoppedWith = (
+    item: WorkItemRow,
+    error: CommandStopped
+  ): { done: boolean; text: string } => {
+    const now = db.workItem(item.id) ?? item;
+    console.log(
+      `[work-items] ${item.id}: its landing was stopped as the item ended (${now.state}); every command it had running was cancelled: ${error.message}`
+    );
+    return {
+      done: false,
+      text: `${now.title} is ${now.state} now; its landing stopped with it, and nothing was landed or reported.`,
+    };
+  };
+
+  /**
+   * {@link settleLanding}'s run: the gate's steps read, the gate at
+   * finish_item run (none for an item landing on its base), and the landing.
+   */
+  const landSubmitted = async (
+    item: WorkItemRow,
+    submission: WorkItemSubmission
+  ): Promise<{ done: boolean; text: string }> => {
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    const settled = { landingSince: null, submission: null };
+    const gate = await gateSteps(workspace, item);
+    if ("refusal" in gate) {
+      update(item.id, settled);
+      return { done: false, text: gate.refusal };
+    }
+    const refused = await branchRefused(workspace, item, gate);
+    if (refused) {
+      return await reportLanding(item, row, workspace, submission, refused);
+    }
+    const run = await gateOnce(
+      workspace,
+      item,
+      item.lands === "main" ? { ...gate, steps: [] } : gate,
+      "at finish_item",
+      { inTurn: false, say: (words) => landingWait(item.id, words) }
+    );
+    if (runFailed(run)) {
+      update(item.id, settled);
+      return { done: false, text: gateFailedText(run, "your commits") };
+    }
+    // The gate took its time: the item may have been stopped since.
+    const current = db.workItem(item.id) ?? item;
+    if (landingStopped(current)()) {
+      return {
+        done: false,
+        text: `${current.title} is ${current.state} now; nothing was landed or reported.`,
+      };
+    }
+    return await landAndReport(current, row, workspace, gate, submission, run);
+  };
+
+  /**
+   * A branch or a pull request gates at finish_item, before its push: the
+   * push is checked first, so one that will be refused runs no step
+   * (landing.ts `branchPushCheck`; a landing on its base checks inside
+   * `land`). The refused landing, or nothing.
+   */
+  const branchRefused = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    gate: Gate
+  ): Promise<Extract<Landed, { kind: "refused" }> | undefined> => {
+    if (item.lands !== "branch" && item.lands !== "pr") {
+      return;
+    }
+    const branch = landingBranch(item);
+    const refused = await branchPushCheck(runIn(workspace, item), branch);
+    return refused
+      ? {
+          kind: "refused",
+          gate: { declared: gate.declared, outcomes: [] },
+          line: refusedLine(
+            refused,
+            { head: "Not pushed", target: `branch ${branch}` },
+            workspace,
+            machineName(workspace.machineId)
+          ),
+        }
+      : undefined;
   };
 
   return {

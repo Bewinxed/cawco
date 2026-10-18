@@ -549,7 +549,9 @@ import {
   type CommandOptions,
   createMachinePause,
   PAUSE_ORIGIN,
+  throwIfStopped,
   WouldWait,
+  whenStopped,
 } from "./machine-pause";
 import { localHubName } from "./mdns";
 import { MeaningJudge } from "./meaning";
@@ -17352,6 +17354,10 @@ export const createServer = (
    * its caller to run again where it chooses. A `noWait` one waits for
    * nothing: a pause, or a slot it begins to wait for (it is cancelled
    * there), throws WouldWait with the words of what it would have waited for.
+   *
+   * A run whose `how.stop` is aborted (its work item stopped while it
+   * landed) is cancelled on its machine through the runner that started it,
+   * or never starts, and throws CommandStopped, whatever it answered.
    */
   const runOnMachine = async (
     machineId: string,
@@ -17362,12 +17368,14 @@ export const createServer = (
     how: CommandOptions = {}
   ): Promise<CommandResult> => {
     for (;;) {
+      throwIfStopped(how, cmd);
       const paused = how.noWait ? machinePause.words(machineId) : undefined;
       if (paused) {
         throw new WouldWait(paused);
       }
       // biome-ignore lint/performance/noAwaitInLoops: a run cancelled by a pause runs again once it is over
-      await pauseOver(machineId, how.onWait);
+      await pauseOver(machineId, how.onWait, how.stop);
+      throwIfStopped(how, cmd);
       const result = await runOnce(
         machineId,
         cwd,
@@ -17376,6 +17384,7 @@ export const createServer = (
         workspace,
         how
       );
+      throwIfStopped(how, cmd);
       if (!result.cancelled || how.movable) {
         return result;
       }
@@ -17390,17 +17399,21 @@ export const createServer = (
     }
   };
 
-  /** Waits out `machineId`'s pause, `onWait` saying it; at once when it is not paused. */
+  /**
+   * Waits out `machineId`'s pause, `onWait` saying it; at once when it is
+   * not paused, or once `stop` is aborted.
+   */
   const pauseOver = async (
     machineId: string,
-    onWait: ((words: string | null) => void) | undefined
+    onWait: ((words: string | null) => void) | undefined,
+    stop: AbortSignal | undefined
   ): Promise<void> => {
     const words = machinePause.words(machineId);
     if (!words) {
       return;
     }
     onWait?.(`waiting: ${words}`);
-    await machinePause.free(machineId);
+    await Promise.race([machinePause.free(machineId), whenStopped(stop)]);
     onWait?.(null);
   };
 
@@ -17465,6 +17478,31 @@ export const createServer = (
     return stopped;
   };
 
+  /**
+   * Cancels run `runId` on its machine (CONTROL_CANCEL_COMMAND): its runner
+   * ends the run's process group, or keeps it from starting. Throws the
+   * machine's words when it could not.
+   */
+  const cancelRun = async (machineId: string, runId: string): Promise<void> => {
+    const answer = await callAgent(
+      machineId,
+      CONTROL_CANCEL_COMMAND,
+      [runId],
+      15_000
+    );
+    switch (answer.kind) {
+      case "unanswered":
+        throw new Error(silentWords(machineId, answer));
+      case "answered":
+        if (answer.value.error) {
+          throw new Error(String(answer.value.error));
+        }
+        return;
+      default:
+        throw unreachable(answer);
+    }
+  };
+
   /** One run of a command on a machine ({@link runOnMachine}). */
   const runOnce = async (
     machineId: string,
@@ -17477,8 +17515,25 @@ export const createServer = (
     const run: CommandRun = {
       id: crypto.randomUUID(),
       queueMaxMs: QUEUE_WAIT_MAX_MS,
+      ...(how.gate ? { gate: how.gate } : {}),
     };
     const { onWait } = how;
+    /**
+     * Its owner ended: the machine's runner ends the run's process group, or
+     * keeps it from starting (CONTROL_CANCEL_COMMAND), and it answers
+     * `cancelled`.
+     */
+    const cancel = (): void => {
+      console.log(
+        `[command] ${machineId}: cancelling ${how.what ?? "command"} run ${run.id}, its owner stopped: \`${cmd.slice(0, 120)}\``
+      );
+      cancelRun(machineId, run.id).catch((error: unknown) =>
+        console.warn(
+          `[command] ${machineId}: run ${run.id}, stopped with its owner, could not be cancelled: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    };
+    how.stop?.addEventListener("abort", cancel, { once: true });
     /** A `noWait` run's slot wait, which cancelled it: its words. */
     let waited: string | undefined;
     if (onWait || how.noWait) {
@@ -17491,25 +17546,11 @@ export const createServer = (
           return;
         }
         waited = queueWords(queue);
-        callAgent(machineId, CONTROL_CANCEL_COMMAND, [run.id], 15_000)
-          .then((answer) => {
-            switch (answer.kind) {
-              case "unanswered":
-                throw new Error(silentWords(machineId, answer));
-              case "answered":
-                if (answer.value.error) {
-                  throw new Error(String(answer.value.error));
-                }
-                return;
-              default:
-                throw unreachable(answer);
-            }
-          })
-          .catch((error: unknown) =>
-            console.warn(
-              `[command] ${machineId}: a run that may not wait (${waited}) could not be cancelled: ${error instanceof Error ? error.message : String(error)}`
-            )
-          );
+        cancelRun(machineId, run.id).catch((error: unknown) =>
+          console.warn(
+            `[command] ${machineId}: a run that may not wait (${waited}) could not be cancelled: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
       });
     }
     commandsInFlight.set(run.id, { machineId, what: how.what ?? "command" });
@@ -17541,6 +17582,7 @@ export const createServer = (
       }
       return result;
     } finally {
+      how.stop?.removeEventListener("abort", cancel);
       commandQueues.delete(run.id);
       commandsInFlight.delete(run.id);
     }

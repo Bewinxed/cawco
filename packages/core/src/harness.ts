@@ -2148,9 +2148,24 @@ export const QUEUE_WAIT_MAX_MS = 3 * 60 * 60 * 1000;
  * (the hub sends {@link QUEUE_WAIT_MAX_MS}).
  */
 export interface CommandRun {
+  /**
+   * The run is a step of a work item's landing gate, in these words (`the
+   * landing gate of “Fix the tray” (153fd0db): iOS build compiles`): the
+   * machine runs it with {@link HEAVY_GATE_ENV} set to them, so a heavy run
+   * it starts takes the next free slot before any other run there (core
+   * heavy-run.ts).
+   */
+  gate?: string;
   id: string;
   queueMaxMs: number;
 }
+
+/**
+ * Set in a landing gate step's environment by the machine that runs it
+ * ({@link CommandRun.gate}), to the words that name the gate: a heavy run
+ * started under it is a gate's, and goes first (core heavy-run.ts).
+ */
+export const HEAVY_GATE_ENV = "CAWCO_HEAVY_GATE";
 
 /** A command's wait for a slot: which, and who holds it (the marker's words). */
 export interface CommandQueue {

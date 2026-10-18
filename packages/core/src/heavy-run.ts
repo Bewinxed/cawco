@@ -45,6 +45,18 @@
  * load under its core count; its resting state with nothing heavy running is
  * level 2 and a load of 7 to 16 (Colima, Brave, the sessions and their MCP
  * servers), so it started nothing for hours while twenty gates waited.
+ *
+ * A work item's landing gate goes first. A run under a gate step
+ * ({@link HEAVY_GATE_ENV}, set by the machine that runs the step: core
+ * harness.ts `CommandRun.gate`) holds a ticket while it waits, a
+ * `gate-<arrival>-<pid>` file in `heavy-runs/` it holds `flock(2)` on, made
+ * under the `gate` file's lock so arrivals are in order. While any ticket is
+ * held, a free slot goes only to the oldest ticket's run; every other run
+ * waits, its `wait heavy` line naming that gate. A ticket whose holder ended
+ * (a SIGKILL included) is unlocked, and the next look under the gate deletes
+ * it. Before 2026-10-18 a leaf's probe kit run held the Mac's one slot for 35
+ * minutes while four landing gates waited, and a slot went to whichever
+ * waiting run polled first.
  */
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import {
@@ -53,12 +65,13 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  unlinkSync,
   writeSync,
 } from "node:fs";
 import { availableParallelism, hostname, totalmem } from "node:os";
 import { join } from "node:path";
 import { openLockFile, tryLock, unlock } from "./flock";
-import { QUEUE_MARKER } from "./harness";
+import { HEAVY_GATE_ENV, QUEUE_MARKER } from "./harness";
 import { workspaceCacheDir } from "./paths";
 
 /** The ceiling on heavy runs at once, when set (a whole number from 1). */
@@ -455,13 +468,22 @@ export const measureRoom = (): Room => {
 
 const slotsDir = (): string => join(workspaceCacheDir(), "heavy-runs");
 
-/** Who holds a slot, as its file says. */
+/** Who holds a slot, or a gate's ticket, as its file says. */
 export interface HeavyHolder {
   command: string;
+  /** The landing gate the run is a step of, in its words ({@link heavyGate}): it goes first. */
+  gate?: string;
   pid: number;
   where: string;
 }
 type Written = HeavyHolder & { since: number };
+
+/** The landing gate this process runs under, in its words, when it is one's step ({@link HEAVY_GATE_ENV}). */
+export const heavyGate = (): string | undefined =>
+  process.env[HEAVY_GATE_ENV] || undefined;
+
+/** A gate's ticket: `gate-<arrival, ms, 15 digits>-<pid>`, so names sort in arrival order. */
+const TICKET_FILE = /^gate-(\d{15})-\d+$/;
 
 const readHolder = (path: string): Written | undefined => {
   try {
@@ -477,7 +499,7 @@ const describe = (path: string): string => {
     return "a run that has not written its name yet";
   }
   const minutes = Math.round((Date.now() - holder.since) / 60_000);
-  return `pid ${holder.pid} in ${holder.where}, ${minutes} min: ${holder.command}`;
+  return `${holder.gate ? `${holder.gate}, ` : ""}pid ${holder.pid} in ${holder.where}, ${minutes} min: ${holder.command}`;
 };
 
 /** This process's place: a workspace's pids are its boundary's own. */
@@ -486,20 +508,126 @@ export const heavyWhere = (): string => {
   return workspace ? `workspace ${workspace.slice(0, 8)}` : hostname();
 };
 
-/** What a wait is behind, by kind: a new kind is said again. */
+/**
+ * What a wait is behind, by kind and, behind a gate, which ticket: a change
+ * of either is said again.
+ */
 interface Behind {
-  kind: "slots" | "spacing" | "room";
+  kind: "slots" | "spacing" | "room" | "gate";
+  ticket?: string;
   words: string;
 }
 
+/** A landing gate's place in the line: its ticket file's name, and the descriptor holding its lock. */
+interface Ticket {
+  fd: number;
+  name: string;
+}
+
+/**
+ * The tickets held in `dir`, oldest first, read under the gate's lock. One
+ * whose lock is free has lost its holder, and is deleted. `mine`, this
+ * process's own, is not opened again.
+ */
+const liveTickets = (dir: string, mine: string | undefined): string[] => {
+  const live: string[] = [];
+  const names = readdirSync(dir)
+    .filter((name) => TICKET_FILE.test(name))
+    .sort();
+  for (const name of names) {
+    if (name === mine) {
+      live.push(name);
+      continue;
+    }
+    const path = join(dir, name);
+    let fd: number;
+    try {
+      fd = openLockFile(path, false);
+    } catch {
+      // Deleted since the listing: its holder took a slot or gave up.
+      continue;
+    }
+    if (tryLock(fd)) {
+      unlinkSync(path);
+      unlock(fd);
+    } else {
+      closeSync(fd);
+      live.push(name);
+    }
+  }
+  return live;
+};
+
+/**
+ * A gate's ticket, made and locked under the gate's lock, named after every
+ * live one so it sorts last; nothing when another run holds the gate this
+ * tick.
+ */
+const takeTicket = (dir: string, holder: HeavyHolder): Ticket | undefined => {
+  const gate = openLockFile(join(dir, "gate"), true);
+  if (!tryLock(gate)) {
+    closeSync(gate);
+    return;
+  }
+  try {
+    const last = liveTickets(dir, undefined).at(-1);
+    const after = last ? Number(TICKET_FILE.exec(last)?.[1] ?? 0) + 1 : 0;
+    const name = `gate-${String(Math.max(Date.now(), after)).padStart(15, "0")}-${process.pid}`;
+    const fd = openLockFile(join(dir, name), true);
+    if (!tryLock(fd)) {
+      closeSync(fd);
+      return;
+    }
+    writeSync(fd, JSON.stringify({ ...holder, since: Date.now() }), 0);
+    return { fd, name };
+  } finally {
+    unlock(gate);
+  }
+};
+
+/** A gate's ticket given up: it took a slot, or its run is gone. */
+const dropTicket = (dir: string, ticket: Ticket): void => {
+  try {
+    unlinkSync(join(dir, ticket.name));
+  } catch {
+    // A look under the gate deleted it already.
+  }
+  unlock(ticket.fd);
+};
+
+/**
+ * The landing gate a run waits behind, read under the gate's lock: the
+ * oldest ticket held, when it is not this run's own (`ticket`); nothing when
+ * no gate waits, or this run's ticket is the oldest.
+ */
+const gateAhead = (
+  dir: string,
+  ticket: string | undefined
+): Behind | undefined => {
+  const [first] = liveTickets(dir, ticket);
+  if (first === undefined || first === ticket) {
+    return;
+  }
+  return {
+    kind: "gate",
+    ticket: first,
+    words: ticket
+      ? `landing gates take heavy-run slots in the order they came, and an earlier one waits: ${describe(join(dir, first))}`
+      : `a landing gate waits for a heavy-run slot, and takes the next free one before any other run: ${describe(join(dir, first))}`,
+  };
+};
+
 /**
  * One look at the slots under the gate: the taken slot's descriptor, or what
- * holds the run (nothing when another run holds the gate this tick).
+ * holds the run (nothing when another run holds the gate this tick). While a
+ * landing gate's ticket is held, a slot goes only to the oldest ticket's run
+ * (`ticket`, this run's own when it is a gate's).
  */
 const tryTake = (
   dir: string,
   count: number,
-  holder: HeavyHolder
+  holder: HeavyHolder,
+  ticket: string | undefined
 ): { fd: number } | { behind?: Behind } => {
   const gate = openLockFile(join(dir, "gate"), true);
   if (!tryLock(gate)) {
@@ -507,6 +635,10 @@ const tryTake = (
     return {};
   }
   try {
+    const ahead = gateAhead(dir, ticket);
+    if (ahead) {
+      return { behind: ahead };
+    }
     const indices = new Set(Array.from({ length: count }, (_, i) => i));
     for (const name of readdirSync(dir)) {
       const index = SLOT_FILE.exec(name)?.[1];
@@ -568,9 +700,33 @@ export interface HeavyTaken {
 }
 
 /**
+ * A landing gate's ticket for `holder`, taken as soon as no other run holds
+ * the gate's lock; nothing when `gone` ends the wait first.
+ */
+const queueGate = async (
+  dir: string,
+  holder: HeavyHolder,
+  gone: () => boolean
+): Promise<Ticket | undefined> => {
+  for (;;) {
+    const ticket = takeTicket(dir, holder);
+    if (ticket) {
+      return ticket;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: the gate's lock is held for one look at a time
+    await Bun.sleep(POLL_MS);
+    if (gone()) {
+      return;
+    }
+  }
+};
+
+/**
  * Takes a slot for `holder` once one is free and the machine has room,
  * waiting as long as that takes; `gone` ends the wait early, with no slot.
- * Each marker line goes to `say` (stderr unless given).
+ * A landing gate's run (`holder.gate`) holds a ticket while it waits, and
+ * goes before every run that is not one. Each marker line goes to `say`
+ * (stderr unless given).
  */
 export async function takeHeavySlot(
   holder: HeavyHolder,
@@ -582,8 +738,33 @@ export async function takeHeavySlot(
   const count = slotCount();
   const dir = slotsDir();
   mkdirSync(dir, { recursive: true });
-  await readyRoom();
-  let said: Behind["kind"] | undefined;
+  const ticket = holder.gate ? await queueGate(dir, holder, gone) : undefined;
+  if (holder.gate && !ticket) {
+    return;
+  }
+  try {
+    await readyRoom();
+    return await waitForSlot(dir, count, holder, ticket?.name, { say, gone });
+  } finally {
+    if (ticket) {
+      dropTicket(dir, ticket);
+    }
+  }
+}
+
+/**
+ * {@link takeHeavySlot}'s wait: a look at the slots each tick while the
+ * machine has room, the room measured again every {@link ROOM_POLL_MS}, each
+ * change of what holds the run said once.
+ */
+async function waitForSlot(
+  dir: string,
+  count: number,
+  holder: HeavyHolder,
+  ticket: string | undefined,
+  { say, gone }: { say: (line: string) => void; gone: () => boolean }
+): Promise<HeavyTaken | undefined> {
+  let said: string | undefined;
   let room: Room | undefined;
   let measuredAt = 0;
   for (;;) {
@@ -593,7 +774,7 @@ export async function takeHeavySlot(
     }
     let behind: Behind | undefined;
     if (room.ok) {
-      const look = tryTake(dir, count, holder);
+      const look = tryTake(dir, count, holder, ticket);
       if ("fd" in look) {
         if (said) {
           say(`${QUEUE_MARKER} held heavy`);
@@ -604,8 +785,9 @@ export async function takeHeavySlot(
     } else {
       behind = { kind: "room", words: room.words };
     }
-    if (behind && behind.kind !== said) {
-      said = behind.kind;
+    const saying = behind && `${behind.kind} ${behind.ticket ?? ""}`;
+    if (behind && saying !== said) {
+      said = saying;
       say(`${QUEUE_MARKER} wait heavy: ${behind.words}`);
     }
     // biome-ignore lint/performance/noAwaitInLoops: one look per tick, until a slot and the room are both there

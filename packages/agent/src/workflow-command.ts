@@ -4,6 +4,7 @@ import {
   type CommandQueueFrame,
   type CommandResult,
   type CommandRun,
+  HEAVY_GATE_ENV,
   QUEUE_MARKER,
   QUEUE_SLOTS,
   QUEUE_WAIT_MAX_MS,
@@ -104,12 +105,13 @@ export const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
   typeof (value as WorkspaceRef).path === "string" &&
   (value as WorkspaceRef).path.startsWith("/");
 
-/** Whether `value` names a run the hub follows: `{ id, queueMaxMs }` (core `CommandRun`). */
+/** Whether `value` names a run the hub follows: `{ id, queueMaxMs, gate? }` (core `CommandRun`). */
 const isCommandRun = (value: unknown): value is CommandRun =>
   typeof value === "object" &&
   value !== null &&
   typeof (value as CommandRun).id === "string" &&
-  typeof (value as CommandRun).queueMaxMs === "number";
+  typeof (value as CommandRun).queueMaxMs === "number" &&
+  ["string", "undefined"].includes(typeof (value as CommandRun).gate);
 
 /** The slots only the runner itself waits for: no command's marker opens them. */
 const RUNNER_SLOTS: ReadonlySet<QueueSlot> = new Set(["folder", "boundary"]);
@@ -378,8 +380,14 @@ export async function runWorkflowCommand(
     const child = spawn(file, args, {
       cwd,
       detached: true,
-      // The executor enters the boundary in `$PWD`: it names `cwd`.
-      env: { ...hostEnvironment(), PWD: cwd },
+      // The executor enters the boundary in `$PWD`: it names `cwd`. A landing
+      // gate's step carries its gate's words, so a heavy run it starts goes
+      // first (core heavy-run.ts).
+      env: {
+        ...hostEnvironment(),
+        PWD: cwd,
+        ...(named?.gate ? { [HEAVY_GATE_ENV]: named.gate } : {}),
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];

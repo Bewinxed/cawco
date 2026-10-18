@@ -131,6 +131,8 @@ const LINE_END = 10;
 
 /** A command after which the helper protocol carries git's own packets, not lines. */
 const CONNECT = /^(stateless-)?connect /;
+/** git's ask for a dry run of the push that follows (gitremote-helpers(7), "option dry-run"). */
+const DRY_RUN = "option dry-run true";
 const FORCED = /^\+/;
 
 /** A push command's refspec (`push [+]<src>:<dst>`), its source and destination. */
@@ -284,10 +286,18 @@ const protocolFeed = (
   let raw = false;
   let pending = Buffer.alloc(0);
   let batch: string[] = [];
+  /** git asked for a dry run (`option dry-run true`): its push sends nothing. */
+  let dryRun = false;
   const endBatch = async (): Promise<void> => {
     const lines = batch;
     batch = [];
     let refused: string | undefined;
+    // A dry run (a landing's push check, hub landing.ts) sends no large file
+    // and lands nothing to hold for the person: the helper answers it alone.
+    if (dryRun) {
+      write(`${lines.join("\n")}\n\n`);
+      return;
+    }
     if (options.hold) {
       refused = await options.hold(lines);
     } else if (options.lfs) {
@@ -321,6 +331,7 @@ const protocolFeed = (
         // biome-ignore lint/performance/noAwaitInLoops: a batch is answered before the next command is read
         await endBatch();
       } else {
+        dryRun ||= line === DRY_RUN;
         write(`${line}\n`);
         raw = CONNECT.test(line);
       }
