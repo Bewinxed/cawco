@@ -42,6 +42,9 @@
  * l. A session whose prose was never cut (stored before the table) is cut
  *    from its stored transcript when its machine registers, and found by
  *    memory_recall; a session cut live keeps nothing twice.
+ * n. A made-up password the person typed in prose, and a made-up credential
+ *    in a URL, are kept as `[redacted]`, in the prose cut live and in the
+ *    cut from the stored transcript alike.
  * Jev off: the curator's run gets the note with the line grep found and no
  * card is made; a brief keeps grep's order; search says it is unranked, and
  * a question grep finds nothing for is not found; a withdrawal still
@@ -140,8 +143,12 @@ const SAY = {
   recallOff: "PROBE-FACTS-RECALL-OFF",
   none: "PROBE-FACTS-RECALL-NONE",
   old: "PROBE-FACTS-OLD what about the flaky e2e suite?",
+  /** The person's credentials, made up, typed in prose (n). */
+  secret: `The CI login password is ${"Zq9!"}fakeProbe, and the mirror is https://probe:${"Mock"}Only77@mirror.example.com/e2e if you need it.`,
   recallOld: "PROBE-FACTS-RECALL-OLD",
 } as const;
+/** The made-up credentials of {@link SAY.secret}: none may be kept. */
+const SECRETS = [`${"Zq9!"}fakeProbe`, `${"Mock"}Only77`];
 const OLD_REPLY =
   "We quarantined the flaky e2e suite behind a nightly job; the PR checks skip it.";
 const CACHE_REPLY =
@@ -194,18 +201,26 @@ const kindOf = (all: string): string | undefined =>
     .filter(({ at }) => at >= 0)
     .sort((a, b) => a.at - b.at)[0]?.marker;
 
+/** Whether the talker called memory_note: it does once. */
+let noted = false;
+
 /** The talker: answers the person about caching, then notes the backfilled fact. */
 const talker = (request: Seen): Reply => {
   const { all } = request;
   if (!all.includes(SAY.backfill)) {
     return text(CACHE_REPLY);
   }
-  return all.includes('"taint"')
-    ? text("Noted.")
-    : call(request, SAY.backfill, NOTE, {
-        text: BACKFILL,
-        since: "2026-09-01",
-      });
+  // One note, whatever the harness asks after it: a second would be left
+  // for the curator's run, which the sort leg expects Jev to leave nothing.
+  if (noted || all.includes('"taint"')) {
+    return text("Noted.");
+  }
+  const reply = call(request, SAY.backfill, NOTE, {
+    text: BACKFILL,
+    since: "2026-09-01",
+  });
+  noted = reply.tool?.name === NOTE;
+  return reply;
 };
 
 /** The asker: one memory_recall per marker, its answer kept. */
@@ -545,6 +560,15 @@ const sortLegs = async (kit: Kit, probe: Probe, backfillId: string) => {
     30_000
   ).catch(() => [] as Ask[]);
   const card = cards.find((ask) => pathsOf(ask)[0] === DEPLOYS_PATH);
+  // A run that started a session was left something: its brief says what.
+  const [left] =
+    ran instanceof Error || ran.outcome === "silent"
+      ? []
+      : probe.fleet.query<{ brief: string }>(
+          "SELECT w.brief FROM routine_runs r JOIN work_items w ON w.id = r.work_item_id WHERE r.routine_id = (SELECT id FROM routines WHERE project_id = ? AND target = 'curator') ORDER BY r.started_at DESC LIMIT 1",
+          probe.projectId
+        );
+  const inbox = left?.brief.indexOf("## The inbox") ?? -1;
   kit.check(
     "Jev's clear sorts pre-fill one proposal for the person, citing the notes; nothing is left for the curator's run",
     Boolean(
@@ -555,7 +579,7 @@ const sortLegs = async (kit: Kit, probe: Probe, backfillId: string) => {
     ) &&
       !(ran instanceof Error) &&
       ran.outcome === "silent",
-    `run ${ran instanceof Error ? ran.message : JSON.stringify(ran)}; card ${JSON.stringify(card?.payload.input.notes)} by ${card?.payload.proposer}`
+    `run ${ran instanceof Error ? ran.message : JSON.stringify(ran)}; card ${JSON.stringify(card?.payload.input.notes)} by ${card?.payload.proposer}${left ? `\nthe curator's brief:\n${left.brief.slice(Math.max(0, inbox), Math.max(0, inbox) + 1500)}` : ""}`
   );
   if (card) {
     await probe.approve(card);
@@ -888,7 +912,7 @@ const restartLegs = async (
   const oldId = await fleet.spawn("claude", "Flaky e2e", fleet.workdir, {
     projectId,
   });
-  await fleet.send(oldId, SAY.old);
+  await fleet.send(oldId, `${SAY.old} ${SAY.secret}`);
   const proseOf = (instanceId: string): number =>
     fleet.query<{ n: number }>(
       "SELECT count(*) AS n FROM session_prose WHERE instance_id = ?",
@@ -900,6 +924,12 @@ const restartLegs = async (
     (n) => n >= 2,
     60_000
   ).catch(() => 0);
+  const personSaid = (): string =>
+    fleet.query<{ text: string }>(
+      "SELECT text FROM session_prose WHERE instance_id = ? AND who = 'person'",
+      oldId
+    )[0]?.text ?? "";
+  const live = personSaid();
   const talked = proseOf(talkerId);
   await probe.put(
     `memory/proposals/${OLD_PROPOSAL_ID}.json`,
@@ -976,6 +1006,19 @@ const restartLegs = async (
       excerpt?.session === oldId &&
       excerpt.text.includes("quarantined the flaky e2e suite"),
     `${cut} rows; ${JSON.stringify(found).slice(0, 600)}`
+  );
+  const backfilled = personSaid();
+  kit.check(
+    "n: a made-up password typed in prose and a made-up credential in a URL are kept as [redacted], live and from the stored transcript",
+    [live, backfilled].every(
+      (said) =>
+        said.includes("flaky e2e suite") &&
+        said.includes(
+          "The CI login password is [redacted], and the mirror is [redacted]"
+        ) &&
+        !SECRETS.some((secret) => said.includes(secret))
+    ),
+    `live: ${live}\nfrom the transcript: ${backfilled}`
   );
   kit.check(
     "l: a session cut live keeps nothing twice when its stored transcript is read",

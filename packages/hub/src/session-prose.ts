@@ -12,6 +12,9 @@
  *   (`transcript-index.db`, packages/agent/src/search) is per machine and
  *   keeps every record of every harness, tools included; this is the hub's,
  *   for every project session on every machine, kept as frames arrive.
+ *   Every message passes the secret filter (secret-filter.ts) before it is
+ *   stored, live and backfilled alike: a credential the person typed is
+ *   kept as `[redacted]`.
  * - **Sittings**: a session's messages split where it was quiet for
  *   {@link SITTING_GAP_MS}, each dated by its first message (past.dev's
  *   `sittingsOf`).
@@ -39,6 +42,7 @@ import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
 import { grepScore, wordsOf } from "./memory-facts";
+import { redactSecrets } from "./secret-filter";
 import type { HistoryRead } from "./transcripts";
 
 /** Quiet this long ends a sitting (past.dev's split). */
@@ -111,10 +115,13 @@ const wordsOfSend = (content: string | readonly unknown[]): string =>
         )
         .join("\n\n");
 
-const kept = (text: string): string =>
-  text.length > PROSE_MAX
-    ? `${text.slice(0, PROSE_MAX)}\n\n… (cut here: the message runs on in the session)`
-    : text;
+/** A message as kept: its secrets redacted (secret-filter.ts), then a long one cut to {@link PROSE_MAX}. */
+const kept = async (text: string): Promise<string> => {
+  const safe = await redactSecrets(text);
+  return safe.length > PROSE_MAX
+    ? `${safe.slice(0, PROSE_MAX)}\n\n… (cut here: the message runs on in the session)`
+    : safe;
+};
 
 /** The paragraphs of `text` that hold `words`, best first by count then in their order, a long one cut to its sentences that do. */
 const excerptOf = (text: string, words: Set<string>): string => {
@@ -382,12 +389,16 @@ export const createSessionProse = ({
     const rows =
       "fault" in history
         ? []
-        : proseOfHistory(history.entries, history.records).map((message) => ({
-            ...message,
-            projectId: session.projectId,
-            instanceId: session.id,
-            text: kept(message.text),
-          }));
+        : await Promise.all(
+            proseOfHistory(history.entries, history.records).map(
+              async (message) => ({
+                ...message,
+                projectId: session.projectId,
+                instanceId: session.id,
+                text: await kept(message.text),
+              })
+            )
+          );
     return db.memoryFacts.backfillProse(session.id, rows);
   };
 
@@ -433,12 +444,12 @@ export const createSessionProse = ({
    * time), so a backfill of the same transcript lines up with it; a session
    * in no project keeps none.
    */
-  const keep = (
+  const keep = async (
     instanceId: string,
     who: "person" | "agent",
     text: string,
     at: Date
-  ) => {
+  ): Promise<void> => {
     const words = text.trim();
     const projectId = words ? projectOfSession(instanceId) : null;
     if (!projectId) {
@@ -449,7 +460,16 @@ export const createSessionProse = ({
       instanceId,
       at,
       who,
-      text: kept(words),
+      text: await kept(words),
+    });
+  };
+
+  /** {@link keep} for a frame or a send as it arrives: a failure is logged, never thrown into the frame's path. */
+  const keepLive = (...args: Parameters<typeof keep>): void => {
+    keep(...args).catch((error: unknown) => {
+      console.error(
+        `[prose] ${args[0]}: a message was not kept: ${error instanceof Error ? error.message : String(error)}`
+      );
     });
   };
 
@@ -554,7 +574,7 @@ export const createSessionProse = ({
       acceptedAt: Date
     ): void {
       if (origin?.kind === "human" && content !== undefined) {
-        keep(instanceId, "person", wordsOfSend(content), acceptedAt);
+        keepLive(instanceId, "person", wordsOfSend(content), acceptedAt);
       }
     },
 
@@ -569,7 +589,7 @@ export const createSessionProse = ({
       ) {
         return;
       }
-      keep(
+      keepLive(
         instanceId,
         "agent",
         transcriptUserText(message.message) ?? "",
