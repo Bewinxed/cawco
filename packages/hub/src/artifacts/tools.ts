@@ -209,7 +209,7 @@ export const artifactRead = {
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture. A sheet adds " +
     "`sheet` (stories, args, props), its stage's `status` and `errors`, and `weight` (null until viewed; `heaviest`: " +
-    "the imports to cut); its picks are stories; a served preview, its server's `stage`.",
+    "the imports that weigh most, for finding what makes a slow sheet slow); its picks are stories; a served preview, its server's `stage`.",
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),
