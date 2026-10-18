@@ -48,6 +48,7 @@ import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { darwinSocketRoot } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -375,22 +376,14 @@ const eachLine = async (
 };
 
 /**
- * Ends `ssh`'s process group, when it still runs. Only a real pid's group:
- * `kill(-1)` signals every process this user owns.
+ * Ends `ssh`'s process group, when it still runs: `ssh` was spawned
+ * `detached`, so it leads its own group.
  */
 const end = (child: Bun.Subprocess | null): void => {
-  if (
-    !child ||
-    child.exitCode !== null ||
-    !Number.isInteger(child.pid) ||
-    child.pid <= 1
-  ) {
-    return;
-  }
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {
-    // ESRCH: it exited between the check and the signal.
+  const leader =
+    child && child.exitCode === null ? spawnedPid(child) : undefined;
+  if (leader) {
+    signalGroup(leader, "SIGTERM");
   }
 };
 

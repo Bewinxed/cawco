@@ -49,6 +49,7 @@ import { generateInstallScript } from "@cawco/core/install-script";
 import { LineSplitter } from "@cawco/core/lines";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { Elysia, t } from "elysia";
 import { DB_PATH, HUB_PORT } from "./config";
 import type { HubLifetimeShape } from "./lifetime";
@@ -365,13 +366,17 @@ const trustCommand = (key: string): string | null => {
  * closes (the install gets none: the script asks its questions on one), so a
  * stopped add's install would run on until its next write. A watchdog sees
  * to it: while sshd's session process (`sh`'s parent) lives it waits, and
- * once it is gone it ends the command's whole process group. The command
+ * once it is gone it ends the command's whole process group: the group `sh`
+ * leads (sshd's session process makes a new session for the login shell,
+ * whose place `sh` takes), named by `sh`'s own pid `$$`, an integer above 1
+ * checked first, never `kill 0`, which signals whatever group the watchdog
+ * finds itself in. The command
  * ends the watchdog when it finishes, and exits with the command's status.
  * Measured against OpenSSH 10.2's sshd: a silent remote command outlived a
  * killed `ssh`; under the watchdog it was gone within 4 s.
  */
 const remoteCommand = (body: string): string =>
-  `exec sh -c 'p=$PPID; ( while ps -p "$p" >/dev/null 2>&1; do sleep 1; done; kill -TERM 0 ) >/dev/null 2>&1 & w=$!; ${body}; s=$?; kill "$w" 2>/dev/null; exit $s'`;
+  `exec sh -c 'p=$PPID; ( while ps -p "$p" >/dev/null 2>&1; do sleep 1; done; [ "$$" -gt 1 ] && kill -TERM -- "-$$" ) >/dev/null 2>&1 & w=$!; ${body}; s=$?; kill "$w" 2>/dev/null; exit $s'`;
 
 /**
  * The step an add fails on when `ssh` ended before the remote command said
@@ -668,22 +673,6 @@ interface JoinDeps {
 /** How long a stopped `ssh` gets to close its connection before its group is killed outright. Our choice. */
 const STOP_GRACE_MS = 3000;
 
-/**
- * Signals `ssh`'s process group: `ssh` and the askpass it may be running.
- * One that is already gone has nothing left to signal. Only a real pid's
- * group: `kill(-1)` signals every process this user owns.
- */
-const signalGroup = (pid: number, signal: "SIGTERM" | "SIGKILL"): void => {
-  if (!Number.isInteger(pid) || pid <= 1) {
-    return;
-  }
-  try {
-    process.kill(-pid, signal);
-  } catch {
-    // ESRCH: the group exited between the stop and the signal.
-  }
-};
-
 /** An add while it runs: the `ssh` it waits on now, the connection it asked for, and its run as a whole, settled. */
 interface Run {
   child: Bun.Subprocess | null;
@@ -967,14 +956,17 @@ export const joinRoutes = ({ lifetime, online, tunnels }: JoinDeps) => {
       tunnels.abandon(run.tunnel.id);
     }
     const { child } = run;
-    if (child) {
-      signalGroup(child.pid, "SIGTERM");
+    // `ssh` leads its own group (spawned `detached`): the group is `ssh` and
+    // the askpass it may be running. One already ended reads `gone`.
+    const leader = child ? spawnedPid(child) : undefined;
+    if (child && leader) {
+      signalGroup(leader, "SIGTERM");
       const exit = await readWithin(STOP_GRACE_MS, () => child.exited);
       switch (exit.kind) {
         case "answered":
           break;
         case "unanswered":
-          signalGroup(child.pid, "SIGKILL");
+          signalGroup(leader, "SIGKILL");
           break;
         default: {
           const unhandled: never = exit;
