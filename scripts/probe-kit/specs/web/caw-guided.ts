@@ -91,8 +91,8 @@ const WORKSPACE_ID = /\b[0-9a-f]{8}\b/;
 const MACHINE_PATH = /(^|[\s(])\/[\w.~-]+\//;
 /** A project's page, by its id. */
 const PROJECT_PAGE = /\/project\/[0-9a-f-]{36}(\?.*)?$/;
-/** A name whose second word is longer than a phone's name column. */
-const LONG_NAME = "Tidewater harbourfrontbookingsystem";
+/** A name whose second word is longer than a phone's name column (defensive-css: one unbroken word). */
+const LONG_NAME = "Tidewater harbourfrontbookingsystemcooperative";
 
 interface Setup {
   base: string;
@@ -241,7 +241,9 @@ const readPanel = (page: Page) =>
     };
     const panel = document.querySelector(panelSel);
     const shell =
-      panel?.closest('[data-caw-dock], [data-slot="drawer-content"]') ?? null;
+      panel?.closest(
+        '[data-caw-dock], [data-slot="drawer-content"], [data-slot="popover-content"]'
+      ) ?? null;
     const form = panel?.querySelector('form[data-slot="cin"]');
     const room = panel?.querySelector('[data-slot="room"]');
     const starters = [
@@ -604,6 +606,19 @@ const leg = async (kit: Kit, setup: Setup, one: Leg, theme: Theme) => {
     at.placeholder
   );
   rowChecks(kit, tag, at);
+  kit.check(
+    `${tag}: the starters and his composer's field start on one edge`,
+    at.starters.length > 0 &&
+      at.composer !== null &&
+      at.starters.every(
+        (row) =>
+          Math.abs((row.box?.left ?? -99) - (at.composer?.left ?? 0)) <= 1
+      ),
+    JSON.stringify({
+      starters: at.starters.map((row) => row.box?.left),
+      field: at.composer?.left,
+    })
+  );
   kit.check(
     `${tag}: the shell's Caw card stands shut behind its cut, not opened by itself`,
     at.glassCard === null ||
@@ -1222,6 +1237,38 @@ const longName = async (kit: Kit, setup: Setup) => {
   }
 };
 
+/** The routines' empty view at 1280: its starter chips stand on its composer field's start edge. */
+const routinesEdge = async (kit: Kit, setup: Setup) => {
+  const page = await legPage(
+    kit,
+    { name: "1280", view: "desk", width: 1280 },
+    "light"
+  );
+  await open(
+    page,
+    `${setup.url}?view=routines`,
+    '[data-slot="ask-caw"] form[data-slot="cin"]'
+  );
+  await settle(page, 400);
+  const read = await page.evaluate(() => ({
+    chips: [
+      ...document.querySelectorAll('[data-slot="routine-starters"] button'),
+    ].map((chip) => chip.getBoundingClientRect().left),
+    field:
+      document
+        .querySelector('[data-slot="ask-caw"] form[data-slot="cin"]')
+        ?.getBoundingClientRect().left ?? null,
+  }));
+  kit.check(
+    "1280 routines: the starter chips and the composer's field start on one edge",
+    read.field !== null &&
+      read.chips.length > 0 &&
+      Math.abs((read.chips[0] ?? -99) - read.field) <= 1,
+    JSON.stringify(read)
+  );
+  await page.close();
+};
+
 /** 6. New project lands on the project's page with his panel open on its Setup thread. */
 const newProject = async (kit: Kit, setup: Setup) => {
   const page = await kit.page("desk", { theme: "light" });
@@ -1273,6 +1320,7 @@ const run = async (kit: Kit) => {
     await sentShots(kit, setup);
     const ids = await filedTasks(kit, setup, threadId);
     await filedLegs(kit, setup, threadId, ids);
+    await routinesEdge(kit, setup);
     await longName(kit, setup);
     await newProject(kit, setup);
   } finally {

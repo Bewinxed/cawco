@@ -1269,10 +1269,19 @@
     gap: var(--space-3);
     align-self: stretch;
   }
+  /* The starters stand on the composer's column under them (Composer
+     `.composer`: --c-composer-w, centred; at 900px and under, --space-3 in
+     from its box), so the chips and the field share one start edge, as the
+     thread hero's do (ThreadPane `.hero`). */
   .routine-starters {
     margin: 0;
     padding: 0;
+    padding-inline: calc((100% - var(--c-composer-w)) / 2);
     list-style: none;
+
+    @media (max-width: 900px) {
+      padding-inline: var(--space-3);
+    }
   }
   .routine-starters li {
     display: flex;
