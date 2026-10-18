@@ -17,7 +17,14 @@
  *   into a delegate's session) hold 4.5:1 on what they stand on;
  * - nothing is written to the console as an error.
  *
- * Each frame is captured to `$TMPDIR/caps/round2/`, the live frame at the
+ * - on a phone the page holds every frame and sheet inside its width;
+ * - a to-do the task and delegates states share wraps the same in both;
+ * - the delegates state shows its queued and failed delegates inside the
+ *   frame, and every line a step waits on is one recipe;
+ * - every delegate's rail hangs from the to-do it is under, and its own
+ *   steps' rail from its tile.
+ *
+ * Each frame is captured to `$TMPDIR/caps/round3/`, the live frame at the
  * beat its delegate's step has folded open and the beat its to-do ticks.
  *
  *   bun scripts/probe-kit/run.ts web plan-view-preview
@@ -30,7 +37,7 @@ import { open, ROOT, settle, THEMES } from "../../kit";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const OUT = join(DASHBOARD, "preview", "plan-view", "out");
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round2");
+const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round3");
 
 /** A caption names its frame first: "Desk · …" or "Phone · …". */
 const CAPTION = /^(Desk|Phone) · \S/;
@@ -350,6 +357,269 @@ const readInks = (page: Page): Promise<{ least: number; what: string }[]> =>
     });
   });
 
+interface Layout {
+  /** Carried rows looked at. */
+  carried: number;
+  /** Desk heads with a task's title, and how far each stands off the "Plan" title's line. */
+  heads: number;
+  headsOff: string[];
+  /** Rows of the delegates state outside what their frame shows. */
+  hidden: string[];
+  /** Figures, desk scrollers or phone sheets past the viewport's sides. */
+  outside: string[];
+  pageWide: number;
+  /** Delegates whose rail does not hang from their to-do, or whose steps' rail not from their tile. */
+  railsOff: string[];
+  /** The device's width. */
+  screen: number;
+  waits: number;
+  /** Waiting lines whose type differs from the first, or which hold a mark. */
+  waitsOff: string[];
+  /** Shared to-dos whose words wrap to a different height in the two states. */
+  wraps: string[];
+}
+
+/**
+ * Figures, desk scrollers and phone sheets past the device's sides, and the
+ * page's width against the device's: on a phone a page wider than the
+ * screen widens the layout viewport itself, so `innerWidth` alone would read
+ * the overflow as the screen. Anything else past the screen's edge that no
+ * scroller holds is named, the widest first.
+ */
+const readOutside = (
+  page: Page
+): Promise<Pick<Layout, "outside" | "pageWide" | "screen">> =>
+  page.evaluate(() => {
+    const view = Math.min(window.innerWidth, screen.width);
+    const past = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      return box.left < -0.5 || box.right > view + 0.5;
+    };
+    const held = (el: Element) =>
+      el.closest('[data-slot="desk-scroll"], [data-slot="phone-screen"]') !==
+        null &&
+      !el.matches('[data-slot="desk-scroll"], [data-slot="phone-screen"]');
+    const named = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      return `${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]}[${el.getAttribute("data-slot") ?? ""}] ${Math.round(box.left)}–${Math.round(box.right)}`;
+    };
+    const outside = [
+      ...[
+        ...document.querySelectorAll(
+          'figure, [data-slot="desk-scroll"], [data-slot="drawer-content"]'
+        ),
+      ].filter(past),
+      ...[...document.querySelectorAll("body *")]
+        .filter((el) => past(el) && !held(el))
+        .sort(
+          (a, b) =>
+            b.getBoundingClientRect().width - a.getBoundingClientRect().width
+        )
+        .slice(0, 4),
+    ].map(named);
+    return {
+      outside: [...new Set(outside)],
+      pageWide: Math.max(
+        window.innerWidth,
+        document.documentElement.scrollWidth,
+        document.body.scrollWidth
+      ),
+      screen: screen.width,
+    };
+  });
+
+/** The proposed (not Today) desk or phone figure of a section. */
+const PROPOSED = (section: string, kind: string): string =>
+  `#${section} figure[data-kind="${kind}"]:not(:has([data-today]))`;
+
+/** The to-dos the task and delegates states share, and how tall each one's words stand. */
+const readWraps = (page: Page): Promise<Pick<Layout, "wraps">> =>
+  page.evaluate(
+    ([task, out]) => {
+      const tops = (selector: string) =>
+        new Map(
+          [
+            ...document.querySelectorAll(
+              `${selector} [data-slot="plan"] > ul > li > [data-slot="plan-row"] [data-slot="words"]`
+            ),
+          ].map((words) => [
+            words.textContent?.trim() ?? "",
+            Math.round(words.getBoundingClientRect().height),
+          ])
+        );
+      const wraps: string[] = [];
+      for (const [index, selector] of task.entries()) {
+        const there = tops(out[index] ?? "");
+        for (const [words, height] of tops(selector)) {
+          if (there.get(words) !== height) {
+            wraps.push(`"${words}" ${height}px against ${there.get(words)}px`);
+          }
+        }
+      }
+      return { wraps };
+    },
+    [
+      [PROPOSED("task", "desk"), PROPOSED("task", "phone")],
+      [PROPOSED("delegates", "desk"), PROPOSED("delegates", "phone")],
+    ]
+  );
+
+/** The delegates state's queued and failed rows against what their frame shows, and the waiting lines' type. */
+const readDelegates = (
+  page: Page
+): Promise<Pick<Layout, "hidden" | "waits" | "waitsOff">> =>
+  page.evaluate(
+    (figures) => {
+      const hidden: string[] = [];
+      for (const selector of figures) {
+        const figure = document.querySelector(selector);
+        const edge = figure
+          ?.querySelector(".body, .scroll")
+          ?.getBoundingClientRect();
+        for (const row of figure?.querySelectorAll(
+          '[data-state="queued"], [data-state="failed"]'
+        ) ?? []) {
+          const box = row.getBoundingClientRect();
+          const inside =
+            !!edge &&
+            box.top >= edge.top - 0.5 &&
+            box.bottom <= edge.bottom + 0.5;
+          if (!inside) {
+            hidden.push(
+              `"${row.querySelector('[data-slot="words"]')?.textContent}" ${Math.round(box.top)}–${Math.round(box.bottom)} in ${Math.round(edge?.top ?? 0)}–${Math.round(edge?.bottom ?? 0)}`
+            );
+          }
+        }
+      }
+      const waits = [...document.querySelectorAll('[data-slot="wait"]')];
+      const typeOf = (el: Element) => {
+        const style = getComputedStyle(el);
+        return `${style.fontSize} ${style.fontWeight} ${style.lineHeight} ${style.fontFamily}`;
+      };
+      const first = waits[0] ? typeOf(waits[0]) : "";
+      const waitsOff = waits
+        .filter((el) => typeOf(el) !== first || el.children.length > 0)
+        .map(
+          (el) =>
+            `"${el.textContent?.trim()}": ${typeOf(el)}, ${el.children.length} marks`
+        );
+      return { hidden, waits: waits.length, waitsOff };
+    },
+    [PROPOSED("delegates", "desk"), PROPOSED("delegates", "phone")]
+  );
+
+/** Each delegate's rail against its to-do's mark, and its own steps' rail against its tile. */
+const readRails = (page: Page): Promise<Pick<Layout, "carried" | "railsOff">> =>
+  page.evaluate(() => {
+    const railX = (list: Element) =>
+      list.getBoundingClientRect().left +
+      Number.parseFloat(getComputedStyle(list).getPropertyValue("--nest-x"));
+    const centre = (el: Element | null | undefined) => {
+      const box = el?.getBoundingClientRect();
+      return box ? box.left + box.width / 2 : Number.NaN;
+    };
+    const offBy = (list: Element, mark: Element | null | undefined) =>
+      Math.abs(railX(list) - centre(mark));
+    const carried = [
+      ...document.querySelectorAll(
+        'figure [data-slot="plan-row"][data-carried]'
+      ),
+    ].filter((row) => !row.closest("[data-today]"));
+    const railsOff = carried.flatMap((row) => {
+      const words = row.querySelector('[data-slot="words"]')?.textContent;
+      const item = row.parentElement;
+      const list = item?.parentElement;
+      const hostRow = list?.parentElement
+        ?.closest("li")
+        ?.querySelector(':scope > [data-slot="plan-row"]');
+      if (!(
+        list?.classList.contains("kit-nest") &&
+        hostRow?.querySelector(".tick-target")
+      )) {
+        return [`"${words}" is not under a to-do`];
+      }
+      const off = offBy(list, hostRow.querySelector(".pv-mark"));
+      const own = item?.querySelector(":scope > ul.kit-nest");
+      const away = own ? offBy(own, row.querySelector(".pv-mark")) : 0;
+      return [
+        ...(off > 1.5
+          ? [`"${words}": rail ${off.toFixed(1)}px off its to-do's mark`]
+          : []),
+        ...(away > 1.5
+          ? [`"${words}": steps' rail ${away.toFixed(1)}px off its tile`]
+          : []),
+      ];
+    });
+    return { carried: carried.length, railsOff };
+  });
+
+/**
+ * Each desk head's title against its task's title: both set in the label
+ * size on the mark line, so one centre is one baseline.
+ */
+const readHeads = (page: Page): Promise<Pick<Layout, "heads" | "headsOff">> =>
+  page.evaluate(() => {
+    const heads = [
+      ...document.querySelectorAll('[data-slot="side-head"]'),
+    ].filter((head) => head.querySelector(".task-title"));
+    const middle = (el: Element | null) => {
+      const box = el?.getBoundingClientRect();
+      return box ? box.top + box.height / 2 : Number.NaN;
+    };
+    const headsOff = heads
+      .map((head) =>
+        Math.abs(
+          middle(head.querySelector(".title")) -
+            middle(head.querySelector(".task-title"))
+        )
+      )
+      .filter((off) => !(off <= 0.5))
+      .map((off) => `${off.toFixed(2)}px apart`);
+    return { heads: heads.length, headsOff };
+  });
+
+/** The layout: the phone page's width, the shared rows' wraps, the delegates' frames and rails. */
+const readLayout = async (page: Page): Promise<Layout> => ({
+  ...(await readHeads(page)),
+  ...(await readOutside(page)),
+  ...(await readWraps(page)),
+  ...(await readDelegates(page)),
+  ...(await readRails(page)),
+});
+
+function checkLayout(kit: Kit, leg: string, seen: Layout): void {
+  kit.check(
+    `${leg}: in all ${seen.heads} desk heads the task's title stands on the "Plan" title's line`,
+    seen.heads > 0 && seen.headsOff.length === 0,
+    seen.headsOff.join(" | ")
+  );
+  kit.check(
+    `${leg}: every frame, desk scroller and phone sheet stands inside the screen, and the page is the screen's width (${seen.pageWide} ≤ ${seen.screen})`,
+    seen.outside.length === 0 && seen.pageWide <= seen.screen,
+    seen.outside.join(" | ")
+  );
+  kit.check(
+    `${leg}: the to-dos the task and delegates states share wrap the same in both`,
+    seen.wraps.length === 0,
+    seen.wraps.join(" | ")
+  );
+  kit.check(
+    `${leg}: the queued and failed delegates stand inside their frame, desk and phone`,
+    seen.hidden.length === 0,
+    seen.hidden.join(" | ")
+  );
+  kit.check(
+    `${leg}: all ${seen.waits} waiting lines are one recipe, with no leading mark`,
+    seen.waits > 0 && seen.waitsOff.length === 0,
+    seen.waitsOff.join(" | ")
+  );
+  kit.check(
+    `${leg}: all ${seen.carried} delegates hang from their to-do's mark, their steps from their tile`,
+    seen.carried > 0 && seen.railsOff.length === 0,
+    seen.railsOff.join(" | ")
+  );
+}
+
 async function captureLive(page: Page, prefix: string): Promise<void> {
   const live = page.locator("figure[data-slot=live]");
   for (const beat of LIVE_BEATS) {
@@ -492,6 +762,7 @@ const spec: Spec = {
           checkRows(kit, leg, await readRows(page));
           checkFrames(kit, leg, await readFrames(page));
           checkFaces(kit, leg, await readFaces(page));
+          checkLayout(kit, leg, await readLayout(page));
           for (const ink of await readInks(page)) {
             kit.check(
               `${leg}: ${ink.what} holds ${ink.least.toFixed(2)}:1, at least 4.5:1`,
