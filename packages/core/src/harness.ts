@@ -558,7 +558,14 @@ export interface NeutralSessionInfo {
   customTitle?: string;
   cwd?: string;
   fileSize?: number;
+  /** The first prompt as its harness listed it, raw: kept for the shipped app; a reader names the session by {@link firstTitle}. */
   firstPrompt?: string;
+  /**
+   * The first prompt as a title, derived once where the listing is answered
+   * (agent session.ts, core `deriveTitleFromFirstMessage`): what a reader
+   * names a session with no given title by, never parsing the prompt itself.
+   */
+  firstTitle?: string;
   gitBranch?: string;
   harness: HarnessKind;
   lastModified: number;

@@ -65,6 +65,7 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   cacheHit,
   type DeliveryMark,
+  deriveTitleFromFirstMessage,
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
@@ -391,6 +392,18 @@ const custodyProbe = async <T>(
  * (`CONTROL_TIMEOUT_MS`), so the harnesses that answered still reach it.
  */
 const HARNESS_LISTING_MS = 10_000;
+
+/**
+ * A listed session with its first prompt as a title
+ * ({@link NeutralSessionInfo.firstTitle}), derived once here so no reader
+ * parses the prompt.
+ */
+const titled = (info: NeutralSessionInfo): NeutralSessionInfo => {
+  const firstTitle = info.firstPrompt
+    ? deriveTitleFromFirstMessage(info.firstPrompt)
+    : "";
+  return firstTitle ? { ...info, firstTitle } : info;
+};
 
 /** A call for a session this agent runs no process for: a control refusal of kind `not-running`. */
 class NotRunning extends Error {
@@ -4749,7 +4762,9 @@ export class SessionSupervisor {
     const all = listed.flat();
     all.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
     return {
-      sessions: options.limit ? all.slice(0, options.limit) : all,
+      sessions: (options.limit ? all.slice(0, options.limit) : all).map(
+        titled
+      ),
       unanswered,
       failed,
     };
@@ -5083,11 +5098,13 @@ export class SessionSupervisor {
         }
         const adapter = this.#adapter(kind);
         switch (method) {
-          case "getSessionInfo":
-            return await adapter.getSessionInfo(
+          case "getSessionInfo": {
+            const info = await adapter.getSessionInfo(
               args[0] as string,
               dirOf(args[1])
             );
+            return info ? titled(info) : info;
+          }
           case "getSessionMessages":
             return await adapter.getSessionMessages(
               args[0] as string,
