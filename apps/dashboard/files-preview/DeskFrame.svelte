@@ -10,9 +10,10 @@
    * so the conversation shows past it. Neither moves the conversation; no
    * scrim.
    */
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { barGlass, glassElement } from "#lib/cawco/bar-glass.svelte.js";
   import ArtifactShown from "./ArtifactShown.svelte";
-  import BarGlass from "./BarGlass.svelte";
+  import FilesBar from "./FilesBar.svelte";
   import FilesGlass from "./FilesGlass.svelte";
   import FilesList from "./FilesList.svelte";
   import {
@@ -29,7 +30,7 @@
   let {
     stage,
     fill = "typical",
-    count: countTake = "none",
+    count: countTake = "beside",
     query = "",
   }: { stage: Stage; fill?: Fill; count?: Count; query?: string } = $props();
 
@@ -39,8 +40,11 @@
     files.artifacts.find((row) => row.id === CHOSEN)?.name ?? "Site task board"
   );
   const picked = $derived(stage === "picked");
+  /** The bar's glass, as every card on it finds it (bar-glass). */
   let glass = $state<HTMLElement | null>(null);
-  let joined = $state(false);
+  onMount(() => {
+    glass = glassElement();
+  });
   /**
    * Files asked open: the stage's, from the frame's first moment, while the
    * glass may still grow as the machines' figure takes its face (HangCard
@@ -63,13 +67,7 @@
   ></div>
   <div class="bar shot" style:--shot="url({shotDesk})">
     <div class="bar-end">
-      <BarGlass
-        {count}
-        {joined}
-        mark={countTake === "mark"}
-        open={filesOpen}
-        bind:group={glass}
-      />
+      <FilesBar {count} open={filesOpen} railed take={countTake} />
     </div>
   </div>
   <div aria-hidden="true" class="main" data-transcript>
@@ -83,7 +81,7 @@
       </div>
     </div>
   {/if}
-  <FilesGlass {glass} open={filesOpen} bind:joined>
+  <FilesGlass {glass} open={filesOpen} bind:joined={barGlass.joined}>
     <FilesList
       artifacts={files.artifacts}
       attachments={files.attachments}
@@ -168,6 +166,14 @@
     padding-block-start: var(--c-bar-group-pad);
     padding-inline: var(--space-3) var(--space-6);
     background: var(--surface-shelf);
+
+    /* Under 900px the group is the phone's glass (BarGroup), flush with
+       the screen's trailing edge and topping with the tabs, as Shell
+       stands it. */
+    @media (max-width: 899px) {
+      padding-block-start: 0;
+      padding-inline-end: 0;
+    }
   }
   .main {
     position: absolute;

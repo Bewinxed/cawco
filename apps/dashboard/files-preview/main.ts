@@ -24,7 +24,7 @@ dark.addEventListener("change", themed);
 const query = new URLSearchParams(location.search);
 const frame = query.get("frame");
 const fill = (query.get("fill") ?? "typical") as Fill;
-const count = (query.get("count") ?? "none") as Count;
+const count = (query.get("count") ?? "beside") as Count;
 const target = document.body;
 
 if (frame === "desk") {
@@ -48,6 +48,7 @@ if (frame === "desk") {
     props: {
       pull: (query.get("pull") ?? "closed") as Pull,
       fill,
+      count,
       query: query.get("q") ?? "",
     },
   });

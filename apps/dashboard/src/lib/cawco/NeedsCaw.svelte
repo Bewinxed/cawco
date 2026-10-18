@@ -57,7 +57,7 @@
    * (GlassCard), hanging from the glass he stands on as one shape with it:
    * its top edge is the glass's foot, its trailing side runs straight on
    * down from the glass's trailing flank, and the glass flares out at its
-   * bottom-left into the panel's top edge (Shell `.join`). While it hangs,
+   * bottom-left into the panel's top edge (BarGroup `.join`). While it hangs,
    * the glass takes the panel's surface and edge, and the arcs on the lower
    * half of his rim, where the glass now runs on into the panel, fade out
    * (the glass's `data-joined`, bar-glass), as they do under the machines
@@ -138,7 +138,7 @@
   const RING_BOX = 36;
   /** The arcs' stroke, px (`--c-caw-ring`). */
   const RIM_STROKE = 2;
-  /** The glass's own edge, px: its hairline border (Shell `.tools::before`). */
+  /** The glass's own edge, px: its hairline border (BarGroup `.tools::before`). */
   const GLASS_EDGE = 1;
   /**
    * The arcs lie ON the glass's rim, a dial's ticks on its edge (owner:
@@ -236,7 +236,7 @@
    * While his panel hangs from his glass, the glass's lower half is no
    * outline any more: its foot is the seam into the panel, its trailing
    * corner runs straight on down into the panel's side, its leading one
-   * flares out into the panel's top edge (Shell `.join`). The arcs there
+   * flares out into the panel's top edge (BarGroup `.join`). The arcs there
    * would run into the seam, so the rim is drawn in two halves, each arc in
    * the half its middle lies in, and the lower half fades out while the
    * panel hangs, as a tab's rim gives way to its card's neck (PaneTabs).
@@ -665,7 +665,7 @@
 </Tip>
 
 <style>
-  /* An item of the bar's group (Shell's `.bar-item` recipe draws its box,
+  /* An item of the bar's group (BarGroup's `.bar-item` recipe draws its box,
      hover and focus). */
   .capsule {
     position: relative;

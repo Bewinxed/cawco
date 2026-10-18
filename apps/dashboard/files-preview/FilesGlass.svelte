@@ -11,10 +11,13 @@
    * Non-modal: no scrim, no trap.
    */
   import type { Snippet } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import { glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
   import { hangShadow } from "#lib/cawco/motion/hung-shadow.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 
   let {
     glass,
@@ -28,6 +31,14 @@
     joined?: boolean;
     children: Snippet;
   } = $props();
+
+  /**
+   * Where a card on the glass stands, as GlassCard places its own
+   * (bar-glass `glassPlacement`): under 900px the glass is the phone's,
+   * flush with the screen's edge, and the card with it.
+   */
+  const phone = new MediaQuery(DRAWER_QUERY);
+  const placement = $derived(glassPlacement(glass, phone.current));
 
   // The hung shadow, as the Shell draws it for every card on the glass.
   $effect(() => {
@@ -51,7 +62,7 @@
     anchor={glass}
     aria-label="Files"
     class="files-pop"
-    collisionPadding={8}
+    collisionPadding={placement.collisionPadding}
     customAnchor={glass}
     data-float="files"
     forceMount
@@ -59,7 +70,7 @@
     inert={!open}
     onOpenAutoFocus={(event) => event.preventDefault()}
     side="bottom"
-    sideOffset={0}
+    sideOffset={placement.sideOffset}
     strategy="fixed"
     trapFocus={false}
     bind:joined

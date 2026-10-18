@@ -27,8 +27,11 @@ const thumbs = import.meta.glob<string>("./assets/thumbs/*.webp", {
 
 /** closed · Files open · a file chosen (Files hung right, the file floating left) */
 export type Stage = "closed" | "open" | "picked";
-/** The count on the Files item: a mark on its glyph's corner, or none. */
-export type Count = "mark" | "none";
+/**
+ * The count on the Files item, never on its folder: the number beside it as
+ * the machines' is, or a vermillion mark at the item's top beside it.
+ */
+export type Count = "beside" | "mark";
 export type Pull = "closed" | "open";
 export type Fill =
   | "typical"

@@ -105,7 +105,9 @@ export function holdReadsWhileLeaving(): void {
       leave();
     }
   });
-  addEventListener("pageshow", (event) => {
+  // The window's own listener, typed by its event map whatever else a
+  // project's globals declare (a preview's typecheck also reads Bun's).
+  window.addEventListener("pageshow", (event) => {
     if (event.persisted) {
       leaving = false;
       for (const told of onReturn.splice(0)) {
@@ -122,7 +124,10 @@ export function holdReadsWhileLeaving(): void {
         ? heldUntilBack<T>(() => Promise.reject(error))
         : Promise.reject(error);
     });
-  const gated: typeof fetch = (input, init) => {
+  const gated = (
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ): Promise<Response> => {
     const outlivesThePage =
       init?.keepalive ?? (input instanceof Request && input.keepalive);
     if (outlivesThePage) {
@@ -143,7 +148,8 @@ export function holdReadsWhileLeaving(): void {
       return response;
     });
   };
-  globalThis.fetch = gated;
+  // The browser's fetch, which has none of Bun's typed extras (`preconnect`).
+  globalThis.fetch = gated as typeof fetch;
 }
 
 /**

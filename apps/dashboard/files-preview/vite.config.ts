@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { svelte, vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import Icons from "unplugin-icons/vite";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import {
   CSS_TARGET,
   calendarThemeOff,
@@ -22,11 +22,40 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const dashboard = join(here, "..");
 
+/** The bar's own items, which read the fleet from the hub's client. */
+const READERS = ["MachinesButton.svelte", "NeedsCaw.svelte"].map((file) =>
+  join(dashboard, "src/lib/cawco", file)
+);
+const FLEET = new Set([
+  "./client.svelte",
+  "./home/home-state.svelte",
+  "./home/caw-notices.svelte",
+]);
+
+/**
+ * The page's fleet for the bar's own items (stand-ins/fleet.ts): what
+ * MachinesButton and NeedsCaw import of the fleet resolves there, and
+ * nothing else does, so both components mount untouched with no hub.
+ */
+function standIns(): Plugin {
+  return {
+    name: "files-preview-stand-ins",
+    enforce: "pre",
+    resolveId(source, importer) {
+      const from = importer?.split("?")[0];
+      return from && READERS.includes(from) && FLEET.has(source)
+        ? join(here, "stand-ins/fleet.ts")
+        : null;
+    },
+  };
+}
+
 export default defineConfig({
   root: here,
   base: "./",
   mode: "development",
   plugins: [
+    standIns(),
     calendarThemeOff(),
     streamdownOverlayOwn(),
     tailwindcss(),

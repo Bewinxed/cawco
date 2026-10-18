@@ -16,12 +16,19 @@
    * find engine's matcher (search.ts): names, and the words on an
    * artifact's page, both regions filtered as it is typed; a region nothing
    * matches says so in its own place.
+   *
+   * On a phone (`segmented`) there is no room for two scrolls one over the
+   * other: the two are one list at a time under the kit's segmented
+   * control, Artifacts | Attachments, each segment with its count (while
+   * searching, its hits), the chosen list filling the rest of the sheet.
    */
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import EmptyState from "#lib/components/ui/empty/empty-state.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import { IconClose, IconLayers, IconPaperclip } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import IconChevronRight from "~icons/solar/alt-arrow-right-linear";
@@ -41,6 +48,7 @@
     failed = null,
     details = false,
     query = "",
+    segmented = false,
   }: {
     artifacts: ArtifactRow[];
     attachments: AttachmentRow[];
@@ -54,10 +62,14 @@
     details?: boolean;
     /** The words in the search as the panel opens. */
     query?: string;
+    /** One list at a time under a segmented control: the phone's sheet. */
+    segmented?: boolean;
   } = $props();
 
   let shown = $state(untrack(() => details));
   let words = $state(untrack(() => query));
+  /** The list the segmented control shows. */
+  let list = $state("artifacts");
 
   const uid = $props.id();
   const age = (offset: number) => formatAgeShort(loadedAt - offset, loadedAt);
@@ -118,152 +130,190 @@
       </button>
     {/if}
   </div>
-  <div
-    class="files-regions"
-    data-artifacts-floor={artifactsFloor}
-    data-attachments-floor={attachmentsFloor}
-  >
-    <section
-      aria-labelledby="{uid}-artifacts"
-      class="files-section"
-      data-files-region="artifacts"
-    >
-      <h3 class="files-head" id="{uid}-artifacts">
-        <span class="files-head-lead" data-box
-          ><IconLayers aria-hidden="true" /></span
-        >
-        <span class="files-head-name">Artifacts</span>
-        {#if !(loading || failed)}
-          <span class="files-head-count num" data-files-count
-            >{countOf(artifactHits.length, artifacts.length)}</span
-          >
-        {/if}
-      </h3>
-      {#if failed}
-        <div class="files-failed" role="alert">
-          <IconAlert aria-hidden="true" class="files-failed-mark" />
-          <p class="files-failed-title">
-            Couldn't read this session's artifacts
-          </p>
-          <p class="files-failed-line">
-            The hub didn't answer the list. Nothing is lost: the artifacts are
-            kept on the hub, and the attachments below come from the
-            conversation itself.
-          </p>
-          <div class="files-failed-actions">
-            <Button label="Try again" size="sm" />
-            <Button
-              aria-controls="{uid}-why"
-              aria-expanded={shown}
-              label={shown ? "Hide details" : "Show details"}
-              onclick={() => {
-                shown = !shown;
-              }}
-              size="sm"
-              variant="ghost"
-            />
-          </div>
-          {#if shown}
-            <pre class="files-failed-why" id="{uid}-why">{failed}</pre>
+  {#if segmented}
+    <!-- One list at a time under the kit's segmented control (Apple HIG,
+         Segmented controls: "switch between closely related subviews"),
+         each segment its noun and its count, equal widths; the chosen list
+         fills the rest of the sheet. -->
+    <Tabs.Root bind:value={list} class="files-tabs">
+      <Tabs.List aria-label="Artifacts or attachments" class="files-segments">
+        <Tabs.Trigger data-files-segment="artifacts" value="artifacts">
+          <span>Artifacts</span>
+          {#if !(loading || failed)}
+            <span class="files-segment-count num" data-files-count
+              >{countOf(artifactHits.length, artifacts.length)}</span
+            >
           {/if}
-        </div>
-      {:else if loading}
-        <div
-          aria-busy="true"
-          aria-label="Reading artifacts"
-          class="files-wait"
-          role="status"
-        >
-          {#each [0.46, 0.34] as share (share)}
-            <div class="files-ghost-row">
-              <span class="lead" data-box><Skeleton class="ghost-glyph" /></span
-              >
-              <Skeleton
-                class="ghost-name"
-                style="inline-size: {share * 100}%"
-              />
-              <Skeleton class="ghost-age" />
-            </div>
-          {/each}
-        </div>
-      {:else if artifacts.length === 0}
-        <p class="files-none">Nothing made yet</p>
-      {:else if artifactHits.length === 0}
-        <p class="files-none" data-files-none>No artifacts match “{asked}”</p>
-      {:else}
-        <div class="files-scroll kit-edge-fade-block" data-files-scroll>
-          <ArtifactCards {chosen} hits={artifactHits} />
-        </div>
-      {/if}
-    </section>
-    <section
-      aria-labelledby="{uid}-attachments"
-      class="files-section"
-      data-files-region="attachments"
-    >
-      <h3 class="files-head" id="{uid}-attachments">
-        <span class="files-head-lead" data-box
-          ><IconPaperclip aria-hidden="true" /></span
-        >
-        <span class="files-head-name">Attachments</span>
-        <span class="files-head-count num" data-files-count
-          >{countOf(attachmentHits.length, attachments.length)}</span
-        >
-      </h3>
-      {#if attachments.length === 0}
-        <p class="files-none">Nothing attached yet</p>
-      {:else if attachmentHits.length === 0}
-        <p class="files-none" data-files-none>No attachments match “{asked}”</p>
-      {:else}
-        <div class="files-scroll kit-edge-fade-block" data-files-scroll>
-          <ul
-            class="files-list"
-            {@attach highlight({ rows: "[data-files-row]" })}
+        </Tabs.Trigger>
+        <Tabs.Trigger data-files-segment="attachments" value="attachments">
+          <span>Attachments</span>
+          <span class="files-segment-count num" data-files-count
+            >{countOf(attachmentHits.length, attachments.length)}</span
           >
-            {#each attachmentHits as file (file.id)}
-              <li class="files-item attachment" data-files-row>
-                <button
-                  class="kit-item relative flex cursor-default select-none items-center gap-2.5 text-label px-2.5 attachment-row"
-                  title={file.name}
-                  type="button"
-                >
-                  <span class="lead" data-box>
-                    {#if file.picture}
-                      <img
-                        alt=""
-                        class="thumb"
-                        decoding="async"
-                        loading="lazy"
-                        src={file.picture}
-                      />
-                    {:else}
-                      <IconDocument aria-hidden="true" />
-                    {/if}
-                  </span>
-                  <span class="words">
-                    <span class="row-name">{file.name}</span>
-                    <span class="row-meta"
-                      >{file.kind} · {file.who} ·
-                      <span class="num">{age(file.age)}</span></span
-                    >
-                  </span>
-                </button>
-                <button
-                  aria-label="Show {file.name} in conversation"
-                  class="show touch-hit"
-                  title="Show in conversation"
-                  type="button"
-                >
-                  <IconChevronRight aria-hidden="true" />
-                </button>
-              </li>
-            {/each}
-          </ul>
-        </div>
-      {/if}
-    </section>
-  </div>
+        </Tabs.Trigger>
+      </Tabs.List>
+      <Tabs.Content
+        class="files-pane"
+        data-files-region="artifacts"
+        value="artifacts"
+      >
+        {@render artifactsBody()}
+      </Tabs.Content>
+      <Tabs.Content
+        class="files-pane"
+        data-files-region="attachments"
+        value="attachments"
+      >
+        {@render attachmentsBody()}
+      </Tabs.Content>
+    </Tabs.Root>
+  {:else}
+    <div
+      class="files-regions"
+      data-artifacts-floor={artifactsFloor}
+      data-attachments-floor={attachmentsFloor}
+    >
+      <section
+        aria-labelledby="{uid}-artifacts"
+        class="files-section"
+        data-files-region="artifacts"
+      >
+        <h3 class="files-head" id="{uid}-artifacts">
+          <span class="files-head-lead" data-box
+            ><IconLayers aria-hidden="true" /></span
+          >
+          <span class="files-head-name">Artifacts</span>
+          {#if !(loading || failed)}
+            <span class="files-head-count num" data-files-count
+              >{countOf(artifactHits.length, artifacts.length)}</span
+            >
+          {/if}
+        </h3>
+        {@render artifactsBody()}
+      </section>
+      <section
+        aria-labelledby="{uid}-attachments"
+        class="files-section"
+        data-files-region="attachments"
+      >
+        <h3 class="files-head" id="{uid}-attachments">
+          <span class="files-head-lead" data-box
+            ><IconPaperclip aria-hidden="true" /></span
+          >
+          <span class="files-head-name">Attachments</span>
+          <span class="files-head-count num" data-files-count
+            >{countOf(attachmentHits.length, attachments.length)}</span
+          >
+        </h3>
+        {@render attachmentsBody()}
+      </section>
+    </div>
+  {/if}
 {/if}
+
+{#snippet artifactsBody()}
+  {#if failed}
+    <div class="files-failed" role="alert">
+      <IconAlert aria-hidden="true" class="files-failed-mark" />
+      <p class="files-failed-title">Couldn't read this session's artifacts</p>
+      <p class="files-failed-line">
+        The hub didn't answer the list. Nothing is lost: the artifacts are kept
+        on the hub, and the attachments {segmented ? "in Attachments" : "below"} come
+        from the conversation itself.
+      </p>
+      <div class="files-failed-actions">
+        <Button label="Try again" size="sm" />
+        <Button
+          aria-controls="{uid}-why"
+          aria-expanded={shown}
+          label={shown ? "Hide details" : "Show details"}
+          onclick={() => {
+            shown = !shown;
+          }}
+          size="sm"
+          variant="ghost"
+        />
+      </div>
+      {#if shown}
+        <pre class="files-failed-why" id="{uid}-why">{failed}</pre>
+      {/if}
+    </div>
+  {:else if loading}
+    <div
+      aria-busy="true"
+      aria-label="Reading artifacts"
+      class="files-wait"
+      role="status"
+    >
+      {#each [0.46, 0.34] as share (share)}
+        <div class="files-ghost-row">
+          <span class="lead" data-box><Skeleton class="ghost-glyph" /></span>
+          <Skeleton class="ghost-name" style="inline-size: {share * 100}%" />
+          <Skeleton class="ghost-age" />
+        </div>
+      {/each}
+    </div>
+  {:else if artifacts.length === 0}
+    <p class="files-none">Nothing made yet</p>
+  {:else if artifactHits.length === 0}
+    <p class="files-none" data-files-none>No artifacts match “{asked}”</p>
+  {:else}
+    <div class="files-scroll kit-edge-fade-block" data-files-scroll>
+      <ArtifactCards {chosen} hits={artifactHits} />
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet attachmentsBody()}
+  {#if attachments.length === 0}
+    <p class="files-none">Nothing attached yet</p>
+  {:else if attachmentHits.length === 0}
+    <p class="files-none" data-files-none>No attachments match “{asked}”</p>
+  {:else}
+    <div class="files-scroll kit-edge-fade-block" data-files-scroll>
+      <ul class="files-list" {@attach highlight({ rows: "[data-files-row]" })}>
+        {#each attachmentHits as file (file.id)}
+          <li class="files-item attachment" data-files-row>
+            <button
+              class="kit-item relative flex cursor-default select-none items-center gap-2.5 text-label px-2.5 attachment-row"
+              title={file.name}
+              type="button"
+            >
+              <span class="lead" data-box>
+                {#if file.picture}
+                  <img
+                    alt=""
+                    class="thumb"
+                    decoding="async"
+                    loading="lazy"
+                    src={file.picture}
+                  />
+                {:else}
+                  <IconDocument aria-hidden="true" />
+                {/if}
+              </span>
+              <span class="words">
+                <span class="row-name">{file.name}</span>
+                <span class="row-meta"
+                  >{file.kind} · {file.who} ·
+                  <span class="num">{age(file.age)}</span></span
+                >
+              </span>
+            </button>
+            <button
+              aria-label="Show {file.name} in conversation"
+              class="show touch-hit"
+              title="Show in conversation"
+              type="button"
+            >
+              <IconChevronRight aria-hidden="true" />
+            </button>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
+{/snippet}
 
 <style>
   /* The two regions share the panel's height. Each track starts at its
@@ -298,6 +348,28 @@
     &[data-attachments-floor="one"] {
       --attachments-min: calc(var(--rows-one) + var(--region-seam));
     }
+  }
+  /* The phone's one list: the kit's segmented control under the search,
+     its two segments equal (the trigger's own `flex-1`), and the chosen
+     list filling what is left of the sheet with its own scroll. */
+  :global(.files-tabs) {
+    flex: 1;
+    min-block-size: 0;
+  }
+  /* As far under the search's hairline as the list stands under it (the
+     root's gap): the field keeps a --space-1 under it, this the rest. */
+  :global(.files-segments) {
+    margin-block-start: var(--space-1);
+  }
+  :global(.files-pane) {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    overflow: hidden;
+  }
+  .files-segment-count {
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
   }
   .files-section {
     display: flex;

@@ -5,9 +5,12 @@
  * one way out is CawCo's own bridge, under `/__cawco/`: the overlay the hub
  * serves with the page keeps its picks and dials there (preview-overlay
  * artifact.ts opens its socket through `window.WebSocket` when it opens).
- * Imported first by every entry.
+ * Its own built files are no backend: Caw's head in the bar fetches his
+ * Rive file and Rive's WASM from the folder's `assets/`, as the app serves
+ * them. Imported first by every entry.
  */
 const BRIDGE = /\/__cawco\//;
+const OWN = new URL("./assets/", document.baseURI).href;
 
 const refuse = (what: string, url: string | URL | Request): never => {
   throw new Error(
@@ -21,8 +24,10 @@ const address = (url: string | URL | Request): string =>
 const ownFetch = window.fetch.bind(window);
 // The page's fetch is the browser's, which has none of the Bun typings'
 // extras (`preconnect`).
+const allowed = (url: string): boolean =>
+  BRIDGE.test(url) || new URL(url, document.baseURI).href.startsWith(OWN);
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
-  BRIDGE.test(address(input))
+  allowed(address(input))
     ? ownFetch(input, init)
     : refuse("fetch", input)) as typeof window.fetch;
 

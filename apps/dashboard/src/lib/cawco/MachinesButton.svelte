@@ -9,7 +9,7 @@
 <script lang="ts">
   /**
    * The machines, one click away in the wide bar's glass group rather than
-   * always on screen: an item of the group (Shell's `.bar-item`), its glyph
+   * always on screen: an item of the group (BarGroup's `.bar-item`), its glyph
    * and the number of machines. The number is said once. Machines in
    * trouble (down, behind the hub, a stuck sync) tint the glyph in the
    * status hue, fail when any is down and attention otherwise; which ones
@@ -87,23 +87,12 @@
 </Tip>
 
 <style>
-  /* The number reads beside its glyph, --space-2 apart; the group's next
-     item (Caw's circle, his ring on its edge) stands the same --space-2 past
-     the number, the group's gap and this trailing pad together, so the
-     group reads at one spacing. */
-  .machines {
-    gap: var(--space-2);
-    padding-inline: var(--space-2) calc(var(--space-2) - var(--c-bar-group-pad));
-  }
-  /* Named under `.machines` to outrank Shell's `.tools .bar-symbol` ink. */
+  /* The number beside its glyph is BarGroup's item-with-a-number recipe
+     (`data-slot="num"`). Named under `.machines` to outrank BarGroup's `.tools .bar-symbol` ink. */
   .machines[data-tone="attn"] :global(.bar-symbol) {
     color: var(--status-attn-glyph);
   }
   .machines[data-tone="fail"] :global(.bar-symbol) {
     color: var(--status-fail-glyph);
-  }
-  .num {
-    font: var(--type-label);
-    font-variant-numeric: tabular-nums;
   }
 </style>

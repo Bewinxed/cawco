@@ -1,10 +1,10 @@
 /**
- * The cards that hang from the top bar's glass (Shell `[data-bar-group]`):
+ * The cards that hang from the top bar's glass (BarGroup `[data-bar-group]`):
  * Caw's panel, the machines and the Jump palette, shown one at a time in the
  * glass's one card (GlassCard). Opening one while another hangs swaps what
  * the card shows in place: the card stays hung, its contents cross-fade and
  * its box tweens to the new size (motion/morph). While the card stands drawn
- * out of the glass, the glass draws its join into it (Shell `.join`) and
+ * out of the glass, the glass draws its join into it (BarGroup `.join`) and
  * Caw's lower arcs give way to the seam (NeedsCaw). Jump opened from the
  * keyboard stands open at once and leaves at once (HangCard `held`,
  * `folded`), a swap into it is at once too, and the glass's join and Caw's
@@ -69,7 +69,7 @@ export const glassElement = (): HTMLElement | null =>
 /**
  * Where a card on the glass stands. On a phone the glass is Caw's tab tucked
  * into the screen's trailing edge, and the card hangs from the tab row's
- * floor through his neck (Shell `--caw-neck`), its top edge on the floor's
+ * floor through his neck (BarGroup `--caw-neck`), its top edge on the floor's
  * own line (the bar's seam, the strip's shelf) so the two are one line, its
  * trailing side the screen's edge and its leading side the phone's 12px
  * margin; on the wide bar it hangs from the glass's foot, 8px clear of the

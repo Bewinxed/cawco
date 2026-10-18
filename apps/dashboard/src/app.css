@@ -54,7 +54,7 @@
   initial-value: 0px;
 }
 /* The neck Caw's phone panel hangs through, from his glass's foot to the
-   row's floor (Shell `.tools`), registered so NeedsCaw reads it in px as
+   row's floor (BarGroup `.tools`), registered so NeedsCaw reads it in px as
    the panel's side offset; none on the wide bar. */
 @property --caw-neck {
   syntax: "<length>";

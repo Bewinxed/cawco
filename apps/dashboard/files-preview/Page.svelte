@@ -28,16 +28,20 @@
 
   const TAKES = [
     {
-      option: "mark",
-      name: "A count on the icon",
-      line: "A small count on the folder's corner, smaller than the icon.",
+      option: "beside",
+      name: "The number beside it",
+      line: "As the machines show theirs: the number in the bar's own type beside the folder.",
     },
     {
-      option: "none",
-      name: "No count",
-      line: "The icon alone. The count is in its name, read out and shown on hover, and in the panel's heads.",
+      option: "mark",
+      name: "A vermillion count",
+      line: "A small vermillion count at the item's top, beside the folder and clear of it.",
     },
   ] as const;
+
+  /** The bar's trailing end on a desk, and the phone's top row's. */
+  const BAR_END = { x: 1020, y: 0, width: 420, height: 44 };
+  const PHONE_END = { x: 190, y: 0, width: 200, height: 56 };
 
   const PULLS = [
     { pull: "closed", label: "Closed" },
@@ -100,11 +104,22 @@
               height={44}
               src="./?frame=bar&count={take.option}"
               title="The bar's icon group: {take.name}"
-              width={420}
+              view={BAR_END}
+              width={1440}
             />
             <figcaption>
-              The end of the bar, enlarged where there is room
+              The end of a desk's bar, enlarged where there is room
             </figcaption>
+          </figure>
+          <figure class="shot phone-end">
+            <Frame
+              height={844}
+              src="./?frame=phone&pull=closed&count={take.option}"
+              title="The phone's glass: {take.name}"
+              view={PHONE_END}
+              width={390}
+            />
+            <figcaption>The phone's glass, beside Caw</figcaption>
           </figure>
         </article>
       {/each}
@@ -116,7 +131,8 @@
     <p class="aside">
       The house drawer from the bottom. Files, beside Caw at the top of the
       screen, opens it; a finger drags it down to its lower stop, and on down to
-      put it away.
+      put it away. Inside, Artifacts and Attachments take turns under one
+      switch, so the list on show has the drawer's whole height.
     </p>
     <div class="phones">
       {#each PULLS as each (each.pull)}
@@ -245,6 +261,9 @@
   }
   .take .shot {
     max-inline-size: 840px;
+  }
+  .take .phone-end {
+    max-inline-size: 400px;
   }
   .phones {
     display: grid;

@@ -7,12 +7,15 @@
  *    the block axis unless that ancestor scrolls),
  *  - text cut with no ellipsis (scrollWidth past clientWidth),
  *  - text overlapping other text,
- * each in light and in dark; then the bar's glass group (every item's box,
- * the gaps, the glyphs: Files against its siblings to 0.5px), the floating
- * panels (inside the viewport, apart), the transcript's box in every desk
- * document (never moved), the selection pill on the chosen row, and the
- * phone sheet's computed transform at mid-pull. With `--shots <dir>` it also
- * captures every document, light and dark.
+ * each in light and in dark; then the bar's glass group, BarGroup's own
+ * (every item's box, the gaps, the glyphs: Files on its siblings' line and
+ * at the machines' symbol size to 0.5px, its count inside its own box), the
+ * folder's ink drawn from its SVG against the count (0 pixels shared), the
+ * floating panels (inside the viewport, apart), the transcript's box in
+ * every desk document (never moved), the selection pill on the chosen row,
+ * the phone sheet's computed transform at mid-pull, and its segments (one
+ * list at a time, each segment its count or its hits, pressed in turn).
+ * With `--shots <dir>` it also captures every document, light and dark.
  *
  *   node files-preview/sweep.mjs <base url> [--shots <dir>]
  */
@@ -46,7 +49,7 @@ for (const width of [390, 680, 1440]) {
   });
 }
 for (const width of [1440, 680]) {
-  for (const count of ["none", "mark"]) {
+  for (const count of ["beside", "mark"]) {
     for (const stage of ["closed", "open", "picked"]) {
       docs.push({
         name: `desk${width}-${stage}-count-${count}`,
@@ -85,23 +88,27 @@ for (const width of [1440, 680]) {
     desk: true,
   });
 }
-for (const count of ["none", "mark"]) {
+for (const count of ["beside", "mark"]) {
   docs.push({
     name: `bar-count-${count}`,
     url: `./?frame=bar&count=${count}`,
-    width: 420,
+    width: 1440,
     height: 44,
   });
-}
-for (const pull of ["closed", "open"]) {
   docs.push({
-    name: `phone-${pull}`,
-    url: `./?frame=phone&pull=${pull}`,
+    name: `phone-closed-count-${count}`,
+    url: `./?frame=phone&pull=closed&count=${count}`,
     width: 390,
     height: 844,
-    phone: true,
   });
 }
+docs.push({
+  name: "phone-open",
+  url: "./?frame=phone&pull=open",
+  width: 390,
+  height: 844,
+  phone: true,
+});
 docs.push({
   name: "phone-open-search-pricing",
   url: "./?frame=phone&pull=open&q=pricing",
@@ -168,7 +175,9 @@ function sweep() {
     const bound = surface
       ? surface.getBoundingClientRect()
       : { left: 0, right: vw };
-    if (moving === el || surface === el) {
+    // A frame showing part of its document (Frame `view`) stands its
+    // document past its box by design.
+    if (moving === el || surface === el || el.matches("[data-view] > iframe")) {
       continue;
     }
     if (r.left < bound.left - EPS || r.right > bound.right + EPS) {
@@ -370,6 +379,15 @@ for (const doc of docs) {
     }
     const read = await page.evaluate(geometry);
     found.push(...read.findings.map((f) => `(${scheme}) ${f}`));
+    const drawnInk = await page.evaluate(ink);
+    if (drawnInk) {
+      read.facts.ink = drawnInk;
+      if (drawnInk.overlapPx > 0) {
+        found.push(
+          `(${scheme}) the count covers ${drawnInk.overlapPx} of the folder's ink pixels: ${JSON.stringify(drawnInk)}`
+        );
+      }
+    }
     extra[scheme] = read.facts;
     if (shots && !(doc.page && doc.width === 680)) {
       mkdirSync(shots, { recursive: true });
@@ -386,9 +404,102 @@ for (const doc of docs) {
       rect: extra.light.transcript,
     });
   }
+  // The phone's one list at a time: the segmented control under the search,
+  // the chosen list filling the sheet, the other a press away; each segment
+  // says its count, and while searching its hits.
+  if (doc.url.includes("frame=phone&pull=open")) {
+    const read = () =>
+      page.evaluate(() => {
+        const sheet = document
+          .querySelector("[data-files-sheet]")
+          ?.getBoundingClientRect();
+        const list = document.querySelector(
+          "[data-files-segment]"
+        )?.parentElement;
+        const shown = [
+          ...document.querySelectorAll("[data-files-region]"),
+        ].filter((r) => !r.hidden);
+        const scroll = shown[0]?.querySelector("[data-files-scroll]");
+        const box = (r) => [+r.top.toFixed(1), +r.bottom.toFixed(1)];
+        return {
+          segments: [...document.querySelectorAll("[data-files-segment]")].map(
+            (segment) => ({
+              name: segment.dataset.filesSegment,
+              state: segment.dataset.state,
+              words: segment.textContent.replace(/\s+/g, " ").trim(),
+              w: +segment.getBoundingClientRect().width.toFixed(1),
+            })
+          ),
+          shown: shown.map((r) => r.dataset.filesRegion),
+          list: list && box(list.getBoundingClientRect()),
+          pane: shown[0] && box(shown[0].getBoundingClientRect()),
+          sheet: sheet && box(sheet),
+          scroll: scroll && {
+            scrollHeight: scroll.scrollHeight,
+            clientHeight: scroll.clientHeight,
+          },
+        };
+      });
+    const before = await read();
+    const segmented = { before };
+    if (before.segments.length === 2) {
+      await page.locator("[data-files-segment='attachments']").click();
+      await page.waitForTimeout(400);
+      segmented.attachments = await read();
+      await page.locator("[data-files-segment='artifacts']").click();
+      await page.waitForTimeout(400);
+      segmented.back = await read();
+    }
+    const s = segmented;
+    // Nothing to hold, nothing to switch: the empty state alone.
+    const empty = doc.url.includes("fill=empty");
+    if (empty !== (before.segments.length === 0)) {
+      found.push(
+        `segments ${empty ? "over" : "missing from"} this fill: ${JSON.stringify(s)}`
+      );
+    }
+    const equal =
+      s.before.segments.length === 2 &&
+      Math.abs(s.before.segments[0].w - s.before.segments[1].w) < 0.5;
+    const one = (r, name) => r && r.shown.length === 1 && r.shown[0] === name;
+    const fills = (r) => r?.pane && r.sheet && r.pane[1] <= r.sheet[1] + 0.5;
+    if (!(
+      empty ||
+      (equal &&
+        one(s.before, "artifacts") &&
+        one(s.attachments, "attachments") &&
+        one(s.back, "artifacts") &&
+        s.before.list[0] >= s.before.sheet[0] &&
+        fills(s.before) &&
+        fills(s.attachments))
+    )) {
+      found.push(
+        `the segments did not show one list at a time: ${JSON.stringify(s)}`
+      );
+    }
+    const words = s.before.segments.map((x) => x.words);
+    const want = doc.url.includes("q=pricing")
+      ? ["Artifacts 3 of 14", "Attachments 0 of 6"]
+      : null;
+    if (want && JSON.stringify(words) !== JSON.stringify(want)) {
+      found.push(
+        `the segments' counts are not the search's hits: ${JSON.stringify(words)}`
+      );
+    }
+    if (
+      /fill=long(&|$)/.test(doc.url) &&
+      !(
+        s.before.scroll?.scrollHeight > s.before.scroll?.clientHeight &&
+        s.attachments.scroll?.scrollHeight > s.attachments.scroll?.clientHeight
+      )
+    ) {
+      found.push(`a long list does not scroll: ${JSON.stringify(s)}`);
+    }
+    extra.light = { ...extra.light, segmented };
+  }
   // Two long regions: each scrolls on its own, and scrolling one leaves the
   // other where it was.
-  if (/fill=long(&|$)/.test(doc.url) && !doc.url.includes("q=")) {
+  if (doc.desk && /fill=long(&|$)/.test(doc.url) && !doc.url.includes("q=")) {
     const own = await page.evaluate(async () => {
       const [a, b] = [...document.querySelectorAll("[data-files-region]")].map(
         (r) => r.querySelector("[data-files-scroll]")
@@ -435,7 +546,7 @@ for (const doc of docs) {
   }
   // Search, typed: both regions filter as the words change, a region with
   // no match says so in its place, and Clear brings everything back.
-  if (doc.desk && /stage=open&count=none$/.test(doc.url)) {
+  if (doc.desk && /stage=open&count=beside$/.test(doc.url)) {
     const state = () =>
       page.evaluate(() => ({
         counts: [...document.querySelectorAll("[data-files-count]")].map((c) =>
@@ -546,7 +657,7 @@ for (const doc of docs) {
   // The open and the close run on `hang` (motion/hang): the card's own
   // translate, paused and sought through the DevTools Animation domain at
   // 0, ½ and 1 of its run.
-  if (doc.desk && /stage=closed&count=none$/.test(doc.url)) {
+  if (doc.desk && /stage=closed&count=beside$/.test(doc.url)) {
     await page.emulateMedia({ colorScheme: "light" });
     const cdp = await context.newCDPSession(page);
     await cdp.send("Animation.enable");
@@ -680,6 +791,73 @@ for (const [width, first] of firstAt) {
 }
 console.log(`\nDOCUMENTS ${report.length}  TOTAL FINDINGS ${total}`);
 
+/**
+ * Runs in the page: the Files folder's ink, drawn from its own SVG at 4×
+ * its size, every pixel with any coverage counted, against the count's box.
+ * The count may stand beside the folder or above it, never on its ink.
+ */
+async function ink() {
+  const files = document.querySelector("[data-files-control]");
+  if (!files || files.getClientRects().length === 0) {
+    return null;
+  }
+  const svg = files.querySelector(".bar-symbol");
+  const num = files.querySelector("[data-slot='num']");
+  const g = svg.getBoundingClientRect();
+  const SCALE = 4;
+  const w = Math.round(g.width * SCALE);
+  const h = Math.round(g.height * SCALE);
+  const copy = svg.cloneNode(true);
+  copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  copy.setAttribute("width", String(w));
+  copy.setAttribute("height", String(h));
+  const picture = new Image();
+  picture.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(copy.outerHTML)}`;
+  await picture.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const pen = canvas.getContext("2d");
+  pen.drawImage(picture, 0, 0);
+  const alpha = pen.getImageData(0, 0, w, h).data;
+  const m = num?.getBoundingClientRect();
+  let inkPx = 0;
+  let overlapPx = 0;
+  const inkBox = { left: 1e9, right: -1e9, top: 1e9, bottom: -1e9 };
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (alpha[(y * w + x) * 4 + 3] === 0) {
+        continue;
+      }
+      inkPx += 1;
+      const px = g.left + x / SCALE;
+      const py = g.top + y / SCALE;
+      inkBox.left = Math.min(inkBox.left, px);
+      inkBox.right = Math.max(inkBox.right, px + 1 / SCALE);
+      inkBox.top = Math.min(inkBox.top, py);
+      inkBox.bottom = Math.max(inkBox.bottom, py + 1 / SCALE);
+      if (
+        m &&
+        px + 1 / SCALE > m.left &&
+        px < m.right &&
+        py + 1 / SCALE > m.top &&
+        py < m.bottom
+      ) {
+        overlapPx += 1;
+      }
+    }
+  }
+  const r = (n) => +n.toFixed(2);
+  return {
+    scale: SCALE,
+    glyph: [r(g.left), r(g.top), r(g.width), r(g.height)],
+    inkBox: [r(inkBox.left), r(inkBox.top), r(inkBox.right), r(inkBox.bottom)],
+    inkPx,
+    count: m && [r(m.left), r(m.top), r(m.right), r(m.bottom)],
+    overlapPx,
+  };
+}
+
 /** Runs in the page: the group's geometry, the floating panels, the pill, the sheet. */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: page.evaluate ships this one function alone, so its checks cannot live in helpers outside it
 function geometry() {
@@ -695,15 +873,28 @@ function geometry() {
     };
   };
   // The phone's glass shows Files and Caw alone (Jump and the machines are
-  // in its sidebar).
+  // in its sidebar). Each item by its own mark: BarGroup's Jump, the
+  // machines, Caw, and the page's Files.
   const items = [...document.querySelectorAll("[data-bar-item]")].filter(
     (el) => el.getClientRects().length > 0
   );
+  const nameOf = (el) => {
+    if (el.hasAttribute("data-files-control")) {
+      return "files";
+    }
+    if (el.hasAttribute("data-machines")) {
+      return "machines";
+    }
+    if (el.hasAttribute("data-needs-caw")) {
+      return "caw";
+    }
+    return el.classList.contains("jump") ? "jump" : "?";
+  };
   if (items.length) {
     const members = items.map((el) => {
       const glyph = el.querySelector(".bar-symbol");
       return {
-        name: el.dataset.barItem,
+        name: nameOf(el),
         ...box(el),
         glyph: glyph ? box(glyph) : null,
       };
@@ -711,9 +902,16 @@ function geometry() {
     const gaps = members
       .slice(1)
       .map((m, i) => +(m.x - (members[i].x + members[i].w)).toFixed(2));
-    const glass = box(document.querySelector("[data-bar-group]"));
+    const group = document.querySelector("[data-bar-group]");
+    const glass = box(group);
+    const drawn = getComputedStyle(group, "::before");
     facts.group = {
       glass,
+      material: {
+        background: drawn.backgroundColor,
+        border: drawn.borderColor,
+        backdrop: drawn.backdropFilter,
+      },
       gaps,
       members: members.map(({ name, x, y, w, h, glyph }) => ({
         name,
@@ -726,61 +924,45 @@ function geometry() {
     };
     const at = (name) => members.find((m) => m.name === name);
     const files = at("files");
-    for (const sib of ["jump", "caw"].filter(at)) {
+    // Files stands on the group's line as its siblings do, and its folder
+    // is the machines' symbol size (Jump draws its glyph bare, smaller).
+    for (const sib of ["jump", "machines", "caw"].filter(at)) {
       const s = at(sib);
-      if (
-        Math.abs(files.w - s.w) > 0.5 ||
-        Math.abs(files.h - s.h) > 0.5 ||
-        Math.abs(files.y - s.y) > 0.5
-      ) {
+      if (Math.abs(files.h - s.h) > 0.5 || Math.abs(files.y - s.y) > 0.5) {
         findings.push(
-          `Files box ${files.w}×${files.h}@${files.y} differs from ${sib} ${s.w}×${s.h}@${s.y}`
+          `Files box ${files.w}×${files.h}@${files.y} off ${sib}'s line ${s.w}×${s.h}@${s.y}`
         );
       }
     }
-    for (const sib of ["jump", "machines"].filter(at)) {
-      const g = at(sib).glyph;
-      if (
-        Math.abs(files.glyph.w - g.w) > 0.5 ||
-        Math.abs(files.glyph.h - g.h) > 0.5
-      ) {
-        findings.push(
-          `Files glyph ${files.glyph.w}×${files.glyph.h} differs from ${sib}'s ${g.w}×${g.h}`
-        );
-      }
+    const machines = at("machines");
+    if (
+      machines &&
+      (Math.abs(files.glyph.w - machines.glyph.w) > 0.5 ||
+        Math.abs(files.glyph.h - machines.glyph.h) > 0.5)
+    ) {
+      findings.push(
+        `Files glyph ${files.glyph.w}×${files.glyph.h} differs from the machines' ${machines.glyph.w}×${machines.glyph.h}`
+      );
     }
     if (gaps.length && Math.max(...gaps) - Math.min(...gaps) > 0.5) {
       findings.push(`gaps differ: ${gaps.join(", ")}`);
     }
-    // The count on the glyph's top-trailing corner: its centre on that
-    // corner, so it covers a quarter of the glyph's box at most and none of
-    // the next item's glyph, and it stays on the screen.
-    const mark = document.querySelector("[data-count-mark]");
-    if (mark) {
-      const m = box(mark);
-      const g = files.glyph;
-      const over =
-        Math.max(0, Math.min(g.x + g.w, m.x + m.w) - Math.max(g.x, m.x)) *
-        Math.max(0, Math.min(g.y + g.h, m.y + m.h) - Math.max(g.y, m.y));
-      facts.mark = { ...m, glyphShare: +(over / (g.w * g.h)).toFixed(3) };
-      if (m.h >= g.h || m.w >= g.w) {
-        findings.push(
-          `count mark ${m.w}×${m.h} not smaller than the glyph ${g.w}×${g.h}`
-        );
-      }
+    // The count stays in Files' own box, on the glass and on the screen.
+    const num = document.querySelector(
+      "[data-files-control] [data-slot='num']"
+    );
+    if (num) {
+      const m = box(num);
+      facts.count = m;
       if (
-        over / (g.w * g.h) > 0.25 ||
-        m.x + m.w / 2 < g.x + g.w / 2 ||
-        m.y + m.h / 2 > g.y + g.h / 2
+        m.x < files.x - 0.5 ||
+        m.x + m.w > files.x + files.w + 0.5 ||
+        m.y < glass.y - 0.5 ||
+        m.y + m.h > glass.y + glass.h + 0.5 ||
+        m.y < 0
       ) {
         findings.push(
-          `count mark off the glyph's top-trailing corner: ${JSON.stringify(facts.mark)} on ${JSON.stringify(g)}`
-        );
-      }
-      const next = members[members.indexOf(files) + 1]?.glyph;
-      if (m.y < 0 || (next && m.x + m.w > next.x - 0.5)) {
-        findings.push(
-          `count mark past the screen or onto ${JSON.stringify(next)}: ${JSON.stringify(m)}`
+          `the count stands past Files' box or the glass: ${JSON.stringify(m)} in ${JSON.stringify({ files, glass })}`
         );
       }
     }
@@ -820,8 +1002,10 @@ function geometry() {
     }
   }
   // Both regions in sight: each head inside the panel's visible box.
+  // The desk's two regions, each under its head (the phone's take turns
+  // under the segments, checked by the sweep's own presses).
   const regions = [...document.querySelectorAll("[data-files-region]")].filter(
-    (r) => !r.closest("[inert]")
+    (r) => !r.closest("[inert]") && r.querySelector(".files-head")
   );
   if (regions.length) {
     const panel = regions[0].closest(".kit-pop, [data-files-sheet]");
@@ -859,7 +1043,7 @@ function geometry() {
     const group = document.querySelector("[data-bar-group]");
     const glassBox = group.getBoundingClientRect();
     const button = document
-      .querySelector('[data-bar-item="files"]')
+      .querySelector("[data-files-control]")
       .getBoundingClientRect();
     const neck = {
       left: +(card.left + px("--neck-start")).toFixed(2),
@@ -909,9 +1093,16 @@ function geometry() {
     )) {
       findings.push("the card does not wear kit-hang and glass-card");
     }
-    if (Math.abs(card.top - glassBox.bottom) > 0.5) {
+    // On the glass's foot; under 900px on the row's floor, through Caw's
+    // neck (bar-glass `glassPlacement`: the neck less the floor's line).
+    const neckBelow = matchMedia("(max-width: 899px)").matches
+      ? Number.parseFloat(
+          getComputedStyle(group).getPropertyValue("--caw-neck")
+        ) - 1
+      : 0;
+    if (Math.abs(card.top - (glassBox.bottom + neckBelow)) > 0.5) {
       findings.push(
-        `the card's top ${card.top} is not on the glass's foot ${glassBox.bottom}`
+        `the card's top ${card.top} is not ${neckBelow}px under the glass's foot ${glassBox.bottom}`
       );
     }
   }

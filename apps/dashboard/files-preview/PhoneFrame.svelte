@@ -7,14 +7,16 @@
    * its grabber, its two snaps (a lower one it opens on, and the recipe's
    * full height), vaul's own drag, which follows the finger, settles on a
    * snap and dismisses past the lower one; its scrim and Close as every
-   * sheet's. At the lower snap what the sheet holds is cut to what shows,
-   * so both regions keep their heads in sight.
+   * sheet's. It holds one list at a time under the kit's segmented control
+   * (FilesList `segmented`), so the list it shows has the sheet's height to
+   * itself; at the lower snap what the sheet holds is cut to what shows.
    */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
-  import BarGlass from "./BarGlass.svelte";
+  import FilesBar from "./FilesBar.svelte";
   import FilesList from "./FilesList.svelte";
   import {
+    type Count,
     type Fill,
     filesOf,
     type Pull,
@@ -25,14 +27,16 @@
   let {
     pull,
     fill = "typical",
+    count: take = "beside",
     query = "",
-  }: { pull: Pull; fill?: Fill; query?: string } = $props();
+  }: { pull: Pull; fill?: Fill; count?: Count; query?: string } = $props();
 
   const files = $derived(filesOf(fill));
   const count = $derived(files.artifacts.length + files.attachments.length);
   /**
    * vaul's snaps, as shares of the screen's height: the lower, where it
-   * opens (both heads and a row of each region in sight), then full.
+   * opens (the segments and the chosen list's first rows in sight), then
+   * full.
    * vaul-svelte opens a sheet at its first snap whatever is bound
    * (huntabyte/vaul-svelte#129, 1.0.0-next.7 the latest), so the snap it
    * opens on is first.
@@ -49,14 +53,14 @@
   <!-- The phone's glass where the capture's stands, Caw's tab at the
        screen's trailing edge, on the shelf over the capture's. -->
   <div class="bar-end">
-    <BarGlass
+    <FilesBar
       {count}
-      mark
       onfiles={() => {
         open = true;
       }}
       {open}
-      phone
+      railed={false}
+      {take}
     />
   </div>
 </div>
@@ -83,6 +87,7 @@
           : null}
         loading={fill === "loading"}
         {query}
+        segmented
       />
     </div>
   </Drawer.Content>
@@ -104,9 +109,9 @@
   :global(html.dark) .phone {
     background-image: none;
   }
-  /* Shell's phone row: the glass tops with the tabs, the bar's height less
-     a tab row's from the screen's top, flush with its trailing edge; the
-     shelf behind it by day covers the capture's own glass. */
+  /* Shell's phone row, flush with the screen's trailing edge, where the
+     glass stands as BarGroup places it (topping with the tabs); the shelf
+     behind it by day covers the capture's own glass. */
   .bar-end {
     position: absolute;
     inset-block-start: 0;
@@ -114,7 +119,6 @@
     display: flex;
     align-items: flex-start;
     block-size: var(--c-top-bar-h);
-    padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
     padding-inline-start: var(--space-3);
     box-sizing: border-box;
     background: var(--surface-shelf);
