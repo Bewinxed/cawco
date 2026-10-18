@@ -55,7 +55,8 @@ const AWAY =
 
 const UNREACHABLE = /Hub unreachable/;
 const RECONNECTED = /reconnected/i;
-const UPDATING_PROBE = /updating to 9\.9\.9-probe/;
+/** The build's name kept whole: a word joiner may follow its hyphen. */
+const UPDATING_PROBE = /updating to 9\.9\.9-\u2060?probe/;
 const UPDATING = /updating/;
 const PROXY_WORDS = /Bad gateway|cloudflare/i;
 const RETRY = /^(retry|try again)$/i;
@@ -187,7 +188,7 @@ interface Read {
     clipTop: number;
     f: number;
     opacity: number;
-    /** The page's top edge: `#main-content`'s, which the band's row moves. */
+    /** The top edge of what follows the band: the bar over the drawer's line, else the page (`#main-content`). */
     pageTop: number;
     translate: string;
   }[];
@@ -244,7 +245,11 @@ async function scrubBand(
               run.transitionProperty
             )
         ) as CSSTransition[];
-        const main = document.querySelector("#main-content");
+        // What stands under the band's foot: the bar, where the band is
+        // over it (under the drawer's line), else the page.
+        const next = window.matchMedia("(max-width: 899px)").matches
+          ? document.querySelector("header.top")
+          : document.querySelector("#main-content");
         for (const run of runs) {
           run.pause();
         }
@@ -281,7 +286,7 @@ async function scrubBand(
               clipTop: (
                 band.parentElement as HTMLElement
               ).getBoundingClientRect().top,
-              pageTop: main?.getBoundingClientRect().top ?? Number.NaN,
+              pageTop: next?.getBoundingClientRect().top ?? Number.NaN,
             };
           }),
         };
@@ -459,10 +464,17 @@ const bandLines = (page: Page) =>
     if (!words) {
       return [];
     }
-    const range = document.createRange();
-    range.selectNodeContents(words);
+    // The text's own line boxes: a range over the paragraph would also
+    // give the block MorphText stands its words in.
+    const boxes: DOMRect[] = [];
+    const walker = document.createTreeWalker(words, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      boxes.push(...range.getClientRects());
+    }
     const rows = new Map<number, { left: number; right: number }>();
-    for (const box of range.getClientRects()) {
+    for (const box of boxes) {
       if (box.width === 0) {
         continue;
       }
@@ -572,38 +584,22 @@ async function openJump(page: Page, view: View) {
  * A project's board read through a tunnel's HTML 502: one sentence, said
  * once, with one Retry; the bar's foot its own divider. The sweep's count.
  */
-async function boardRead(kit: Kit, page: Page, name: string) {
-  // A project's board read through the same tunnel.
-  const project = {
-    id: "probe-project",
-    name: "Probe",
-    caw: false,
-    createdAt: new Date().toISOString(),
-    lands: "main",
-    places: [],
-    primaryPlaceId: null,
-    remote: null,
-    review: false,
-    appleGate: false,
-    upstreamPosts: null,
-  };
+async function boardRead(kit: Kit, page: Page, name: string, project: string) {
+  // A project the hub keeps (the rail lists it), whose own reads come back
+  // through the tunnel as its HTML 502.
   await page.route(
-    (url) => url.pathname === "/api/projects",
-    (route) => route.fulfill({ json: [project] })
-  );
-  await page.route(
-    (url) => url.pathname.startsWith("/api/projects/probe-project/"),
+    (url) => url.pathname.startsWith(`/api/projects/${project}/`),
     (route) =>
       route.fulfill({ status: 502, contentType: "text/html", body: PROXY_502 })
   );
-  await page.evaluate(() => {
+  await page.evaluate((id) => {
     const link = document.createElement("a");
-    link.href = "/project/probe-project";
+    link.href = `/project/${id}`;
     document.body.append(link);
     link.click();
     link.remove();
-  });
-  await page.waitForURL("**/project/probe-project", { timeout: 20_000 });
+  }, project);
+  await page.waitForURL(`**/project/${project}`, { timeout: 20_000 });
   await page.waitForTimeout(1000);
   await settle(page, 200);
   const board = await page.evaluate(
@@ -675,8 +671,158 @@ async function boardRead(kit: Kit, page: Page, name: string) {
     seam !== null && seam.foot === seam.seam,
     JSON.stringify(seam)
   );
+  // Caw's read was refused with the rest: no empty seat before the name.
+  const head = await page.evaluate(() => {
+    const who = document
+      .querySelector('[data-slot="project-head"] [data-slot="who"]')
+      ?.getBoundingClientRect();
+    const title = document
+      .querySelector('[data-slot="project-head"] [data-slot="name"]')
+      ?.getBoundingClientRect();
+    return {
+      seats: document.querySelectorAll(
+        '[data-slot="project-head"] [data-slot="seat"]'
+      ).length,
+      who: who?.left ?? null,
+      name: title?.left ?? null,
+    };
+  });
+  kit.check(
+    `${name}, board 502: Caw unread, the name starts the head (no empty seat)`,
+    head.seats === 0 &&
+      head.who !== null &&
+      head.name !== null &&
+      head.name - head.who <= 4.5,
+    JSON.stringify(head)
+  );
+  if (name.startsWith("desk")) {
+    const listed = await page
+      .locator(".rail")
+      .getByText("Probe", { exact: true })
+      .filter({ visible: true })
+      .count();
+    kit.check(
+      `${name}, board 502: the rail lists the open project`,
+      listed > 0,
+      `${listed} in the rail`
+    );
+  }
   const found = await sweep(kit, page, name, "board 502");
+  if (name.endsWith("light")) {
+    // What the tunnel sent, as a browser draws it, beside what the board
+    // says of it (for the reviewer; never read by this spec).
+    const raw = await page.context().newPage();
+    await raw.setContent(PROXY_502);
+    await raw.screenshot({
+      path: join(kit.out, `${entrySlug(`${name} the tunnel's 502 body`)}.png`),
+    });
+    await raw.close();
+  }
   return found;
+}
+
+interface CardFrame {
+  at: number;
+  h: number;
+  held: number;
+  tweening: boolean;
+}
+
+/** Records Jump's card height every frame from now, and when the field is next typed in. */
+const recordCard = (page: Page) =>
+  page.evaluate((card) => {
+    const w = window as unknown as {
+      probeFrames: CardFrame[];
+      probeTyped: number;
+      probeStop: boolean;
+    };
+    w.probeFrames = [];
+    w.probeTyped = 0;
+    w.probeStop = false;
+    document
+      .querySelector(`${card} [data-slot="finder-field"] input`)
+      ?.addEventListener(
+        "input",
+        (event) => {
+          // When the event was made, on the frames' own timeline: a busy
+          // frame runs its listeners well after its own timestamp.
+          w.probeTyped = event.timeStamp;
+        },
+        { once: true }
+      );
+    const tick = () => {
+      const frame = document.querySelector<HTMLElement>(card);
+      if (frame) {
+        w.probeFrames.push({
+          // When the frame ran: its rAF stamp is the frame's begin time,
+          // which lags on a throttled frame.
+          at: performance.now(),
+          h: frame.getBoundingClientRect().height,
+          held: frame.querySelectorAll(".skeleton-slot").length,
+          tweening: frame
+            .getAnimations()
+            .some((each) =>
+              (each.effect as KeyframeEffect | null)
+                ?.getKeyframes()
+                .some((k) => "height" in k)
+            ),
+        });
+      }
+      if (!w.probeStop) {
+        requestAnimationFrame(tick);
+      }
+    };
+    requestAnimationFrame(tick);
+  }, CARD);
+
+/** The frames recorded since the field was typed in. */
+const recordedCard = async (page: Page) => {
+  const run = await page.evaluate(() => {
+    const w = window as unknown as {
+      probeFrames: CardFrame[];
+      probeTyped: number;
+      probeStop: boolean;
+    };
+    w.probeStop = true;
+    return { frames: w.probeFrames, typed: w.probeTyped };
+  });
+  return run.frames.filter((f) => f.at >= run.typed);
+};
+
+/** Placeholders from the first frame, then the answer, and the card's height never stepping between. */
+function cardMotion(kit: Kit, name: string, what: string, after: CardFrame[]) {
+  const firstHeld = after.findIndex((f) => f.held > 0);
+  kit.check(
+    `${name}, ${what}: placeholder rows within one frame of the query`,
+    firstHeld >= 0 && firstHeld <= 1,
+    `frame ${firstHeld} of ${after.length} after the input`
+  );
+  const lastHeld = after.findLastIndex((f) => f.held > 0);
+  kit.check(
+    `${name}, ${what}: the answer replaces the placeholders`,
+    lastHeld >= 0 &&
+      lastHeld < after.length - 1 &&
+      (after.at(-1)?.held ?? 1) === 0,
+    `placeholders from frame ${firstHeld} to ${lastHeld} of ${after.length}`
+  );
+  const steps = after
+    .slice(1)
+    .map((f, i) => ({
+      d: f.h - (after[i]?.h ?? f.h),
+      tweening: f.tweening || (after[i]?.tweening ?? false),
+    }))
+    .filter((step) => Math.abs(step.d) > 2 && !step.tweening);
+  const heights = after.map((f) => f.h);
+  kit.check(
+    `${name}, ${what}: the card's height animates, never steps`,
+    steps.length === 0,
+    `${steps.length} step(s): ${steps
+      .slice(0, 4)
+      .map((step) => step.d.toFixed(1))
+      .join(
+        ", "
+      )}px; heights ${after[0]?.h.toFixed(0)} → max ${Math.max(...heights).toFixed(0)} → ${after.at(-1)?.h.toFixed(0)} over ${after.length} frames`
+  );
 }
 
 /**
@@ -695,48 +841,10 @@ async function search(kit: Kit, page: Page, name: string, view: View) {
       await route.continue();
     }
   );
-  await page.evaluate((card) => {
-    const w = window as unknown as {
-      probeFrames: { at: number; h: number; held: number; tweening: boolean }[];
-      probeTyped: number;
-      probeStop: boolean;
-    };
-    w.probeFrames = [];
-    w.probeTyped = 0;
-    w.probeStop = false;
-    const field = document.querySelector(
-      `${card} [data-slot="finder-field"] input`
-    );
-    field?.addEventListener(
-      "input",
-      () => {
-        w.probeTyped = performance.now();
-      },
-      { once: true }
-    );
-    const tick = (at: number) => {
-      const frame = document.querySelector<HTMLElement>(card);
-      if (frame) {
-        w.probeFrames.push({
-          at,
-          h: frame.getBoundingClientRect().height,
-          held: frame.querySelectorAll(".skeleton-slot").length,
-          tweening: frame
-            .getAnimations()
-            .some((each) =>
-              (each.effect as KeyframeEffect | null)
-                ?.getKeyframes()
-                .some((k) => "height" in k)
-            ),
-        });
-      }
-      if (!w.probeStop) {
-        requestAnimationFrame(tick);
-      }
-    };
-    requestAnimationFrame(tick);
-  }, CARD);
-  await page.fill(`${CARD} [data-slot="finder-field"] input`, "probe");
+  await recordCard(page);
+  // Words nothing here holds (the hub keeps a project named Probe), so the
+  // answer is the one line "No sessions for …".
+  await page.fill(`${CARD} [data-slot="finder-field"] input`, "lantern");
   // The answer is held 800 ms: the placeholder rows, as drawn, for the
   // reviewer (never read by this spec).
   await page.waitForTimeout(250);
@@ -744,48 +852,20 @@ async function search(kit: Kit, page: Page, name: string, view: View) {
     path: join(kit.out, `${entrySlug(`${name} search loading`)}.png`),
   });
   const loading = await cardPlace(page);
+  // With no machine to ask, the hub alone searches: never "0 machines".
+  const searching = await page.evaluate(
+    (card) =>
+      document.querySelector<HTMLElement>(`${card} [data-slot="searching"]`)
+        ?.innerText ?? "",
+    CARD
+  );
+  kit.check(
+    `${name}, search loading: it says what is searched, never "0 machines"`,
+    searching.trim() === "Searching the hub…",
+    JSON.stringify(searching)
+  );
   await page.waitForTimeout(1350);
-  const run = await page.evaluate(() => {
-    const w = window as unknown as {
-      probeFrames: { at: number; h: number; held: number; tweening: boolean }[];
-      probeTyped: number;
-      probeStop: boolean;
-    };
-    w.probeStop = true;
-    return { frames: w.probeFrames, typed: w.probeTyped };
-  });
-  const after = run.frames.filter((f) => f.at >= run.typed);
-  const firstHeld = after.findIndex((f) => f.held > 0);
-  kit.check(
-    `${name}: placeholder rows within one frame of the query`,
-    firstHeld >= 0 && firstHeld <= 1,
-    `frame ${firstHeld} of ${after.length} after the input`
-  );
-  const lastHeld = after.findLastIndex((f) => f.held > 0);
-  kit.check(
-    `${name}: the answer replaces the placeholders`,
-    lastHeld >= 0 &&
-      lastHeld < after.length - 1 &&
-      (after.at(-1)?.held ?? 1) === 0,
-    `placeholders from frame ${firstHeld} to ${lastHeld} of ${after.length}`
-  );
-  const steps = after
-    .slice(1)
-    .map((f, i) => ({
-      d: f.h - (after[i]?.h ?? f.h),
-      tweening: f.tweening || (after[i]?.tweening ?? false),
-    }))
-    .filter((s) => Math.abs(s.d) > 2 && !s.tweening);
-  kit.check(
-    `${name}: the card's height animates, never steps`,
-    steps.length === 0,
-    `${steps.length} step(s): ${steps
-      .slice(0, 4)
-      .map((s) => s.d.toFixed(1))
-      .join(
-        ", "
-      )}px; heights ${after[0]?.h.toFixed(0)} → ${after.at(-1)?.h.toFixed(0)}`
-  );
+  cardMotion(kit, name, "search held", await recordedCard(page));
   await settle(page, 200);
   const answered = await cardPlace(page);
   const inside = (state: string, at: typeof answered) =>
@@ -809,11 +889,19 @@ async function search(kit: Kit, page: Page, name: string, view: View) {
   // ---- (d) the answers a tunnel draws ----
   await page.route(
     (url) => url.pathname === "/api/find",
-    (route) =>
-      route.fulfill({ status: 502, contentType: "text/html", body: PROXY_502 })
+    async (route) => {
+      await Bun.sleep(800);
+      await route.fulfill({
+        status: 502,
+        contentType: "text/html",
+        body: PROXY_502,
+      });
+    }
   );
-  await page.fill(`${CARD} [data-slot="finder-field"] input`, "probe again");
-  await page.waitForTimeout(1200);
+  await recordCard(page);
+  await page.fill(`${CARD} [data-slot="finder-field"] input`, "lantern again");
+  await page.waitForTimeout(1600);
+  cardMotion(kit, name, "search refused", await recordedCard(page));
   await settle(page, 200);
   const searched = await page.evaluate(
     (card) => document.querySelector<HTMLElement>(card)?.innerText ?? "",
@@ -847,10 +935,109 @@ async function search(kit: Kit, page: Page, name: string, view: View) {
   return found;
 }
 
+/**
+ * Where the open band stands: at the top of the screen over the bar under
+ * the drawer's line (JOURNEY.md: "at the top of the viewport across all
+ * mobile surfaces"), under the bar on a desk.
+ */
+async function bandPlace(kit: Kit, page: Page, name: string, view: View) {
+  const at = await page.evaluate((selector) => {
+    const band = document.querySelector(selector)?.getBoundingClientRect();
+    const bar = document.querySelector("header.top")?.getBoundingClientRect();
+    return band && bar
+      ? { band: [band.top, band.bottom], bar: [bar.top, bar.bottom] }
+      : null;
+  }, BAND);
+  const top = view === "desk";
+  kit.check(
+    top
+      ? `${name}: the band stands under the bar`
+      : `${name}: the band stands at the top of the screen, the bar under it`,
+    at !== null &&
+      (top
+        ? Math.abs((at.band[0] ?? -1) - (at.bar[1] ?? 0)) <= 0.5
+        : at.band[0] === 0 &&
+          Math.abs((at.bar[0] ?? -1) - (at.band[1] ?? 0)) <= 0.5),
+    JSON.stringify(at)
+  );
+}
+
+/** The countdown ticking (a morph every second) never folds the band's lines: its height holds on every frame. */
+async function countdownSteady(kit: Kit, page: Page, name: string) {
+  const seen = await page.evaluate(
+    (selector) =>
+      new Promise<{ band: number[]; words: number[]; drawn: number }>(
+        (done) => {
+          const band = document.querySelector<HTMLElement>(selector);
+          const words = band?.querySelector<HTMLElement>(".words");
+          const heights = { band: new Set<number>(), words: new Set<number>() };
+          let drawn = 0;
+          const end = performance.now() + 2600;
+          const tick = (at: number) => {
+            drawn += 1;
+            heights.band.add(
+              Math.round((band?.getBoundingClientRect().height ?? 0) * 10) / 10
+            );
+            heights.words.add(
+              Math.round((words?.getBoundingClientRect().height ?? 0) * 10) / 10
+            );
+            if (at < end) {
+              requestAnimationFrame(tick);
+            } else {
+              done({
+                band: [...heights.band],
+                words: [...heights.words],
+                drawn,
+              });
+            }
+          };
+          requestAnimationFrame(tick);
+        }
+      ),
+    BAND
+  );
+  kit.check(
+    `${name}, hub away: the countdown ticks without moving the band's lines`,
+    seen.band.length === 1 && seen.words.length === 1,
+    JSON.stringify(seen)
+  );
+}
+
+/** The build's name on one line, wherever the sentence wraps. */
+async function versionWhole(kit: Kit, page: Page, name: string) {
+  const rows = await page.evaluate((selector) => {
+    const words = document.querySelector(`${selector} .words`);
+    if (!words) {
+      return null;
+    }
+    const walker = document.createTreeWalker(words, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent ?? "";
+      const at = text.indexOf("9.9.9");
+      const end = text.indexOf("probe", at);
+      if (at >= 0 && end > at) {
+        const range = document.createRange();
+        range.setStart(node, at);
+        range.setEnd(node, end + 5);
+        return new Set(
+          [...range.getClientRects()]
+            .filter((r) => r.width > 0)
+            .map((r) => Math.round(r.top))
+        ).size;
+      }
+    }
+    return 0;
+  }, BAND);
+  kit.check(
+    `${name}, updating: the build's name stands on one line`,
+    rows === 1,
+    `${rows} line(s)`
+  );
+}
+
 async function runLeg(
   kit: Kit,
-  base: string,
-  hub: string,
+  { base, hub, project }: { base: string; hub: string; project: string },
   view: View,
   theme: "light" | "dark",
   findings: { count: number }
@@ -918,6 +1105,8 @@ async function runLeg(
     JSON.stringify(down)
   );
   await coversNothing("hub away");
+  await bandPlace(kit, page, name, view);
+  await countdownSteady(kit, page, name);
   const spoken = await said
     .ariaSnapshot({ timeout: 3000 })
     .catch((e: Error) => e.message);
@@ -1097,6 +1286,7 @@ async function runLeg(
     seen.slice(0, 3).join(" ‖ ") || (await bandNow(page)).words
   );
   await coversNothing("updating");
+  await versionWhole(kit, page, name);
   const lines = await bandLines(page);
   kit.check(
     `${name}, updating: the band's words wrap balanced, no line under half the longest`,
@@ -1128,9 +1318,87 @@ async function runLeg(
   await settle(page, 300);
 
   findings.count += await search(kit, page, name, view);
-  findings.count += await boardRead(kit, page, name);
+  findings.count += await boardRead(kit, page, name, project);
   await frames(page);
   await page.close();
+}
+
+/** Jump's list as the kinds it stands in, top to bottom, a placeholder read as the row it holds a place for. */
+const listKinds = (page: Page) =>
+  page.evaluate((card) => {
+    const list = [
+      ...document.querySelectorAll<HTMLElement>(`${card} [data-slot="list"]`),
+    ].find((el) => el.checkVisibility());
+    // What each child is, first match wins: a placeholder is the row it
+    // holds a place for.
+    const named: [string, string][] = [
+      [".skeleton-slot, [data-find-row]", "row"],
+      ['[data-slot="chips"]', "chips"],
+      [".head", "head"],
+      [".rule", "rule"],
+      ['[data-slot="nothing"]', "nothing"],
+    ];
+    const kinds: string[] = [];
+    for (const child of list?.children ?? []) {
+      const kind =
+        named.find(
+          ([selector]) =>
+            child.matches(selector) || child.querySelector(selector) !== null
+        )?.[1] ?? child.tagName.toLowerCase();
+      if (kinds.at(-1) !== kind) {
+        kinds.push(kind);
+      }
+    }
+    return kinds;
+  }, CARD);
+
+/**
+ * A search with answers, held 800 ms: its placeholders stand in the order
+ * its answer then takes, on this form (a phone's from the field up).
+ */
+async function searchOrder(kit: Kit, page: Page, name: string, view: View) {
+  await openJump(page, view);
+  await page.route(
+    (url) => url.pathname === "/api/find",
+    async (route) => {
+      await Bun.sleep(800);
+      await route.continue();
+    }
+  );
+  // "band" is the conversation's name and in its every message: the
+  // answer has both sections, names and where it was said.
+  await page.fill(`${CARD} [data-slot="finder-field"] input`, "band");
+  // Inside the 800 ms hold, past the 280 ms the doorway's rows take to
+  // leave (DESIGN.md, The Nothing Jumps Rule).
+  await page.waitForTimeout(550);
+  const loading = await listKinds(page);
+  await page.screenshot({
+    path: join(kit.out, `${entrySlug(`${name} search loading`)}.png`),
+  });
+  await page.waitForTimeout(2000);
+  await settle(page, 200);
+  const answered = await listKinds(page);
+  await page.screenshot({
+    path: join(kit.out, `${entrySlug(`${name} search answered`)}.png`),
+  });
+  // Every section that answers stands where its placeholders stood, in
+  // their order on this form; a section that answers empty folds away.
+  let at = 0;
+  for (const kind of answered) {
+    at = loading.indexOf(kind, at) + 1;
+    if (at === 0) {
+      break;
+    }
+  }
+  kit.check(
+    `${name}: the search's answer stands where its placeholders stood, in their order`,
+    loading.includes("row") && answered.includes("row") && at > 0,
+    JSON.stringify({ loading, answered })
+  );
+  await page.unroute((url) => url.pathname === "/api/find");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await settle(page, 300);
 }
 
 /** The shell's boxes at rest: the bar, the band's slot and the page. */
@@ -1150,6 +1418,39 @@ const restBoxes = (page: Page) =>
       tabs: box("[data-session-tab]"),
     };
   });
+
+/** With less motion the band's row lands open at once, the page's top at its foot. */
+async function lessMotion(kit: Kit, page: Page, name: string, socket: Socket) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  socket.mode = "refuse";
+  socket.drop();
+  await page.waitForFunction(
+    (selector) => document.querySelector(selector)?.hasAttribute("data-open"),
+    BAND,
+    { timeout: 10_000, polling: "raf" }
+  );
+  const landed = await page.evaluate((selector) => {
+    const band = document.querySelector<HTMLElement>(selector) as HTMLElement;
+    const slot = band.closest<HTMLElement>(".band-slot");
+    return {
+      rows: (slot?.getAnimations() ?? []).map((run) =>
+        run instanceof CSSTransition ? run.transitionProperty : "animation"
+      ),
+      foot: band.getBoundingClientRect().bottom,
+      pageTop:
+        document.querySelector("#main-content")?.getBoundingClientRect().top ??
+        Number.NaN,
+      slotHeight: slot?.getBoundingClientRect().height ?? 0,
+    };
+  }, BAND);
+  kit.check(
+    `${name}, less motion: the band's row lands open at once, the page's top at its foot`,
+    landed.rows.length === 0 &&
+      landed.slotHeight > 0 &&
+      Math.abs(landed.foot - landed.pageTop) <= 0.5,
+    JSON.stringify(landed)
+  );
+}
 
 /**
  * A conversation in front, on a phone (the bar floating over its tabs) and
@@ -1181,6 +1482,7 @@ async function conversationLeg(
   await settle(page, 600);
 
   const rest = await restBoxes(page);
+  await searchOrder(kit, page, name, view);
   kit.note(`${name}: at rest ${JSON.stringify(rest)}`);
   kit.check(
     `${name}: at rest the band's row lays out nothing, and the page starts where it did`,
@@ -1292,35 +1594,7 @@ async function conversationLeg(
   await until(async () => !(await bandNow(page)).open, 10_000);
   await settle(page, 600);
   if (view === "desk") {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    socket.mode = "refuse";
-    socket.drop();
-    await page.waitForFunction(
-      (selector) => document.querySelector(selector)?.hasAttribute("data-open"),
-      BAND,
-      { timeout: 10_000, polling: "raf" }
-    );
-    const landed = await page.evaluate((selector) => {
-      const band = document.querySelector<HTMLElement>(selector) as HTMLElement;
-      const slot = band.closest<HTMLElement>(".band-slot");
-      return {
-        rows: (slot?.getAnimations() ?? []).map((run) =>
-          run instanceof CSSTransition ? run.transitionProperty : "animation"
-        ),
-        foot: band.getBoundingClientRect().bottom,
-        pageTop:
-          document.querySelector("#main-content")?.getBoundingClientRect()
-            .top ?? Number.NaN,
-        slotHeight: slot?.getBoundingClientRect().height ?? 0,
-      };
-    }, BAND);
-    kit.check(
-      `${name}, less motion: the band's row lands open at once, the page's top at its foot`,
-      landed.rows.length === 0 &&
-        landed.slotHeight > 0 &&
-        Math.abs(landed.foot - landed.pageTop) <= 0.5,
-      JSON.stringify(landed)
-    );
+    await lessMotion(kit, page, name, socket);
   }
   await page.close();
 }
@@ -1337,11 +1611,22 @@ const spec: Spec = {
     fleet.launch("hub");
     await fleet.hubUp();
     const base = await fleet.dashboard();
+    // The project whose board reads come back as a tunnel's 502: one the hub
+    // keeps, so the rail lists it as it would.
+    const probe = await fleet.api<{ id: string }>("/api/projects", {
+      name: "Probe",
+    });
     const findings = { count: 0 };
     for (const view of ["phone", "narrowDesk", "desk"] as const) {
       for (const theme of ["light", "dark"] as const) {
         // biome-ignore lint/performance/noAwaitInLoops: one leg at a time, each its own page
-        await runLeg(kit, base, fleet.base, view, theme, findings);
+        await runLeg(
+          kit,
+          { base, hub: fleet.base, project: probe.id },
+          view,
+          theme,
+          findings
+        );
       }
     }
     // A machine with a conversation, for the bar that floats over its tabs.
@@ -1354,7 +1639,7 @@ const spec: Spec = {
     const session = await fleet.spawn("claude", "Band");
     for (const turn of ["one", "two", "three", "four", "five", "six"]) {
       // biome-ignore lint/performance/noAwaitInLoops: one turn after another
-      await fleet.send(session, `turn ${turn}`);
+      await fleet.send(session, `band turn ${turn}`);
       await Bun.sleep(1500);
     }
     for (const view of ["phone", "desk"] as const) {

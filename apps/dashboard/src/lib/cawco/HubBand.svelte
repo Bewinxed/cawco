@@ -39,9 +39,11 @@
    * moves nothing; a longer sentence (a refused address) grows it through
    * the house morph.
    *
-   * Where the bar floats over a conversation's tabs on a phone (`above`),
-   * the bar and the tabs are one row, so the band stands over both and they
-   * move down together.
+   * Under the drawer's line, where the bar is the phone's one row, the band
+   * stands at the top of the screen, over the bar, on every screen
+   * (JOURNEY.md: "The connection band persists at the top of the viewport
+   * across all mobile surfaces"): where the bar floats over a
+   * conversation's tabs, the bar and the tabs move down together under it.
    *
    * The first connection is not a fault: `status` starts `disconnected`, a
    * socket not made yet reads like one that failed, so the band waits for
@@ -57,13 +59,6 @@
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { dur } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
-
-  let {
-    above = false,
-  }: {
-    /** The bar floats over the page's first row: the band stands over both. */
-    above?: boolean;
-  } = $props();
 
   /** Whether this tab has ever had the hub: a drop retries, a first miss is a wrong address. */
   let everConnected = $state(false);
@@ -198,13 +193,21 @@
       : `retrying in ${retryIn}s`
   );
 
+  /**
+   * A build's name kept on one line: a word joiner (U+2060, zero width and
+   * read as nothing) after each hyphen, where a line may otherwise break
+   * ("9.9.9-" / "probe"), while the sentence around it still balances.
+   */
+  const unbroken = (version: string): string =>
+    version.replaceAll("-", "-\u2060");
+
   /** The words a refused page leads with, before the hub's address. */
   const REFUSED = "Can't reach the hub at";
 
   const words = $derived.by((): string => {
     switch (shown?.kind) {
       case "updating":
-        return `CawCo is updating${shown.version ? ` to ${shown.version}` : ""} — the hub is back within ${left(shown.until)}.`;
+        return `CawCo is updating${shown.version ? ` to ${unbroken(shown.version)}` : ""} — the hub is back within ${left(shown.until)}.`;
       case "lost":
       case "retrying":
         return `Hub unreachable — ${retry}.`;
@@ -213,7 +216,7 @@
       case "back":
         return shown.updated === undefined
           ? "Hub reconnected."
-          : `CawCo updated${shown.updated ? ` to ${shown.updated}` : ""}.`;
+          : `CawCo updated${shown.updated ? ` to ${unbroken(shown.updated)}` : ""}.`;
       case "older":
         return {
           busy: "CawCo updated — this page has stopped updating. It reloads once you're not using it.",
@@ -256,7 +259,7 @@
 <!-- Its slot is a row of the page's column under the bar, clipped at the
      bar's foot, so the band is uncovered from under the bar and closes back
      into it while the row opens and shuts under it. -->
-<div class="band-slot" data-above={above || undefined}>
+<div class="band-slot">
   <!-- The live region stands from the first markup, so assistive tech has
        it registered before its words change; it says the band's words
        plain, without MorphText's letters (MDN, ARIA live regions: "Establish
@@ -277,10 +280,17 @@
         inert={!band}
         {@attach morph()}
       >
+        <!-- The sentence morphs as a paragraph (`wrap`): its countdown ticks
+             each second, and a morph on one line would fold a phone's two
+             lines into one clipped line for every tick. The refused address
+             stands inline before it, so that one morphs on its line. -->
         <p class="words" aria-hidden="true">
           {#if shown?.kind === "refused"}
             {REFUSED} <code>{hubSocketUrl()}</code>{" "}
-          {/if}{#key episode}<MorphText text={words} />{/key}
+          {/if}{#key episode}<MorphText
+              text={words}
+              wrap={shown?.kind !== "refused"}
+            />{/key}
         </p>
         {#if pressable}
           <!-- Pending in place while an attempt is out, whoever started it. -->
@@ -318,8 +328,9 @@
     &:has(> .band-row > [data-open]) {
       grid-template-rows: 1fr;
     }
-    /* Over a phone's floating bar and the tabs it floats on. */
-    &[data-above] {
+    /* Under the drawer's line (DRAWER_QUERY), the top of the screen,
+       over the bar: the same place on every phone screen. */
+    @media (max-width: 899px) {
       order: -1;
     }
     @media (prefers-reduced-motion: no-preference) {

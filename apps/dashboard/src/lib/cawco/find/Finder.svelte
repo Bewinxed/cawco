@@ -252,6 +252,17 @@
     finder.missing.length > 0 || finder.indexing.length > 0
   );
   const machines = (n: number) => (n === 1 ? "1 machine" : `${n} machines`);
+  /**
+   * What is being searched, counted only when there is something to count:
+   * before the names answer says how many machines a find asks, or with no
+   * machine to ask, it is the hub alone that searches (never "Searching 0
+   * machines…").
+   */
+  const searchingWords = $derived(
+    finder.askable > 0
+      ? `Searching ${machines(finder.askable)}…`
+      : "Searching the hub…"
+  );
 
   type Fold = Extract<GoTo, { type: "fold" }>;
   type Item =
@@ -423,7 +434,7 @@
       return `No sessions for “${finder.text.trim()}”`;
     }
     if (finder.searching) {
-      return `${nameRows.length} found by name. Searching ${machines(finder.askable)}.`;
+      return `${nameRows.length} found by name. ${searchingWords.replace("…", ".")}`;
     }
     if (finder.typed) {
       const gone = finder.missing.length
@@ -517,9 +528,7 @@
     {/if}
     {#if finder.searching}
       <span data-slot="searching" class="searching mark-line" aria-hidden="true"
-        ><span>Searching {machines(finder.askable)}…</span><Spinner
-          class="spin"
-        /></span
+        ><span>{searchingWords}</span><Spinner class="spin" /></span
       >
     {:else if finder.coverage?.asked && !short}
       <span data-slot="covered" class="covered"

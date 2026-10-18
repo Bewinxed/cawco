@@ -1077,8 +1077,9 @@
       {/if}
 
       <!-- The one place the hub connection is spoken of (HubBand): a row
-           under the bar that moves the page down, never over it. -->
-      <HubBand above={floating} />
+           under the bar (over it under the drawer's line) that moves the
+           page down, never over it. -->
+      <HubBand />
 
       <!-- The old thumb bar is gone, so this region reclaims its height. On a
          session route the composer owns its own bottom inset; everywhere else
@@ -1698,7 +1699,7 @@
     }
     /* Floating, it lays out no room of its own: the page's first row
        starts at its top, and the connection band, standing over both
-       (HubBand `above`), moves the two down together. */
+       (HubBand, under the drawer's line), moves the two down together. */
     .top.floating {
       position: relative;
       z-index: 20;

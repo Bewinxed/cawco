@@ -351,7 +351,10 @@
 
 <header data-slot="project-head" class="project-head">
   <div data-slot="who" class="who">
-    {#if seated}
+    <!-- His seat holds its place while he is read, so the name never moves
+         as he lands; a read the hub refused draws no one, so the name takes
+         the head's start rather than standing after an empty seat. -->
+    {#if seated && !(lead.refused !== null && lead.view === null)}
       <div data-slot="seat" class="seat" transition:slot>
         <CawSeat {lead} projectId={project.id} projectName={project.name} />
       </div>

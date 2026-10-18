@@ -1326,12 +1326,12 @@
       SENTENCE_END.test(why) ? why : `${why}.`
     } Nothing was changed.`;
   });
-  /** Retry: the tasks, the stages and the views read again, together. */
+  /** Retry: the tasks, the stages, the views and Caw read again, together. */
   let rereading = $state(false);
   async function readAgain() {
     rereading = true;
     try {
-      await Promise.all([refresh(), readViews()]);
+      await Promise.all([refresh(), readViews(), lead.read()]);
     } finally {
       rereading = false;
     }
