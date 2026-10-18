@@ -1894,7 +1894,14 @@
     max-height: inherit;
   }
   /* A tab's rim's ink at the strength it wears it now: the one outline's
-     ink across the tab while a hang stands drawn out of it (HangCard). */
+     ink across the tab while a hang stands drawn out of it (HangCard).
+     Read off the tab alone, so it stays there: inherited, its value moving
+     with `--pick` restyled every element under the tab each frame of a
+     choice. */
+  @property --hang-rim {
+    syntax: "*";
+    inherits: false;
+  }
   .tab :global(.ff-tab) {
     --hang-rim: color-mix(
       in oklab,

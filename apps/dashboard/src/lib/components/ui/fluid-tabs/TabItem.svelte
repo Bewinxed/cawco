@@ -357,11 +357,22 @@
 
 <style>
   /* How chosen a folder tab is (`pick`), typed so a choice interpolates the
-     one number and everything drawn from it follows on its clock. */
+     one number and everything drawn from it follows on its clock. Set on
+     the tab and handed down only along the path to the three that read it
+     (the sheet, the rim, the strong ink): inherited by every element under
+     the tab, each frame of a choice restyled all of them, ~50 a tab. */
   @property --pick {
     syntax: "<number>";
-    inherits: true;
+    inherits: false;
     initial-value: 0;
+  }
+  .fold,
+  .sheet,
+  .rim,
+  .hit,
+  .label,
+  .strong {
+    --pick: inherit;
   }
   /* The measured box: the hit and whatever trails it. The overlays are
      aimed at this, so a trailing control sits inside the segment. */
