@@ -315,7 +315,7 @@
           data-slot="suggest-shimmer"
           style:--shimmer-w="9rem"
           style:--shimmer-h="calc(var(--text-label) + var(--space-1) * 2 + 2px)"
-          class="shimmer block w-(--shimmer-w) h-(--shimmer-h) flex-none pointer-events-auto"
+          class="block w-(--shimmer-w) h-(--shimmer-h) flex-none pointer-events-auto"
           in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
           ><Skeleton class="size-full" /></span
         >
