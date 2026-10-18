@@ -29,15 +29,19 @@
  * the page's own random client ids, so it is played by the hub's own rules
  * (hub artifacts/sync.ts `artifactSocket`), not by bytes: the page's sync
  * step 1 gets the step 2 the tape holds; its step 2 and its updates go to
- * the artifact's other sockets, as the hub relays them; awareness and text
- * frames get nothing, as the hub ignores them.
+ * the artifact's other sockets in the same page's context (the pane's and
+ * its preview's), as the hub relays them; awareness and text frames get
+ * nothing, as the hub ignores them. The walk's passes read side by side on
+ * one tape, each its own reader: relayed across them, a pin one pass dropped
+ * was counted on the other's pane whenever the two acts met (artifact/pin
+ * read "Comments, 2" in two walks of three, "1" in the third).
  *
  * Time stands still at `tape.at`: the page's clock is frozen there
  * (`page.clock.setFixedTime`), so every "2m ago" the tape's times make
  * reads the same on every run.
  */
 import { gunzipSync, gzipSync } from "node:zlib";
-import type { BrowserContext, Route } from "playwright-core";
+import type { BrowserContext, Route, WebSocketRoute } from "playwright-core";
 
 /** One HTTP exchange as the hub answered it. */
 export interface TapeHttp {
@@ -664,13 +668,20 @@ export function player(tape: TapeHub) {
     }
   }
   const misses = new Set<string>();
-  /** Each artifact's open doc sockets, on either origin: what a relay reaches. */
+  /**
+   * Each artifact's open doc sockets, on either origin, by the page context
+   * that opened them (`scope`): what a relay reaches.
+   */
   const rooms = new Map<string, Set<Peer>>();
 
-  /** A page's socket on `pathname`, answered from the tape; null when the tape has no such socket. */
   /** Held requests and silent sockets open now: held on purpose, answered as the hub state answers (a wait on the tape counts them done). */
   let holding = 0;
-  const connect = (pathname: string, peer: Peer) => {
+  /**
+   * A page's socket on `pathname`, answered from the tape; null when the tape
+   * has no such socket. `scope` is the page context it is in (`attach`), or
+   * the dashboard's server for one that came the network's way.
+   */
+  const connect = (pathname: string, peer: Peer, scope = "server") => {
     if (tape.held?.sockets.includes(pathname)) {
       holding += 1;
       return {
@@ -687,9 +698,10 @@ export function player(tape: TapeHub) {
       return null;
     }
     const artifact = pathname.match(ARTIFACT_SOCKET)?.[1];
-    const room = artifact ? (rooms.get(artifact) ?? new Set<Peer>()) : null;
+    const roomKey = `${scope} ${artifact}`;
+    const room = artifact ? (rooms.get(roomKey) ?? new Set<Peer>()) : null;
     if (artifact && room) {
-      rooms.set(artifact, room);
+      rooms.set(roomKey, room);
       room.add(peer);
     }
     for (const frame of opening(script)) {
@@ -723,8 +735,17 @@ export function player(tape: TapeHub) {
   };
   type Connection = NonNullable<ReturnType<typeof connect>>;
 
-  /** The previews' origins on a page's context: HTTP from the tape by port and path, sockets as the hub's are. */
+  /** Page contexts attached so far: each one's doc sockets relay among themselves alone. */
+  let contexts = 0;
+  /**
+   * The previews' origins on a page's context: HTTP from the tape by port
+   * and path, sockets as the hub's are; and the pane's own doc socket on the
+   * dashboard's origin, played here too, where its context is known (through
+   * the dashboard's server it is anyone's).
+   */
   const attach: Attach = async (context, isPreview) => {
+    contexts += 1;
+    const scope = `context ${contexts}`;
     await context.route(isPreview, (route) => {
       const request = route.request();
       const url = new URL(request.url());
@@ -758,14 +779,23 @@ export function player(tape: TapeHub) {
           : withParent(found.bytes, PARENT_MASK, parent),
       });
     });
-    await context.routeWebSocket(isPreview, (ws) => {
-      const connection = connect(new URL(ws.url()).pathname, {
-        send: (data) =>
-          ws.send(typeof data === "string" ? data : Buffer.from(data)),
-      });
+    const play = (ws: WebSocketRoute) => {
+      const connection = connect(
+        new URL(ws.url()).pathname,
+        {
+          send: (data) =>
+            ws.send(typeof data === "string" ? data : Buffer.from(data)),
+        },
+        scope
+      );
       ws.onMessage((message) => connection?.message(wire(message)));
       ws.onClose(() => connection?.close());
-    });
+    };
+    await context.routeWebSocket(isPreview, play);
+    await context.routeWebSocket(
+      (url) => !isPreview(url) && ARTIFACT_SOCKET.test(url.pathname),
+      play
+    );
   };
 
   const server = Bun.serve<{
