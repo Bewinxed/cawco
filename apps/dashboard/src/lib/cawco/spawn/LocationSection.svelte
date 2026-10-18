@@ -1,6 +1,7 @@
 <script lang="ts">
   /**
-   * Location (§1.5, §2.8): Existing files | Clone from GitHub. The directory
+   * Location (§1.5, §2.8): Existing files | Clone a repository, by its git
+   * URL on any host. The directory
    * browser lists the selected machine's real filesystem through `machineFs`.
    * No branch API exists, so the design's branch panel is not rendered.
    */
@@ -8,12 +9,12 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
-  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import Up from "~icons/solar/alt-arrow-up-linear";
   import Left from "~icons/solar/arrow-left-linear";
   import Right from "~icons/solar/arrow-right-linear";
   import Folder from "~icons/solar/folder-bold-duotone";
+  import FolderGit from "~icons/solar/folder-git-bold-duotone";
   import FolderOpen from "~icons/solar/folder-open-bold-duotone";
   import Search from "~icons/solar/magnifer-bold-duotone";
   import Refresh from "~icons/solar/refresh-bold-duotone";
@@ -180,7 +181,7 @@
     <Segmented
       items={[
         { value: "dir", label: "Existing files" },
-        { value: "repo", label: "Clone from GitHub" },
+        { value: "repo", label: "Clone a repository" },
       ]}
       label="Location source"
       onchange={onmode}
@@ -190,11 +191,7 @@
         {#if value === "dir"}
           <Folder style="color:var(--hue-amber-500)" />
         {:else}
-          <ProviderLogo
-            provider="github"
-            size={null}
-            style={`opacity:${on ? 1 : 0.6}`}
-          />
+          <FolderGit style={`opacity:${on ? 1 : 0.6}`} />
         {/if}
       {/snippet}
     </Segmented>
@@ -354,14 +351,14 @@
       >
         <div data-slot="location-section-field" class="field">
           <div data-slot="row" class="row repo-row">
-            <ProviderLogo class="lead gh" provider="github" size={null} />
+            <FolderGit class="lead" />
             <input
               aria-label="Repository"
               autocapitalize="off"
               id="session-repo"
               oninput={(event) => onrepo(event.currentTarget.value)}
               onkeydown={commitOnEnter}
-              placeholder="owner/repository"
+              placeholder="https://host/owner/repository.git"
               spellcheck="false"
               tabindex={mode === "repo" ? 0 : -1}
               value={repo}
@@ -422,9 +419,6 @@
     height: 16px;
     flex: none;
     color: var(--hue-amber-500);
-  }
-  .row :global(svg.gh) {
-    opacity: 0.8;
   }
   input {
     flex: 1;

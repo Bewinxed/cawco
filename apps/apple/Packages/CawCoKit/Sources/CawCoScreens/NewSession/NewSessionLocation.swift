@@ -4,7 +4,8 @@ import CawCoDesign
 import UIKit
 
 // Location (spawn/LocationChip.svelte over LocationSection.svelte, embedded):
-// Existing files | Clone from GitHub. The directory browser lists the chosen
+// Existing files | Clone a repository, by its git URL on any host. The
+// directory browser lists the chosen
 // machine's real filesystem.
 
 enum LocationMode { case dir, repo }
@@ -106,11 +107,11 @@ final class LocationPopover: NsPopoverController, UITextFieldDelegate {
         column.isLayoutMarginsRelativeArrangement = true
         column.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
 
-        // The GitHub mark as the web draws it, at 60% while it is not the chosen source.
-        let github = BrandLogo.github.image
+        // The clone glyph as the web draws it, at 60% while it is not the chosen source.
+        let clone = Glyph.folderGit.image
         let source = NsSegmented([
             ("Existing files", Glyph.folder.image, Palette.hueAmber500, nil),
-            ("Clone from GitHub", github, nil, nsSized(github, 16, template: false, alpha: 0.6)),
+            ("Clone a repository", clone, Palette.inkStrong, nsSized(clone, 16, template: true, alpha: 0.6)),
         ], selected: seed.mode == .dir ? 0 : 1)
         source.onChange = { [weak self] index in self?.choose(index == 0 ? .dir : .repo) }
         // `justify-self: start`: the switch hugs its items.
@@ -523,18 +524,18 @@ final class LocationPopover: NsPopoverController, UITextFieldDelegate {
         onCommit()
     }
 
-    // MARK: Clone from GitHub
+    // MARK: Clone a repository
 
     private func buildRepo() {
-        input(repoInput, placeholder: "owner/repository", label: "Repository")
+        input(repoInput, placeholder: "https://host/owner/repository.git", label: "Repository")
         repoInput.text = seed.repo
         repoInput.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             seed.repo = repoInput.text ?? ""
             onRepo(seed.repo)
         }, for: .editingChanged)
-        let mark = UIImageView(image: BrandLogo.github.image)
-        mark.alpha = 0.8
+        let mark = UIImageView(image: Glyph.folderGit.image)
+        mark.tintColor = Palette.hueAmber500
         mark.contentMode = .scaleAspectFit
         mark.translatesAutoresizingMaskIntoConstraints = false
         let row = UIStackView(arrangedSubviews: [mark, repoInput])

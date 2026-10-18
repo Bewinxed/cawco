@@ -7,6 +7,7 @@
     type EffortLevel,
     HARNESSES,
     type HarnessKind,
+    isGitUrl,
     type MoveEstimate,
     type PermissionMode,
     type PlacementPreview,
@@ -152,7 +153,6 @@
     /** The operator deleted the source chip: the dialog stays open as a plain New Session. */
     onexitcontinue?: () => void;
   } = $props();
-  const REPO = /^[\w.-]+\/[\w.-]+$/;
   /** A home folder at the start of a path (Linux, macOS). */
   const HOME = /^\/(home|Users)\/[^/]+(?=\/|$)/;
   /**
@@ -945,7 +945,7 @@
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
       unreadable ||
-      (repo !== undefined && !REPO.test(repo.trim())) ||
+      (repo !== undefined && !isGitUrl(repo)) ||
       (moveTo !== null && !(moving || movedAlready))
   );
   /** The source as the prompt's opening chip; a session title is often its first prompt, so it is cut short. */
@@ -1237,8 +1237,8 @@
     if (!machineIds.length) {
       return "Choose a machine to run this session on.";
     }
-    if (repo !== undefined && !REPO.test(repo.trim())) {
-      return "Enter a repository as owner/repository.";
+    if (repo !== undefined && !isGitUrl(repo)) {
+      return "Enter the repository's git URL.";
     }
     if (!cwd.trim()) {
       return "Enter the directory this session should work in.";

@@ -110,6 +110,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     // The new-session dialog (spawn/*.svelte).
     case chatRound = "chat-round-line-bold-duotone"
     case folderOpen = "folder-open-bold-duotone"
+    /// Clone a repository (LocationSection.svelte, LocationChip.svelte).
+    case folderGit = "folder-git-bold-duotone"
     case database = "database-bold-duotone"
     case tuning = "tuning-2-bold-duotone"
     case notes = "notes-bold-duotone"

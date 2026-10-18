@@ -123,6 +123,7 @@ const SOLAR_ICONS = [
   // The new-session dialog (spawn/*.svelte).
   "chat-round-line-bold-duotone", // First prompt
   "folder-open-bold-duotone", // LocationChip
+  "folder-git-bold-duotone", // LocationSection, LocationChip: Clone a repository
   "database-bold-duotone", // LifetimeChip: Persistent
   "tuning-2-bold-duotone", // ToolChips: effort
   "notes-bold-duotone", // permission-look: plan

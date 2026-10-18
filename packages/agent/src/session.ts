@@ -73,6 +73,7 @@ import {
   type HarnessUnanswered,
   holdingWords,
   INSTALL_SESSION_CREDENTIAL,
+  isGitUrl,
   LIMIT_REACHED,
   type LimitHolder,
   lastErrorKindOf,
@@ -577,21 +578,34 @@ const listRepos = async (): Promise<ReposResult> => {
   return listed.json() as RepoInfo[];
 };
 
-/** The same repository, under whichever of its names, is the same repository. */
-const repoIdentity = (repo: string): string => repoPath(repo).toLowerCase();
+/** A `<scheme>://` git URL's host and path, past any login and port. */
+const SCHEME_URL_PARTS =
+  /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([^/:]*)(?::\d*)?(\/.*)?$/i;
+/** An scp-like git URL's host and path, past any login. */
+const SCP_URL_PARTS = /^(?:[^@/:]*@)?([^/:]+):\/?(.*)$/;
+const TRAILING_SLASHES = /\/+$/;
+const DOT_GIT = /\.git$/;
+const LEADING_SLASHES = /^\/+/;
+
+/**
+ * A git URL as `host/path`, lowercased, without its login, port, `.git` or
+ * trailing slash: the same repository, under whichever of its URLs
+ * (`https://`, `ssh://`, scp-like), is the same repository, and the same
+ * path on another host is another.
+ */
+const repoIdentity = (url: string): string => {
+  const bare = url.trim().replace(TRAILING_SLASHES, "").replace(DOT_GIT, "");
+  const parts = bare.match(SCHEME_URL_PARTS) ?? bare.match(SCP_URL_PARTS);
+  const [host = "", path = ""] = parts ? [parts[1], parts[2]] : ["", bare];
+  return `${host}/${path.replace(LEADING_SLASHES, "")}`.toLowerCase();
+};
 
 /** What a clone of it is called on disk — git's own default. */
 const repoLeaf = (repo: string): string =>
   repoPath(repo).split("/").pop() ?? "";
 
-const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
-const SCP_LIKE_RE = /^[^/]+@[^:]+:/;
 /** A reason's own full stop, dropped where a sentence carries on after it. */
 const FINAL_STOP = /\.$/;
-
-/** A reference git can clone on its own, without `gh` resolving it first. */
-const isRepoUrl = (repo: string): boolean =>
-  URL_SCHEME_RE.test(repo.trim()) || SCP_LIKE_RE.test(repo.trim());
 
 /** The machine-scoped session-catalog controls, routed to a harness. */
 const CATALOG_METHODS = new Set([
@@ -4432,10 +4446,19 @@ export class SessionSupervisor {
     }
   }
 
+  /**
+   * `repo`, a git URL on any host, cloned by plain git with the machine's own
+   * git credential, whatever host it names; anything else is refused.
+   */
   async #clone({
     repo,
     baseDir,
   }: NonNullable<SpawnPayload["bootstrap"]>): Promise<string> {
+    if (!isGitUrl(repo)) {
+      throw new Error(
+        `${repo} is not a git URL: name the repository by its clone URL (https://, ssh:// or git@host:path)`
+      );
+    }
     // A MachinePath from the hub: absolute, no trailing slash.
     const parent = baseDir;
     const target = `${parent === "/" ? "" : parent}/${repoLeaf(repo)}`;
@@ -4453,19 +4476,14 @@ export class SessionSupervisor {
       return target;
     }
 
-    const gh = await ghAvailable();
-    if (!(gh || isRepoUrl(repo))) {
-      throw new Error(
-        `cloning ${repo} needs the GitHub CLI, and gh is not installed on this machine`
-      );
-    }
-
     await Bun.$`mkdir -p ${parent}`.quiet();
-    const cloned = gh
-      ? await Bun.$`gh repo clone ${repo} ${target} -- --single-branch`
-          .quiet()
-          .nothrow()
-      : await hostGit(parent, ["clone", "--single-branch", repo, target]);
+    const cloned = await hostGit(parent, [
+      "clone",
+      "--single-branch",
+      "--",
+      repo.trim(),
+      target,
+    ]);
     if (cloned.exitCode !== 0) {
       throw new Error(
         `could not clone ${repo}: ${tail(cloned.stderr.toString())}`

@@ -245,8 +245,8 @@ export interface SpawnPayload {
   accountDir?: { accountId: string };
   /**
    * Start from a repository instead of a directory that is already there: the
-   * agent clones `repo` — `owner/name`, or any URL git understands — into a
-   * subdirectory of `baseDir` and runs the session in the clone.
+   * agent clones `repo`, a git URL on any host ({@link isGitUrl}), with plain
+   * git into a subdirectory of `baseDir` and runs the session in the clone.
    */
   bootstrap?: { repo: string; baseDir: string };
   /**
@@ -442,6 +442,20 @@ const TRAILING_SLASHES = /\/+$/;
 const URL_SCHEME_AND_HOST = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i;
 const SCP_LIKE_HOST = /^[^/]+@[^:]+:/;
 const DOT_GIT_SUFFIX = /\.git$/;
+
+/** A URL with a scheme: `https://`, `ssh://`, `git://`, `file://`, any `<scheme>://`. */
+const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i;
+/** git's scp-like form, `[<user>@]<host>:<path>`: "only recognized if there are no slashes before the first colon". */
+const SCP_LIKE_URL = /^[^/\s:]+:\S+$/;
+
+/**
+ * Whether `repo` is a git URL, in git's own syntaxes (git-scm.com/docs/git-clone,
+ * "GIT URLS"): a `<scheme>://` URL or the scp-like `[<user>@]<host>:<path>`,
+ * on any host. A spawn's {@link SpawnPayload.bootstrap} clones only one, by
+ * plain git; a bare `owner/name` names no host, so it is none.
+ */
+export const isGitUrl = (repo: string): boolean =>
+  SCHEME_URL.test(repo.trim()) || SCP_LIKE_URL.test(repo.trim());
 
 /** `owner/name`, however the repository was written. */
 export const repoPath = (repo: string): string =>
