@@ -1639,6 +1639,13 @@
       "when": 1792273737814,
       "tag": "0233_work_item_landed",
       "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "6",
+      "when": 1792299007153,
+      "tag": "0234_ssh_machines",
+      "breakpoints": true
     }
   ]
 }

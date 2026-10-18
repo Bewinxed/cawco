@@ -1,8 +1,9 @@
 /**
  * Adding a machine to the fleet: what the hub's join routes answer with, and
- * what the dashboard renders from them. The hub never connects out except for
- * an SSH add the operator started; every machine joins by running the hub's
- * install script, which ends in `cawco binary-install agent`.
+ * what the dashboard renders from them. Every machine joins by running the
+ * hub's install script, which ends in `cawco binary-install agent`. One added
+ * over SSH runs it through the connection the hub holds to it, which
+ * carries a port on the machine's loopback to the hub (hub ssh-tunnels.ts).
  */
 
 /** Every line of progress the install script and `cawco binary-install` print starts with this. */
@@ -36,8 +37,11 @@ export interface JoinInfo {
 
 /** `POST /api/machines/ssh`. */
 export interface SshJoinRequest {
-  /** One of {@link JoinInfo.addresses}' urls; nothing typed reaches the remote shell. */
-  hubUrl: string;
+  /**
+   * Unread: a machine added over SSH reaches the hub through the hub's own
+   * connection to it. Apps built before still send the address they picked.
+   */
+  hubUrl?: string;
   /**
    * The target's password, for a machine that does not trust the hub's key
    * yet: this one connection signs in with it and adds the key to the
@@ -61,7 +65,7 @@ export type SshJoinProblem =
   | { kind: "host-key" }
   /** Nothing answered on that address and port, or the name did not resolve. */
   | { kind: "unreachable"; detail: string }
-  /** SSH got in, but the machine could not reach the hub address to download the script. */
+  /** SSH got in, but the machine's `curl` of the script through the hub's connection failed. */
   | { kind: "download" }
   /** A step of the install script or `cawco join` failed. */
   | { kind: "step"; step: string }
@@ -88,6 +92,11 @@ export interface SshPasswordProblem {
 /** `GET /api/machines/ssh/:id`: one SSH add, as the hub holds it in memory. */
 export interface SshJoinJob {
   exitCode: number | null;
+  /**
+   * The hub as the machine reaches it, `http://127.0.0.1:<port>`: the port on
+   * its loopback the hub's connection carries to the hub. Empty until that
+   * connection is up.
+   */
   hubUrl: string;
   id: string;
   /**

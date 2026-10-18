@@ -469,6 +469,32 @@ export const removedMachines = sqliteTable("removed_machines", {
 });
 
 /**
+ * A machine the hub added over SSH, and the connection it holds to it
+ * (ssh-tunnels.ts): the SSH target the person typed, and the port on the
+ * machine's loopback its agent reaches the hub on, carried to the hub's port
+ * by that connection. Kept so the hub opens every connection again when it
+ * starts, on the same port, which the agent's config names. `machineId` is
+ * null while the add that made the row runs, and set once the machine has
+ * joined; the hub only holds the connection of a joined machine open.
+ */
+export const sshMachines = sqliteTable(
+  "ssh_machines",
+  {
+    /** 12 random hex: names the connection's control socket (ssh-tunnels.ts `controlPath`). */
+    id: text("id").primaryKey(),
+    /** `user@host`, or a `Host` from the hub user's `~/.ssh/config`. */
+    target: text("target").notNull(),
+    /** The SSH port the person gave, or null: whatever `ssh` connects to. */
+    sshPort: integer("ssh_port"),
+    /** The port on the machine's loopback carried to the hub: null until OpenSSH allocates it. */
+    boxPort: integer("box_port"),
+    machineId: text("machine_id"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("ssh_machines_machine").on(table.machineId)]
+);
+
+/**
  * A project: one identity for work across machines and folders (WORDS.md).
  * Where its files are is its places (`project_places`); `machineId` and `cwd`
  * are its primary place, the one it was made from, and every client that

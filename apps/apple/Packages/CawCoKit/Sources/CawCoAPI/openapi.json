@@ -14792,8 +14792,7 @@
                   }
                 },
                 "required": [
-                  "target",
-                  "hubUrl"
+                  "target"
                 ]
               }
             }
@@ -38635,6 +38634,7 @@
             ]
           },
           "hubUrl": {
+            "description": "The hub as the machine reaches it, `http://127.0.0.1:<port>`: the port on\nits loopback the hub's connection carries to the hub. Empty until that\nconnection is up.",
             "type": "string"
           },
           "id": {

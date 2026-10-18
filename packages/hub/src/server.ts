@@ -675,6 +675,7 @@ import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
 import { sourceFacts } from "./source-facts";
+import { createSshTunnels } from "./ssh-tunnels";
 import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
@@ -3216,6 +3217,15 @@ export const createServer = (
     paused: (machineId, until) => pauseBegan(machineId, until),
     resumed: (machineId) => pauseEnded(machineId),
   });
+
+  /**
+   * The SSH connection the hub holds to each machine it added over SSH
+   * (ssh-tunnels.ts): the machine's agent reaches the hub through it, and
+   * the hub reaches its preview listeners the same way. Every joined
+   * machine's is opened once the hub serves.
+   */
+  const sshTunnels = createSshTunnels({ db: db.sshMachines, lifetime });
+  offBoot.push(() => sshTunnels.start());
 
   /**
    * Why a machine takes no new session start now, or nothing when it does.
@@ -9520,13 +9530,57 @@ export const createServer = (
         error: "Machine is not connected",
       };
     }
+    const { port } = answer.result as { port: number };
+    if (!sshTunnels.holds(machineId)) {
+      return { ok: true, upstream: { address, port, token } };
+    }
+    return await carriedListener(
+      { instanceId, machineId, generation, port, token },
+      stopLate
+    );
+  };
+
+  /**
+   * A listener on a machine added over SSH, reached through the hub's
+   * connection to it (ssh-tunnels.ts): the address its socket came from is
+   * that connection's end here, the hub's own loopback, so the listener's
+   * port is carried to one on it. A start the counter moved past meanwhile
+   * is told to go, as {@link startListener}'s is.
+   */
+  const carriedListener = async (
+    at: {
+      generation: number;
+      instanceId: string;
+      machineId: string;
+      port: number;
+      token: string;
+    },
+    stopLate: () => void
+  ): Promise<ListenerStart> => {
+    let carried: number;
+    try {
+      carried = await sshTunnels.carry(at.machineId, at.port);
+    } catch (error) {
+      stopLate();
+      return {
+        ok: false,
+        code: 503,
+        down: "reach",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+    if (previewGenerationOf(at.instanceId) !== at.generation) {
+      stopLate();
+      return {
+        ok: false,
+        code: 409,
+        down: "closed",
+        error: "Preview was closed while starting.",
+      };
+    }
     return {
       ok: true,
-      upstream: {
-        address,
-        port: (answer.result as { port: number }).port,
-        token,
-      },
+      upstream: { address: "127.0.0.1", port: carried, token: at.token },
     };
   };
 
@@ -10754,6 +10808,36 @@ export const createServer = (
         revision: target.revision,
       };
       const listener = listeners.get(instanceId);
+      if (
+        listener &&
+        previewSourceKey(listener.source) === previewSourceKey(target.source) &&
+        sshTunnels.holds(machineId)
+      ) {
+        // Through the hub's SSH connection to the machine, carried anew on
+        // this connection: until it is, a request starts the listener again.
+        previewTargets.set(instanceId, held);
+        const generation = previewGenerationOf(instanceId);
+        sshTunnels.carry(machineId, listener.port).then(
+          (port) => {
+            const now = previewTargets.get(instanceId);
+            if (
+              now &&
+              !now.upstream &&
+              previewGenerationOf(instanceId) === generation
+            ) {
+              previewTargets.set(instanceId, {
+                ...now,
+                upstream: { address: "127.0.0.1", port, token: listener.token },
+              });
+            }
+          },
+          (error: unknown) =>
+            console.warn(
+              `[hub] preview for ${instanceId} is not pointed at its listener again: ${error instanceof Error ? error.message : String(error)}`
+            )
+        );
+        continue;
+      }
       if (
         listener &&
         previewSourceKey(listener.source) === previewSourceKey(target.source)
@@ -21473,6 +21557,7 @@ export const createServer = (
         joinRoutes({
           lifetime,
           online: (machineId) => Boolean(registry.agent(machineId)),
+          tunnels: sshTunnels,
         }),
         createBinaryUpdates({
           dbPath: DB_PATH,
@@ -22187,6 +22272,8 @@ export const createServer = (
         machineCredentials.forget(params.machineId);
         // Its key goes too: if it comes back, the person admits it again.
         db.hubAuth.forgetMachineKey(params.machineId);
+        // The hub's SSH connection to it, if it was added over SSH, ends.
+        sshTunnels.forget(params.machineId);
         // The frame that carries the machine list: every dashboard drops the
         // machine and its sessions without a reload.
         publishInstances(params.machineId);

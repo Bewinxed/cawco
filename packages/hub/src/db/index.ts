@@ -226,6 +226,7 @@ import {
   workspaces,
 } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
+import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
 import { type TrashDb, trashDb } from "./trash";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
@@ -2076,6 +2077,8 @@ export interface DbShape {
   readonly sleepInstance: (id: string) => boolean;
   /** What reaching a cap does where a project sets nothing; its default before any is set. */
   readonly spendOnCap: () => OnCap;
+  /** The machines the hub added over SSH, and the connection it holds to each (ssh-tunnels.ts). */
+  readonly sshMachines: SshMachinesDb;
   readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
   /**
    * The row a fetch is about to resolve: a new one is stored with no files
@@ -3262,6 +3265,7 @@ const make = async (path: string): Promise<DbShape> => {
     ["login_moves", "machine_id", "keyed"],
     ["usage_limits", "machine_id", "keyed"],
     ["machine_keys", "machine_id", "keyed"],
+    ["ssh_machines", "machine_id"],
   ];
   /** How many rows moved, by what they are: what a re-key answers. */
   type Moved = (what: string, count: number) => void;
@@ -9111,6 +9115,7 @@ const make = async (path: string): Promise<DbShape> => {
     connections: connectionsDb(db),
     ingress: ingressDb(db),
     relays: relaysDb(db),
+    sshMachines: sshMachinesDb(db),
     hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db),
     find: findDb(db),

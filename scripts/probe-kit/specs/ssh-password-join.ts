@@ -1,25 +1,34 @@
 /**
  * Connect a machine › Over SSH with a password (hub join.ts): the password
  * signs in one connection, which adds the hub's key to the machine's
- * `~/.ssh/authorized_keys` as `ssh-copy-id` does and runs the install in the
- * same session; every later add signs in with the key. The password is never
- * in an argv, an environment, a job's lines, the hub's log or its database.
+ * `~/.ssh/authorized_keys` as `ssh-copy-id` does; the hub's own connection
+ * to the machine (ssh-tunnels.ts) and the install sign in with that key, and
+ * so does every later add. The password is never in an argv, an
+ * environment, a job's lines, the hub's log or its database.
  *
  * The scratch target is an SSH server on loopback (the maintained `ssh2`
  * package's): a non-root OpenSSH `sshd` cannot check a password, which needs
  * /etc/shadow or PAM. It takes one throwaway user and a random password full
  * of shell-hostile characters, signs in by password, keyboard-interactive or
- * a key in its own `authorized_keys`, and runs each command with `sh -c`
- * under a HOME of its own. The hub's `ssh` is system OpenSSH, through a
- * wrapper on the hub's PATH that names the scratch HOME's key and
- * known_hosts: OpenSSH reads `~` from the password database, never $HOME,
- * so the scratch hub's own `~/.ssh` would otherwise be the host user's.
+ * a key in its own `authorized_keys`, forwards a port to the client as
+ * OpenSSH does (`tcpip-forward`), and runs each command with `sh -c` under a
+ * HOME of its own. The hub's `ssh` is system OpenSSH, through a wrapper on
+ * the hub's PATH that names the scratch HOME's key and known_hosts: OpenSSH
+ * reads `~` from the password database, never $HOME, so the scratch hub's
+ * own `~/.ssh` would otherwise be the host user's.
+ *
+ * The machine's commands run with a PATH that has no `tar` ({@link machineBin}):
+ * the install script, downloaded through the hub's connection, runs and
+ * stops at its first check ("tar is needed"), before it fetches or places
+ * anything. That line is the proof the install ran on the machine through
+ * the hub's port, without installing a build on this host.
  *
  * (a) Before any password, a key add is refused: the machine does not trust
  *     the hub's key yet.
  * (b) A wrong password is refused, classified as `password`, nothing added.
  * (c) The right password: the target's `authorized_keys` holds the hub's key
- *     once (`.ssh` 700, the file 600), and the install ran in that session.
+ *     once (`.ssh` 700, the file 600), and the install ran with that key,
+ *     through the port the hub's connection carries.
  *     No process's argv or environment held the password while it signed in.
  * (d) The right password again: the key is still there once.
  * (e) A key add with no password now signs in with the key (BatchMode).
@@ -28,11 +37,6 @@
  * (h) A wrong password the machine answers with silence (as a firewall that
  *     bans the address after a failed password) ends the add within
  *     {@link SILENT_MS}, as a machine that stopped answering.
- * (i) An add that signed in and hangs on a hub address that never answers
- *     (the owner's: a tailnet address from a machine off the tailnet) says
- *     it signed in, and Stop ends it.
- * (j) Left alone, that download ends within {@link DOWNLOAD_MS}, as the
- *     machine unable to reach the hub.
  * (l) On a real OpenSSH sshd, Stop ends the command on the machine too
  *     (sshd signals none started without a terminal), and an add that runs
  *     to its end leaves no watchdog behind.
@@ -49,21 +53,22 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import {
-  type AuthContext,
-  type AuthenticationType,
-  type ParsedKey,
-  type PublicKeyAuthContext,
-  Server,
-  utils,
-} from "ssh2";
+import type { AuthContext } from "ssh2";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import {
+  HELD,
+  keyAccepted,
+  machineBin,
+  serveTarget,
+  WAYS,
+} from "../ssh-target";
 
 const USER = "probe";
 /** Quotes, `$`, a backslash, `!` and spaces: any shell that read it would change it. */
@@ -77,8 +82,10 @@ const ADD_MS = 60_000;
 const REFUSED_MS = 15_000;
 /** How long a silenced sign-in may take: the hub's 10 s ServerAliveInterval, three asks, and slack. */
 const SILENT_MS = 45_000;
-/** How long a download the hub address never answers may take: curl's 60 s `--max-time`, and slack. */
-const DOWNLOAD_MS = 80_000;
+/** The hub's step once its connection carries a port on the machine to it. */
+const CARRYING = "cawco-install: carrying this hub to the machine on its port ";
+/** The install script's own first refusal on a machine with no `tar`. */
+const NO_TAR = "cawco: tar is needed";
 
 const PROCESS_ID = /^\d+$/;
 
@@ -155,17 +162,31 @@ const modesOf = (dir: string, file: string): string =>
 const OVER_SSH = /Over SSH/;
 
 /**
+ * The install ran on the machine through the hub's connection: the hub's
+ * carry step, the job's hub address that port on the machine's loopback,
+ * and the install script's own refusal there ({@link machineBin}).
+ */
+const installed = (job: SshJoinJob): boolean => {
+  const carried = job.lines.find((line) => line.startsWith(CARRYING));
+  return (
+    carried !== undefined &&
+    job.hubUrl === `http://127.0.0.1:${carried.slice(CARRYING.length)}` &&
+    job.lines.some((line) => line.startsWith(NO_TAR))
+  );
+};
+
+/**
  * (l) On a real OpenSSH sshd (this user's own, unprivileged: key sign-in
  * only, the scratch target's `authorized_keys`, which holds the hub's key
- * by now): Stop ends what the add runs on the machine, not only the hub's
- * `ssh`, and an add that runs to its end leaves nothing behind.
+ * by now; its sessions given the scratch HOME and {@link machineBin}'s PATH by
+ * `SetEnv`): Stop ends what the add runs on the machine, not only the
+ * hub's `ssh`, and an add that runs to its end leaves nothing behind.
  */
 async function realSshd(
   kit: Kit,
   fleet: KitFleet,
   dir: string,
-  authorized: string,
-  urls: { refused: string; holding: string }
+  machine: { authorized: string; bin: string; home: string }
 ): Promise<void> {
   const lease = Bun.listen({
     hostname: "127.0.0.1",
@@ -178,23 +199,22 @@ async function realSshd(
   await Bun.$`ssh-keygen -q -t ed25519 -N "" -f ${join(dir, "sshd_host_key")}`.quiet();
   writeFileSync(
     config,
-    `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(dir, "sshd_host_key")}\nPidFile ${join(dir, "sshd.pid")}\nAuthorizedKeysFile ${authorized}\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\nStrictModes no\n`
+    `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(dir, "sshd_host_key")}\nPidFile ${join(dir, "sshd.pid")}\nAuthorizedKeysFile ${machine.authorized}\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\nStrictModes no\nSetEnv HOME=${machine.home} PATH=${machine.bin}\n`
   );
   const sshd = Bun.spawn(
     ["/usr/sbin/sshd", "-D", "-f", config, "-E", join(dir, "sshd.log")],
     { stdout: "ignore", stderr: "ignore" }
   );
   const user = (await Bun.$`id -un`.text()).trim();
-  const begin = (hubUrl: string) =>
+  const begin = () =>
     fleet.api<SshJoinJob>("/api/machines/ssh", {
       target: `${user}@127.0.0.1`,
       port,
-      hubUrl,
     });
   const read = (id: string) => fleet.api<SshJoinJob>(`/api/machines/ssh/${id}`);
-  const remoteCurl = () =>
-    processes({ parts: ["curl", `${urls.holding}/install.sh`] });
+  const holding = () => processes({ parts: HELD });
   const watchdogs = () => processes({ parts: ["while ps -p"] });
+  const hold = join(machine.home, ".hold");
   try {
     await until(
       "the real sshd listening",
@@ -202,31 +222,33 @@ async function realSshd(
       Boolean,
       10_000
     );
-    const held = await begin(urls.holding);
-    const curl = await until(
-      "the machine's curl holding the download",
-      () => remoteCurl().at(0),
+    writeFileSync(hold, "");
+    const held = await begin();
+    const step = await until(
+      "the machine's install step held",
+      () => holding().at(0),
       Boolean,
-      20_000
+      30_000
     ).catch(() => undefined);
-    const curlGroup = curl === undefined ? null : groupOf(curl);
+    const stepGroup = step === undefined ? null : groupOf(step);
     const stopped = await stopAdd(fleet, held.id);
     const gone = await until(
-      "the machine's curl and its group gone",
+      "the machine's step and its group gone",
       () =>
-        remoteCurl().length === 0 &&
-        processes({ group: curlGroup ?? -1 }).length === 0
+        holding().length === 0 &&
+        processes({ group: stepGroup ?? -1 }).length === 0
           ? true
           : undefined,
       Boolean,
       10_000
     ).catch(() => false);
     kit.check(
-      "l: on a real sshd, Stop ends what the add runs on the machine: its curl and every process of that group are gone within 10 s",
-      stopped.job?.state === "stopped" && curl !== undefined && gone === true,
-      `stop answered ${stopped.said}; machine's curl ${curl} (group ${curlGroup}); left ${JSON.stringify(remoteCurl())} and in the group ${JSON.stringify(processes({ group: curlGroup ?? -1 }))}`
+      "l: on a real sshd, Stop ends what the add runs on the machine: its held step and every process of that group are gone within 10 s",
+      stopped.job?.state === "stopped" && step !== undefined && gone === true,
+      `stop answered ${stopped.said}; machine's step ${step} (group ${stepGroup}); left ${JSON.stringify(holding())} and in the group ${JSON.stringify(processes({ group: stepGroup ?? -1 }))}`
     );
-    const ran = await begin(urls.refused);
+    rmSync(hold, { force: true });
+    const ran = await begin();
     const ended = await until(
       "the add on the real sshd ended",
       () => read(ran.id),
@@ -240,8 +262,8 @@ async function realSshd(
       5000
     ).catch(() => false);
     kit.check(
-      "l: on a real sshd, an add that runs to its end exits with its own failure and leaves no watchdog behind",
-      ended.problem?.kind === "download" && strays === true,
+      "l: on a real sshd, an add that runs to its end ran the install through the hub's connection, exits with its own failure and leaves no watchdog behind",
+      ended.state === "failed" && installed(ended) && strays === true,
       `${seen(ended)}; watchdogs left ${JSON.stringify(watchdogs())}`
     );
   } finally {
@@ -318,19 +340,7 @@ async function run(kit: Kit): Promise<void> {
     `#!/bin/sh\nexec /usr/bin/ssh -F ${join(dir, "ssh_config")} "$@"\n`
   );
   chmodSync(join(bin, "ssh"), 0o755);
-  // Inside a workspace boundary the hub's machine has no address but
-  // loopback, so `/api/join` lists none to choose. This `tailscale` gives it
-  // two. 127.0.0.2, where the hub (bound to 127.0.0.1) does not answer: the
-  // target's `curl` of the install script is refused, which shows the
-  // install ran in the session without installing a build there. And
-  // 127.0.0.3, its "DNS name", where a socket of this spec's accepts and
-  // never answers: a hub address that holds the download, as a tailnet
-  // address does for a machine off the tailnet.
-  writeFileSync(
-    join(bin, "tailscale"),
-    `#!/bin/sh\ncase "$1" in ip) echo 127.0.0.2 ;; *) echo '{"Self":{"DNSName":"127.0.0.3."}}' ;; esac\n`
-  );
-  chmodSync(join(bin, "tailscale"), 0o755);
+  const path = machineBin(join(dir, "machine-bin"));
 
   const authorized = join(home, ".ssh", "authorized_keys");
   const signedIn: string[] = [];
@@ -348,39 +358,6 @@ async function run(kit: Kit): Promise<void> {
     signedIn.push(way);
     return true;
   };
-  const trusted = (): ParsedKey[] =>
-    existsSync(authorized)
-      ? readFileSync(authorized, "utf8")
-          .split("\n")
-          .filter(Boolean)
-          .flatMap((line) => {
-            const key = utils.parseKey(line);
-            return key instanceof Error ? [] : [key as ParsedKey];
-          })
-      : [];
-  /**
-   * A key sign-in: the key is one `authorized_keys` holds, and its
-   * signature, once sent, verifies (before it, the client only asks).
-   */
-  const keyAccepted = (ctx: PublicKeyAuthContext): boolean => {
-    const { key, signature, blob, hashAlgo } = ctx;
-    const match = trusted().find(
-      (one) => one.type === key.algo && one.getPublicSSH().equals(key.data)
-    );
-    if (!(match && signature && blob)) {
-      return Boolean(match);
-    }
-    const verified = match.verify(blob, signature, hashAlgo) === true;
-    if (verified) {
-      signedIn.push("publickey");
-    }
-    return verified;
-  };
-  const WAYS: AuthenticationType[] = [
-    "publickey",
-    "password",
-    "keyboard-interactive",
-  ];
   const authenticate = (ctx: AuthContext): void => {
     const answer = (ok: boolean): void => {
       if (ok) {
@@ -407,80 +384,29 @@ async function run(kit: Kit): Promise<void> {
         );
         break;
       case "publickey":
-        answer(keyAccepted(ctx));
+        answer(keyAccepted(authorized, ctx, () => signedIn.push("publickey")));
         break;
       default:
         answer(false);
     }
   };
-  const server = new Server(
-    { hostKeys: [readFileSync(join(dir, "host_key"))] },
-    (client) => {
-      client
-        .on("authentication", authenticate)
-        .on("ready", () => {
-          client.on("session", (accept) => {
-            accept().on("exec", (acceptExec, _reject, info) => {
-              const channel = acceptExec();
-              const child = Bun.spawn(["sh", "-c", info.command], {
-                cwd: home,
-                env: { HOME: home, PATH: process.env.PATH ?? "/usr/bin:/bin" },
-                stdin: "ignore",
-                stdout: "pipe",
-                stderr: "pipe",
-              });
-              // As sshd does: output as it comes, the exit once both ends close.
-              const relay = async (
-                from: ReadableStream<Uint8Array>,
-                to: { write: (chunk: Uint8Array) => unknown }
-              ) => {
-                for await (const chunk of from) {
-                  to.write(chunk);
-                }
-              };
-              Promise.all([
-                relay(child.stdout, channel),
-                relay(child.stderr, channel.stderr),
-                child.exited,
-              ]).then(([, , code]) => {
-                channel.exit(code);
-                channel.end();
-              });
-            });
-          });
-        })
-        .on("error", () => undefined);
-    }
-  );
-  const port = await new Promise<number>((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      resolve((server.address() as { port: number }).port);
-    });
+  const { port, server } = await serveTarget({
+    authenticate,
+    home,
+    host: "127.0.0.1",
+    hostKey: readFileSync(join(dir, "host_key")),
+    path,
+    port: 0,
   });
 
   const jobs: SshJoinJob[] = [];
   try {
     fleet.launch("hub", [], { PATH: `${bin}:${fleet.env.PATH}` });
     await fleet.hubUp();
-    const info = await fleet.api<{ addresses: { url: string }[] }>("/api/join");
-    const hubUrl = info.addresses[0]?.url ?? "";
-    const holdingUrl = info.addresses[1]?.url ?? "";
-    kit.check(
-      "the hub lists the two addresses to hand the install",
-      hubUrl.includes("127.0.0.2") && holdingUrl.includes("127.0.0.3"),
-      JSON.stringify(info.addresses)
-    );
-    // Accepts the machine's `curl` and never answers it.
-    const holding = Bun.listen({
-      hostname: "127.0.0.3",
-      port: Number(new URL(fleet.base).port),
-      socket: { data: () => undefined },
-    });
-    const begin = (password?: string, address = hubUrl) =>
+    const begin = (password?: string) =>
       fleet.api<SshJoinJob>("/api/machines/ssh", {
         target: `${USER}@127.0.0.1`,
         port,
-        hubUrl: address,
         ...(password === undefined ? {} : { password }),
       });
     const read = (id: string) =>
@@ -489,9 +415,9 @@ async function run(kit: Kit): Promise<void> {
      * One add through the hub API, read until it ends, and how long that
      * took. One still running after {@link ADD_MS} is answered as it reads.
      */
-    const timedAdd = async (password?: string, address = hubUrl) => {
+    const timedAdd = async (password?: string) => {
       const from = Date.now();
-      const started = await begin(password, address);
+      const started = await begin(password);
       const ended = await until(
         `the add ${started.id} ended`,
         () => read(started.id),
@@ -508,10 +434,6 @@ async function run(kit: Kit): Promise<void> {
             .split("\n")
             .filter((line) => line.startsWith(hubBlob))
         : [];
-    /** The install ran: its download was tried, from the address given. */
-    const installed = (job: SshJoinJob) =>
-      job.problem?.kind === "download" &&
-      job.lines.some((line: string) => line.includes("curl: ("));
 
     // (a) The hub's key is not trusted yet.
     const before = await add();
@@ -537,7 +459,7 @@ async function run(kit: Kit): Promise<void> {
     const first = await add(PASSWORD);
     const modes = modesOf(join(home, ".ssh"), authorized);
     kit.check(
-      "c: the password signs in, the hub's key is added once (.ssh 700, the file 600), and the install runs in the same session",
+      "c: the password signs in, the hub's key is added once (.ssh 700, the file 600), and the install runs with that key through the port the hub's connection carries",
       signedIn.includes("password") &&
         keyLines().length === 1 &&
         keyLines()[0] === hubPublic &&
@@ -609,47 +531,7 @@ async function run(kit: Kit): Promise<void> {
       `${seen(silent)}; ended after ${silentMs} ms`
     );
 
-    // (i) Signed in, the download held by a hub address that never answers:
-    // the job says it has signed in, and Stop ends it.
-    const downloading = await begin(PASSWORD, holdingUrl);
-    const signedInRead = await until(
-      "the add past its sign-in, on its download step",
-      () => read(downloading.id),
-      (job) =>
-        job.lines.some((line) =>
-          line.startsWith("cawco-install: downloading the install script")
-        ),
-      15_000
-    ).catch(() => read(downloading.id));
-    const downloadGroup = sshGroup(sshArgv);
-    const stoppedDownload = await stopAdd(fleet, downloading.id);
-    jobs.push(await read(downloading.id));
-    kit.check(
-      "i: once signed in the job says so (its download step) while it runs, and Stop ends a download that hangs: stopped, its ssh group gone",
-      signedInRead.state === "running" &&
-        signedInRead.lines.some((line) =>
-          line.startsWith("cawco-install: downloading the install script")
-        ) &&
-        stoppedDownload.job?.state === "stopped" &&
-        downloadGroup !== null &&
-        processes({ group: downloadGroup }).length === 0,
-      `while running ${seen(signedInRead)}; stop answered ${stoppedDownload.said}; group ${downloadGroup}`
-    );
-
-    // (j) The same hanging download, left alone, ends within curl's limits.
-    const { job: held2, ms: heldMs } = await timedAdd(PASSWORD, holdingUrl);
-    kit.check(
-      `j: a download the hub address never answers ends within ${DOWNLOAD_MS / 1000} s, as the machine unable to reach the hub`,
-      held2.state === "failed" &&
-        held2.problem?.kind === "download" &&
-        heldMs < DOWNLOAD_MS,
-      `${seen(held2)}; ended after ${heldMs} ms`
-    );
-    await realSshd(kit, fleet, dir, authorized, {
-      refused: hubUrl,
-      holding: holdingUrl,
-    });
-    holding.stop(true);
+    await realSshd(kit, fleet, dir, { authorized, bin: path, home });
 
     await passwordField(kit, fleet);
 
