@@ -79,7 +79,9 @@
   .hidden-file {
     display: none;
   }
-  .att-btn {
+  /* css-scope: the menu's button is the kit Trigger's own, which Svelte never scopes; data-att-btn marks it, and this file alone writes that name */
+  .att-btn,
+  :global([data-att-btn]) {
     --hit-edge: 1px;
     width: var(--c-composer-field);
     height: var(--c-composer-field);
@@ -102,18 +104,24 @@
         transform var(--dur-control) var(--ease-out);
     }
   }
-  .att-btn :global(svg) {
+  /* css-scope: the Trigger's glyph, as above */
+  .att-btn :global(svg),
+  :global([data-att-btn] svg) {
     width: 16px;
     height: 16px;
   }
   @media (hover: hover) and (pointer: fine) {
-    .att-btn:hover {
+    /* css-scope: the Trigger's hover, as above */
+    .att-btn:hover,
+    :global([data-att-btn]:hover) {
       background: var(--surface-hover);
       color: var(--ink-strong);
     }
   }
   @media (prefers-reduced-motion: no-preference) {
-    .att-btn:active {
+    /* css-scope: the Trigger's press, as above */
+    .att-btn:active,
+    :global([data-att-btn]:active) {
       transform: scale(var(--press-scale));
     }
   }
