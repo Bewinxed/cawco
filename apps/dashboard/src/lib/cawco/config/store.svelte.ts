@@ -9,7 +9,13 @@ import type {
 } from "@cawco/core";
 import { getContext, setContext } from "svelte";
 import { failureWords } from "#lib/cawco/hub-read.js";
-import type { DelegateTypesPayload } from "../delegate-types";
+import type { ProjectRow } from "../client.svelte";
+import type {
+  DelegateTypesPayload,
+  ProjectCatalogPayload,
+  ProjectDelegateType,
+  ProjectTypes,
+} from "../delegate-types";
 import type {
   FleetMemoryDocRow,
   FleetMemoryRow,
@@ -91,6 +97,27 @@ export class ConfigStore {
     const payload = await read<DelegateTypesPayload>("/api/delegate-types");
     return payload.types;
   });
+  /** Each project's own types, read from its catalog; a project with none is left out. */
+  readonly projectTypes = new Slot(
+    "the projects' delegate types",
+    async (): Promise<ProjectTypes[]> => {
+      const projects = await read<ProjectRow[]>("/api/projects");
+      const catalogs = await Promise.all(
+        projects.map(async ({ id, name }) => {
+          const catalog = await read<ProjectCatalogPayload>(
+            `/api/projects/${encodeURIComponent(id)}/delegate-types`
+          );
+          return {
+            project: { id, name },
+            types: catalog.types.filter(
+              (type): type is ProjectDelegateType => type.source === "project"
+            ),
+          };
+        })
+      );
+      return catalogs.filter((entry) => entry.types.length > 0);
+    }
+  );
   readonly fleet = new Slot(
     "the fleet's setup",
     async (): Promise<FleetState> => {
@@ -182,6 +209,7 @@ export class ConfigStore {
       this.rules.load(),
       this.hooks.load(),
       this.types.load(),
+      this.projectTypes.load(),
       this.fleet.load(),
       this.tools.load(),
     ]);

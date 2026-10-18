@@ -21,6 +21,27 @@ export interface DelegateTypesPayload {
   types: DelegateType[];
 }
 
+/**
+ * A type a project's `delegates/` folder holds (hub project-delegate-types.ts):
+ * the file it was read from, and whether it replaces a fleet type of its name.
+ */
+export type ProjectDelegateType = DelegateType & {
+  path: string;
+  shadows?: boolean;
+  source: "project";
+};
+
+/** `GET /api/projects/:id/delegate-types`: the project's types first, then the fleet types they leave. */
+export interface ProjectCatalogPayload {
+  types: (ProjectDelegateType | (DelegateType & { source: "fleet" }))[];
+}
+
+/** One project's own types, under the project they apply in. */
+export interface ProjectTypes {
+  project: { id: string; name: string };
+  types: ProjectDelegateType[];
+}
+
 /** Elysia refuses with a bare string; JSON only when something else went wrong. */
 async function said(response: Response): Promise<string> {
   const body = await response.text();
