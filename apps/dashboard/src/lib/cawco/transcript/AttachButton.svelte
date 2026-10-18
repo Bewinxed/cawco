@@ -47,7 +47,7 @@
     <DropdownMenu.Trigger
       data-att-btn
       aria-label="Attach or draw"
-      class="att-btn touch-hit"
+      class="att-btn"
     >
       <IconPlus />
     </DropdownMenu.Trigger>
