@@ -248,9 +248,13 @@ function roomFaults(room: Room, wanted: string[]): string[] {
     .filter((name) => name !== "more" && name !== "close");
   const reached = [...standing, ...room.more].sort();
   if (reached.join() !== [...wanted].sort().join()) {
-    faults.push(`reached ${reached.join(",")} for ${[...wanted].sort().join(",")}`);
+    faults.push(
+      `reached ${reached.join(",")} for ${[...wanted].sort().join(",")}`
+    );
   }
-  const small = room.shown.filter((slot) => slot.width < 44 || slot.height < 44);
+  const small = room.shown.filter(
+    (slot) => slot.width < 44 || slot.height < 44
+  );
   if (small.length > 0) {
     faults.push(`under 44pt: ${small.map((slot) => slot.name).join(",")}`);
   }
@@ -263,7 +267,9 @@ function roomFaults(room: Room, wanted: string[]): string[] {
   }
   // The page's name is longer than the floor: the floor is the whole of it.
   if (room.floor !== NAME_FLOOR || room.title < room.floor - 1) {
-    faults.push(`name ${room.title} against its floor ${room.floor} (${NAME_FLOOR} for this name)`);
+    faults.push(
+      `name ${room.title} against its floor ${room.floor} (${NAME_FLOOR} for this name)`
+    );
   }
   if (!standing.includes("mode")) {
     faults.push("the mode is off the head");
@@ -271,7 +277,8 @@ function roomFaults(room: Room, wanted: string[]): string[] {
   if (!standing.includes("comments") && room.badge === "-") {
     faults.push("Comments' count is nowhere on the head");
   }
-  const used = room.title + room.shown.reduce((sum, slot) => sum + slot.width, 0);
+  const used =
+    room.title + room.shown.reduce((sum, slot) => sum + slot.width, 0);
   if (used > room.width + 8) {
     faults.push(`laid ${used} in ${room.width}`);
   }
@@ -279,7 +286,11 @@ function roomFaults(room: Room, wanted: string[]): string[] {
 }
 
 /** The newest head room line after `mark` that has Send picks in it (standing or in More). */
-function roomAfter(on: On, mark: number, tag: string): Promise<Room | undefined> {
+function roomAfter(
+  on: On,
+  mark: number,
+  tag: string
+): Promise<Room | undefined> {
   return until(
     `${tag}: the head with Send picks`,
     () => readRoom(on.heard.slice(mark).findLast((line) => ROOM.test(line))),

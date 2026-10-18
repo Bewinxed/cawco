@@ -38,15 +38,17 @@ async function sh(script: string): Promise<string> {
 }
 
 /** Every element on screen with its name and frame, as axe reads them. */
-async function named(udid: string): Promise<{ frame?: Frame; label?: string }[]> {
+async function named(
+  udid: string
+): Promise<{ frame?: Frame; label?: string }[]> {
   const out: { frame?: Frame; label?: string }[] = [];
   const walk = (node: Record<string, unknown>) => {
     out.push({
       label: (node.AXLabel ?? node.label) as string | undefined,
       frame: node.frame as Frame | undefined,
     });
-    for (const kid of (node.children as Record<string, unknown>[] | undefined) ??
-      []) {
+    for (const kid of (node.children as
+      Record<string, unknown>[] | undefined) ?? []) {
       walk(kid);
     }
   };
