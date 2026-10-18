@@ -18,6 +18,9 @@
  *   on: apps/apple, scripts/lib/heavy-run.sh
  *   needs: apple
  *   timeout: 30m
+ * Caw edits:
+ *   docs/**
+ *   README.md
  * ---
  * Anything after the block is notes for people; the hub reads none of it.
  * ```
@@ -41,6 +44,15 @@
  *   - `on-fail: stop`: a failure of this step leaves the steps after it
  *     unrun (an install the rest depend on). Without it every step runs, and
  *     each failure is reported.
+ * - **`Caw edits:`**, a line at the margin, opens the files the project's
+ *   Caw may edit by hand (lead-gate.ts): each indented line under it one
+ *   glob (Bun.Glob: `*`, `**`, `?`, `[…]`, `{a,b}`; case-sensitive, so
+ *   `[mM]` for either case of an m), from the place's root. The next line at the
+ *   margin is a step again. Without the section the project declares no
+ *   list, and every edit of Caw's goes to your Approve card; with it, an
+ *   edit of a file it matches runs in a turn your words woke (on your card
+ *   in any other), and an edit of any other file is refused. Given empty, it
+ *   lets Caw edit nothing.
  *
  * A gate.md that does not read is never taken for none: the item does not
  * land, and finish_item names every problem.
@@ -58,9 +70,23 @@ import { capabilitiesOf, RUNS_ON_CAPABILITIES, runsOnWords } from "./runs-on";
 /** The file in the project's folder that declares its gate. */
 export const GATE_FILE = "gate.md";
 
-/** What reading gate.md answers: its steps (core `DeclaredStep`), or every problem it has. */
+/**
+ * What reading gate.md answers: its steps (core `DeclaredStep`) and its
+ * `Caw edits:` globs (absent: it declares no list), or every problem it has.
+ */
 export type GateReading =
-  { ok: true; steps: DeclaredStep[] } | { ok: false; problems: string[] };
+  | { ok: true; steps: DeclaredStep[]; cawEdits?: string[] }
+  | { ok: false; problems: string[] };
+
+/**
+ * The files a project's Caw may edit, as its gate.md declares them:
+ * `none` when it lists none (no gate.md, or no `Caw edits:` section);
+ * `declared`, its globs; `unreadable`, what keeps gate.md from reading.
+ */
+export type CawEdits =
+  | { kind: "none" }
+  | { kind: "declared"; globs: string[] }
+  | { kind: "unreadable"; problems: string[] };
 
 const FENCE = /^---\s*$/;
 const LINE_SPLIT = /\r?\n/;
@@ -74,6 +100,8 @@ const GLOB = /[*?[\]{}]/;
 const TRAILING = /\/(\*\*)?$/;
 const LEADING = /^\.\//;
 const KEYS = ["name", "on", "needs", "timeout", "on-fail"] as const;
+/** The margin line that opens the files Caw may edit, any case. */
+const CAW_EDITS = /^caw edits:\s*(.*)$/i;
 type Key = (typeof KEYS)[number];
 
 /**
@@ -178,7 +206,73 @@ const optionLine = (
   return applyOption(step, key, (option[2] ?? "").trim());
 };
 
-/** gate.md's block as steps, or every problem it has. */
+/**
+ * One `Caw edits:` glob as the place's paths are matched: from its root, no
+ * leading `./`. A problem when it is absolute or climbs out.
+ */
+const cawEditGlob = (raw: string): { glob: string } | { problem: string } => {
+  const glob = raw.replace(LEADING, "");
+  if (glob.startsWith("/")) {
+    return {
+      problem: `Caw edits: ${glob} is absolute; write it from the place's root, like docs/**.`,
+    };
+  }
+  if (glob.split("/").includes("..")) {
+    return { problem: `Caw edits: ${glob} climbs out of the place with “..”.` };
+  }
+  return { glob };
+};
+
+/** What reading gate.md's block holds so far. */
+interface BlockRead {
+  /** The `Caw edits:` globs; undefined until the section opens. */
+  cawEdits?: string[];
+  /** The indented lines now are `Caw edits:` globs, not a step's options. */
+  inCawEdits: boolean;
+  problems: string[];
+  /** The option keys given under the last step so far. */
+  seen: Set<Key>;
+  steps: DeclaredStep[];
+}
+
+/** One line at the margin: `Caw edits:`, which opens its section, or a step. */
+const marginLine = (read: BlockRead, text: string): void => {
+  const opens = CAW_EDITS.exec(text);
+  if (!opens) {
+    read.inCawEdits = false;
+    read.steps.push({ command: text, name: text, stopsRest: false });
+    read.seen = new Set();
+    return;
+  }
+  if (read.cawEdits) {
+    read.problems.push("Caw edits: is given twice; list every glob under one.");
+  } else if (opens[1]) {
+    read.problems.push(
+      `Caw edits: takes its globs on the indented lines under it, one each, not “${opens[1]}” beside it.`
+    );
+  }
+  read.cawEdits ??= [];
+  read.inCawEdits = true;
+};
+
+/** One indented line: a glob under `Caw edits:`, else an option of the step above it. */
+const indentedLine = (read: BlockRead, text: string): void => {
+  if (read.inCawEdits) {
+    const glob = cawEditGlob(text);
+    if ("problem" in glob) {
+      read.problems.push(glob.problem);
+    } else {
+      read.cawEdits?.push(glob.glob);
+    }
+    return;
+  }
+  const problem = optionLine(text, read.steps.at(-1), read.seen);
+  if (problem) {
+    read.problems.push(problem);
+  }
+};
+
+/** gate.md's block as steps and Caw edits, or every problem it has. */
 export const readGate = (content: string): GateReading => {
   const lines = content.split(LINE_SPLIT);
   const start = lines.findIndex((line) => line.trim() !== "");
@@ -194,26 +288,28 @@ export const readGate = (content: string): GateReading => {
       ],
     };
   }
-  const steps: DeclaredStep[] = [];
-  const problems: string[] = [];
-  /** The option keys given under the last step so far. */
-  let seen = new Set<Key>();
+  const read: BlockRead = {
+    inCawEdits: false,
+    problems: [],
+    seen: new Set(),
+    steps: [],
+  };
   for (const line of lines.slice(start + 1, end)) {
     const text = line.trim();
     if (!text || text.startsWith("#")) {
       continue;
     }
     if (INDENTED.test(line)) {
-      const problem = optionLine(text, steps.at(-1), seen);
-      if (problem) {
-        problems.push(problem);
-      }
-      continue;
+      indentedLine(read, text);
+    } else {
+      marginLine(read, text);
     }
-    steps.push({ command: text, name: text, stopsRest: false });
-    seen = new Set();
   }
-  return problems.length > 0 ? { ok: false, problems } : { ok: true, steps };
+  const { cawEdits, problems, steps } = read;
+  if (problems.length > 0) {
+    return { ok: false, problems };
+  }
+  return cawEdits ? { ok: true, steps, cawEdits } : { ok: true, steps };
 };
 
 /** The project's gate as its folder holds it now. */
@@ -228,9 +324,23 @@ export const projectGate = async (projectId: string): Promise<ProjectGate> => {
     throw error;
   }
   const reading = readGate(content);
-  return reading.ok
-    ? { kind: "declared", steps: reading.steps }
-    : { kind: "unreadable", problems: reading.problems };
+  if (!reading.ok) {
+    return { kind: "unreadable", problems: reading.problems };
+  }
+  return reading.cawEdits
+    ? { kind: "declared", steps: reading.steps, cawEdits: reading.cawEdits }
+    : { kind: "declared", steps: reading.steps };
+};
+
+/** The files the project's Caw may edit, as its gate.md declares them now. */
+export const projectCawEdits = async (projectId: string): Promise<CawEdits> => {
+  const gate = await projectGate(projectId);
+  if (gate.kind === "unreadable") {
+    return gate;
+  }
+  return gate.kind === "declared" && gate.cawEdits
+    ? { kind: "declared", globs: gate.cawEdits }
+    : { kind: "none" };
 };
 
 /**

@@ -8,12 +8,23 @@
  *   (on the Mac) BUN_BE_BUN=1 ./cawco probe.js /absolute/path/to/cawco
  *
  * where `cawco` is a darwin build of this tree whose version is
- * `0.0.0-probe.2`, signed (`codesign --force --sign -`). Each step prints one
+ * `0.0.0-probe.2`, signed (`codesign --force --sign -`). A second scratch
+ * job, `dev.cawco.sessiond-0.0.0-probe.3`, loaded from a plist in the scratch
+ * directory and never run at load, proves a job that never ran from one whose
+ * keeper exited 0 (launchd states status 0 for both). Each step prints one
  * line ending in PASS or FAIL; the last line counts them. Everything it made
  * is removed at the end, whatever happened.
  */
 import { openSync } from "node:fs";
-import { copyFile, lstat, mkdir, readlink, rm } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  readlink,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -26,8 +37,10 @@ import { EXECUTABLE_IN_VERSION } from "../../packages/core/src/binary-installati
 import {
   keeperEndpoint,
   keeperEndpoints,
+  keeperStartPath,
   publishKeeper,
 } from "../../packages/core/src/keepers";
+import { launchdJob } from "../../packages/core/src/launchd";
 import { isAlive, listedPid, signal } from "../../packages/core/src/signal";
 import { welcomed } from "../lib/keeper-dial";
 
@@ -37,6 +50,12 @@ const SERVICE = `sessiond-${VERSION}`;
 const LABEL = `dev.cawco.${SERVICE}`;
 const PLIST = join(homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
 const LOG = join(homedir(), "Library", "Logs", `cawco-sessiond-${VERSION}.log`);
+/** The job that never runs at load, for the never-ran and exited-0 steps. */
+const QUIET = "0.0.0-probe.3";
+const QUIET_SERVICE = `sessiond-${QUIET}`;
+const QUIET_LABEL = `dev.cawco.${QUIET_SERVICE}`;
+/** How long the update helper waits for a keeper's welcome (binary-apply.ts `HEALTH_MS`): an exit reads well inside it. */
+const HEALTH_MS = 45_000;
 
 const [, , given] = Bun.argv;
 if (!given?.startsWith("/") || process.platform !== "darwin") {
@@ -144,6 +163,8 @@ const launchctl = async (...args: string[]) => {
 
 const build = { kind: "build", version: VERSION } as const;
 const job = keeperJob(build);
+const quiet = { kind: "build", version: QUIET } as const;
+const quietJob = keeperJob(quiet);
 const own = keeperEndpoint(build, machine);
 let legacy: ReturnType<typeof Bun.spawn> | undefined;
 try {
@@ -306,6 +327,68 @@ try {
     `exit ${strayCode}`
   );
 
+  // 6b. A job loaded and never run reads as not exited; its keeper run and
+  // exited 0 (its endpoint a symlink: not wanted) reads so at once, by the
+  // start record it wrote, though launchd states status 0 for both.
+  if (!quietJob) {
+    throw new Error("no launchd job for the quiet keeper on this machine");
+  }
+  const quietEndpoint = keeperEndpoint(quiet, machine);
+  await symlink(`sessiond-${VERSION}.sock`, quietEndpoint);
+  const quietLog = join(scratch, "quiet-keeper.log");
+  const quietPlist = join(scratch, `${QUIET_LABEL}.plist`);
+  await writeFile(
+    quietPlist,
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>${QUIET_LABEL}</string>
+<key>ProgramArguments</key><array><string>${binary}</string><string>sessiond</string></array>
+<key>EnvironmentVariables</key><dict>
+<key>XDG_DATA_HOME</key><string>${data}</string>
+<key>CAWCO_SESSIOND_ENDPOINT</key><string>${quietEndpoint}</string>
+</dict>
+<key>RunAtLoad</key><false/>
+<key>StandardOutPath</key><string>${quietLog}</string>
+<key>StandardErrorPath</key><string>${quietLog}</string>
+</dict></plist>
+`
+  );
+  await rm(keeperStartPath(QUIET_SERVICE), { force: true });
+  const loadedQuiet = await launchctl(
+    "bootstrap",
+    `gui/${process.getuid?.()}`,
+    quietPlist
+  );
+  const neverRan = await launchdJob(QUIET_LABEL);
+  const neverRanExit = await quietJob.exited();
+  step(
+    "a keeper job loaded and never run (no process, status 0) has not exited",
+    loadedQuiet.code === 0 &&
+      neverRan?.pid === undefined &&
+      neverRan?.lastExit === 0 &&
+      neverRanExit === undefined,
+    `bootstrap ${loadedQuiet.code} ${loadedQuiet.err.trim()}; listed ${JSON.stringify(neverRan)}; exited ${neverRanExit ?? "nothing"}`
+  );
+  const kicked = Date.now();
+  await quietJob.start();
+  let quietExit: string | undefined;
+  await until(async () => {
+    quietExit = await quietJob.exited();
+    return quietExit !== undefined;
+  }, HEALTH_MS);
+  const readIn = Date.now() - kicked;
+  const ranQuiet = await launchdJob(QUIET_LABEL);
+  step(
+    "its keeper, run and exited 0, reads as exited with code 0 well inside the helper's wait",
+    quietExit === "it exited with code 0" &&
+      ranQuiet?.lastExit === 0 &&
+      readIn < HEALTH_MS / 3 &&
+      (await present(keeperStartPath(QUIET_SERVICE))),
+    `${quietExit ?? "nothing"} after ${readIn} ms; listed ${JSON.stringify(ranQuiet)}; its log: ${await tail(quietLog)}`
+  );
+  await launchctl("bootout", `gui/${process.getuid?.()}/${QUIET_LABEL}`);
+
   // 7. Retired: its plist goes, so it does not load at the next login, and its job runs on.
   await job.retire();
   step(
@@ -380,6 +463,9 @@ try {
 } finally {
   legacy?.kill("SIGKILL");
   await launchctl("bootout", `gui/${process.getuid?.()}/${LABEL}`);
+  await launchctl("bootout", `gui/${process.getuid?.()}/${QUIET_LABEL}`);
+  await rm(keeperStartPath(SERVICE), { force: true });
+  await rm(keeperStartPath(QUIET_SERVICE), { force: true });
   await rm(PLIST, { force: true });
   await rm(LOG, { force: true });
   await rm(scratch, { recursive: true, force: true });

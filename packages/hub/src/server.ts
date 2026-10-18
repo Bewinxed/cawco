@@ -519,7 +519,7 @@ import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
-import { gateRoutes } from "./gate-file";
+import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
@@ -2969,6 +2969,7 @@ export const createServer = (
    * the sends his harness reads and the web content his turn reads.
    */
   const leadGate = createLeadGate({
+    cawEdits: projectCawEdits,
     db,
     note: (instanceId, note) => lead?.noteCall(instanceId, note),
     shared: (row) => sharedPlace(row),
@@ -27797,7 +27798,7 @@ export const createServer = (
                 // answered here and never shown; one for your card parks as
                 // any ask does, in his thread.
                 const gated = owner
-                  ? leadGate.decide(owner, message)
+                  ? await leadGate.decide(owner, message)
                   : undefined;
                 if (owner && gated && gated.kind !== "card") {
                   const askerAgent = registry.agent(message.machineId);

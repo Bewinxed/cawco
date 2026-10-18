@@ -31876,7 +31876,7 @@
         ]
       },
       "ProjectGate": {
-        "description": "A project's gate: `none` with no gate.md; `declared`, its steps (none\nwhen its block names none); `unreadable`, what is wrong with it.",
+        "description": "A project's gate: `none` with no gate.md; `declared`, its steps (none\nwhen its block names none) and its Caw edits when it lists them;\n`unreadable`, what is wrong with it.",
         "anyOf": [
           {
             "type": "object",
@@ -31905,6 +31905,12 @@
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/DeclaredStep"
+                }
+              },
+              "cawEdits": {
+                "type": "array",
+                "items": {
+                  "type": "string"
                 }
               }
             },

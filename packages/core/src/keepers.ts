@@ -36,10 +36,13 @@ import {
   symlink,
 } from "node:fs/promises";
 import { Socket } from "node:net";
+import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { readKeeperVersion } from "./binary-installation";
 import { type Bounded, readWithin } from "./bounded";
+import { bootId, ownIdentity } from "./process-identity";
 import { sessiondEndpoint } from "./sessiond";
+import { readRecord, writeStateFile } from "./state-file";
 
 /** The machine's endpoint's own name: what names the current keeper. */
 export const MACHINE_ENDPOINT = "sessiond.sock";
@@ -95,6 +98,63 @@ export const keeperService = (keeper: KeeperName): string =>
   keeper.kind === "build"
     ? `sessiond-${keeper.version.replace(NOT_IN_A_JOB_NAME, "_")}`
     : "sessiond";
+
+/** The service name of the keeper listening on `endpoint`: its build's, or the legacy keeper's on the machine's endpoint. */
+export const keeperServiceAt = (endpoint: string): string => {
+  const keeper = keeperOf(basename(endpoint));
+  return keeper ? keeperService(keeper) : "sessiond";
+};
+
+/**
+ * A keeper's start record: its process, written as that process starts
+ * (sessiond main.ts), before anything it does can end it. It is what tells a
+ * job whose keeper never ran from one whose keeper ran and exited 0, which
+ * launchd does not state: `launchctl list`'s second column is "the last exit
+ * status of the job", 0 for both, and `print` "is NOT API in any sense at
+ * all" (launchctl(1)).
+ */
+export interface KeeperStart {
+  bootId?: string;
+  pid: number;
+  procStart?: string;
+  /** When it started, in ms. */
+  startedAt: number;
+}
+
+/** Where the keeper with this service name keeps its start record. */
+export const keeperStartPath = (service: string): string =>
+  join(homedir(), ".cawco", "keepers", `${service}.start.json`);
+
+/** Writes this process's start record, as the keeper on `endpoint`. */
+export const writeKeeperStart = async (endpoint: string): Promise<void> => {
+  const identity = await ownIdentity();
+  const record: KeeperStart = { ...identity, startedAt: Date.now() };
+  await writeStateFile(
+    keeperStartPath(keeperServiceAt(endpoint)),
+    JSON.stringify(record)
+  );
+};
+
+/**
+ * The keeper's start record since the machine last booted; undefined when
+ * it wrote none since its job last started it, or one from before a reboot.
+ */
+export const readKeeperStart = async (
+  service: string
+): Promise<KeeperStart | undefined> => {
+  const record = await readRecord<KeeperStart>(keeperStartPath(service));
+  if (!record) {
+    return;
+  }
+  const boot = await bootId();
+  return record.bootId === undefined || record.bootId === boot
+    ? record
+    : undefined;
+};
+
+/** Takes the keeper's start record away: before its job starts it, so only its new process writes one, and with its job. */
+export const forgetKeeperStart = (service: string): Promise<void> =>
+  rm(keeperStartPath(service), { force: true });
 
 /**
  * Whether something accepts a connection on `path`: answered true when one

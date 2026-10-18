@@ -24,9 +24,10 @@ export interface DeclaredStep {
 
 /**
  * A project's gate: `none` with no gate.md; `declared`, its steps (none
- * when its block names none); `unreadable`, what is wrong with it.
+ * when its block names none) and its `Caw edits:` globs when it lists them
+ * (hub lead-gate.ts); `unreadable`, what is wrong with it.
  */
 export type ProjectGate =
   | { kind: "none" }
-  | { kind: "declared"; steps: DeclaredStep[] }
+  | { kind: "declared"; steps: DeclaredStep[]; cawEdits?: string[] }
   | { kind: "unreadable"; problems: string[] };
