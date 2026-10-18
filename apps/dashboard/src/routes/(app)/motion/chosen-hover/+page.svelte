@@ -4,7 +4,10 @@
    * chosen and one not, for the chosen-hover probe: the new-session chips'
    * rows (`?control=lifetime|project|machines` opens that one's popover),
    * the permission rows, the side panel's pressed head button, the plan
-   * ring and the comments list's current pin.
+   * ring, the comments list's current pin, the model list (its catalogue
+   * is the browser's kept one, `cawco-models:by-harness`, which the
+   * chosen-hover spec seeds with two Claude models before the page loads)
+   * and a live Crepe editor, for its slash menu.
    */
   import type { Pin } from "@cawco/core/comments";
   import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
@@ -12,9 +15,11 @@
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import LifetimeChip from "#lib/cawco/spawn/LifetimeChip.svelte";
   import MachinesChip from "#lib/cawco/spawn/MachinesChip.svelte";
+  import ModelSection from "#lib/cawco/spawn/ModelSection.svelte";
   import type { MachineItem, ProjectItem } from "#lib/cawco/spawn/ns-types.js";
   import PermissionSection from "#lib/cawco/spawn/PermissionSection.svelte";
   import ProjectChip from "#lib/cawco/spawn/ProjectChip.svelte";
+  import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
   import { IconEye, IconLaptop, IconPen, IconServer } from "#lib/icons.js";
   import { page } from "$app/state";
 
@@ -68,6 +73,7 @@
   });
   const pins: Pin[] = [pin("pin-1", 1), pin("pin-2", 2)];
   const noop = () => undefined;
+  let markdown = $state("");
 </script>
 
 <svelte:head><title>Chosen and hover | CawCo</title></svelte:head>
@@ -129,6 +135,20 @@
     <PlanRing done={1} onopen={noop} open={true} total={3} />
     <PlanRing done={1} onopen={noop} open={false} total={3} />
   </section>
+  <section class="model" data-probe="model">
+    <ModelSection
+      harness="claude"
+      installed={["claude"]}
+      machineIds={[]}
+      machineName="studio"
+      model="claude-opus-4-5"
+      onharness={noop}
+      onmodel={noop}
+    />
+  </section>
+  <section class="editor" data-probe="slash">
+    <MarkdownEditor bind:value={markdown} label="Notes" />
+  </section>
   <section data-probe="pins">
     <PinList
       focused="pin-1"
@@ -153,6 +173,10 @@
   }
   section {
     min-inline-size: 0;
+  }
+  .model,
+  .editor {
+    inline-size: 480px;
   }
   .side {
     inline-size: 360px;

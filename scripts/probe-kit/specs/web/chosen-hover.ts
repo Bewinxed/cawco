@@ -45,13 +45,18 @@ interface Control {
   onWash?: { label: string; row: string };
   /** The unchosen item. */
   other: string;
+  /** Steps that bring the chosen item on screen (the slash menu's `/`). */
+  prepare?: (page: Page) => Promise<void>;
   /** Read the background of `::before`, where the control paints it. */
   pseudo?: "::before";
+  /** What stands once the bench has drawn the control; the chosen item if unset. */
+  ready?: string;
   /** DESIGN's background for the chosen item. */
   recipe: string;
 }
 
 const POP = ".ns-pop";
+const SLASH = '[data-probe="slash"] .milkdown-slash-menu';
 
 const CONTROLS: Control[] = [
   {
@@ -128,7 +133,61 @@ const CONTROLS: Control[] = [
       label: '[data-probe="pins"] .pin-row[aria-current="true"] .name',
     },
   },
+  {
+    name: "Model row",
+    hover: "ghost",
+    recipe: WASH,
+    chosen: '[data-probe="model"] [data-slot="list"] > [data-slot="fill"]',
+    other: '[data-probe="model"] [role="option"][aria-selected="false"]',
+    ready: '[data-probe="model"] [role="option"][aria-selected="true"]',
+    onWash: {
+      row: '[data-probe="model"] [role="option"][aria-selected="true"]',
+      label: '[data-probe="model"] [role="option"][aria-selected="true"] .name',
+    },
+  },
+  {
+    name: "Slash menu's group tab",
+    hover: "force",
+    recipe: WASH,
+    chosen: `${SLASH} .tab-group li.selected`,
+    other: `${SLASH} .tab-group li:not(.selected)`,
+    ready: '[data-probe="slash"] .milkdown .ProseMirror',
+    prepare: async (page) => {
+      await page.click('[data-probe="slash"] .milkdown .ProseMirror');
+      await page.keyboard.type("/");
+      await page.waitForSelector(`${SLASH} .tab-group li.selected`, {
+        state: "visible",
+      });
+    },
+    onWash: {
+      row: `${SLASH} .tab-group li.selected`,
+      label: `${SLASH} .tab-group li.selected`,
+    },
+  },
 ];
+
+/**
+ * The model list's catalogue: what the browser kept from the last visit
+ * (models.svelte `cawco-models:by-harness`), read as the app loads, so it is
+ * written before the page's own scripts. Two Claude models, the first chosen.
+ */
+const seedModels = () => {
+  localStorage.setItem(
+    "cawco-models:by-harness",
+    JSON.stringify([
+      {
+        displayName: "Opus 4.5",
+        harness: "claude",
+        value: "claude-opus-4-5",
+      },
+      {
+        displayName: "Sonnet 4.5",
+        harness: "claude",
+        value: "claude-sonnet-4-5",
+      },
+    ])
+  );
+};
 
 interface Read {
   color: string;
@@ -357,7 +416,7 @@ const spec: Spec = {
     const bench = await kit.bench();
     for (const theme of THEMES) {
       // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time, each on its own page
-      const page = await kit.page("desk", { theme });
+      const page = await kit.page("desk", { theme, init: [seedModels] });
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("DOM.enable");
       await cdp.send("CSS.enable");
@@ -367,9 +426,10 @@ const spec: Spec = {
         await open(
           page,
           `${bench}/motion/chosen-hover${query}`,
-          c.control ? `${POP} .row` : c.chosen
+          c.ready ?? (c.control ? `${POP} .row` : c.chosen)
         );
         await page.mouse.move(1, 1);
+        await c.prepare?.(page);
         await settle(page, 400);
         const chosen = await readBackground(page, c.chosen, c.pseudo ?? null);
         const recipe = await resolve(page, c.recipe);
