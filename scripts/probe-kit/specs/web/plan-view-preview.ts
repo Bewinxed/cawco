@@ -24,7 +24,7 @@
  * - every delegate's rail hangs from the to-do it is under, and its own
  *   steps' rail from its tile.
  *
- * Each frame is captured to `$TMPDIR/caps/round4/`, the live frame at the
+ * Each frame is captured to `$TMPDIR/caps/round5/`, the live frame at the
  * beat its delegate's step has folded open and the beat its to-do ticks.
  *
  *   bun scripts/probe-kit/run.ts web plan-view-preview
@@ -37,12 +37,12 @@ import { open, ROOT, settle, THEMES } from "../../kit";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const OUT = join(DASHBOARD, "preview", "plan-view", "out");
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round4");
+const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round5");
 
 /** A caption names its frame first: "Desk · …" or "Phone · …". */
 const CAPTION = /^(Desk|Phone) · \S/;
-/** The live frame's beats worth a still: folded open, then the to-do ticked. */
-const LIVE_BEATS = [3, 4];
+/** The live frame's beats: each one captured, in every leg. */
+const LIVE_BEATS = 6;
 
 async function build(): Promise<void> {
   const child = Bun.spawn(["bun", "preview/build.ts", "plan-view"], {
@@ -136,8 +136,8 @@ const readRows = (page: Page): Promise<Rows> =>
         lists: frame.querySelectorAll('[data-slot="plan"] > ul').length,
       }));
     return {
-      captions: [...document.querySelectorAll("figcaption")].map(
-        (caption) => caption.textContent?.trim() ?? ""
+      captions: [...document.querySelectorAll("figcaption")].map((caption) =>
+        (caption as HTMLElement).innerText.trim()
       ),
       overflows,
       pageWide: {
@@ -358,6 +358,10 @@ const readInks = (page: Page): Promise<{ least: number; what: string }[]> =>
   });
 
 interface Layout {
+  /** The open spec's bullets: how many, and the least contrast on their ground. */
+  bullets: { count: number; least: number };
+  /** Captions past their frame's sides. */
+  captionsOff: string[];
   /** Carried rows looked at. */
   carried: number;
   /** Desk frames whose side card is not in view, or which show a quiet conversation on a phone. */
@@ -370,6 +374,9 @@ interface Layout {
   headsOff: string[];
   /** Rows of the delegates state outside what their frame shows. */
   hidden: string[];
+  keyMarks: number;
+  /** Key marks off their cell's centre, and samples starting inside the cell. */
+  keyOff: string[];
   /** Nested rows looked at. */
   nested: number;
   /** Figures, desk scrollers or phone sheets past the viewport's sides. */
@@ -451,15 +458,26 @@ const readWraps = (page: Page): Promise<Pick<Layout, "wraps">> =>
             ),
           ].map((words) => [
             words.textContent?.trim() ?? "",
-            Math.round(words.getBoundingClientRect().height),
+            {
+              height: Math.round(words.getBoundingClientRect().height),
+              width: Math.round(words.getBoundingClientRect().width),
+            },
           ])
         );
       const wraps: string[] = [];
+      // A row whose trailing content differs between the two (a time in one
+      // and none in the other) has another width for its words, and wraps
+      // to its own: only rows of one width are held to one wrap.
       for (const [index, selector] of task.entries()) {
         const there = tops(out[index] ?? "");
-        for (const [words, height] of tops(selector)) {
-          if (there.get(words) !== height) {
-            wraps.push(`"${words}" ${height}px against ${there.get(words)}px`);
+        for (const [words, here] of tops(selector)) {
+          const other = there.get(words);
+          if (
+            other &&
+            other.width === here.width &&
+            other.height !== here.height
+          ) {
+            wraps.push(`"${words}" ${here.height}px against ${other.height}px`);
           }
         }
       }
@@ -611,7 +629,15 @@ const readEarlyWraps = (page: Page): Promise<Pick<Layout, "early">> =>
       if (!text) {
         return [];
       }
-      const end = words.getBoundingClientRect().right;
+      // The row's own free width: up to its trailing content where it has
+      // some, past the column gap; to the row's end where it has none.
+      const row = words.closest('[data-slot="plan-row"]') as HTMLElement;
+      const trail = row.querySelector(':scope > [data-slot="trail"]');
+      const end = trail
+        ? trail.getBoundingClientRect().left -
+          Number.parseFloat(getComputedStyle(row).columnGap)
+        : row.getBoundingClientRect().right -
+          Number.parseFloat(getComputedStyle(row).paddingRight);
       // A space at a soft break hangs past the line and measures nothing
       // there: its width comes from the words' own font.
       if (pen) {
@@ -695,21 +721,132 @@ const readHeads = (page: Page): Promise<Pick<Layout, "heads" | "headsOff">> =>
       const box = el?.getBoundingClientRect();
       return box ? box.top + box.height / 2 : Number.NaN;
     };
-    const headsOff = heads
-      .map((head) =>
-        Math.abs(
-          middle(head.querySelector(".title")) -
-            middle(head.querySelector(".task-title"))
-        )
-      )
-      .filter((off) => !(off <= 0.5))
-      .map((off) => `${off.toFixed(2)}px apart`);
+    const sizeOf = (el: Element | null) =>
+      el ? getComputedStyle(el).fontSize : "none";
+    const headsOff = heads.flatMap((head) => {
+      const names = [".title", ".task-title", ".stage"].map((name) =>
+        head.querySelector(name)
+      );
+      const sizes = new Set(names.map(sizeOf));
+      const lines = names.map(middle);
+      const spread = Math.max(...lines) - Math.min(...lines);
+      return [
+        ...(sizes.size === 1 ? [] : [`sizes ${[...sizes].join(", ")}`]),
+        ...(spread <= 0.5 ? [] : [`lines ${spread.toFixed(2)}px apart`]),
+      ];
+    });
     return { heads: heads.length, headsOff };
+  });
+
+/** Each caption against its frame: the phone's screen or the desk's frame. */
+const readCaptions = (page: Page): Promise<Pick<Layout, "captionsOff">> =>
+  page.evaluate(() => {
+    const captionsOff = [...document.querySelectorAll("figure")]
+      .filter((figure) => figure.getBoundingClientRect().width > 0)
+      .flatMap((figure) => {
+        const frame = figure.querySelector(
+          '[data-slot="phone-screen"], [data-slot="desk-scroll"]'
+        );
+        const caption = figure.querySelector("figcaption");
+        const edge = frame?.getBoundingClientRect();
+        const box = caption?.getBoundingClientRect();
+        return edge &&
+          box &&
+          box.left >= edge.left - 0.5 &&
+          box.right <= edge.right + 0.5
+          ? []
+          : [
+              `"${caption?.textContent?.trim().slice(0, 30)}" ${Math.round(box?.left ?? 0)}–${Math.round(box?.right ?? 0)} under a frame ${Math.round(edge?.left ?? 0)}–${Math.round(edge?.right ?? 0)}`,
+            ];
+      });
+    return { captionsOff };
+  });
+
+/** The key: each mark centred in its 18px cell, each sample starting after the cell. */
+const readKey = (page: Page): Promise<Pick<Layout, "keyOff" | "keyMarks">> =>
+  page.evaluate(() => {
+    const cells = [...document.querySelectorAll('[data-slot="key-cell"]')];
+    const centre = (box: DOMRect) => [
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    ];
+    const keyOff = [
+      ...cells.flatMap((cell) => {
+        const mark = cell.firstElementChild;
+        const [cx = 0, cy = 0] = centre(cell.getBoundingClientRect());
+        const [mx = 0, my = 0] = mark
+          ? centre(mark.getBoundingClientRect())
+          : [Number.NaN, Number.NaN];
+        return Math.abs(cx - mx) <= 0.5 && Math.abs(cy - my) <= 0.5
+          ? []
+          : [
+              `a mark ${(mx - cx).toFixed(1)}, ${(my - cy).toFixed(1)}px off its cell's centre`,
+            ];
+      }),
+      ...[...document.querySelectorAll('[data-slot="key-sample"]')].flatMap(
+        (sample) => {
+          const cell = sample.previousElementSibling?.getBoundingClientRect();
+          const box = sample.getBoundingClientRect();
+          return cell && box.left >= cell.right
+            ? []
+            : [`"${sample.textContent?.trim()}" starts inside the mark's cell`];
+        }
+      ),
+    ];
+    return { keyMarks: cells.length, keyOff };
+  });
+
+/** The open spec's list bullets against their card, in this scheme. */
+const readBullets = (page: Page): Promise<Pick<Layout, "bullets">> =>
+  page.evaluate(() => {
+    const pen = document.createElement("canvas").getContext("2d", {
+      willReadFrequently: true,
+    });
+    const rgb = (color: string): number[] => {
+      if (!pen) {
+        return [0, 0, 0];
+      }
+      pen.clearRect(0, 0, 1, 1);
+      pen.fillStyle = color;
+      pen.fillRect(0, 0, 1, 1);
+      return [...pen.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+    };
+    const ground = (el: Element): string => {
+      for (let at: Element | null = el; at; at = at.parentElement) {
+        const paint = getComputedStyle(at).backgroundColor;
+        if (paint !== "rgba(0, 0, 0, 0)" && paint !== "transparent") {
+          return paint;
+        }
+      }
+      return getComputedStyle(document.body).backgroundColor;
+    };
+    const lin = (c: number) => {
+      const v = c / 255;
+      return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    const lum = (p: number[]) =>
+      0.2126 * lin(p[0] ?? 0) +
+      0.7152 * lin(p[1] ?? 0) +
+      0.0722 * lin(p[2] ?? 0);
+    const items = [
+      ...document.querySelectorAll('[data-slot="spec-body"] li'),
+    ].filter((li) => li.getBoundingClientRect().width > 0);
+    const ratios = items.map((li) => {
+      const a = lum(rgb(getComputedStyle(li, "::marker").color));
+      const b = lum(rgb(ground(li)));
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    });
+    return {
+      bullets: { count: ratios.length, least: Math.min(...ratios) },
+    };
   });
 
 /** The layout: the phone page's width, the shared rows' wraps, the delegates' frames and rails. */
 const readLayout = async (page: Page): Promise<Layout> => ({
   ...(await readHeads(page)),
+  ...(await readCaptions(page)),
+  ...(await readKey(page)),
+  ...(await readBullets(page)),
   ...(await readOutside(page)),
   ...(await readWraps(page)),
   ...(await readDelegates(page)),
@@ -720,7 +857,22 @@ const readLayout = async (page: Page): Promise<Layout> => ({
 
 function checkLayout(kit: Kit, leg: string, seen: Layout): void {
   kit.check(
-    `${leg}: in all ${seen.heads} desk heads the task's title stands on the "Plan" title's line`,
+    `${leg}: every caption stands inside its frame's width`,
+    seen.captionsOff.length === 0,
+    seen.captionsOff.join(" | ")
+  );
+  kit.check(
+    `${leg}: all ${seen.keyMarks} key marks stand centred in their cell, and every sample starts after it`,
+    seen.keyMarks > 0 && seen.keyOff.length === 0,
+    seen.keyOff.join(" | ")
+  );
+  kit.check(
+    `${leg}: the open spec's ${seen.bullets.count} bullets hold ${seen.bullets.least.toFixed(2)}:1, at least 3:1`,
+    seen.bullets.count > 0 && seen.bullets.least >= 3,
+    ""
+  );
+  kit.check(
+    `${leg}: in all ${seen.heads} desk heads "Plan", the task's title and its stage are one size on one line`,
     seen.heads > 0 && seen.headsOff.length === 0,
     seen.headsOff.join(" | ")
   );
@@ -763,13 +915,15 @@ function checkLayout(kit: Kit, leg: string, seen: Layout): void {
 
 async function captureLive(page: Page, prefix: string): Promise<void> {
   const live = page.locator("figure[data-slot=live]");
-  for (const beat of LIVE_BEATS) {
+  const now = Number(await live.getAttribute("data-beat"));
+  // Every beat, from the one after where the demo stands, round to it.
+  for (let step = 1; step <= LIVE_BEATS; step += 1) {
+    const beat = (now + step) % LIVE_BEATS;
     // biome-ignore lint/performance/noAwaitInLoops: the live frame's beats, in their order
     await page.waitForSelector(`figure[data-slot=live][data-beat="${beat}"]`, {
-      timeout: 30_000,
+      timeout: 20_000,
     });
     await live.scrollIntoViewIfNeeded();
-    await settle(page);
     await live.screenshot({
       path: join(CAPS, `${prefix}-90-live-beat-${beat + 1}.png`),
     });

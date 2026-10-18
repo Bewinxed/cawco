@@ -154,26 +154,29 @@
       {/if}
     </span>
     <span data-slot="words" class="words">{step.words}</span>
-    <!-- The trailing edge: the time in one fixed track on every row, so
-         every time ends on one x and a row's words wrap the same whether it
-         is timed or not; a fold's count stands before it, on the rows that
-         fold something. -->
-    <span class="trail">
-      {#if step.fold}
-        <span data-slot="fold" class="fold">
-          <span class="chev" aria-hidden="true" data-open={open || undefined}
-            ><IconChevronRight /></span
-          >
-          <TreeCount
-            count={step.fold.count}
-            noun={step.fold.noun}
-            ontoggle={() => turn(step.id)}
-            {open}
-          />
-        </span>
-      {/if}
-      <span data-slot="time" data-num class="num time">{time ?? ""}</span>
-    </span>
+    <!-- The trailing edge, only on a row with something there: the fold's
+         count, then the time in a track of one width, so every time ends on
+         one x. A row with neither gives its words the whole line. -->
+    {#if step.fold || time}
+      <span data-slot="trail" class="trail">
+        {#if step.fold}
+          <span data-slot="fold" class="fold">
+            <span class="chev" aria-hidden="true" data-open={open || undefined}
+              ><IconChevronRight /></span
+            >
+            <TreeCount
+              count={step.fold.count}
+              noun={step.fold.noun}
+              ontoggle={() => turn(step.id)}
+              {open}
+            />
+          </span>
+        {/if}
+        {#if time}
+          <span data-slot="time" data-num class="num time">{time}</span>
+        {/if}
+      </span>
+    {/if}
     {#if step.promoted}
       <span class="under">
         <button class="link touch-hit" type="button">
@@ -258,7 +261,7 @@
         <IconChevronDown aria-hidden="true" class="spec-chev" />
       </button>
       {#if specOpen}
-        <div class="spec-body">
+        <div class="spec-body" data-slot="spec-body">
           <MessageBody source={plan.spec.markdown} />
         </div>
       {/if}
@@ -353,6 +356,10 @@
   }
   .row[data-state="failed"] .words {
     color: var(--status-fail-ink);
+  }
+  /* With no trailing content, the words run to the row's end. */
+  .row:not(:has(> .trail)) .words {
+    grid-column: 2 / -1;
   }
   .trail {
     grid-area: trail;
@@ -566,6 +573,12 @@
   }
   .spec-at {
     font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  /* The spec's list bullets in the muted ink, which holds 3:1 on the card
+     in both schemes; the prose plugin's own bullet ink nearly vanished at
+     night. */
+  .spec-body :global(li::marker) {
     color: var(--ink-muted);
   }
   .spec-body {

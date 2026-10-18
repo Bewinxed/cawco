@@ -205,15 +205,19 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .task-title {
-    color: var(--ink-strong);
+  /* The head's names in one size, on one line (the head recipe's label
+     role): "Plan", the task's title, its stage. */
+  .task-title,
+  .stage {
+    font: var(--type-label);
     font-weight: var(--weight-body);
     white-space: nowrap;
   }
+  .task-title {
+    color: var(--ink-strong);
+  }
   .stage {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    white-space: nowrap;
+    color: var(--ink-muted);
   }
   /* A phone's page: no sideways scroll; the card at the page's width, and
      the conversation over it only where it has something to show. */
@@ -231,9 +235,11 @@
       min-block-size: 0;
       padding: var(--space-2);
     }
+    /* What the conversation shows stands on the card's own edges, so the
+       cards above and the plan card below share one inset. */
     .conversation {
       flex: none;
-      padding: var(--space-2) var(--space-2) var(--space-3);
+      padding: var(--space-2) 0 var(--space-3);
     }
     .desk-frame[data-narrow="card"] .conversation,
     .conversation[data-quiet] {
