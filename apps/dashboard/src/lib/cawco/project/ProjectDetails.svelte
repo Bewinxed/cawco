@@ -15,6 +15,9 @@
    *   and Discard.
    * - Repository: read from the folder's remote, said so.
    * - Work lands: where its attempts land when their task says nothing.
+   * - Landing checks: the steps the hub runs before work lands, read from
+   *   the project folder's gate.md (`GET /api/projects/:id/gate`), with a
+   *   link to edit the file.
    * - Caw: his lead switch (CawLeadSwitch), its ways off with it.
    * - Review before done.
    *
@@ -24,7 +27,13 @@
    * (RowFault). Every value is the project as the hub last said it, which
    * `projects.changed` brings to every open dashboard.
    */
-  import { LANDS_MODES, type LandsMode, machineLabel } from "@cawco/core";
+  import {
+    type DeclaredStep,
+    LANDS_MODES,
+    type LandsMode,
+    machineLabel,
+    type ProjectGate,
+  } from "@cawco/core";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import {
@@ -41,6 +50,7 @@
   import { conversationHref } from "#lib/cawco/links.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
+  import { folderFileHref, readGate } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -109,6 +119,71 @@
     landsTried = next;
     setLands(next);
   }
+
+  /* ── Landing checks ─────────────────────────────────────────────── */
+
+  /** The project's gate.md as the hub last read it, read when the details open. */
+  type GateRead =
+    | { state: "reading" }
+    | { state: "failed"; reason: string }
+    | { state: "read"; gate: ProjectGate };
+
+  let gateRead = $state<GateRead>({ state: "reading" });
+  /** Which read is the latest: an older one answering late is dropped. */
+  let gateAsk = 0;
+
+  async function loadGate(projectId: string): Promise<void> {
+    gateAsk += 1;
+    const asked = gateAsk;
+    gateRead = { state: "reading" };
+    try {
+      const { gate } = await readGate(projectId);
+      if (asked === gateAsk) {
+        gateRead = { state: "read", gate };
+      }
+    } catch (error) {
+      if (asked === gateAsk) {
+        gateRead = { state: "failed", reason: failureWords(error) };
+      }
+    }
+  }
+
+  // Read again when the details show another project.
+  $effect(() => {
+    loadGate(project.id);
+  });
+
+  /** What the row draws: a declared gate naming no step reads as none. */
+  const gateShown = $derived.by(() => {
+    if (gateRead.state !== "read") {
+      return gateRead.state;
+    }
+    const { gate } = gateRead;
+    return gate.kind === "declared" && gate.steps.length === 0
+      ? "none"
+      : gate.kind;
+  });
+
+  const UNITS = [
+    { sec: 3600, unit: "h" },
+    { sec: 60, unit: "m" },
+  ] as const;
+  /** Seconds in the largest unit gate.md writes that holds them whole: 90s, 10m, 1h. */
+  const durationWords = (seconds: number): string => {
+    const fit = UNITS.find(({ sec }) => seconds % sec === 0);
+    return fit ? `${seconds / fit.sec}${fit.unit}` : `${seconds}s`;
+  };
+
+  /** A step's facts, those that apply, joined as its meta line says them. */
+  const stepFacts = (step: DeclaredStep): string =>
+    [
+      step.inputs?.length ? `on ${step.inputs.join(", ")}` : null,
+      step.needs ? `needs ${step.needs}` : null,
+      step.timeoutSec ? `within ${durationWords(step.timeoutSec)}` : null,
+      step.stopsRest ? "stops the rest if it fails" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
 
   /* ── Review before done ─────────────────────────────────────────── */
 
@@ -468,6 +543,57 @@
       </div>
     </div>
 
+    <!-- Landing checks: what the hub runs before work lands, as gate.md declares it. -->
+    <div data-slot="row" class="row" data-detail="gate" data-gate={gateShown}>
+      <p data-slot="project-details-label" class="label">Landing checks</p>
+      <div data-slot="value" class="value">
+        {#if gateRead.state === "reading"}
+          <p data-slot="note" class="note">Reading gate.md…</p>
+        {:else if gateRead.state === "failed"}
+          <RowFault
+            again={() => loadGate(project.id)}
+            data-gate-fault
+            reason={gateRead.reason}
+          />
+        {:else if gateRead.gate.kind === "unreadable"}
+          {#each gateRead.gate.problems as problem, at (at)}
+            <RowFault data-gate-problem reason={problem} />
+          {/each}
+          <p data-slot="note" class="note">
+            Until gate.md is fixed, nothing in this project lands.
+          </p>
+        {:else if gateRead.gate.kind === "declared" && gateRead.gate.steps.length > 0}
+          <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops list semantics when list styles are removed; an explicit role="list" keeps them (scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
+          <ol class="gate-steps" data-gate-steps role="list">
+            {#each gateRead.gate.steps as each, at (at)}
+              {@const facts = stepFacts(each)}
+              <li class="gate-check" data-gate-step>
+                <span class="gate-name">{each.name}</span>
+                {#if each.command !== each.name}
+                  <code class="gate-command">{each.command}</code>
+                {/if}
+                {#if facts}
+                  <span class="gate-facts">{facts}</span>
+                {/if}
+              </li>
+            {/each}
+          </ol>
+        {:else}
+          <p data-slot="note" class="note">
+            Landed with no checks: this project declares none.
+          </p>
+        {/if}
+        <Button
+          class="gate-edit"
+          data-gate-edit
+          href={folderFileHref(project.id, "gate.md")}
+          label="Edit gate.md"
+          size="xs"
+          variant="link"
+        />
+      </div>
+    </div>
+
     <!-- Caw: his own switch, its ways off with it. -->
     <div data-slot="row" class="row" data-detail="caw">
       <p data-slot="project-details-label" class="label">Caw</p>
@@ -719,6 +845,47 @@
     50% {
       opacity: 0.45;
     }
+  }
+  /* Landing checks: one entry per step, in gate.md's order; every line
+     wraps, a command or path breaking anywhere rather than overflowing. */
+  .gate-steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .gate-check {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+  .gate-name {
+    min-inline-size: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .gate-command {
+    min-inline-size: 0;
+    font: var(--type-meta);
+    font-family: var(--font-mono);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .gate-facts {
+    min-inline-size: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+  }
+  /* A text link: its words start on the value column with the rest. */
+  .value :global(.gate-edit) {
+    align-self: flex-start;
+    padding-inline: 0;
   }
   .switch-line {
     display: flex;

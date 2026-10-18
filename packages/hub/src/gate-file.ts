@@ -45,46 +45,22 @@
  * A gate.md that does not read is never taken for none: the item does not
  * land, and finish_item names every problem.
  */
-import { namedAmong } from "@cawco/core";
+import {
+  type DeclaredStep,
+  namedAmong,
+  type ProjectGate,
+  type RunsOnCapability,
+} from "@cawco/core";
 import { Elysia } from "elysia";
 import { FolderRefusal, readFolderFile, refused } from "./project-folder";
-import {
-  capabilitiesOf,
-  RUNS_ON_CAPABILITIES,
-  type RunsOnCapability,
-  runsOnWords,
-} from "./runs-on";
+import { capabilitiesOf, RUNS_ON_CAPABILITIES, runsOnWords } from "./runs-on";
 
 /** The file in the project's folder that declares its gate. */
 export const GATE_FILE = "gate.md";
 
-/** A step as the project declares it. */
-export interface DeclaredStep {
-  command: string;
-  /** The paths whose change makes it run; absent: it always runs. */
-  inputs?: string[];
-  /** What the report calls it. */
-  name: string;
-  /** The capability of the machine it runs on; absent: the workspace's own. */
-  needs?: RunsOnCapability;
-  /** A failure leaves the steps after it unrun. */
-  stopsRest: boolean;
-  /** Seconds before it is killed; the gate's default when absent. */
-  timeoutSec?: number;
-}
-
-/** What reading gate.md answers: its steps, or every problem it has. */
+/** What reading gate.md answers: its steps (core `DeclaredStep`), or every problem it has. */
 export type GateReading =
   { ok: true; steps: DeclaredStep[] } | { ok: false; problems: string[] };
-
-/**
- * A project's gate: `none` with no gate.md; `declared`, its steps (none
- * when its block names none); `unreadable`, what is wrong with it.
- */
-export type ProjectGate =
-  | { kind: "none" }
-  | { kind: "declared"; steps: DeclaredStep[] }
-  | { kind: "unreadable"; problems: string[] };
 
 const FENCE = /^---\s*$/;
 const LINE_SPLIT = /\r?\n/;

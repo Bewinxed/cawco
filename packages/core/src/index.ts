@@ -64,6 +64,12 @@ export * from "./notifications";
 export * from "./permission-presentation";
 // A session's plan: its steps, its spec, its task's to-dos, and their live frames.
 export * from "./plan";
+// A project's landing gate as its gate.md declares it: the hub reads it, Settings draws it.
+export type {
+  DeclaredStep,
+  ProjectGate,
+  RunsOnCapability,
+} from "./project-gate";
 // Which projects a session lists in: the rail and the hub's forget read one rule.
 export * from "./project-membership";
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —

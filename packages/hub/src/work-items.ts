@@ -39,6 +39,7 @@
 import type {
   BriefTarget,
   CommandResult,
+  DeclaredStep,
   DelegateType,
   EndedBy,
   Envelope,
@@ -50,6 +51,7 @@ import type {
   NeutralOrigin,
   PermissionMode,
   PlanStep,
+  RunsOnCapability,
   SendPayload,
   SendRefusal,
   SessionRole,
@@ -111,7 +113,6 @@ import {
   capableRefusal,
   changedPathsCommand,
   covers,
-  type DeclaredStep,
   diffPaths,
   GATE_FILE,
   lastCapable,
@@ -141,7 +142,6 @@ import {
   writeFolderFiles,
 } from "./project-folder";
 import { placesChanged } from "./project-placements";
-import type { RunsOnCapability } from "./runs-on";
 import type { Todo } from "./task-file";
 import type { TodoChanges } from "./tasks";
 import { unwatchedMode } from "./unwatched-mode";

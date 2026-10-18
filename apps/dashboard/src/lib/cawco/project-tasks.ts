@@ -12,6 +12,7 @@
 import {
   type AttemptResult,
   outputArtifacts,
+  type ProjectGate,
   type ProjectStarter,
   type StarterGlyph,
   type StarterPlace,
@@ -464,6 +465,12 @@ export const listTasksWaiting = async (
 
 export const readStages = (projectId: string): Promise<StagesView> =>
   send(`${base(projectId)}/stages`);
+
+/** The project's landing gate as the hub reads its gate.md now (hub gate-file.ts `gateRoutes`). */
+export const readGate = (
+  projectId: string
+): Promise<{ file: string; gate: ProjectGate }> =>
+  send(`${base(projectId)}/gate`);
 
 /** What you did with a starter you pressed, as the composer sent: its words as they stood, or changed. */
 export const tellStarterOutcome = (

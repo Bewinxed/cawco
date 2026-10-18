@@ -45,10 +45,9 @@
  * read there a moment before; `pr` then opens a pull request for it with
  * `gh`, or finds the one already open ({@link openPullRequest}).
  */
-import type { CommandResult } from "@cawco/core";
+import type { CommandResult, RunsOnCapability } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { WouldWait } from "./machine-pause";
-import type { RunsOnCapability } from "./runs-on";
 
 /**
  * Why git turned a landing down: the step it was on, the end of what git
