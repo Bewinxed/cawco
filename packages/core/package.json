@@ -36,6 +36,8 @@
     "./preview-proxy": "./src/preview-proxy.ts",
     "./browser": "./src/browser.ts",
     "./browser-gate": "./src/browser-gate.ts",
+    "./stream-relay": "./src/stream-relay.ts",
+    "./public-address": "./src/public-address.ts",
     "./hub-auth": "./src/hub-auth.ts",
     "./machine-key": "./src/machine-key.ts",
     "./choices": "./src/choices.ts",

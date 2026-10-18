@@ -1,5 +1,4 @@
 import { existsSync, readdirSync } from "node:fs";
-import { BlockList } from "node:net";
 import { homedir, networkInterfaces, platform } from "node:os";
 import { join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -7,6 +6,7 @@ import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
+import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
 import { mediaForwarding } from "./browser/media-forwarding";
@@ -73,46 +73,12 @@ function playwrightBrowser(): string | undefined {
   return undefined;
 }
 
-/** Addresses no screen out on the internet reaches the machine by: private, CGNAT, link-local, loopback, documentation, multicast and reserved. */
-const NOT_PUBLIC = new BlockList();
-for (const [address, prefix] of [
-  ["0.0.0.0", 8],
-  ["10.0.0.0", 8],
-  ["100.64.0.0", 10],
-  ["127.0.0.0", 8],
-  ["169.254.0.0", 16],
-  ["172.16.0.0", 12],
-  ["192.0.0.0", 24],
-  ["192.0.2.0", 24],
-  ["192.168.0.0", 16],
-  ["198.18.0.0", 15],
-  ["198.51.100.0", 24],
-  ["203.0.113.0", 24],
-  ["224.0.0.0", 3],
-] as const) {
-  NOT_PUBLIC.addSubnet(address, prefix, "ipv4");
-}
-for (const [address, prefix] of [
-  ["::", 3],
-  ["4000::", 2],
-  ["8000::", 1],
-  ["2001:db8::", 32],
-] as const) {
-  NOT_PUBLIC.addSubnet(address, prefix, "ipv6");
-}
-
 /** Every global unicast address of the machine's interfaces (a stream relay listens on one, Projects spec §5.11). */
 const publicAddresses = (): string[] => [
   ...new Set(
     Object.values(networkInterfaces()).flatMap((addresses) =>
       (addresses ?? [])
-        .filter(
-          (one) =>
-            !NOT_PUBLIC.check(
-              one.address,
-              one.family === "IPv4" ? "ipv4" : "ipv6"
-            )
-        )
+        .filter((one) => isPublicAddress(one.address))
         .map((one) => one.address)
     )
   ),

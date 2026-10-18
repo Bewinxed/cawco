@@ -94,6 +94,8 @@ export * from "./secret-text";
 export * from "./starters";
 // The Ledger Protocol: canonical session streams + acknowledged commands.
 export * from "./stream";
+// The fleet's stream relay: its ports, the daemon's frame, the hub's commands and the relay step's words.
+export * from "./stream-relay";
 // HTTPS on the hub machine's tailnet name: its state, and a preview's origin there.
 export * from "./tailnet-https";
 // A project's threads with its Caw: rows, messages and their frames.
@@ -1627,6 +1629,8 @@ export type FramePayload =
   | import("./accounts").AccountBorrowFrame
   /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
   | import("./browser").BrowserFrame
+  /** Daemon-originated: the stream relay on the machine, whole, on each change. */
+  | import("./stream-relay").RelayFrame
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 

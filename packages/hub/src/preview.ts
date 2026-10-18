@@ -38,6 +38,7 @@ import {
   versionedFile,
 } from "@cawco/core/preview-proxy";
 import type { StageState } from "@cawco/core/stage";
+import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { serveCanvas } from "./artifacts/canvas";
 import {
@@ -1097,6 +1098,11 @@ export function createPreviewListeners(
     if (fleet) {
       return `it is ${fleet} port`;
     }
+    // A machine of the fleet may run the stream relay on these: TCP 3478
+    // sits inside the default range, and no preview ever takes it.
+    if (isStreamRelayPort(port)) {
+      return "it is the stream relay's port";
+    }
     if (settings.mode === "host" && port === PREVIEW_PORTS.first) {
       return "it is host mode's listener port";
     }
@@ -1183,7 +1189,9 @@ export function createPreviewListeners(
       previewFailed(HOP, null, why);
       return why;
     }
-    const fleet = FLEET_PORTS.get(PREVIEW_PORTS.first);
+    const fleet =
+      FLEET_PORTS.get(PREVIEW_PORTS.first) ??
+      (isStreamRelayPort(PREVIEW_PORTS.first) ? "the stream relay's" : null);
     if (fleet) {
       const why = `Port ${PREVIEW_PORTS.first} is ${fleet} port, so host-mode previews can't take it: set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
       previewFailed(HOP, null, why);

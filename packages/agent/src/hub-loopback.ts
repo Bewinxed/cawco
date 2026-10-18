@@ -8,6 +8,7 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
+import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { Server } from "bun";
 
 /**
@@ -239,12 +240,17 @@ export async function startHubLoopback(
   const all: [local: number, hub: number][] = [
     [ports.dashboard.local, ports.dashboard.hub],
   ];
+  // The hub never gives a preview one of the stream relay's ports (hub
+  // preview.ts `barred`), so none is carried: on the relay's machine coturn
+  // listens on them, loopback included.
   for (
     let port = ports.previews.first;
     port <= ports.previews.last;
     port += 1
   ) {
-    all.push([port, port]);
+    if (!isStreamRelayPort(port)) {
+      all.push([port, port]);
+    }
   }
   const { servers, held, absent } = await listenAll(hubHost, LOOPBACK, all);
   for (const hostname of absent) {
