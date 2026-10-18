@@ -15,6 +15,7 @@
     damagedWords,
     getToolGlance,
     machineLabel,
+    planWords,
     questionsOf,
   } from "@cawco/core";
   /**
@@ -73,12 +74,12 @@
   import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
+  import { planProgress } from "./plan/PlanPane.svelte";
+  import PlanTree, { stepsTree, todosTree } from "./plan/PlanTree.svelte";
   import RowFault from "./RowFault.svelte";
   import SessionMark from "./SessionMark.svelte";
   import { sessionAct, stopOnRow } from "./session-acts.svelte";
   import { cawOf, sessionStatus } from "./session-status";
-  import TaskPanel from "./TaskPanel.svelte";
-  import { refreshTasks, taskProgress, tasksOf } from "./tasks.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
 
@@ -109,9 +110,6 @@
     const id = target.viewId;
     untrack(() => {
       openSession(id);
-      // A peek is the one moment a session's plan is looked at from the board,
-      // and no frame is coming to say it moved while nobody was watching.
-      refreshTasks(id);
       const held = cawco.session(id);
       if (!(held?.initialized && held.messages.length > 0)) {
         // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — the read publishes into the store the tail below reads
@@ -215,9 +213,13 @@
     untrack(() => void refreshContext(id, machineId));
   });
 
-  const plan = $derived(tasksOf(target.viewId));
-  const progress = $derived(
-    plan && plan.tasks.length > 0 ? taskProgress(plan) : null
+  // The hub's plan, live: a peeked session is streamed (`setPeeked`), and the
+  // hub sends its streamers the plan whole on subscribe, then its deltas.
+  const plan = $derived(cawco.planOf(target.viewId));
+  const progress = $derived(plan ? planProgress(plan) : null);
+  /** Its steps, else (a task attempt that wrote none) its task's to-dos. */
+  const planRows = $derived(
+    plan && plan.steps.length > 0 ? stepsTree(plan) : todosTree(plan)
   );
 
   /** How much conversation a peek is: enough to see what it is up to. */
@@ -474,15 +476,18 @@
   {/if}
 
   <!-- What it set out to do, before what it last said about doing it.
-       Capped, because a peek is a glance — a forty-task plan scrolls inside
+       Capped, because a peek is a glance — a forty-step plan scrolls inside
        its own section rather than pushing the tail off. -->
-  {#if progress}
-    <div class="flex flex-col border-t border-border/50 pb-2">
+  {#if progress && progress.total > 0}
+    <div class="flex flex-col border-t border-border/50 pb-3">
       <p class="px-4 pt-3 pb-1 text-label">
-        Tasks · {progress.done} of {progress.total}
+        {planWords.plan} · {progress.done} of {progress.total}
       </p>
-      <div class="max-h-48 overflow-y-auto px-2">
-        <TaskPanel dense viewId={target.viewId} />
+      <div
+        data-slot="peek-plan"
+        class="max-h-48 overflow-y-auto overscroll-contain px-4"
+      >
+        <PlanTree nodes={planRows} />
       </div>
     </div>
   {/if}

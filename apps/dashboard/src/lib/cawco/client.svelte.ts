@@ -186,11 +186,6 @@ import {
   subscribeSession,
   sweepCommands,
 } from "./stream";
-import {
-  invalidateTasks,
-  refreshTasks,
-  TASK_LEDGER_TOOLS,
-} from "./tasks.svelte";
 import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
 import { toast } from "./toasts";
 import { warmCompactionMark } from "./transcript/compaction-mark";
@@ -1637,11 +1632,6 @@ function updateBlock(target: SessionState, block: TranscriptBlock): void {
   }
   if (adopt(held, block as Message) && !block.parentToolUseId) {
     target.rev += 1;
-  }
-  // The ledger on disk just moved: what it now says is read back from the
-  // files, never parsed out of here.
-  if (TASK_LEDGER_TOOLS.has(block.metadata?.toolName ?? "")) {
-    invalidateTasks(target.instanceId);
   }
 }
 
@@ -7310,9 +7300,6 @@ async function readNewestPage(
 ): Promise<TranscriptOutcome> {
   const viewId = target.instanceId;
   beginRead(streamState, viewId);
-  // A stored session's plan is still on its machine, and no frame will ever
-  // arrive to say so — opening it is the only moment there is to ask.
-  refreshTasks(viewId);
   target.loading = true;
   // The `/` palette's servers and tools are read beside the transcript: the
   // board's rows do not carry them. A session with no hub row has none.

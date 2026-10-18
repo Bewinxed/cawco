@@ -6,8 +6,8 @@
  * the hub is a bare sentence, and every call throws it whole, so the caller
  * prints the hub's own words (a refused move names the moves that are open).
  *
- * Not to be confused with `tasks.svelte.ts`, which reads a session's own plan
- * off its machine (WORDS.md: plan).
+ * Not to be confused with a session's own plan (WORDS.md: plan), which is
+ * the hub's too, held in the client by `plan.ts`.
  */
 import {
   type AttemptResult,
