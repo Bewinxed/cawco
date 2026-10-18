@@ -71,6 +71,19 @@
  *    then the third shown), the first's frame is gone, and it loads again
  *    with its tab.
  *
+ * 13. The desk's bound of 2 across switches, as the live run made them: A,
+ *    B and C opened, then C→A→B→C→A, each stood on `DWELL_MS`: every
+ *    return finds its page as it was (the same document). Each switch shows
+ *    one pane and puts another away, each pane saying so from its own effect
+ *    in the tree's order.
+ * 14. A phone's bound of 1, A→B→A with B's tab first in the strip: A's
+ *    page is kept.
+ * 15. A page artifact whose own script starts an interval as it is parsed,
+ *    with no <head> and with one: off screen `DWELL_MS` its interval runs 0
+ *    times, and runs again once its tab is back.
+ * 16. A canvas standing in a conversation's panel: held while its tab is
+ *    off screen (its frame says `cawco:held` true), let go with its tab.
+ *
  * Every reading is written to `numbers.json` in the spec's out folder.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person opens them
@@ -112,6 +125,15 @@ const fullPage = () =>
     (_, i) =>
       `<section><h2>Part ${i}</h2><p>${"A sentence of copy on this part of the page. ".repeat(6)}</p><div data-cawco-choice="pick-${i}"><button data-option="a">A</button><button data-option="b">B</button></div><input name="note-${i}" placeholder="Note"></section>`
   ).join("")}</body></html>`;
+/** An interval the page starts as it is parsed, counting on its window (15). */
+const TICKER =
+  "<script>window.__ticks=0;setInterval(function(){window.__ticks++;},1000);</script>";
+/** A page artifact with no <head> nor <html>, its interval in its body (15). */
+const TICKS_BARE = `<!doctype html><meta charset="utf-8"><title>Ticks</title><h1>Ticks</h1>${TICKER}`;
+/** The same with a <head> (15). */
+const TICKS_HEAD = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ticks</title></head><body><h1>Ticks</h1>${TICKER}</body></html>`;
+/** How long each conversation is stood on in 13's switches, and a ticking page left off screen in 15: the live run's 11 s. */
+const DWELL_MS = 11_000;
 const pageOf = (heading: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${heading}</title></head><body><h1>${heading}</h1></body></html>`;
 
@@ -119,6 +141,8 @@ const pageOf = (heading: string) =>
 interface Cost {
   gaps: [number, number][];
   heard: [number, string, number][];
+  /** Each frame's word that it is held or let go (`cawco:held`): when, its origin, and which. */
+  held: [number, string, boolean][];
   tasks: [number, number][];
 }
 
@@ -127,7 +151,7 @@ function watchDashboard(): void {
   if (window.top !== window) {
     return;
   }
-  const cost: Cost = { tasks: [], gaps: [], heard: [] };
+  const cost: Cost = { tasks: [], gaps: [], heard: [], held: [] };
   (window as unknown as { __cost: Cost }).__cost = cost;
   try {
     new PerformanceObserver((list) => {
@@ -149,13 +173,20 @@ function watchDashboard(): void {
   addEventListener(
     "message",
     (event) => {
-      const data = event.data as { png?: unknown; type?: unknown } | null;
+      const data = event.data as {
+        held?: unknown;
+        png?: unknown;
+        type?: unknown;
+      } | null;
       if (typeof data?.type === "string" && data.type.startsWith("cawco:")) {
         cost.heard.push([
           performance.now(),
           data.type,
           typeof data.png === "string" ? data.png.length : 0,
         ]);
+      }
+      if (data?.type === "cawco:held") {
+        cost.held.push([performance.now(), event.origin, data.held === true]);
       }
     },
     true
@@ -491,6 +522,20 @@ const run = async (kit: Kit) => {
     name: "full",
     html: fullPage(),
   });
+  // Page artifacts that count an interval's ticks (15): one with no <head>, one with it.
+  const tickOf = async (name: string, html: string) => {
+    const id = await fleet.spawn("claude", `Ticks ${name}`, fleet.repo);
+    await fleet.api(`/api/instances/${id}/artifacts`, {
+      kind: "page",
+      name,
+      html,
+    });
+    return id;
+  };
+  const ticks = [
+    { name: "no head", id: await tickOf("ticks-bare", TICKS_BARE) },
+    { name: "a head", id: await tickOf("ticks-head", TICKS_HEAD) },
+  ];
   const base = await fleet.dashboard();
   const paneFrame = (page: Page, pane: string) =>
     page.locator(
@@ -951,6 +996,175 @@ const run = async (kit: Kit) => {
     phonePastFrames === 0 && phoneBack,
     `the first's frames with two hidden after it: ${phonePastFrames}; ready again ${phoneBack}`
   );
+  await deck.close();
+
+  /** Pane `pane`'s page in `page`, by its frame's origin; "" while none stands. */
+  const originIn = async (page: Page, pane: string) => {
+    const src = await paneFrame(page, pane)
+      .first()
+      .getAttribute("src", { timeout: 1000 })
+      .catch(() => null);
+    return src ? new URL(src).origin : "";
+  };
+
+  // 13. The desk's bound of 2 across switches (the live run): A, B, C
+  // opened, then C→A→B→C→A, each stood on DWELL_MS. Every switch shows one
+  // pane and puts another away, each pane saying so from its own effect.
+  const trio = await kit.page("desk", { init: [watchDashboard] });
+  const [paneA, paneB, paneC] = [lightOne, lightTwo, lightThree];
+  await tabsAt(trio, [paneA, paneB, paneC], paneA);
+  await open(trio, `${base}/session/${paneA}`, 'iframe[title="Preview"]');
+  await until("A's page loaded", readyIn(trio, paneA), Boolean, 60_000);
+  for (const pane of [paneB, paneC]) {
+    await choose(trio, pane);
+    await until("a page loaded", readyIn(trio, pane), Boolean, 60_000);
+  }
+  const trioOrigins = new Map<string, string>();
+  const trioBorn = new Map<string, number | null>();
+  for (const pane of [paneA, paneB, paneC]) {
+    const origin = await originIn(trio, pane);
+    trioOrigins.set(pane, origin);
+    trioBorn.set(pane, await bornOf(trio, origin));
+  }
+  const names = new Map([
+    [paneA, "A"],
+    [paneB, "B"],
+    [paneC, "C"],
+  ]);
+  const steps: string[] = [];
+  let trioKept = true;
+  for (const pane of [paneA, paneB, paneC, paneA]) {
+    await choose(trio, pane);
+    await trio.waitForTimeout(1500);
+    const born = await bornOf(trio, trioOrigins.get(pane) ?? "");
+    const kept = born !== null && born === trioBorn.get(pane);
+    trioKept &&= kept;
+    steps.push(
+      `→${names.get(pane)} ${kept ? "kept" : `loaded again (${trioBorn.get(pane)} → ${born})`}`
+    );
+    await trio.waitForTimeout(DWELL_MS - 1500);
+  }
+  numbers.desktopSwitches = steps;
+  kit.check(
+    "13: the desk (bound 2), A, B, C opened then C→A→B→C→A: every return finds its page as it was (same document)",
+    trioKept,
+    steps.join(", ")
+  );
+  await trio.close();
+
+  // 14. The phone's bound of 1, A→B→A, B's tab first in the strip: each
+  // pane's effect runs in the tree's order, B's before A's.
+  const pair = await kit.page("phone", { scale: 3, init: [watchDashboard] });
+  await tabsAt(pair, [paneB, paneA], paneA);
+  const OPEN_SHEET =
+    '[data-preview-sheet][data-state="open"] iframe[title="Preview"][data-ready]';
+  await open(pair, `${base}/session/${paneA}`, OPEN_SHEET);
+  const aSrc = await pair.locator(OPEN_SHEET).getAttribute("src");
+  const aOrigin = aSrc ? new URL(aSrc).origin : "";
+  const aBorn = await bornOf(pair, aOrigin);
+  await choose(pair, paneB);
+  await until(
+    "B's sheet loaded",
+    async () =>
+      (await pair
+        .locator(OPEN_SHEET)
+        .getAttribute("src")
+        .catch(() => null)) ?? "",
+    (src) => !!src && !src.startsWith(aOrigin),
+    60_000
+  );
+  await pair.waitForTimeout(DWELL_MS);
+  await choose(pair, paneA);
+  await pair.waitForTimeout(2000);
+  const aBack = await bornOf(pair, aOrigin);
+  numbers.phoneSwitches = { aBorn, aBack };
+  kit.check(
+    "14: a phone (bound 1), A→B→A with B's tab first: A's page is kept (same document)",
+    aBorn !== null && aBack === aBorn,
+    `A's document ${aBorn} → ${aBack}`
+  );
+  await pair.close();
+
+  // 15. A hidden page artifact's own interval stands still, with or
+  // without a <head>, and runs again with its tab.
+  const ticking = await kit.page("desk", { init: [watchDashboard] });
+  await tabsAt(ticking, [...ticks.map((one) => one.id), lightOne], lightOne);
+  await open(ticking, `${base}/session/${lightOne}`, 'iframe[title="Preview"]');
+  const ticksOf = (origin: string) =>
+    previewFrameOf(ticking, origin)
+      ?.evaluate(
+        () => (window as unknown as { __ticks?: number }).__ticks ?? -1
+      )
+      .catch(() => -1) ?? Promise.resolve(-1);
+  for (const { name, id } of ticks) {
+    await choose(ticking, id);
+    await until(
+      "the ticking page loaded",
+      readyIn(ticking, id),
+      Boolean,
+      60_000
+    );
+    await ticking.waitForTimeout(2000);
+    const origin = await originIn(ticking, id);
+    await choose(ticking, lightOne);
+    await ticking.waitForTimeout(1500);
+    const before = await ticksOf(origin);
+    await ticking.waitForTimeout(DWELL_MS);
+    const hidden = await ticksOf(origin);
+    await choose(ticking, id);
+    await ticking.waitForTimeout(3500);
+    const resumed = await ticksOf(origin);
+    numbers[`ticks ${name}`] = { before, hidden, resumed };
+    kit.check(
+      `15: a page artifact with ${name}, its tab off screen ${DWELL_MS / 1000} s: its own interval ran 0 times, and runs again once its tab is back`,
+      before >= 0 && hidden === before && resumed > hidden,
+      `ticks ${before} as it went off screen, ${hidden} after ${DWELL_MS / 1000} s off screen, ${resumed} 3.5 s after it came back`
+    );
+  }
+  await ticking.close();
+
+  // 16. A canvas in a hidden conversation's panel is held, and let go with its tab.
+  const drawn = await fleet.spawn("claude", "Canvas", fleet.repo);
+  const easel = await kit.page("desk", { init: [watchDashboard] });
+  await tabsAt(easel, [drawn, lightOne], drawn);
+  await open(easel, `${base}/session/${drawn}`, '[data-slot="pane"]');
+  asks.set("2", { name: CREATE, input: { kind: "canvas", name: "held" } });
+  await fleet.send(drawn, "PROBE-CALL:2");
+  await until("the canvas made", () => answered.get("2"), Boolean, 180_000);
+  const canvasFrame = easel.locator('iframe[title="Canvas"]').first();
+  const docked = await until(
+    "the canvas standing in the panel",
+    () => easel.locator("[data-canvas-stages-docked]").count(),
+    (n) => n > 0,
+    60_000
+  ).then(
+    () => true,
+    () => false
+  );
+  await easel.waitForTimeout(3000);
+  const canvasSrc = await canvasFrame.getAttribute("src").catch(() => null);
+  const canvasOrigin = canvasSrc ? new URL(canvasSrc).origin : "";
+  const heldFrom = async (since: number, held: boolean) =>
+    (await costOf(easel)).held.some(
+      ([when, from, word]) =>
+        when >= since && from === canvasOrigin && word === held
+    );
+  const awayAt = await easel.evaluate(() => performance.now());
+  await choose(easel, lightOne);
+  await easel.waitForTimeout(2500);
+  const heldAway = await heldFrom(awayAt, true);
+  const backAt = await easel.evaluate(() => performance.now());
+  await choose(easel, drawn);
+  await easel.waitForTimeout(2500);
+  const releasedBack = await heldFrom(backAt, false);
+  numbers.canvasHeld = { docked, canvasOrigin, heldAway, releasedBack };
+  kit.check(
+    "16: a canvas standing in a conversation's panel: held while its tab is off screen, let go with its tab",
+    docked && !!canvasOrigin && heldAway && releasedBack,
+    `in the panel ${docked}; origin ${canvasOrigin || "none"}; held off screen ${heldAway}; let go on return ${releasedBack}`
+  );
+  await easel.close();
+
   await writeFile(
     join(kit.out, "numbers.json"),
     JSON.stringify(numbers, null, 2)
