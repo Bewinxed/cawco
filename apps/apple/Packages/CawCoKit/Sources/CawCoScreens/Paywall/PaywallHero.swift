@@ -33,7 +33,7 @@ struct HeroBanner: Equatable {
             let harness = row?.harness.rawValue ?? exampleHarness
             return HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(harness), machine: machine), body: line)
         }
-        let pair = home.working.first.map { (harness: $0.harness.rawValue, machine: fleet.machineName($0.machineId)) }
+        let pair = home.working.lazy.compactMap(\.session).first.map { (harness: $0.harness.rawValue, machine: fleet.machineName($0.machineId)) }
             ?? (harness: exampleHarness, machine: first)
         return HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(pair.harness), machine: pair.machine), body: PaywallCopy.bannerExample)
     }

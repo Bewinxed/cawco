@@ -908,7 +908,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         }
     }
 
-    private func isUnder(_ line: TreeLine<InstanceRow>?, _ parent: String, in rows: [String: RowLine]) -> Bool {
+    private func isUnder(_ line: TreeLine<BoardRow>?, _ parent: String, in rows: [String: RowLine]) -> Bool {
         var at = line?.parent
         while let id = at {
             if id == parent {

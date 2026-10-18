@@ -1409,7 +1409,7 @@ final class SessionViewController: ObservedViewController {
 
     /// The harness the session runs.
     private var harness: String? {
-        hub.fleet.byId[sessionId]?.harness.rawValue ?? transcript.facts?.harness ?? transcript.location?.harness.rawValue
+        hub.fleet.byId[sessionId]?.harness?.rawValue ?? transcript.facts?.harness ?? transcript.location?.harness.rawValue
     }
 
     /// client.svelte.ts `canWithdraw`: a send still waiting to be read, on

@@ -38,7 +38,8 @@ final class NewSessionFlow {
 
     /// Continue in new session, by the id the hub knows the source by.
     func continueSession(_ id: String) {
-        guard let row = hub.fleet.byId[id] else { return }
+        // Only a session has a conversation to go on from.
+        guard let row = hub.fleet.byId[id]?.session else { return }
         let name = row.title.flatMap { $0.isEmpty ? nil : $0 } ?? title(id) ?? hub.fleet.title(row)
         continueSession(ContinueSource(instanceId: id, machineId: row.machineId, cwd: row.cwd, harness: row.harness.rawValue,
                                        model: row.model, title: name))
