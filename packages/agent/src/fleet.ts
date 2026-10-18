@@ -9,15 +9,7 @@
  * outlives every sync this daemon runs.
  */
 
-import {
-  chmod,
-  readdir,
-  realpath,
-  rename,
-  rm,
-  rmdir,
-  stat,
-} from "node:fs/promises";
+import { chmod, readdir, realpath, rm, rmdir, stat } from "node:fs/promises";
 import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import type {
   CliInstall,
@@ -121,14 +113,6 @@ const vendorName = (marketplace: string): string => `cawco-${marketplace}`;
 /** Where it is written. */
 const vendorDir = (marketplace: string): string =>
   join(VENDOR_ROOT, marketplace);
-
-/**
- * Before one vendored marketplace per fleet marketplace, every vendored
- * plugin went into this one, as `<plugin>@cawco`, a folder per plugin name.
- * A sync moves what it finds there to the new ids ({@link moveLegacyVendored}).
- */
-const LEGACY_VENDOR_DIR = userLayerPath("cawco-marketplace");
-const LEGACY_VENDOR_NAME = "cawco";
 
 /** The user-scope memory every session on this machine reads (NEW.md §11). */
 const MEMORY_PATH = userLayerPath("CLAUDE.md");
@@ -315,14 +299,7 @@ const readSidecar = async (): Promise<Sidecar> => {
     // Read back like every other record: without it each sync starts from an
     // empty one, so it reinstalls every vendored plugin and never uninstalls a
     // plugin the fleet dropped.
-    // Keyed by plugin name alone before each marketplace had its own vendored
-    // copy; those records name `<plugin>@cawco` installs, which the next sync
-    // moves (moveLegacyVendored) and records under their fleet ids.
-    vendoredPlugins: Object.fromEntries(
-      Object.entries(stored?.vendoredPlugins ?? {}).filter(([id]) =>
-        id.includes("@")
-      )
-    ),
+    vendoredPlugins: stored?.vendoredPlugins ?? {},
     // A sidecar written before skills existed names none, which is the truth.
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
@@ -1358,84 +1335,6 @@ const readVendoredPlugins = async (): Promise<Record<string, string>> => {
   return held;
 };
 
-/** `~/.claude/plugins/data/<id>`: the id with every byte outside `a-zA-Z0-9_-` as `-` (plugins-reference). */
-const pluginDataDir = (id: string): string =>
-  join(PLUGINS_DIR, "data", id.replace(/[^a-zA-Z0-9_-]/g, "-"));
-
-/**
- * Moves every `<plugin>@cawco` install, from when all vendored plugins shared
- * one marketplace, to the id it has now, `<plugin>@cawco-<marketplace>`. The
- * old one is uninstalled keeping its data (`--keep-data`), and its data folder
- * moves to the new id's; one the fleet no longer carries is just uninstalled.
- * Then the shared marketplace is unlinked and its folder goes. Answers the new
- * ids whose old one the user had disabled, for the install to leave disabled.
- * A name two fleet marketplaces carry goes to the first; the other installs
- * fresh, as it never could before.
- */
-const moveLegacyVendored = async (
-  bin: string,
-  payloads: readonly FleetPluginPayload[]
-): Promise<Set<string>> => {
-  const disabled = new Set<string>();
-  const installed =
-    (await readJson<InstalledPlugins>(INSTALLED_PLUGINS))?.plugins ?? {};
-  const legacy = Object.entries(installed).flatMap(([id, entries]) =>
-    marketplaceOf(id) === LEGACY_VENDOR_NAME &&
-    entries.some((entry) => entry.scope === "user")
-      ? [id]
-      : []
-  );
-  const enabled =
-    (
-      await readJson<{ enabledPlugins?: Record<string, unknown> }>(
-        SETTINGS_PATH
-      )
-    )?.enabledPlugins ?? {};
-  for (const old of legacy) {
-    const heir = payloads.find(({ name }) => name === pluginNameOf(old));
-    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin uninstall` mutates the CLI's shared installed_plugins.json; concurrent runs would race
-    await runClaude(bin, [
-      "plugin",
-      "uninstall",
-      old,
-      "--scope",
-      "user",
-      "--keep-data",
-      "-y",
-    ]);
-    if (!heir) {
-      await rm(pluginDataDir(old), { recursive: true, force: true });
-      console.log(`[fleet] ${old}: uninstalled, the fleet carries it no more`);
-      continue;
-    }
-    const next = vendoredIdOf(payloadId(heir));
-    const from = pluginDataDir(old);
-    const to = pluginDataDir(next);
-    if ((await dirExists(from)) && !(await dirExists(to))) {
-      await rename(from, to);
-    }
-    if (enabled[old] === false) {
-      disabled.add(next);
-    }
-    console.log(
-      `[fleet] ${old} moved to ${next}${enabled[old] === false ? ", disabled as it was" : ""}`
-    );
-  }
-  if (await linkedEntry(LEGACY_VENDOR_NAME)) {
-    await runClaude(bin, [
-      "plugin",
-      "marketplace",
-      "remove",
-      LEGACY_VENDOR_NAME,
-    ]);
-    console.log(
-      `[fleet] the shared ${LEGACY_VENDOR_NAME} marketplace unlinked`
-    );
-  }
-  await rm(LEGACY_VENDOR_DIR, { recursive: true, force: true });
-  return disabled;
-};
-
 /**
  * What claude's copy of the fleet holds on this disk now: the skills cawco
  * wrote under `~/.claude/skills`, and the plugins in the vendored marketplace.
@@ -1515,8 +1414,6 @@ const syncVendoredPlugins = async (
     }
   }
 
-  const disabled = await moveLegacyVendored(bin, payloads);
-
   for (const { id } of wanted) {
     const plugin = byId.get(id);
     if (!plugin) {
@@ -1554,16 +1451,6 @@ const syncVendoredPlugins = async (
         detail: ran?.output ?? "install did not land",
       };
       continue;
-    }
-    // Moved from a `<plugin>@cawco` the user had turned off: off it stays.
-    if (ran && disabled.has(vendoredId)) {
-      await runClaude(bin, [
-        "plugin",
-        "disable",
-        vendoredId,
-        "--scope",
-        "user",
-      ]);
     }
 
     // The copy this one replaces. A machine that installed the plugin the old

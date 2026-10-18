@@ -22,13 +22,7 @@ import {
   launchdJobs,
 } from "@cawco/core/launchd";
 import { hostEnvironment } from "@cawco/core/session-env";
-import {
-  isAlive,
-  listedPid,
-  type Pid,
-  signal as signalPid,
-} from "@cawco/core/signal";
-import { writeStateFile } from "@cawco/core/state-file";
+import { listedPid, type Pid } from "@cawco/core/signal";
 
 interface Ran {
   code: number;
@@ -37,19 +31,17 @@ interface Ran {
 }
 
 const run = async (argv: string[]): Promise<Ran> => {
+  // systemd's user manager gives every unit it runs XDG_RUNTIME_DIR, the bus
+  // `systemctl --user` reaches it on: without one there is no user manager.
+  if (process.platform === "linux" && !process.env.XDG_RUNTIME_DIR) {
+    throw new Error(
+      `systemd required: ${argv.join(" ")} needs systemd's user manager, and this process has no XDG_RUNTIME_DIR, so none runs it`
+    );
+  }
   const child = Bun.spawn(argv, {
     stdout: "pipe",
     stderr: "pipe",
-    env: {
-      ...hostEnvironment(),
-      LC_ALL: "C",
-      ...(process.platform === "linux"
-        ? {
-            XDG_RUNTIME_DIR:
-              process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.()}`,
-          }
-        : {}),
-    },
+    env: { ...hostEnvironment(), LC_ALL: "C" },
   });
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),
@@ -84,8 +76,6 @@ const launchAgentsDir = (): string =>
 const KEEPER_UNIT = /^cawco-(sessiond(?:-.+)?)\.service$/;
 const KEEPER_PLIST = /^dev\.cawco\.(sessiond(?:-.+)?)\.plist$/;
 const KEEPER_LABEL = /^dev\.cawco\.(sessiond(?:-.+)?)$/;
-/** The service name of a keeper from before keepers ran side by side. */
-const LEGACY_SERVICE = "sessiond";
 
 /** One keeper's job, as the service manager runs it. */
 export interface KeeperJob {
@@ -106,10 +96,7 @@ export interface KeeperJob {
   readonly pid: () => Promise<Pid | undefined>;
   /**
    * Ends it and takes it off the machine, unit or plist and all. Only for a
-   * keeper that holds nothing, or one wedged past saving. A legacy keeper is
-   * killed outright: one built before keepers ran side by side removes its
-   * endpoint's path on a graceful stop, and that path now names the current
-   * keeper.
+   * keeper that holds nothing, or one wedged past saving.
    */
   readonly remove: () => Promise<void>;
   /** Restarts it in place, with everything it holds. */
@@ -183,16 +170,6 @@ const systemdJob = (service: string): KeeperJob => {
       await must(["systemctl", "--user", "restart", unit]);
     },
     async remove() {
-      if (service === LEGACY_SERVICE) {
-        // SIGKILL to every process of the unit, and no restart of a unit
-        // stopped by a signal: its drain never runs.
-        const dropins = `${file}.d`;
-        await writeStateFile(
-          join(dropins, "retired.conf"),
-          "[Service]\nKillSignal=SIGKILL\nRestart=no\n"
-        );
-        await reload();
-      }
       await run(["systemctl", "--user", "disable", unit]);
       await must(["systemctl", "--user", "stop", unit]);
       await rm(file, { force: true });
@@ -246,40 +223,11 @@ const launchdKeeperJob = (service: string): KeeperJob => {
       await must(["launchctl", "kickstart", "-k", target]);
     },
     async remove() {
-      if (service === LEGACY_SERVICE) {
-        // Killed by its own pid, and gone, before launchd is asked anything:
-        // `bootout` would send it SIGTERM. Should launchd start it again
-        // meanwhile (a kill is not a successful exit), what starts is a keeper
-        // on the machine's endpoint, a symlink now, which exits by itself.
-        const running = await pid();
-        if (running !== undefined) {
-          signalPid(running, "SIGKILL");
-          await gone(running);
-        }
-      }
       await run(["launchctl", "bootout", target]);
       await rm(plist, { force: true });
       await forgetLaunchdStart(label);
     },
   };
-};
-
-/** How long a killed keeper gets to be gone before its removal goes on. */
-const GONE_MS = 10_000;
-
-/** Resolves once `target` is no longer a process, or {@link GONE_MS} has passed. */
-const gone = async (target: Pid): Promise<void> => {
-  const deadline = Date.now() + GONE_MS;
-  for (;;) {
-    if (!isAlive(target)) {
-      return;
-    }
-    if (Date.now() > deadline) {
-      return;
-    }
-    // biome-ignore lint/performance/noAwaitInLoops: a poll for one process to be gone
-    await Bun.sleep(100);
-  }
 };
 
 /** The job of the keeper with this service name; none where there is no service manager CawCo installs into. */

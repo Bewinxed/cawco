@@ -41,11 +41,11 @@ TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-tmp-$(printf %s "$out
 ln -sfn "$out/tmp" "$TMPDIR"
 export TMPDIR
 
-# The builds (scripts/binary/build-stage2.ts): build 1 from before keepers ran side by side, and two of this tree.
-export BASE=0.0.1-test.2 NEXT=0.0.1-test.3 LEGACY=0.0.1-test.1
+# The builds (scripts/binary/build-stage2.ts): two of this tree.
+export BASE=0.0.1-test.2 NEXT=0.0.1-test.3
 # The proof's own pace for the update's timed steps (packages/core/src/clock.ts, replaced in proof builds by
 # scripts/binary/proof-clock.ts): the trial window (180 s), the confirm hold (60 s), the first retry delay (60 s) and
-# how long a retiring keeper sits empty (20 s) run this many times faster. Builds 2 and 3 only: build 1 is old code.
+# how long a retiring keeper sits empty (20 s) run this many times faster.
 PROOF_TIME_SCALE=6
 # The stand-ins are as slow and as late as production gets, never faster: what reached the person on 2026-10-16 came
 # from slowness the rigs did not have.
@@ -64,10 +64,10 @@ export CLAUDE_LATE_S
 
 # ---------------------------------------------------------------- which rigs run
 # A rig is a function rig_<name> below; its checks are its `check "<name>" …` lines.
-RIGS=(install held3455 spare legacy hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry pins workspace runaway memory capped)
+RIGS=(install held3455 spare hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry pins workspace runaway memory capped)
 # How many systemd machines each rig boots (its `machines` refuses any other count): what it holds of the host user's
 # inotify instances while it runs.
-declare -A RIG_MACHINES=([install]=2 [held3455]=1 [spare]=1 [legacy]=2 [hubself]=1 [rollback]=1 [migration]=1 [swapkill]=1
+declare -A RIG_MACHINES=([install]=2 [held3455]=1 [spare]=1 [hubself]=1 [rollback]=1 [migration]=1 [swapkill]=1
   [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [pins]=1 [workspace]=2 [runaway]=1
   [memory]=1 [capped]=2)
 # THE HOST USER'S INOTIFY INSTANCES are every rig's to share. The kernel charges an instance to its user in each user
@@ -190,7 +190,7 @@ EOF
 orchestrate() {
   python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is needed to answer the installer's prompts (pip install pexpect)" >&2; exit 2; }
   command -v flock > /dev/null || { echo "flock (util-linux) is needed: one proof at a time builds into the image store" >&2; exit 2; }
-  for need in cawco-1 cawco-2 cawco-3 keys/test-release-private.pem keys/test-release-public.pem; do
+  for need in cawco-2 cawco-3 keys/test-release-private.pem keys/test-release-public.pem; do
     [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
   done
   free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
@@ -237,7 +237,6 @@ orchestrate() {
   feed() { local name=$1; shift; fixture release "$out/feeds/$name" "$@"; }
   feeds() {
     local pids=() rc=0 pid
-    feed legacy ok stable "$LEGACY" 1111111111111111111111111111111111111111 "$bins/cawco-1" "$key" 10 "$schema" & pids+=($!)
     feed base ok stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" & pids+=($!)
     feed next ok stable "$NEXT" 3333333333333333333333333333333333333333 "$bins/cawco-3" "$key" 30 "$schema" & pids+=($!)
     feed broken ok stable 0.0.1-test.10 1010101010101010101010101010101010101010 "$out/shared/broken-cawco" "$key" 31 "$schema" & pids+=($!)
@@ -746,15 +745,14 @@ start_loop() {
   done
 }
 # The machine's session keepers (packages/core/src/keepers.ts): each listens on an endpoint of its own beside the
-# machine's, sessiond-<build>.sock (legacy-sessiond-<build>.sock for one set aside from before keepers ran side by
-# side), and the machine's endpoint sessiond.sock is a symlink naming the current one, which every new start goes to.
+# machine's, sessiond-<build>.sock, and the machine's endpoint sessiond.sock is a symlink naming the current one,
+# which every new start goes to.
 keeper_list() { as_user "$1" sh -c 'printf "{\"type\":\"list\"}\n" | socat -t1 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock | head -n 1'; }
 # What every keeper holds, current and retiring: one listing per line, each with the endpoint it answered on. The
-# machine's endpoint is listed when it is a keeper's own socket (a legacy keeper not yet handed over, as build 1
-# runs); as a symlink it names a keeper listed by its own endpoint.
+# machine's endpoint, a symlink, names a keeper listed by its own endpoint.
 keeper_lists() {
-  as_user "$1" sh -c 'for s in /run/user/1000/cawco/sessiond.sock /run/user/1000/cawco/sessiond-*.sock /run/user/1000/cawco/legacy-sessiond-*.sock; do
-    [ -S "$s" ] && [ ! -L "$s" ] || continue
+  as_user "$1" sh -c 'for s in /run/user/1000/cawco/sessiond-*.sock; do
+    [ -S "$s" ] || continue
     printf "{\"type\":\"list\"}\n" | socat -t1 - UNIX-CONNECT:"$s" 2> /dev/null | head -n 1 | sed "s|^{|{\"endpoint\":\"$(basename "$s")\",|"
   done'
 }
@@ -764,16 +762,15 @@ children_with() { keeper_lists "$1" | jsonl "d => d.flatMap(k => k.procs).filter
 children_total() { keeper_lists "$1" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive).length"; }
 # The endpoint of the keeper holding a live child under the id (sessiond-<build>.sock), empty when none does.
 holder_of() { keeper_lists "$1" | jsonl "d => d.find(k => k.procs.some(p => p.alive && p.procId === '$2'))?.endpoint"; }
-# The current keeper's own endpoint, as the machine's endpoint names it (empty when it is a legacy keeper's own socket).
+# The current keeper's own endpoint, as the machine's endpoint names it.
 current_endpoint() { as_user "$1" sh -c 'readlink /run/user/1000/cawco/sessiond.sock || true'; }
 # A build's keeper's endpoint and unit (keeperService: what a unit name cannot carry becomes _).
 endpoint_of() { echo "sessiond-$1.sock"; }
 unit_of() { local v=$1; echo "cawco-sessiond-${v//[^A-Za-z0-9._-]/_}.service"; }
-# The current keeper's unit: its build's own, or a legacy keeper's cawco-sessiond.service.
+# The current keeper's unit: its build's own.
 current_unit() {
   local e
   e=$(current_endpoint "$1")
-  if [[ -z $e ]]; then echo cawco-sessiond.service; return; fi
   e=${e#sessiond-}
   unit_of "${e%.sock}"
 }
@@ -964,14 +961,11 @@ install_hub() {
   as_user "$hubc" curl -fsS -o /dev/null http://127.0.0.1:3000/
   # The binary's dashboard serves every address its socket names: the loopback port too, and [::1] where the
   # machine has it (the socket names it there alone). `/` answers 307 to /session, the page with the app's markup.
-  # $LEGACY is a build from before the loopback port, so it has none to serve.
-  if [[ "$version" != "$LEGACY" ]]; then
-    as_user "$hubc" curl -fsS http://127.0.0.1:3455/session | grep -q _app/immutable \
-      || { echo "ASSERTION FAILED: 127.0.0.1:3455 is not the dashboard"; return 1; }
-    if has_ipv6_loopback "$hubc"; then
-      as_user "$hubc" curl -fsS -g 'http://[::1]:3455/session' | grep -q _app/immutable \
-        || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
-    fi
+  as_user "$hubc" curl -fsS http://127.0.0.1:3455/session | grep -q _app/immutable \
+    || { echo "ASSERTION FAILED: 127.0.0.1:3455 is not the dashboard"; return 1; }
+  if has_ipv6_loopback "$hubc"; then
+    as_user "$hubc" curl -fsS -g 'http://[::1]:3455/session' | grep -q _app/immutable \
+      || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
   fi
   [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
   [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == "versions/$version" ]]
@@ -1013,7 +1007,7 @@ sign_in() {
   wait_until 60 '[[ "$(hub_api /api/agents | json "d => d.filter(a => a.status === \"online\").length")" == '"$#"' ]]'
 }
 # A rig's fleet: its machines booted, the hub installed from the feed named (and the joined machine joined, when the
-# rig has one), and the machines given signed in. Every rig but the legacy one installs this tree's build, BASE.
+# rig has one), and the machines given signed in. Every rig installs this tree's build, BASE.
 fleet() {
   local feed_name=$1 version=$2 roles=$3 signed=${4:-}
   use_feed "$feed_name"
@@ -1316,101 +1310,6 @@ rig_spare() {
   check "a tampered archive is refused and nothing changes" "refuse tampered 'does not match the signed checksum'"
   check "a bad signature is refused and nothing changes" "refuse badsig 'does not match CawCo.s release key'"
   check "a missing signature is refused and nothing changes" "refuse nosig 'could not download'"
-}
-
-# ---------------------------------------------------------------- legacy: the fleet's own first update. Both
-# machines are installed from build 1, from before keepers ran side by side: one keeper, cawco-sessiond.service, on
-# the machine's endpoint itself, and an agent unit that requires it. Each updates to this tree's build: build 1's
-# helper applies it, and this build's agent hands the keeper over beside it.
-install_now() {
-  need_hub
-  install_now_request "$hid"
-  wait_until 300 '[[ "$(build_version $hid)" == $BASE && "$(phase $hid)" == installed ]]'
-  as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
-  [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == "versions/$BASE" ]]
-  # Build 1's keeper, from before keepers ran side by side, is handed over to this build's, its own unit's: the
-  # machine's endpoint names it, and the legacy keeper, holding nothing, goes with its unit.
-  wait_until 180 '[[ "$(current_endpoint "$hubc")" == "$(endpoint_of $BASE)" ]]'
-  wait_until 120 'as_user "$hubc" test ! -e /home/cawco/.config/systemd/user/cawco-sessiond.service'
-  [[ "$(as_user "$hubc" sh -c 'grep -c "cawco-sessiond" ~/.config/systemd/user/cawco-agent.service || true')" == 0 ]]
-  wait_until 60 '[[ -z "$(retiring $hid)" && "$(field $hid sessiondVersion)" == $BASE ]]'
-}
-joiner_starts_held() {
-  need_hub
-  on_exit '[[ $ROW_STATUS == 0 ]] || end_children "$joinerc" joinerpre-'
-  # Its own starts, the held one and every one the loop asked for, are read here only.
-  on_exit 'end_children "$joinerc" joinerheld-1 joinerstart-'
-  rm -f "$rigdir/stop-joiner" "$rigdir/accepted-joiner.txt"
-  [[ "$(wc -l < "$rigdir/joiner-before.txt")" == 2 ]]
-  # A start asked while the joined machine still runs build 1 and its hub this build is kept by the hub, not sent:
-  # build 1's agent would launch it with no credential and stop it before its first turn. It runs once the machine
-  # has installed this build.
-  start_session "$jid" joinerheld-1 > /dev/null
-  sleep 5
-  [[ "$(hub_api /api/instances | json "d => d.find(r => r.id === 'joinerheld-1')?.status")" == starting ]]
-  [[ -z "$(child_pids "$joinerc" joinerheld-1)" ]]
-  install_now_request "$jid" > /dev/null
-  start_loop "$jid" joinerstart "$rigdir/accepted-joiner.txt" "$rigdir/stop-joiner" &
-  loop=$!
-  # The loop stops before its starts are ended, or it would start more after.
-  on_exit 'touch "$rigdir/stop-joiner"; wait "$loop"'
-  # The machine's sessions are held by its session keeper, which no update restarts: the new build's keeper starts
-  # beside it and the update is complete, installed, when the new build runs. It is not complete while installing.
-  wait_until 300 '[[ "$(build_version $jid)" == $BASE && "$(phase $jid)" == installed ]]'
-  [[ "$(field $jid installedVersion)" == $BASE ]]
-  touch "$rigdir/stop-joiner"
-  wait "$loop"
-  accepted_ran_once "$jid" "$joinerc" joinerstart "$rigdir/accepted-joiner.txt"
-  wait_until 120 "session_running joinerheld-1"
-  [[ "$(child_pids "$joinerc" joinerheld-1)" =~ ^[0-9]+$ ]]
-}
-joiner_survived() {
-  need_hub
-  on_exit '[[ $ROW_STATUS == 0 ]] || end_children "$joinerc" joinerpre-'
-  survived "$joinerc" "$rigdir/joiner-before.txt"
-}
-# Build 1's update to this build was applied by build 1's helper, which left the legacy keeper where it was while it
-# held sessions; this build's agent then handed it over to this build's keeper, beside it, with those sessions on it.
-# When they end, the legacy keeper goes with its unit, killed outright and never told to drain: a keeper of that age
-# removes the machine's endpoint, now another keeper's, when it drains.
-legacy_handed_over() {
-  need_hub
-  local id pid
-  on_exit 'end_children "$joinerc" joinerpre-'
-  wait_until 180 '[[ "$(current_endpoint "$joinerc")" == "$(endpoint_of $BASE)" ]]'
-  [[ "$(as_user "$joinerc" readlink /home/cawco/.local/share/cawco/binary/keeper)" == "versions/$BASE" ]]
-  # The legacy keeper's socket was set aside under its build; it holds the sessions that ran before the update.
-  while read -r -u 3 id pid; do
-    [[ "$(holder_of "$joinerc" "$id")" == "legacy-sessiond-$LEGACY.sock" ]]
-  done 3< "$rigdir/joiner-before.txt"
-  # Its unit no longer starts with the machine, and the agent's unit no longer requires it: the new keeper's unit,
-  # enabled, requires the agent's from its own side.
-  [[ "$(as_user "$joinerc" systemctl --user is-enabled cawco-sessiond.service)" == disabled ]]
-  [[ "$(as_user "$joinerc" sh -c 'grep -c "cawco-sessiond" ~/.config/systemd/user/cawco-agent.service || true')" == 0 ]]
-  [[ "$(as_user "$joinerc" systemctl --user is-enabled "$(unit_of $BASE)")" == enabled ]]
-  [[ "$(as_user "$joinerc" systemctl --user show -p RequiredBy --value "$(unit_of $BASE)")" == *cawco-agent.service* ]]
-  # The state says installed, on this build's keeper, with the legacy keeper handing over what it holds; nothing owed.
-  wait_until 60 '[[ "$(phase $jid)" == installed && "$(field $jid sessiondVersion)" == $BASE && "$(retiring $jid)" == *"$LEGACY:"* ]]'
-  [[ -z "$(field $jid keeperOwed)" ]]
-  echo "retiring keepers: $(retiring $jid)"
-  # The sessions end; the legacy keeper goes with its unit, never told to drain.
-  end_children "$joinerc" joinerpre-
-  wait_until 180 '[[ -z "$(retiring $jid)" ]]'
-  wait_until 60 'as_user "$joinerc" test ! -e /home/cawco/.config/systemd/user/cawco-sessiond.service'
-  [[ "$(as_user "$joinerc" sh -c 'journalctl --user --no-pager -o cat -u cawco-sessiond.service | grep -c "draining children" || true')" == 0 ]]
-}
-export -f install_now joiner_starts_held joiner_survived legacy_handed_over
-rig_legacy() {
-  fleet legacy "$LEGACY" "hub joiner" "hub joiner"
-  # Sessions running on the joined machine before its update begins, started while it and its hub both run build 1.
-  setup "start two sessions on the joined machine" start_before "$jid" "$joinerc" "$rigdir/joiner-before.txt" joinerpre-1 joinerpre-2
-  use_feed base
-  setup "the hub learns this build" learn
-  setup_done
-  check "Install now applies the newer build" install_now
-  check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held 900 "Install now applies the newer build"
-  check "a session already running on the joined machine before its update is the same process afterwards, re-attached and running" joiner_survived 600 "a session start requested while the joined machine installs runs once afterwards, one child, none lost"
-  check "a keeper from before keepers ran side by side, holding sessions, is handed over at the update: they run on there, the new build's keeper is the machine's, and it goes, undrained, once they end" legacy_handed_over 600 "a session already running on the joined machine before its update is the same process afterwards, re-attached and running"
 }
 
 # ---------------------------------------------------------------- hubself: the hub's own machine updates (the hub

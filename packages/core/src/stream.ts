@@ -292,7 +292,6 @@ export interface DeliveryMark {
 
 /** `register`'s ack, with the ledger the returning agent reattaches against. */
 export interface RegisterAckPayload {
-  addressContract?: true;
   /**
    * The dashboard's ports: `hub`, where the hub's computer serves it to the
    * network (hub config.ts `DASHBOARD_PORT`), and `local`, its port on every

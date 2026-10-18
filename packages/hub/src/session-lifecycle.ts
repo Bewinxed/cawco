@@ -17,8 +17,6 @@ export const createSessionLifecycle = (ports: {
   send: (machineId: string, payload: StopPayload) => boolean;
   restore: (row: InstanceRow) => void;
   deleteTranscript: (row: InstanceRow) => Promise<boolean>;
-  ready: (machineId: string) => boolean;
-  machineName: (machineId: string) => string;
   confirmed: (row: ReturnType<DbShape["sessionOwnership"]>[number]) => void;
   recoverRemoved: (machineId: string) => void;
   changed: (machineId: string, removed?: string) => void;
@@ -79,9 +77,6 @@ export const createSessionLifecycle = (ports: {
     confirmAbsent = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: total keep/end decision table reads current durable rows on every run, with positive custody required for absence
   ): void => {
-    if (!ports.ready(machineId)) {
-      return;
-    }
     if (fresh) {
       snapshots.set(machineId, fresh);
     }
@@ -243,11 +238,6 @@ export const createSessionLifecycle = (ports: {
     if (requestId && !owner) {
       throw new Error(
         "This session is no longer recorded. Refresh, then retry."
-      );
-    }
-    if (owner && !ports.ready(owner.machineId)) {
-      throw new Error(
-        `${ports.machineName(owner.machineId)}'s agent has not restarted onto this build yet. Restart its agent, then retry.`
       );
     }
     if (owner && requestId) {

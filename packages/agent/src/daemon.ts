@@ -1371,7 +1371,6 @@ const attach = (
     // proofs name (hub-proof.ts).
     setConnectedHub(challenge.hubId);
     yield* Effect.promise(() => recordJoinedHub(url, challenge.hubId));
-    supervisor.setHubContract(false);
     supervisor.resetStopSequence();
     process.env[CAWCO_ENV.hubUrl] = url;
     const { catalog } = yield* Effect.promise(() => reading);
@@ -2404,10 +2403,6 @@ const attach = (
     /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */
     const beforeAck = (envelope: Envelope): boolean => {
       if (envelope.verb === "register") {
-        supervisor.declareHubContract(
-          (envelope.payload as { addressContract?: unknown })
-            .addressContract === true
-        );
         agentStep({ kind: "register-ack" });
         recordRegistered();
         // What each session is owed goes first, ahead of anything this ack

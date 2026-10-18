@@ -10,9 +10,10 @@
  * where `cawco` is a darwin build of this tree whose version is
  * `0.0.0-probe.2`, signed (`codesign --force --sign -`). A second scratch
  * job, `dev.cawco.sessiond-0.0.0-probe.3`, loaded from a plist in the scratch
- * directory and never run at load, proves a job that never ran from one whose
- * keeper exited 0 (launchd states status 0 for both; its start record, as
- * every job CawCo writes has, tells them apart). Each step prints one
+ * directory and never run at load, proves a job that never ran from one that
+ * ran and exited 0, its program `true` through the keeper's launchd wrapper
+ * (launchd states status 0 for both; its start record, as every job CawCo
+ * writes has, tells them apart). Each step prints one
  * line ending in PASS or FAIL; the last line counts them. Everything it made
  * is removed at the end, whatever happened.
  */
@@ -23,7 +24,6 @@ import {
   mkdir,
   readlink,
   rm,
-  symlink,
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -49,7 +49,7 @@ import { isAlive, listedPid, signal } from "../../packages/core/src/signal";
 import { welcomed } from "../lib/keeper-dial";
 
 const VERSION = "0.0.0-probe.2";
-const LEGACY = "0.0.0-legacy";
+const CHECKOUT = "0.0.0-checkout";
 const SERVICE = `sessiond-${VERSION}`;
 const LABEL = `dev.cawco.${SERVICE}`;
 const PLIST = join(homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
@@ -88,7 +88,7 @@ const env = {
 };
 process.env.XDG_DATA_HOME = data;
 process.env.CAWCO_SESSIOND_ENDPOINT = machine;
-const legacyLog = join(scratch, "legacy-keeper.log");
+const checkoutLog = join(scratch, "checkout-keeper.log");
 /** The last of what a file says, for a failure's detail. */
 const tail = async (path: string): Promise<string> =>
   (
@@ -170,32 +170,32 @@ const job = keeperJob(build);
 const quiet = { kind: "build", version: QUIET } as const;
 const quietJob = keeperJob(quiet);
 const own = keeperEndpoint(build, machine);
-let legacy: ReturnType<typeof Bun.spawn> | undefined;
+let checkout: ReturnType<typeof Bun.spawn> | undefined;
 try {
   await mkdir(dirname(binary), { recursive: true });
   await mkdir(run, { recursive: true, mode: 0o700 });
   await copyFile(given, binary);
   await Bun.$`chmod 700 ${binary}`;
-  await Bun.$`ln -s versions/${LEGACY} ${join(root, "keeper")}`;
+  await Bun.$`ln -s versions/${CHECKOUT} ${join(root, "keeper")}`;
   if (!job) {
     throw new Error("no launchd job for a keeper on this machine");
   }
 
-  // 1. A legacy keeper, from before keepers ran side by side: on the machine's endpoint itself, holding a child.
-  const said = openSync(legacyLog, "w");
-  legacy = Bun.spawn([binary, "sessiond"], {
+  // 1. A source checkout's keeper: on the machine's endpoint itself, holding a child.
+  const said = openSync(checkoutLog, "w");
+  checkout = Bun.spawn([binary, "sessiond"], {
     env,
     stdout: said,
     stderr: said,
   });
-  const started = legacy;
+  const started = checkout;
   const before = await until(
     async () => started.exitCode === null && (await welcomes(machine)),
     60_000
   );
   if (!before) {
     throw new Error(
-      `the legacy keeper never answered on ${machine} (${started.exitCode === null ? "still running" : `exited ${started.exitCode}`}): ${await tail(legacyLog)}`
+      `the checkout keeper never answered on ${machine} (${started.exitCode === null ? "still running" : `exited ${started.exitCode}`}): ${await tail(checkoutLog)}`
     );
   }
   const held = welcomed(machine, await SessiondClient.connect(machine));
@@ -204,7 +204,7 @@ try {
     (p) => p.procId === "held-1" && p.alive
   );
   step(
-    "a legacy keeper on the machine's endpoint holds a child",
+    "a checkout keeper on the machine's endpoint holds a child",
     before && Boolean(child)
   );
 
@@ -231,7 +231,7 @@ try {
     `exit ${unitsCode}, ${PLIST}${unitsCode === 0 ? "" : `: ${unitsSaid.trim().slice(-800)}`}`
   );
 
-  // 3. Its job starts beside the legacy keeper and answers on its own endpoint; the legacy one is untouched.
+  // 3. Its job starts beside the checkout keeper and answers on its own endpoint; the checkout one is untouched.
   await job.start();
   const up = await until(() => welcomes(own), 45_000);
   const pid = await job.pid();
@@ -243,7 +243,7 @@ try {
       : `pid ${pid}; its log ${LOG}: ${await tail(LOG)}`
   );
   step(
-    "it does not take the machine's endpoint by itself while a legacy keeper holds it",
+    "it does not take the machine's endpoint by itself while a checkout keeper holds it",
     !(await lstat(machine)).isSymbolicLink()
   );
   const runningExit = await job.exited();
@@ -259,8 +259,8 @@ try {
     loaded.join(" ")
   );
 
-  // 4. The switch: the legacy socket moves to its legacy name (a rename on this file system), the endpoint names the build's keeper.
-  await publishKeeper(own, LEGACY);
+  // 4. The switch: the checkout socket moves to its checkout name (a rename on this file system), the endpoint names the build's keeper.
+  await publishKeeper(own, CHECKOUT);
   const named = await readlink(machine).catch(() => "");
   const current = await dial(machine);
   const currentList = current ? await current.list() : undefined;
@@ -270,19 +270,19 @@ try {
     named === `sessiond-${VERSION}.sock` && currentList?.procs.length === 0,
     `-> ${named}`
   );
-  const legacyName = keeperEndpoint(
-    { kind: "legacy", version: LEGACY },
+  const checkoutName = keeperEndpoint(
+    { kind: "checkout", version: CHECKOUT },
     machine
   );
-  const viaLegacy = await dial(legacyName);
-  const legacyList = viaLegacy ? await viaLegacy.list() : undefined;
-  viaLegacy?.close();
+  const viaCheckout = await dial(checkoutName);
+  const checkoutList = viaCheckout ? await viaCheckout.list() : undefined;
+  viaCheckout?.close();
   step(
-    "the legacy keeper answers on the name it was set aside under, holding its child",
-    Boolean(legacyList?.procs.some((p) => p.procId === "held-1" && p.alive))
+    "the checkout keeper answers on the name it was set aside under, holding its child",
+    Boolean(checkoutList?.procs.some((p) => p.procId === "held-1" && p.alive))
   );
   step(
-    "the connection open to the legacy keeper before the switch still works",
+    "the connection open to the checkout keeper before the switch still works",
     (await held.list()).procs.some((p) => p.procId === "held-1" && p.alive)
   );
   const found = (await keeperEndpoints(machine)).map(
@@ -290,11 +290,11 @@ try {
   );
   step(
     "every keeper is found, the current one first",
-    found.join(" ") === `build:${VERSION}* legacy:${LEGACY}`,
+    found.join(" ") === `build:${VERSION}* checkout:${CHECKOUT}`,
     found.join(" ")
   );
 
-  // 5. The agent's view: new work to the current keeper, the child found on the legacy one, a relaunch killing it there.
+  // 5. The agent's view: new work to the current keeper, the child found on the checkout one, a relaunch killing it there.
   const pool = new KeeperPool();
   const fresh = await pool.current();
   step(
@@ -304,7 +304,7 @@ try {
   const holder = await pool.holding("held-1");
   step(
     "the child is found on the keeper that holds it",
-    holder?.epoch === legacyList?.epoch
+    holder?.epoch === checkoutList?.epoch
   );
   await pool.replaceElsewhere("held-1", fresh);
   const killed = await until(
@@ -317,28 +317,14 @@ try {
   );
   pool.close();
 
-  // 6. A keeper started on the machine's endpoint now (a legacy job launchd starts again) is not wanted, and exits 0.
-  const stray = Bun.spawn([binary, "sessiond"], {
-    env,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const strayCode = await stray.exited;
-  step(
-    "a keeper started on the machine's endpoint, a symlink now, exits 0",
-    strayCode === 0 &&
-      (await readlink(machine).catch(() => "")) === `sessiond-${VERSION}.sock`,
-    `exit ${strayCode}`
-  );
-
-  // 6b. A job loaded and never run reads as not exited; its keeper run and
-  // exited 0 (its endpoint a symlink: not wanted) reads so at once, by the
-  // start record it wrote, though launchd states status 0 for both.
+  // 6. A job loaded and never run reads as not exited; one run and exited 0
+  // reads so at once, by the start record its launchd program wrote, though
+  // launchd states status 0 for both. Its program is `true` through the
+  // keeper's own launchd wrapper (launchdProgram): the start record is the
+  // wrapper's, whatever it then runs.
   if (!quietJob) {
     throw new Error("no launchd job for the quiet keeper on this machine");
   }
-  const quietEndpoint = keeperEndpoint(quiet, machine);
-  await symlink(`sessiond-${VERSION}.sock`, quietEndpoint);
   const quietLog = join(scratch, "quiet-keeper.log");
   const quietPlist = join(scratch, `${QUIET_LABEL}.plist`);
   await writeFile(
@@ -348,8 +334,7 @@ try {
 <plist version="1.0"><dict>
 <key>Label</key><string>${QUIET_LABEL}</string>
 <key>ProgramArguments</key><array>${launchdProgram(QUIET_LABEL, [
-      binary,
-      "sessiond",
+      "/usr/bin/true",
     ])
       .map(
         (argument) =>
@@ -358,7 +343,6 @@ try {
       .join("")}</array>
 <key>EnvironmentVariables</key><dict>
 <key>XDG_DATA_HOME</key><string>${data}</string>
-<key>CAWCO_SESSIOND_ENDPOINT</key><string>${quietEndpoint}</string>
 </dict>
 <key>RunAtLoad</key><false/>
 <key>StandardOutPath</key><string>${quietLog}</string>
@@ -392,7 +376,7 @@ try {
   const readIn = Date.now() - kicked;
   const ranQuiet = await launchdJob(QUIET_LABEL);
   step(
-    "its keeper, run and exited 0, reads as exited with code 0 well inside the helper's wait",
+    "a keeper job run and exited 0 reads as exited with code 0 well inside the helper's wait",
     quietExit === "it exited with code 0" &&
       ranQuiet?.lastExit === 0 &&
       readIn < HEALTH_MS / 3 &&
@@ -410,16 +394,16 @@ try {
       (await welcomes(own))
   );
 
-  // 8. The legacy keeper, empty now, is killed outright: the machine's endpoint is untouched.
+  // 7. The checkout keeper, empty now, is killed outright: the machine's endpoint is untouched.
   held.close();
-  legacy.kill("SIGKILL");
-  await legacy.exited;
+  checkout.kill("SIGKILL");
+  await checkout.exited;
   step(
-    "killing the legacy keeper outright leaves the machine's endpoint naming the current one",
+    "killing the checkout keeper outright leaves the machine's endpoint naming the current one",
     await welcomes(machine)
   );
 
-  // 9. A build's keeper removed (bootout: SIGTERM, its own drain): it removes its own endpoint only.
+  // 8. A build's keeper removed (bootout: SIGTERM, its own drain): it removes its own endpoint only.
   await job.remove();
   const goneBuild =
     pid !== undefined && (await until(async () => !isAlive(pid), 15_000));
@@ -434,8 +418,8 @@ try {
       !(await keeperJobsHere()).some((one) => one.service === SERVICE)
   );
 
-  // 10. The legacy removal's own sequence on a launchd job (the probe's label, never the machine's): its pid, as
-  // launchctl prints it, killed outright, then booted out; nothing drains, so its endpoint file stays.
+  // 9. A launchd keeper that ends by itself (the probe's label, never the machine's): its pid, as launchctl prints
+  // it, killed outright, and its job says how it ended.
   const again = Bun.spawn([binary, "binary-units"], {
     env,
     stdout: "ignore",
@@ -454,17 +438,8 @@ try {
   const killedExit = await job.exited();
   step(
     "a launchd keeper that ended says how, as its job's exit",
-    killedExit !== undefined,
-    killedExit ?? "nothing"
-  );
-  await launchctl("bootout", `gui/${process.getuid?.()}/${LABEL}`);
-  step(
-    "a launchd keeper killed by its pid then booted out never drains (its endpoint file stays) and its job is gone",
-    killedOutright &&
-      (await present(own)) &&
-      (await launchctl("print", `gui/${process.getuid?.()}/${LABEL}`)).code !==
-        0,
-    `pid ${second}`
+    killedOutright && killedExit !== undefined,
+    `pid ${second}: ${killedExit ?? "nothing"}`
   );
 } catch (error) {
   step(
@@ -473,7 +448,7 @@ try {
     error instanceof Error ? error.message : String(error)
   );
 } finally {
-  legacy?.kill("SIGKILL");
+  checkout?.kill("SIGKILL");
   await launchctl("bootout", `gui/${process.getuid?.()}/${LABEL}`);
   await launchctl("bootout", `gui/${process.getuid?.()}/${QUIET_LABEL}`);
   await rm(launchdStartPath(LABEL), { force: true });

@@ -2501,48 +2501,6 @@ export const refreshServices = async (
   }
 };
 
-/** What the agent's unit said of the keeper before keepers ran side by side. */
-const LEGACY_KEEPER_LINES = new Set([
-  `Requires=${unitName("sessiond")}`,
-  `After=${unitName("sessiond")}`,
-]);
-
-/**
- * The agent's unit, as builds from before keepers ran side by side wrote it,
- * requires `cawco-sessiond.service` and starts after it: retiring that keeper
- * would stop the agent with it, and the unit's removal would fail the agent's
- * next start. Those two lines are taken out of the unit on disk, and nothing
- * else is touched: the rest is what the installing shell knew (the hub's
- * address), which the process doing this may not (`cawco up` holds the hub's
- * address in another form). The keeper that is the machine's now requires the
- * agent's unit from its own side (`RequiredBy=`). systemd only; a launchd job
- * names no other.
- */
-export const releaseAgentUnit = async (
-  note: (line: string) => void
-): Promise<void> => {
-  if (platform() !== "linux") {
-    return;
-  }
-  const path = systemdPath("agent");
-  const before = await Bun.file(path)
-    .text()
-    .catch(() => "");
-  const after = before
-    .split("\n")
-    .filter((line) => !LEGACY_KEEPER_LINES.has(line.trim()))
-    .join("\n");
-  if (after === before) {
-    return;
-  }
-  await writeUnit(path, after);
-  const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
-  if (reloaded.exitCode !== 0) {
-    throw failed("systemctl --user daemon-reload", reloaded);
-  }
-  note(`${path} no longer requires ${unitName("sessiond")}`);
-};
-
 /**
  * Runs one of the service verbs against whichever init system this machine has.
  * Everything it touches is per-user: no sudo, and nothing outside `$HOME`.

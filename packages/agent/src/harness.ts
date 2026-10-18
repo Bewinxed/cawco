@@ -59,7 +59,6 @@ export class HarnessRecoveryRefused extends Error {}
 export class ReattachFailed extends Error {}
 /** A refusal is final for its launch attempt, including recovery attempts. */
 export class SessionAddressRefused extends Error {}
-export class HubContractRefused extends SessionAddressRefused {}
 /**
  * A session process that cannot be trusted to run: its CawCo MCP credential
  * did not install (a process this agent launched) or verify (one it attached

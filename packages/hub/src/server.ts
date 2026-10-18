@@ -276,7 +276,6 @@ import {
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   RESOLVE_PERMISSION,
-  RESTART_RESUMABLE,
   type RebalanceNotice,
   type Relaunch,
   RULE_TEMPLATES,
@@ -387,7 +386,6 @@ import { adminTools, isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createArtifactSessions } from "./artifact-session";
 import { createArtifactDocs } from "./artifacts/docs";
-import { importLegacyCanvases } from "./artifacts/legacy";
 import { artifactRoutes } from "./artifacts/routes";
 import {
   ArtifactRefusal,
@@ -1464,7 +1462,6 @@ const registerAck = (
     ok: true,
     ingested,
     delivered,
-    addressContract: true,
     hubEpoch: HUB_EPOCH,
     machineCredential,
     sessionLimits,
@@ -3099,11 +3096,8 @@ export const createServer = (
 
   // And the same honesty for the sessions those machines were carrying. A hub
   // that just started holds no daemon sockets, so it has no basis for any row
-  // claiming `running` or `starting`; and rows the previous taxonomy had to file
-  // under `error` for the crime of having been restarted are re-read as what
-  // they always were — `sleeping`. Idempotent, so this is a boot step and not a
-  // migration script somebody has to remember to run.
-  const swept = db.sweepBootStatuses(RESTART_RESUMABLE);
+  // claiming `running` or `starting`.
+  const swept = db.sweepBootStatuses();
   /** Asks this start drops with the process that parked them: asked again when each session next runs ({@link noteWithdrawn}). */
   const droppedAtStart: Envelope[] = [];
   for (const parked of pending.list()) {
@@ -3120,10 +3114,8 @@ export const createServer = (
       pending.forget(parked.instanceId ?? "");
     }
   }
-  if (swept.toUnknown || swept.toSleeping) {
-    console.log(
-      `[hub] boot sweep: ${swept.toUnknown} session(s) → unknown, ${swept.toSleeping} legacy restart error(s) → sleeping`
-    );
+  if (swept) {
+    console.log(`[hub] boot sweep: ${swept} session(s) → unknown`);
   }
   keepSendsAtStart(db);
 
@@ -3191,8 +3183,7 @@ export const createServer = (
     { machineId: string; since: number; reason: string }
   >();
   const machineCustody = new Map<string, SessionCustody>();
-  const addressProtocolMachines = new Set<string>();
-  const addressClaims = (payload: unknown): SessionAddress[] | undefined => {
+  const addressClaims = (payload: unknown): SessionAddress[] => {
     const value = (payload as { sessionAddresses?: unknown } | null)
       ?.sessionAddresses;
     return Array.isArray(value)
@@ -3202,13 +3193,12 @@ export const createServer = (
             typeof claim.instanceId === "string" &&
             typeof claim.sessionId === "string"
         )
-      : undefined;
+      : [];
   };
   const recordSessionAddress = (
     agent: HubSocket,
     machineId: string,
     claim: SessionAddress
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: persist, verify, acknowledge or refuse, then re-address an end as one generation-fenced transaction
   ): void => {
     const row = db.ownedInstance(claim.instanceId, machineId);
     const acknowledged =
@@ -3217,16 +3207,14 @@ export const createServer = (
         claim.processGeneration === processGeneration(row)) &&
       row.harness === "opencode" &&
       !row.endConfirmedAt &&
-      !(row.endIntent && row.addressRequired && !row.sessionId);
+      !(row.endIntent && !row.sessionId);
     if (acknowledged) {
       db.noteInstanceSession(row.id, claim.sessionId, undefined, "opencode");
       if (db.ownedInstance(row.id, machineId)?.sessionId !== claim.sessionId) {
         return;
       }
-      if (!row.endIntent) {
-        db.acknowledgeAddress(row.id);
-      } else if (row.sessionId !== claim.sessionId) {
-        // A legacy carried address changes the coordinates of an already queued end.
+      if (row.endIntent && row.sessionId !== claim.sessionId) {
+        // A new address for a session whose end is queued: the end goes to it.
         lifecycle.deliveryFailed(row.id);
       }
     }
@@ -6704,7 +6692,6 @@ export const createServer = (
     }
     db.openInstance({
       id: instanceId,
-      addressProtocol: addressProtocolMachines.has(machineId),
       machineId,
       // Its own launch directory (revivePayloadOf): a revive never moves it.
       cwd: row.cwd,
@@ -11027,13 +11014,6 @@ export const createServer = (
       );
     },
   });
-  importLegacyCanvases({
-    db: db.artifacts,
-    hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
-    projectRoot,
-    root: ARTIFACTS_ROOT,
-  });
-
   /**
    * What every panel showed when this hub last ran, kept in the database
    * (openPreview): served again from here on, each preview's listener
@@ -12021,7 +12001,6 @@ export const createServer = (
     forgetPending(payload.instanceId, UNREAD.restarted, false, "all");
     db.openInstance({
       id: payload.instanceId,
-      addressProtocol: addressProtocolMachines.has(machineId),
       machineId,
       cwd: payload.cwd,
       sessionId: peekResume(payload),
@@ -12181,7 +12160,6 @@ export const createServer = (
     forgetPending(payload.instanceId, UNREAD.restarted, false, "all");
     db.openInstance({
       id: payload.instanceId,
-      addressProtocol: addressProtocolMachines.has(machineId),
       machineId,
       cwd: payload.cwd,
       harness: payload.harness,
@@ -12372,7 +12350,7 @@ export const createServer = (
                 peek(message.payload, "kind") === "session_address";
               const replaysAddresses =
                 message.verb === "heartbeat" &&
-                !!addressClaims(message.payload)?.length;
+                addressClaims(message.payload).length > 0;
               if (
                 message.verb === "register" ||
                 awaitsAddress ||
@@ -12470,17 +12448,6 @@ export const createServer = (
   };
   const lifecycle = createSessionLifecycle({
     db,
-    machineName: (machineId) => {
-      const machine = db
-        .listAgents()
-        .find((agent) => agent.machineId === machineId);
-      if (!machine) {
-        throw new Error(
-          "This machine is no longer registered. Register its agent, then retry."
-        );
-      }
-      return machine.hostname;
-    },
     confirmed: (row) => {
       // A forget waiting on this session's end hears it now, not at the ask.
       projectStops.confirmed(row.id);
@@ -12490,10 +12457,6 @@ export const createServer = (
       // Ended, it holds its finished item's workspace no longer.
       workItems.settleFor(row.id);
     },
-    ready: (machineId) =>
-      registry.agent(machineId)
-        ? addressProtocolMachines.has(machineId)
-        : db.agentAddressContract(machineId),
     recoverRemoved: (machineId) => {
       if (recoveringRemoved.has(machineId) || !registry.agent(machineId)) {
         return;
@@ -12572,7 +12535,7 @@ export const createServer = (
     },
     send: (machineId, payload) => {
       const agent = registry.agent(machineId);
-      if (!(agent && addressProtocolMachines.has(machineId))) {
+      if (!agent) {
         return false;
       }
       sendFrame(agent, {
@@ -12660,11 +12623,7 @@ export const createServer = (
       throw new Error(failed);
     },
     refresh: (machineId) => {
-      if (
-        refreshingCustody.has(machineId) ||
-        !registry.agent(machineId) ||
-        !addressProtocolMachines.has(machineId)
-      ) {
+      if (refreshingCustody.has(machineId) || !registry.agent(machineId)) {
         return;
       }
       refreshingCustody.add(machineId);
@@ -14160,7 +14119,7 @@ export const createServer = (
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds the restore payload from the stored row in one place
   ): void => {
     if (
-      !addressProtocolMachines.has(row.machineId) ||
+      !registry.agent(row.machineId) ||
       db.ownedInstance(row.id, row.machineId)?.machineRemoved ||
       db.ownedInstance(row.id, row.machineId)?.endIntent ||
       (!reattachOnly && row.lastError === CLAUDE_CONVERSATION_GONE)
@@ -14257,7 +14216,6 @@ export const createServer = (
     const { payload } = settled;
     db.openInstance({
       id: row.id,
-      addressProtocol: addressProtocolMachines.has(row.machineId),
       machineId: row.machineId,
       cwd: payload.cwd,
       sessionId: row.sessionId ?? undefined,
@@ -14703,7 +14661,6 @@ export const createServer = (
     agentProtocols.delete(former);
     machineCustody.delete(former);
     homeStamps.delete(former);
-    addressProtocolMachines.delete(former);
     ruleEngine.reload();
     ruleEngine.forgetFacts();
     console.info(
@@ -21964,7 +21921,6 @@ export const createServer = (
     // Brought back by the operator: nothing of the stop is left to carry.
     db.openInstance({
       id: message.instanceId,
-      addressProtocol: addressProtocolMachines.has(message.machineId),
       machineId: message.machineId,
       cwd: payload.cwd,
       sessionId: peekResume(message.payload),
@@ -26771,14 +26727,8 @@ export const createServer = (
                 break;
               }
               lifecycle.disconnect(message.machineId);
-              const claims = addressClaims(message.payload);
-              if (claims) {
-                addressProtocolMachines.add(message.machineId);
-                for (const claim of claims) {
-                  recordSessionAddress(ws, message.machineId, claim);
-                }
-              } else {
-                addressProtocolMachines.delete(message.machineId);
+              for (const claim of addressClaims(message.payload)) {
+                recordSessionAddress(ws, message.machineId, claim);
               }
               for (const [id, held] of heldSessions) {
                 if (held.machineId === message.machineId) {
@@ -26858,10 +26808,6 @@ export const createServer = (
               for (const projectId of db.resolveHomePaths(message.machineId)) {
                 placesChanged(message.machineId, projectId);
               }
-              db.noteAgentAddressContract(
-                message.machineId,
-                claims !== undefined
-              );
               // A register from a daemon with nothing to say leaves standing what
               // the beats said — the same tolerance `build` gets on the row.
               const registered = peekBinaryUpdate(message.payload);
@@ -27179,12 +27125,10 @@ export const createServer = (
                 )
               );
               for (const row of toEnd) {
-                if (addressProtocolMachines.has(message.machineId)) {
-                  endSession(row.id, "stop", {
-                    kind: "hub",
-                    why: "no summary job needs this summariser any more",
-                  });
-                }
+                endSession(row.id, "stop", {
+                  kind: "hub",
+                  why: "no summary job needs this summariser any more",
+                });
               }
               lifecycle.reconcile(
                 message.machineId,
@@ -27236,7 +27180,7 @@ export const createServer = (
               break;
             }
             case "heartbeat": {
-              for (const claim of addressClaims(message.payload) ?? []) {
+              for (const claim of addressClaims(message.payload)) {
                 recordSessionAddress(ws, message.machineId, claim);
               }
               db.touchAgent(message.machineId);
@@ -29220,7 +29164,6 @@ export const createServer = (
           // Its update state was true of a connection that has just ended.
           binaryUpdateStates.delete(machineId);
           machineCustody.delete(machineId);
-          addressProtocolMachines.delete(machineId);
           lifecycle.disconnect(machineId);
           // A forget waiting on its stops: they are owed to its next register.
           projectStops.machineGone(machineId);

@@ -876,7 +876,7 @@ const opencodeRows = (count: number): string[] =>
     const id = crypto.randomUUID();
     const now = Date.now();
     fleet.write(
-      "INSERT INTO instances (id, machine_id, cwd, harness, session_id, status, address_protocol, model, permission_mode, spawned_at, created_at, updated_at) VALUES (?, ?, ?, 'opencode', ?, 'running', 1, ?, 'bypassPermissions', ?, ?, ?)",
+      "INSERT INTO instances (id, machine_id, cwd, harness, session_id, status, model, permission_mode, spawned_at, created_at, updated_at) VALUES (?, ?, ?, 'opencode', ?, 'running', ?, 'bypassPermissions', ?, ?, ?)",
       id,
       MACHINE,
       fleet.workdir,

@@ -1058,10 +1058,8 @@ export const AGENT_BUSY = "agentBusy";
  * - `running` — the owning daemon currently lists the instance.
  * - `sleeping` — no live process, but it runs again: on the session id its
  *   harness picks back up from, or fresh under its id when it never named
- *   one ({@link relaunchOf}). This is what a daemon restart or a quiet drop used
- *   to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that
- *   encoding conflated "gone but fine" with a real failure, so `sleeping` rows
- *   carry `lastError: null` — nothing went wrong, there's just nothing running.
+ *   one ({@link relaunchOf}). `sleeping` rows carry `lastError: null` — nothing
+ *   went wrong, there's just nothing running.
  * - `stopping` — an end (stop, discard, or a delete that waits on its
  *   process) is recorded and owed to its machine, which has not yet
  *   confirmed the process is gone. It may still be running. Its machine's
@@ -1454,13 +1452,7 @@ export interface SessionPulse {
   runningSubagents: number;
 }
 
-/**
- * What the hub records on a session whose daemon restarted out from under it.
- */
-export const RESTART_RESUMABLE =
-  "The agent restarted; this session did not survive it.";
-
-/** And what it records when there is nothing to go back to. */
+/** What the hub records on a session whose daemon restarted out from under it, with nothing to go back to. */
 export const RESTART_LOST =
   "The agent restarted, and this session left nothing to resume from.";
 

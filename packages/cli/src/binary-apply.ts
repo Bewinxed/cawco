@@ -90,12 +90,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { binaryLayout } from "./binary-install";
-import {
-  releaseAgentUnit,
-  type ServiceId,
-  service,
-  stopService,
-} from "./service";
+import { type ServiceId, service, stopService } from "./service";
 
 /** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;
@@ -424,8 +419,8 @@ async function refreshServiceUnits(version: string): Promise<void> {
  * (`<root>/keeper`) is written. The keeper of `to` starts beside the current
  * one, in a job of its own, from its own build's unit; once it answers at its
  * own endpoint it becomes the machine's: the `keeper` link names it, the
- * machine's endpoint names it (a legacy keeper's own socket there moves to its
- * legacy name in the same instant), and its job starts with the machine where
+ * machine's endpoint names it (a checkout's keeper's own socket there moves to
+ * its checkout name in the same instant), and its job starts with the machine where
  * the one before's no longer does. The keeper before is not signalled: it
  * runs on with every session it holds, each through its own connection, and
  * the agent removes it once it holds nothing (binary-update.ts
@@ -493,21 +488,17 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
       error: `The session keeper of ${to} did not start: ${message(error)}`,
     };
   }
-  // The agent's unit stops naming the keeper before it, so that keeper's end
-  // ends nothing else; the keeper of `to` requires it from its own side once
-  // it is enabled, below.
-  await releaseAgentUnit((line) => console.log(`update: ${line}`));
   await say(
     `keeper ${to}: answers at ${endpoint}; the machine's endpoint names it now${before ? `, and ${before.keeper.version}'s keeper keeps what it holds` : ""}`
   );
-  // The endpoint first, setting a legacy keeper's socket aside under the
+  // The endpoint first, setting a checkout's keeper's socket aside under the
   // build the link names before it moves; then the link. A helper that stops
   // between the two leaves the endpoint naming this build's keeper with the
   // link on the one before, which the agent hands over again: `to`'s keeper,
   // answering already, is made the link's.
   await publishKeeper(
     endpoint,
-    before?.keeper.kind === "legacy" ? before.keeper.version : undefined
+    before?.keeper.kind === "checkout" ? before.keeper.version : undefined
   );
   await pointLinkAt(keeperPath(), to);
   await job.enable();

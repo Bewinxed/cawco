@@ -12,7 +12,6 @@ import { Db, DbLayer } from "./db";
 import { DatabaseHeld, lockDatabase } from "./db-lock";
 import { HubLifetime, HubLifetimeLayer } from "./lifetime";
 import { advertise } from "./mdns";
-import { migrateLegacyDb } from "./migrate-db";
 import { Pending, PendingLayer } from "./pending";
 import { Registry, RegistryLayer } from "./registry";
 import { createServer } from "./server";
@@ -66,7 +65,6 @@ export const startHub = async (): Promise<void> => {
     }
     throw error;
   }
-  migrateLegacyDb(DB_PATH);
   await Effect.runPromise(
     Effect.provide(
       main,

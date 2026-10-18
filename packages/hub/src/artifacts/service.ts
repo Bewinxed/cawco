@@ -73,7 +73,7 @@ import {
 } from "@cawco/core/stage";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { applyPatch, type Operation } from "rfc6902";
-import { Doc, encodeStateAsUpdate } from "yjs";
+import type { Doc } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import {
   type BuiltProgram,
@@ -583,14 +583,6 @@ const patchedEntries = (
   }
   return next;
 };
-
-/** A name for a preview made before artifacts had names: its port, or its folder's leaf. */
-export const legacyName = (place: string): string =>
-  place
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
-    .slice(0, 63) || "preview";
 
 /** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
 const sheetOf = (
@@ -3369,35 +3361,3 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 };
 
 export type Artifacts = ReturnType<typeof createArtifacts>;
-
-/** A legacy canvas's entries as a doc's `state` update, with its meta. */
-export const legacyDoc = (
-  meta: {
-    kind: ArtifactKind;
-    name: string;
-    pageHash: string | null;
-    sentAt: string | null;
-  },
-  entries: Record<string, ChoiceEntry>
-): Uint8Array => {
-  const doc = new Doc();
-  doc.transact(() => {
-    const m = doc.getMap("meta");
-    m.set("kind", meta.kind);
-    m.set("name", meta.name);
-    m.set("revision", 1);
-    if (meta.pageHash) {
-      m.set("pageHash", meta.pageHash);
-    }
-    if (meta.sentAt) {
-      m.set("sentAt", meta.sentAt);
-    }
-    const state = doc.getMap("state");
-    for (const [key, entry] of Object.entries(entries)) {
-      state.set(key, entry);
-    }
-  });
-  const update = encodeStateAsUpdate(doc);
-  doc.destroy();
-  return update;
-};

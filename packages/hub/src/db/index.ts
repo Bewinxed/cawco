@@ -280,9 +280,7 @@ export type PublicInstanceRow = Omit<
   | "tooling"
   | "endIntent"
   | "endConfirmedAt"
-  | "addressProtocol"
   | "endReason"
-  | "addressRequired"
   | "machineRemoved"
   | "scratchWorktree"
   | "endRetryAt"
@@ -547,7 +545,6 @@ export type UsageLimitRow = typeof usageLimits.$inferSelect;
 export interface DbShape {
   /** Accounts, where they are signed in, how they route, and their limits. */
   readonly accounts: AccountsDb;
-  readonly acknowledgeAddress: (id: string) => void;
   readonly acknowledgeSessionIdentity: (
     instanceId: string,
     hash: string
@@ -620,9 +617,8 @@ export interface DbShape {
    * waiting on an answer. What `from` delegated and is over stays its own.
    */
   readonly adoptChildren: (from: string, to: string) => AdoptedChildren;
-  /** A machine's last-known tool status by id; empty for one that never reported. */
-  readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
+  /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
   /** Every project's threads, newest first. */
   readonly allThreads: () => ThreadRow[];
@@ -1244,10 +1240,6 @@ export interface DbShape {
    */
   readonly newestConversation: (projectId: string) => ThreadRow | undefined;
   /** Records the window a claude turn reported for its model. */
-  readonly noteAgentAddressContract: (
-    machineId: string,
-    supported: boolean
-  ) => void;
   readonly noteClaudeContextWindow: (
     model: string,
     contextWindow: number
@@ -1337,7 +1329,6 @@ export interface DbShape {
     line: string;
   }) => boolean;
   readonly openInstance: (instance: {
-    addressProtocol?: boolean;
     id: string;
     machineId: string;
     cwd: MachinePath;
@@ -2109,29 +2100,13 @@ export interface DbShape {
   /** A project's starters as last written, and what was done with them (project-starters.ts). */
   readonly starters: StartersDb;
   /**
-   * The one-time reclassification a taxonomy change needs when the column is
-   * plain text and there is no SQL migration to hang it on. Idempotent by
-   * construction — both halves select on states they then leave — so running it
-   * on every boot costs one no-op statement pair.
-   *
-   * - `running`/`starting` → `unknown`: this process holds no sockets on its
-   *   first line, so it cannot vouch for any of it. Same argument as
-   *   {@link markAllAgentsOffline}, and for the same reason: the read overlay
-   *   would already answer `unknown`, but a column nobody has to remember to
-   *   distrust is worth one write at startup.
-   * - `error` whose `lastError` is the legacy resumable marker → `sleeping`,
-   *   `lastError` cleared. Those rows never described a failure; they were a
-   *   restart, filed under `error` because the taxonomy had nowhere else to put
-   *   "no process, but resumable". `sleeping` is that place.
-   *
-   * The marker string is a parameter rather than an import so this file holds
-   * no opinion about what a legacy error *said* — the caller passes core's
-   * constant.
+   * `running`/`starting` → `unknown` at the hub's start, answering how many
+   * rows moved: this process holds no sockets on its first line, so it cannot
+   * vouch for any of it. Same argument as {@link markAllAgentsOffline}, and for
+   * the same reason: the read overlay would already answer `unknown`, but a
+   * column nobody has to remember to distrust is worth one write at startup.
    */
-  readonly sweepBootStatuses: (legacyResumableError: string) => {
-    toUnknown: number;
-    toSleeping: number;
-  };
+  readonly sweepBootStatuses: () => number;
   /**
    * The ids of the `instances` rows written since the last call (the
    * connection's change log), and the log emptied: what the board reads again.
@@ -2729,10 +2704,8 @@ const make = async (path: string): Promise<DbShape> => {
   const {
     endRetryAt: _endRetryAt,
     endAttempts: _endAttempts,
-    addressRequired: _addressRequired,
     machineRemoved: _machineRemoved,
     scratchWorktree: _scratchWorktree,
-    addressProtocol: _addressProtocol,
     endReason: _endReason,
     endIntent: _endIntent,
     endConfirmedAt: _endConfirmedAt,
@@ -4010,18 +3983,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(and(eq(instances.id, id), isNotNull(instances.endIntent)))
         .run();
     },
-    agentAddressContract: (machineId) =>
-      db
-        .select({ addressContract: agents.addressContract })
-        .from(agents)
-        .where(eq(agents.machineId, machineId))
-        .get()?.addressContract ?? false,
-    noteAgentAddressContract: (machineId, addressContract) => {
-      db.update(agents)
-        .set({ addressContract })
-        .where(eq(agents.machineId, machineId))
-        .run();
-    },
     instanceTooling: (id) =>
       db
         .select({ tooling: instances.tooling })
@@ -4065,12 +4026,6 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .get(),
-    acknowledgeAddress: (id) => {
-      db.update(instances)
-        .set({ addressProtocol: true })
-        .where(eq(instances.id, id))
-        .run();
-    },
     recordScratchWorktree: (id, scratchWorktree, dir) => {
       db.update(instances)
         .set({ scratchWorktree, cwd: dir })
@@ -4166,7 +4121,6 @@ const make = async (path: string): Promise<DbShape> => {
               : intent;
           const neverStarted =
             row.harness === "opencode" &&
-            row.addressRequired &&
             !row.sessionId &&
             !row.scratchWorktree &&
             next !== "discard";
@@ -4795,7 +4749,6 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(agents).set({ status: "offline" }).run();
     },
     openInstance: ({
-      addressProtocol = false,
       id,
       machineId,
       cwd,
@@ -4870,7 +4823,6 @@ const make = async (path: string): Promise<DbShape> => {
       }
       db.insert(instances)
         .values({
-          addressRequired: addressProtocol,
           id,
           machineId,
           cwd,
@@ -4915,10 +4867,6 @@ const make = async (path: string): Promise<DbShape> => {
           // No `cwd`: a row keeps the directory it was launched in, and every
           // spawn of it is sent there (`launchDirOf`).
           set: {
-            // A row a move held (moves.ts) is born at its first spawn.
-            ...(existing?.spawnedAt === null
-              ? { addressRequired: addressProtocol }
-              : {}),
             kind,
             permissionMode,
             ...(model ? { model } : {}),
@@ -5750,8 +5698,8 @@ const make = async (path: string): Promise<DbShape> => {
     // anything, and `updatedAt` is what the restore horizon reads to tell a
     // session that stopped a minute ago from one that stopped last Tuesday.
     // Stamping it here would make every row on the machine look freshly alive.
-    sweepBootStatuses: (legacyResumableError) => {
-      const toUnknown = db
+    sweepBootStatuses: () =>
+      db
         .update(instances)
         .set({ status: "unknown" })
         .where(
@@ -5761,20 +5709,7 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .returning({ id: instances.id })
-        .all().length;
-      const toSleeping = db
-        .update(instances)
-        .set({ status: "sleeping", lastError: null })
-        .where(
-          and(
-            eq(instances.status, "error"),
-            eq(instances.lastError, legacyResumableError)
-          )
-        )
-        .returning({ id: instances.id })
-        .all().length;
-      return { toUnknown, toSleeping };
-    },
+        .all().length,
     listToolPolicies: () =>
       db
         .select()
@@ -6707,7 +6642,6 @@ const make = async (path: string): Promise<DbShape> => {
           .all()
           .map(
             ({
-              addressContract: _addressContract,
               fleet,
               build,
               home,

@@ -9,7 +9,6 @@
  * whenever its job restarts it. Its handover publishes it the first time.
  */
 
-import { lstat, readlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { readKeeperVersion } from "@cawco/core/binary-installation";
 import { detach } from "@cawco/core/detach";
@@ -32,16 +31,6 @@ const main = async (): Promise<void> => {
   // the name again before it binds through it.
   if (sessiondHomePath(endpoint) !== endpoint) {
     sessiondLinkDir();
-  }
-  // The machine's endpoint as a symlink is a build's keeper's: one started on
-  // it (a legacy keeper's unit, restarted after its keeper was retired) would
-  // take it over, or refuse it again every two seconds. Nothing here is
-  // wanted, and an exit of 0 is not restarted.
-  if ((await lstat(endpoint).catch(() => undefined))?.isSymbolicLink()) {
-    console.log(
-      `[sessiond] ${endpoint} names the keeper at ${await readlink(endpoint)}; this keeper is not wanted, and exits`
-    );
-    process.exit(0);
   }
   // Linux only: macOS has no cgroups, and limits threads per process, so the
   // children there cannot take the keeper's.

@@ -127,7 +127,6 @@ import type { Harness, HarnessContext, HarnessSession } from "./harness";
 import {
   HarnessRecoveryRefused,
   HeldProcessRefused,
-  HubContractRefused,
   type KeeperRefused,
   ReattachFailed,
   SessionAddressRefused,
@@ -665,23 +664,6 @@ export const agreedHashes = (
 };
 
 export class SessionSupervisor {
-  #hubContract = false;
-  readonly #hubRefusal =
-    "The hub has not restarted onto this build yet. Restart the hub, then retry.";
-
-  setHubContract(supported: boolean): void {
-    this.#hubContract = supported;
-  }
-
-  declareHubContract(supported: boolean): void {
-    this.setHubContract(supported);
-    if (!supported) {
-      for (const pending of this.#addressWaiting.values()) {
-        pending.ack.reject(new HubContractRefused(this.#hubRefusal));
-      }
-    }
-  }
-
   #stopSequence = 0;
 
   get stopSequence(): number {
@@ -1306,13 +1288,8 @@ export class SessionSupervisor {
     this.#custodyHarnesses?.delete(instanceId);
   }
 
-  /** Whether custody is ready now: false when the hub refused its contract (reported as a failure) or a newer epoch began. */
+  /** Whether custody is ready now: false when a newer epoch began. */
   completeCustody(epoch: number): boolean {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: register declarations mutate this connection-local contract before custody completion
-    if (!this.#hubContract) {
-      this.failCustody(epoch, new HubContractRefused(this.#hubRefusal));
-      return false;
-    }
     if (epoch !== this.#custodyEpoch) {
       return false;
     }
@@ -1338,21 +1315,14 @@ export class SessionSupervisor {
   }
 
   /**
-   * A recovery that could not be decided: the register went unanswered, or
-   * the hub refused the contract. Said to every session it named and in the
-   * log, and idle-gated operations stay held. Only for the epoch in
-   * progress: one that completed was recovered, and losing the connection
-   * after that begins a new one (`loseCustody`). A harness whose reattach
-   * fails or runs out of time is not this: it settles its own sessions and
-   * custody goes on (daemon.ts `takeCustody`).
-   *
-   * What happens next depends on the cause. An unanswered register is sent
-   * again on the same connection (daemon.ts `registrationExpired`). A
-   * refused contract is not: the hub answers every register with the
-   * contract its build has (server.ts `registerAck`), and this agent reads it
-   * once per connection, from that connection's first register ack (daemon.ts
-   * `beforeAck`), so only a new connection to a hub on a build with the
-   * contract changes it.
+   * A recovery that could not be decided: the register went unanswered. Said
+   * to every session it named and in the log, and idle-gated operations stay
+   * held; the register is sent again on the same connection (daemon.ts
+   * `registrationExpired`). Only for the epoch in progress: one that
+   * completed was recovered, and losing the connection after that begins a
+   * new one (`loseCustody`). A harness whose reattach fails or runs out of
+   * time is not this: it settles its own sessions and custody goes on
+   * (daemon.ts `takeCustody`).
    */
   failCustody(epoch: number, problem: unknown): void {
     if (epoch !== this.#custodyEpoch || this.#custodyState === "ready") {
@@ -1361,11 +1331,7 @@ export class SessionSupervisor {
     this.#custodyState = "failed";
     this.#custodyError =
       problem instanceof Error ? problem.message : String(problem);
-    const next =
-      problem instanceof HubContractRefused
-        ? "It's tried again when the hub next restarts and this machine registers"
-        : "The register is sent again while connected";
-    const message = `Machine custody recovery failed: ${this.#custodyError.replace(FINAL_STOP, "")}. ${next}; idle-gated operations remain held.`;
+    const message = `Machine custody recovery failed: ${this.#custodyError.replace(FINAL_STOP, "")}. The register is sent again while connected; idle-gated operations remain held.`;
     const ids = [...this.#custodyInstances];
     for (const instanceId of ids) {
       this.sink({ kind: "error", instanceId, verb: "register", message });
@@ -2618,9 +2584,6 @@ export class SessionSupervisor {
       });
     }
     try {
-      if (adapter.kind === "opencode" && !this.#hubContract) {
-        throw new HubContractRefused(this.#hubRefusal);
-      }
       if (payload.scratchWorktree) {
         this.#worktrees.set(instanceId, payload.scratchWorktree);
       }
@@ -2862,19 +2825,6 @@ export class SessionSupervisor {
             requestId: ack,
             ok: false,
             error: "The session was stopped before it was attached.",
-          });
-        }
-        return;
-      }
-      if (error instanceof HubContractRefused) {
-        this.#fail(instanceId, error, payload.processGeneration);
-        if (ack) {
-          this.sink({
-            kind: "control_result",
-            instanceId,
-            requestId: ack,
-            ok: false,
-            error: error.message,
           });
         }
         return;
@@ -4276,9 +4226,6 @@ export class SessionSupervisor {
         this.#ending.add(session);
       }
       const kind = harness ?? session?.harness;
-      if (kind === "opencode" && !this.#hubContract) {
-        throw new HubContractRefused(this.#hubRefusal);
-      }
       let ended: Extract<FramePayload, { kind: "stopped" }>["ended"];
       let sharedConversation = false;
       if (kind === "opencode") {
