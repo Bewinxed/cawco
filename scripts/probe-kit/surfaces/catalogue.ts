@@ -1314,6 +1314,27 @@ export const SURFACES: Surface[] = [
       },
       { name: "account", act: inSheet(press(ACCOUNT_CHIP)), root: "body" },
       {
+        // The Machines chip's "Connect a machine…": the pairing panel in the
+        // list's place, its install command in the join step's CopyBox. The
+        // command stands once the hub lists an address (hub join.ts
+        // `joinAddresses`: Tailscale, then each non-internal IPv4), which a
+        // host's tape holds and a workspace's (loopback alone) does not.
+        name: "machines-pair",
+        act: inSheet(
+          press(PROJECT_CHIP),
+          (page) =>
+            page.getByRole("button", { name: CAWCO_PROJECT }).first().click(),
+          press(MACHINES_CHIP),
+          (page) =>
+            page
+              .locator(`${MACHINE_ROW_ANY}[data-add]`)
+              .filter({ visible: true })
+              .first()
+              .click()
+        ),
+        root: "body",
+      },
+      {
         // The cawco project on the machine with no checkout of it: Move &
         // start, and the move it asks a yes for.
         name: "move",
