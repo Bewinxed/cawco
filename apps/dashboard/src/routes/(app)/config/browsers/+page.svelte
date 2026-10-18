@@ -215,7 +215,7 @@
             <div class="flex min-w-0 flex-wrap items-center gap-(--space-2)">
               <span
                 class="min-w-0 text-label text-(--ink-strong) [overflow-wrap:anywhere]"
-                >{view.machineName}</span
+                data-relay-name>{view.machineName}</span
               >
               <Badge data-relay-state variant={stateTint(view)}
                 ><span>{stateWord(view)}</span></Badge
@@ -231,60 +231,58 @@
                 >{/if}
             </p>
           </div>
-          <div
-            class="flex min-w-0 flex-col gap-(--space-1) max-sm:justify-self-start sm:items-end"
-          >
-            <div class="flex flex-wrap items-center gap-(--space-4)">
-              {#if view.state === "stopped" || view.state === "failed"}
-                <Button
-                  aria-expanded={asking("relay-start")}
-                  disabled={asking("relay-start")}
-                  label={words.start}
-                  onclick={() => askStartAgain(view)}
-                  size="sm"
-                  variant="outline"
-                />
-              {:else}
-                <!-- The machine runs one relay command at a time: a stop sent
+          <div class={CONTROLS}>
+            {#if view.state === "stopped" || view.state === "failed"}
+              <Button
+                aria-expanded={asking("relay-start")}
+                disabled={asking("relay-start")}
+                label={words.start}
+                onclick={() => askStartAgain(view)}
+                size="sm"
+                variant="outline"
+              />
+            {:else}
+              <!-- The machine runs one relay command at a time: a stop sent
                    while it starts would wait out the start. Remove still
                    goes (the hub forgets the relay at once).
                    A ghost's ink starts inside its box (1px edge, 11px
                    padding): wrapped under the words it hangs back by that
                    much, so its first letter stands on their edge. -->
-                <Button
-                  aria-describedby={busy ? "relay-stop-wait" : undefined}
-                  aria-expanded={asking("relay-stop")}
-                  class="max-sm:-ms-3"
-                  data-relay-stop
-                  disabled={asking("relay-stop") || busy}
-                  label={words.stop}
-                  onclick={() => askStop(view)}
-                  size="sm"
-                  variant="ghost"
-                />
-              {/if}
               <Button
-                aria-expanded={asking("relay-remove")}
-                data-relay-remove
-                disabled={asking("relay-remove")}
-                label={words.remove}
-                onclick={() => askRemove(view)}
+                aria-describedby={busy ? "relay-stop-wait" : undefined}
+                aria-expanded={asking("relay-stop")}
+                class="max-sm:-ms-3"
+                data-relay-stop
+                disabled={asking("relay-stop") || busy}
+                label={words.stop}
+                onclick={() => askStop(view)}
                 size="sm"
-                variant="destructive"
+                variant="ghost"
               />
-            </div>
-            <!-- Why Stop waits, in words a touch screen shows too. -->
-            {#if busy}
-              <p
-                class="text-meta text-(--ink-muted) text-pretty sm:text-end"
-                data-relay-wait
-                id="relay-stop-wait"
-              >
-                {words.stopWhileStarting}
-              </p>
             {/if}
+            <Button
+              aria-expanded={asking("relay-remove")}
+              data-relay-remove
+              disabled={asking("relay-remove")}
+              label={words.remove}
+              onclick={() => askRemove(view)}
+              size="sm"
+              variant="destructive"
+            />
           </div>
         </div>
+        <!-- Why Stop waits, in words a touch screen shows too: a line of its
+             own under the row, as the why is, so the row keeps one height in
+             every state and nothing beside it moves as the relay goes live. -->
+        {#if busy}
+          <p
+            class="mt-(--space-2) max-w-[72ch] text-meta text-(--ink-muted) text-pretty"
+            data-relay-wait
+            id="relay-stop-wait"
+          >
+            {words.stopWhileStarting}
+          </p>
+        {/if}
         {#if view.state === "live" && view.health.length > 0}
           <ul
             aria-label="Each port's answer"

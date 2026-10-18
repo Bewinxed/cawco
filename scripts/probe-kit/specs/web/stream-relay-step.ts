@@ -763,7 +763,7 @@ const states = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
     const read = await relayRead(page);
     const scroll = await sideways(page);
     kit.check(
-      `${leg.name} ${state.name}: badge "${state.badge}" (${state.tint}), line "${one.address}${state.answer.relay?.hostname ? " · relay.example.com" : ""}", controls ${state.controls.join(" and ")}${state.held ? ` (${state.held.join(", ")} held, described by the wait line "${read.wait?.words}" under the buttons)` : ", no wait line"}${state.why ? `, the why whole in ${read.whyLines} lines` : ", no why"}${state.command ? `, its command in code ("${read.whyCode}")` : ""}, no backtick, no chips, nothing sideways`,
+      `${leg.name} ${state.name}: badge "${state.badge}" (${state.tint}), line "${one.address}${state.answer.relay?.hostname ? " · relay.example.com" : ""}", controls ${state.controls.join(" and ")}${state.held ? ` (${state.held.join(", ")} held, described by the wait line "${read.wait?.words}" under the row)` : ", no wait line"}${state.why ? `, the why whole in ${read.whyLines} lines` : ", no why"}${state.command ? `, its command in code ("${read.whyCode}")` : ""}, no backtick, no chips, nothing sideways`,
       read.badge === state.badge &&
         read.badgeClass.includes(state.tint) &&
         read.line ===
@@ -790,6 +790,62 @@ const states = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
     );
     await capture(page, `state-${state.name}-${leg.name}`);
   }
+};
+
+/**
+ * The Steady Swap Rule: the relay row keeps one height as its state changes,
+ * so its name stands at one top in pulling, starting, stopped and live; the
+ * wait line stands under the row, never inside its controls' cell. At 680
+ * and 1440, where the row's two sides stand side by side.
+ */
+const steady = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
+  if (leg.view === "phone") {
+    return;
+  }
+  const answers: [string, StreamRelayAnswer][] = [
+    ["pulling", relayAs({ state: "pulling", progress: { done: 3, total: 7 } })],
+    ["starting", relayAs({ state: "starting" })],
+    ["stopped", relayAs({ state: "stopped" })],
+    ["live", live],
+  ];
+  const tops: {
+    state: string;
+    name: number | null;
+    waitBelow: boolean | null;
+  }[] = [];
+  for (const [state, answer] of answers) {
+    // biome-ignore lint/performance/noAwaitInLoops: one state at a time, each on its own page
+    const page = await look(kit, base, leg, answer, "[data-relay-row]");
+    tops.push({
+      state,
+      ...(await page.evaluate(() => {
+        const name = document
+          .querySelector("[data-relay-row] [data-relay-name]")
+          ?.getBoundingClientRect();
+        const row = document
+          .querySelector("[data-relay-row] > div")
+          ?.getBoundingClientRect();
+        const wait = document
+          .querySelector("[data-relay-wait]")
+          ?.getBoundingClientRect();
+        return {
+          name: name ? Math.round(name.top * 100) / 100 : null,
+          waitBelow: wait && row ? wait.top >= row.bottom : null,
+        };
+      })),
+    });
+  }
+  const names = tops.flatMap((top) => (top.name === null ? [] : [top.name]));
+  const spread = Math.max(...names) - Math.min(...names);
+  kit.check(
+    `${leg.name} steady: the relay's name stands at one top in pulling, starting, stopped and live (spread ${Math.round(spread * 100) / 100}px ≤ 0.5px), the wait line under the row`,
+    names.length === answers.length &&
+      spread <= 0.5 &&
+      tops
+        .filter((top) => top.state === "pulling" || top.state === "starting")
+        .every((top) => top.waitBelow === true),
+    JSON.stringify(tops)
+  );
 };
 
 /** Live with no DNS name: its line, three chips, and its Remove ask's sentence without a certificate. */
@@ -1180,6 +1236,7 @@ const spec: Spec = {
       await running(kit, base, leg);
       await previews(kit, base, leg);
       await states(kit, base, leg);
+      await steady(kit, base, leg);
       await plain(kit, base, leg);
       await dark(kit, base, leg);
       await focus(kit, base, leg);
