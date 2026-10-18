@@ -18,6 +18,7 @@
     today = false,
     toEnd = false,
     fit = false,
+    narrow = "card",
     conversation,
     children,
   }: {
@@ -28,6 +29,11 @@
     toEnd?: boolean;
     /** The frame grows to its plan's whole height, so nothing is cut at its foot. */
     fit?: boolean;
+    /**
+     * Under 700px of page: the side card alone ("card"), or what the
+     * conversation shows stacked over it ("stack"), each at the page's width.
+     */
+    narrow?: "card" | "stack";
     /** What the conversation shows; quiet lines when nothing is given. */
     conversation?: Snippet;
     children: Snippet;
@@ -60,12 +66,22 @@
   }
 </script>
 
-<!-- Narrower than the frame, it scrolls sideways at full size inside its
-     own box, its edges fading where more lies past them; the page never
-     does. -->
+<!-- Narrower than the frame on a wide page, it scrolls sideways at full size
+     inside its own box, its edges fading where more lies past them; the page
+     never does. On a phone's page the frame stacks at the page's width. -->
 <div class="desk-scroll kit-edge-fade" data-slot="desk-scroll">
-  <div class="desk-frame" data-slot="desk-frame" data-fit={fit || undefined}>
-    <div class="conversation" aria-hidden={conversation ? undefined : "true"}>
+  <div
+    class="desk-frame"
+    data-slot="desk-frame"
+    data-fit={fit || undefined}
+    data-narrow={narrow}
+  >
+    <div
+      class="conversation"
+      aria-hidden={conversation ? undefined : "true"}
+      data-slot="conversation"
+      data-quiet={conversation ? undefined : ""}
+    >
       {#if conversation}
         {@render conversation()}
       {:else}
@@ -78,7 +94,7 @@
         <span class="composer"></span>
       {/if}
     </div>
-    <div class="desk">
+    <div class="desk" data-slot="side-card">
       <SideSurface label="Plan" onclose={() => undefined} recessed={false}>
         {#snippet titleControl()}
           <span class="head mark-line">
@@ -198,6 +214,35 @@
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     white-space: nowrap;
+  }
+  /* A phone's page: no sideways scroll; the card at the page's width, and
+     the conversation over it only where it has something to show. */
+  @media (width < 700px) {
+    .desk-scroll {
+      overflow-x: visible;
+      padding-block-end: 0;
+    }
+    .desk-frame,
+    .desk-frame[data-fit] {
+      flex: 1 1 auto;
+      flex-direction: column;
+      inline-size: 100%;
+      block-size: auto;
+      min-block-size: 0;
+      padding: var(--space-2);
+    }
+    .conversation {
+      flex: none;
+      padding: var(--space-2) var(--space-2) var(--space-3);
+    }
+    .desk-frame[data-narrow="card"] .conversation,
+    .conversation[data-quiet] {
+      display: none;
+    }
+    .desk {
+      inline-size: 100%;
+      block-size: 640px;
+    }
   }
   .body {
     flex: 1 1 auto;
