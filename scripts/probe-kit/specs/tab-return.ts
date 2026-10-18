@@ -209,9 +209,14 @@ interface PageBack {
 
 /** Pane `pane`'s preview frame; null while no page stands there. */
 async function previewFrame(page: Page, pane: string): Promise<Frame | null> {
-  const src = await page
+  const iframe = page
     .locator(`[data-slot="pane"][data-pane="${pane}"] iframe[title="Preview"]`)
-    .first()
+    .first();
+  // Read at once, never waited for: a busy tab has none, and its reach is timed.
+  if ((await iframe.count()) === 0) {
+    return null;
+  }
+  const src = await iframe
     .getAttribute("src", { timeout: 1000 })
     .catch(() => null);
   if (!src) {
@@ -532,6 +537,27 @@ function watchPosts(): void {
   });
 }
 
+/**
+ * In the dashboard's own document on WebKit, which reports no long tasks:
+ * every gap of more than 50 ms in a 16 ms timer on its thread (its start,
+ * epoch ms, and its length), where a task held the thread.
+ */
+function watchGaps(): void {
+  if (window.top !== window) {
+    return;
+  }
+  const gaps: [number, number][] = [];
+  (window as unknown as { __gaps: [number, number][] }).__gaps = gaps;
+  let last = performance.now();
+  setInterval(() => {
+    const now = performance.now();
+    if (now - last > 50) {
+      gaps.push([performance.timeOrigin + last, now - last]);
+    }
+    last = now;
+  }, 16);
+}
+
 /** The dashboard's reaches into a preview's frame (`watchPosts`), epoch ms. */
 const postsOf = (page: Page) =>
   page.evaluate(
@@ -580,18 +606,18 @@ async function measureBack(
   const main = await traceMain(
     page,
     async () => {
-      await page.evaluate(() => performance.mark("two-pane:reach:0"));
-      await point.reach();
-      await page.waitForTimeout(REACH_MS);
       // The trace's CPU profiler starts in an idle isolate at its next script:
       // a held out-of-process preview's first is its release, where starting
       // (every compiled function logged) took ~500 ms of its thread. A script
-      // run there now keeps that off the return's clock.
+      // run there now, before the reach is counted, keeps that off the return.
       await (
         await previewFrame(page, id)
       )
         ?.evaluate(() => 0)
         .catch(() => undefined);
+      await page.evaluate(() => performance.mark("two-pane:reach:0"));
+      await point.reach();
+      await page.waitForTimeout(REACH_MS);
       origin = await page.evaluate(() => performance.timeOrigin);
       madeAt = await page.evaluate((pane) => {
         const drawn = () => {
@@ -733,6 +759,16 @@ async function clickBack(
       await page.waitForTimeout(250);
     }
   }
+  // WebKit reports no long tasks: the gaps in a 16 ms timer on the dashboard's thread stand for them (`watchGaps`).
+  const gaps = (
+    await page.evaluate(
+      () => (window as unknown as { __gaps?: [number, number][] }).__gaps ?? []
+    )
+  ).filter(([at, ms]) => at + ms >= pressAt && at <= pressAt + WINDOW_MS);
+  const [worstAt, worstMs] = gaps.reduce<[number, number]>(
+    (most, gap) => (gap[1] > most[1] ? gap : most),
+    [pressAt, 0]
+  );
   return {
     held: "not read",
     heavy: "not traced",
@@ -740,7 +776,7 @@ async function clickBack(
     inputMs: 0,
     inserted: 0,
     longest: 0,
-    longestWhat: "not traced",
+    longestWhat: `not traced; the dashboard's thread stood still at most ${Math.round(worstMs)}ms, ${Math.round(worstAt - pressAt)}ms after the press (its longest timer gap)`,
     pressAt,
     elsewhere: "not traced",
     reach: 0,
@@ -807,7 +843,7 @@ const run = async (kit: Kit) => {
     const page = await kit.page(
       "desk",
       engine === "webkit"
-        ? { engine: "webkit" }
+        ? { engine: "webkit", init: [watchGaps] }
         : {
             init: [watchCost, watchPosts],
             oneProcess: engine === "one-process",
