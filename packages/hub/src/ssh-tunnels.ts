@@ -129,8 +129,6 @@ const controlDir = (): string => {
 };
 const controlPath = (id: string): string => join(controlDir(), id);
 
-/** What a machine's server says when it will not forward: `remote port forwarding failed for listen port 0`. */
-const REFUSED = /remote port forwarding failed for listen port/;
 const CARRIAGE_RETURN = /\r$/;
 const PORT_LINE = /^\d+$/;
 /** A listener's address as `ss` and `lsof` print it: its host, then `:<port>`. */
@@ -438,6 +436,19 @@ const masterReady = async (
 };
 
 /**
+ * Whether a `-O forward` that exited non-zero was the machine's server
+ * refusing it, read from the master's state, never from `ssh`'s words: the
+ * forward asked is well formed, so when the master still answers `-O check`
+ * (exit 0) it carried the request and the server said no; when it does not,
+ * the connection itself failed.
+ */
+const refusedByServer = async (
+  path: string,
+  target: string
+): Promise<boolean> =>
+  (await control(["ssh", "-S", path, "-O", "check", "--", target]))?.code === 0;
+
+/**
  * Where the machine binds a forward, before the hub is forwarded there: a
  * probe forward whose far end is a port nothing on this host answers (so
  * nothing behind it answers anyone), its listeners read, then cancelled by
@@ -462,7 +473,7 @@ const checkBinding = async (
     target,
   ]);
   if (probed?.code !== 0) {
-    return REFUSED.test(probed?.err ?? "")
+    return (await refusedByServer(path, target))
       ? { kind: "forwarding" }
       : {
           kind: "failed",
@@ -648,7 +659,7 @@ export const createSshTunnels = ({
       row.target,
     ]);
     if (answer?.code !== 0) {
-      if (!REFUSED.test(answer?.err ?? "")) {
+      if (!(await refusedByServer(path, row.target))) {
         return {
           refusal: {
             kind: "failed",
