@@ -780,7 +780,11 @@
     <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
       <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton class="h-auto min-h-c-nav-h" isActive={false} row="nav">
+          <Sidebar.MenuButton
+            class="h-auto min-h-c-nav-h"
+            isActive={false}
+            row="nav"
+          >
             {#snippet child({ props })}
               <a
                 href="/session"

@@ -419,6 +419,7 @@
 @custom-variant slot-node-card (&[data-slot="node-card"]);
 @custom-variant slot-note (&[data-slot="note"]);
 @custom-variant slot-now (&[data-slot="now"]);
+@custom-variant slot-ns-chip-btn (&[data-slot="ns-chip-btn"]);
 @custom-variant slot-older-rows-box (&[data-slot="older-rows-box"]);
 @custom-variant slot-order (&[data-slot="order"]);
 @custom-variant slot-page-head (&[data-slot="page-head"]);

@@ -281,7 +281,8 @@
           data-slot="pip"
           class="pointer-events-none absolute top-1/2 mt-(--mt) size-(--dot) rounded-pill bg-ink-strong transition-[opacity] dur-control ease-out motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
           style:--dot="5px"
-          style:--pip-durs="var(--ns-fill-ms, var(--dur-toggle)), var(--dur-control)"
+          style:--pip-durs="var(--ns-fill-ms, var(--dur-toggle)),
+          var(--dur-control)"
           style:--pip-eases="var(--ease-in-out), var(--ease-out)"
           style:--mt="-2.5px"
           style:left={`calc(var(--kw) / 2 - 2.5px + ${pip.frac} * (100% - var(--kw)))`}

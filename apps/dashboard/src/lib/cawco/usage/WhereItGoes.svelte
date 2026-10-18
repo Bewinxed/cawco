@@ -588,7 +588,8 @@
               style:opacity={headHidden(entry.kind, id) ? "0" : undefined}
             >
               <OsMark class="size-icon-md shrink-0" os={entry.group.os} />
-              <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+              <span
+                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
                 >{entry.group.name}</span
               >
             </h3>
