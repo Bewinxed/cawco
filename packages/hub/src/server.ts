@@ -11075,6 +11075,23 @@ export const createServer = (
     },
     canvasFrom: (request, instanceId, artifactId) =>
       openDiagramAsCanvas(request, instanceId, artifactId),
+    // A decision page's Canvas, Open to draw: that canvas at the front of the panel.
+    showFrom: async (request, instanceId, artifactId) => {
+      if (request.method !== "POST") {
+        return new Response("Show an artifact with a POST.", {
+          status: 405,
+          headers: { allow: "POST" },
+        });
+      }
+      try {
+        return Response.json(await artifacts.show(instanceId, artifactId));
+      } catch (error) {
+        if (error instanceof ArtifactRefusal) {
+          return new Response(error.message, { status: error.status });
+        }
+        throw error;
+      }
+    },
   };
   /**
    * HTTPS on the machine's tailnet name (tailnet-https.ts): the dashboard's

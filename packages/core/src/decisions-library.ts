@@ -130,13 +130,13 @@ export const decisionLibrary = <C>(
   );
   const Dials = define(
     "Dials",
-    "Controls for values the person tunes rather than picks; artifact_read answers them as the dials entry's value, by name.",
+    "Controls for values the person tunes rather than picks, drawn where you put it; artifact_read answers them as the dials entry's value, by panel name and path.",
     z.object({
       name: z.string().describe('The panel\'s name, like "Card".'),
       config: z
         .record(z.string(), z.unknown())
         .describe(
-          'DialKit controls by name: a number as [default, min, max], a colour as "#hex", a boolean, a string; like {radius: [12, 0, 32], accent: "#e65d46"}.'
+          'Each value by name: a number as [default, min, max] or [default, min, max, step], a colour as "#rrggbb", a switch as true or false, a menu as a list of words, a field as words; a nested object is a group. Like {radius: [12, 0, 32], accent: "#e65d46", shadow: {blur: [8, 0, 40]}}.'
         ),
     })
   );
@@ -253,6 +253,92 @@ export const decisionLibrary = <C>(
     ],
     root: DECISION_ROOT,
   });
+};
+
+// --- dials ---------------------------------------------------------------------
+
+/** One value a Dials panel tunes: its path in the panel, the control it is drawn as, and where it starts. */
+export type Dial = { path: string } & (
+  | { initial: number; kind: "range"; max: number; min: number; step: number }
+  | { initial: string; kind: "colour" }
+  | { initial: boolean; kind: "switch" }
+  | { choices: string[]; initial: string; kind: "menu" }
+  | { initial: string; kind: "words" }
+);
+
+const HEX = /^#[0-9a-f]{6}$/i;
+/** Values a panel tunes at most. Our bound: a set value stops at 2,000 characters of JSON. */
+const DIALS_MAX = 24;
+
+/** One config value as its control; a problem when no control draws it. */
+const dialOf = (path: string, value: unknown): Dial | string => {
+  if (typeof value === "boolean") {
+    return { path, kind: "switch", initial: value };
+  }
+  if (typeof value === "string") {
+    return HEX.test(value)
+      ? { path, kind: "colour", initial: value }
+      : { path, kind: "words", initial: value };
+  }
+  if (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((each) => typeof each === "string")
+  ) {
+    return { path, kind: "menu", choices: value, initial: value[0] };
+  }
+  const [initial, min, max, step] = Array.isArray(value) ? value : [];
+  if (
+    [initial, min, max].every((each) => typeof each === "number") &&
+    (step === undefined || typeof step === "number") &&
+    (min as number) < (max as number)
+  ) {
+    return {
+      path,
+      kind: "range",
+      initial: initial as number,
+      min: min as number,
+      max: max as number,
+      step:
+        (step as number | undefined) ??
+        ((max as number) - (min as number) > 10 ? 1 : 0.01),
+    };
+  }
+  return `${path}: ${String(JSON.stringify(value)).slice(0, 40)} is no control: a number is [default, min, max] or [default, min, max, step], a colour "#rrggbb", a switch true or false, a menu a list of words, a field words.`;
+};
+
+/**
+ * A Dials config as its controls, nested groups as dotted paths
+ * (`{shadow: {blur: [8, 0, 40]}}` is `shadow.blur`), and what no control
+ * draws, a sentence each.
+ */
+export const dialsOf = (
+  config: Record<string, unknown>
+): { dials: Dial[]; problems: string[] } => {
+  const dials: Dial[] = [];
+  const problems: string[] = [];
+  const walk = (group: Record<string, unknown>, prefix: string): void => {
+    for (const [key, value] of Object.entries(group)) {
+      const path = `${prefix}${key}`;
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        walk(value as Record<string, unknown>, `${path}.`);
+        continue;
+      }
+      const dial = dialOf(path, value);
+      if (typeof dial === "string") {
+        problems.push(dial);
+      } else {
+        dials.push(dial);
+      }
+    }
+  };
+  walk(config, "");
+  if (dials.length > DIALS_MAX) {
+    problems.push(
+      `${dials.length} values: a panel tunes ${DIALS_MAX} at most; split it.`
+    );
+  }
+  return { dials, problems };
 };
 
 // --- the prompt ----------------------------------------------------------------

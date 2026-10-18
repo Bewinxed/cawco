@@ -106,7 +106,10 @@
             "type": "string"
           }
         },
-        "required": ["title", "children"],
+        "required": [
+          "title",
+          "children"
+        ],
         "additionalProperties": false,
         "description": "The page: its title, Caw, the count picked, Send picks. The root."
       },
@@ -133,7 +136,10 @@
             }
           }
         },
-        "required": ["title", "children"],
+        "required": [
+          "title",
+          "children"
+        ],
         "additionalProperties": false,
         "description": "A heading over some decisions: a group on the decision graph."
       },
@@ -178,7 +184,11 @@
             "type": "boolean"
           }
         },
-        "required": ["id", "question", "options"],
+        "required": [
+          "id",
+          "question",
+          "options"
+        ],
         "additionalProperties": false,
         "description": "One question the person picks on: a card with its options, a note, and a state line."
       },
@@ -204,7 +214,10 @@
             }
           }
         },
-        "required": ["id", "label"],
+        "required": [
+          "id",
+          "label"
+        ],
         "additionalProperties": false,
         "description": "One answer to a decision: what the person gets, in a few words."
       },
@@ -249,7 +262,10 @@
             "type": "string"
           }
         },
-        "required": ["file", "alt"],
+        "required": [
+          "file",
+          "alt"
+        ],
         "additionalProperties": false,
         "description": "A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result)."
       },
@@ -263,7 +279,9 @@
             "type": "string"
           }
         },
-        "required": ["mermaid"],
+        "required": [
+          "mermaid"
+        ],
         "additionalProperties": false,
         "description": "A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…)."
       },
@@ -277,7 +295,9 @@
             "type": "string"
           }
         },
-        "required": ["artifact"],
+        "required": [
+          "artifact"
+        ],
         "additionalProperties": false,
         "description": "A drawing: a canvas artifact you made with artifact_create (kind canvas), shown at its box."
       },
@@ -291,7 +311,9 @@
             "type": "string"
           }
         },
-        "required": ["artifact"],
+        "required": [
+          "artifact"
+        ],
         "additionalProperties": false,
         "description": "A page artifact of yours live in a frame: an animated mockup you made with artifact_create (kind page, html), say."
       },
@@ -303,10 +325,17 @@
           },
           "variant": {
             "type": "string",
-            "enum": ["title", "label", "body", "meta"]
+            "enum": [
+              "title",
+              "label",
+              "body",
+              "meta"
+            ]
           }
         },
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "additionalProperties": false,
         "description": "Words, in one of the house text roles. Plain text."
       },
@@ -318,10 +347,18 @@
           },
           "tone": {
             "type": "string",
-            "enum": ["neutral", "live", "attn", "done", "fail"]
+            "enum": [
+              "neutral",
+              "live",
+              "attn",
+              "done",
+              "fail"
+            ]
           }
         },
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "additionalProperties": false,
         "description": "A short label in a status pair."
       },
@@ -336,14 +373,26 @@
           },
           "justify": {
             "type": "string",
-            "enum": ["start", "center", "end", "spaceBetween"]
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "spaceBetween"
+            ]
           },
           "align": {
             "type": "string",
-            "enum": ["start", "center", "end", "stretch"]
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "stretch"
+            ]
           }
         },
-        "required": ["children"],
+        "required": [
+          "children"
+        ],
         "additionalProperties": false,
         "description": "Lays media side by side, wrapping where they do not fit."
       },
@@ -358,10 +407,17 @@
           },
           "align": {
             "type": "string",
-            "enum": ["start", "center", "end", "stretch"]
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "stretch"
+            ]
           }
         },
-        "required": ["children"],
+        "required": [
+          "children"
+        ],
         "additionalProperties": false,
         "description": "Lays media one under another."
       },
@@ -379,9 +435,12 @@
             "additionalProperties": {}
           }
         },
-        "required": ["name", "config"],
+        "required": [
+          "name",
+          "config"
+        ],
         "additionalProperties": false,
-        "description": "Controls for values the person tunes rather than picks; artifact_read answers them as the dials entry's value, by name."
+        "description": "Controls for values the person tunes rather than picks, drawn where you put it; artifact_read answers them as the dials entry's value, by panel name and path."
       }
     }
   }

@@ -7,22 +7,24 @@
   const tone = $derived(
     ["live", "attn", "done", "fail"].includes(String(props.tone))
       ? String(props.tone)
-      : "idle"
+      : "neutral"
   );
 </script>
 
 <span class="badge" data-tone={tone}>{String(props.text ?? "")}</span>
 
 <style>
+  /* DESIGN.md, Badges: label role, recess surface, no border, 5px radius;
+     the live, attn, done and fail variants take their status pairs. */
   .badge {
     align-self: start;
     max-inline-size: 100%;
     padding: 0 var(--space-2);
-    border-radius: var(--radius-pill);
-    font: var(--type-meta);
+    border-radius: var(--radius-xs);
+    font: var(--type-label);
     overflow-wrap: anywhere;
-    background: var(--status-idle-bg);
-    color: var(--status-idle-ink);
+    background: var(--surface-recess);
+    color: var(--ink-strong);
     &[data-tone="live"] {
       background: var(--status-live-bg);
       color: var(--status-live-ink);

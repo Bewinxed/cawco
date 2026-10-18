@@ -27,7 +27,7 @@ Image(file: string, alt: string, caption?: string) — A picture: a file beside 
 Diagram(mermaid: string, caption?: string) — A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…).
 Canvas(artifact: string, caption?: string) — A drawing: a canvas artifact you made with artifact_create (kind canvas), shown at its box.
 Preview(artifact: string, caption?: string) — A page artifact of yours live in a frame: an animated mockup you made with artifact_create (kind page, html), say.
-Dials(name: string, config: Record<string, any>) — Controls for values the person tunes rather than picks; artifact_read answers them as the dials entry's value, by name.
+Dials(name: string, config: Record<string, any>) — Controls for values the person tunes rather than picks, drawn where you put it; artifact_read answers them as the dials entry's value, by panel name and path.
 Text(text: string, variant?: "title" | "label" | "body" | "meta") — Words, in one of the house text roles. Plain text.
 Badge(text: string, tone?: "neutral" | "live" | "attn" | "done" | "fail") — A short label in a status pair.
 Row(children: any[], justify?: "start" | "center" | "end" | "spaceBetween", align?: "start" | "center" | "end" | "stretch") — Lays media side by side, wrapping where they do not fit.

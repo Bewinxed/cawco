@@ -70,7 +70,8 @@ host = Decision("host", "Where does the page run?", [hub, edge], "It ships with 
 hub = Option("hub", "The hub", "Nothing new to run.")
 edge = Option("edge", "An edge host", "Closer to readers.")
 later = Section("Later", [plan])
-plan = Decision("plan", "When does the plan ship?", [now, after], "The waitlist opens with it.", [gantt], ["host"])
+plan = Decision("plan", "When does the plan ship?", [now, after], "The waitlist opens with it.", [gantt, status], ["host"])
+status = Row([Text("Ships with the waitlist", "meta"), Badge("Planned", "attn")])
 now = Option("now", "With the page")
 after = Option("after", "A week after")
 shot = Image("${ids.image}", "The landing as it stands: a title and one button", "Today's landing")
@@ -220,7 +221,32 @@ const mediaIn = (frame: Frame) =>
       ),
       canvas: !!canvas?.contentDocument?.querySelector(".excalidraw canvas"),
       preview: preview?.contentDocument?.body?.textContent?.trim() ?? "",
-      dials: document.querySelector("[data-cawco-dials]")?.children.length ?? 0,
+      dials: document.querySelectorAll("#decision-host figure.dials input")
+        .length,
+      faces: [...document.fonts]
+        .filter((face) => face.status === "loaded")
+        .map((face) => face.family),
+      row: (() => {
+        const row = document.querySelector("#decision-plan .stack");
+        const words = row?.querySelector(".text");
+        const badge = row?.querySelector(".badge");
+        const rowStyle = row ? getComputedStyle(row) : null;
+        const probe = document.createElement("span");
+        probe.style.columnGap = "var(--space-3)";
+        probe.style.display = "flex";
+        document.body.append(probe);
+        const space = getComputedStyle(probe).columnGap;
+        probe.remove();
+        return {
+          space,
+          display: rowStyle?.display,
+          direction: rowStyle?.flexDirection,
+          wrap: rowStyle?.flexWrap,
+          gap: rowStyle?.columnGap,
+          font: words ? getComputedStyle(words).fontFamily : "",
+          badge: badge ? getComputedStyle(badge).backgroundColor : "",
+        };
+      })(),
       opens: [...document.querySelectorAll("figure.diagram")].map(
         (figure) => !!figure.querySelector("button.open")
       ),
@@ -444,20 +470,33 @@ const mediaLeg = async (
       m.diagrams.length === 3 &&
       m.canvas &&
       m.preview.includes("slides") &&
-      m.dials > 0,
+      m.dials > 0 &&
+      m.faces.length > 0,
     30_000
   ).catch(() => undefined);
   await settle(shown, 400);
   const media = await mediaIn(frame);
   kit.check(
-    `(a) ${leg}: three cards, the picture loaded, three diagrams, the canvas live, the mockup live, the dials docked, in the host's theme`,
+    `(a) ${leg}: three cards, the picture loaded, three diagrams, the canvas live, the mockup live, the dials in the host card, in the host's theme`,
     media.image === 64 &&
       media.diagrams.length === 3 &&
       media.canvas &&
       media.preview.includes("slides") &&
-      media.dials > 0 &&
+      media.dials === 2 &&
       media.theme === theme,
     JSON.stringify(media)
+  );
+  kit.check(
+    `(a) ${leg}: the house faces loaded in the page, and a Row of Text and a Badge drawn on the host's own styles`,
+    media.faces.some((family) => family.includes("Figtree")) &&
+      media.row.display === "flex" &&
+      media.row.direction === "row" &&
+      media.row.wrap === "wrap" &&
+      media.row.gap === media.row.space &&
+      media.row.font.includes("Figtree") &&
+      media.row.badge !== "" &&
+      media.row.badge !== "rgba(0, 0, 0, 0)",
+    JSON.stringify({ faces: media.faces, row: media.row })
   );
   const sweep = await overflowIn(frame);
   kit.check(
@@ -881,6 +920,77 @@ const openAsCanvas = async (on: On) => {
   );
 };
 
+/** Dials: a value the person moves is kept under dials by panel and path; a control no Dials draws is refused. */
+const dialChecks = async (on: On, frame: Frame) => {
+  const { fleet, kit } = on;
+  const radius = frame.locator(
+    '#decision-host figure.dials input[type="range"]'
+  );
+  await radius.scrollIntoViewIfNeeded();
+  await radius.fill("20");
+  const tuned = await until(
+    "the dial's value on the hub",
+    on.read,
+    (r) =>
+      (r.state.dials?.value as Record<string, Record<string, unknown>> | null)
+        ?.Card?.radius === 20,
+    10_000
+  ).catch(() => null);
+  kit.check(
+    "Dials: moving the radius keeps dials.Card.radius on the hub, the panel drawn in the host card where the program put it",
+    !!tuned,
+    JSON.stringify(tuned?.state.dials)
+  );
+  const refused = await fetch(
+    `${fleet.base}/api/instances/${on.writer}/artifacts`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "page",
+        name: "bad-dials",
+        program: `root = Decisions("Tune", [pick, tune])\npick = Decision("pick", "Which?", [a, b])\na = Option("a", "A")\nb = Option("b", "B")\ntune = Dials("Card", {radius: [12, 32, 0], spring: null})`,
+      }),
+    }
+  );
+  const said = await refused.text();
+  kit.check(
+    "Dials: a control no Dials draws is refused, naming it",
+    refused.status === 422 &&
+      said.includes('Dials("Card") radius') &&
+      said.includes('Dials("Card") spring'),
+    `${refused.status} ${said.slice(0, 300)}`
+  );
+};
+
+/** Canvas: Open to draw brings the canvas to the front of the panel. */
+const openToDraw = async (on: On) => {
+  const { desk, fleet, kit } = on;
+  await fleet
+    .api(`/api/instances/${on.writer}/artifacts/${on.page}/show`, {})
+    .catch(() => undefined);
+  const frame = await frameWith(desk, 4);
+  const canvasId = await frame
+    .locator('iframe[src*="/__cawco/canvas/"]')
+    .getAttribute("src")
+    .then((src) => src?.split("/")[3] ?? "");
+  await tapIn(desk, frame, "#decision-host figure button.open");
+  const shown = await until(
+    "the canvas at the front of the panel",
+    () => fleet.api<{ shown: boolean }>(`/api/artifacts/${canvasId}`),
+    (read) => read.shown,
+    20_000
+  ).catch(() => null);
+  kit.check(
+    "Canvas: Open to draw brings the canvas to the front of the session's panel",
+    !!shown?.shown,
+    JSON.stringify({ canvasId, shown })
+  );
+  await fleet
+    .api(`/api/instances/${on.writer}/artifacts/${on.page}/show`, {})
+    .catch(() => undefined);
+};
+
 const run = async (kit: Kit) => {
   const on = await publish(kit, await standUp(kit));
   for (const view of ["desk", "phone"] as const) {
@@ -889,10 +999,12 @@ const run = async (kit: Kit) => {
     }
   }
   const first = await marks(on, await frameWith(on.desk, 3));
+  await dialChecks(on, await frameWith(on.desk, 3));
   await insertAhead(on, first);
   await graphChecks(on);
   await makeTasks(on);
   await htmlPage(on);
+  await openToDraw(on);
   await openAsCanvas(on);
   kit.check(
     "the pages said no error",

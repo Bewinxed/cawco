@@ -49,6 +49,7 @@ export interface Bridge {
     listener: (picks: Record<string, ChoiceEntry>) => void
   ) => () => void;
   send: (text?: string) => Promise<void>;
+  set: (key: string, value: unknown) => Promise<void>;
 }
 
 export const bridge = (): Bridge | null =>

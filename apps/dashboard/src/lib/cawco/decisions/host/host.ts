@@ -9,12 +9,13 @@
 import { mount } from "svelte";
 import pageCss from "../../../../../../../packages/hub/skills/decision-page/kit/page.css" with { type: "text" };
 import tokensCss from "../../../../../../../packages/hub/skills/decision-page/kit/tokens.css" with { type: "text" };
+import { FACES } from "./faces.js";
 import Host from "./Host.svelte";
 import { bridge, picks, takeServed } from "./page.svelte.js";
 
 const sheet = document.createElement("style");
 // Bun's text loader gives each a string; the dashboard's types call a sheet a module.
-sheet.textContent = String(tokensCss) + String(pageCss);
+sheet.textContent = FACES + String(tokensCss) + String(pageCss);
 document.head.prepend(sheet);
 
 takeServed(document);

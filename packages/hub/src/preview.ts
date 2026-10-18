@@ -348,6 +348,12 @@ export interface PreviewListenerDeps {
   /** Where a shown preview of a machine's is served now, its listener started when it has none. */
   reach: (instanceId: string) => Promise<PreviewReach>;
   send: ReturnType<typeof artifactSend>;
+  /** An artifact of the session's brought to the front of its panel from a page (`/show`: a decision page's Canvas, Open to draw). */
+  showFrom: (
+    request: Request,
+    instanceId: string,
+    artifactId: string
+  ) => Promise<Response>;
   socket: ReturnType<typeof artifactSocket>;
   /** A page artifact's doc as one base64 Yjs update, embedded in its overlay tag. */
   state: (artifactId: string) => string;
@@ -380,6 +386,9 @@ const joinArtifact = (
   }
   if (action === "/canvas") {
     return deps.canvasFrom(request, instanceId, artifactId);
+  }
+  if (action === "/show") {
+    return deps.showFrom(request, instanceId, artifactId);
   }
   const screen = new URL(request.url).searchParams.get("screen") === "1";
   return server.upgrade(request, { data: { artifactId, screen } })

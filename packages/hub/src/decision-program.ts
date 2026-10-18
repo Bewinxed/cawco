@@ -26,6 +26,7 @@ import {
   AFTER_REF,
   ARTIFACT_ID,
   DECISION_ID,
+  dialsOf,
 } from "@cawco/core/decisions-library";
 import spec from "@cawco/core/decisions-spec";
 import {
@@ -205,6 +206,9 @@ const mediaProblems = (read: ProgramRead): string[] => [
       : [
           `${component}("${id}") names no artifact: pass the id artifact_create answered.`,
         ]
+  ),
+  ...read.dials.flatMap(({ name, config }) =>
+    dialsOf(config).problems.map((problem) => `Dials("${name}") ${problem}`)
   ),
   ...read.images.flatMap((file) =>
     file && !file.includes("..")
