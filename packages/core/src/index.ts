@@ -1104,8 +1104,8 @@ export const AGENT_BUSY = "agentBusy";
  * - `stopped` — deliberate: the operator (or a `stop` call) ended it, and its
  *   machine confirmed the process gone.
  * - `error` — an actual failure. `lastError` is required here, and this is
- *   where {@link RESTART_LOST} still lands: a restart with nothing to resume
- *   from is a real loss, not a nap.
+ *   where {@link RESTART_LOST} still lands (`lastErrorKind` `restart-lost`): a
+ *   restart with nothing to resume from is a real loss, not a nap.
  * - `unknown` — the machine that owns this row can't currently be reached, so
  *   the hub can't say which of the above is true.
  * - `discarded` — a spin-off torn down on purpose; gone for good.
@@ -1136,9 +1136,55 @@ export const ENDED_STATUSES: ReadonlySet<InstanceStatus> = new Set([
   "discarded",
 ]);
 
-/** A missing Claude conversation is terminal; restarting cannot recreate its history. */
+/**
+ * A missing Claude conversation is terminal; restarting cannot recreate its
+ * history. The words a person reads; what CawCo decides by is the kind
+ * `conversation-gone` ({@link LastErrorKind}).
+ */
 export const CLAUDE_CONVERSATION_GONE =
   "This Claude Code conversation is gone and cannot be resumed. Start a new session to continue working.";
+
+/**
+ * What a session's failure was, typed where it is found, beside the words
+ * (`lastError`) a person reads. Every decision about a failed row reads this,
+ * never the words:
+ * - `conversation-gone` — the conversation it would resume is gone
+ *   ({@link CLAUDE_CONVERSATION_GONE}): it never runs on it again;
+ * - `restart-lost` — its daemon restarted and it left nothing to resume from
+ *   ({@link RESTART_LOST}).
+ * A failure no producer typed has none.
+ */
+export type LastErrorKind = "conversation-gone" | "restart-lost";
+
+/** An error that carries its {@link LastErrorKind} from where it is made to the row it fails. */
+export class KindedError extends Error {
+  readonly lastErrorKind: LastErrorKind;
+  constructor(lastErrorKind: LastErrorKind, message: string) {
+    super(message);
+    this.name = "KindedError";
+    this.lastErrorKind = lastErrorKind;
+  }
+}
+
+/** A Claude conversation that is gone: its words, and its kind. */
+export const conversationGone = (): KindedError =>
+  new KindedError("conversation-gone", CLAUDE_CONVERSATION_GONE);
+
+/** Every {@link LastErrorKind}, for a reader of one off the wire. */
+const LAST_ERROR_KINDS: ReadonlySet<string> = new Set<LastErrorKind>([
+  "conversation-gone",
+  "restart-lost",
+]);
+
+/** `value` as a {@link LastErrorKind}, when it is one. */
+export const asLastErrorKind = (value: unknown): LastErrorKind | undefined =>
+  typeof value === "string" && LAST_ERROR_KINDS.has(value)
+    ? (value as LastErrorKind)
+    : undefined;
+
+/** The {@link LastErrorKind} an error carries, when its maker typed it. */
+export const lastErrorKindOf = (error: unknown): LastErrorKind | undefined =>
+  error instanceof KindedError ? error.lastErrorKind : undefined;
 
 /**
  * How a session with no process comes back: on its conversation by its key;
@@ -1153,10 +1199,10 @@ export type Relaunch =
   | { kind: "refused"; reason: string };
 
 export const relaunchOf = (row: {
-  lastError?: string | null;
+  lastErrorKind?: LastErrorKind | null;
   sessionId: string | null;
 }): Relaunch => {
-  if (row.lastError === CLAUDE_CONVERSATION_GONE) {
+  if (row.lastErrorKind === "conversation-gone") {
     return { kind: "refused", reason: CLAUDE_CONVERSATION_GONE };
   }
   return row.sessionId
@@ -1255,8 +1301,13 @@ export interface InstanceRow {
   keepAlive?: KeepAlive;
   /** `mainline`, `scratch` for a spin-off, or `summariser`, never on the board. */
   kind: string;
-  /** What killed the session, on a row the agent reported as `error`. */
+  /** What killed the session, on a row the agent reported as `error`: words a person reads. */
   lastError?: string | null;
+  /**
+   * What `lastError` was, typed where it was found; null when no producer
+   * typed it. What every decision about the row reads, `relaunchOf` first.
+   */
+  lastErrorKind?: LastErrorKind | null;
   lastRequestAt?: string | number | Date | null;
   /**
    * Whether `cwd` is the launch directory: `known`; `unread`, still to be read

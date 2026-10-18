@@ -69,7 +69,6 @@ import {
   ASK_USER_QUESTION,
   BOUNDARY_RELAUNCH,
   CAWCO_ENV,
-  CLAUDE_CONVERSATION_GONE,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_FORGET_ACCOUNT,
@@ -85,6 +84,7 @@ import {
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_WITHDRAW_SEND,
+  conversationGone,
   EFFORT_READ,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
@@ -281,7 +281,7 @@ export const processEnded = async (
     return;
   }
   if (conversationKept && !(await conversationKept())) {
-    ctx.failed(new Error(CLAUDE_CONVERSATION_GONE));
+    ctx.failed(conversationGone());
     return;
   }
   ctx.failed(new Error(CRASHED));
@@ -3974,7 +3974,7 @@ export class ClaudeHarness implements Harness {
       // its origin's account, and its origin may be running.
       if (spec.resume.fork) {
         if (!(await conversationKept?.())) {
-          throw new Error(CLAUDE_CONVERSATION_GONE);
+          throw conversationGone();
         }
       } else {
         const carried = (
@@ -3986,7 +3986,7 @@ export class ClaudeHarness implements Harness {
           );
         }
         if (!(await conversationKept?.())) {
-          throw new Error(CLAUDE_CONVERSATION_GONE);
+          throw conversationGone();
         }
       }
     }

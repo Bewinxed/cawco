@@ -5493,7 +5493,7 @@ export async function ensureAlive(
     // harness never began one; not at all when its conversation is gone.
     const plan = relaunchOf({
       sessionId: resumeKeyFor(instanceId),
-      lastError: row.lastError,
+      lastErrorKind: row.lastErrorKind,
     });
     if (plan.kind === "refused") {
       throw new Error(plan.reason);
@@ -7877,7 +7877,7 @@ export async function relaunchSession(
   // when its conversation is gone.
   const plan = relaunchOf({
     sessionId: resumeKeyFor(instanceId),
-    lastError: instanceIndex.byId.get(instanceId)?.lastError ?? null,
+    lastErrorKind: instanceIndex.byId.get(instanceId)?.lastErrorKind ?? null,
   });
   if (plan.kind === "refused") {
     throw new Error(plan.reason);

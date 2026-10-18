@@ -120,8 +120,10 @@ const signalled = async (kit: Kit): Promise<void> => {
     await import("../../../packages/agent/src/sessiond-client");
   const { processEnded } =
     await import("../../../packages/agent/src/harnesses/claude");
-  const { CLAUDE_CONVERSATION_GONE } =
-    await import("../../../packages/core/src/index");
+  const { CLAUDE_CONVERSATION_GONE, ...core } =
+    (await import("../../../packages/core/src/index")) as typeof import("../../../packages/core/src/index") & {
+      lastErrorKindOf?: (error: unknown) => string | undefined;
+    };
   let listener:
     | { exit?: (code: number | null, signal: NodeJS.Signals | null) => void }
     | undefined;
@@ -191,6 +193,11 @@ const signalled = async (kit: Kit): Promise<void> => {
     "A: a resumed conversation's CLI that exits 1 with its transcript gone is that conversation gone",
     failed instanceof Error && failed.message === CLAUDE_CONVERSATION_GONE,
     `died ${died}, failed ${String(failed)}`
+  );
+  kit.check(
+    "H: that failure carries its typed kind, conversation-gone, which the agent's error frame sends beside its words",
+    core.lastErrorKindOf?.(failed) === "conversation-gone",
+    `kind ${String(core.lastErrorKindOf?.(failed))}`
   );
 };
 
@@ -649,17 +656,190 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
   }
 };
 
+/**
+ * G: Claude Code's error in place of an answer, read for its account's
+ * credential by its SDK `error` alone: `authentication_failed` signs the
+ * account out whatever its words, and `server_error` (the CLI's refresh race
+ * among its causes) is no sign-out and no race. Read by the hub's own
+ * decision (accounts.ts), or, where a build has none, its word match.
+ */
+const credential = async (kit: Kit): Promise<void> => {
+  const accounts =
+    (await import("../../../packages/hub/src/accounts")) as Record<
+      string,
+      unknown
+    > & {
+      claudeCredentialRefused?: (
+        error: string | undefined,
+        text: string
+      ) => { reason: string } | undefined;
+      claudeCredentialWord?: (
+        error: string | undefined,
+        text: string
+      ) => { kind: "refused" | "raced" } | undefined;
+    };
+  const read = (error: string, text: string): string => {
+    if (accounts.claudeCredentialRefused) {
+      return accounts.claudeCredentialRefused(error, text)
+        ? "signed out"
+        : "kept";
+    }
+    const word = accounts.claudeCredentialWord?.(error, text);
+    if (word?.kind === "refused") {
+      return "signed out";
+    }
+    return word?.kind === "raced" ? "raced" : "kept";
+  };
+  const refused = read(
+    "authentication_failed",
+    "Anmeldung abgelaufen · Bitte /login ausführen"
+  );
+  kit.check(
+    "G: an assistant error authentication_failed signs its account out, whatever its words",
+    refused === "signed out",
+    refused
+  );
+  const server = read(
+    "server_error",
+    "Failed to refresh OAuth token: another Claude Code process is refreshing it. This is usually transient; retry in a minute."
+  );
+  kit.check(
+    "G: an assistant error server_error is no sign-out and no race re-send, whatever its words",
+    server === "kept",
+    server
+  );
+};
+
+/**
+ * H: a failed session's kind is a column (`last_error_kind`), and the hub
+ * decides by it: the realistic database (hub fixtures, a published
+ * nightly's) with one row filed in the hub's old words for a conversation
+ * gone and one in its words for a restart with nothing to resume, opened by
+ * an in-process hub, which migrates it. The first reads `conversation-gone`
+ * and is refused a relaunch; the second reads `restart-lost`. Then a row failed in other words with the
+ * kind is refused, and one failed in the conversation-gone words without it
+ * resumes: the words decide nothing.
+ */
+const lastErrorKinds = async (kit: Kit, scratch: string): Promise<void> => {
+  const { Database } = await import("bun:sqlite");
+  const { CLAUDE_CONVERSATION_GONE, RESTART_LOST, relaunchOf } =
+    await import("../../../packages/core/src/index");
+  const dbPath = join(scratch, "hub", "hub.db");
+  await mkdir(join(scratch, "hub"), { recursive: true });
+  await writeFile(
+    dbPath,
+    Bun.gunzipSync(
+      new Uint8Array(
+        await Bun.file(
+          join(
+            import.meta.dir,
+            "../../../packages/hub/fixtures/realistic-db.sqlite.gz"
+          )
+        ).arrayBuffer()
+      )
+    )
+  );
+  const sqlite = new Database(dbPath, { readwrite: true });
+  const ids = sqlite
+    .query<{ id: string }, []>(
+      "SELECT id FROM instances WHERE session_id IS NOT NULL AND end_intent IS NULL AND machine_removed = 0 AND status != 'discarded' ORDER BY id LIMIT 4"
+    )
+    .all()
+    .map(({ id }) => id);
+  const [gone = "", restarted = "", typed = "", worded = ""] = ids;
+  sqlite
+    .query("UPDATE instances SET status = 'error', last_error = ? WHERE id = ?")
+    .run(CLAUDE_CONVERSATION_GONE, gone);
+  sqlite
+    .query("UPDATE instances SET status = 'error', last_error = ? WHERE id = ?")
+    .run(RESTART_LOST, restarted);
+  sqlite.close();
+  const { DB_PATH } = await import("../../../packages/hub/src/config");
+  if (DB_PATH !== dbPath) {
+    kit.check(
+      "H: the in-process hub opens the scratch database",
+      false,
+      `config's DB_PATH is ${DB_PATH}, not ${dbPath}`
+    );
+    return;
+  }
+  const { hubInProcess } =
+    await import("../../../packages/hub/scripts/hub-in-process");
+  const { db, lifetime } = await hubInProcess(dbPath, join(scratch, "home"));
+  try {
+    const row = (id: string) => {
+      const [found] = db.getInstancesByIds([id]);
+      return found as
+        (typeof found & { lastErrorKind?: string | null }) | undefined;
+    };
+    const migrated = row(gone);
+    kit.check(
+      "H: a row stored in the hub's words for a conversation gone reads last_error_kind conversation-gone once migrated, and is refused a relaunch",
+      migrated?.lastErrorKind === "conversation-gone" &&
+        relaunchOf(migrated).kind === "refused",
+      JSON.stringify({
+        status: migrated?.status,
+        lastErrorKind: migrated?.lastErrorKind,
+        relaunch: migrated && relaunchOf(migrated),
+      })
+    );
+    const lost = row(restarted);
+    kit.check(
+      "H: a row stored in the hub's words for a restart with nothing to resume reads last_error_kind restart-lost once migrated",
+      lost?.lastErrorKind === "restart-lost",
+      JSON.stringify({
+        status: lost?.status,
+        lastErrorKind: lost?.lastErrorKind,
+      })
+    );
+    (db.failInstance as (id: string, error: string, kind?: string) => void)(
+      typed,
+      "Die Unterhaltung ist fort und kann nicht fortgesetzt werden.",
+      "conversation-gone"
+    );
+    db.failInstance(worded, CLAUDE_CONVERSATION_GONE);
+    const byKind = row(typed);
+    const byWords = row(worded);
+    kit.check(
+      "H: a session failed with the kind conversation-gone is refused a relaunch, whatever its words",
+      byKind?.lastErrorKind === "conversation-gone" &&
+        relaunchOf(byKind).kind === "refused",
+      JSON.stringify({
+        lastErrorKind: byKind?.lastErrorKind,
+        relaunch: byKind && relaunchOf(byKind),
+      })
+    );
+    kit.check(
+      "H: a session failed in the conversation-gone words with no kind resumes: words decide nothing",
+      byWords !== undefined &&
+        (byWords.lastErrorKind ?? null) === null &&
+        relaunchOf(byWords).kind === "resume",
+      JSON.stringify({
+        lastErrorKind: byWords?.lastErrorKind,
+        relaunch: byWords && relaunchOf(byWords),
+      })
+    );
+  } finally {
+    lifetime.close();
+  }
+};
+
 const spec: Spec = {
   name: "typed-causes",
   run: async (kit: Kit) => {
     const scratch = await mkdtemp(
       join(process.env.TMPDIR ?? tmpdir(), "typed-causes-")
     );
+    // The hub modules these legs import read their database's path once, at
+    // their first import: the scratch one, from before any of them.
+    process.env.CAWCO_DB_PATH = join(scratch, "hub", "hub.db");
     try {
       await signalled(kit);
       await providerLimit(kit, scratch);
       await germanPlace(kit, scratch);
       await germanRace(kit, scratch);
+      await credential(kit);
+      await lastErrorKinds(kit, scratch);
       await trailerless(kit, scratch);
       await sshJoin(kit, scratch);
     } finally {

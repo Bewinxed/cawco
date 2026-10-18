@@ -1189,6 +1189,9 @@ export const instances = sqliteTable("instances", {
     .default("starting"),
   /** Why the session died, for a dashboard that was not watching when it did. */
   lastError: text("last_error"),
+  /** What `lastError` was, typed where it was found (core `LastErrorKind`); null when nothing typed it. */
+  lastErrorKind:
+    text("last_error_kind").$type<import("@cawco/core").LastErrorKind>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

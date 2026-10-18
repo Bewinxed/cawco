@@ -129,6 +129,7 @@ import {
   artifactCommentsNotice,
   artifactHandedNotice,
   artifactResponsesNotice,
+  asLastErrorKind,
   atProviderLimit,
   attachedFileLine,
   attachedFileName,
@@ -228,6 +229,7 @@ import {
   invariant,
   isEffortLevel,
   joinProviders,
+  type LastErrorKind,
   LIMIT_REACHED,
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
@@ -3554,7 +3556,7 @@ export const createServer = (
    */
   const wakesForSend = (row: {
     id: string;
-    lastError: string | null;
+    lastErrorKind: LastErrorKind | null;
     sessionId: string | null;
     status: string;
   }): boolean =>
@@ -4309,10 +4311,10 @@ export const createServer = (
   const inputRefusal = (
     instanceId: string,
     origin: NeutralOrigin
-  ): { reason: string; refusal?: SendRefusal } | undefined => {
+  ): { gone?: true; reason: string; refusal?: SendRefusal } | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
-    if (row?.lastError === CLAUDE_CONVERSATION_GONE) {
-      return { reason: CLAUDE_CONVERSATION_GONE };
+    if (row?.lastErrorKind === "conversation-gone") {
+      return { reason: CLAUDE_CONVERSATION_GONE, gone: true };
     }
     // A send to a session whose process is gone wakes it ({@link wakeForSend}),
     // fresh when its harness never began a conversation (core `relaunchOf`);
@@ -7652,7 +7654,7 @@ export const createServer = (
     const refused = keepAlive
       ? undefined
       : inputRefusal(instanceId, message.origin);
-    if (refused?.reason === CLAUDE_CONVERSATION_GONE) {
+    if (refused?.gone) {
       throw new WorkItemRefusal(409, refused.reason);
     }
     const [target] = db.getInstancesByIds([instanceId]);
@@ -14146,7 +14148,7 @@ export const createServer = (
       !registry.agent(row.machineId) ||
       db.ownedInstance(row.id, row.machineId)?.machineRemoved ||
       db.ownedInstance(row.id, row.machineId)?.endIntent ||
-      (!reattachOnly && row.lastError === CLAUDE_CONVERSATION_GONE)
+      (!reattachOnly && row.lastErrorKind === "conversation-gone")
     ) {
       return;
     }
@@ -21031,13 +21033,14 @@ export const createServer = (
   const processFailed = (
     machineId: string,
     instanceId: string,
-    reason: string
+    reason: string,
+    kind?: LastErrorKind
   ): void => {
     turnWaiters.get(instanceId)?.reject(new Error(reason));
-    db.failInstance(instanceId, reason);
+    db.failInstance(instanceId, reason, kind);
     sayNestedBoundaryFix(reason);
     workflowRuntime.observe(instanceId, reason);
-    losePending(instanceId, reason !== CLAUDE_CONVERSATION_GONE, reason);
+    losePending(instanceId, kind !== "conversation-gone", reason);
     escalateRoutedAsks(instanceId);
     push.sessionFailed(instanceId, reason);
     publishInstances(machineId);
@@ -28892,7 +28895,8 @@ export const createServer = (
                   message.machineId,
                   message.instanceId,
                   peek(message.payload, "message")?.trim() ||
-                    `The session's process on ${machineName(message.machineId)} failed, and its agent sent no words for why.`
+                    `The session's process on ${machineName(message.machineId)} failed, and its agent sent no words for why.`,
+                  asLastErrorKind(peek(message.payload, "lastErrorKind"))
                 );
               }
               // An install answering, whoever asked for it: the cell is the hub's

@@ -26657,6 +26657,9 @@
                   "string"
                 ]
               },
+              "lastErrorKind": {
+                "$ref": "#/components/schemas/ErrorFrameLastErrorKind"
+              },
               "updatedAt": {
                 "type": "string",
                 "format": "date-time"
@@ -26893,6 +26896,9 @@
                     "null",
                     "string"
                   ]
+                },
+                "lastErrorKind": {
+                  "$ref": "#/components/schemas/ErrorFrameLastErrorKind"
                 },
                 "updatedAt": {
                   "type": "string",
@@ -51191,11 +51197,15 @@
             "type": "string"
           },
           "lastError": {
-            "description": "What killed the session, on a row the agent reported as `error`.",
+            "description": "What killed the session, on a row the agent reported as `error`: words a person reads.",
             "type": [
               "null",
               "string"
             ]
+          },
+          "lastErrorKind": {
+            "$ref": "#/components/schemas/ErrorFrameLastErrorKind",
+            "description": "What `lastError` was, typed where it was found; null when no producer\ntyped it. What every decision about the row reads, `relaunchOf` first."
           },
           "lastRequestAt": {
             "anyOf": [
@@ -51376,7 +51386,7 @@
         ]
       },
       "InstanceStatus": {
-        "description": "What a session row is doing, right now, as the hub last heard it.\n\n- `starting` — a spawn went out and hasn't been confirmed live yet.\n- `running` — the owning daemon currently lists the instance.\n- `sleeping` — no live process, but it runs again: on the session id its\n  harness picks back up from, or fresh under its id when it never named\n  one ({@link relaunchOf}). `sleeping` rows carry `lastError: null` — nothing\n  went wrong, there's just nothing running.\n- `stopping` — an end (stop, discard, or a delete that waits on its\n  process) is recorded and owed to its machine, which has not yet\n  confirmed the process is gone. It may still be running. Its machine's\n  confirmation files it `stopped` (or `discarded`); an away machine leaves\n  it here until it is back and confirms. For everything that asks whether\n  the person ended it (filters, the Finished list, wake and resume\n  gating), it is ended; for everything that asks whether a process\n  remains, it is not gone yet.\n- `stopped` — deliberate: the operator (or a `stop` call) ended it, and its\n  machine confirmed the process gone.\n- `error` — an actual failure. `lastError` is required here, and this is\n  where {@link RESTART_LOST} still lands: a restart with nothing to resume\n  from is a real loss, not a nap.\n- `unknown` — the machine that owns this row can't currently be reached, so\n  the hub can't say which of the above is true.\n- `discarded` — a spin-off torn down on purpose; gone for good.\n- `moving` — its project is moving to its machine for it (move.ts): the hub\n  holds the row from the move's start, under the id the session starts\n  under, and the move's start takes it on to `starting`. No process, and\n  none is claimed: a failed move files it `error`, a cancelled one drops it.",
+        "description": "What a session row is doing, right now, as the hub last heard it.\n\n- `starting` — a spawn went out and hasn't been confirmed live yet.\n- `running` — the owning daemon currently lists the instance.\n- `sleeping` — no live process, but it runs again: on the session id its\n  harness picks back up from, or fresh under its id when it never named\n  one ({@link relaunchOf}). `sleeping` rows carry `lastError: null` — nothing\n  went wrong, there's just nothing running.\n- `stopping` — an end (stop, discard, or a delete that waits on its\n  process) is recorded and owed to its machine, which has not yet\n  confirmed the process is gone. It may still be running. Its machine's\n  confirmation files it `stopped` (or `discarded`); an away machine leaves\n  it here until it is back and confirms. For everything that asks whether\n  the person ended it (filters, the Finished list, wake and resume\n  gating), it is ended; for everything that asks whether a process\n  remains, it is not gone yet.\n- `stopped` — deliberate: the operator (or a `stop` call) ended it, and its\n  machine confirmed the process gone.\n- `error` — an actual failure. `lastError` is required here, and this is\n  where {@link RESTART_LOST} still lands (`lastErrorKind` `restart-lost`): a\n  restart with nothing to resume from is a real loss, not a nap.\n- `unknown` — the machine that owns this row can't currently be reached, so\n  the hub can't say which of the above is true.\n- `discarded` — a spin-off torn down on purpose; gone for good.\n- `moving` — its project is moving to its machine for it (move.ts): the hub\n  holds the row from the move's start, under the id the session starts\n  under, and the move's start takes it on to `starting`. No process, and\n  none is claimed: a failed move files it `error`, a cancelled one drops it.",
         "type": "string",
         "enum": [
           "discarded",
@@ -52062,6 +52072,10 @@
             "enum": [
               "error"
             ]
+          },
+          "lastErrorKind": {
+            "$ref": "#/components/schemas/ErrorFrameLastErrorKind",
+            "description": "A failed session's typed kind, when what failed typed it (core `KindedError`); `message` is its words."
           },
           "message": {
             "type": "string"
@@ -53752,6 +53766,13 @@
           "plugin",
           "project",
           "user"
+        ]
+      },
+      "ErrorFrameLastErrorKind": {
+        "type": "string",
+        "enum": [
+          "conversation-gone",
+          "restart-lost"
         ]
       },
       "FindConversationOutcome": {

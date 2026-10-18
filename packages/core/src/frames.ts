@@ -19,6 +19,7 @@ import type {
   ContinuationJob,
   DelegateEvent,
   InstanceRow,
+  LastErrorKind,
   PreviewSource,
   SessionPulse,
   Verb,
@@ -537,6 +538,8 @@ export interface ErrorFrame {
   instanceId?: string;
   /** Hub-originated routing failures (e.g. target machine offline). */
   kind: "error";
+  /** A failed session's typed kind, when what failed typed it (core `KindedError`); `message` is its words. */
+  lastErrorKind?: LastErrorKind;
   message: string;
   requestId?: string;
   verb?: Verb;

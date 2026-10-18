@@ -348,7 +348,7 @@ public final class SessionDetailsController: ObservedViewController {
         }
         guard let row else { return }
         // On its own conversation, or fresh under the same id before its first message.
-        let plan = HubConnection.Relaunch.of(sessionId: row.sessionId, lastError: row.lastError)
+        let plan = HubConnection.Relaunch.of(sessionId: row.sessionId, lastErrorKind: row.lastErrorKind, lastError: row.lastError)
         if case let .refused(reason) = plan {
             relaunchFailure = reason
             requestRefresh()

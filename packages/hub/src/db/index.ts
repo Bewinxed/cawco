@@ -53,6 +53,7 @@ import type {
 import {
   CLAUDE_CONVERSATION_GONE,
   CONTINUATION_ORIGIN,
+  type LastErrorKind,
   placedOnly,
   REMOVED_MACHINE,
   RESTART_LOST,
@@ -803,8 +804,15 @@ export interface DbShape {
     id: string,
     intent: SessionEndIntent
   ) => typeof instances.$inferSelect | undefined;
-  /** The agent reported the session dead: what killed it, kept for late readers. */
-  readonly failInstance: (id: string, error: string) => void;
+  /**
+   * The agent reported the session dead: what killed it, kept for late
+   * readers, and its kind when what failed typed it (core `LastErrorKind`).
+   */
+  readonly failInstance: (
+    id: string,
+    error: string,
+    kind?: LastErrorKind
+  ) => void;
   /** What the find engine reads (find.ts), and when the person last looked at each session. */
   readonly find: FindDb;
   /** Transcript deletion follows confirmed process exit, never precedes it. */
@@ -3942,6 +3950,7 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(instances)
         .set({
           lastError: error,
+          lastErrorKind: null,
           endReason: error,
           endAttempts: row.endAttempts + 1,
           endRetryAt: new Date(
@@ -4787,6 +4796,7 @@ const make = async (path: string): Promise<DbShape> => {
             endRetryAt: null,
             endAttempts: 0,
             lastError: null,
+            lastErrorKind: null,
             ...(cleanSessionId ? { sessionId: cleanSessionId } : {}),
             // A start with no conversation to resume begins one from nothing.
             ...(cleanSessionId ? {} : { modelUsageSeen: {} }),
@@ -4841,7 +4851,7 @@ const make = async (path: string): Promise<DbShape> => {
     settleMovingInstance: (id, status, lastError) =>
       db
         .update(instances)
-        .set({ status, lastError: lastError ?? null })
+        .set({ status, lastError: lastError ?? null, lastErrorKind: null })
         .where(
           and(
             eq(instances.id, id),
@@ -4944,7 +4954,7 @@ const make = async (path: string): Promise<DbShape> => {
     sleepInstance: (id) =>
       db
         .update(instances)
-        .set({ status: "sleeping", lastError: null })
+        .set({ status: "sleeping", lastError: null, lastErrorKind: null })
         .where(
           and(
             eq(instances.id, id),
@@ -4960,11 +4970,16 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
-    failInstance: (id, error) => {
+    failInstance: (id, error, kind) => {
       // A spin-off that was thrown away stays thrown away: its teardown can
       // fail long after the session did, and it is not coming back as a row.
       db.update(instances)
-        .set({ status: "error", lastError: error, updatedAt: new Date() })
+        .set({
+          status: "error",
+          lastError: error,
+          lastErrorKind: kind ?? null,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(instances.id, id),
@@ -5350,7 +5365,11 @@ const make = async (path: string): Promise<DbShape> => {
         // A previously failed resume is checked too, without launching it again.
         // A process still running is not a conversation gone, catalogued or not.
         db.update(instances)
-          .set({ status: "error", lastError: CLAUDE_CONVERSATION_GONE })
+          .set({
+            status: "error",
+            lastError: CLAUDE_CONVERSATION_GONE,
+            lastErrorKind: "conversation-gone",
+          })
           .where(
             and(
               eq(instances.machineId, machineId),
@@ -5383,7 +5402,7 @@ const make = async (path: string): Promise<DbShape> => {
         // hub correcting itself, not the session doing anything. Stamping it
         // here dated every live session on the machine to the register.
         db.update(instances)
-          .set({ status: "running", lastError: null })
+          .set({ status: "running", lastError: null, lastErrorKind: null })
           .where(
             and(
               eq(instances.machineId, machineId),
@@ -5428,7 +5447,7 @@ const make = async (path: string): Promise<DbShape> => {
         // at admission, and its CLI waited on a question nobody was shown.
         if (held.has(row.id)) {
           db.update(instances)
-            .set({ status: "starting", lastError: null })
+            .set({ status: "starting", lastError: null, lastErrorKind: null })
             .where(eq(instances.id, row.id))
             .run();
           return { row, resumes: true };
@@ -5453,8 +5472,12 @@ const make = async (path: string): Promise<DbShape> => {
         db.update(instances)
           .set(
             resumes
-              ? { status: "sleeping", lastError: null }
-              : { status: "error", lastError: RESTART_LOST }
+              ? { status: "sleeping", lastError: null, lastErrorKind: null }
+              : {
+                  status: "error",
+                  lastError: RESTART_LOST,
+                  lastErrorKind: "restart-lost",
+                }
           )
           .where(eq(instances.id, row.id))
           .run();
@@ -5482,7 +5505,7 @@ const make = async (path: string): Promise<DbShape> => {
               // below omits `running`: a promotion is the hub agreeing with the
               // beat, not the session moving. It used to be stamped here, which
               // dated every session the beat corrected to the beat itself.
-              .set({ status: "running", lastError: null })
+              .set({ status: "running", lastError: null, lastErrorKind: null })
               .where(
                 and(
                   eq(instances.machineId, machineId),
@@ -5535,7 +5558,7 @@ const make = async (path: string): Promise<DbShape> => {
       // `settleInstances` files it: asleep, nothing lost.
       for (const row of gone) {
         db.update(instances)
-          .set({ status: "sleeping", lastError: null })
+          .set({ status: "sleeping", lastError: null, lastErrorKind: null })
           .where(eq(instances.id, row.id))
           .run();
       }
@@ -5545,7 +5568,7 @@ const make = async (path: string): Promise<DbShape> => {
     markInstanceLive: (id) =>
       db
         .update(instances)
-        .set({ status: "running", lastError: null })
+        .set({ status: "running", lastError: null, lastErrorKind: null })
         .where(
           and(
             eq(instances.id, id),
@@ -5585,7 +5608,7 @@ const make = async (path: string): Promise<DbShape> => {
     markInstanceAttaching: (id) =>
       db
         .update(instances)
-        .set({ status: "starting", lastError: null })
+        .set({ status: "starting", lastError: null, lastErrorKind: null })
         .where(
           and(
             eq(instances.id, id),
@@ -5601,7 +5624,7 @@ const make = async (path: string): Promise<DbShape> => {
       }
       // Resumed on its conversation, or fresh when it never named one.
       db.update(instances)
-        .set({ status: "sleeping", lastError: null })
+        .set({ status: "sleeping", lastError: null, lastErrorKind: null })
         .where(eq(instances.id, id))
         .run();
       return true;

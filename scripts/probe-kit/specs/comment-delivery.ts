@@ -451,10 +451,9 @@ const endedWriterChecks = async (
   const db = new Database(fleet.env.CAWCO_DB_PATH as string);
   try {
     db.exec("PRAGMA busy_timeout = 15000");
-    db.query("UPDATE instances SET last_error = ? WHERE id = ?").run(
-      CLAUDE_CONVERSATION_GONE,
-      writer
-    );
+    db.query(
+      "UPDATE instances SET last_error = ?, last_error_kind = 'conversation-gone' WHERE id = ?"
+    ).run(CLAUDE_CONVERSATION_GONE, writer);
   } finally {
     db.close();
   }

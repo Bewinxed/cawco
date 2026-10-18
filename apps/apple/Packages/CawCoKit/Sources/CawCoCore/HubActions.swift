@@ -87,8 +87,14 @@ extension HubConnection {
         /// Core `CLAUDE_CONVERSATION_GONE`: the row's `lastError` when its conversation can't be resumed.
         public static let conversationGone = "This Claude Code conversation is gone and cannot be resumed. Start a new session to continue working."
 
-        public static func of(sessionId: String?, lastError: String?) -> Relaunch {
-            if lastError == conversationGone { return .refused(conversationGone) }
+        /// Refused when the row's `lastErrorKind` is `conversation-gone`. A hub from
+        /// before the kind sends none, and its `lastError` words are what it says.
+        public static func of(sessionId: String?, lastErrorKind: OpenEnums.ErrorFrameLastErrorKind?, lastError: String?) -> Relaunch {
+            if let lastErrorKind {
+                if case .conversationGone = lastErrorKind { return .refused(lastError ?? conversationGone) }
+            } else if lastError == conversationGone {
+                return .refused(conversationGone)
+            }
             return sessionId.map { .resume(sessionKey: $0) } ?? .fresh
         }
     }

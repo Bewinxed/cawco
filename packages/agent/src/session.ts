@@ -75,6 +75,7 @@ import {
   INSTALL_SESSION_CREDENTIAL,
   LIMIT_REACHED,
   type LimitHolder,
+  lastErrorKindOf,
   limitSentence,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -4047,12 +4048,14 @@ export class SessionSupervisor {
       warn(`${instanceId}: ${said}`);
     }
     this.#failures.set(instanceId, message);
+    const lastErrorKind = lastErrorKindOf(error);
     const frame = {
       kind: "error" as const,
       instanceId,
       processGeneration,
       verb: "spawn" as const,
       message,
+      ...(lastErrorKind ? { lastErrorKind } : {}),
     };
     // The hub fails the row and its work item on this frame alone. One that
     // could not go out now goes out on the next connection.

@@ -422,7 +422,7 @@ async function answerLost(p: Probe): Promise<void> {
 async function refused(p: Probe): Promise<void> {
   // The hub's own refusal of a send (server.ts `inputRefusal`): its session's conversation is gone.
   p.fleet.write(
-    "UPDATE instances SET last_error = ? WHERE id = ?",
+    "UPDATE instances SET last_error = ?, last_error_kind = 'conversation-gone' WHERE id = ?",
     CLAUDE_CONVERSATION_GONE,
     p.session
   );
