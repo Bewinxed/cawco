@@ -313,7 +313,7 @@
               <Collapsible.Content fade reveal>
                 <ol
                   data-slot="inner"
-                  class="m-0 flex list-none flex-col gap-space-2 pt-space-2 pr-0 pb-0 pl-space-5"
+                  class="m-0 flex list-none flex-col gap-space-2 pt-space-2 pe-0 pb-0 ps-space-5"
                 >
                   {#each piece.lines as each (`${each.at}-${each.text}`)}
                     {@render line(each)}
