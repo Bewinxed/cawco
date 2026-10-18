@@ -159,7 +159,7 @@
 <div
   data-slot="list"
   class={[
-    "flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain has-data-stuck:mask-(--stuck-fade) max-phone:max-h-(--list-max-phone) [&>[data-slot=section]+[data-slot=section]]:mt-space-2 [&>[data-slot=section]+[data-slot=section]]:border-t [&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid/(--tab-rim-mix) [&>[data-slot=section]+[data-slot=section]]:pt-space-2 contrast-more:[&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid",
+    "flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain scrollbar-gutter-stable has-data-stuck:mask-(--stuck-fade) max-phone:max-h-(--list-max-phone) [&>[data-slot=section]+[data-slot=section]]:mt-space-2 [&>[data-slot=section]+[data-slot=section]]:border-t [&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid/(--tab-rim-mix) [&>[data-slot=section]+[data-slot=section]]:pt-space-2 contrast-more:[&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid",
     overflowing && "kit-edge-fade-block",
   ]}
   data-safe-bottom
