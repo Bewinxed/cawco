@@ -2144,7 +2144,7 @@
   <!-- No Claude account can take it on this machine: why, beside Start,
        and where to sign one in. -->
   {#if placementRefusal}
-    <div class="full-send" data-vaul-no-drag in:unfold|global out:unfold>
+    <div class="start-notice" data-vaul-no-drag in:unfold|global out:unfold>
       <Alert role="status" variant="warning">
         <IconKey />
         <AlertTitle>{placementRefusal}</AlertTitle>
@@ -2159,7 +2159,7 @@
   <!-- The chosen permission mode can't go out on this machine: why, beside
        Start, which waits for a mode the machine takes. -->
   {#if modeRefused && !placementRefusal}
-    <div class="full-send" data-vaul-no-drag in:unfold|global out:unfold>
+    <div class="start-notice" data-vaul-no-drag in:unfold|global out:unfold>
       <Alert role="status" variant="warning">
         <IconShield />
         <AlertTitle>{modeRefused}</AlertTitle>
@@ -2169,7 +2169,7 @@
   <!-- Full Send in the form, however it got there, stands outside the body's
        scroll, beside Start: it is in view whenever the form can start. -->
   {#if fullSendWarning}
-    <div class="full-send" data-vaul-no-drag in:unfold|global out:unfold>
+    <div class="start-notice" data-vaul-no-drag in:unfold|global out:unfold>
       <Alert role="status" variant="warning">
         <IconShield />
         <AlertTitle
@@ -2199,7 +2199,8 @@
   .footer {
     display: contents;
   }
-  .full-send {
+  /* A notice beside Start, outside the body's scroll: a refusal, a mode the machine won't take, or Full Send on. */
+  .start-notice {
     flex: none;
     padding-top: var(--space-2);
   }
