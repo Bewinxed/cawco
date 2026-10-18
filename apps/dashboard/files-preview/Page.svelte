@@ -3,29 +3,27 @@
    * The page the owner picks on: Files on a desk, floating over the page
    * from its item in the bar's glass group; the one decision, how the count
    * shows on that item (its two answers side by side, each with its Pick);
-   * then the phone's drawer from the right and the session card's Files
-   * chip.
+   * then the phone's bottom drawer, opened from Files in the phone's glass.
    */
   import { Button } from "#lib/components/ui/button/index.js";
-  import { filesOf } from "./fixtures";
   import Frame from "./Frame.svelte";
-  import SessionCard from "./SessionCard.svelte";
-
-  const files = filesOf("typical");
-  const count = files.artifacts.length + files.attachments.length;
 
   const STAGES = [
     { src: "stage=closed", label: "Closed" },
     { src: "stage=open", label: "Files open" },
     {
       src: "stage=picked",
-      label: "A file chosen: Files hanging on the right, the file floating on the left",
+      label:
+        "A file chosen: Files hanging on the right, the file floating on the left",
     },
     {
       src: "stage=open&q=pricing",
       label: "Searching “pricing”: names and what is in them",
     },
-    { src: "stage=open&q=invoice", label: "Searching “invoice”: nothing matches" },
+    {
+      src: "stage=open&q=invoice",
+      label: "Searching “invoice”: nothing matches",
+    },
   ] as const;
 
   const TAKES = [
@@ -43,7 +41,7 @@
 
   const PULLS = [
     { pull: "closed", label: "Closed" },
-    { pull: "open", label: "Open, from the card's Files chip" },
+    { pull: "open", label: "Open, from Files beside Caw" },
   ] as const;
 </script>
 
@@ -60,8 +58,8 @@
     <h2 id="desk">On a desk</h2>
     <p class="aside">
       Files hangs from the icon group, one shape with it, as the machines and
-      Jump do, and the conversation stays where it is. A chosen file floats on
-      the left, so the conversation shows between the two. The conversation
+      Jump do, and the conversation stays where it is. A chosen file floats
+      beside Files, on its left, the two tops on one line. The conversation
       behind is today's screen.
     </p>
     <div class="desks">
@@ -104,7 +102,9 @@
               title="The bar's icon group: {take.name}"
               width={420}
             />
-            <figcaption>The end of the bar, enlarged where there is room</figcaption>
+            <figcaption>
+              The end of the bar, enlarged where there is room
+            </figcaption>
           </figure>
         </article>
       {/each}
@@ -114,8 +114,9 @@
   <section aria-labelledby="phone" class="block">
     <h2 id="phone">On a phone</h2>
     <p class="aside">
-      The house drawer from the right. The session card's Files chip opens it;
-      a finger drags it back out to the right to put it away.
+      The house drawer from the bottom. Files, beside Caw at the top of the
+      screen, opens it; a finger drags it down to its lower stop, and on down to
+      put it away.
     </p>
     <div class="phones">
       {#each PULLS as each (each.pull)}
@@ -130,14 +131,6 @@
         </figure>
       {/each}
     </div>
-  </section>
-
-  <section aria-labelledby="card" class="block">
-    <h2 id="card">The session card</h2>
-    <p class="aside">
-      A Files chip joins its settings. It opens Files and puts the card away.
-    </p>
-    <SessionCard {count} />
   </section>
 </main>
 
@@ -216,9 +209,6 @@
     gap: var(--space-4);
     min-inline-size: 0;
   }
-  .take .shot {
-    max-inline-size: 840px;
-  }
   .take-head {
     display: flex;
     align-items: flex-start;
@@ -252,6 +242,9 @@
       color: var(--ink-muted);
       font: var(--type-meta);
     }
+  }
+  .take .shot {
+    max-inline-size: 840px;
   }
   .phones {
     display: grid;

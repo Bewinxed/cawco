@@ -46,7 +46,10 @@ export default defineConfig({
         find: /^\$app\/navigation$/,
         replacement: join(here, "app/navigation.ts"),
       },
-      { find: /^\$app\/state$/, replacement: join(here, "app/state.svelte.ts") },
+      {
+        find: /^\$app\/state$/,
+        replacement: join(here, "app/state.svelte.ts"),
+      },
     ],
   },
   build: {

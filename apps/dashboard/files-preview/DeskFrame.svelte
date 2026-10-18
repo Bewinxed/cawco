@@ -5,9 +5,10 @@
    * the bar's glass as its other cards do (FilesGlass, GlassCard's
    * HangCard): one shape with the glass, drawn down out of its foot, the
    * glass drawing its join while it stands. Choosing an artifact opens it
-   * floating at the page's leading side, the preview's head and well as
-   * today, at the split's share of the page, so the conversation shows
-   * between the two. Neither moves the conversation; no scrim.
+   * floating beside Files on its leading side, the two tops on one line,
+   * the preview's head and well as today, at the split's share of the page,
+   * so the conversation shows past it. Neither moves the conversation; no
+   * scrim.
    */
   import { untrack } from "svelte";
   import ArtifactShown from "./ArtifactShown.svelte";
@@ -55,7 +56,11 @@
 </script>
 
 <div class="desk" data-stage={stage}>
-  <div aria-hidden="true" class="rail shot" style:--shot="url({shotDesk})"></div>
+  <div
+    aria-hidden="true"
+    class="rail shot"
+    style:--shot="url({shotDesk})"
+  ></div>
   <div class="bar shot" style:--shot="url({shotDesk})">
     <div class="bar-end">
       <BarGlass
@@ -101,11 +106,14 @@
   .desk {
     --bar: 44px;
     --rail: 228px;
-    /* The room under the bar, less the popover's 4px offset and the 12px
-       it keeps from the screen's foot (CawFloat). */
+    /* Files' top: the glass's foot, its 36px a group pad in from the bar's
+       top (`.bar-end`). */
+    --float-top: calc(var(--c-bar-group-pad) + var(--c-btn-h));
+    /* The room under that line, less the 11px kept from the screen's foot
+       (CawFloat). */
     --float-h: min(
       var(--c-caw-panel-h),
-      calc(100% - var(--bar) - 4px - var(--space-3))
+      calc(100% - var(--float-top) - var(--space-3))
     );
     position: relative;
     inline-size: 100vw;
@@ -186,7 +194,7 @@
   /* A floating panel: CawFloat's kit popover, edge to edge inside. */
   .float {
     position: absolute;
-    inset-block-start: calc(var(--bar) + 4px);
+    inset-block-start: var(--float-top);
     display: flex;
     block-size: var(--float-h);
   }
@@ -204,18 +212,17 @@
     border-radius: 0;
     box-shadow: none;
   }
-  /* The file at the page's leading side, the split's share of the page
-     (Split's 45%), 11px clear of the rail; never past the leading edge of
-     Files, hung under the glass, less the same 11px, so the two never meet
-     on a narrower desk. */
+  /* The file beside Files, on its leading side: its top on Files' top, its
+     trailing edge 11px clear of Files' leading one (Files hangs flush with
+     the glass's trailing flank, the bar's 21px in from the page's end, the
+     panel's width wide), the split's share of the page (Split's 45%), and
+     never nearer the rail than the same 11px on a narrower desk. */
   .float[data-float="file"] {
-    inset-inline-start: calc(var(--rail) + var(--space-3));
+    --beside-files: calc(var(--space-6) + var(--c-panel-w) + var(--space-3));
+    inset-inline-end: var(--beside-files);
     inline-size: min(
       calc((100% - var(--rail)) * 0.45),
-      calc(
-        100% - var(--rail) - 2 * var(--space-3) - var(--c-panel-w) -
-          var(--space-6)
-      )
+      calc(100% - var(--rail) - var(--space-3) - var(--beside-files))
     );
   }
 </style>

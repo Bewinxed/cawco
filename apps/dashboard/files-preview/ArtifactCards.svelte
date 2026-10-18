@@ -49,7 +49,7 @@
       return;
     }
     const seen = new ResizeObserver(([entry]) => {
-      width = entry.contentRect.width;
+      ({ width } = entry.contentRect);
     });
     seen.observe(box);
     return () => seen.disconnect();
@@ -120,15 +120,19 @@
             <span class="name">{artifact.name}</span>
           </span>
           <span class="meta">
-            <span class="num">{formatAgeShort(loadedAt - artifact.age, loadedAt)}</span
+            <span class="num"
+              >{formatAgeShort(loadedAt - artifact.age, loadedAt)}</span
             >{#if artifact.promoted}<span class="sep" aria-hidden="true">·</span
-              ><span class="promoted" title="Promoted into the project's folder at artifacts/{artifact.name}/"
+              ><span
+                class="promoted"
+                title="Promoted into the project's folder at artifacts/{artifact.name}/"
                 >Promoted {artifact.promoted}</span
               >{/if}
           </span>
           {#if hit.within}
             <span class="within"
-              >“{#each hit.within as part, j (j)}{#if part.matched}<mark>{part.text}</mark
+              >“{#each hit.within as part, j (j)}{#if part.matched}<mark
+                    >{part.text}</mark
                   >{:else}{part.text}{/if}{/each}”</span
             >
           {/if}

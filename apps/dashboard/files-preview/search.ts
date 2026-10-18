@@ -9,6 +9,8 @@
  * newest.
  */
 import type { FindField } from "@cawco/core";
+import type { Excerpt } from "#lib/cawco/find/find-rows.js";
+import { excerptParts } from "#lib/cawco/find/find-rows.js";
 import {
   type Entry,
   excerptOf,
@@ -17,8 +19,6 @@ import {
   parse,
   wordsOf,
 } from "../../../packages/hub/src/find-names";
-import { excerptParts } from "#lib/cawco/find/find-rows";
-import type { Excerpt } from "#lib/cawco/find/find-rows";
 import type { ArtifactRow, AttachmentRow } from "./fixtures";
 
 export interface Hit<T> {

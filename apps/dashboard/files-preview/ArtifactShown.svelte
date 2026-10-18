@@ -23,7 +23,12 @@
 {/snippet}
 
 {#snippet actions()}
-  <button aria-label="Open in new tab" class="touch-hit" title="Open in new tab" type="button">
+  <button
+    aria-label="Open in new tab"
+    class="touch-hit"
+    title="Open in new tab"
+    type="button"
+  >
     <IconArrowUpRight aria-hidden="true" />
   </button>
   <button aria-label="Reload" class="touch-hit" title="Reload" type="button">
@@ -53,11 +58,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* The whole page across the well, from its top. */
   .page {
     display: block;
     inline-size: 100%;
-    block-size: 100%;
-    object-fit: cover;
-    object-position: top left;
+    block-size: auto;
   }
 </style>

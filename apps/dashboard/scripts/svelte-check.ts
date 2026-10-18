@@ -13,6 +13,9 @@
  * - The experimental mode reads TypeScript 7's `unstable/*` API, which 7.1 is
  *   to replace: `@typescript/native` stays on `~7.0.2` until svelte-check
  *   supports it.
+ *
+ * Its one argument is the project, from the dashboard's folder: the app's
+ * (`./tsconfig.json`) unless another is named (a preview's own).
  */
 import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -20,6 +23,7 @@ import { join } from "node:path";
 
 const TIMEOUT_MS = 180_000;
 const DASHBOARD = join(import.meta.dir, "..");
+const PROJECT = process.argv[2] ?? "./tsconfig.json";
 
 const fail = (why: string): never => {
   console.error(`svelte-check: ${why}`);
@@ -41,7 +45,7 @@ const child = Bun.spawn(
     node as string,
     bin,
     "--tsconfig",
-    "./tsconfig.json",
+    PROJECT,
     "--output",
     "machine",
     "--tsgo-experimental-api",

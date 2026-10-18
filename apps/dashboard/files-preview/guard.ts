@@ -19,8 +19,12 @@ const address = (url: string | URL | Request): string =>
   url instanceof Request ? url.url : String(url);
 
 const ownFetch = window.fetch.bind(window);
-window.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
-  BRIDGE.test(address(input)) ? ownFetch(input, init) : refuse("fetch", input);
+// The page's fetch is the browser's, which has none of the Bun typings'
+// extras (`preconnect`).
+window.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+  BRIDGE.test(address(input))
+    ? ownFetch(input, init)
+    : refuse("fetch", input)) as typeof window.fetch;
 
 const OwnSocket = window.WebSocket;
 window.WebSocket = class extends OwnSocket {

@@ -30,11 +30,7 @@
   import IconToolFiles from "~icons/solar/folder-with-files-bold-duotone";
   import IconSearch from "~icons/solar/magnifer-bold-duotone";
   import ArtifactCards from "./ArtifactCards.svelte";
-  import {
-    type ArtifactRow,
-    type AttachmentRow,
-    loadedAt,
-  } from "./fixtures";
+  import { type ArtifactRow, type AttachmentRow, loadedAt } from "./fixtures";
   import { searchArtifacts, searchAttachments } from "./search";
 
   let {
@@ -75,8 +71,12 @@
   const countOf = (hits: number, all: number) =>
     asked ? `${hits} of ${all}` : `${all}`;
   /** A region's floor: its head and two rows, one, or its own words. */
-  const floor = (rows: number) =>
-    rows >= 2 ? "two" : rows === 1 ? "one" : "own";
+  const floor = (rows: number) => {
+    if (rows >= 2) {
+      return "two";
+    }
+    return rows === 1 ? "one" : "own";
+  };
   const artifactsFloor = $derived(
     loading || failed || artifactHits.length === 0 ? "own" : "cards"
   );
@@ -123,85 +123,103 @@
     data-artifacts-floor={artifactsFloor}
     data-attachments-floor={attachmentsFloor}
   >
-      <section
-        aria-labelledby="{uid}-artifacts"
-        class="files-section"
-        data-files-region="artifacts"
-      >
-        <h3 class="files-head" id="{uid}-artifacts">
-          <span class="files-head-lead" data-box><IconLayers aria-hidden="true" /></span>
-          <span class="files-head-name">Artifacts</span>
-          {#if !(loading || failed)}
-            <span class="files-head-count num" data-files-count
-              >{countOf(artifactHits.length, artifacts.length)}</span
-            >
-          {/if}
-        </h3>
-        {#if failed}
-          <div class="files-failed" role="alert">
-            <IconAlert aria-hidden="true" class="files-failed-mark" />
-            <p class="files-failed-title">Couldn't read this session's artifacts</p>
-            <p class="files-failed-line">
-              The hub didn't answer the list. Nothing is lost: the artifacts are
-              kept on the hub, and the attachments below come from the
-              conversation itself.
-            </p>
-            <div class="files-failed-actions">
-              <Button label="Try again" size="sm" />
-              <Button
-                aria-controls="{uid}-why"
-                aria-expanded={shown}
-                label={shown ? "Hide details" : "Show details"}
-                onclick={() => {
-                  shown = !shown;
-                }}
-                size="sm"
-                variant="ghost"
-              />
-            </div>
-            {#if shown}
-              <pre class="files-failed-why" id="{uid}-why">{failed}</pre>
-            {/if}
-          </div>
-        {:else if loading}
-          <div aria-busy="true" aria-label="Reading artifacts" class="files-wait">
-            {#each [0.46, 0.34] as share (share)}
-              <div class="files-ghost-row">
-                <span class="lead" data-box><Skeleton class="ghost-glyph" /></span>
-                <Skeleton class="ghost-name" style="inline-size: {share * 100}%" />
-                <Skeleton class="ghost-age" />
-              </div>
-            {/each}
-          </div>
-        {:else if artifacts.length === 0}
-          <p class="files-none">Nothing made yet</p>
-        {:else if artifactHits.length === 0}
-          <p class="files-none" data-files-none>No artifacts match “{asked}”</p>
-        {:else}
-          <div class="files-scroll kit-edge-fade-block" data-files-scroll>
-            <ArtifactCards {chosen} hits={artifactHits} />
-          </div>
-        {/if}
-      </section>
-      <section
-        aria-labelledby="{uid}-attachments"
-        class="files-section"
-        data-files-region="attachments"
-      >
-        <h3 class="files-head" id="{uid}-attachments">
-          <span class="files-head-lead" data-box><IconPaperclip aria-hidden="true" /></span>
-          <span class="files-head-name">Attachments</span>
+    <section
+      aria-labelledby="{uid}-artifacts"
+      class="files-section"
+      data-files-region="artifacts"
+    >
+      <h3 class="files-head" id="{uid}-artifacts">
+        <span class="files-head-lead" data-box
+          ><IconLayers aria-hidden="true" /></span
+        >
+        <span class="files-head-name">Artifacts</span>
+        {#if !(loading || failed)}
           <span class="files-head-count num" data-files-count
-            >{countOf(attachmentHits.length, attachments.length)}</span
+            >{countOf(artifactHits.length, artifacts.length)}</span
           >
-        </h3>
-        {#if attachments.length === 0}
-          <p class="files-none">Nothing attached yet</p>
-        {:else if attachmentHits.length === 0}
-          <p class="files-none" data-files-none>No attachments match “{asked}”</p>
-        {:else}
-          <div class="files-scroll kit-edge-fade-block" data-files-scroll>
-          <ul class="files-list" {@attach highlight({ rows: "[data-files-row]" })}>
+        {/if}
+      </h3>
+      {#if failed}
+        <div class="files-failed" role="alert">
+          <IconAlert aria-hidden="true" class="files-failed-mark" />
+          <p class="files-failed-title">
+            Couldn't read this session's artifacts
+          </p>
+          <p class="files-failed-line">
+            The hub didn't answer the list. Nothing is lost: the artifacts are
+            kept on the hub, and the attachments below come from the
+            conversation itself.
+          </p>
+          <div class="files-failed-actions">
+            <Button label="Try again" size="sm" />
+            <Button
+              aria-controls="{uid}-why"
+              aria-expanded={shown}
+              label={shown ? "Hide details" : "Show details"}
+              onclick={() => {
+                shown = !shown;
+              }}
+              size="sm"
+              variant="ghost"
+            />
+          </div>
+          {#if shown}
+            <pre class="files-failed-why" id="{uid}-why">{failed}</pre>
+          {/if}
+        </div>
+      {:else if loading}
+        <div
+          aria-busy="true"
+          aria-label="Reading artifacts"
+          class="files-wait"
+          role="status"
+        >
+          {#each [0.46, 0.34] as share (share)}
+            <div class="files-ghost-row">
+              <span class="lead" data-box><Skeleton class="ghost-glyph" /></span
+              >
+              <Skeleton
+                class="ghost-name"
+                style="inline-size: {share * 100}%"
+              />
+              <Skeleton class="ghost-age" />
+            </div>
+          {/each}
+        </div>
+      {:else if artifacts.length === 0}
+        <p class="files-none">Nothing made yet</p>
+      {:else if artifactHits.length === 0}
+        <p class="files-none" data-files-none>No artifacts match “{asked}”</p>
+      {:else}
+        <div class="files-scroll kit-edge-fade-block" data-files-scroll>
+          <ArtifactCards {chosen} hits={artifactHits} />
+        </div>
+      {/if}
+    </section>
+    <section
+      aria-labelledby="{uid}-attachments"
+      class="files-section"
+      data-files-region="attachments"
+    >
+      <h3 class="files-head" id="{uid}-attachments">
+        <span class="files-head-lead" data-box
+          ><IconPaperclip aria-hidden="true" /></span
+        >
+        <span class="files-head-name">Attachments</span>
+        <span class="files-head-count num" data-files-count
+          >{countOf(attachmentHits.length, attachments.length)}</span
+        >
+      </h3>
+      {#if attachments.length === 0}
+        <p class="files-none">Nothing attached yet</p>
+      {:else if attachmentHits.length === 0}
+        <p class="files-none" data-files-none>No attachments match “{asked}”</p>
+      {:else}
+        <div class="files-scroll kit-edge-fade-block" data-files-scroll>
+          <ul
+            class="files-list"
+            {@attach highlight({ rows: "[data-files-row]" })}
+          >
             {#each attachmentHits as file (file.id)}
               <li class="files-item attachment" data-files-row>
                 <button
@@ -225,9 +243,8 @@
                   <span class="words">
                     <span class="row-name">{file.name}</span>
                     <span class="row-meta"
-                      >{file.kind} · {file.who} · <span class="num"
-                        >{age(file.age)}</span
-                      ></span
+                      >{file.kind} · {file.who} ·
+                      <span class="num">{age(file.age)}</span></span
                     >
                   </span>
                 </button>
@@ -242,9 +259,9 @@
               </li>
             {/each}
           </ul>
-          </div>
-        {/if}
-      </section>
+        </div>
+      {/if}
+    </section>
   </div>
 {/if}
 
@@ -425,7 +442,9 @@
   /* The cards' gutter: the rows' edges, so a card's picture lines up with
      the head's glyph. */
   .files-scroll > :global([data-files-cards]) {
-    padding-inline: calc((10px - (var(--c-row-lead) - var(--icon-md)) / 2) - var(--space-1));
+    padding-inline: calc(
+      (10px - (var(--c-row-lead) - var(--icon-md)) / 2) - var(--space-1)
+    );
   }
   .files-list {
     position: relative;

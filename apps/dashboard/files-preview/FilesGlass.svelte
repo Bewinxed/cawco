@@ -11,7 +11,7 @@
    * Non-modal: no scrim, no trap.
    */
   import type { Snippet } from "svelte";
-  import { hangShadow } from "#lib/cawco/motion/hung-shadow";
+  import { hangShadow } from "#lib/cawco/motion/hung-shadow.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";

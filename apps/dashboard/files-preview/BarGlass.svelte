@@ -9,12 +9,16 @@
    * Caw his capsule (NeedsCaw) with his still and rim from the day capture.
    *
    * The count, two ways (`count`):
-   * - `mark`: a small mark on the glyph's top-trailing corner, anchored to
-   *   the glyph's box: the kit badge's recipe (recess, strong ink,
-   *   `radius-xs`) at its smallest, the caps role and a `space-1` pad, so it
-   *   stands under the glyph's 20px;
+   * - `mark`: a small vermillion mark centred on the glyph's top-trailing
+   *   corner, so it covers that corner and none of the folder's body: the
+   *   work tab's count (a solid fill, its numeral's ink, `radius-xs`,
+   *   tabular figures) in the chosen chip's vermillion and white, at the
+   *   caps role, the type scale's smallest, and a `space-1` pad;
    * - `none`: no mark; the count is in the item's name ("Files, 20") and in
    *   the panel's own heads.
+   *
+   * On a phone (`phone`) the group is Shell's phone glass: Jump and the
+   * machines are in the sidebar, so it holds Files and Caw.
    */
   import IconToolFiles from "~icons/solar/folder-with-files-bold-duotone";
   import IconSearch from "~icons/solar/magnifer-bold-duotone";
@@ -26,6 +30,8 @@
     open = false,
     joined = false,
     mark = false,
+    phone = false,
+    onfiles,
     group = $bindable(null),
   }: {
     count: number;
@@ -34,6 +40,10 @@
     /** The glass's card stands drawn out of the glass: the glass draws its join. */
     joined?: boolean;
     mark?: boolean;
+    /** The phone's glass, tucked into the screen's trailing edge. */
+    phone?: boolean;
+    /** Files pressed. */
+    onfiles?: () => void;
     /** The group's element, which the glass's card hangs from. */
     group?: HTMLElement | null;
   } = $props();
@@ -44,6 +54,7 @@
   class="tools"
   data-bar-group
   data-joined={joined ? "" : undefined}
+  data-phone={phone ? "" : undefined}
 >
   <!-- The glass as one shape with the card hanging from it while one does
        (Shell `.join`). -->
@@ -55,13 +66,16 @@
     class="bar-item files touch-hit press-tint"
     data-bar-item="files"
     data-files-control
+    onclick={onfiles}
     title={count > 0 ? `Files, ${count}` : "Files"}
     type="button"
   >
     <span class="glyph-box" data-box>
       <IconToolFiles aria-hidden="true" class="bar-symbol" />
       {#if mark && count > 0}
-        <span aria-hidden="true" class="count-mark num" data-count-mark>{count}</span>
+        <span aria-hidden="true" class="count-mark num" data-count-mark
+          >{count}</span
+        >
       {/if}
     </span>
   </button>
@@ -229,23 +243,24 @@
     inline-size: var(--c-bar-symbol);
     block-size: var(--c-bar-symbol);
   }
-  /* The kit badge at its smallest, on the glyph's top-trailing corner:
-     the caps role, a space-1 pad, its height under the glyph's, cut out of
-     the glyph by a ring of the glass's surface. */
+  /* The work tab's count in vermillion, centred on the glyph's top-trailing
+     corner: the caps role, a space-1 pad, cut out of the glyph by a ring of
+     the glass's surface. */
   .count-mark {
+    --mark: calc(1lh + var(--space-1));
     position: absolute;
-    inset-block-start: calc(-1 * var(--space-1));
-    inset-inline-end: calc(-1 * var(--space-1));
+    inset-block-start: calc(var(--mark) / -2);
+    inset-inline-end: calc(var(--mark) / -2);
     display: grid;
     place-items: center;
-    min-inline-size: calc(1lh + var(--space-1));
-    block-size: calc(1lh + var(--space-1));
+    min-inline-size: var(--mark);
+    block-size: var(--mark);
     padding-inline: calc(var(--space-1) / 2);
     box-sizing: border-box;
     border-radius: var(--radius-xs);
-    background: var(--surface-recess);
+    background: var(--chip-chosen-bg);
     box-shadow: 0 0 0 1px var(--surface-raised);
-    color: var(--ink-strong);
+    color: var(--chip-chosen-ink);
     font: var(--type-caps);
     font-variant-numeric: tabular-nums;
   }
@@ -273,5 +288,34 @@
     max-inline-size: none;
     translate: -50% -50%;
     pointer-events: none;
+  }
+  /* Shell's phone glass: a tab tucked into the screen's trailing edge,
+     square on that side, which draws no edge, round on the other; Files and
+     Caw each the glass's whole box, a coarse pointer's 16px apart. */
+  .tools[data-phone] {
+    --hit-gap-x: 16px;
+    gap: 16px;
+    block-size: var(--c-bar-caw-glass-phone);
+    padding: 0;
+    border-radius: calc(var(--c-bar-caw-glass-phone) / 2) 0 0
+      calc(var(--c-bar-caw-glass-phone) / 2);
+
+    &::before {
+      border-inline-end-width: 0;
+    }
+    & :is([data-bar-item="jump"], .machines) {
+      display: none;
+    }
+    & .bar-item {
+      inline-size: var(--c-bar-caw-glass-phone);
+      min-inline-size: var(--c-bar-caw-glass-phone);
+      block-size: var(--c-bar-caw-glass-phone);
+    }
+    /* His head the glass less the group's pad each side
+       (`c-bar-caw-head-phone`), as the desk's still is the item's. */
+    & .caw {
+      inline-size: var(--c-bar-caw-glass-phone);
+      block-size: var(--c-bar-caw-glass-phone);
+    }
   }
 </style>

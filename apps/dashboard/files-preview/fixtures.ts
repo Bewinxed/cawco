@@ -10,10 +10,15 @@
  * moment the page loads.
  */
 import type { ArtifactKind } from "@cawco/core";
-import boardPage from "./assets/board-page.webp";
-import shotDesk from "./assets/session-1440.png";
-import shotPhone from "./assets/session-390.png";
+import boardCapture from "./assets/board-page.webp";
+import phoneCapture from "./assets/session-390.png";
+import deskCapture from "./assets/session-1440.png";
 import pages from "./assets/thumbs/pages.json";
+
+/** The chosen artifact's page, and today's session on a phone and a desk. */
+export const boardPage: string = boardCapture;
+export const shotPhone: string = phoneCapture;
+export const shotDesk: string = deskCapture;
 
 const thumbs = import.meta.glob<string>("./assets/thumbs/*.webp", {
   eager: true,
@@ -76,7 +81,12 @@ interface Page {
 const PAGE = new Map((pages as Page[]).map((page) => [page.file, page]));
 
 /** What each page is called, newest first; the second is the one chosen. */
-const MADE: [file: string, name: string, age: number, promoted: string | null][] = [
+const MADE: [
+  file: string,
+  name: string,
+  age: number,
+  promoted: string | null,
+][] = [
   ["fleet", "Fleet home", 2 * MIN, null],
   ["board", "Site task board", 1 * HOUR, "7778ccd"],
   ["canvas", "Pricing page variants", 3 * HOUR, null],
@@ -105,11 +115,17 @@ const artifactOf = (
     promoted,
     kind: page.kind,
     text: page.text,
-    thumb: { src: thumbs[`./assets/thumbs/${file}.webp`], w: page.tw, h: page.th },
+    thumb: {
+      src: thumbs[`./assets/thumbs/${file}.webp`],
+      w: page.tw,
+      h: page.th,
+    },
   };
 };
 
-const ARTIFACTS: ArtifactRow[] = MADE.map((made, i) => artifactOf(made, `a${i}`));
+const ARTIFACTS: ArtifactRow[] = MADE.map((made, i) =>
+  artifactOf(made, `a${i}`)
+);
 
 const ATTACHMENTS: AttachmentRow[] = [
   ["session-1440.png", "PNG", "You", 1 * HOUR, shotDesk],
@@ -128,7 +144,10 @@ const ATTACHMENTS: AttachmentRow[] = [
 }));
 
 /** A name of 60 characters, the longest a row is asked to hold. */
-const LONG_NAME = "Session view files sidebar with artifacts and attachments v2";
+const LONG_NAME =
+  "Session view files sidebar with artifacts and attachments v2";
+/** A file name's extension, which a long list's copies number in front of. */
+const EXTENSION = /(\.\w+)$/;
 
 export function filesOf(fill: Fill): {
   artifacts: ArtifactRow[];
@@ -177,7 +196,7 @@ export function filesOf(fill: Fill): {
         name:
           i === 2
             ? `${LONG_NAME}.md`
-            : row.name.replace(/(\.\w+)$/, `-${i + 1}$1`),
+            : row.name.replace(EXTENSION, `-${i + 1}$1`),
         age: (i + 1) * 53 * MIN,
       };
     });
@@ -190,5 +209,3 @@ export function filesOf(fill: Fill): {
 export const CHOSEN = "a1";
 
 export const loadedAt = Date.now();
-
-export { boardPage, shotDesk, shotPhone };
