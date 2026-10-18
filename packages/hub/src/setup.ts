@@ -27,12 +27,13 @@ import { type StagesTemplate, templateText } from "./stages";
 import { templateTypes } from "./template-types";
 
 /**
- * The delegate types a template's work suggests beyond the ones its stages
- * run: those are written with the template (template-types.ts), never picked.
+ * The delegate types a template's work suggests beyond the ones it supplies
+ * (its stages run them, or its skills file tasks with them): those are
+ * written with the template (template-types.ts), never picked.
  */
 export const TEMPLATE_DELEGATES: Record<StagesTemplate, readonly string[]> = {
   code: ["implementer", "reviewer"],
-  launch: ["designer"],
+  launch: [],
   seo: [],
   brand: [],
   design: [],
@@ -152,7 +153,7 @@ export const setupEvent = (ask: SetupAsk): string => {
       : "";
   const kept =
     own.length > 0
-      ? ` The template's own types (${own.join(", ")}) are in delegates/ already, written as the project was made: its stages run them by those names, so keep the names, and rewrite a type's brief (the body under its front matter) with folder_write only where their words change the work; the rewrite goes to them as a proposal too.`
+      ? ` The template's own types (${own.join(", ")}) are in delegates/ already, written as the project was made: its stages and skills run them by those names, so keep the names, and rewrite a type's brief (the body under its front matter) with folder_write only where their words change the work; the rewrite goes to them as a proposal too.`
       : "";
   return [
     `Event setup: the person just made the project “${ask.projectName}”${

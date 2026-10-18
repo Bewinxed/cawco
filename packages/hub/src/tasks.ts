@@ -134,7 +134,7 @@ import {
   TRAILERS,
   taskFileIn,
 } from "./task-history";
-import { runsOf, templateTypes, typeFiles } from "./template-types";
+import { runsOf, skillTypes, templateTypes, typeFiles } from "./template-types";
 import {
   budgetProblem,
   isLive,
@@ -2435,18 +2435,23 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
-   * A type the project's stages run that resolves to nothing (no file of
-   * its own, no fleet type) and that a template defines is written, as
-   * applying that template writes it: a project made before templates wrote
-   * their types, or whose stages.md was written by hand or by Caw, can start
-   * every stage. A file of its own, readable or not, stays as it is.
+   * A type the project's stages run, or its template's skills file tasks
+   * with, that resolves to nothing (no file of its own, no fleet type) and
+   * that a template defines is written, as applying that template writes
+   * it: a project made before templates wrote their types, or whose
+   * stages.md was written by hand or by Caw, can start every stage and every
+   * task its skills file. A file of its own, readable or not, stays as it is.
    */
   const fillTypes = async (projectId: string): Promise<void> => {
     const { reading } = await stagesOf(projectId);
     if (!reading.ok) {
       return;
     }
-    const unresolved = runsOf(reading.stages).filter(
+    const wanted = new Set([
+      ...runsOf(reading.stages),
+      ...skillTypes(store.project(projectId)?.template ?? null),
+    ]);
+    const unresolved = [...wanted].filter(
       (type) => !store.resolvesType(projectId, type)
     );
     const writes = await missingTypes(projectId, unresolved);
@@ -2456,10 +2461,10 @@ export const createTasks = (store: TaskStore) => {
     const names = writes.map((write) => write.path).join(", ");
     await writeFolderFiles(projectId, writes, {
       author: { name: AUTHOR.hub },
-      message: `delegates: ${names}, which its stages run and nothing defined (by hub)`,
+      message: `delegates: ${names}, which its stages run or its template's skills file tasks with, and nothing defined (by hub)`,
     });
     console.info(
-      `[tasks] project ${projectId}: wrote ${names}, which its stages run and nothing defined.`
+      `[tasks] project ${projectId}: wrote ${names}, which its stages run or its template's skills file tasks with, and nothing defined.`
     );
   };
 

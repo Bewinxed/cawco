@@ -19,18 +19,23 @@
  *     start problem says so ("… did not start: No Claude account is signed
  *     in …") and its card shows Can't start with that reason (on main: only
  *     a log line, nothing on the task).
- * (a) Each type a template's stages run is in its project's catalog, as
- *     its own.
+ * (a) Each type a template supplies (its stages run it, or its skills file
+ *     tasks with it: template-types.ts `templateTypes`) is in its project's
+ *     catalog, as its own.
  * (b) Each start resolves its stage's type: the task has an attempt, and
  *     neither the start's answer nor the task names a missing type (on
  *     main: `No delegate type "brand". Available: …`, no attempt).
- * (1) A launch task with `type: designer` moved into make, which runs
- *     writer: with no designer file the start names `designer` as the
- *     missing type (on main writer starts); with the project's own
+ * (L) A launch project has delegates/designer.md (launch-plan files pieces
+ *     with `type: designer`), and its designer piece moved into make starts
+ *     designer.
+ * (1) A social task with `type: designer` moved into draft, which runs
+ *     writer: with no designer file (social supplies none) the start names
+ *     `designer` as the missing type; with the project's own
  *     delegates/designer.md, its attempt runs designer.
  * (2) A project whose stages.md runs brand, written while the hub was down,
  *     with no delegates/: after the hub starts it has delegates/brand.md,
- *     and its extract starts.
+ *     and its extract starts. (2L) A launch project whose designer file was
+ *     taken away while the hub was down has it again after the hub starts.
  * (2b) A stages.md running seo and writer, written through the folder's
  *     own route while the hub runs: both files follow at once.
  * (c) A project whose own stages.md runs a type no template defines
@@ -48,6 +53,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TEMPLATES, templateText } from "../../../packages/hub/src/stages";
+import { templateTypes } from "../../../packages/hub/src/template-types";
 import { MACHINE, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
@@ -156,10 +162,10 @@ async function everyTemplate(leg: Leg): Promise<void> {
       (stage) => stage.kind === "active" && stage.hooks.runs
     );
     const types = await leg.catalog(projectId);
-    const runs = [...new Set(running.map((stage) => stage.hooks.runs))];
+    const supplied = templateTypes(template);
     leg.kit.check(
-      `a ${template}: every type its stages run is the project's own (${runs.join(", ") || "none run"})`,
-      runs.every((name) =>
+      `a ${template}: every type it supplies (its stages run, its skills file) is the project's own (${supplied.join(", ") || "none"})`,
+      supplied.every((name) =>
         types.some((type) => type.name === name && type.source === "project")
       ),
       types.map((type) => `${type.name} ${type.source}`).join(", ")
@@ -183,13 +189,42 @@ async function everyTemplate(leg: Leg): Promise<void> {
   }
 }
 
-/** (1) A task's own type wins over its stage's runs. */
+/** (L) A launch project supplies designer, the type launch-plan files pieces with, and its designer piece in make starts designer. */
+async function launchDesigner(leg: Leg): Promise<void> {
+  const { projectId, parent } = await leg.made("launch-designer", "launch");
+  const types = await leg.catalog(projectId);
+  leg.kit.check(
+    "L1: a launch project has delegates/designer.md, its own",
+    types.some((type) => type.name === "designer" && type.source === "project"),
+    types.map((type) => `${type.name} ${type.source}`).join(", ")
+  );
+  const id = await leg.file(
+    projectId,
+    "make",
+    "Probe launch visual",
+    "designer"
+  );
+  const { answer, read } = await leg.start(projectId, id, parent);
+  const [item] = leg.fleet.query<{ type: string | null }>(
+    "SELECT type FROM work_items WHERE task_id = ? ORDER BY created_at DESC",
+    id
+  );
+  leg.kit.check(
+    "L2: its designer piece moved into make starts an attempt that runs designer",
+    read.attempts.length > 0 &&
+      item?.type === "designer" &&
+      !MISSING_TYPE.test(answer),
+    `start ${answer.slice(0, 300)}; work item type ${item?.type}; startProblem ${read.startProblem}`
+  );
+}
+
+/** (1) A task's own type wins over its stage's runs, in a social project, which supplies no designer. */
 async function ownType(leg: Leg): Promise<void> {
-  const { projectId, parent } = await leg.made("own-type", "launch");
-  const id = await leg.file(projectId, "make", "Probe designer", "designer");
+  const { projectId, parent } = await leg.made("own-type", "social");
+  const id = await leg.file(projectId, "draft", "Probe designer", "designer");
   const before = await leg.start(projectId, id, parent);
   leg.kit.check(
-    "1a: a designer task in make (runs writer), with no designer file, asks for designer, not writer",
+    "1a: a designer task in draft (runs writer), with no designer file, asks for designer, not writer",
     before.answer.includes(NO_DESIGNER) &&
       (before.read.startProblem ?? "").startsWith(NO_DESIGNER),
     `start ${before.answer.slice(0, 300)}; startProblem ${before.read.startProblem}`
@@ -211,21 +246,47 @@ async function ownType(leg: Leg): Promise<void> {
 async function restarted(leg: Leg): Promise<void> {
   const { fleet } = leg;
   const { projectId } = await leg.made("legacy", "code", "bare");
+  // A launch project made before launch supplied designer.
+  const launch = await leg.made("legacy-launch", "launch", "bare");
   // The folder is the hub's git repository once something is written to it.
   await leg.put(projectId, "notes.md", "# Legacy\n");
   await fleet.stop("hub");
-  const root = join(fleet.sandbox, "hub", "projects", projectId);
+  const folder = (project: string) =>
+    join(fleet.sandbox, "hub", "projects", project);
+  const gitIn =
+    (cwd: string) =>
+    (...args: string[]) =>
+      Bun.$`git ${args}`
+        .cwd(cwd)
+        .env({ ...process.env, HOME: fleet.home })
+        .quiet();
+  const root = folder(projectId);
+  const git = gitIn(root);
   await writeFile(join(root, "stages.md"), templateText("brand"));
-  const git = (...args: string[]) =>
-    Bun.$`git ${args}`
-      .cwd(root)
-      .env({ ...process.env, HOME: fleet.home })
-      .quiet();
   await git("add", "stages.md");
   await git("commit", "-qm", "stages: the brand template, from before");
+  const launchGit = gitIn(folder(launch.projectId));
+  await launchGit("rm", "-q", "delegates/designer.md");
+  await launchGit("commit", "-qm", "delegates: as launch was before designer");
   fleet.launch("hub");
   await fleet.hubUp();
   await fleet.agentUp();
+  const launchTypes = await until(
+    "legacy-launch's designer type",
+    () => leg.catalog(launch.projectId),
+    (each) =>
+      each.some(
+        (type) => type.name === "designer" && type.source === "project"
+      ),
+    60_000
+  ).catch(() => leg.catalog(launch.projectId));
+  leg.kit.check(
+    "2L: a launch project with no designer file has delegates/designer.md after the hub starts",
+    launchTypes.some(
+      (type) => type.name === "designer" && type.source === "project"
+    ),
+    launchTypes.map((type) => `${type.name} ${type.source}`).join(", ")
+  );
   const types = await until(
     "legacy's brand type",
     () => leg.catalog(projectId),
@@ -425,6 +486,7 @@ async function run(kit: Kit): Promise<void> {
     await fleet.accountSignedIn();
 
     await everyTemplate(leg);
+    await launchDesigner(leg);
     await ownType(leg);
     await restarted(leg);
     await writtenLater(leg);

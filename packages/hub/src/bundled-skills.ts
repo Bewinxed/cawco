@@ -86,6 +86,12 @@ const skillNamed = (name: string): FleetSkillPayload => {
   return skill;
 };
 
+/** A skill CawCo ships, its SKILL.md as words (template-types.ts reads which types it files). */
+export const skillText = (name: string): string => {
+  const file = skillNamed(name).files?.find((each) => each.path === "SKILL.md");
+  return file ? Buffer.from(file.contentBase64, "base64").toString("utf8") : "";
+};
+
 /** The skills every machine gets. */
 export const bundledSkills = (): FleetSkillPayload[] =>
   BUNDLED_SKILLS.map(skillNamed);
