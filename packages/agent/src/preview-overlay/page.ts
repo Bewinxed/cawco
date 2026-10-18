@@ -25,7 +25,7 @@ import type { InkGroup } from "@cawco/core/ink";
 import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
-import { here, mark } from "./boot";
+import { here, mark, markOf } from "./boot";
 import { fillFields, trackFields } from "./fields";
 import {
   deepElementAt,
@@ -33,10 +33,12 @@ import {
   frameLoading,
   frameOrigin,
   framesOf,
+  frameWindows,
   isFrame,
   rectOf,
   watchFrames,
 } from "./frames";
+import { hold } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
@@ -472,12 +474,15 @@ if (document.readyState === "loading") {
  * Re-publish (`artifact_update` with new HTML): the doc's `meta` names the
  * page's new hash, and the page morphs to it in place (morph.ts), fetched
  * afresh from its own origin. The overlay's host and its own script are not
- * the page's, and stay as they are.
+ * the page's, and stay as they are; so is what the app's web view put in
+ * the page before it loaded (`data-cawco-host`: its viewport, as the web's
+ * iframe lays a page out).
  */
 const kept = (node: Node): boolean =>
   node === host ||
   node === ink.layer ||
   node === pins.layer ||
+  (node instanceof Element && node.hasAttribute("data-cawco-host")) ||
   (node instanceof HTMLScriptElement &&
     OVERLAY_SRC.test(node.getAttribute("src") ?? ""));
 
@@ -644,15 +649,25 @@ declare global {
   }
 }
 
-/** A machine and a folder on it, as `cawco.pickPlace` answers. */
+/**
+ * A machine and a folder on it, as `cawco.pickPlace` answers: the machine's
+ * id, its label (the name the dashboard shows it by, core `machineLabel`)
+ * and the folder's full path.
+ */
 interface PlacePick {
+  label: string;
   machineId: string;
   path: string;
 }
 
-const isPlace = (value: unknown): value is PlacePick =>
-  typeof (value as PlacePick | null)?.machineId === "string" &&
-  typeof (value as PlacePick).path === "string";
+const placeOf = (value: unknown): PlacePick | null => {
+  const raw = value as Partial<Record<keyof PlacePick, unknown>> | null;
+  return typeof raw?.machineId === "string" &&
+    typeof raw.label === "string" &&
+    typeof raw.path === "string"
+    ? { label: raw.label, machineId: raw.machineId, path: raw.path }
+    : null;
+};
 
 Object.defineProperty(window, "cawco", {
   value: Object.freeze({
@@ -681,8 +696,8 @@ Object.defineProperty(window, "cawco", {
       return () => listeners.delete(listener);
     },
     pickPlace: async () => {
-      const place = await askHost("cawco/pick-place", { pageHash });
-      if (!isPlace(place)) {
+      const place = placeOf(await askHost("cawco/pick-place", { pageHash }));
+      if (!place) {
         return null;
       }
       await change({ choice: "place", pageHash, value: place });
@@ -1687,7 +1702,19 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       pins.focus(idOf(message), message.scroll === true),
     "cawco:track-pin": (message) => pins.track(idOf(message)),
     "cawco:capture": async () => post("cawco:capture", await thumbnail()),
+    // Its conversation's tab off screen, and back (hold.ts): this document
+    // and every same-origin frame in it, which the pane hears as `cawco:held`.
+    "cawco:hold": () => holdPage(true),
+    "cawco:release": () => holdPage(false),
   };
+
+function holdPage(on: boolean) {
+  hold(on);
+  for (const view of frameWindows(document)) {
+    markOf(view)?.hold(on);
+  }
+  post("cawco:held", { held: on });
+}
 
 window.addEventListener("message", async (event) => {
   if (!heardFromHost(event)) {

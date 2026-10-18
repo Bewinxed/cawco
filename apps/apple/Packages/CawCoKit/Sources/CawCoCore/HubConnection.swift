@@ -51,6 +51,8 @@ public final class HubConnection {
     /// `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_DEADLINE_MS`).
     static let heartbeatInterval: Duration = .seconds(20)
     static let heartbeatDeadline: Duration = .seconds(10)
+    /// How long HTTPS's onboarding row stands ticked once its step is taken (client.svelte.ts `TAILNET_TICK_MS`).
+    static let tailnetTick: Duration = .seconds(12)
     private static let addressKey = "cawco-hub-url"
 
     /// The hub's address, as the operator entered it; nil until then.
@@ -162,7 +164,6 @@ public final class HubConnection {
         rowlessAsks(id).contains { $0.threadId == nil && $0.originInstanceId == nil }
     }
     public private(set) var sessions: SessionsStore!
-    public private(set) var tasks: TasksStore!
     /// The delegates' work items their parents' trays read.
     public private(set) var workItems: WorkItemsStore!
     public private(set) var workflowRuns: WorkflowRunsStore!
@@ -182,6 +183,8 @@ public final class HubConnection {
     public private(set) var threads: ThreadsStore!
     /// The plans followed beside the sessions streamed: a thread's lead's.
     public let plans = PlanFollows()
+    /// The "make this a project" offers standing on plain sessions.
+    public let offers = ProjectOffers()
 
     @ObservationIgnored private var projectStopListeners: [UUID: (Components.Schemas.ProjectStopFrame) -> Void] = [:]
 
@@ -231,7 +234,6 @@ public final class HubConnection {
             return nil
         }
         sessions = SessionsStore(hub: self)
-        tasks = TasksStore(hub: self)
         configuration = FleetConfig(hub: self)
         workItems = WorkItemsStore(hub: self)
         workflowRuns = WorkflowRunsStore(hub: self)
@@ -383,7 +385,6 @@ public final class HubConnection {
         fleetRead?.cancel(); fleetRead = nil
         outageTimer?.cancel(); outageTimer = nil
         sessions.reset()
-        tasks.reset()
         workItems.reset()
         workflowRuns.reset()
         threads.reset()
@@ -410,7 +411,6 @@ public final class HubConnection {
         previews.reset()
         needs.parked = [:]
         sessions.reset()
-        tasks.reset()
         workItems.reset()
         workflowRuns.reset()
         workflows.reset()
@@ -1042,10 +1042,14 @@ public final class HubConnection {
         async let watched = try? await client.getApiFleetWatchNotices().ok.body.json.notices
         // The fleet's upstream answer: Needs you asks it while nobody has.
         async let choices = try? await client.getApiFleetChoices().ok.body.json
+        // HTTPS on the tailnet name: Needs you shows its step while one stands.
+        async let tailnet = try? await client.getApiTailnetHttps().ok.body.json
         // The approved actions waiting on you: frames keep them from here.
         async let waiting = try? await client.getApiActionsWaiting().ok.body.json.actions
         // The devices waiting to pair: the `hub_auth` frame keeps them from here.
         async let pairings = try? await client.getApiPairRequests().ok.body.json
+        // The "make this a project" offers standing: `project_offer` frames keep them from here.
+        async let offered = try? await client.getApiProjectOffers().ok.body.json
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
@@ -1055,8 +1059,10 @@ public final class HubConnection {
         let readMoves = await moving
         let readWatched = await watched
         let readUpstream = await choices.map { UpstreamAnswer($0.upstream) }
+        let readTailnet = await tailnet
         let readWaiting = await waiting
         let readPairings = await pairings
+        let readOffers = await offered
         let readMachines = try? machines.get()
         let readRows = try? rows.get()
         let readProjects = try? projects.get()
@@ -1106,7 +1112,6 @@ public final class HubConnection {
             switch boardRows {
             case let .success(rows):
                 hub.fleet.adopt(rows: rows)
-                hub.tasks.sweepLiveLedgers()
             case let .failure(error):
                 hub.log.error("instances unreadable: \(String(describing: error), privacy: .public)")
             case nil:
@@ -1128,11 +1133,17 @@ public final class HubConnection {
             if let readUpstream {
                 hub.fleet.upstream = readUpstream
             }
+            if let readTailnet {
+                hub.fleet.tailnetHttps = readTailnet
+            }
             if let readWaiting {
                 hub.fleet.actions = readWaiting
             }
             if let readPairings {
                 hub.adopt(pairingRequests: readPairings)
+            }
+            if let readOffers {
+                hub.offers.replace(with: readOffers)
             }
             if !unreadable.isEmpty {
                 hub.cannotRead(unreadable)
@@ -1418,7 +1429,6 @@ public final class HubConnection {
             adopt(machines: board.agents)
             fleet.adopt(rows: board.instances)
             previews.reconcile(board.previews)
-            tasks.sweepLiveLedgers()
             fleet.liveRead = true
         case let .instancesDelta(delta, hubBuild):
             if let hubBuild { fleet.hubBuild = hubBuild }
@@ -1431,7 +1441,6 @@ public final class HubConnection {
             }
             fleet.patch(upserts: delta.upserts, removed: delta.removed)
             previews.reconcile(delta.previews)
-            tasks.sweepLiveLedgers()
         case let .permissionRequest(ask, routedTo, machineId):
             needs.park(ask, routedTo: routedTo, machineId: machineId)
         case let .permissionSettled(settled):
@@ -1489,8 +1498,22 @@ public final class HubConnection {
             fleet.lawsBroken = broken
         case let .fleetUpstream(answer):
             fleet.upstream = .answered(answer)
+        case let .tailnetHttps(tailnet):
+            // Its step taken while connected: the row ticks, then leaves
+            // (client.svelte.ts `tailnetTicked`).
+            let ticked = fleet.tailnetHttps?.state == .needs && tailnet.state == .serving
+            fleet.tailnetHttps = tailnet
+            fleet.tailnetTicked = ticked
+            if ticked {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: Self.tailnetTick)
+                    self?.fleet.tailnetTicked = false
+                }
+            }
         case let .hubAuth(frame):
             adopt(pairingRequests: frame.requests)
+        case let .projectOffer(instanceId, offer):
+            offers.adopt(instanceId, offer: offer)
         case .ignored:
             break
         }

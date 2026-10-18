@@ -496,8 +496,8 @@ const ghAvailable = async (): Promise<boolean> =>
  * In a workspace's clone they run inside its boundary, as every git call
  * there does (`safe-git.ts`): its config and hooks are the workspace's to
  * write, and `git status` runs what they name (an fsmonitor, a filter). A
- * project lead's place is a person's own folder, whose protected config the
- * lead cannot write (core workspace-policy.ts): there they run on the host.
+ * place is a person's own folder, whose protected config its boundary
+ * cannot write (core workspace-policy.ts): there they run on the host.
  */
 const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
   const workspace = await cloneHolding(dir);

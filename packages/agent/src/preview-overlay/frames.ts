@@ -17,6 +17,18 @@ export type FrameElement = HTMLIFrameElement | HTMLFrameElement;
 export const isFrame = (el: Element | null): el is FrameElement =>
   !!el && FRAME_TAGS.has(el.localName);
 
+/** The windows of every same-origin frame inside `doc`, at any depth. */
+export function frameWindows(doc: Document): Window[] {
+  return [...doc.querySelectorAll<FrameElement>("iframe, frame")].flatMap(
+    (frame) => {
+      const inner = frameDocument(frame);
+      return inner?.defaultView
+        ? [inner.defaultView, ...frameWindows(inner)]
+        : [];
+    }
+  );
+}
+
 /** A frame's document when it is of this origin; null for another origin's. */
 export const frameDocument = (frame: FrameElement): Document | null => {
   try {

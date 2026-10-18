@@ -81,6 +81,7 @@ public struct HubAPI: Sendable {
         public func join(_ input: Operations.GetApiJoin.Input = .init()) async throws -> Operations.GetApiJoin.Output { try await client.getApiJoin(input) }
         public func connectSSH(_ input: Operations.PostApiMachinesSsh.Input) async throws -> Operations.PostApiMachinesSsh.Output { try await client.postApiMachinesSsh(input) }
         public func sshStatus(_ input: Operations.GetApiMachinesSshById.Input) async throws -> Operations.GetApiMachinesSshById.Output { try await client.getApiMachinesSshById(input) }
+        public func stopSSH(_ input: Operations.PostApiMachinesSshByIdStop.Input) async throws -> Operations.PostApiMachinesSshByIdStop.Output { try await client.postApiMachinesSshByIdStop(input) }
     }
     public struct Instances: Sendable {
         let client: Client
@@ -98,6 +99,8 @@ public struct HubAPI: Sendable {
         public func showArtifact(_ input: Operations.PostApiInstancesByIdArtifactsByArtifactShow.Input) async throws -> Operations.PostApiInstancesByIdArtifactsByArtifactShow.Output { try await client.postApiInstancesByIdArtifactsByArtifactShow(input) }
         public func createArtifact(_ input: Operations.PostApiInstancesByIdArtifacts.Input) async throws -> Operations.PostApiInstancesByIdArtifacts.Output { try await client.postApiInstancesByIdArtifacts(input) }
         public func artifactView(_ input: Operations.GetApiInstancesByIdArtifactsByArtifactView.Input) async throws -> Operations.GetApiInstancesByIdArtifactsByArtifactView.Output { try await client.getApiInstancesByIdArtifactsByArtifactView(input) }
+        public func artifacts(_ input: Operations.GetApiInstancesByIdArtifacts.Input) async throws -> Operations.GetApiInstancesByIdArtifacts.Output { try await client.getApiInstancesByIdArtifacts(input) }
+        public func removeArtifact(_ input: Operations.DeleteApiInstancesByIdArtifactsByArtifact.Input) async throws -> Operations.DeleteApiInstancesByIdArtifactsByArtifact.Output { try await client.deleteApiInstancesByIdArtifactsByArtifact(input) }
         public func artifactShown(_ input: Operations.PostApiInstancesByIdArtifactsByArtifactShown.Input) async throws -> Operations.PostApiInstancesByIdArtifactsByArtifactShown.Output { try await client.postApiInstancesByIdArtifactsByArtifactShown(input) }
         public func comments(_ input: Operations.GetApiInstancesByIdArtifactsComments.Input) async throws -> Operations.GetApiInstancesByIdArtifactsComments.Output { try await client.getApiInstancesByIdArtifactsComments(input) }
         public func canvasSent(_ input: Operations.PostApiInstancesByIdArtifactsByArtifactSent.Input) async throws -> Operations.PostApiInstancesByIdArtifactsByArtifactSent.Output { try await client.postApiInstancesByIdArtifactsByArtifactSent(input) }

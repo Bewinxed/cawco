@@ -233,6 +233,10 @@ public final class HomeModel {
             /// An onboarding choice nobody answered: the fleet's upstream
             /// choice, its three answers on the row (NeedsCard.svelte `choice`).
             case choice
+            /// HTTPS on the tailnet name: the step that stands, its one
+            /// button on the row; `done` a moment after it is taken
+            /// (NeedsCard.svelte `tailnet`).
+            case tailnet(Components.Schemas.TailnetHttps, done: Bool)
         }
 
         public let id: String
@@ -255,7 +259,7 @@ public final class HomeModel {
             switch kind {
             case let .ask(ask): ask.instanceId
             case let .watch(notice): notice.instanceId
-            case .run, .choice: nil
+            case .run, .choice, .tailnet: nil
             }
         }
     }
@@ -329,6 +333,19 @@ public final class HomeModel {
                 kind: .choice,
                 machineId: "",
                 title: Words.Upstream.title,
+                place: "Onboarding",
+                raisedAt: nil
+            ))
+        }
+        // HTTPS on the tailnet name: its step while one stands, its tick a
+        // moment after (home-state.svelte.ts `secured`).
+        if let tailnet = fleet.tailnetHttps,
+           tailnet.state == .needs || (tailnet.state == .serving && fleet.tailnetTicked) {
+            items.append(NeedsItem(
+                id: "tailnet:https",
+                kind: .tailnet(tailnet, done: tailnet.state == .serving),
+                machineId: "",
+                title: Words.Tailnet.title,
                 place: "Onboarding",
                 raisedAt: nil
             ))

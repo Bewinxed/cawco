@@ -14866,6 +14866,53 @@
         }
       }
     },
+    "/api/machines/ssh/{id}/stop": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiMachinesSshByIdStop",
+        "responses": {
+          "200": {
+            "description": "postApiMachinesSshByIdStop 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshJoinJob"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiMachinesSshByIdStop 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiMachinesSshByIdStop 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/binary-updates/settings": {
       "get": {
         "operationId": "getApiBinaryUpdatesSettings",
@@ -16155,6 +16202,23 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tailnet-https": {
+      "get": {
+        "operationId": "getApiTailnetHttps",
+        "responses": {
+          "200": {
+            "description": "getApiTailnetHttps 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TailnetHttps"
                 }
               }
             }
@@ -25258,6 +25322,9 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "name": {
             "type": "string"
           },
@@ -25271,9 +25338,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "description": {
             "type": "string"
@@ -25330,6 +25394,9 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "name": {
             "type": "string"
           },
@@ -25343,9 +25410,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "description": {
             "type": "string"
@@ -25388,6 +25452,9 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "name": {
             "type": "string"
           },
@@ -25401,9 +25468,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "description": {
             "type": "string"
@@ -30027,6 +30091,9 @@
             "$ref": "#/components/schemas/FleetUpstreamFrame"
           },
           {
+            "$ref": "#/components/schemas/TailnetHttpsFrame"
+          },
+          {
             "$ref": "#/components/schemas/FleetFetchFrame"
           },
           {
@@ -30098,6 +30165,7 @@
             "starters.changed": "#/components/schemas/StartersChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
             "fleet.upstream": "#/components/schemas/FleetUpstreamFrame",
+            "tailnet.https": "#/components/schemas/TailnetHttpsFrame",
             "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "actions": "#/components/schemas/ActionsFrame",
@@ -31037,10 +31105,33 @@
           "port": {
             "description": "The session's own preview port, listened on in either mode.",
             "type": "number"
+          },
+          "tailnet": {
+            "$ref": "#/components/schemas/TailnetOrigin",
+            "description": "The session's origin on the hub machine's tailnet name, while the hub\nserves HTTPS there (core tailnet-https.ts): on the tailnet addresses the\nport answers HTTPS alone."
           }
         },
         "required": [
           "port"
+        ]
+      },
+      "TailnetOrigin": {
+        "description": "A session's preview origin on the tailnet name, beside its port\n({@link PreviewAddress}): `origin` is `https://<name>:<port>`, and `hosts`\nevery host a client reaches the hub's machine by over the tailnet (its\ntailnet addresses, its full name and its short one). A client that reached\nthe hub by one of them loads the preview from `origin`: on those\naddresses the port answers HTTPS alone.",
+        "type": "object",
+        "properties": {
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "origin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hosts",
+          "origin"
         ]
       },
       "PreviewTicket": {
@@ -33101,6 +33192,10 @@
           "stage": {
             "$ref": "#/components/schemas/StageState",
             "description": "A sheet's stage, or a served preview's server, as it stands once started."
+          },
+          "tailnet": {
+            "$ref": "#/components/schemas/TailnetOrigin",
+            "description": "A draft canvas's origin on the tailnet name while the hub serves HTTPS there (core `PreviewAddress`)."
           },
           "weight": {
             "$ref": "#/components/schemas/FolderWeight",
@@ -38546,7 +38641,7 @@
             "type": "string"
           },
           "lines": {
-            "description": "Everything the SSH session printed, stdout and stderr in arrival order.",
+            "description": "Everything the SSH session printed, stdout and stderr in arrival order.\nA step line ({@link INSTALL_STEP_PREFIX}) means it has signed in: the\nremote command prints one before anything else it does.",
             "type": "array",
             "items": {
               "type": "string"
@@ -38685,7 +38780,7 @@
           },
           "state": {
             "$ref": "#/components/schemas/SshJoinJobState",
-            "description": "`done` means the script exited 0 and the hub has the machine online."
+            "description": "`done` means the script exited 0 and the hub has the machine online;\n`stopped`, that the person stopped it and its `ssh` is gone."
           },
           "target": {
             "type": "string"
@@ -38877,6 +38972,9 @@
         "description": "A workflow as the list carries it: everything but its program, which only\nthe workflow's own read serves. The graph stays: the editor resolves a\ncalled workflow's Start inputs from it, and the app's launch form reads it.",
         "type": "object",
         "properties": {
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "name": {
             "type": "string"
           },
@@ -38904,9 +39002,6 @@
                 "type": "string"
               }
             ]
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "description": {
             "type": "string"
@@ -39926,6 +40021,53 @@
         "required": [
           "message",
           "name"
+        ]
+      },
+      "TailnetHttps": {
+        "description": "What `GET /api/tailnet-https` answers, and the `tailnet.https` frame carries.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "The command the step runs on the hub's machine, for `operator` and `port`.",
+            "type": "string"
+          },
+          "dashboard": {
+            "description": "The dashboard's https address while `serving`: `https://<name>:<port>`.",
+            "type": "string"
+          },
+          "host": {
+            "description": "The hub's machine, by its hostname.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The machine's tailnet name (`machine.tailnet.ts.net`), once its tailnet names it.",
+            "type": "string"
+          },
+          "port": {
+            "description": "The port a `port` step names.",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TailnetHttpsState"
+          },
+          "step": {
+            "$ref": "#/components/schemas/TailnetHttpsStep",
+            "description": "What the person does next, while `needs`."
+          }
+        },
+        "required": [
+          "host",
+          "state"
+        ]
+      },
+      "TailnetHttpsState": {
+        "description": "Where it stands on the hub's machine:\n- `absent`: no Tailscale there (no CLI, or its daemon is not running);\n- `signed-out`: Tailscale is there but not signed in to a tailnet;\n- `needs`: on a tailnet, and one step of the person's stands between it\n  and HTTPS ({@link TailnetHttpsStep});\n- `serving`: the dashboard and the previews answer over HTTPS on the name.",
+        "type": "string",
+        "enum": [
+          "absent",
+          "needs",
+          "serving",
+          "signed-out"
         ]
       },
       "AgentRow": {
@@ -42099,6 +42241,18 @@
           "delegateTitle": {
             "description": "The delegate's brief headline, carried beside {@link delegateInstanceId}.",
             "type": "string"
+          },
+          "designOffer": {
+            "description": "A thread's note of Caw asking whether to build a design system: the\nproject it is for, whose Build and Not now the note draws under it\n(EventThreadMessage `designOffer`, as a thread's blocks carry it on the\ndashboard and in the app).",
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "projectId"
+            ]
           },
           "errorTitle": {
             "description": "A failure card's heading (`ui.error`, `ui.session_error`); a missing\nsession's when unset on a session error, \"Turn failed\" otherwise.",
@@ -46047,6 +46201,13 @@
           "dirty": {
             "type": "number"
           },
+          "excluded": {
+            "description": "The untracked paths git ignores through no `.gitignore` the repository\ntracks: by a line of the clone's `.git/info/exclude`, or a `.gitignore`\nthat is itself untracked, each as `git status --ignored=matching` names\nit, relative to the clone (a folder ends in `/`). The paths `skip`\nnames, and what CawCo writes into a clone and lists there itself (its\ndeny paths' stand-ins, the placed skills and memory, its stage), are not\namong them. On 2026-10-17 a delegate kept a design page's source out of\nits landing this way, and retirement deleted it. Absent when none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "stashes": {
             "type": "number"
           },
@@ -46079,7 +46240,7 @@
         ]
       },
       "WorkspaceHolding": {
-        "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref of `origin` has\n(`git rev-list --count HEAD --branches --not --remotes=origin`: landed work\nwas pushed, whether onto the base or to a branch of its own, and a cut\nagain fetches it from `origin`), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), and stash entries. Files git ignores are\nnone of it: they go with the clone, and a delegate keeps one by handing it\nin as an output. `bytes` is the clone's size on disk.",
+        "description": "What a workspace holds that is nowhere else, read with git on its machine's\nhost once its boundary is closed (agent workspace.ts `closeClone`): commits\non HEAD or any local branch that no remote-tracking ref of `origin` has\n(`git rev-list --count HEAD --branches --not --remotes=origin`: landed work\nwas pushed, whether onto the base or to a branch of its own, and a cut\nagain fetches it from `origin`), entries of `git status\n--porcelain` (untracked files included; the paths `skip` names, the outputs\nits items handed over, left out), stash entries, and the files kept out of\ngit only by the clone's own excludes (`excluded`). Files a committed\n`.gitignore` covers (dependencies, builds, caches) are none of it: they go\nwith the clone. `bytes` is the clone's size on disk.",
         "type": "object",
         "properties": {
           "ahead": {
@@ -46090,6 +46251,13 @@
           },
           "dirty": {
             "type": "number"
+          },
+          "excluded": {
+            "description": "The untracked paths git ignores through no `.gitignore` the repository\ntracks: by a line of the clone's `.git/info/exclude`, or a `.gitignore`\nthat is itself untracked, each as `git status --ignored=matching` names\nit, relative to the clone (a folder ends in `/`). The paths `skip`\nnames, and what CawCo writes into a clone and lists there itself (its\ndeny paths' stand-ins, the placed skills and memory, its stage), are not\namong them. On 2026-10-17 a delegate kept a design page's source out of\nits landing this way, and retirement deleted it. Absent when none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "stashes": {
             "type": "number"
@@ -47777,6 +47945,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/PreviewFrameState"
+          },
+          "tailnet": {
+            "$ref": "#/components/schemas/TailnetOrigin",
+            "description": "The session's origin on the tailnet name while the hub serves HTTPS there ({@link PreviewAddress})."
           }
         },
         "required": [
@@ -51385,6 +51557,25 @@
           "upstream"
         ]
       },
+      "TailnetHttpsFrame": {
+        "description": "Hub-originated: HTTPS on the hub machine's tailnet name changed state (hub\ntailnet-https.ts): a step came to need the person, they took it, or the\nname began or stopped answering. Every dashboard takes it at once, so its\nonboarding row in Needs you shows the step that stands, or ticks.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "tailnet.https"
+            ]
+          },
+          "tailnet": {
+            "$ref": "#/components/schemas/TailnetHttps"
+          }
+        },
+        "required": [
+          "kind",
+          "tailnet"
+        ]
+      },
       "FleetFetchFrame": {
         "description": "Hub-originated: a download at the hub began (`fetching`) or landed. A fetch\nruns after the request that asked for it has answered, so this is how\nevery dashboard learns what came of it. Exactly one of the four is set:\n- `skill`, `plugin`: a fetch of a fleet row's files, the row whole as\n  `/api/fleet` reads it (files, or the sentence it failed with);\n- `marketplace`: a read of a marketplace source (its name and offers);\n- `link`: a link of a marketplace source, linked or refused.",
         "type": "object",
@@ -52704,7 +52895,8 @@
         "enum": [
           "done",
           "failed",
-          "running"
+          "running",
+          "stopped"
         ]
       },
       "StageHooksBy": {
@@ -52722,6 +52914,16 @@
         "enum": [
           "file",
           "template"
+        ]
+      },
+      "TailnetHttpsStep": {
+        "type": "string",
+        "enum": [
+          "enable-https",
+          "enable-magicdns",
+          "operator",
+          "port",
+          "userspace"
         ]
       },
       "TaskHistoryState": {

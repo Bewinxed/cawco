@@ -290,12 +290,27 @@ export interface DeliveryMark {
 export interface RegisterAckPayload {
   addressContract?: true;
   /**
+   * The dashboard's ports: `hub`, where the hub's computer serves it to the
+   * network (hub config.ts `DASHBOARD_PORT`), and `local`, its port on every
+   * computer's loopback (core `localDashboardPort`). The agent serves `local`
+   * on its own loopback, carried to the hub's `hub` (agent hub-loopback.ts),
+   * with {@link previewPorts}.
+   */
+  dashboardPorts: { hub: number; local: number };
+  /**
    * The hub's delivery mark for each instance the register names
    * ({@link DeliveryMark}): the agent sends again what it has past it.
    * Every heartbeat's ack carries them again, and the agent lets go of what
    * they cover.
    */
   delivered?: Record<string, DeliveryMark>;
+  /**
+   * Whether this machine is the hub's own computer: its machine id is the
+   * hub's (hub server.ts `isHubMachine`: "an agent registered under it shares
+   * the hub's disk"). The agent's loopback carries nothing there (agent
+   * hub-loopback.ts): the dashboard's own socket listens on the loopback port.
+   */
+  hostsHub: boolean;
   /**
    * This hub process, random at its start: an agent that last saw another
    * epoch knows the hub restarted since, and that every connection a harness
@@ -319,6 +334,8 @@ export interface RegisterAckPayload {
    */
   machineCredential: string;
   ok: true;
+  /** The ports the hub's preview listeners take (hub config.ts `PREVIEW_PORTS`), served on the agent's loopback beside {@link dashboardPorts}. */
+  previewPorts: { first: number; last: number };
   /**
    * The fleet's session limits ({@link import("./index").SessionLimits}), so
    * the first process the machine starts after it connects runs under them.

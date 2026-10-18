@@ -378,7 +378,8 @@
 
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so,
      unless the site keeps it drawn (`forceMount`): the page has its pointer
-     back at the dismissal (floating-presence). -->
+     back at the dismissal (floating-presence). Its wrapper is marked a
+     hanging card's (`data-hang`), the cut app.css draws on it. -->
 <Content
   data-glass-card={glass || undefined}
   {...rest}
@@ -393,7 +394,7 @@
 >
   {#snippet child({ props, wrapperProps, open })}
     {#if forceMount || drawn(props)}
-      <div {...wrapperProps} style:pointer-events={pressable(open)}>
+      <div {...wrapperProps} data-hang style:pointer-events={pressable(open)}>
         <div
           {...own(props)}
           style:pointer-events={pressable(open)}

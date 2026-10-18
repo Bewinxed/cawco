@@ -90,6 +90,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case refresh = "refresh-bold-duotone"
     case settings = "settings-bold-duotone"
     case shield = "shield-bold-duotone"
+    /// HTTPS on the tailnet (icons.ts `IconTailnetHttps`).
+    case tailnetHttps = "shield-network-bold-duotone"
     case sidebar = "sidebar-minimalistic-line-duotone"
     case sort = "sort-bold-duotone"
     case unfold = "sort-vertical-bold-duotone"
@@ -150,6 +152,9 @@ public enum Glyph: String, CaseIterable, Sendable {
     case pen = "pen-bold-duotone"
     /// A pin's Reopen (PinCard.svelte `IconReopen`).
     case reopen = "restart-bold-duotone"
+    /// A sheet inspector's prop back to its default (SheetInspector.svelte `IconReset`).
+    case reset = "undo-left-bold-duotone"
+    case undock = "sidebar-minimalistic-bold-duotone"
     /// The pins' moved tray (PinList.svelte `IconMapPoint`).
     case mapPoint = "map-point-bold-duotone"
     // Configure → Accounts (AccountEditor.svelte, AccountMachines.svelte, KeyPanel.svelte).

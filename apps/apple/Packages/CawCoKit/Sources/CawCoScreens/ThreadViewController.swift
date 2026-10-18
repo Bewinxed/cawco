@@ -5,6 +5,7 @@ import CawCoMascot
 import CawCoTranscript
 import OSLog
 import UIKit
+import UniformTypeIdentifiers
 
 /// A thread with a project's Caw, as a session tab (ThreadPane.svelte): the
 /// thread's messages shaped into the transcript's session, so the real
@@ -37,6 +38,8 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     private let transcriptView = TranscriptView()
     private let transcriptHost = UIViewController()
     let composerBinding: SessionComposerBinding
+    /// What rides with the words: picks, pastes and uploads.
+    private var attacher: ComposerAttacher!
     private var transcript: SessionTranscript
     private var cards: [String: PromptCardView] = [:]
     private var shownOnce = false
@@ -78,9 +81,13 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         composerBinding.agentName = "Caw"
         composerBinding.placeholder = "Message the project…"
         composerBinding.delegates = false
-        composerBinding.attachMenu = nil
+        // Files and pictures ride with the words in a thread too (ThreadPane's Composer, `attach` on).
+        attacher = ComposerAttacher(hub: hub, binding: composerBinding, presenter: self)
+        composerBinding.attachMenu = attacher.menu()
+        composerBinding.onPasteItems = { [weak self] items in self?.attacher.pasted(items) }
+        composerBinding.onRetryFile = { [weak self] id in self?.attacher.upload(id) }
         composerBinding.perch = seatBox
-        composerBinding.onSend = { [weak self] words, _ in self?.send(words) }
+        composerBinding.onSend = { [weak self] words, attachments in self?.send(words, attachments) }
         composerBinding.onStop = { [weak self] in self?.stopTurn() }
         composerBinding.recall = { [weak self] in self?.recall() ?? [] }
         planRing.addAction(UIAction { [weak self] _ in self?.openPlan() }, for: .touchUpInside)
@@ -114,6 +121,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         transcriptView.translatesAutoresizingMaskIntoConstraints = false
         transcriptView.hub = hub
         transcriptView.onOpenSession = { [weak self] id in self?.onOpenSession(id) }
+        transcriptView.onOpenTask = { [weak self] projectId, taskId in self?.onOpenTask(projectId, taskId) }
         transcriptView.onOpenRun = { [weak self] runId in self?.onOpenSession(BoardRun.prefix + runId) }
         transcriptView.onReturnToFleet = { [weak self] in self?.onReturnToFleet() }
         view.hold(transcriptHost.view)
@@ -204,7 +212,73 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         shownOnce = true
+        #if DEBUG
+        carryForProbe()
+        #endif
     }
+
+    #if DEBUG
+    private var carried = false
+    private var carryWaiting = ""
+
+    /// `-thread-carry <words>` (ios-thread-carry): a picture and a file are
+    /// pasted into the composer, as a paste hands them over (ComposerAttacher
+    /// `pasted`: the picture read, the file uploaded to the hub), and once
+    /// both stand ready the words are typed and Send pressed.
+    private func carryForProbe() {
+        guard let words = PreviewProbe.threadCarry, !carried else { return }
+        guard writable, hub.state == .connected, composerBinding.composer != nil else {
+            let waiting = "thread carry waits writable=\(writable) connected=\(hub.state == .connected) composer=\(composerBinding.composer != nil) problem=\(caw?.problem ?? "-")"
+            if waiting != carryWaiting {
+                carryWaiting = waiting
+                PreviewProbe.say(waiting)
+            }
+            return
+        }
+        carried = true
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 48)).pngData { context in
+            UIColor.systemRed.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 64, height: 48))
+        }
+        let picture = NSItemProvider(item: image as NSData, typeIdentifier: UTType.png.identifier)
+        picture.suggestedName = "probe.png"
+        let pdf = Data("%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n".utf8)
+        let file = NSItemProvider()
+        file.registerDataRepresentation(forTypeIdentifier: UTType.pdf.identifier, visibility: .all) { done in
+            done(pdf, nil)
+            return nil
+        }
+        file.suggestedName = "probe-brief"
+        attacher.pasted([picture, file])
+        Task { [weak self] in
+            for _ in 0 ..< 120 {
+                guard let self else { return }
+                let held = composerBinding.attachments
+                let ready = held.contains { if case .image = $0 { true } else { false } }
+                    && held.contains { if case .file(_, _, _, _, .ready) = $0 { true } else { false } }
+                if ready {
+                    PreviewProbe.say("thread carry attached \(held.map(Self.probeName).joined(separator: ","))")
+                    let pressed = composerBinding.probeSend(words)
+                    PreviewProbe.say("thread carry pressed send=\(pressed)")
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            PreviewProbe.say("thread carry never ready: \(self?.composerBinding.attachments.map(Self.probeName).joined(separator: ",") ?? "-")")
+        }
+    }
+
+    /// An attachment as the probe log names it: its kind, its name, and a file's state.
+    private static func probeName(_ attachment: ComposerAttachment) -> String {
+        switch attachment {
+        case let .image(name, _, _): "image:\(name)"
+        case let .text(name, _): "text:\(name)"
+        case let .file(_, name, _, _, .ready): "file:\(name):ready"
+        case let .file(_, name, _, _, state): "file:\(name):\(state)"
+        case let .pending(_, name): "pending:\(name)"
+        }
+    }
+    #endif
 
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
@@ -320,6 +394,8 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         clearComposer()
         #if DEBUG
         probe()
+        // The thread becomes writable once the hub's word on Caw is read: the probe's carry waits for it.
+        if view.window != nil { carryForProbe() }
         #endif
     }
 
@@ -411,7 +487,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     private func syncPlan() {
         let plan = followed.flatMap { hub.plans.plans[$0] }
         if let plan, plan.shows {
-            planRing.configure(done: plan.done, total: plan.steps.count)
+            planRing.configure(done: plan.progress.done, total: plan.progress.total)
             composerBinding.ring = planRing
         } else {
             composerBinding.ring = nil
@@ -421,7 +497,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     private func openPlan() {
         guard let lead = followed else { return }
         let sheet = PlanSheetController(hub: hub, instanceId: lead)
-        present(HouseSheetController(sheet, title: "Plan", scroller: sheet.scroll), animated: true)
+        present(HouseSheetController(sheet, title: PlanSheetController.title(hub.plans.plans[lead]), scroller: sheet.scroll), animated: true)
     }
 
     // MARK: His asks, on the composer
@@ -644,24 +720,41 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     /// Your words go to the thread as one message (ThreadPane.svelte
     /// `onsubmit`): its row lands them however soon its frame draws it; a
     /// refusal gives them back to the field with why.
-    private func send(_ words: String) {
+    private func send(_ words: String, _ attachments: [ComposerAttachment]) {
         guard hub.state == .connected, writable, !sending, !projectId.isEmpty else { return }
+        // Nothing goes while a pick is being read or a file is not on the hub yet.
+        guard let carried = ComposerAttacher.carried(attachments) else { return }
         let id = unanswered.flatMap { $0.words == words ? $0.id : nil } ?? UUID().uuidString.lowercased()
         sending = true
         sendError = nil
         composerBinding.sent()
         requestRefresh()
+        #if DEBUG
+        PreviewProbe.say("thread send \(id) images=\(carried.images.count) texts=\(carried.texts.count) files=\(carried.files.map(\.name).joined(separator: ","))")
+        #endif
         Task { [weak self, hub, projectId, threadId] in
             do {
-                let said = try await hub.threads.say(projectId: projectId, threadId: threadId, body: words, id: id)
+                let said = try await hub.threads.say(projectId: projectId, threadId: threadId, body: words, id: id,
+                                                     images: carried.images, texts: carried.texts, files: carried.files)
                 self?.unanswered = nil
                 if threadId == nil { self?.started(said.id) }
+                #if DEBUG
+                PreviewProbe.say("thread send \(id) kept")
+                #endif
             } catch {
+                // The words and what rode with them come back (`draft.restore(text, extras)`).
                 self?.composerBinding.setDraft(words)
+                for attachment in attachments { self?.composerBinding.attach(attachment) }
                 let unreached = ThreadsStore.unreachable(error)
                 self?.unanswered = unreached ? (words, id) : nil
                 self?.sendError = unreached ? ThreadsStore.sendUnreached : ThreadsStore.failureWords(error)
                 Self.log.error("thread send refused: \(error.localizedDescription, privacy: .public)")
+                #if DEBUG
+                if let self {
+                    let held = composerBinding.attachments.map(Self.probeName).joined(separator: ",")
+                    PreviewProbe.say("thread send \(id) refused why=\(sendError ?? "-") restored words=\(composerBinding.draft) attachments=\(held)")
+                }
+                #endif
             }
             self?.sending = false
             self?.requestRefresh()

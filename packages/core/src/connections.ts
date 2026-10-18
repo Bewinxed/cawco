@@ -5,6 +5,25 @@
  * key: a delegate type (or a project) lists the connections its sessions may
  * use, and the hub calls their tools for them (`conn__<name>__<tool>`).
  */
+import type { RelayProvider } from "./relays";
+
+/**
+ * The services that push their events and are never polled for them (§5.5:
+ * "Caw offers the relay when you connect a push-only service"), each with
+ * the relay provider that checks its deliveries' signature (hub relay.ts).
+ * A project that gets one of these signed in hears nothing from it until it
+ * has a relay, so Caw is woken to offer one. Stripe is the one service the
+ * relay verifies by its own scheme (`Stripe-Signature`); GitHub is polled.
+ */
+export const PUSH_ONLY_SERVICES: Readonly<Record<string, RelayProvider>> = {
+  stripe: "stripe",
+};
+
+/** The relay provider a connection's service needs, when it is push-only; the service as its row says it. */
+export const pushOnlyProvider = (service: string): RelayProvider | undefined =>
+  Object.hasOwn(PUSH_ONLY_SERVICES, service.trim().toLowerCase())
+    ? PUSH_ONLY_SERVICES[service.trim().toLowerCase()]
+    : undefined;
 
 /**
  * How the hub reaches the service's MCP server: `http` (Streamable HTTP),

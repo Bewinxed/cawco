@@ -76,6 +76,7 @@ import type {
   StopPayload,
   StreamHeartbeat,
   SupportedCommands,
+  TailnetHttps,
   ThreadMessage,
   ThreadRead,
   ThreadSaid,
@@ -185,11 +186,6 @@ import {
   subscribeSession,
   sweepCommands,
 } from "./stream";
-import {
-  invalidateTasks,
-  refreshTasks,
-  TASK_LEDGER_TOOLS,
-} from "./tasks.svelte";
 import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
 import { toast } from "./toasts";
 import { warmCompactionMark } from "./transcript/compaction-mark";
@@ -855,6 +851,10 @@ const state = $state({
       title?: string;
       path?: string;
       thumbnail?: string;
+      /** The revision the thumbnail was taken of. */
+      thumbnailRevision?: string;
+      /** A transcript card that shows the thumbnail is on screen (ToolGroup): the pane takes one. */
+      thumbnailWanted?: boolean;
     }
   >,
   previewRequests: {} as Record<string, number>,
@@ -1035,6 +1035,14 @@ const state = $state({
    * read.
    */
   fleetUpstream: undefined as UpstreamPosts | null | undefined,
+  /**
+   * HTTPS on the hub machine's tailnet name (`GET /api/tailnet-https`, then
+   * each `tailnet.https` frame): Needs you shows its step while one needs
+   * the person; undefined until read.
+   */
+  tailnetHttps: undefined as TailnetHttps | undefined,
+  /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
+  tailnetTicked: false,
   /**
    * Each machine's latest Claude limit reading, by machineId — folded in from
    * the `kind: 'usage'` frame so the pill updates live rather than polling
@@ -1628,11 +1636,6 @@ function updateBlock(target: SessionState, block: TranscriptBlock): void {
   }
   if (adopt(held, block as Message) && !block.parentToolUseId) {
     target.rev += 1;
-  }
-  // The ledger on disk just moved: what it now says is read back from the
-  // files, never parsed out of here.
-  if (TASK_LEDGER_TOOLS.has(block.metadata?.toolName ?? "")) {
-    invalidateTasks(target.instanceId);
   }
 }
 
@@ -2601,6 +2604,8 @@ async function refresh(): Promise<boolean> {
   readWatchNotices();
   // The fleet's upstream answer: Needs you asks it while nobody has.
   readFleetUpstream();
+  // HTTPS on the tailnet name: Needs you shows its step while one stands.
+  readTailnetHttps();
   // Every project's threads, for the rail; frames keep them from here.
   readThreads();
   // What the socket says about asks from here on is newer than the read.
@@ -3110,6 +3115,21 @@ function handleFrame(frame: FramePayload): void {
   // The fleet's upstream answer, given anywhere: Needs you stops asking.
   if (frame.kind === "fleet.upstream") {
     state.fleetUpstream = frame.upstream;
+    return;
+  }
+
+  // HTTPS on the tailnet name changed: Needs you's step moves on, or ticks.
+  if (frame.kind === "tailnet.https") {
+    const ticked =
+      state.tailnetHttps?.state === "needs" &&
+      frame.tailnet.state === "serving";
+    state.tailnetHttps = frame.tailnet;
+    state.tailnetTicked = ticked;
+    if (ticked) {
+      setTimeout(() => {
+        state.tailnetTicked = false;
+      }, TAILNET_TICK_MS);
+    }
     return;
   }
 
@@ -5880,6 +5900,17 @@ async function readProjectOffers(): Promise<void> {
   }
 }
 
+/** How long HTTPS's onboarding row stands ticked once its step is taken. Our choice: long enough to read and press its Open. */
+const TAILNET_TICK_MS = 12_000;
+
+/** HTTPS on the hub machine's tailnet name, as the hub has it now. */
+async function readTailnetHttps(): Promise<void> {
+  const read = await load<TailnetHttps>("/api/tailnet-https");
+  if (read) {
+    state.tailnetHttps = read;
+  }
+}
+
 /** The fleet's upstream answer, as the hub holds it now. */
 async function readFleetUpstream(): Promise<void> {
   const read = await load<{ upstream: UpstreamPosts | null }>(
@@ -7273,9 +7304,6 @@ async function readNewestPage(
 ): Promise<TranscriptOutcome> {
   const viewId = target.instanceId;
   beginRead(streamState, viewId);
-  // A stored session's plan is still on its machine, and no frame will ever
-  // arrive to say so — opening it is the only moment there is to ask.
-  refreshTasks(viewId);
   target.loading = true;
   // The `/` palette's servers and tools are read beside the transcript: the
   // board's rows do not carry them. A session with no hub row has none.
@@ -8542,6 +8570,14 @@ export const cawco = {
   /** The fleet's upstream answer; null while nobody has given it, undefined until read. */
   get fleetUpstream(): UpstreamPosts | null | undefined {
     return state.fleetUpstream;
+  },
+  /** HTTPS on the hub machine's tailnet name; undefined until read. */
+  get tailnetHttps(): TailnetHttps | undefined {
+    return state.tailnetHttps;
+  },
+  /** Its step was taken while this page stood, a moment ago: the row ticks. */
+  get tailnetTicked(): boolean {
+    return state.tailnetTicked;
   },
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {

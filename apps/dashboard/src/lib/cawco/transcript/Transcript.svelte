@@ -1546,8 +1546,13 @@
   const keepMounted = $derived.by(() => {
     const count = renderedRows.length;
     const { leaving: folding, settled } = presentation;
+    // Not seen, the tail has no motion to keep: every row its session sends
+    // would wait mounted for the reach to style it, with the view it was put
+    // away at (tab-return 1b: 8 rows, 550 elements, in the warm frame). A
+    // far landing builds its own (`staged`).
+    const tail = unseen ? 0 : TAIL_MOUNTED;
     const kept = Array.from(
-      { length: Math.min(Math.max(TAIL_MOUNTED, staged), count) },
+      { length: Math.min(Math.max(tail, staged), count) },
       (_, i) => count - 1 - i
     );
     // A row folding shut stands after the settled rows (`withLeaving`).
@@ -1572,14 +1577,15 @@
   /**
    * A LANDING FAR DOWN DRAWS WHAT IS ON SCREEN FIRST.
    *
-   * A pane shown again after its session went on without it (a catch-up, a
-   * pane laid out while the pointer rested on its tab, `active` rising) is
-   * put on its new tail by the pin, a screen or more below where it stood
-   * (`pinBottom`). virtua re-cut its range there in one go: every row on
-   * screen at the tail and a screen more above it mounted, and every row of
-   * the view it left taken down, in one scroll event of 53ms. While it lands,
-   * it mounts only what the view shows (no `bufferSize`) and keeps the rows
-   * of the view it left (`lingering`, in `keepMounted`), out of sight above.
+   * A pane whose session went on without it — laid out unseen as the reader
+   * reaches for its tab (`awayAtTail`), or shown again with no reach first, a
+   * catch-up, `active` rising — is put on its new tail by the pin, a screen
+   * or more below where it stood (`pinBottom`). virtua re-cut its range
+   * there in one go: every row on screen at the tail and a screen more above
+   * it mounted, and every row of the view it left taken down, in one scroll
+   * event of 53ms. While it lands, it mounts only what the view shows (no
+   * `bufferSize`) and keeps the rows of the view it left (`lingering`, in
+   * `keepMounted`), out of sight above.
    * Once that frame has painted, the screen above is mounted in a task of its
    * own, and the rows left behind are let go in the next (web.dev, "Optimize
    * long tasks": break a long task up and yield between the parts). What is
@@ -2620,6 +2626,8 @@
       if (landingFrame !== null) {
         cancelAnimationFrame(landingFrame);
       }
+      clearTimeout(landingAway);
+      landingAway = undefined;
       stopFollow();
     };
   });
@@ -2634,6 +2642,39 @@
    */
   const pinned = (): boolean =>
     landed && atBottom && !jumping && (active || !shown);
+
+  /**
+   * A PANE PUT AWAY AT ITS TAIL IS LAID OUT AT ITS TAIL.
+   *
+   * Put away, a pane is skipped (PaneLeaf `.pane-hidden`): its rows are built
+   * on the scheduler's turns but never measured, so nothing moves its view,
+   * and minutes of a busy session leave the view it was put away at screens
+   * above its end (2,400px after 3 min, tab-return 1b). Started by the
+   * press, the far landing that distance makes (`stageFar`, `landFar`) ran
+   * in front of the reader: each step's measurement pinned again in virtua's
+   * observer, a layout forced behind the rows it had just flushed, 20ms a
+   * frame for 300ms, and the landing's own frame 35ms. The reach lays the
+   * pane out unseen first (warm.svelte.ts), and virtua measures its rows
+   * there: the landing starts then, its steps out of sight, so the press
+   * finds a pane at its tail holding the rows of that view. Only from
+   * virtua's observer,
+   * which a skipped pane never hears (Chromium delivers no ResizeObserver
+   * entry inside `content-visibility: hidden`, and a scroll write there lays
+   * the subtree out to land): a read of the page in a pane put away would lay
+   * it out. And in a task of its own behind the frame that measured: that
+   * frame already styles every element the pane holds.
+   */
+  const awayAtTail = (): boolean => landed && atBottom && !jumping && !visible;
+  let landingAway: ReturnType<typeof setTimeout> | undefined;
+  function landAway(): void {
+    landingAway ??= setTimeout(() => {
+      landingAway = undefined;
+      if (awayAtTail()) {
+        keepWhole();
+        pinBottom();
+      }
+    });
+  }
 
   /**
    * THE PIN. While the reader is at the tail, the list getting taller is
@@ -2669,6 +2710,9 @@
    */
   function onresize(): void {
     if (!pinned()) {
+      if (awayAtTail()) {
+        landAway();
+      }
       return;
     }
     flushSync();
@@ -3726,13 +3770,13 @@
      another spoke, a tab behind another, a deck card, the pen), and the
      transcript's rows were drawn over Workflows. A row virtua has never
      measured keeps virtua's hiding.
-     The item is named (`data-item`, virtua's `itemProps`) ahead of the
-     `:has()`: with the pseudo-class alone as the subject, every element on
-     the page was one the engine had to test it on, so every node put in
-     anywhere (each word of a streamed reply, each row virtua mounted)
-     restyled its parent, and a tab switch restyled the transcripts whole
-     ("Affected by :has()", 1,406 of them across five switches). */
-  .listing :global([data-item]:has(> [data-row][data-drawn])) {
+     The item is named (`data-item`, virtua's `itemProps`) and marked drawn
+     by its row (Row's `data-drawn`), never asked with `:has()`: as
+     `:has(> [data-row][data-drawn])`, every node put in under a row (each
+     word of a streamed reply, each row virtua mounted) walked up and
+     restyled its item ("Affected by :has()", 8-11 items in each of a busy
+     tab's return tasks, tab-return 1b). */
+  .listing :global([data-item][data-drawn]) {
     visibility: inherit !important;
   }
   /* virtua writes `pointer-events: none` on its container while it scrolls

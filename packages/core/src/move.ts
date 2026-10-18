@@ -437,12 +437,32 @@ export const moveBranch = (machineName: string): string =>
       .replace(/^[-.]+|[-.]+$/g, "") || "machine"
   }`;
 
-/** The install a lockfile at a repository's root picks (my call; no lockfile, no install). */
+/**
+ * bun's install that never writes the lockfile, as every pick of
+ * {@link installFor} is frozen. bun.com/docs/pm/cli/install: "Bun installs
+ * the exact versions specified in the lockfile and does not update it. If
+ * your `package.json` disagrees with `bun.lock`, Bun exits with an error";
+ * and "If there is no lockfile at all, `--frozen-lockfile` installs from
+ * `package.json` without writing one".
+ */
+const BUN_FROZEN: MoveInstall = {
+  argv: ["bun", "install", "--frozen-lockfile"],
+  command: "bun install --frozen-lockfile",
+};
+
+/** bun's words as a frozen install refuses a lockfile its `package.json` disagrees with. */
+const BUN_FROZEN_REFUSAL = "lockfile had changes, but lockfile is frozen";
+
+/**
+ * The install a lockfile at a repository's root picks (my call; no lockfile,
+ * no install): each frozen, so it installs what the lockfile holds and never
+ * rewrites it, and refuses a lockfile its `package.json` disagrees with.
+ */
 export const installFor = (lockfile: string | null): MoveInstall | null => {
   switch (lockfile) {
     case "bun.lock":
     case "bun.lockb":
-      return { argv: ["bun", "install"], command: "bun install" };
+      return BUN_FROZEN;
     case "pnpm-lock.yaml":
       return {
         argv: ["pnpm", "install", "--frozen-lockfile"],
@@ -470,8 +490,11 @@ export const LOCKFILES = [
 ] as const;
 
 /**
- * Where a checkout's install records the lockfile it installed from: the
- * lockfile's git blob hash, next to the dependencies.
+ * Where a checkout's install records what it installed from, next to the
+ * dependencies: one hash of its root lockfile (its `package.json` when it
+ * has none) and every tracked `package.json`, so a manifest changed without
+ * its lockfile installs too, and the frozen install refuses it. Gone with
+ * them: a clone cut again has none.
  */
 const DEPS_STAMP = "node_modules/.cawco-lockfile";
 
@@ -479,12 +502,27 @@ const DEPS_STAMP = "node_modules/.cawco-lockfile";
 export const DEPS_INSTALLING = "installing: ";
 
 /**
- * Installs a checkout's dependencies when its root lockfile no longer
- * matches the one they were installed from ({@link DEPS_STAMP}), by
- * {@link installFor}'s pick for that lockfile; then stamps it. No lockfile,
- * or a matching stamp: nothing runs and nothing is printed. Run in the
- * checkout's root: before a work item's landing gate (the hub's `runGate`) and
- * before a probe's scratch fleet starts from the checkout.
+ * What {@link depsScript} prints, last, when bun's frozen install refused a
+ * lockfile that disagrees with `package.json`, then that lockfile:
+ * `stale lockfile: bun.lock`.
+ */
+export const DEPS_STALE = "stale lockfile: ";
+
+/**
+ * Installs a checkout's dependencies when they were not installed from its
+ * root lockfile and manifests as they stand ({@link DEPS_STAMP}): none
+ * installed, or one changed since; by {@link installFor}'s pick for that lockfile,
+ * which never rewrites it, so the tree the gate checks is the one that
+ * lands. With no lockfile its `package.json` stands in for one, installed by
+ * bun's frozen install, which writes none: the checkout gains no file to
+ * commit. Then stamps it. An install that refused a lockfile its
+ * `package.json` disagrees with ends on a {@link DEPS_STALE} line. Neither
+ * file, or a matching stamp: nothing runs and nothing is printed. The stamp,
+ * not the installer's own check, decides: `npm ci` removes a `node_modules`
+ * that is there before every install (docs.npmjs.com/cli/commands/npm-ci).
+ * Run in the checkout's
+ * root: before a work item's landing gate (the hub's `runGate`) and before a
+ * probe's scratch fleet starts from the checkout.
  */
 export const depsScript = (): string => {
   const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
@@ -493,10 +531,16 @@ export const depsScript = (): string => {
       `${index ? "elif" : "if"} [ -f ${lock} ]; then lock=${lock}; install=${word(installFor(lock)?.command ?? "")}`
   ).join("\n");
   return [
-    `${picks}\nelse exit 0\nfi`,
-    `[ "$(cat ${DEPS_STAMP} 2>/dev/null)" = "$(git hash-object "$lock")" ] && exit 0`,
-    `echo "${DEPS_INSTALLING}$install ($lock changed since the dependencies were installed)"`,
-    "$install 2>&1 || exit $?",
-    `mkdir -p node_modules && git hash-object "$lock" > ${DEPS_STAMP}`,
+    `${picks}\nelif [ -f package.json ]; then lock=package.json; install=${word(BUN_FROZEN.command)}\nelse exit 0\nfi`,
+    `inputs="$({ git hash-object "$lock"; git -c core.quotePath=false ls-files -- ':(glob)**/package.json' | git hash-object --stdin-paths; } | git hash-object --stdin)"`,
+    `stamp="$(cat ${DEPS_STAMP} 2>/dev/null)"`,
+    `[ "$stamp" = "$inputs" ] && exit 0`,
+    `what="a package.json"; [ "$lock" = package.json ] || what="$what or $lock"`,
+    `if [ -n "$stamp" ]; then why="$what changed since the dependencies were installed"; else why="no dependencies installed from $lock"; fi`,
+    `echo "${DEPS_INSTALLING}$install ($why)"`,
+    `out="$($install 2>&1)"; code=$?`,
+    `printf '%s\\n' "$out"`,
+    `if [ "$code" -ne 0 ]; then\ncase "$out" in *${word(BUN_FROZEN_REFUSAL)}*) echo "${DEPS_STALE}$lock" ;; esac\nexit "$code"\nfi`,
+    `mkdir -p node_modules && printf '%s\\n' "$inputs" > ${DEPS_STAMP}`,
   ].join("\n");
 };

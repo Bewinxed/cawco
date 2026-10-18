@@ -1798,7 +1798,7 @@ const syncSkillFiles = async (
 /**
  * Whether `cwd` is a delegate workspace's clone that is no git clone any
  * more (stand-ins.ts `noRepositoryAt`): one deleted by hand, whose
- * workspace's archive takes the folder away. A project lead's place is a
+ * workspace's archive takes the folder away. A place is a
  * plain folder by design and no delegate's (`cloneHolding` passes over it).
  * A folder inside a workspace whose records are damaged is a workspace's too.
  */

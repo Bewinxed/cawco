@@ -32,8 +32,18 @@
    * An onboarding choice nobody answered (the fleet's upstream choice) is
    * the same row with its risk as its line and its two options as the
    * peers; it opens nothing, and leaves once the hub has the answer.
+   *
+   * HTTPS on the tailnet is an onboarding step of the same kind: the step
+   * that stands as its line, its one button (open Tailscale's DNS page,
+   * copy the command, open the docs), and a tick with the https dashboard
+   * to open once the hub finds the step taken.
    */
-  import { pairingWords, questionsOf } from "@cawco/core";
+  import {
+    pairingWords,
+    questionsOf,
+    type TailnetHttps,
+    tailnetWords,
+  } from "@cawco/core";
   import {
     UPSTREAM_POSTS,
     UPSTREAM_WORDS,
@@ -46,8 +56,10 @@
   import {
     IconCheck,
     IconClose,
+    IconCopy,
     IconDollar,
     IconError,
+    IconExternal,
     IconFolder,
     IconLock,
     IconMaximize,
@@ -55,6 +67,8 @@
     IconSend,
     IconServer,
     IconShield,
+    IconSuccess,
+    IconTailnetHttps,
     IconTick,
     IconWarningTriangle,
     IconWorkflow,
@@ -69,6 +83,7 @@
     permissionAnswer,
     submitCommand,
   } from "../client.svelte";
+  import { copyToClipboard } from "../copy";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
   import { conversationHref } from "../links";
@@ -92,7 +107,7 @@
   } = $props();
 
   const href = $derived.by(() => {
-    if (item.kind === "choice") {
+    if (item.kind === "choice" || item.kind === "tailnet") {
       return;
     }
     if (item.kind !== "ask") {
@@ -115,6 +130,10 @@
         return item.notice.title;
       case "choice":
         return UPSTREAM_WORDS.risk;
+      case "tailnet":
+        return item.done
+          ? tailnetWords.done(item.tailnet.dashboard ?? "")
+          : tailnetStep(item.tailnet);
       case "pairing":
         return pairingWords.asks(item.request.userCode);
       case "admission":
@@ -217,6 +236,8 @@
         return `Fleet watch · ${item.place}`;
       case "choice":
         return "Onboarding · each project can change it";
+      case "tailnet":
+        return tailnetWords.meta(item.tailnet.host);
       case "pairing":
         return item.place ? `Pairing · ${item.place}` : "Pairing";
       case "admission":
@@ -328,6 +349,53 @@
     }
   }
 
+  /** The step HTTPS on the tailnet waits on, in its one line. */
+  function tailnetStep(tailnet: TailnetHttps): string {
+    const command = tailnet.command ?? "";
+    switch (tailnet.step) {
+      case "enable-magicdns":
+        return tailnetWords.enableMagicDns;
+      case "operator":
+        return tailnetWords.operator(tailnet.host, command);
+      case "userspace":
+        return tailnetWords.userspace(tailnet.host);
+      case "port":
+        return tailnetWords.port(tailnet.host, tailnet.port ?? 0, command);
+      default:
+        return tailnetWords.enableHttps;
+    }
+  }
+
+  /**
+   * The step's one button: a page to open, or its command to copy; once
+   * ticked, the https dashboard to open.
+   */
+  const tailnetAction = $derived.by(
+    (): { label: string; href?: string; copy?: string } | null => {
+      if (item.kind !== "tailnet") {
+        return null;
+      }
+      const { tailnet } = item;
+      if (item.done) {
+        return { label: tailnetWords.openDashboard, href: tailnet.dashboard };
+      }
+      switch (tailnet.step) {
+        case "operator":
+        case "port":
+          return { label: tailnetWords.copyCommand, copy: tailnet.command };
+        case "userspace":
+          return {
+            label: tailnetWords.openDocs,
+            href: tailnetWords.userspacePage,
+          };
+        default:
+          return {
+            label: tailnetWords.openDnsPage,
+            href: tailnetWords.dnsPage,
+          };
+      }
+    }
+  );
   /** An approved action waiting for your approval: Deny and Approve stand. */
   const approvable = $derived(
     item.kind === "action" && item.action.state === "proposed"
@@ -399,6 +467,12 @@
       <IconWorkflow aria-hidden="true" />
     {:else if item.kind === "choice"}
       <IconShield aria-hidden="true" />
+    {:else if item.kind === "tailnet"}
+      {#if item.done}
+        <IconSuccess aria-hidden="true" class="done" />
+      {:else}
+        <IconTailnetHttps aria-hidden="true" />
+      {/if}
     {:else if item.kind === "pairing"}
       <IconLock aria-hidden="true" />
     {:else if item.kind === "admission"}
@@ -606,6 +680,30 @@
           variant="secondary"
         />
       {/each}
+    </div>
+  {:else if item.kind === "tailnet" && tailnetAction}
+    <!-- Its one button: the page the step is taken on, or its command. -->
+    <div data-slot="peers" class="peers">
+      {#if tailnetAction.copy}
+        {@const command = tailnetAction.copy}
+        <Button
+          icon={IconCopy}
+          label={tailnetAction.label}
+          onclick={() => copyToClipboard("Command", command)}
+          size="sm"
+          variant="secondary"
+        />
+      {:else}
+        <Button
+          href={tailnetAction.href}
+          icon={IconExternal}
+          label={tailnetAction.label}
+          rel="noopener"
+          size="sm"
+          target="_blank"
+          variant="secondary"
+        />
+      {/if}
     </div>
   {:else if item.kind === "pairing" || item.kind === "admission"}
     {@const who =
@@ -933,11 +1031,17 @@
   .peers > :global(.peer) {
     border-color: transparent;
   }
-  /* A choice's risk is the whole of what it asks: read whole, never cut. */
-  .row[data-kind="choice"] > .want {
+  /* A choice's risk, and HTTPS's step, is the whole of what it asks: read
+     whole, never cut. */
+  .row[data-kind="choice"] > .want,
+  .row[data-kind="tailnet"] > .want {
     display: block;
     -webkit-line-clamp: unset;
     line-clamp: none;
+  }
+  /* HTTPS's tick, in the done status's ink. */
+  .lead > :global(.done) {
+    color: var(--status-done-ink);
   }
   /* A choice's options are its words, longer than Deny and Approve, too
      long to stand side by side in the panel: they stack, each the text

@@ -291,7 +291,7 @@
     font: var(--type-label);
     color: var(--ink-strong);
   }
-  .name.mono {
+  .name.mono > :is(.link, .label) {
     font-family: var(--font-mono);
   }
   .link,

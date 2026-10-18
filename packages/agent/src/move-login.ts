@@ -20,6 +20,7 @@ import {
   accountEnv,
   authStatusIn,
   bareEnv,
+  HOME_SERVICE,
   keychainService,
   keychainUser,
   kindOf,
@@ -60,9 +61,6 @@ import { forgetAccount } from "./login";
  * what was written and leaves the original as it was.
  */
 
-/** The default dir's Keychain service: no `CLAUDE_CONFIG_DIR`, no hash suffix. */
-const HOME_SERVICE = "Claude Code-credentials";
-
 /** `errSecItemNotFound`, as `security` exits for a missing item. */
 const SEC_ITEM_NOT_FOUND = 44;
 
@@ -93,6 +91,7 @@ const signinIn = async (
       const status = read.value;
       switch (status.kind) {
         case "unread":
+        case "locked":
           throw new Error(status.why);
         case "signin":
           return status;

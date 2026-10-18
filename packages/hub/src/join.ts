@@ -227,21 +227,65 @@ const askpass = (): string => {
 const PUBLIC_KEY = /^(\S+ [A-Za-z0-9+/]+=*)(?: (.*))?$/;
 const PLAIN_COMMENT = /^[\w@.:,+=/ -]*$/;
 
-/** The step the trust command names when it fails, as the install script names its own. */
-const TRUST_STEP = "Adding this hub's SSH key";
+/** The trust command's step line, worded as the install script words its own. */
+const TRUST_STEP = "adding this hub's SSH key";
+
+/**
+ * The step the remote command prints before it fetches the install script:
+ * the first line of a session that has signed in, which tells the dialog the
+ * install runs on the machine now.
+ */
+const DOWNLOAD_STEP = "downloading the install script from ";
+
+/**
+ * How long a connection gets to open: `ssh`'s to the machine, and the
+ * machine's `curl` to the hub address. Without the second, an address the
+ * machine cannot route to (a tailnet address off the tailnet) holds the add
+ * for the kernel's whole connect timeout, minutes. curl(1):
+ * "--connect-timeout … Maximum time in seconds that you allow curl's
+ * connection to take." Our choice.
+ */
+const CONNECT_S = 10;
+
+/**
+ * How long the machine's `curl` gets for the install script as a whole,
+ * once connected: the script is a few kilobytes. curl(1) `--max-time`. Our
+ * choice.
+ */
+const DOWNLOAD_MAX_S = 60;
+
+/**
+ * curl's own exits for an address it could not reach (`curl: (6)` the name
+ * did not resolve, `(7)` the connection failed, `(28)` it timed out); any
+ * other `curl: (` is the hub answering, and the download step's failure.
+ */
+const UNREACHED = /curl: \((?:6|7|28)\)/;
+
+/**
+ * How often `ssh` asks a silent server whether it is still there, three
+ * times before it gives up: a server that stops answering mid-sign-in (a
+ * firewall that bans the address after a failed password) ends the add in
+ * about 30 s. Debian's OpenSSH sets 300 under BatchMode alone, so a password
+ * add had none and waited forever. ssh_config(5), ServerAliveInterval:
+ * "The default is 0 … or 300 if the BatchMode option is set
+ * (Debian-specific)." Our choice of 10.
+ */
+const SERVER_ALIVE_S = 10;
+
+/** The install, once signed in: its step line, then the script from the hub. */
+const installCommand = (hubUrl: string): string =>
+  `echo "${INSTALL_STEP_PREFIX}${DOWNLOAD_STEP}${hubUrl}" && curl -fsSL --connect-timeout ${CONNECT_S} --max-time ${DOWNLOAD_MAX_S} ${hubUrl}/install.sh | sh`;
 
 /**
  * What `ssh-copy-id` does on the machine, run ahead of the install by a
  * password add: `~/.ssh` made 700 and `authorized_keys` 600 when they are
  * missing (and left as they are when they exist), a final newline added to
  * the file when it lacks one, and the key appended only when the file does
- * not hold it already. It runs under `sh -c` whatever the account's login
- * shell is, quoted so that every login shell hands it over as it is: one
- * single-quoted word holding no quote or backslash (fish reads `\\` and
- * `\'` inside single quotes). Its apostrophe is printf's `\047`, which no
- * shell's single quotes touch. A key whose comment could not stand in that
- * word is added without the comment; a comment is a label, never part of
- * the key.
+ * not hold it already. It prints its step line first, so a failure is
+ * named by it, and runs in a subshell so its umask stays its own. Its
+ * apostrophe is printf's `\047` ({@link remoteCommand} holds no single
+ * quote). A key whose comment could not stand in that command is added
+ * without the comment; a comment is a label, never part of the key.
  */
 const trustCommand = (key: string): string | null => {
   const [, blob, comment] = PUBLIC_KEY.exec(key) ?? [];
@@ -252,7 +296,30 @@ const trustCommand = (key: string): string | null => {
     comment && PLAIN_COMMENT.test(comment) ? `${blob} ${comment}` : blob;
   const file = '"$HOME/.ssh/authorized_keys"';
   const step = `${INSTALL_STEP_PREFIX}${TRUST_STEP}`.replace("'", "\\047");
-  return `sh -c 'umask 077 && mkdir -p "$HOME/.ssh" && touch ${file} && { [ -z "$(tail -c 1 ${file})" ] || echo >> ${file}; } && { grep -qF "${blob}" ${file} || echo "${line}" >> ${file}; } || { printf "${step}\\n" >&2; exit 1; }'`;
+  return `( printf "${step}\\n" && umask 077 && mkdir -p "$HOME/.ssh" && touch ${file} && { [ -z "$(tail -c 1 ${file})" ] || echo >> ${file}; } && { grep -qF "${blob}" ${file} || echo "${line}" >> ${file}; } )`;
+};
+
+/**
+ * The one command an add hands `ssh`: `exec sh -c` and one single-quoted
+ * word, so every login shell (sh, bash, zsh, fish, csh) hands it over as it
+ * is (the word holds no quote or backslash: fish reads `\\` and `\'` inside
+ * single quotes) and `sh` takes the login shell's place under sshd's session
+ * process.
+ *
+ * sshd signals no command it started without a terminal when the connection
+ * closes (the install gets none: the script asks its questions on one), so a
+ * stopped add's install would run on until its next write. A watchdog sees
+ * to it: while sshd's session process (`sh`'s parent) lives it waits, and
+ * once it is gone it ends the command's whole process group. The command
+ * ends the watchdog when it finishes, and exits with the command's status.
+ * Measured against OpenSSH 10.2's sshd: a silent remote command outlived a
+ * killed `ssh`; under the watchdog it was gone within 4 s.
+ */
+const remoteCommand = (trust: string | null, hubUrl: string): string => {
+  const body = trust
+    ? `${trust} && ${installCommand(hubUrl)}`
+    : installCommand(hubUrl);
+  return `exec sh -c 'p=$PPID; ( while ps -p "$p" >/dev/null 2>&1; do sleep 1; done; kill -TERM 0 ) >/dev/null 2>&1 & w=$!; ${body}; s=$?; kill "$w" 2>/dev/null; exit $s'`;
 };
 
 /** Everything the output says went wrong, most specific first. */
@@ -263,6 +330,8 @@ const UNREACHABLE = [
   "No route to host",
   "Could not resolve hostname",
   "Network is unreachable",
+  // ServerAliveInterval's end: `Connection to <host> port <port> timed out`.
+  "timed out",
 ];
 
 /**
@@ -311,16 +380,15 @@ const problemOf = (
         lines.find((line) => line.includes(unreachable))?.trim() ?? unreachable,
     };
   }
-  if (steps.length === 0 && text.includes("curl: (")) {
+  const last = steps.at(-1)?.slice(INSTALL_STEP_PREFIX.length);
+  if (last?.startsWith(DOWNLOAD_STEP) && UNREACHED.test(text)) {
     return { kind: "download" };
   }
-  const last = steps.at(-1);
   if (exitCode === 0 && machineId) {
     return { kind: "unregistered" };
   }
-  return last
-    ? { kind: "step", step: last.slice(INSTALL_STEP_PREFIX.length) }
-    : { kind: "download" };
+  // No step line at all: it never signed in, for a reason none of the above names.
+  return { kind: "step", step: last ?? "connecting over SSH" };
 };
 
 interface JoinDeps {
@@ -330,8 +398,31 @@ interface JoinDeps {
   readonly online: (machineId: string) => boolean;
 }
 
+/** How long a stopped `ssh` gets to close its connection before its group is killed outright. Our choice. */
+const STOP_GRACE_MS = 3000;
+
+/**
+ * Signals `ssh`'s process group: `ssh` and the askpass it may be running.
+ * One that is already gone has nothing left to signal.
+ */
+const signalGroup = (pid: number, signal: "SIGTERM" | "SIGKILL"): void => {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    // ESRCH: the group exited between the stop and the signal.
+  }
+};
+
+/** An add's `ssh` while it runs, and its run as a whole, settled. */
+interface Run {
+  readonly child: Bun.Subprocess;
+  readonly ended: Promise<void>;
+  stopped: boolean;
+}
+
 export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
   const jobs = new Map<string, SshJoinJob>();
+  const runs = new Map<string, Run>();
 
   const settle = async (
     job: SshJoinJob,
@@ -397,7 +488,9 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
    * hub's key) the connection signs in by password alone, through
    * {@link ASKPASS} on `ssh`'s stdin, and adds the key before the install;
    * without it, by key with no prompt at all (BatchMode). `-n` keeps that
-   * stdin from the remote command: `ssh` hands the session /dev/null.
+   * stdin from the remote command: `ssh` hands the session /dev/null. `ssh`
+   * leads a process group of its own (`detached`, setsid), so a stop ends it
+   * and its askpass together.
    */
   const start = (
     target: string,
@@ -405,7 +498,6 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
     hubUrl: string,
     trust: { password: string; command: string } | null
   ) => {
-    const install = `curl -fsSL ${hubUrl}/install.sh | sh`;
     const job: SshJoinJob = {
       id: crypto.randomUUID(),
       target,
@@ -435,11 +527,13 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
         "-o",
         "StrictHostKeyChecking=accept-new",
         "-o",
-        "ConnectTimeout=10",
+        `ConnectTimeout=${CONNECT_S}`,
+        "-o",
+        `ServerAliveInterval=${SERVER_ALIVE_S}`,
         ...(port === null ? [] : ["-p", String(port)]),
         "--",
         target,
-        trust ? `${trust.command} && ${install}` : install,
+        remoteCommand(trust?.command ?? null, hubUrl),
       ],
       {
         stdin: trust
@@ -447,6 +541,7 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
           : "ignore",
         stdout: "pipe",
         stderr: "pipe",
+        detached: true,
         env: trust
           ? {
               ...process.env,
@@ -456,22 +551,52 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
           : process.env,
       }
     );
-    detach(
-      Promise.all([
-        collect(job, child.stdout),
-        collect(job, child.stderr),
-        child.exited,
-      ])
-        .then(([, , code]) => {
-          job.exitCode = code;
-          return settle(job, trust !== null);
-        })
-        .finally(() => {
-          lifetime.after(JOB_TTL_MS, () => jobs.delete(job.id));
-        }),
-      "machine join"
-    );
+    const ended = Promise.all([
+      collect(job, child.stdout),
+      collect(job, child.stderr),
+      child.exited,
+    ])
+      .then(([, , code]) => {
+        job.exitCode = code;
+        if (run.stopped) {
+          job.state = "stopped";
+          return;
+        }
+        return settle(job, trust !== null);
+      })
+      .finally(() => {
+        runs.delete(job.id);
+        lifetime.after(JOB_TTL_MS, () => jobs.delete(job.id));
+      });
+    const run: Run = { child, ended, stopped: false };
+    runs.set(job.id, run);
+    detach(ended, "machine join");
     return job;
+  };
+
+  /**
+   * Stops an add that runs: its `ssh` group is asked to end (TERM, so `ssh`
+   * closes the connection), then killed if it has not within
+   * {@link STOP_GRACE_MS}. Answers once the run has ended and reads
+   * `stopped`. On the machine, the closed connection ends the remote
+   * command's watchdog's wait, and it ends the command ({@link remoteCommand}).
+   */
+  const stop = async (run: Run): Promise<void> => {
+    run.stopped = true;
+    signalGroup(run.child.pid, "SIGTERM");
+    const exit = await readWithin(STOP_GRACE_MS, () => run.child.exited);
+    switch (exit.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        signalGroup(run.child.pid, "SIGKILL");
+        break;
+      default: {
+        const unhandled: never = exit;
+        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      }
+    }
+    await run.ended;
   };
 
   return new Elysia()
@@ -552,5 +677,20 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
     .get("/api/machines/ssh/:id", ({ params, status }) => {
       const job = jobs.get(params.id);
       return job ?? status(404, "No SSH add with that id on this hub.");
+    })
+    .post("/api/machines/ssh/:id/stop", async ({ params, status }) => {
+      const job = jobs.get(params.id);
+      if (!job) {
+        return status(404, "No SSH add with that id on this hub.");
+      }
+      const run = runs.get(params.id);
+      if (!run) {
+        return status(
+          409,
+          `That SSH add to ${job.target} has already ended, so there is nothing to stop.`
+        );
+      }
+      await stop(run);
+      return job;
     });
 };

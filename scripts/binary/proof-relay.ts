@@ -40,7 +40,7 @@ const server = http.createServer(async (incoming, response) => {
   }
   response.end(JSON.stringify({ peer: peer.address, bytes }));
 });
-const relay = await listenInherited(server, fd, () => {
+const relay = await listenInherited(server, [fd], () => {
   /* listener event is not the proof; successful requests below are */
 });
 const agent = new http.Agent({ keepAlive: true });

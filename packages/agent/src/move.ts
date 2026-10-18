@@ -224,57 +224,62 @@ export const LFS_FILTERS: [string, string][] = [
 const hubEnv = (
   projectId: string,
   extra: [string, string][] = []
+): Record<string, string> => ({
+  ...hubGitEnv(hubRepo(projectId), extra),
+  GIT_OPTIONAL_LOCKS: "0",
+});
+
+/**
+ * The LFS endpoint git-lfs derives from a clone URL: `<url>/info/lfs` for
+ * one ending in `.git`, `<url>.git/info/lfs` otherwise
+ * (lfsapi/endpoint_finder.go `NewEndpointFromCloneURL`).
+ */
+const lfsEndpointOf = (repo: string): string => {
+  const url = repo.replace(TRAILING_SLASH, "");
+  return url.endsWith(".git") ? `${url}/info/lfs` : `${url}.git/info/lfs`;
+};
+
+const TRAILING_SLASH = /\/+$/;
+
+/**
+ * git's environment for a command that reaches the hub's repository `repo`
+ * with this machine's credential, env-only: a workspace's clone and
+ * fetches, a workspace's own fetch and push run on the host (`hub-git.ts`),
+ * a place's push and a move's steps. The credential is `repo`'s alone
+ * (`http.<repo>.extraHeader`, matched on whole path segments), so nothing
+ * run in a clone reaches another project's repository with it.
+ *
+ * git-lfs talks to `repo`'s own LFS alone, whatever the repository's
+ * committed `.lfsconfig` names ("Settings from Git configuration files
+ * override the `.lfsconfig` file", git-lfs-config(5)): `lfs.url` and
+ * `lfs.pushurl` are its endpoint, which comes before every other source of
+ * one (lfsapi/endpoint_finder.go `getEndpoint`). At that endpoint, lock
+ * checks off (the hub has none) and the access mode given as `basic`, the
+ * hub's realm, both at its own URL so no more specific key in `.lfsconfig`
+ * outranks them. Otherwise a 401 or a missing locks API has git-lfs persist
+ * what it learned into the clone's own config by lock-and-rename
+ * (`SetAccess` is `gitConfig.SetLocal`; lockverifier.go `disableFor`). The
+ * rename drops a workspace sandbox's read-only bind on `.git/config`, which
+ * stops the sandbox, and the key is one `repositoryConfigProblem` refuses.
+ */
+export const hubGitEnv = (
+  repo: string,
+  extra: [string, string][] = []
 ): Record<string, string> => {
-  const origin = hubOrigin();
+  const lfs = lfsEndpointOf(repo);
   return {
     ...hostEnvironment(),
     GIT_TERMINAL_PROMPT: "0",
-    GIT_OPTIONAL_LOCKS: "0",
     ...configEnv([
-      [`http.${origin}/git/.extraHeader`, `Authorization: Basic ${basicOf()}`],
-      // git-lfs asks a server about locks before a push and writes what it
-      // hears into the repository's config; the hub has no locks.
-      [`lfs.${hubRepo(projectId)}/info/lfs.locksverify`, "false"],
-      // Its access mode as given (see hubGitEnv): nothing left to write.
-      [`lfs.${hubRepo(projectId)}/info/lfs.access`, "basic"],
+      [`http.${repo}.extraHeader`, `Authorization: Basic ${basicOf()}`],
+      ["lfs.url", lfs],
+      ["lfs.pushurl", lfs],
+      [`lfs.${lfs}.locksverify`, "false"],
+      [`lfs.${lfs}.access`, "basic"],
       ...extra,
     ]),
   } as Record<string, string>;
 };
-
-/**
- * git's environment for a command that reaches any of the hub's
- * repositories with this machine's credential, env-only as {@link hubEnv}
- * is: a workspace's clone and fetches, and a workspace's own fetch and push
- * run on the host (`hub-git.ts`). LFS's lock checks off: the hub has none.
- *
- * And LFS's access mode for the hub given as `basic`, the hub's realm: a
- * 401 from the hub's LFS (a credential it turned down) otherwise has git-lfs
- * upgrade the mode from `none` and persist `lfs.<url>.access` into the
- * clone's own config by lock-and-rename (lfsapi/auth.go `doWithAuth`: "if
- * newAccess.Mode() != access.Mode() { c.Endpoints.SetAccess(newAccess) }",
- * and `SetAccess` is `gitConfig.SetLocal`). The rename drops a workspace
- * sandbox's read-only bind on `.git/config`, which stops the sandbox, and the
- * key is one `repositoryConfigProblem` refuses. git-lfs reads the mode from
- * all of git's config (`fetchGitAccess`), so one given here leaves it
- * nothing to write.
- */
-export const hubGitEnv = (
-  extra: [string, string][] = []
-): Record<string, string> =>
-  ({
-    ...hostEnvironment(),
-    GIT_TERMINAL_PROMPT: "0",
-    ...configEnv([
-      [
-        `http.${hubGitPrefix()}.extraHeader`,
-        `Authorization: Basic ${basicOf()}`,
-      ],
-      [`lfs.${hubGitPrefix()}.locksverify`, "false"],
-      [`lfs.${hubGitPrefix()}.access`, "basic"],
-      ...extra,
-    ]),
-  }) as Record<string, string>;
 
 /**
  * git's environment for anything else. `GIT_OPTIONAL_LOCKS=0`: a read
@@ -1553,7 +1558,7 @@ const largestInFlight = (
 /**
  * One large file fetched from the hub's LFS store into the clone's own:
  * `git lfs smudge` of its pointer with the hub as the LFS server (`lfs.url`,
- * env-only), which downloads the object into the clone's store, resuming a
+ * env-only, {@link hubGitEnv}), which downloads the object into the clone's store, resuming a
  * partial one with `Range` as any git-lfs download does. The content it
  * writes out is not wanted; the pull after checks the file out.
  */
@@ -1569,7 +1574,7 @@ const fromHubLfs = async (
     discardStdout: true,
     input: `version https://git-lfs.github.com/spec/v1\noid sha256:${object.oid}\nsize ${object.size}\n`,
     env: {
-      ...hubEnv(projectId, [["lfs.url", `${hubRepo(projectId)}/info/lfs`]]),
+      ...hubEnv(projectId),
       GIT_LFS_PROGRESS: progressFile,
     },
   });

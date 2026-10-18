@@ -5501,6 +5501,7 @@ public enum OpenEnums {
         case done
         case failed
         case running
+        case stopped
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -5509,6 +5510,7 @@ public enum OpenEnums {
             case "done": self = .done
             case "failed": self = .failed
             case "running": self = .running
+            case "stopped": self = .stopped
             default: self = .unrecognized(rawValue)
             }
         }
@@ -5518,6 +5520,7 @@ public enum OpenEnums {
             case .done: "done"
             case .failed: "failed"
             case .running: "running"
+            case .stopped: "stopped"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -5526,7 +5529,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.done, .failed, .running]
+        public static let allCases: [Self] = [.done, .failed, .running, .stopped]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -5951,6 +5954,97 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.commit, .event, .path, .routine, .task, .thread]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TailnetHttpsState`.
+    public enum TailnetHttpsState: OpenEnum {
+        case absent
+        case needs
+        case serving
+        case signedOut
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "absent": self = .absent
+            case "needs": self = .needs
+            case "serving": self = .serving
+            case "signed-out": self = .signedOut
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .absent: "absent"
+            case .needs: "needs"
+            case .serving: "serving"
+            case .signedOut: "signed-out"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.absent, .needs, .serving, .signedOut]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TailnetHttpsStep`.
+    public enum TailnetHttpsStep: OpenEnum {
+        case enableHttps
+        case enableMagicdns
+        case _operator
+        case port
+        case userspace
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "enable-https": self = .enableHttps
+            case "enable-magicdns": self = .enableMagicdns
+            case "operator": self = ._operator
+            case "port": self = .port
+            case "userspace": self = .userspace
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .enableHttps: "enable-https"
+            case .enableMagicdns: "enable-magicdns"
+            case ._operator: "operator"
+            case .port: "port"
+            case .userspace: "userspace"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.enableHttps, .enableMagicdns, ._operator, .port, .userspace]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

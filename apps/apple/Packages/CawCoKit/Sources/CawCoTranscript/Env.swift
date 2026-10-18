@@ -34,6 +34,8 @@ final class RowEnv {
     /// Opening another session, or a run, in its own view (the host routes it).
     var openSession: (String) -> Void = { _ in }
     var openRun: (String) -> Void = { _ in }
+    /// Opening a project's task beside its board.
+    var openTask: (_ projectId: String, _ taskId: String) -> Void = { _, _ in }
     /// Reveals an artifact tool row's artifact (its input) in this session's preview, once `artifact_show` has opened it.
     var openPreview: ([String: Any]) -> Void = { _ in }
     /// The queued message whose words are in the composer: its bubble folds to its tag.

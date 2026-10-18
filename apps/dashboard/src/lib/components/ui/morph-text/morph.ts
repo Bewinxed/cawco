@@ -306,7 +306,12 @@ export class Morph {
     }
   }
 
-  /** The new words in flow, the leaving letters after them. */
+  /**
+   * The new words in flow, the leaving letters after them. A letter already
+   * where it belongs stays put: only those that arrive or move are put in,
+   * since every element put into the page restyles it (replaced whole, a
+   * swap put every letter in again, kept ones too).
+   */
   #lay(segments: Segment[]): {
     flow: HTMLElement[];
     arriving: Set<HTMLElement>;
@@ -325,7 +330,31 @@ export class Morph {
       arriving.add(el);
       return el;
     });
-    this.#root.replaceChildren(...flow, ...this.#leaving);
+    const inFlow = new Set<Node>(flow);
+    const leaving = new Set<Node>(this.#leaving);
+    let next = this.#root.firstChild;
+    const put = (el: HTMLElement, belongs: Set<Node>) => {
+      // Past what goes elsewhere: a letter leaving goes after the words.
+      while (next && !belongs.has(next)) {
+        next = next.nextSibling;
+      }
+      if (el === next) {
+        next = el.nextSibling;
+      } else {
+        this.#root.insertBefore(el, next);
+      }
+    };
+    for (const el of flow) {
+      put(el, inFlow);
+    }
+    for (const el of this.#leaving) {
+      put(el, leaving);
+    }
+    for (const node of [...this.#root.childNodes]) {
+      if (!(inFlow.has(node) || leaving.has(node))) {
+        node.remove();
+      }
+    }
     return { flow, arriving };
   }
 

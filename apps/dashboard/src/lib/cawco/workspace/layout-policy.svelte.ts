@@ -18,6 +18,10 @@ const touchPortrait = new MediaQuery(
 );
 
 export const layoutPolicy = {
+  /** A screen under 900px: a phone's, where conversations are the deck. */
+  get phone(): boolean {
+    return phone.current;
+  },
   /** Whether conversations are a deck of one group at a time, not a grid. */
   get deck(): boolean {
     if (phone.current) {

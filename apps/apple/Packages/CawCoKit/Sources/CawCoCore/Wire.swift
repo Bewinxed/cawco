@@ -260,8 +260,12 @@ enum Frame {
     case lawsBroken([Components.Schemas.LawBroken])
     /// The fleet's upstream answer was given or changed, anywhere: Needs you stops asking.
     case fleetUpstream(Components.Schemas.FleetChoicesUpstream)
+    /// HTTPS on the hub machine's tailnet name changed state: Needs you's step moves on, or ticks.
+    case tailnetHttps(Components.Schemas.TailnetHttps)
     /// The hub's mode and what waits on the person to pair or admit, whole, on each change.
     case hubAuth(Components.Schemas.HubAuthFrame)
+    /// A plain session's "make this a project" offer, or nil once it was answered.
+    case projectOffer(instanceId: String, offer: Components.Schemas.ProjectOfferSummary?)
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -315,8 +319,12 @@ enum Frame {
             self = .lawsBroken(frame.broken)
         case .fleet_upstream(let frame):
             self = .fleetUpstream(frame.upstream)
+        case .tailnet_https(let frame):
+            self = .tailnetHttps(frame.tailnet)
         case .hubAuth(let frame):
             self = .hubAuth(frame)
+        case .projectOffer(let frame):
+            self = .projectOffer(instanceId: frame.instanceId, offer: frame.offer)
         default:
             self = .ignored
         }

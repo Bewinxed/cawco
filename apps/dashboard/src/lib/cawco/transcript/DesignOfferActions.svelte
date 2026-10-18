@@ -6,7 +6,7 @@
    * (`/api/projects/:id/design-offer`). Build files the task; nothing is
    * built before it.
    */
-  import type { DesignOfferState } from "@cawco/core";
+  import { type DesignOfferState, offerWords } from "@cawco/core";
   import { untrack } from "svelte";
   import {
     answerDesignOffer,
@@ -63,28 +63,28 @@
 <div class="offer rail-hang" data-design-offer={offer.projectId}>
   {#if now?.answer === "open"}
     <Button
-      label="Build"
+      label={offerWords.build}
       onclick={() => act("build")}
       pending={acting === "build"}
-      pendingLabel="Filing…"
+      pendingLabel={offerWords.filing}
       size="xs"
       variant="outline"
     />
     <Button
-      label="Not now"
+      label={offerWords.notNow}
       onclick={() => act("dismiss")}
       pending={acting === "dismiss"}
-      pendingLabel="Not now…"
+      pendingLabel={offerWords.notNowPending}
       size="xs"
       variant="ghost"
     />
   {:else if now?.answer === "built"}
-    <span class="said">Filed</span>
+    <span class="said">{offerWords.filed}</span>
     {#if href}
-      <Button {href} label="Open" size="xs" variant="ghost" />
+      <Button {href} label={offerWords.open} size="xs" variant="ghost" />
     {/if}
   {:else if now?.answer === "dismissed"}
-    <span class="said">Not now</span>
+    <span class="said">{offerWords.notNow}</span>
   {/if}
   {#if problem}
     <p class="problem">{problem}</p>

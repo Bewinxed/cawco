@@ -71,7 +71,12 @@ import {
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { isPlace } from "@cawco/core/workspace-policy";
-import { ensureBoundary, shellQuote } from "./boundary";
+import {
+  BUN_SCRIPT_ENV,
+  bunScriptRuntime,
+  ensureBoundary,
+  shellQuote,
+} from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
 import { stageHost } from "./stage-host/build";
@@ -319,10 +324,13 @@ function notInstalled(
   if (!version) {
     return `${name} isn't installed in ${dir}: run the project's install there, then call again.`;
   }
-  const major = Number(version.split(".")[0]);
-  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on.
-  if (toolchain === "vite" && !(major >= 6)) {
-    return `Live components need Vite 6 or later, whose Environment API the stage runs on; ${dir} runs Vite ${version}.`;
+  const [major, minor] = version.split(".").map(Number);
+  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on;
+  // its config loads by `configLoader: "native"`, which writes nothing into
+  // node_modules (stage-host/host.ts `startVite`): "Added as exprimental in
+  // vite@6.1.0" (github.com/vitejs/vite/discussions/20162).
+  if (toolchain === "vite" && !(major > 6 || (major === 6 && minor >= 1))) {
+    return `Live components need Vite 6.1 or later, whose Environment API and native config loading the stage runs on; ${dir} runs Vite ${version}.`;
   }
   if (toolchain === "astro" && major !== ASTRO_MAJOR) {
     return `The stage starts Astro through its experimental programmatic API, read for Astro ${ASTRO_MAJOR}; ${dir} runs Astro ${version}, whose API this CawCo hasn't read.`;
@@ -397,16 +405,16 @@ function stageFor(
   if (missing) {
     throw new StageRefusal(missing);
   }
-  const bun = upFrom(root, workspace.path).some(
-    (at) =>
-      existsSync(join(at, "bun.lock")) || existsSync(join(at, "bun.lockb"))
-  );
-  const runtime = Bun.which(bun ? "bun" : "node", {
-    PATH: hostEnvironment().PATH,
-  });
-  if (!runtime) {
+  // Every stage runs on the agent's own bun, whatever the lockfile: Vite's
+  // `native` config loader imports the project's config with the stage's
+  // runtime (stage-host/host.ts `startVite`), and bun reads what Vite's
+  // default bundler does (TS enums, extensionless relative imports,
+  // `__dirname` in ESM), where node strips types only ("TypeScript enum is
+  // not supported in strip-only mode", measured on node 26).
+  const runtime = bunScriptRuntime();
+  if (!existsSync(runtime)) {
     throw new StageRefusal(
-      `${bun ? "bun" : "node"} isn't on this machine's PATH, and ${dir}'s lockfile asks for it, so its stage can't start.`
+      `The bun every stage runs on (${runtime}) isn't on this machine, so ${dir}'s stage can't start.`
     );
   }
   const kit = "@sveltejs/kit" in deps;
@@ -744,6 +752,7 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
     ? [
         `exec ${shellQuote(stage.runs.runtime)} ${HOST_FILE}`,
         {
+          ...BUN_SCRIPT_ENV,
           CAWCO_STAGE: "1",
           CAWCO_STAGE_PORT: String(stage.port),
           CAWCO_STAGE_FRAMEWORK: stage.runs.framework,

@@ -34,6 +34,7 @@ import {
   connectionToolName,
   type InstanceRow,
   parseConnectionTool,
+  pushOnlyProvider,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
@@ -132,6 +133,16 @@ export interface ConnectionsDeps {
   readonly hubOrigin: () => string;
   readonly lifetime: HubLifetimeShape;
   readonly projectExists: (id: string) => boolean;
+  /**
+   * A push-only service's connection (core `pushOnlyProvider`) reached
+   * `projects` signed in: it signed in while they had it, or they were
+   * granted it while signed in. Each is told once per such moment (server.ts
+   * wakes its Caw to offer a relay).
+   */
+  readonly pushOnlyConnected: (
+    connection: ConnectionView,
+    projects: string[]
+  ) => void;
   /**
    * Moves a connection, its projects with it, into the hub's trash for its
    * Undo (db/trash.ts); the entry's id, or undefined for no such connection.
@@ -1032,6 +1043,22 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
   };
 
+  /**
+   * After a sign-in or a grant: `projects` now have `name` signed in, and a
+   * push-only service's say so ({@link ConnectionsDeps.pushOnlyConnected}).
+   * Nothing for a connection that is not signed in once looked at.
+   */
+  const reached = (name: string, projects: readonly string[]): void => {
+    const r = db.byName(name);
+    if (
+      r?.state === "signed-in" &&
+      projects.length > 0 &&
+      pushOnlyProvider(r.service)
+    ) {
+      deps.pushOnlyConnected(view(r), [...projects]);
+    }
+  };
+
   /** Where a row stands with no secret yet: signed in only once it is looked at. */
   const startState = (
     authKind: ConnectionAuth
@@ -1071,6 +1098,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     console.info(`[connections] made ${input.name} (${input.service})`);
     if (input.auth === "none") {
       await probe(input.name);
+      reached(input.name, input.projects ?? []);
     }
     deps.changed();
     return view(row(input.name));
@@ -1094,6 +1122,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     projectsProblem(patch.projects);
     const where = whereOf(next);
     const moved = JSON.stringify(where) !== JSON.stringify(whereOf(r));
+    const had = new Set(db.projectsOf(r.id));
     db.update(r.id, {
       service: next.service.trim(),
       account: next.account.trim(),
@@ -1111,6 +1140,14 @@ export const createConnections = (deps: ConnectionsDeps) => {
         await probe(name);
       }
     }
+    // A move signs in again (all its projects reach it anew); else only the
+    // projects this change grants it to.
+    reached(
+      name,
+      moved
+        ? db.projectsOf(r.id)
+        : (patch.projects ?? []).filter((project) => !had.has(project))
+    );
     deps.changed();
     return view(row(name));
   };
@@ -1131,6 +1168,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     db.update(r.id, { state: "error", reason: "Not looked at yet." });
     console.info(`[connections] ${name}: key set`);
     await probe(name);
+    reached(name, db.projectsOf(r.id));
     return view(row(name));
   };
 
@@ -1247,6 +1285,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     drop(r.id);
     console.info(`[connections] ${r.name}: signed in`);
     await probe(r.name);
+    reached(r.name, db.projectsOf(r.id));
     return view(row(r.name));
   };
 

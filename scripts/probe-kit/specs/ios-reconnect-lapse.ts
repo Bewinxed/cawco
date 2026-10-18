@@ -32,7 +32,7 @@ import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
-/** iOS 18.5: where axe reaches the simulator from a workspace (ios-seen.ts). */
+/** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
 const SIM = {
   runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
   device: "iPhone 16 Pro",

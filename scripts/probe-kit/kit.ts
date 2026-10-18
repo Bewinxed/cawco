@@ -26,6 +26,7 @@ import { readWithin } from "../../packages/core/src/bounded";
 import { type HeavySlot, heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
+  type HubAddress,
   type Reply,
   type Seen,
   scratchFleet,
@@ -50,6 +51,9 @@ export const VIEWS = {
   /** An iPhone 15 Pro, portrait: the owner's phone. */
   iphone15Pro: { width: 393, height: 852, touch: true },
   ipad: { width: 1032, height: 1376, touch: true },
+  /** The same iPad in landscape: a pane past 900px, so the web stands the side panel beside the
+   *  conversation (SideSplit `phone`) as the app does on an iPad's regular width. */
+  ipadWide: { width: 1376, height: 1032, touch: true },
 } as const;
 export type View = keyof typeof VIEWS;
 
@@ -93,6 +97,12 @@ export type Engine = "chromium" | "webkit" | "firefox";
 export interface PageOptions {
   /** WebKit for a spec that reads Safari's engine, Firefox for Gecko's; Chromium otherwise. */
   engine?: Engine;
+  /**
+   * Chromium only: its `--host-resolver-rules`, where a spec needs a name to
+   * reach one address alone (`MAP localhost [::1]`: an agent's loopback
+   * beside a scratch hub on 127.0.0.1).
+   */
+  hostRules?: string;
   /** Scripts installed before the page's own, in order. */
   init?: (() => void)[];
   /**
@@ -215,9 +225,14 @@ export interface Kit {
   /**
    * A scratch fleet (scratch-fleet.ts), nothing launched yet, answered once
    * the run's dashboard is built; its `dashboard()` serves that build
-   * against its hub once asked. Both go when the spec ends.
+   * against its hub once asked, where the hub is reached (`hub.at`). Both go
+   * when the spec ends. `hub`: where its hub listens and is reached
+   * (scratch-fleet.ts `HubAddress`), 127.0.0.1 unless named.
    */
-  fleet: (respond: (request: Seen) => Reply) => Promise<KitFleet>;
+  fleet: (
+    respond: (request: Seen) => Reply | Promise<Reply>,
+    hub?: HubAddress
+  ) => Promise<KitFleet>;
   /** A line that is neither a pass nor a fail (a capture awaiting its baseline). */
   note: (line: string) => void;
   /** Where the spec writes what a reviewer reads after a failure. */
@@ -311,16 +326,19 @@ const viteBuild = async (): Promise<void> => {
 async function serve(
   how: "dev" | "preview",
   hub: string,
-  env: Record<string, string> = {}
+  /** The port to serve on: a fleet's `dashboardPort`, the one its hub names; any free one when unset. */
+  at?: number,
+  /** The address to serve on: a fleet's hub's (`hub.at`); 127.0.0.1 when unset. */
+  host = "127.0.0.1"
 ) {
-  const port = await freePort();
+  const port = at ?? (await freePort());
   const child = Bun.spawn(
     [
       "bunx",
       "vite",
       how,
       "--host",
-      "127.0.0.1",
+      host,
       "--port",
       String(port),
       "--strictPort",
@@ -329,7 +347,6 @@ async function serve(
       cwd: DASHBOARD,
       env: {
         ...process.env,
-        ...env,
         CAWCO_DEV_HUB_URL: hub,
         CAWCO_HUB_URL: hub,
       },
@@ -337,7 +354,7 @@ async function serve(
       stderr: "ignore",
     }
   );
-  const base = `http://127.0.0.1:${port}`;
+  const base = `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
   await until(
     "the built dashboard answering",
     () => fetch(base).then((r) => r.ok),
@@ -392,18 +409,21 @@ export class Run {
   /** The dashboard served (`serve`), under the run's slot. */
   private async startServer(
     how: "dev" | "preview",
-    hub: string
+    hub: string,
+    port?: number,
+    host?: string
   ): Promise<{ base: string; child: Bun.Subprocess }> {
     await this.heavy();
-    return serve(how, hub);
+    return serve(how, hub, port, host);
   }
 
   browser(
     engine: Engine,
     revision?: string,
-    oneProcess = false
+    oneProcess = false,
+    hostRules?: string
   ): Promise<Browser> {
-    const key = `${revision ? `${engine}-${revision}` : engine}${oneProcess ? "-one-process" : ""}`;
+    const key = `${revision ? `${engine}-${revision}` : engine}${oneProcess ? "-one-process" : ""}${hostRules ? `-hosts:${hostRules}` : ""}`;
     const known = this.browsers.get(key);
     if (known) {
       return known;
@@ -436,6 +456,7 @@ export class Run {
                   "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
                 ]
               : []),
+            ...(hostRules ? [`--host-resolver-rules=${hostRules}`] : []),
           ],
           env,
         }),
@@ -511,7 +532,7 @@ export class Run {
         });
         return (await served).base;
       },
-      fleet: async (respond) => {
+      fleet: async (respond, hub) => {
         // Under the run's slot, taken by the build: the fleet's own hold
         // (scratch-fleet.ts) counts once in this process.
         // Built before the fleet starts, never between its start and the
@@ -524,6 +545,7 @@ export class Run {
         const fleet = await scratchFleet({
           name: `probe-kit-${spec.name}`,
           respond,
+          ...(hub ? { hub } : {}),
         });
         let served: Promise<{ base: string; child: Bun.Subprocess }> | null =
           null;
@@ -540,7 +562,12 @@ export class Run {
         return Object.assign(fleet, {
           dashboard: () => {
             served ??= this.build().then(() =>
-              this.startServer("preview", fleet.base)
+              this.startServer(
+                "preview",
+                fleet.base,
+                fleet.dashboardPort,
+                fleet.hub.at
+              )
             );
             return served.then((s) => s.base);
           },
@@ -555,7 +582,8 @@ export class Run {
         const browser = await this.browser(
           options.engine ?? "chromium",
           options.engine === "webkit" ? options.webkit : undefined,
-          options.oneProcess
+          options.oneProcess,
+          options.hostRules
         );
         const phoneAgent = PHONE_AGENT[options.engine ?? "chromium"];
         const context = await browser.newContext({

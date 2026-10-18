@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    artifactWords,
     machineLabel,
     PREVIEW_LOCKED_MESSAGE,
     PREVIEW_PING_PATH,
@@ -62,6 +63,7 @@
   import { sideExpand } from "../side/expand";
   import SideSurface from "../side/SideSurface.svelte";
   import { readJson, store, stored, writeJson } from "../storage";
+  import { afterPaint } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
     type ArtifactDoc,
@@ -70,6 +72,7 @@
     joinArtifact,
     sendArtifact,
   } from "./artifact-doc";
+  import { loadedPanes } from "./loaded.svelte";
   import PinCard from "./PinCard.svelte";
   import PinList from "./PinList.svelte";
   import PlacePick from "./PlacePick.svelte";
@@ -107,8 +110,8 @@
     instanceId: string;
     /**
      * Its conversation's tab is in view (SideSplit's `visible`). A tab kept
-     * mounted off screen keeps its page loaded for {@link PARK_MS}, then
-     * unloads it, and loads it again once its tab is back.
+     * mounted off screen keeps its page loaded and held, up to the bound of
+     * loaded.svelte.ts, and loads it again once its tab is back past it.
      */
     onScreen?: boolean;
     /**
@@ -188,7 +191,6 @@
   });
   let connected = $state(false);
   let loaded = $state(false);
-  let captured = false;
   let reload = $state(0);
   /**
    * What last went wrong, and what trying again means: the frame's own
@@ -333,33 +335,54 @@
   const frameKey = $derived(`${preview?.revision}:${reload}`);
   // The old paint bridges navigation only until the replacement finishes loading.
   let standing = $state<string | null>(null);
-  /**
-   * How long a page whose conversation's tab is off screen stays loaded. A
-   * preview is the dashboard's own process and thread wherever the browser
-   * keeps a frame of the same site there (every WebKit, and Chromium over
-   * plain http), so a page left running in every tab kept open adds up. Our
-   * call: a glance at another tab and back keeps the page as it was.
+  /*
+   * Off screen, the page is held (the overlay's hold.ts: no frames, timers
+   * or animations run) and kept, up to the owner's bound of panes off
+   * screen (loaded.svelte.ts); past it, the one hidden longest unloads. A
+   * pane that mounts off screen loads nothing until its tab is shown, and
+   * then only once the switch has painted (`afterPaint`).
    */
-  const PARK_MS = 30_000;
-  /** Off screen past {@link PARK_MS}: no frame stands, and the cover waits for the next load. */
-  let parked = $state(false);
+  const paneId = $props.id();
+  /** No page: mounted off screen, or let go past the bound; the cover waits for the next load. */
+  let unloaded = $state(untrack(() => !onScreen));
+  /** The page said it is held (`cawco:held`). */
+  let pageHeld = $state(false);
+  function unload() {
+    unloaded = true;
+    standing = null;
+    loaded = false;
+    connected = false;
+    pageHeld = false;
+    // A ticket is spent by its frame's load: the next load asks again.
+    entries = {};
+  }
   $effect(() => {
-    if (onScreen) {
-      parked = false;
+    if (isCanvas) {
       return;
     }
-    const timer = setTimeout(() => {
-      parked = true;
-      standing = null;
-      loaded = false;
-      connected = false;
-      // A ticket is spent by its frame's load: the next load asks again.
-      entries = {};
-    }, PARK_MS);
-    return () => clearTimeout(timer);
+    const id = paneId;
+    loadedPanes.enter({ id, onScreen: untrack(() => onScreen), unload });
+    return () => loadedPanes.leave(id);
+  });
+  $effect(() => {
+    if (isCanvas) {
+      return;
+    }
+    if (!onScreen) {
+      untrack(() => post({ type: "cawco:hold" }));
+      loadedPanes.hidden(paneId);
+      return;
+    }
+    loadedPanes.shown(paneId);
+    untrack(() => post({ type: "cawco:release" }));
+    if (untrack(() => unloaded)) {
+      return afterPaint(() => {
+        unloaded = false;
+      });
+    }
   });
   const frames = $derived.by(() => {
-    if (parked) {
+    if (unloaded) {
       return [];
     }
     return standing === null || standing === frameKey
@@ -384,7 +407,7 @@
     const origin = paneOrigin;
     const at = framePlace;
     if (
-      parked ||
+      unloaded ||
       !(byHost && origin && reached?.origin === origin && reached.ok)
     ) {
       return;
@@ -443,8 +466,8 @@
   }
   /**
    * Try again after a frame failure: reload the frame. Pending until the
-   * reloaded page answers with a capture, which either clears the failure or
-   * states the new one.
+   * reloaded page says it is ready, which clears the failure, or states a
+   * new one.
    */
   let retrying = $state(false);
   function retry() {
@@ -520,7 +543,7 @@
     if (frameKey) {
       connected = false;
       loaded = false;
-      captured = false;
+      pageHeld = false;
       // A new load says again whether it is served.
       down = null;
       downWhy = null;
@@ -593,6 +616,51 @@
       // Unheard: the next change of state says it again.
       saidFor = null;
     });
+  });
+
+  /**
+   * How long the page has said ready and its frame's size has stood still
+   * before its thumbnail is taken: its first paints and fonts land, and the
+   * pane opening around it settles its width. Our call.
+   */
+  const CAPTURE_AFTER_MS = 1000;
+  /*
+   * The thumbnail, on demand: taken once per revision, when the transcript
+   * card that shows it is on screen (ToolGroup sets `thumbnailWanted`) and
+   * the page stands in view, loaded and not held. A page nobody's card shows
+   * is never drawn for one; a whole-page capture costs the page 80-150 ms.
+   * The page is drawn at its frame's width, so a frame still resizing (the
+   * pane opening) is waited for: a capture taken mid-open drew the page at
+   * 467, 422 and 479 px on three walks.
+   */
+  $effect(() => {
+    const record = preview;
+    const frame = iframe;
+    if (!(
+      frame &&
+      record?.thumbnailWanted &&
+      record.thumbnailRevision !== record.revision &&
+      onScreen &&
+      connected &&
+      !pageHeld &&
+      !ownTab
+    )) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Its first report is the frame's size now: every report starts the wait again.
+    const settled = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(
+        () => post({ type: "cawco:capture" }),
+        CAPTURE_AFTER_MS
+      );
+    });
+    settled.observe(frame);
+    return () => {
+      clearTimeout(timer);
+      settled.disconnect();
+    };
   });
 
   /*
@@ -781,6 +849,7 @@
   let picking = $state<{ id: number | string } | null>(null);
   /** The place picked goes back to the page, which keeps it in its state. */
   function pickedPlace(place: {
+    label: string;
     machineId: string;
     path: string;
   }): Promise<void> {
@@ -1142,6 +1211,11 @@
         if (message.type === "cawco:ready") {
           connected = true;
           refusedEntries = 0;
+          // The frame Try again reloaded answered: what it was tried for is over.
+          retrying = false;
+          if (failure?.again === "reload") {
+            failure = null;
+          }
           setMode(mode, placing);
           if (!pinsShown) {
             showPins(false);
@@ -1150,17 +1224,22 @@
           if (openPin) {
             post({ type: "cawco:track-pin", id: openPin });
           }
-          if (!captured) {
-            captured = true;
-            post({ type: "cawco:capture" });
+          if (!onScreen) {
+            // Loaded while its tab is off screen: held from the start.
+            post({ type: "cawco:hold" });
           }
         }
         break;
       }
+      case "cawco:held":
+        pageHeld = message.held === true;
+        break;
       case "cawco:capture": {
         const png = previewPng(message.png);
         if (png && preview) {
           preview.thumbnail = png;
+          preview.thumbnailRevision = preview.revision;
+          preview.thumbnailWanted = false;
         }
         failure = frameError(previewError(message.error));
         retrying = false;
@@ -1454,11 +1533,11 @@
   {#if inspector}
     <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
     <button
-      aria-label="Inspect"
+      aria-label={artifactWords.inspect}
       aria-pressed={inspectOpen}
       class="inspect touch-hit"
       onclick={() => showInspector(!inspectOpen)}
-      title="Inspect: change the story's props, then Save them into its file"
+      title={artifactWords.inspectTitle}
       type="button"
     >
       <IconTuning />

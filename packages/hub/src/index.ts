@@ -46,6 +46,8 @@ const main = Effect.gen(function* () {
     maxRequestBodySize: MAX_REQUEST_BYTES,
   });
   server.previews.start();
+  // HTTPS on the machine's tailnet name, once its preview listeners stand.
+  server.tailnet.start();
   yield* Effect.log(`cawco hub ${HUB_VERSION} listening on :${HUB_PORT}`);
   advertise(HUB_PORT);
   // Off the boot path: a month of transcripts is read once, then never again.

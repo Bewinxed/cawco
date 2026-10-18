@@ -21,6 +21,7 @@
    * pane closes its own content; with nothing left the split collapses. Its
    * width and expansion are the conversation's own, kept across visits.
    */
+  import { sideWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -172,9 +173,16 @@
   /** The surface beside the transcript, on screen or not. */
   const desktopOpen = $derived(open && !phone);
 
+  /**
+   * The sheet stays mounted while its conversation's tab is off screen,
+   * closed (SideSheet), so its preview keeps its page as a desk's split
+   * does (preview/loaded.svelte.ts holds or unloads it); only the sheet of
+   * the tab in front is open.
+   */
   let sheetMounted = $state(false);
+  const sheetOpen = $derived((previewOpen || fileShown) && visible && active);
   $effect(() => {
-    if (phone && (previewOpen || fileShown) && visible && active) {
+    if (phone && (previewOpen || fileShown)) {
       sheetMounted = true;
       return;
     }
@@ -188,10 +196,10 @@
   });
 
   const LABEL: Record<Shown, string> = {
-    plan: "Plan",
-    preview: "Preview",
-    task: "Task",
-    file: "File",
+    plan: sideWords.plan,
+    preview: sideWords.preview,
+    task: sideWords.task,
+    file: sideWords.file,
   };
 </script>
 
@@ -204,7 +212,7 @@
     size="compact"
     value={shown}
   >
-    <TabsList aria-label="Beside the conversation">
+    <TabsList aria-label={sideWords.label}>
       {#each opened as each (each)}
         <TabItem label={LABEL[each]} value={each} />
       {/each}
@@ -246,9 +254,10 @@
 {/snippet}
 
 {#snippet sheets()}
-  {#if sheetMounted && phone && visible && active}
+  {#if sheetMounted && phone}
     <!-- One sheet on the composer: the file while one is open, else the
-         preview; Escape closes the file from its own Close. -->
+         preview; Escape closes the file from its own Close. Off screen it
+         stays, closed, with its page held. -->
     <SideSheet
       content={root}
       instanceId={previewId}
@@ -257,7 +266,7 @@
           previewPane?.parentEscape(event);
         }
       }}
-      open={previewOpen || fileShown}
+      open={sheetOpen}
     >
       {#if fileShown && file}
         <RegionBoundary region="file">
@@ -268,6 +277,7 @@
           <PreviewPane
             instanceId={previewId}
             linkSession={previewId !== viewId}
+            onScreen={visible && active}
             sheet
             bind:this={previewPane}
           />

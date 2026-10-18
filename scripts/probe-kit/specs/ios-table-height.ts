@@ -55,7 +55,7 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
-/** iOS 18.5, the app's oldest target, where axe reaches the simulator from a workspace. */
+/** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 const IPHONE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro";
 const IPAD = "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB";

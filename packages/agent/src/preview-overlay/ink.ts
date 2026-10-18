@@ -309,20 +309,35 @@ const pathOf = (points: Point[]): string => {
   return `${d} Z`;
 };
 
+/** The overlay's layers that hold a mark now (a stroke, a disc), each as its own draw said. */
+const holding = new Set<SVGSVGElement>();
+
 /**
- * The overlay's layers at the page's origin, each as big as the page's
- * scroll. The scroll is read with every layer folded away first: a layer
- * stands in the scroll it measures, so read as it is, one sized for a taller
- * layout (the page before it reflowed wider) would hold the page at that
- * height for good.
+ * The overlay's layers at the page's origin, each holding a mark as big as
+ * the page's scroll, and each holding none folded away. `layer`, about to
+ * be drawn, says whether it `holds` a mark. The scroll is read with every
+ * layer folded away first: a layer stands in the scroll it measures, so
+ * read as it is, one sized for a taller layout (the page before it reflowed
+ * wider) would hold the page at that height for good. While no layer holds
+ * a mark nothing is read: reading the scroll lays the whole page out there
+ * and then, before the browser would (a page of 300 sections: 50 ms of its
+ * style and layout as it opened, preview-bound 12), for nothing to draw.
  */
-export const fitToPage = () => {
+export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
+  if (holds) {
+    holding.add(layer);
+  } else {
+    holding.delete(layer);
+  }
   const layers = document.querySelectorAll<SVGSVGElement>(
     "svg[data-cawco-ink], svg[data-cawco-pins]"
   );
-  for (const layer of layers) {
-    layer.setAttribute("width", "0");
-    layer.setAttribute("height", "0");
+  for (const one of layers) {
+    one.setAttribute("width", "0");
+    one.setAttribute("height", "0");
+  }
+  if (holding.size === 0) {
+    return;
   }
   const root = document.documentElement;
   const width = String(
@@ -331,9 +346,9 @@ export const fitToPage = () => {
   const height = String(
     Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0)
   );
-  for (const layer of layers) {
-    layer.setAttribute("width", width);
-    layer.setAttribute("height", height);
+  for (const one of holding) {
+    one.setAttribute("width", width);
+    one.setAttribute("height", height);
   }
 };
 
@@ -483,6 +498,8 @@ export function startInk(deps: InkDeps): Ink {
       event.stopImmediatePropagation();
       layer.style.pointerEvents = "auto";
       layer.style.touchAction = "none";
+      // The stroke is drawn in the layer: it stands as big as the page while it is down.
+      fitToPage(layer, true);
       try {
         layer.setPointerCapture(event.pointerId);
       } catch {
@@ -811,10 +828,14 @@ export function startInk(deps: InkDeps): Ink {
     if (onCanvas()) {
       return;
     }
-    fitToPage();
     const { ink } = maps();
-    const brand = chrome.token("--brand-solid");
     const groups = [...ink.values()];
+    fitToPage(
+      layer,
+      groups.length > 0 || layer.querySelector("[data-live]") !== null
+    );
+    // Read only for a group to draw: a token is the page's style, read there and then.
+    const brand = groups.length > 0 ? chrome.token("--brand-solid") : "";
     const located = groups.map((group) => ({
       group,
       el: "selector" in group.anchor ? deps.locate(group.anchor)?.el : null,

@@ -81,7 +81,15 @@ async function wait(
 }
 function dashboard() {
   const child = Bun.spawn([process.execPath, "dashboard"], {
-    env: { ...process.env, LISTEN_FDS: "1", CAWCO_PROOF_ACTIVATED_FD: "3" },
+    // The one descriptor (fd 3, `listener`) named as the dashboard's socket
+    // unit names it (`FileDescriptorName=dashboard`); LISTEN_PID is set by
+    // the child itself (proof-entry.ts), whose pid this process cannot know.
+    env: {
+      ...process.env,
+      LISTEN_FDS: "1",
+      LISTEN_FDNAMES: "dashboard",
+      CAWCO_PROOF_ACTIVATED_FD: "3",
+    },
     stdio: ["ignore", "pipe", "pipe", listener],
   });
   children.push(child);

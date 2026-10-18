@@ -198,6 +198,8 @@ export { default as IconWorkflow } from "~icons/solar/share-circle-bold-duotone"
 export { default as IconShield } from "~icons/solar/shield-bold-duotone";
 /** Rules: a standing guard over what sessions say, distinct from bare `shield`. */
 export { default as IconRules } from "~icons/solar/shield-check-bold-duotone";
+/** HTTPS on the tailnet: the hub's name served over TLS to every device on it. */
+export { default as IconTailnetHttps } from "~icons/solar/shield-network-bold-duotone";
 export { default as IconShop } from "~icons/solar/shop-bold-duotone";
 /** A canvas's Undock, out of the artifact panel back over the field. */
 export { default as IconUndock } from "~icons/solar/sidebar-minimalistic-bold-duotone";

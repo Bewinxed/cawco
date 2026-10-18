@@ -342,6 +342,8 @@ export interface Created {
   sheet?: SheetRead;
   /** A sheet's stage, or a served preview's server, as it stands once started. */
   stage?: StageState;
+  /** A draft canvas's origin on the tailnet name while the hub serves HTTPS there (core `PreviewAddress`). */
+  tailnet?: PreviewAddress["tailnet"];
   /** A folder preview's: what it loads at most, from its folder's files. */
   weight?: FolderWeight;
   /** Why it is not on screen, one sentence; only with `opened: false`. */

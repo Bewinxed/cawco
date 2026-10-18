@@ -6,6 +6,7 @@ import type { AgentRow } from "@cawco/core";
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
+  localDashboardPort,
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
@@ -94,9 +95,10 @@ const SYSTEMD_DIR = join(
 
 const systemdPath = (name: string): string => join(SYSTEMD_DIR, unitName(name));
 
-/** The listening socket systemd holds for a socket-activated service. */
-const socketName = (id: ServiceId): string => `cawco-${id}.socket`;
-const socketPath = (id: ServiceId): string => join(SYSTEMD_DIR, socketName(id));
+/** A listening socket systemd holds for a socket-activated service, by its base name (`SocketSpec.unit`). */
+const socketName = (base: string): string => `cawco-${base}.socket`;
+const socketPath = (base: string): string =>
+  join(SYSTEMD_DIR, socketName(base));
 const launchAgentPath = (name: string): string =>
   join(homedir(), "Library", "LaunchAgents", `${label(name)}.plist`);
 const launchAgentLog = (name: string): string =>
@@ -264,15 +266,18 @@ const HERE = here();
 const ROOT = HERE.root;
 
 const LISTEN_STREAM = /^ListenStream=(.+):(\d+)$/m;
+/** An IPv6 host as `ListenStream=` writes it, in brackets (`listenAddress`). */
+const BRACKETED = /^\[(.*)\]$/;
 const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/;
 const SOCK_SERVICE = /<key>SockServiceName<\/key>\s*<string>([^<]*)<\/string>/;
 
 /**
  * The address the installed dashboard socket already listens on, read back out
- * of its socket unit or its plist. The deploy poller reinstalls the dashboard's
- * units on every deploy that reaches it, from a daemon whose environment has no
- * PORT or HOST in it; without this, a dashboard installed on another port
- * would be moved back to 3000 by the next deploy.
+ * of its socket unit or its plist. Every binary update rewrites the dashboard's
+ * units from the incoming build (`refreshServices`, run as `cawco binary-units
+ * --services`), in a process with no PORT or HOST in its environment; without
+ * this, a dashboard installed on another port would be moved back to 3000 by
+ * the next update.
  */
 const installedDashboardAddress = ():
   { host: string; port: string } | undefined => {
@@ -288,19 +293,109 @@ const installedDashboardAddress = ():
     ? LISTEN_STREAM.exec(readFileSync(path, "utf8"))
     : null;
   return listen?.[1] && listen[2]
-    ? { host: listen[1], port: listen[2] }
+    ? { host: listen[1].replace(BRACKETED, "$1"), port: listen[2] }
     : undefined;
 };
 
 /**
  * Where the dashboard listens. Read from the installing shell so a second
  * machine can differ, then from the socket already installed, with the
- * defaults this one's browser expects.
+ * defaults this one's browser expects. Read as each unit is written: an
+ * update's refresh clears PORT and HOST (`asInstalled`), so the socket keeps
+ * the address it has.
  */
-const DASHBOARD_PORT =
-  process.env.PORT ?? installedDashboardAddress()?.port ?? "3000";
-const DASHBOARD_HOST =
-  process.env.HOST ?? installedDashboardAddress()?.host ?? "0.0.0.0";
+const dashboardAddress = (): { host: string; port: string } => {
+  const installed = installedDashboardAddress();
+  return {
+    port: process.env.PORT ?? installed?.port ?? "3000",
+    host: process.env.HOST ?? installed?.host ?? "0.0.0.0",
+  };
+};
+
+/** One listening socket a service is handed (`ServiceSpec.sockets`). */
+interface SocketSpec {
+  /** One descriptor per address. */
+  readonly listens: readonly { readonly host: string; readonly port: string }[];
+  /** What the service collects it by: systemd's `FileDescriptorName=`, launchd's `Sockets` key. */
+  readonly name: string;
+  /**
+   * Whether the service requires it (`Requires=`): one that does not open
+   * keeps the service down. Otherwise wanted (`Sockets=` gives `Wants=`,
+   * systemd.service(5): "Services also pull in all .socket units listed in
+   * Sockets= via automatic Wants= and After= dependencies"), and one that does
+   * not open is said while the service runs on the rest.
+   */
+  readonly required: boolean;
+  /** Its systemd unit: `cawco-<unit>.socket`. */
+  readonly unit: string;
+}
+
+/**
+ * The dashboard's sockets: where the network reaches it (required, its own
+ * unit, `cawco-dashboard.socket`; installedDashboardAddress reads it back),
+ * and this computer's loopback at the dashboard's loopback port (core
+ * `localDashboardPort`), so `http://localhost:3455` is the dashboard here as
+ * it is on every computer whose agent carries it (agent hub-loopback.ts).
+ *
+ * The loopback is a unit of its own, `cawco-dashboard-local.socket`, wanted
+ * and not required: systemd fails a whole socket unit on one address it
+ * cannot open, closing the rest (src/core/socket.c `socket_open_fds`: `p->fd
+ * = socket_address_listen_in_cgroup(…); if (p->fd < 0) return p->fd;`, then
+ * "Failed to listen on sockets"), so a 3455 something else holds (obelisk's
+ * agent, 2026-10-18) took 3000 down with it while both were one unit. Apart,
+ * the service gets the loopback's descriptors only when it opened
+ * (src/core/service.c `service_collect_fds`: a socket with none, `if (cn_fds
+ * == 0) continue;`), and starts on the network's alone otherwise. It is left
+ * out when the loopback port is the network port already, and `::1` on a
+ * computer that has no IPv6 loopback ({@link hasIpv6Loopback}).
+ */
+const dashboardSockets = (): SocketSpec[] => {
+  const local = String(localDashboardPort());
+  const network = dashboardAddress();
+  const loopback = [
+    { host: "127.0.0.1", port: local },
+    ...(hasIpv6Loopback() ? [{ host: "::1", port: local }] : []),
+  ];
+  return [
+    {
+      unit: "dashboard",
+      name: "dashboard",
+      listens: [network],
+      required: true,
+    },
+    ...(local === network.port
+      ? []
+      : [
+          {
+            unit: "dashboard-local",
+            name: "dashboard-local",
+            listens: loopback,
+            required: false,
+          },
+        ]),
+  ];
+};
+
+/**
+ * Whether this computer can listen on `::1` now. A container or host with no
+ * IPv6 loopback (`::1` absent, or no IPv6 at all) gets no `[::1]` listen:
+ * one address the loopback socket cannot open fails it whole. Every update
+ * writes the sockets again (`refreshServices`), so one that gains `::1`
+ * listens there from its next update.
+ */
+const hasIpv6Loopback = (): boolean => {
+  try {
+    Bun.serve({
+      hostname: "::1",
+      port: 0,
+      fetch: () => new Response(null),
+    }).stop(true);
+    return true;
+  } catch {
+    // EADDRNOTAVAIL (no `::1`) or EAFNOSUPPORT (no IPv6): none here.
+    return false;
+  }
+};
 
 /**
  * The PATH the installing shell had. A launchd job otherwise inherits a nearly
@@ -326,15 +421,6 @@ const servicePath = (): string => {
   ];
   return [...new Set([...inherited, ...usual])].join(":");
 };
-
-/**
- * Where the hub's sqlite file lives (C9, our choice): per-user, created with
- * no sudo, and outside any git checkout — so `git clean -fdx` in a dev tree or
- * a deploy clone can never again reach the fleet's whole memory. Core's one
- * rule (`hubDbPath`), which the hub itself reads too. Every workspace
- * boundary hides the dir (`credentialStores`).
- */
-const DEFAULT_DB_PATH = hubDbPath();
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
 const PROBE_TIMEOUT_MS = 2000;
@@ -432,7 +518,8 @@ const probeHub = async (): Promise<string> => {
 };
 
 const probeDashboard = async (): Promise<string> => {
-  const url = `http://${DASHBOARD_HOST}:${DASHBOARD_PORT}/`;
+  const { host, port } = dashboardAddress();
+  const url = `http://${host}:${port}/`;
   const answer = await probe(url, async (response) => {
     await response.body?.cancel();
     return response.status;
@@ -538,11 +625,10 @@ const probeSessiond = async (): Promise<string | undefined> => {
 
 /** The browser address corresponding to the socket we install. */
 export const dashboardUrl = (): string => {
+  const { host: listening, port } = dashboardAddress();
   const host =
-    DASHBOARD_HOST === "0.0.0.0" || DASHBOARD_HOST === "::"
-      ? "localhost"
-      : DASHBOARD_HOST;
-  return `http://${host.includes(":") ? `[${host}]` : host}:${DASHBOARD_PORT}`;
+    listening === "0.0.0.0" || listening === "::" ? "localhost" : listening;
+  return `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
 };
 
 const READY_TIMEOUT_MS = 90_000;
@@ -731,17 +817,14 @@ export interface ServiceSpec {
   readonly restartOnSuccess: boolean;
   readonly restartSec: number;
   /**
-   * A listening socket the init system opens and keeps open, handing it to the
-   * service at every start (systemd `.socket` unit, launchd `Sockets`). A
-   * connection that arrives while the service restarts waits in the socket's
-   * backlog for the new process rather than being refused. `name` is what the
-   * service collects it by.
+   * The listening sockets the init system opens and keeps open, handing them
+   * to the service at every start (systemd `.socket` units, launchd
+   * `Sockets`). A connection that arrives while the service restarts waits in
+   * a socket's backlog for the new process rather than being refused. The
+   * first is the service's own; any other is a unit of its own the service
+   * names in `Sockets=` ({@link SocketSpec}).
    */
-  readonly socket?: {
-    readonly host: string;
-    readonly name: string;
-    readonly port: string;
-  };
+  readonly sockets?: readonly SocketSpec[];
   readonly wants: readonly string[];
   readonly workingDirectory: string;
 }
@@ -776,8 +859,14 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         // linux, ~/Library/Application Support/cawco on darwin), or the
         // CAWCO_DB_PATH the operator set. The hub's own boot migration
         // (packages/hub/src/index.ts) carries an existing in-tree database
-        // there the first time it finds one.
-        [CAWCO_ENV.dbPath]: DEFAULT_DB_PATH,
+        // there the first time it finds one. Read as the unit is written, so
+        // an update's refresh writes the path the unit already names
+        // (`refreshServices`). Where the file lives (C9, our choice):
+        // per-user, created with no sudo, and outside any git checkout — so
+        // `git clean -fdx` in a dev tree or a deploy clone can never again
+        // reach the fleet's whole memory. Every workspace boundary hides the
+        // dir (`credentialStores`).
+        [CAWCO_ENV.dbPath]: hubDbPath(),
         // Its preview listeners' ports: the operator's range, else the
         // hundred after the hub's own (hub config.ts `PREVIEW_PORTS`).
         ...(readEnv(CAWCO_ENV.previewPorts)
@@ -785,7 +874,10 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
           : {}),
         // The dashboard socket's port, which the hub's preview ports never
         // take (hub config.ts `FLEET_PORTS`) and its bridge's links name.
-        [CAWCO_ENV.dashboardPort]: DASHBOARD_PORT,
+        [CAWCO_ENV.dashboardPort]: dashboardAddress().port,
+        // Its loopback port, the one the hub names to every agent: the same
+        // one the dashboard's loopback socket listens on here (`dashboardSockets`).
+        [CAWCO_ENV.localDashboardPort]: String(localDashboardPort()),
       },
       workingDirectory: LAYOUT_ROOT,
       after: ["network-online.target"],
@@ -805,9 +897,9 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       environment: {
         [CAWCO_ENV.hubUrl]: readEnv(CAWCO_ENV.hubUrl) ?? hubOrigin(),
       },
-      // serve.js collects this socket by name and never binds the port itself,
-      // so a deploy's restart leaves the port open the whole time.
-      socket: { name: "dashboard", host: DASHBOARD_HOST, port: DASHBOARD_PORT },
+      // serve.js collects these sockets by name and never binds a port itself,
+      // so a deploy's restart leaves the ports open the whole time.
+      sockets: dashboardSockets(),
       workingDirectory: layout.dashboardCwd,
       after: [unitName("hub"), socketName("dashboard")],
       wants: [unitName("hub")],
@@ -1010,9 +1102,9 @@ const devFor = (
         DASHBOARD_VITE,
         "dev",
         "--port",
-        DASHBOARD_PORT,
+        dashboardAddress().port,
         "--host",
-        DASHBOARD_HOST,
+        dashboardAddress().host,
       ],
       // A vite server reads its hub from this variable alone and refuses to
       // start without it (vite.config.ts). This unit is the one vite server
@@ -1021,7 +1113,7 @@ const devFor = (
         [CAWCO_ENV.devHubUrl]: readEnv(CAWCO_ENV.hubUrl) ?? hubOrigin(),
       },
       // vite binds its own port, so the dev flavour has no socket to wait on.
-      socket: undefined,
+      sockets: undefined,
       after: [unitName("hub")],
       requires: undefined,
       workingDirectory: DASHBOARD_DIR,
@@ -1114,6 +1206,27 @@ const orderingComment = (spec: ServiceSpec): string => {
   return `\n  <!-- ordering: starts after ${siblings.join(", ")} — launchd has no ordering, so this is recorded, not enforced -->`;
 };
 
+/**
+ * One socket as a plist's `Sockets` entry: its own key, each address a
+ * dictionary of it (launchd.plist(5): "Sockets <dictionary of dictionaries...
+ * OR dictionary of array of dictionaries...>").
+ */
+const plistSocket = (
+  socket: SocketSpec
+): string => `    <key>${xml(socket.name)}</key>
+    <array>
+${socket.listens
+  .map(
+    ({ host, port }) => `      <dict>
+        <key>SockNodeName</key>
+        <string>${xml(host)}</string>
+        <key>SockServiceName</key>
+        <string>${xml(port)}</string>
+      </dict>`
+  )
+  .join("\n")}
+    </array>`;
+
 const plist = (
   spec: ServiceSpec
 ): string => `<?xml version="1.0" encoding="UTF-8"?>
@@ -1127,16 +1240,10 @@ const plist = (
 ${spec.command.map((argument) => `    <string>${xml(argument)}</string>`).join("\n")}
   </array>
 ${
-  spec.socket
+  spec.sockets
     ? `  <key>Sockets</key>
   <dict>
-    <key>${xml(spec.socket.name)}</key>
-    <dict>
-      <key>SockNodeName</key>
-      <string>${xml(spec.socket.host)}</string>
-      <key>SockServiceName</key>
-      <string>${xml(spec.socket.port)}</string>
-    </dict>
+${spec.sockets.map(plistSocket).join("\n")}
   </dict>
 `
     : ""
@@ -1195,7 +1302,14 @@ ${[
 [Service]
 ExecStart=${spec.command.join(" ")}
 WorkingDirectory=${spec.workingDirectory}
-${environment(spec)
+${
+  // Every socket it is handed, the units of its own name and the rest
+  // (systemd.service(5), Sockets=: "Specifies the name of the socket units
+  // this service shall inherit socket file descriptors from").
+  spec.sockets && spec.sockets.length > 1
+    ? `Sockets=${spec.sockets.map((socket) => socketName(socket.unit)).join(" ")}\n`
+    : ""
+}${environment(spec)
   .map(([key, value]) => `Environment=${key}=${value}`)
   .join("\n")}
 Restart=${spec.restartOnSuccess ? "always" : "on-failure"}
@@ -1211,22 +1325,37 @@ RestartSec=${spec.restartSec}${spec.oomContinue ? "\nOOMPolicy=continue" : ""}${
 ${["WantedBy=default.target", ...(spec.requiredBy ?? []).map((target) => `RequiredBy=${target}`)].join("\n")}
 `;
 
+/** An address as `ListenStream=` takes it: an IPv6 host in brackets. */
+const listenAddress = ({ host, port }: { host: string; port: string }) =>
+  `${host.includes(":") ? `[${host}]` : host}:${port}`;
+
 /**
- * The listening socket systemd holds for a socket-activated service. The
- * service unit of the same name is the one it starts; `FileDescriptorName=` is
- * what the service collects it by. `NoDelay=` because every byte on it is an
- * interactive page load.
+ * One socket unit systemd holds for a socket-activated service, one
+ * descriptor per address it listens on. It starts the service of its own
+ * name, or, for a socket unit of another name, the service its `Service=`
+ * names; `FileDescriptorName=` is what the service collects them by.
+ * `NoDelay=` because every byte on them is an interactive page load.
+ * `ReusePort=` so the hub's HTTPS listener on the machine's tailnet address
+ * can stand on the network port (hub tailnet-https.ts): Linux binds an
+ * address's listener beside the wildcard one only when both sockets set
+ * SO_REUSEPORT, and gives that address's connections to it. None of these
+ * addresses is a tailnet one, so none shares the HTTPS listener's.
+ * `FreeBind=` because they name specific IP addresses, and one missing at a
+ * start (the loopback's) would fail the whole socket: systemd.socket(5), "For
+ * robustness reasons it is recommended to use this option whenever you bind
+ * a socket to a specific IP address"; systemd sets it before `bind()`
+ * (src/shared/socket-label.c). It cannot help a host with no IPv6 at all,
+ * whose `socket()` fails first: `dashboardSockets` names no `::1` there.
  */
-const socketUnit = (
-  spec: ServiceSpec,
-  socket: NonNullable<ServiceSpec["socket"]>
-): string => `[Unit]
-Description=${spec.description} socket
+const socketUnit = (spec: ServiceSpec, socket: SocketSpec): string => `[Unit]
+Description=${spec.description} ${socket.required ? "" : `${socket.name} `}socket
 
 [Socket]
-ListenStream=${socket.host}:${socket.port}
-FileDescriptorName=${socket.name}
+${socket.listens.map((listen) => `ListenStream=${listenAddress(listen)}`).join("\n")}
+FileDescriptorName=${socket.name}${socket.unit === spec.id ? "" : `\nService=${unitName(spec.name)}`}
 NoDelay=true
+FreeBind=true
+ReusePort=true
 
 [Install]
 WantedBy=sockets.target
@@ -1355,7 +1484,7 @@ export const installLaunchAgents = async (
     // So an unchanged, loaded one is left running — a deploy restarts it with
     // `kickstart -k`, which keeps the socket.
     if (
-      spec.socket &&
+      spec.sockets &&
       // biome-ignore lint/performance/noAwaitInLoops: services install one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
       (await Bun.file(path)
         .text()
@@ -1463,10 +1592,10 @@ export const requireLinger = async (
  */
 const writeSocketUnit = async (
   spec: ServiceSpec,
-  socket: NonNullable<ServiceSpec["socket"]>,
+  socket: SocketSpec,
   note: (line: string) => void
 ): Promise<boolean> => {
-  const path = socketPath(spec.id);
+  const path = socketPath(socket.unit);
   const text = socketUnit(spec, socket);
   const before = await Bun.file(path)
     .text()
@@ -1477,20 +1606,55 @@ const writeSocketUnit = async (
     "systemctl",
     "--user",
     "is-active",
-    socketName(spec.id),
+    socketName(socket.unit),
   ]);
   return active.stdout.toString().trim() !== "active" || before !== text;
 };
 
 /**
- * Binds a service's socket. The service is stopped first: whatever holds the
- * port while the socket is down is that service binding it itself — an install
- * from before it was socket-activated — and a socket cannot bind a port that
- * is taken. Only ever run when the socket is down or moving, so a service
- * already serving on its socket is never stopped here.
+ * Every socket of `spec` written ({@link writeSocketUnit}): those that have to
+ * be (re)bound. A loopback socket unit an earlier install wrote and this one
+ * names no longer (its port is the network's now) is stopped and removed.
  */
-const bindSocket = async (
+const writeSocketUnits = async (
   spec: ServiceSpec,
+  note: (line: string) => void
+): Promise<SocketSpec[]> => {
+  const sockets = spec.sockets ?? [];
+  const moving: SocketSpec[] = [];
+  for (const socket of sockets) {
+    // biome-ignore lint/performance/noAwaitInLoops: a service's sockets write one at a time, each note in its order
+    if (await writeSocketUnit(spec, socket, note)) {
+      moving.push(socket);
+    }
+  }
+  const stale = `${spec.id}-local`;
+  if (
+    sockets.length > 0 &&
+    !sockets.some((socket) => socket.unit === stale) &&
+    existsSync(socketPath(stale))
+  ) {
+    await run(["systemctl", "--user", "disable", "--now", socketName(stale)]);
+    await Bun.file(socketPath(stale)).delete();
+    note(`removed ${socketPath(stale)}`);
+  }
+  return moving;
+};
+
+/**
+ * Binds `sockets` of `spec`. The service is stopped first: systemd opens no
+ * socket while its service runs (src/core/socket.c: "Socket service %s
+ * already active, refusing."), whatever holds a port while its socket is down
+ * may be that service binding it itself (an install from before it was
+ * socket-activated), and a socket cannot bind a port that is taken. A
+ * required socket that does not open throws; a wanted one that does not is
+ * said, and the service starts on the rest. Only ever run for sockets that
+ * are down or moving, so a service already serving on them is never stopped
+ * here.
+ */
+const bindSockets = async (
+  spec: ServiceSpec,
+  sockets: readonly SocketSpec[],
   note: (line: string) => void
 ): Promise<void> => {
   const stopped = await run([
@@ -1502,36 +1666,35 @@ const bindSocket = async (
   if (stopped.exitCode !== 0) {
     throw failed("systemctl --user stop", stopped);
   }
-  const bound = await run([
-    "systemctl",
-    "--user",
-    "restart",
-    socketName(spec.id),
-  ]);
-  if (bound.exitCode !== 0) {
-    throw failed("systemctl --user restart", bound);
+  for (const socket of sockets) {
+    const name = socketName(socket.unit);
+    // biome-ignore lint/performance/noAwaitInLoops: a service's sockets bind one at a time, each note in its order
+    const bound = await run(["systemctl", "--user", "restart", name]);
+    const enabled = await run(["systemctl", "--user", "enable", name]);
+    if (socket.required && bound.exitCode !== 0) {
+      throw failed("systemctl --user restart", bound);
+    }
+    if (enabled.exitCode !== 0) {
+      throw failed("systemctl --user enable", enabled);
+    }
+    note(
+      bound.exitCode === 0
+        ? `listening on ${name}`
+        : `${name} did not open (${socket.listens.map(listenAddress).join(", ")}): ${unitName(spec.name)} runs without it; journalctl --user -u ${name} says why`
+    );
   }
-  const enabled = await run([
-    "systemctl",
-    "--user",
-    "enable",
-    socketName(spec.id),
-  ]);
-  if (enabled.exitCode !== 0) {
-    throw failed("systemctl --user enable", enabled);
-  }
-  note(`listening on ${socketName(spec.id)}`);
 };
 
 const installSystemdUnits = async (
   specs: ServiceSpec[],
   note: (line: string) => void
 ): Promise<void> => {
-  const rebind = new Set<ServiceId>();
+  const rebind = new Map<ServiceId, SocketSpec[]>();
   for (const spec of specs) {
     // biome-ignore lint/performance/noAwaitInLoops: units write one at a time so each one's note prints in its own order and a failure is attributable to the unit that caused it.
-    if (spec.socket && (await writeSocketUnit(spec, spec.socket, note))) {
-      rebind.add(spec.id);
+    const moving = await writeSocketUnits(spec, note);
+    if (moving.length > 0) {
+      rebind.set(spec.id, moving);
     }
     await writeUnit(systemdPath(spec.name), unit(spec));
     note(`wrote ${systemdPath(spec.name)}`);
@@ -1545,9 +1708,10 @@ const installSystemdUnits = async (
   }
 
   for (const spec of specs) {
-    if (rebind.has(spec.id)) {
+    const moving = rebind.get(spec.id);
+    if (moving) {
       // biome-ignore lint/performance/noAwaitInLoops: units enable one at a time, each socket listening before its service starts, so each one's notes print in its own order and a failure is attributable to the unit that caused it.
-      await bindSocket(spec, note);
+      await bindSockets(spec, moving, note);
     }
     const enabled = await run([
       "systemctl",
@@ -1579,20 +1743,21 @@ const uninstallSystemdUnits = async (
         // best effort: the unit file may already be gone
       });
     note(`removed ${systemdPath(spec.name)}`);
-    if (spec.socket) {
+    for (const socket of spec.sockets ?? []) {
+      // biome-ignore lint/performance/noAwaitInLoops: a service's sockets go one at a time, each note in its order
       await run([
         "systemctl",
         "--user",
         "disable",
         "--now",
-        socketName(spec.id),
+        socketName(socket.unit),
       ]);
-      await Bun.file(socketPath(spec.id))
+      await Bun.file(socketPath(socket.unit))
         .delete()
         .catch(() => {
           // best effort: the socket unit may already be gone
         });
-      note(`removed ${socketPath(spec.id)}`);
+      note(`removed ${socketPath(socket.unit)}`);
     }
   }
   await run(["systemctl", "--user", "daemon-reload"]);
@@ -1999,15 +2164,16 @@ const systemdStatus = async (
   note(
     `state    ${active.stdout.toString().trim() || "unknown"} (${enabled.stdout.toString().trim() || "not installed"})`
   );
-  if (spec.socket) {
+  for (const socket of spec.sockets ?? []) {
+    // biome-ignore lint/performance/noAwaitInLoops: a service's sockets, each said in its order
     const listening = await run([
       "systemctl",
       "--user",
       "is-active",
-      socketName(spec.id),
+      socketName(socket.unit),
     ]);
     note(
-      `socket   ${socketName(spec.id)} ${listening.stdout.toString().trim() || "unknown"} on ${spec.socket.host}:${spec.socket.port}`
+      `socket   ${socketName(socket.unit)} ${listening.stdout.toString().trim() || "unknown"} on ${socket.listens.map(listenAddress).join(", ")}`
     );
   }
   note(`mode     ${await modeLine(spec, systemdPath(spec.name))}`);
@@ -2112,6 +2278,26 @@ const specsOf = (
   return ids.map((id) => specFor(id, mode, layout));
 };
 
+/** The dashboard's sockets as `cawco service install` writes them on this computer: each systemd socket unit, its service unit, and its launchd plist. */
+export const dashboardSocketTexts = (): {
+  launchd: string;
+  service: string;
+  systemd: { text: string; unit: string }[];
+} => {
+  const [spec] = specsOf(["dashboard"], "prod", undefined);
+  if (!spec?.sockets) {
+    throw new Error("the dashboard's service has no socket");
+  }
+  return {
+    systemd: spec.sockets.map((socket) => ({
+      unit: socketName(socket.unit),
+      text: socketUnit(spec, socket),
+    })),
+    service: unit(spec),
+    launchd: plist(spec),
+  };
+};
+
 /**
  * Rewrites the units of `ids` this build writes differently from what is on
  * disk, and has systemd reload its unit files once; restarts, starts and
@@ -2151,6 +2337,194 @@ export const refreshUnits = async (
     note("systemd reloaded its unit files");
   }
   return changed;
+};
+
+const UNIT_ENVIRONMENT = /^Environment=([^=\n]+)=(.*)$/gm;
+const PLIST_ENVIRONMENT =
+  /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/;
+const PLIST_PAIR = /<key>([^<]*)<\/key>\s*<string>([^<]*)<\/string>/g;
+
+/** What `xml` escaped, as it was. */
+const unxml = (value: string): string =>
+  value
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+
+/** The environment a unit (systemd) or plist (launchd) was written with. */
+const recordedEnvironment = (
+  text: string,
+  mac: boolean
+): Record<string, string> =>
+  Object.fromEntries(
+    mac
+      ? [...(PLIST_ENVIRONMENT.exec(text)?.[1] ?? "").matchAll(PLIST_PAIR)].map(
+          ([, name, value]) => [unxml(name ?? ""), unxml(value ?? "")]
+        )
+      : [...text.matchAll(UNIT_ENVIRONMENT)].map(([, name, value]) => [
+          name ?? "",
+          value ?? "",
+        ])
+  );
+
+/**
+ * What a unit's text takes from the installing shell's environment: its
+ * PATH, its XDG homes and CawCo's settings, and the dashboard's PORT and HOST
+ * (which no unit records: the socket's own address stands for them,
+ * `dashboardAddress`).
+ */
+const fromShell = (name: string): boolean =>
+  name === "PORT" ||
+  name === "HOST" ||
+  name === "PATH" ||
+  name === "XDG_CONFIG_HOME" ||
+  name === "XDG_DATA_HOME" ||
+  name.startsWith("CAWCO_");
+
+/**
+ * `render`, run as though the installing shell's environment were `recorded`:
+ * every variable a unit takes from that shell ({@link fromShell}) is the one
+ * the unit recorded, or none, and put back after.
+ */
+const asInstalled = <T>(
+  recorded: Record<string, string>,
+  render: () => T
+): T => {
+  const before = Object.entries(process.env).filter(([name]) =>
+    fromShell(name)
+  );
+  for (const [name] of before) {
+    delete process.env[name];
+  }
+  Object.assign(process.env, recorded);
+  try {
+    return render();
+  } finally {
+    for (const name of Object.keys(recorded)) {
+      delete process.env[name];
+    }
+    Object.assign(process.env, Object.fromEntries(before));
+  }
+};
+
+/**
+ * Service `id`'s unit (or plist) as this build writes it on a machine whose
+ * installed one reads `installed`: from the environment that unit recorded,
+ * the dashboard's with the loopback port the hub's unit records (`local`).
+ */
+const renderInstalled = (
+  id: ServiceId,
+  installed: string,
+  at: {
+    binaryLayout: NonNullable<ServiceOptions["binaryLayout"]>;
+    local: string | undefined;
+    mac: boolean;
+  }
+): { spec: ServiceSpec; text: string } =>
+  asInstalled(
+    {
+      ...recordedEnvironment(installed, at.mac),
+      ...(id === "dashboard" && at.local
+        ? { [CAWCO_ENV.localDashboardPort]: at.local }
+        : {}),
+    },
+    () => {
+      const [spec] = specsOf([id], "prod", at.binaryLayout);
+      if (!spec) {
+        throw new ServiceError(`no service ${id}`);
+      }
+      return { spec, text: at.mac ? plist(spec) : unit(spec) };
+    }
+  );
+
+/**
+ * THE UPDATE'S UNIT REFRESH: what a binary update runs from the build it
+ * installs (`cawco binary-units --services`, binary-apply.ts), before it
+ * restarts anything, so the hub's, the dashboard's and the agent's units, and
+ * the dashboard's socket, are what this build's `cawco service install`
+ * writes. Only a unit this machine has is refreshed. Each is written as the
+ * install wrote it, from the environment it recorded then (the installing
+ * shell's PATH, XDG homes and CawCo settings, {@link asInstalled}), with the
+ * dashboard's loopback port as the hub's unit records it; the socket's
+ * network address is read back from the socket itself
+ * (`installedDashboardAddress`). Only a unit whose text changed is rewritten.
+ *
+ * systemd: one daemon-reload for the set; a socket that changed (or is not
+ * listening) is rebound through `bindSockets`, which stops the dashboard and
+ * restarts the socket on its new addresses, and the update's restart that
+ * follows starts the dashboard on them. A loopback socket that does not open
+ * then (an earlier agent still holding its port) is said, never fatal: the
+ * dashboard's restart starts it again, as a wanted unit (systemd's
+ * transaction.c pulls in `UNIT_ATOM_PULL_IN_START_IGNORED`, i.e. `Wants=`,
+ * for `JOB_START` and `JOB_RESTART` alike), by when the update's agent
+ * restart has let the port go. launchd: a changed plist is reloaded, which
+ * reopens a job's sockets on what it names now.
+ */
+export const refreshServices = async (
+  ids: readonly ServiceId[],
+  binaryLayout: NonNullable<ServiceOptions["binaryLayout"]>,
+  note: (line: string) => void
+): Promise<void> => {
+  const mac = platform() === "darwin";
+  const fileOf = (id: ServiceId) =>
+    mac ? launchAgentPath(id) : systemdPath(id);
+  const installed = new Map<ServiceId, string>();
+  for (const id of ids) {
+    // biome-ignore lint/performance/noAwaitInLoops: a handful of files, read in order
+    const text = await Bun.file(fileOf(id))
+      .text()
+      .catch(() => undefined);
+    if (text === undefined) {
+      note(`${fileOf(id)}: not installed here`);
+    } else {
+      installed.set(id, text);
+    }
+  }
+  const hub = installed.get("hub");
+  const local = hub
+    ? recordedEnvironment(hub, mac)[CAWCO_ENV.localDashboardPort]
+    : undefined;
+  const bootstrap = mac ? await hasBootstrap() : false;
+  let reload = false;
+  let rebind: { moving: SocketSpec[]; spec: ServiceSpec } | undefined;
+  for (const [id, before] of installed) {
+    const { spec, text } = renderInstalled(id, before, {
+      mac,
+      local,
+      binaryLayout,
+    });
+    const path = fileOf(id);
+    if (text !== before) {
+      // biome-ignore lint/performance/noAwaitInLoops: units rewrite one at a time, each note in its order
+      await writeUnit(path, text);
+      note(`rewrote ${path}`);
+      if (mac) {
+        await loadLaunchAgent(spec, bootstrap, note);
+      } else {
+        reload = true;
+      }
+    }
+    // The service's sockets, where its own socket is installed: one an
+    // earlier build did not write (the loopback's) is written now.
+    const moving =
+      !mac && spec.sockets && existsSync(socketPath(id))
+        ? await writeSocketUnits(spec, note)
+        : [];
+    if (moving.length > 0) {
+      reload = true;
+      rebind = { spec, moving };
+    }
+  }
+  if (reload) {
+    const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
+    if (reloaded.exitCode !== 0) {
+      throw failed("systemctl --user daemon-reload", reloaded);
+    }
+    note("systemd reloaded its unit files");
+  }
+  if (rebind) {
+    await bindSockets(rebind.spec, rebind.moving, note);
+  }
 };
 
 /** What the agent's unit said of the keeper before keepers ran side by side. */

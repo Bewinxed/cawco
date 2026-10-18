@@ -622,9 +622,9 @@ export function proxyHeaders(input: Headers): Headers {
 export interface PreviewSocket {
   closed: boolean;
   headers: Headers;
-  /** The hop relaying it and the preview's session, for its failure's line. */
+  /** The hop relaying it and the preview's session, for its failure's line; null for a hop that serves no one session (the agent's hub loopback). */
   hop: string;
-  instanceId: string;
+  instanceId: string | null;
   /** Nothing listens at `url` any more: the hop forgets where it sent it (the hub's stale machine listener). */
   nothingListens?: () => void;
   opened: boolean;

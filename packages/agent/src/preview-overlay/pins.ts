@@ -284,10 +284,15 @@ export function startPins(deps: PinsDeps): Pins {
   /** Places each pin on the page, drawing a disc for each its frames show; answers those that are gone. */
   const placeAll = (all: Pin[]): Pin[] => {
     const gone: Pin[] = [];
-    const paint = {
-      fill: chrome.token("--action-solid"),
-      ink: chrome.token("--on-action"),
-      font: chrome.token("--type-label", "font"),
+    // Read for the first disc drawn: a token is the page's style, read there and then.
+    let painted: { fill: string; font: string; ink: string } | null = null;
+    const paintNow = () => {
+      painted ??= {
+        fill: chrome.token("--action-solid"),
+        ink: chrome.token("--on-action"),
+        font: chrome.token("--type-label", "font"),
+      };
+      return painted;
     };
     // A resolved pin stands on the page only while the host has its card open.
     const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
@@ -302,7 +307,7 @@ export function startPins(deps: PinsDeps): Pins {
       placed.set(pin.id, where);
       // A pin in a frame scrolled away from it stands hidden until the frame shows it again.
       if (where.shown) {
-        layer.append(disc(pin, where, paint));
+        layer.append(disc(pin, where, paintNow()));
       }
     }
     return gone;
@@ -314,10 +319,11 @@ export function startPins(deps: PinsDeps): Pins {
     }
     placed.clear();
     if (!(onPage() && artifact.keeps())) {
+      fitToPage(layer, false);
       return;
     }
-    fitToPage();
     const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
+    fitToPage(layer, all.length > 0);
     const gone = placeAll(all);
     if (settled()) {
       settle(reanchor(all), gone);

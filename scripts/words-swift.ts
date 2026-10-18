@@ -75,12 +75,42 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     members: [{ file: "upstream-guard.ts", export: "UPSTREAM_WORDS", as: "" }],
   },
   {
+    // HTTPS on the tailnet: its onboarding row in Needs you.
+    swift: "Tailnet",
+    members: [{ file: "words/tailnet.ts", export: "tailnetWords", as: "" }],
+  },
+  {
     swift: "Catalog",
     members: [{ file: "words/catalog.ts", export: "catalogWords", as: "" }],
   },
   {
     swift: "Preview",
     members: [{ file: "words/preview.ts", export: "previewWords", as: "" }],
+  },
+  {
+    // Caw's offers in a conversation: make this a project, and a design system.
+    swift: "Offers",
+    members: [{ file: "words/offers.ts", export: "offerWords", as: "" }],
+  },
+  {
+    // A page's cawco.pickPlace(): the machine select and folder browser over the preview's well.
+    swift: "PlacePick",
+    members: [{ file: "words/place.ts", export: "placePickWords", as: "" }],
+  },
+  {
+    // A session's plan: its ring and its panel.
+    swift: "Plan",
+    members: [{ file: "words/plan.ts", export: "planWords", as: "" }],
+  },
+  {
+    // What stands beside a conversation: the switch between its surfaces.
+    swift: "Side",
+    members: [{ file: "words/side.ts", export: "sideWords", as: "" }],
+  },
+  {
+    // The artifact panel: its title menu, a sheet's stage, a sheet's inspector.
+    swift: "Artifacts",
+    members: [{ file: "words/artifacts.ts", export: "artifactWords", as: "" }],
   },
   {
     // A device asking to pair: its Needs you card and its push.

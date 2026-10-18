@@ -19,6 +19,12 @@
  *   back out, so the page stands as it was.
  * - **The record keeps its tasks**: whenever the project's tasks change, a
  *   record whose cards' tasks moved is written again with them.
+ * - **The graph** (`decisions/decisions.json`) is the person's drags and
+ *   Caw's: he writes the file, or calls `decision_add` (a page's cards, each
+ *   checked against the built page and placed on a new row under the rest),
+ *   `decision_link` (edges between cards on it) and `decision_group` (a named
+ *   frame round some of them). Each is one commit as Caw that keeps whatever
+ *   else the file holds, the person's places included.
  */
 import {
   type ChoiceEntry,
@@ -295,14 +301,15 @@ export interface DecisionsDeps {
   builtPage: (artifactId: string) => Promise<string | undefined>;
   /** Broadcasts that a project's decision pages changed. */
   changed: (projectId: string) => void;
-  /** Writes and deletes files of the project's folder in one commit, as the operator. */
+  /** Writes and deletes files of the project's folder in one commit, as the operator, or as Caw for his graph tools. */
   commit: (
     projectId: string,
     change: {
       deletes: string[];
       writes: { content: string; path: string }[];
     },
-    message: string
+    message: string,
+    by?: "caw"
   ) => Promise<void>;
   /** The names of the entries in one folder of the project's. */
   folderNames: (projectId: string, path: string) => Promise<string[]>;
@@ -341,6 +348,51 @@ interface StoredRecord extends DecisionRecord {
   /** The thread Caw was asked in, when Caw was asked. */
   askedIn?: string | null;
 }
+
+/**
+ * Where `decision_add` places new cards: rows of {@link ROW_CARDS} under the
+ * lowest card, a step apart that clears the graph view's card (148 × 56,
+ * DecisionGraph.svelte) and a group's frame round it.
+ */
+const STEP = { x: 188, y: 120 };
+const ROW_CARDS = 4;
+const GROUP_ID = /[^a-z0-9]+/g;
+const EDGE_ENDS = /^-+|-+$/g;
+
+/** The graph file as written: what a change keeps beside the cards, edges and groups it rewrites. */
+type GraphFile = Record<string, unknown>;
+
+/**
+ * A page's card going onto the graph: its question, or null when the graph
+ * has it already; refused when the page has no such card, or the graph has
+ * that id from another page.
+ */
+const newCard = (
+  onGraph: GraphCard[],
+  page: string,
+  card: string,
+  cards: DecisionCard[]
+): string | null => {
+  const drawn = cards.find((each) => each.id === card);
+  if (!drawn) {
+    throw new DecisionRefusal(
+      404,
+      `decisions/${page}/ has no card ${card}; its cards are ${cards.map((each) => each.id).join(", ") || "none"}.`
+    );
+  }
+  const there = onGraph.find((each) => each.id === card);
+  if (there && there.page !== page) {
+    throw new DecisionRefusal(
+      409,
+      `The graph has a card ${card} from decisions/${there.page}/ already, and cards are keyed by id.`
+    );
+  }
+  return there ? null : drawn.question;
+};
+
+/** A list the file holds, or none when it holds something else there. */
+const listed = (value: unknown): unknown[] =>
+  Array.isArray(value) ? value : [];
 
 const recordPath = (name: string) => `decisions/${name}/record.json`;
 const logPath = (name: string) => `decisions/${name}/log.md`;
@@ -503,6 +555,16 @@ export const createDecisions = (deps: DecisionsDeps) => {
     return { read, page };
   };
 
+  /**
+   * Whether a page is a decision page: its built page has cards (the kit's
+   * choice groups, {@link readPage}), or a record was made from it. A page
+   * artifact without them, a design system's Foundations specimen
+   * ("Caw&Co foundations", nightly 3944), is no decision: it is not listed,
+   * read, sent on, or a session's open question.
+   */
+  const decisionPage = (read: DecisionPageRead, page: ReadPage): boolean =>
+    page.cards.length > 0 || read.record !== null;
+
   /** A record with each card's tasks as the task list has them now. */
   const withTasks = (
     record: StoredRecord,
@@ -528,18 +590,21 @@ export const createDecisions = (deps: DecisionsDeps) => {
     const found = (await pageNames(projectId)).find(
       (page) => page.name === name
     );
-    if (!found) {
+    const one = found
+      ? await readOne(
+          projectId,
+          name,
+          found.artifact,
+          await deps.tasks(projectId)
+        )
+      : undefined;
+    if (!(one && decisionPage(one.read, one.page))) {
       throw new DecisionRefusal(
         404,
         `This project has no decision page ${name}.`
       );
     }
-    return readOne(
-      projectId,
-      name,
-      found.artifact,
-      await deps.tasks(projectId)
-    );
+    return one;
   };
 
   /** Who hears a page's send or its Make tasks: its session while it stands, else Caw. */
@@ -599,6 +664,62 @@ export const createDecisions = (deps: DecisionsDeps) => {
     }
   };
 
+  /** The graph file as it stands, and read; an empty one while the folder has none. */
+  const graphFile = async (
+    projectId: string
+  ): Promise<{ file: GraphFile; graph: DecisionGraph }> => {
+    known(projectId);
+    const text = await deps.folderText(projectId, GRAPH_FILE);
+    if (text === undefined) {
+      return { file: {}, graph: { cards: [], edges: [], groups: [] } };
+    }
+    const graph = graphOf(text);
+    const file = jsonOf(text);
+    if (Array.isArray(file)) {
+      throw new DecisionRefusal(
+        422,
+        `${GRAPH_FILE} is a list; Caw writes it as { cards, edges, groups }.`
+      );
+    }
+    return { file: file as GraphFile, graph };
+  };
+
+  /** Caw's change to the graph: one commit as Caw, keeping what else the file holds. */
+  const writeGraph = async (
+    projectId: string,
+    file: GraphFile,
+    change: Partial<Record<keyof DecisionGraph, unknown[]>>,
+    message: string
+  ): Promise<void> => {
+    await deps.commit(
+      projectId,
+      {
+        writes: [
+          {
+            path: GRAPH_FILE,
+            content: `${JSON.stringify({ ...file, ...change }, null, 2)}\n`,
+          },
+        ],
+        deletes: [],
+      },
+      message,
+      "caw"
+    );
+    deps.changed(projectId);
+  };
+
+  /** The ids named that are not cards on the graph, refused in one sentence. */
+  const onGraph = (graph: DecisionGraph, ids: string[]): void => {
+    const there = new Set(graph.cards.map((card) => card.id));
+    const missing = [...new Set(ids)].filter((id) => !there.has(id));
+    if (missing.length > 0) {
+      throw new DecisionRefusal(
+        404,
+        `${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not on the graph; put ${missing.length > 1 ? "them" : "it"} there with decision_add first.`
+      );
+    }
+  };
+
   return {
     /** The project's pages, newest first, and whether its decisions form a graph. */
     async list(projectId: string): Promise<DecisionsList> {
@@ -613,7 +734,15 @@ export const createDecisions = (deps: DecisionsDeps) => {
       for (const { name, artifact } of names) {
         try {
           // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
-          const { read } = await readOne(projectId, name, artifact, tasks);
+          const { read, page } = await readOne(
+            projectId,
+            name,
+            artifact,
+            tasks
+          );
+          if (!decisionPage(read, page)) {
+            continue;
+          }
           const { record: _record, sentAt: _sentAt, ...summary } = read;
           pages.push(summary);
         } catch (error) {
@@ -654,7 +783,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
         const { read, page } = await readOne(projectId, name, artifact, tasks);
         if (
           read.writer?.instanceId === instanceId &&
-          read.state !== "decided"
+          read.state !== "decided" &&
+          decisionPage(read, page)
         ) {
           pages.push({ read, cards: page.cards });
         }
@@ -858,6 +988,125 @@ export const createDecisions = (deps: DecisionsDeps) => {
         "decisions: the graph's places"
       );
       deps.changed(projectId);
+    },
+
+    /**
+     * `decision_add`: cards of the project's pages onto the graph, each a card
+     * its built page has, named by `name` or else its question, placed on new
+     * rows under the lowest card. A card already on the graph stays where it
+     * is; one id on two pages is refused, since the graph keys cards by id.
+     */
+    async add(
+      projectId: string,
+      asked: { card: string; name?: string; page: string }[]
+    ): Promise<GraphCard[]> {
+      const { file, graph } = await graphFile(projectId);
+      const pages = new Map<string, DecisionCard[]>();
+      for (const { page } of asked) {
+        if (!pages.has(page)) {
+          // biome-ignore lint/performance/noAwaitInLoops: a call names a page or two; read one at a time
+          pages.set(page, (await find(projectId, page)).page.cards);
+        }
+      }
+      const bottom = graph.cards.length
+        ? Math.max(...graph.cards.map((card) => card.y)) + STEP.y
+        : 0;
+      const added: GraphCard[] = [];
+      for (const { page, card, name } of asked) {
+        const question = newCard(
+          [...graph.cards, ...added],
+          page,
+          card,
+          pages.get(page) ?? []
+        );
+        if (question !== null) {
+          added.push({
+            id: card,
+            name: name?.trim() || question,
+            page,
+            x: (added.length % ROW_CARDS) * STEP.x,
+            y: bottom + Math.floor(added.length / ROW_CARDS) * STEP.y,
+          });
+        }
+      }
+      if (added.length > 0) {
+        await writeGraph(
+          projectId,
+          file,
+          { cards: [...listed(file.cards), ...added] },
+          `decisions: Caw puts ${added.map((card) => card.id).join(", ")} on the graph`
+        );
+      }
+      return added;
+    },
+
+    /** `decision_link`: edges between cards on the graph, each from one to the card it leads to; one there already stays one. */
+    async link(
+      projectId: string,
+      asked: { from: string; to: string }[]
+    ): Promise<[string, string][]> {
+      const { file, graph } = await graphFile(projectId);
+      onGraph(
+        graph,
+        asked.flatMap((edge) => [edge.from, edge.to])
+      );
+      const drawn = new Set(graph.edges.map(([from, to]) => `${from}\0${to}`));
+      const added: [string, string][] = [];
+      for (const { from, to } of asked) {
+        if (from === to) {
+          throw new DecisionRefusal(400, `${from} can't lead to itself.`);
+        }
+        if (!drawn.has(`${from}\0${to}`)) {
+          drawn.add(`${from}\0${to}`);
+          added.push([from, to]);
+        }
+      }
+      if (added.length > 0) {
+        await writeGraph(
+          projectId,
+          file,
+          { edges: [...listed(file.edges), ...added] },
+          `decisions: Caw links ${added.map(([from, to]) => `${from} → ${to}`).join(", ")}`
+        );
+      }
+      return added;
+    },
+
+    /**
+     * `decision_group`: a named frame round cards on the graph. Its id is its
+     * name made a slug; the same name again sets its cards, and no cards
+     * takes the group away.
+     */
+    async group(
+      projectId: string,
+      name: string,
+      cards: string[]
+    ): Promise<{ cards: string[]; id: string; name: string } | null> {
+      const { file, graph } = await graphFile(projectId);
+      const id = name
+        .trim()
+        .toLowerCase()
+        .replace(GROUP_ID, "-")
+        .replace(EDGE_ENDS, "");
+      if (!id) {
+        throw new DecisionRefusal(400, "Name the group in words.");
+      }
+      onGraph(graph, cards);
+      const group = cards.length
+        ? { id, name: name.trim(), cards: [...new Set(cards)] }
+        : null;
+      const others = listed(file.groups).filter(
+        (each) => (each as { id?: unknown } | null)?.id !== id
+      );
+      await writeGraph(
+        projectId,
+        file,
+        { groups: group ? [...others, group] : others },
+        group
+          ? `decisions: Caw groups ${group.cards.join(", ")} as ${group.name}`
+          : `decisions: Caw takes the group ${name.trim()} away`
+      );
+      return group;
     },
 
     /** The project's tasks changed: records whose tasks moved are written again, one at a time. */

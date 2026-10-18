@@ -14,7 +14,8 @@
  *   of its project's tasks, folder and its own task's to-dos; changes to tasks and
  *   fleet settings go to its parent through handoff.
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
- *   drafting views, its project's folder on the hub and decision pages in it,
+ *   drafting views, its project's folder on the hub and decision pages in it
+ *   with their graph,
  *   its routines, its ingress and relays (opening a relay asks you),
  *   proposing approved actions, its own project's settings and memory
  *   (applied at once, or asked about first: project-settings.ts, memory.ts),
@@ -76,8 +77,8 @@ const TASK_WRITE = [
 ] as const;
 
 /**
- * Caw's own: a project's conversations with it, the views it drafts, and its
- * folder on the hub (caw.ts).
+ * Caw's own: a project's conversations with it, the views it drafts, its
+ * folder on the hub, and its decision graph (caw.ts).
  */
 export const CAW_TOOLS = [
   "thread_read",
@@ -86,6 +87,9 @@ export const CAW_TOOLS = [
   "view_query",
   "folder_read",
   "folder_write",
+  "decision_add",
+  "decision_link",
+  "decision_group",
 ] as const;
 
 /**

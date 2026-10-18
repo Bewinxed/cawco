@@ -13,8 +13,15 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
       return store.rules.value?.length ?? null;
     case "hooks":
       return store.hooks.value?.length ?? null;
-    case "delegate-types":
-      return store.types.value?.length ?? null;
+    case "delegate-types": {
+      const types = store.types.value;
+      return types
+        ? (store.projectTypes.value ?? []).reduce(
+            (sum, entry) => sum + entry.types.length,
+            types.length
+          )
+        : null;
+    }
     case "subagents":
       return store.fleet.value?.agents.length ?? null;
     case "cli-tools":

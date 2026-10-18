@@ -47,6 +47,8 @@ export const DESIGN_SKILL = "design-system";
 
 export interface DesignOffersDeps {
   db: DbShape;
+  /** The person said Not now: the project's starters stop suggesting one (project-starters.ts). */
+  declined: (projectId: string) => void;
   /** A note in a project's thread that wakes no one; answers the thread it went to (caw.ts `notice`). */
   notice: (
     projectId: string,
@@ -266,6 +268,7 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
         return this.state(projectId);
       }
       db.designOffers.answer(projectId, "dismissed");
+      deps.declined(projectId);
       return this.state(projectId);
     },
 

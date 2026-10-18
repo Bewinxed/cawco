@@ -486,15 +486,25 @@ const socketAddress = async (id: string, socket: string): Promise<string> => {
 };
 
 /**
- * The runtime the boundary's plain Bun scripts run on: `BUN_BE_BUN=1 <binary
- * root>/run` in a binary install, bun in a checkout. Refuses the workspace
- * when it is not there, rather than writing a hook that refuses every
- * command.
+ * The bun the agent's plain Bun scripts run on, the boundary's and a stage's
+ * host (stage.ts): `<binary root>/run` with {@link BUN_SCRIPT_ENV} in a
+ * binary install, bun in a checkout.
+ */
+export const bunScriptRuntime = (): string =>
+  standalone ? join(binaryRoot(), "run") : (Bun.which("bun") ?? "bun");
+
+/** What {@link bunScriptRuntime} needs in its environment: a binary install's runs as bun only with `BUN_BE_BUN=1`. */
+export const BUN_SCRIPT_ENV: Readonly<Record<string, string>> = standalone
+  ? { BUN_BE_BUN: "1" }
+  : {};
+
+/**
+ * {@link bunScriptRuntime} for workspace `id`'s boundary scripts. Refuses the
+ * workspace when it is not there, rather than writing a hook that refuses
+ * every command.
  */
 const bunRuntime = async (id: string): Promise<string> => {
-  const runtime = standalone
-    ? join(binaryRoot(), "run")
-    : (Bun.which("bun") ?? "bun");
+  const runtime = bunScriptRuntime();
   await access(runtime, constants.X_OK).catch(() => {
     throw refusal(
       id,
@@ -665,7 +675,7 @@ const judgeFor = async (
         // which nothing inside the boundary writes.
         cwd: stateDir(id),
         env: {
-          ...(standalone ? { BUN_BE_BUN: "1" } : {}),
+          ...BUN_SCRIPT_ENV,
           PATH: SYSTEM_PATH,
         },
       });
@@ -1525,8 +1535,7 @@ export const rearmHooks = async (): Promise<void> => {
  * a hook naming a judge that is gone, which refuses every call the process
  * makes (b895ec57, 2026-10-16: closed as quiet while its session's attach
  * had failed, its process still running on the keeper before the update). A
- * project lead's place has no clone record, and is armed as its session
- * starts.
+ * place has no clone record, and is armed as its session starts.
  */
 const readWorkspaces = async (): Promise<{
   listed: ListedWorkspace[];
@@ -2057,8 +2066,8 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
 
 /**
  * The folder a boundary holds, ready for it: a delegate's clone (refused
- * when it is none), or a project lead's place, whatever folder his project
- * is in, a plain one too, which stays as the person keeps it: never made
+ * when it is none), or a place, whatever folder it is over, a plain one
+ * too, which stays as the person keeps it: never made
  * into a clone. One that is not there is refused, and its boundaries closed
  * ({@link refuseGone}).
  */
@@ -2069,7 +2078,7 @@ const placeReady = async (ref: WorkspaceRef): Promise<void> => {
       await refuseGone(ref, `${ref.path} is not a folder`);
     }
     // What earlier builds stood in there goes, once nothing holds it: at
-    // each ensure (each of the lead's wakes), so once the boundary that bound
+    // each ensure (each wake of its session), so once the boundary that bound
     // them is gone (stand-ins.ts `removeStandIns`).
     await removeStandIns(ref).catch((error: unknown) =>
       console.warn(
@@ -2247,8 +2256,8 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
 /**
  * How the runner starts one command, a perl program (no single quote,
  * backslash or `${`: it goes into bash single quotes inside this template).
- * Every command leads a process group of its own. In a project lead's place
- * (`CAWCO_LEAD_PLACE`, a person's own folder) nothing it starts outlives it:
+ * Every command leads a process group of its own. In a place
+ * (`CAWCO_PLACE`, a person's own folder) nothing it starts outlives it:
  * the launcher makes itself the command's child subreaper (Linux
  * `prctl(PR_SET_CHILD_SUBREAPER)`, 36, by the machine's syscall number), so
  * whatever the command leaves running, backgrounded, `setsid` or
@@ -2260,7 +2269,7 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
  */
 const LAUNCH = [
   "setpgrp(0, 0);",
-  "exec @ARGV unless $ENV{CAWCO_LEAD_PLACE};",
+  "exec @ARGV unless $ENV{CAWCO_PLACE};",
   'if ($^O eq "linux") {',
   "  my %nr = (x86_64 => 157, aarch64 => 167, i686 => 172, armv7l => 172, armv6l => 172, riscv64 => 167);",
   "  my $n = $nr{(POSIX::uname())[4]};",
@@ -2316,12 +2325,13 @@ const LAUNCHD_SOCKETS = "/private/tmp";
  * testmanagerd's, webinspectord's), beside those in {@link LAUNCHD_SOCKETS}.
  * A workspace writes nothing there, so every socket in it is the host's: a
  * workspace drives a simulator through CoreSimulator's mach services
- * (`simctl`), never these, but for {@link TEST_MANAGER_SOCKET}.
+ * (`simctl`), never these, but for {@link TEST_MANAGER_SOCKET} and
+ * {@link REMOTE_AUTOMATION_SOCKET}.
  */
 const SIMULATOR_SOCKETS = "/private/var/tmp";
 
 /**
- * The one host socket in {@link LAUNCHD_SOCKETS} or {@link SIMULATOR_SOCKETS}
+ * A host socket in {@link LAUNCHD_SOCKETS} or {@link SIMULATOR_SOCKETS}
  * a workspace connects to, as a Seatbelt regex over its whole path: a booted
  * simulator's testmanagerd, which `xcodebuild test-without-building` dials to
  * run a UI test runner (XCUITest, Maestro's driver). The simulator names it
@@ -2330,12 +2340,31 @@ const SIMULATOR_SOCKETS = "/private/var/tmp";
  * 18.5; newer runtimes keep the same names under `/private/var/tmp`. Refused,
  * the runner fails with "Failed to connect to unix domain socket at path
  * /private/tmp/com.apple.launchd.lzUhSQrMjS/com.apple.testmanagerd.unix-domain.socket:
- * 1 Operation not permitted". Its siblings (webinspectord's, testmanagerd's
- * remote automation, syslog) and every other socket there stay the host's.
- * testmanagerd starts and drives apps inside its own simulator, as `simctl`
- * already lets a workspace.
+ * 1 Operation not permitted". Its siblings (webinspectord's, syslog) and
+ * every other socket there stay the host's, but for
+ * {@link REMOTE_AUTOMATION_SOCKET}. testmanagerd starts and drives apps inside
+ * its own simulator, as `simctl` already lets a workspace.
  */
 const TEST_MANAGER_SOCKET = String.raw`^/private(/var)?/tmp/com\.apple\.launchd\.[A-Za-z0-9]+/com\.apple\.testmanagerd\.unix-domain\.socket$`;
+
+/**
+ * A booted iOS 27 simulator's testmanagerd remote automation socket, through
+ * which axe and xcui send taps, typing and gestures (iOS 18.5 takes them
+ * without it). The simulator runtime's own testmanagerd binds it, beside
+ * {@link TEST_MANAGER_SOCKET}: its launchd plist
+ * (RuntimeRoot/Developer/Library/LaunchDaemons/com.apple.testmanagerd.plist)
+ * lists `com.apple.testmanagerd.remote-automation.uds` under `Sockets`, keyed
+ * `TESTMANAGERD_REMOTE_AUTOMATION_SIM_SOCK`. The Mac's own testmanagerd binds
+ * no socket: its remote automation is the AppleInternal-only RemoteService
+ * `com.apple.testmanagerd.remote.automation`
+ * (/System/Library/LaunchDaemons/com.apple.testmanagerd.plist), so this name
+ * under a launchd dir in {@link SIMULATOR_SOCKETS} is a simulator's alone.
+ * Refused, every axe HID call on iOS 27.2 failed with "Failed to connect to
+ * unix domain socket at path
+ * /private/var/tmp/com.apple.launchd.q3TgJJkNqx/com.apple.testmanagerd.remote-automation.uds:
+ * 1 Operation not permitted".
+ */
+const REMOTE_AUTOMATION_SOCKET = String.raw`^/private/var/tmp/com\.apple\.launchd\.[A-Za-z0-9]+/com\.apple\.testmanagerd\.remote-automation\.uds$`;
 
 /** Linux: the agent's runtime dir, where its sandbox's proxy socket and the workspace's door go. */
 const runtimeDirOf = (id: string): string => {
@@ -2464,7 +2493,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
           ...(await darwinUserDirs()),
         ].map((path) => realpath(path).catch(() => path))
       ),
-      reachedHostSockets: [TEST_MANAGER_SOCKET],
+      reachedHostSockets: [TEST_MANAGER_SOCKET, REMOTE_AUTOMATION_SOCKET],
     });
     const file = join(generationDir(id, gen), "boundary.sb");
     return {
@@ -2505,7 +2534,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
           CAWCO_WORKSPACE: id,
           [BOUNDARY_MARKER]: gen,
           TMPDIR: workspaceTmpDir(id),
-          ...(isPlace(id) ? { [LEAD_PLACE_ENV]: "1" } : {}),
+          ...(isPlace(id) ? { [PLACE_ENV]: "1" } : {}),
         },
       },
     };
@@ -2523,7 +2552,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     runner: join(generationDir(id, gen), "runner.sh"),
     denies: join(generationDir(id, gen), "denies.json"),
   };
-  const lead = isPlace(id);
+  const place = isPlace(id);
   return {
     files: [
       [files.settings, settings],
@@ -2542,7 +2571,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       .update("\0")
       .update(await hostText)
       .update("\0")
-      .update(lead ? `${policy.scratch}\0${PLACE_GUARD}` : "")
+      .update(place ? `${policy.scratch}\0${PLACE_GUARD}` : "")
       .digest("hex")
       .slice(0, 16),
     spec: {
@@ -2569,13 +2598,13 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         CLAUDE_CODE_TMPDIR: policy.scratch,
         CAWCO_WORKSPACE: id,
         PATH: SYSTEM_PATH,
-        // A lead's place is a person's own folder: srt resolves its own
+        // A place is a person's own folder: srt resolves its own
         // mandatory names against the host's working directory and makes a
         // mount point for each one absent, so the host starts srt in the
         // place's scratch dir, never in the place (boundary-host.ts); and
         // what each command leaves running goes with it (RUNNER).
-        ...(lead
-          ? { CAWCO_SANDBOX_CWD: policy.scratch, [LEAD_PLACE_ENV]: "1" }
+        ...(place
+          ? { CAWCO_SANDBOX_CWD: policy.scratch, [PLACE_ENV]: "1" }
           : {}),
       },
     },
@@ -2601,7 +2630,7 @@ const PROTECTED_TESTS = [
 ];
 
 /**
- * A project lead's place's guard (`place-guard.pl before REQ PLACE` before
+ * A place's guard (`place-guard.pl before REQ PLACE` before
  * each command, `after REQ PLACE SCRATCH POLICY HOME` once it has run), the
  * executor's on the host ({@link execScript}). A person's own folder gets no
  * stand-ins (never write into a person's own folder), so srt binds only the
@@ -2771,10 +2800,15 @@ for my $link (find0("-name", "node_modules", "-prune", "-o", "-type", "l", "-new
 exit($moved ? 3 : 0);
 `;
 
-/** The runner's word that its commands are a project lead's ({@link RUNNER}): nothing a command starts outlives it. */
-const LEAD_PLACE_ENV = "CAWCO_LEAD_PLACE";
+/**
+ * The runner's word that its commands run in a place ({@link RUNNER}):
+ * nothing a command starts outlives it. Set once on the boundary as it
+ * starts, by the build that starts it, and read by that boundary's own
+ * runner and host, so an older boundary still running reads its own word.
+ */
+const PLACE_ENV = "CAWCO_PLACE";
 
-/** A lead's place's guard, written into the boundary's generation dir ({@link PLACE_GUARD}); none for a clone. */
+/** A place's guard, written into the boundary's generation dir ({@link PLACE_GUARD}); none for a clone. */
 const guardFiles = (id: string, gen: string): [string, string][] =>
   isPlace(id) ? [[guardOf(id, gen), PLACE_GUARD]] : [];
 
@@ -3613,8 +3647,8 @@ const liveFacts = async (
 /**
  * Whether a session's process a keeper holds may run a command in workspace
  * `id`, whose folder is `path`: a Claude Code or pi process started in its
- * clone (every session there runs in its boundary), or, for a project lead's
- * place (a person's own folder, where the person's own sessions run on the
+ * clone (every session there runs in its boundary), or, for a place (a
+ * person's own folder, where the person's own sessions run on the
  * host), one launched with the place's hook. A sleeping session has no
  * process. Read off the keepers, so it holds for a CLI this agent has not
  * adopted yet.
@@ -4199,7 +4233,7 @@ take() {
  * the command runs with its caller's PATH, behind the upstream guard's
  * shims ({@link writeGuardShims}) and, on macOS, the toolchain shims.
  */
-/** A lead's place's guard, looking before its command ({@link PLACE_GUARD}): a place it cannot look at runs no command. Nothing for a clone. */
+/** A place's guard, looking before its command ({@link PLACE_GUARD}): a place it cannot look at runs no command. Nothing for a clone. */
 const guardBefore = (id: string, held: Pick<Held, "gen" | "path">): string =>
   isPlace(id)
     ? `if ! /usr/bin/perl ${shellQuote(guardOf(id, held.gen))} before "$req" ${shellQuote(held.path)} 2> "$req/guard-err"; then
@@ -4210,7 +4244,7 @@ fi
 `
     : "";
 
-/** A lead's place's guard, judging what its command did ({@link PLACE_GUARD}): what it moved fails the command, and so does a guard that could not look. Nothing for a clone. */
+/** A place's guard, judging what its command did ({@link PLACE_GUARD}): what it moved fails the command, and so does a guard that could not look. Nothing for a clone. */
 const guardAfter = (
   id: string,
   held: Pick<Held, "gen" | "path" | "scratch">
@@ -4686,7 +4720,7 @@ const launch = async (
   gen: string
 ): Promise<Boundary> => {
   const linux = process.platform === "linux";
-  // A lead's place is a person's own folder: nothing of the boundary's is
+  // A place is a person's own folder: nothing of the boundary's is
   // written into it (no copied inodes, no stand-ins, no exclude lines).
   const own = !isPlace(ref.id);
   const procId = boundaryProcId(ref.id, gen);

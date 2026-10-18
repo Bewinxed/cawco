@@ -52,6 +52,7 @@
   import { hangShadow } from "./motion/hung-shadow";
   import NeedsCaw from "./NeedsCaw.svelte";
   import Overlays from "./Overlays.svelte";
+  import { hold } from "./page-marks";
   import RegionBoundary from "./RegionBoundary.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
@@ -776,6 +777,21 @@
   const floating = $derived(
     !railed && onSession && workspace.activeSessionId !== null
   );
+  /* What the bar is, floating or hosting the tabs, said on the root for the
+     screen's top edge (ScreenEdges, page-marks). */
+  $effect(() => {
+    const releases = [
+      floating && hold("root", "data-bar", "floating"),
+      hosting && hold("root", "data-bar", "hosting"),
+    ];
+    return () => {
+      for (const release of releases) {
+        if (release) {
+          release();
+        }
+      }
+    };
+  });
 
   /* The home's Check machines opens the machines where a phone keeps them:
      the sidebar. */

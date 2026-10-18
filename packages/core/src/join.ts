@@ -61,7 +61,7 @@ export type SshJoinProblem =
   | { kind: "host-key" }
   /** Nothing answered on that address and port, or the name did not resolve. */
   | { kind: "unreachable"; detail: string }
-  /** SSH got in, but the machine could not download the script from the hub address. */
+  /** SSH got in, but the machine could not reach the hub address to download the script. */
   | { kind: "download" }
   /** A step of the install script or `cawco join` failed. */
   | { kind: "step"; step: string }
@@ -90,7 +90,11 @@ export interface SshJoinJob {
   exitCode: number | null;
   hubUrl: string;
   id: string;
-  /** Everything the SSH session printed, stdout and stderr in arrival order. */
+  /**
+   * Everything the SSH session printed, stdout and stderr in arrival order.
+   * A step line ({@link INSTALL_STEP_PREFIX}) means it has signed in: the
+   * remote command prints one before anything else it does.
+   */
   lines: string[];
   /** From the `joined as` line, once it has been printed. */
   machineId: string | null;
@@ -102,7 +106,10 @@ export interface SshJoinJob {
   passwordProblem?: SshPasswordProblem;
   port: number | null;
   problem: SshJoinProblem | null;
-  /** `done` means the script exited 0 and the hub has the machine online. */
-  state: "running" | "failed" | "done";
+  /**
+   * `done` means the script exited 0 and the hub has the machine online;
+   * `stopped`, that the person stopped it and its `ssh` is gone.
+   */
+  state: "running" | "failed" | "done" | "stopped";
   target: string;
 }

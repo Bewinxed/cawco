@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ComponentProps } from "svelte";
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
+  import { mirror } from "#lib/cawco/page-marks.js";
   import { visible } from "#lib/cawco/visible-viewport.svelte.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn } from "#lib/utils.js";
@@ -49,6 +50,41 @@
     const watch = new MutationObserver(hold);
     watch.observe(node, { attributeFilter: ["aria-modal"] });
     return () => watch.disconnect();
+  });
+
+  /**
+   * What the sheet is, said for the page around it (page-marks): a bottom
+   * sheet the kit places on the screen's foot is the bottom edge
+   * (ScreenEdges), and while one closes the body takes presses again
+   * (app.css).
+   */
+  $effect(() => {
+    const node = ref;
+    if (!node) {
+      return;
+    }
+    const foot = mirror(
+      node,
+      "root",
+      "data-kit-sheet",
+      ["data-placed", "data-vaul-drawer-direction"],
+      (sheet) =>
+        sheet.hasAttribute("data-placed") &&
+        sheet.dataset.vaulDrawerDirection === "bottom"
+          ? ["bottom"]
+          : []
+    );
+    const closing = mirror(
+      node,
+      "body",
+      "data-drawer",
+      ["data-state"],
+      (sheet) => (sheet.dataset.state === "closed" ? ["closed"] : [])
+    );
+    return () => {
+      foot();
+      closing();
+    };
   });
 
   /**

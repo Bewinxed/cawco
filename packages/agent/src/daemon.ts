@@ -108,7 +108,7 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
 import { accountReports, claudeAuthNote, claudeSignins } from "./accounts";
-import { unlockKeychain } from "./auth";
+import { resolveClaudeExecutable, unlockKeychain } from "./auth";
 import {
   BinaryUpdater,
   latestBinaryUpdate,
@@ -133,6 +133,7 @@ import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { serveHubCredential } from "./hub-git";
+import { carryHub, stopCarrying } from "./hub-loopback";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import { readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
@@ -1501,7 +1502,9 @@ const attach = (
     let reportedHomeStores = homeStoresStamp();
     /** `report` in place of the one of its harness this connection last read, or beside the others. */
     const keepReport = (report: MachineHarnessReport): void => {
-      if (report.harness === "claude") {
+      // A machine with no Claude Code has its sentence in the report's
+      // `authReason`, not the one about its accounts' sign-ins.
+      if (report.harness === "claude" && report.installed) {
         noteClaudeAuth(report.auth);
       }
       reportedHarnesses = [
@@ -1742,7 +1745,9 @@ const attach = (
      * again, when either moved since the last one this connection sent (a
      * login gone, a keychain locked or unlocked under the agent); the whole
      * report read again when the announce could not read it, so its sign-ins
-     * still reach the hub. Nothing when there is nothing new to send.
+     * still reach the hub, and while Claude Code is not installed or has gone
+     * from PATH since, so its installing or going is said. Nothing when there
+     * is nothing new to send.
      */
     const rereadClaude = async (): Promise<
       MachineHarnessReport | undefined
@@ -1750,9 +1755,12 @@ const attach = (
       const old = reportedHarnesses.find(
         (report) => report.harness === "claude"
       );
-      if (!old) {
+      if (!old?.installed || resolveClaudeExecutable() === undefined) {
         const claude = harness("claude");
-        return claude ? await readHarness(claude) : undefined;
+        const report = claude ? await readHarness(claude) : undefined;
+        return report && old && Bun.deepEquals(report, old)
+          ? undefined
+          : report;
       }
       const read = await readPart(
         "the claude harness's sign-ins",
@@ -1767,7 +1775,7 @@ const attach = (
         unreadAccounts: _unread,
         ...rest
       } = old;
-      const next = { ...rest, ...(await claudeSignins(read)) };
+      const next = { ...rest, ...claudeSignins(read) };
       return Bun.deepEquals(next, old) ? undefined : next;
     };
 
@@ -2383,6 +2391,15 @@ const attach = (
           (envelope.payload as RegisterAckPayload).sessionLimits
         );
         takeUpstream((envelope.payload as RegisterAckPayload).upstream);
+        // localhost on this computer is the hub this connection reached.
+        carryHub(
+          url,
+          {
+            dashboard: (envelope.payload as RegisterAckPayload).dashboardPorts,
+            previews: (envelope.payload as RegisterAckPayload).previewPorts,
+          },
+          (envelope.payload as RegisterAckPayload).hostsHub
+        );
         // This connection's credential for the hub's git remote, in memory only.
         setHubCredential(
           identity.machineId,
@@ -2692,6 +2709,8 @@ export const startDaemon = (rediscover = false) =>
       Effect.promise(() => startMcpGateway(() => hubUrl)),
       (listener) => Effect.sync(() => listener.stop(true))
     );
+    // The hub on this computer's loopback, started by each register (hub-loopback.ts `carryHub`).
+    yield* Effect.addFinalizer(() => Effect.promise(() => stopCarrying()));
     const machineIdValue = yield* Effect.promise(() => machineId());
     // Child processes — the opencode server and its plugins most of all — read
     // the machine's identity and the hub off the environment they inherit.

@@ -76,6 +76,12 @@ for (const name of GIT_REPOSITORY_ENV) {
 export type Harness = "claude" | "opencode" | "pi";
 export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
 
+/** A launch's stderr file, whose stdout is the same name in `.log`. */
+const ERR_SUFFIX = /\.err$/;
+/** An agent's line on its sign-in reads and its reports (accounts.ts, daemon.ts `readPart`, auth.ts). */
+const SIGNIN_LINE =
+  /\[accounts\]|\[keychain\]|harness's report|sign-ins|Claude account|could not be read|was not read/;
+
 /**
  * How Claude Code opens the words a person sent while a turn ran, which it
  * delivers mid-turn one of two ways: in a `<system-reminder>` block of the
@@ -957,9 +963,23 @@ export interface SendSnapshot {
  * or the machine has no room. Under a run that holds one already (the probe
  * kit's), it counts once.
  */
+/**
+ * Where a fleet's hub listens (`bind`, its `HOST`) and the address its
+ * services and the probe reach it at (`at`): 127.0.0.1 for both unless a
+ * spec names others. hub-loopback binds every address (`::`) so an agent
+ * reaches it at each loopback name; hub-loopback-relay puts it on the host's
+ * own interface address, off loopback.
+ */
+export interface HubAddress {
+  at: string;
+  bind: string;
+}
+
 export async function scratchFleet(options: {
+  hub?: HubAddress;
   name: string;
-  respond: (request: Seen) => Reply;
+  /** A promise holds the request until it settles: a spec paces a session's turns. */
+  respond: (request: Seen) => Reply | Promise<Reply>;
 }) {
   const heavy = await heavySlot();
   const dirs = new FleetDirs();
@@ -973,10 +993,17 @@ export async function scratchFleet(options: {
 }
 
 async function standUp(
-  options: { name: string; respond: (request: Seen) => Reply },
+  options: {
+    hub?: HubAddress;
+    name: string;
+    respond: (request: Seen) => Reply | Promise<Reply>;
+  },
   dirs: FleetDirs,
   heavy: HeavySlot
 ) {
+  const hub = options.hub ?? { bind: "127.0.0.1", at: "127.0.0.1" };
+  /** The hub's address as a URL names it: an IPv6 one in brackets. */
+  const hubAt = hub.at.includes(":") ? `[${hub.at}]` : hub.at;
   const root = resolve(import.meta.dir, "..");
   const { homes, scratch, short: shortRoot } = await fleetRoots();
   const sandbox = await dirs.own(
@@ -1030,7 +1057,12 @@ async function standUp(
   const hubPort = await freePort();
   const previewPorts = await freePortRange(PREVIEW_PORTS);
   const mcpPort = await freePort();
-  const base = `http://127.0.0.1:${hubPort}`;
+  // The hub names it to every agent, which serves it on its loopback (agent
+  // hub-loopback.ts): never the host's own dashboard port.
+  const dashboardPort = await freePort();
+  // The dashboard's loopback port the hub names to every agent (core `localDashboardPort`).
+  const localDashboardPort = await freePort();
+  const base = `http://${hubAt}:${hubPort}`;
 
   // ── The mock model endpoint ───────────────────────────────────────────
   const seen: Seen[] = [];
@@ -1094,7 +1126,7 @@ async function standUp(
         }),
       };
       seen.push(one);
-      const reply = options.respond(one);
+      const reply = await options.respond(one);
       const chat = path.endsWith("/chat/completions");
       const refused = refusalOf(reply, chat);
       if (refused) {
@@ -1269,8 +1301,10 @@ async function standUp(
     CAWCO_HUB_PORT: String(hubPort),
     CAWCO_PREVIEW_PORTS: previewPorts,
     CAWCO_MCP_PORT: String(mcpPort),
-    HOST: "127.0.0.1",
-    CAWCO_HUB_URL: `ws://127.0.0.1:${hubPort}/ws`,
+    CAWCO_DASHBOARD_PORT: String(dashboardPort),
+    CAWCO_LOCAL_DASHBOARD_PORT: String(localDashboardPort),
+    HOST: hub.bind,
+    CAWCO_HUB_URL: `ws://${hubAt}:${hubPort}/ws`,
     CAWCO_NO_MDNS: "1",
     // The hub's debug lines, for a spec that reads its log (routine-results 4b).
     CAWCO_DEBUG: "1",
@@ -1532,7 +1566,7 @@ async function standUp(
         url: string,
         options?: { headers: Record<string, string> }
       ) => WebSocket
-    )(`ws://127.0.0.1:${hubPort}/ws/dashboard`, {
+    )(`ws://${hubAt}:${hubPort}/ws/dashboard`, {
       headers: ownerHeaders(),
     });
     await new Promise<void>((done, fail) => {
@@ -1724,40 +1758,116 @@ async function standUp(
     );
     socket = undefined;
   };
+  /** What {@link agentOnline} reads of the hub's row for a machine. */
+  interface AgentRow {
+    auth?: string;
+    custody?: { state: string };
+    harnesses?: { auth?: string; harness: string }[];
+    machineCapabilities?: unknown;
+    machineId: string;
+    status: string;
+  }
   /**
    * The hub's row for `machineId` says its agent is online, with custody, and
    * the reports that follow its register are in: every harness's, and its
    * capabilities. Until a harness has reported, the hub starts nothing on it
    * (hub placement.ts `unreportedHarnessRefusal`).
    */
-  const online = async (machineId: string) =>
-    (
-      await api<
-        {
-          custody?: { state: string };
-          harnesses?: { harness: string }[];
-          machineCapabilities?: unknown;
-          machineId: string;
-          status: string;
-        }[]
-      >("/api/agents")
-    ).some(
-      (row) =>
-        row.machineId === machineId &&
-        row.status === "online" &&
-        row.custody?.state === "available" &&
-        row.machineCapabilities !== undefined &&
-        HARNESSES.every((harness) =>
-          row.harnesses?.some((report) => report.harness === harness)
-        )
+  const online = (row: AgentRow): boolean =>
+    row.status === "online" &&
+    row.custody?.state === "available" &&
+    row.machineCapabilities !== undefined &&
+    HARNESSES.every((harness) =>
+      row.harnesses?.some((report) => report.harness === harness)
     );
+  /**
+   * Why the agent was not {@link online} at the deadline: each condition with
+   * the value the hub's last row had, the machine's word on Claude (what the
+   * agent's `claudeAuth` answered, once a report carrying one was filed), the
+   * agent's lines on its sign-in reads and reports, and the end of its log.
+   */
+  const notOnline = async (
+    machineId: string,
+    row: AgentRow | undefined,
+    err: string | undefined
+  ): Promise<string> => {
+    const rowWords = row
+      ? [
+          `the hub's last row for ${machineId}:`,
+          `  status: ${row.status} (wants online)`,
+          `  custody.state: ${row.custody?.state ?? "(none)"} (wants available)`,
+          `  machineCapabilities: ${row.machineCapabilities === undefined ? "not set" : "set"}`,
+          ...HARNESSES.map((harness) => {
+            const report = row.harnesses?.find(
+              (one) => one.harness === harness
+            );
+            return `  ${harness}: ${report ? `report filed, auth ${report.auth ?? "(none)"}` : "no report filed"}`;
+          }),
+          `  the machine's word on Claude (claudeAuth's answer, kept from the last report that carried one): ${row.auth ?? "(none)"}`,
+        ]
+      : [`the hub had no row for ${machineId}`];
+    const read = (path: string) =>
+      Bun.file(path)
+        .text()
+        .catch(() => "");
+    const log = err?.replace(ERR_SUFFIX, ".log");
+    const [stdout, stderr] = await Promise.all([
+      log ? read(log) : "",
+      err ? read(err) : "",
+    ]);
+    const signins = `${stdout}\n${stderr}`
+      .split("\n")
+      .filter((line) => SIGNIN_LINE.test(line))
+      .slice(-30);
+    return [
+      ...rowWords,
+      `the agent's lines on its sign-ins and reports (${signins.length}):`,
+      ...(signins.length > 0 ? signins : ["(none)"]),
+      `the agent's log (${log ?? "none"}), its last lines:`,
+      stdout.trimEnd().split("\n").slice(-30).join("\n") || "(empty)",
+    ].join("\n");
+  };
+  /**
+   * {@link waitingOn} the hub holding `machineId` {@link online}, 120 s; a
+   * wait that runs out says why ({@link notOnline}).
+   */
+  const agentOnline = async (
+    name: string,
+    child: ReturnType<typeof Bun.spawn> | undefined,
+    err: string | undefined,
+    label: string,
+    machineId: string
+  ): Promise<void> => {
+    let last: AgentRow | undefined;
+    try {
+      await waitingOn(
+        name,
+        child,
+        err,
+        label,
+        async () => {
+          last = (await api<AgentRow[]>("/api/agents")).find(
+            (row) => row.machineId === machineId
+          );
+          return last !== undefined && online(last);
+        },
+        Boolean,
+        120_000
+      );
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n${await notOnline(machineId, last, err)}`,
+        { cause: error }
+      );
+    }
+  };
   const agentUp = async () => {
-    await answering(
+    await agentOnline(
       "agent",
+      procs.agent,
+      errs.agent,
       "the agent online with custody and its reports",
-      () => online(MACHINE),
-      Boolean,
-      120_000
+      MACHINE
     );
   };
   /**
@@ -1769,12 +1879,12 @@ async function standUp(
   const rejoinAs = async (machineId: string) => {
     await stop("agent");
     launch("agent", [], { CAWCO_MACHINE_ID: machineId });
-    await answering(
+    await agentOnline(
       "agent",
+      procs.agent,
+      errs.agent,
       `the agent online with custody and its reports as ${machineId}`,
-      () => online(machineId),
-      Boolean,
-      120_000
+      machineId
     );
   };
 
@@ -1791,13 +1901,18 @@ async function standUp(
    * hub holds it online with custody. Every machine runs on this host, so
    * the hub names them all by its hostname. It runs under the fleet's slot.
    */
-  const launchMachine = async (machineId: string): Promise<Machine> => {
+  const launchMachine = async (
+    machineId: string,
+    /** Laid over its environment: a spec's own `CAWCO_HUB_URL`, say. */
+    overrides: Record<string, string> = {}
+  ): Promise<Machine> => {
     const machineHome = await dirs.short(homes);
     const machineRuntime = await dirs.short(shortRoot);
     await furnish(machineHome);
     const socketPath = join(machineRuntime, "sessiond.sock");
     const machineEnv: Record<string, string> = {
       ...env,
+      ...overrides,
       HOME: machineHome,
       XDG_CONFIG_HOME: join(machineHome, ".config"),
       XDG_DATA_HOME: join(machineHome, ".local", "share"),
@@ -1833,14 +1948,12 @@ async function standUp(
     const agent = start("agent");
     // Stopped before its sessiond, as the first machine's is.
     machineProcs.unshift(agent.child);
-    await waitingOn(
+    await agentOnline(
       `${machineId}'s agent`,
       agent.child,
       agent.err,
       `${machineId}'s agent online with custody and its reports`,
-      () => online(machineId),
-      Boolean,
-      120_000
+      machineId
     );
     return {
       machineId,
@@ -2060,8 +2173,14 @@ async function standUp(
   };
 
   return {
-    /** The hub's own address, `http://127.0.0.1:<port>`. */
+    /** The hub's own address, `http://127.0.0.1:<port>` (or where `hub.at` names). */
     base,
+    /** Where the hub listens and is reached at ({@link HubAddress}). */
+    hub,
+    /** The port the hub says its dashboard is on (`CAWCO_DASHBOARD_PORT`): the kit serves the built dashboard there. */
+    dashboardPort,
+    /** The dashboard's loopback port the hub names to every agent (`CAWCO_LOCAL_DASHBOARD_PORT`). */
+    localDashboardPort,
     sandbox,
     home,
     sessiondSocket,

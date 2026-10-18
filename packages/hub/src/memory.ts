@@ -35,7 +35,9 @@
  *   their taint), commits at once as Caw, its notes archived as applied, and
  *   is noted in the thread his turn answers. With `ask: true` it is a
  *   proposal instead, parked in that thread.
- * - **Proposals** (`memory_propose` from the curator, or Caw's `ask`): a
+ * - **Proposals** (`memory_propose` from the curator, or Caw's `ask`; and
+ *   Caw's `folder_write` of a `delegates/` type file, §5.1's "a file diff you
+ *   approve", which cites no notes): a
  *   file's whole new text, citing its notes. Each is the person's ask through
  *   the hub's one needs-you path (pending.ts), drawn as a diff on every
  *   surface (core permission-presentation.ts), kept as
@@ -58,6 +60,7 @@ import { devNull, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CREDENTIAL_PATTERNS,
+  DELEGATE_TYPE_PROPOSAL_TOOL,
   type Envelope,
   frontMatterBlock,
   type InstanceRow,
@@ -75,6 +78,7 @@ import type { DbShape, ProjectRow, SessionTaintRow } from "./db";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
+import { typeFileProblem } from "./project-delegate-types";
 import {
   changeFolderFiles,
   type FolderAuthor,
@@ -105,6 +109,11 @@ const PROPOSALS_DIR = "memory/proposals";
 const NOTE_LIMIT = 4000;
 /** The longest reason a proposal gives: its approval's commit subject carries it. */
 const WHY_LIMIT = 500;
+/** What a parked proposal's caller hears. */
+const WAITING =
+  "The person sees it as a needs-you item with its diff; nothing changes until they approve it.";
+/** Where a project's delegate types are, one file each (project-delegate-types.ts). */
+const DELEGATES_DIR = "delegates/";
 /** Candidates past this many run the curator now, not at its next slot (routines.ts rests it an hour between). */
 export const INBOX_MARK = 20;
 /** Notes one curator run reads, oldest first; the rest wait for the next. */
@@ -1286,7 +1295,9 @@ export const createMemory = ({
       requestId: proposal.id,
       harness: "claude",
       requestKind: "tool",
-      toolName: MEMORY_PROPOSAL_TOOL,
+      toolName: proposal.path.startsWith(DELEGATES_DIR)
+        ? DELEGATE_TYPE_PROPOSAL_TOOL
+        : MEMORY_PROPOSAL_TOOL,
       input: {
         path: proposal.path,
         before: proposal.before,
@@ -1404,27 +1415,78 @@ export const createMemory = ({
       });
       return { path, sha, notes, committed: true };
     }
+    await keep(proposal, project);
+    return { id: proposal.id, path, notes, waiting: WAITING };
+  };
+
+  /** A proposal kept as its file, then parked for the person where it was made. */
+  const keep = async (
+    proposal: Proposal,
+    project: ProjectRow
+  ): Promise<void> => {
     const written = await writeFolderFile(
-      projectId,
+      project.id,
       `${PROPOSALS_DIR}/${proposal.id}.json`,
       `${JSON.stringify(proposal, null, 2)}\n`,
       {
         author: { name: proposal.by },
-        message: `memory: propose a change to ${path}`,
+        message: `memory: propose a change to ${proposal.path}`,
       }
     );
-    folderChanged(projectId);
+    folderChanged(project.id);
     parkProposal(proposal);
     console.log(
-      `[memory] ${project.name}: ${proposal.id} proposes ${path} (${notes.length} notes) at ${written.sha.slice(0, 9)}`
+      `[memory] ${project.name}: ${proposal.id} proposes ${proposal.path} (${proposal.notes.length} notes) at ${written.sha.slice(0, 9)}`
     );
-    return {
-      id: proposal.id,
+  };
+
+  /**
+   * Caw's delegate type (§5.1, "Caw can propose a new type as a file diff
+   * you approve"): his `folder_write` of a `delegates/` file, checked to make
+   * a type whole, kept and parked in his thread as a proposal. Nothing is
+   * written to `delegates/` until the person approves it.
+   */
+  const proposeType = async (
+    actor: InstanceRow,
+    path: string,
+    content: string,
+    toolUseId: string | undefined
+  ) => {
+    const projectId =
+      actor.projectId ??
+      refuse(409, "This session is in no project, so it has no delegates/.");
+    const project = projectOf(projectId);
+    const problem = typeFileProblem(path, content);
+    if (problem) {
+      refuse(400, `${path} was not proposed: ${problem}`);
+    }
+    const before = await fileOr(projectId, path);
+    if (before === content) {
+      refuse(409, `${path} already says exactly that; nothing to change.`);
+    }
+    const name = path.slice(DELEGATES_DIR.length, -".md".length);
+    const [head] = (await folderHistory(projectId, "", 1)).commits;
+    const at = new Date();
+    const threadId = threadOf(actor);
+    const proposal: Proposal = {
+      id: idAt("p", at),
+      projectId,
       path,
-      notes,
-      waiting:
-        "The person sees it as a needs-you item with its diff; nothing changes until they approve it.",
+      base: head?.sha ?? "",
+      before,
+      content,
+      notes: [],
+      why: before
+        ? `a change to the delegate type ${name}`
+        : `a new delegate type, ${name}`,
+      by: boardTitle(actor),
+      session: actor.id,
+      time: at.toISOString(),
+      ...(threadId ? { threadId } : {}),
+      ...(toolUseId ? { toolUseId } : {}),
     };
+    await keep(proposal, project);
+    return { id: proposal.id, path, waiting: WAITING };
   };
 
   /** The proposal file, read back; undefined when it is gone. */
@@ -1473,7 +1535,7 @@ export const createMemory = ({
         : await mergeThree(now, proposal.before, proposal.content);
     if (next === undefined) {
       throw new Error(
-        `${path} changed since this was proposed, and the proposal no longer applies to it. Reject it; the curator proposes again from what the file says now.`
+        `${path} changed since this was proposed, and the proposal no longer applies to it. Reject it; ${path.startsWith(DELEGATES_DIR) ? "Caw" : "the curator"} proposes again from what the file says now.`
       );
     }
     const written = await writeFolderFile(projectId, path, next, {
@@ -1772,6 +1834,7 @@ export const createMemory = ({
     watch,
     note,
     propose,
+    proposeType,
     classify,
     read,
     makeNote,

@@ -263,6 +263,7 @@ import {
   pauseClock,
   providerChoices,
   providerLimitRefused,
+  pushOnlyProvider,
   QUESTION_DISMISSED,
   QUEUE_WAIT_MAX_MS,
   questionsOf,
@@ -424,10 +425,13 @@ import {
 import {
   ARTIFACTS_ROOT,
   BIND_HOST,
+  DASHBOARD_PORT,
   DB_PATH,
   GIT_ROOT,
   HUB_VERSION,
   LFS_ROOT,
+  LOCAL_DASHBOARD_PORT,
+  PREVIEW_PORTS,
   SPAWN_START_TIMEOUT_MS,
 } from "./config";
 import { connectionRoutes, createConnections } from "./connections";
@@ -447,7 +451,11 @@ import {
 } from "./continuation";
 import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
-import { dashboardUrl, secureDashboardUrl } from "./dashboard-url";
+import {
+  dashboardUrl,
+  noteTailnetDashboard,
+  secureDashboardUrl,
+} from "./dashboard-url";
 import type {
   AgentAuth,
   BoardInstanceRow,
@@ -666,14 +674,10 @@ import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
 import { sourceFacts } from "./source-facts";
-import {
-  type StagesTemplate,
-  TEMPLATES,
-  templateOf,
-  templateText,
-} from "./stages";
+import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
+import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
 import { TaskDoc } from "./task-file";
 import {
@@ -1127,14 +1131,21 @@ const CONTINUATION_KEPT_MS = 5 * 60_000;
 /**
  * Who asked for a continuation: a person (the dashboard's "Continue in new
  * session", or the API with no session named), a session's
- * `continue_session`, or the at-limit controller.
+ * `continue_session`, the at-limit controller, or your comment on a task
+ * whose ended attempt's session is cold (jev-tasks.ts, Attach or spawn).
  */
 type ContinuationAsker =
-  { kind: "person" } | { kind: "session"; id: string } | { kind: "at-limit" };
+  | { kind: "person" }
+  | { kind: "session"; id: string }
+  | { kind: "at-limit" }
+  | { kind: "task"; id: string };
 /** Who asked, as a continuation's log line says it. */
 const askerWords = (by: ContinuationAsker): string => {
   if (by.kind === "session") {
     return `session ${by.id} (continue_session)`;
+  }
+  if (by.kind === "task") {
+    return `your comment on ${by.id} (attach or spawn)`;
   }
   return by.kind === "at-limit"
     ? "the at-limit controller"
@@ -1400,7 +1411,8 @@ const registerAck = (
   sessions: CarrySessionRequest[],
   machineCredential: string,
   sessionLimits: SessionLimits,
-  upstream: UpstreamRules
+  upstream: UpstreamRules,
+  hostsHub: boolean
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -1413,6 +1425,11 @@ const registerAck = (
     machineCredential,
     sessionLimits,
     upstream,
+    // What the agent serves on its own computer's loopback (agent
+    // hub-loopback.ts), and whether that computer is this hub's: then nothing.
+    dashboardPorts: { hub: DASHBOARD_PORT, local: LOCAL_DASHBOARD_PORT },
+    hostsHub,
+    previewPorts: PREVIEW_PORTS,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
   },
@@ -7815,6 +7832,32 @@ export const createServer = (
     }
   };
 
+  /**
+   * Whether an owed send stays kept for its session's account limit, its
+   * machine's pause, or its item's hold ({@link WorkItems.heldFor}). Held for
+   * its workspace's turn or cut, the wait that releases it is asked for
+   * here too, as the send path asks for it.
+   */
+  const owedHeld = (
+    instanceId: string,
+    machineId: string,
+    origin: SentMessage["origin"]
+  ): boolean => {
+    if (
+      heldAtLimit(instanceId, origin) ||
+      machinePause.until(machineId) !== undefined
+    ) {
+      return true;
+    }
+    if (!workItems.heldFor(instanceId, origin)) {
+      return false;
+    }
+    if (workItems.recutHold(instanceId, origin)) {
+      workItems.recutFor(instanceId);
+    }
+    return true;
+  };
+
   /** One owed send, as {@link releaseOwed} hands it over. */
   const releaseOne = (send: SentMessageRow): void => {
     const [row] = db.getInstancesByIds([send.instanceId]);
@@ -7835,11 +7878,7 @@ export const createServer = (
     // against this sender: it goes once the pause ends, or one who may wake
     // it writes to it.
     const { origin } = envelope.payload.message;
-    if (
-      heldAtLimit(send.instanceId, origin) ||
-      machinePause.until(row.machineId) !== undefined ||
-      workItems.heldFor(send.instanceId, origin)
-    ) {
+    if (owedHeld(send.instanceId, row.machineId, origin)) {
       return;
     }
     const refused = inputRefusal(send.instanceId, origin);
@@ -10653,11 +10692,35 @@ export const createServer = (
     socket: artifactSocket(artifactDocs),
     state: artifactDocs.snapshot,
   };
+  /**
+   * HTTPS on the machine's tailnet name (tailnet-https.ts): the dashboard's
+   * port first, relayed to the dashboard on loopback, then every preview
+   * listener's twin. `tailnet.start()` once the hub listens (index.ts). A
+   * change names the https dashboard as the one the hub hands out and lets
+   * it frame previews from the start, tells every dashboard (its onboarding
+   * row), and sends each shown preview's address again, its tailnet origin
+   * come or gone.
+   */
+  const tailnetHttps = createTailnetHttps({ dashboardPort: DASHBOARD_PORT });
+  tailnetHttps.beside(DASHBOARD_PORT, dashboardRelay(DASHBOARD_PORT));
+  tailnetHttps.onChange((tailnet) => {
+    noteTailnetDashboard(tailnetHttps.dashboard());
+    noteParent(tailnet.dashboard);
+    registry.broadcast({
+      verb: "frames",
+      machineId: "hub",
+      payload: { kind: "tailnet.https", tailnet },
+    });
+    for (const [instanceId, target] of previewTargets) {
+      publishPreview(instanceId, "open", target);
+    }
+  });
   /** Every session's preview origin (preview.ts): `previews.start()` once the hub listens (index.ts). */
   const previewListeners = createPreviewListeners(
     BIND_HOST,
     artifactListener,
-    db.previews
+    db.previews,
+    tailnetHttps
   );
 
   /**
@@ -11542,7 +11605,9 @@ export const createServer = (
     machineId: string,
     asked: SpawnPayload,
     kind: InstanceKind,
-    fallbackMode?: string
+    fallbackMode?: string,
+    /** The work item its row names from its first listing on: a continuation's, taken on from its source. */
+    workItemId?: string
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
@@ -11577,6 +11642,7 @@ export const createServer = (
       permissionMode: settled.permissionMode,
       model: payload.model,
       ...peekParent(payload),
+      ...(workItemId ? { workItemId } : {}),
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
     });
@@ -12753,13 +12819,39 @@ export const createServer = (
   };
 
   /**
+   * A source that holds a work item has its workspace's clone there before
+   * its continuation reads it (a retired one cut again), held until the
+   * answered release: its new session takes the item on and starts in that
+   * clone ({@link startTarget}). The caller releases once the job is filed,
+   * whose record holds the workspace from then on, or once it is refused.
+   * Throws why there is no clone.
+   */
+  const cloneForContinuation = async (
+    sourceId: string
+  ): Promise<() => void> => {
+    const itemId = db.getInstancesByIds([sourceId])[0]?.workItemId;
+    return itemId ? await workItems.continuable(itemId) : () => undefined;
+  };
+
+  /**
    * Whether the chosen models fit, by the same rule the dashboard's pickers
-   * show: a refusal naming the model and why, or nothing.
+   * show, and whether a source holding a work item goes on where it runs (its
+   * workspace's clone): a refusal naming why, or nothing.
    */
   const continuationRefusal = async (
     prepared: PreparedContinuation,
     request: ContinueRequest
   ): Promise<string | undefined> => {
+    const itemId = db.getInstancesByIds([prepared.source.instanceId])[0]
+      ?.workItemId;
+    const { cwd: at, machineId: on } = request.target;
+    if (
+      itemId &&
+      ((at && at !== prepared.source.cwd) ||
+        (on && on !== prepared.source.machineId))
+    ) {
+      return `${prepared.source.title} holds work item ${itemId}: its new session takes the item on, so it starts where the item's workspace is, in ${prepared.source.cwd} on ${machineName(prepared.source.machineId)}.`;
+    }
     if (prepared.prompt) {
       if (!request.summarizer) {
         return "Choose who summarises the session, or continue from your asks alone.";
@@ -13235,6 +13327,12 @@ export const createServer = (
       return false;
     }
     const ready = moveContinuation(row.id, { openItems: open }) ?? row;
+    // The source's own work item goes on in the new session, whoever asked:
+    // its opening is the item's (its row has named the item since its
+    // start, {@link spawnTarget}, so it lists finish_item from its first turn).
+    if (source?.workItemId) {
+      workItems.continuedIn(source.workItemId, row.targetInstanceId);
+    }
     adoptChildren(prepared.source.instanceId, row.targetInstanceId);
     sendOpening(ready);
     return true;
@@ -13267,7 +13365,11 @@ export const createServer = (
           : null
       ),
       request.target.scratch ? "scratch" : "mainline",
-      request.target.fallbackPermissionMode
+      request.target.fallbackPermissionMode,
+      // Its row names the source's item before its process lists its tools,
+      // so its first turn has finish_item; the item moves to it before its
+      // opening ({@link startTarget}).
+      source?.workItemId ?? undefined
     );
   };
 
@@ -17606,24 +17708,16 @@ export const createServer = (
   };
 
   /**
-   * A new project's template as its stages.md (the code template is the
-   * hub's own, read with no file), and its Setup thread when it is made
-   * with Caw.
+   * A new project's template applied as any template is (tasks.ts
+   * `applyTemplate`: its stages.md and the delegate types they run), and its
+   * Setup thread when it is made with Caw.
    */
   const startProject = async (
     created: ProjectRow,
     asked: ProjectAsk
   ): Promise<ThreadSummary | undefined> => {
     if (asked.template) {
-      if (asked.template !== "code") {
-        await writeFolderFile(
-          created.id,
-          "stages.md",
-          templateText(asked.template),
-          { message: `stages: the ${asked.template} template` }
-        );
-      }
-      tasks.touched(created.id);
+      await tasks.applyTemplate(created.id, asked.template, YOU_ACTOR);
       // Its template's starter skills reach the checkout it was made from.
       fanOutFleet();
     }
@@ -17794,6 +17888,19 @@ export const createServer = (
     // and leaves a session to the send already on its way to it.
     inputRefusal,
     awaitsSend: (instanceId) => awaitsSend(instanceId),
+    // A send that wakes its session holds its finished item's workspace.
+    sendWakes: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      return (
+        !!row &&
+        db.sendsIn(instanceId, ["pending"]).some((send) => {
+          const origin = (send.body as SentMessage | null)?.origin;
+          return (
+            !isKeepAlive(send.body) && !!origin && startsTurnIn(row, origin)
+          );
+        })
+      );
+    },
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     leadPlace: leadPlaceRef,
     report: (row, body, failed, notice, headline) => {
@@ -18047,6 +18154,8 @@ export const createServer = (
         threadId: db.threadOfTask(projectId, taskId)?.id,
       }),
     startProblem: (projectId, task) => dispatcher.problemOf(projectId, task),
+    resolvesType: (projectId, type) =>
+      projectTypes.resolveTypeFor(projectId, type) !== undefined,
     queuedStarts: (projectId) =>
       db.queuedTaskStarts(projectId).map((row) => row.taskId),
   });
@@ -18218,6 +18327,10 @@ export const createServer = (
     inTurn: (instanceId) => pulses.get(instanceId)?.busy === true,
     caps,
     db,
+    // The decisions are made further down; Caw's graph tools reach them only once a call runs.
+    decisions: () => decisions,
+    proposeType: (actor, path, content, toolUseId) =>
+      projectMemory.proposeType(actor, path, content, toolUseId),
     interrupt: interruptTurn,
     online: (machineId) =>
       machineId === undefined
@@ -18497,9 +18610,9 @@ export const createServer = (
       return (await file.exists()) ? await file.text() : undefined;
     },
     changed: decisionsChanged,
-    commit: async (projectId, change, message) => {
+    commit: async (projectId, change, message, by) => {
       await changeFolderFiles(projectId, change, {
-        author: FOLDER_YOU,
+        author: by === "caw" ? { name: "Caw" } : FOLDER_YOU,
         message,
       });
     },
@@ -18624,6 +18737,8 @@ export const createServer = (
     online: (machineId) => Boolean(registry.agent(machineId)),
     notice: (projectId, threadId, note) =>
       caw.notice(projectId, threadId, note),
+    // Called on a person's answer, long after both are made.
+    declined: (projectId) => projectStarters.designDeclined(projectId),
   });
   tasks.listen(designOffers.taskChanged);
   // A project's starters, written for it by Jev from what it holds now, on
@@ -18702,11 +18817,67 @@ export const createServer = (
       refused: (row) => inputRefusal(row.id, { kind: "human" })?.reason,
     }).taskChanged
   );
+  /**
+   * Attach or spawn's cold branch (§5.3, jev-tasks.ts): task `taskId`'s
+   * ended attempt's session `row`, its cache cold, compressed and continued
+   * in a new session in the attempt's own workspace, which takes on the
+   * attempt as every continuation takes on its source's item, and opens on
+   * `comment` as its next step. The source is only read: it takes no filing
+   * turn. Our own call: the summary is written on the source's harness at
+   * its default model, and the new session runs on the source's harness and
+   * model, in its mode. Answers the new session's id and how the job ends
+   * (nothing once it started, else why not); throws why it could not begin.
+   */
+  const continueAttempt = async (
+    row: InstanceRow,
+    taskId: string,
+    comment: string
+  ): Promise<{
+    ended: Promise<string | undefined>;
+    targetInstanceId: string;
+  }> => {
+    const release = await cloneForContinuation(row.id);
+    let job: ContinuationRow;
+    try {
+      const prepared = await prepareContinuation(row.id, comment);
+      const { harness } = prepared.source;
+      const request: ContinueRequest = {
+        summarizer: { harness },
+        target: {
+          harness,
+          ...(row.model ? { model: row.model } : {}),
+          ...(row.permissionMode
+            ? { fallbackPermissionMode: row.permissionMode as PermissionMode }
+            : {}),
+        },
+        note: comment,
+      };
+      const refusal = await continuationRefusal(prepared, request);
+      if (refusal) {
+        throw new Error(refusal);
+      }
+      job = startContinuation(prepared, request, { kind: "task", id: taskId });
+    } finally {
+      release();
+    }
+    return {
+      targetInstanceId: job.targetInstanceId,
+      ended: settledContinuation(job.id).then((settled) => {
+        if (settled?.stage === "started") {
+          return;
+        }
+        return settled?.stage === "cancelled"
+          ? CONTINUATION_CANCELLED
+          : (settled?.error ?? "the continuation failed");
+      }),
+    };
+  };
   // Jev placement on the board (§5.9, jev-tasks.ts): Duplicates and Triage
-  // as a task is filed; Attach or fresh as you comment on a task (a live
+  // as a task is filed; Attach or spawn as you comment on a task (a live
   // attempt reads your comment as any message of yours); phone requests.
   const jevTasks = createJevTasks({
     caw,
+    continueAttempt,
     db,
     dispatcher,
     tasks,
@@ -18996,6 +19167,23 @@ export const createServer = (
     lifetime,
     hubOrigin: hubHttpUrl,
     projectExists: (id) => Boolean(db.project(id)),
+    // A push-only service connected (§5.5): each project with no relay for
+    // its provider has its Caw woken to offer one (caw.ts `offerRelay`).
+    pushOnlyConnected: (connection, projects) => {
+      const provider = pushOnlyProvider(connection.service);
+      if (!provider) {
+        return;
+      }
+      for (const projectId of projects) {
+        if (
+          !db.relays
+            .ofProject(projectId)
+            .some((open) => open.provider === provider && open.state !== "off")
+        ) {
+          caw.offerRelay(projectId, connection, provider);
+        }
+      }
+    },
     trash: (name) =>
       db.trash.put({ kind: "connection", key: name }, Date.now()),
     typeConnections: (row) =>
@@ -19161,6 +19349,10 @@ export const createServer = (
         designShaped(db.project(projectId)?.template ?? null, task)
       );
     },
+    taskOpen: async (projectId, taskId) => {
+      const { kind } = await tasks.get(projectId, taskId);
+      return kind !== "done" && kind !== "dropped";
+    },
     // An agent's change to a system its project had is the person's ask,
     // as a memory proposal is, answered below with the rest.
     park: (envelope) => parkForPerson(envelope),
@@ -19226,7 +19418,7 @@ export const createServer = (
       projectOffers.accept(actor.id, sessionActor(actor)),
     writePlan: (actor, written) => plans.write(actor, written),
     delegationTree: (actor, include) => delegationTree.read(actor, include),
-    cawTools: (actor) => caw.tools(actor),
+    cawTools: (actor, toolUseId) => caw.tools(actor, toolUseId),
     routineTools: (actor, toolUseId) => routines.tools(actor, toolUseId),
     ingressTools: (actor) => ingress.tools(actor),
     actionTools: (actor) => actions.tools(actor),
@@ -21669,6 +21861,10 @@ export const createServer = (
         // what the app keeps for a hub it found on this network.
         localName: localHubName() ?? null,
       }))
+      // HTTPS on the machine's tailnet name (tailnet-https.ts): where it
+      // stands, the step that needs the person while one does. Every change
+      // after it comes as a `tailnet.https` frame.
+      .get("/api/tailnet-https", () => tailnetHttps.state())
       // The fleet's list is the person's. A machine reads its own row alone,
       // by its own id (hub-auth.ts): what its CLI's health, install and
       // service checks ask.
@@ -21810,7 +22006,9 @@ export const createServer = (
           }
           let prepared: PreparedContinuation;
           let refusal: string | undefined;
+          let release: () => void = () => undefined;
           try {
+            release = await cloneForContinuation(params.id);
             prepared = await prepareContinuation(
               params.id,
               body.note,
@@ -21818,12 +22016,14 @@ export const createServer = (
             );
             refusal = await continuationRefusal(prepared, request);
           } catch (error) {
+            release();
             return status(
               422,
               error instanceof Error ? error.message : String(error)
             );
           }
           if (refusal) {
+            release();
             return status(409, refusal);
           }
           const row = startContinuation(
@@ -21831,6 +22031,8 @@ export const createServer = (
             request,
             askedBy ? { kind: "session", id: askedBy } : { kind: "person" }
           );
+          // Its record holds the source's workspace from here (work-items.ts `holdOn`).
+          release();
           return {
             continuationId: row.id,
             targetInstanceId: row.targetInstanceId,
@@ -25009,9 +25211,12 @@ export const createServer = (
       // Refused (409, in words naming what and how big) when its clone holds
       // work that is nowhere else: nothing is deleted, and the workspace is
       // held. `discard: true` is a person letting that work go: its machine
-      // writes its unlanded commits, changes and stashes to a carry first,
-      // whose folder the answer names as `carry`. Files git ignores go with
-      // the clone either way.
+      // writes its unlanded commits, changes, stashes and excluded files to a
+      // carry first, whose folder the answer names as `carry`. Files a
+      // tracked `.gitignore` covers go with the clone either way. Refused
+      // (409) whatever `discard` says while a project's folder is inside its
+      // clone or scratch dir. A preview of it does not refuse: the archive
+      // ends its served server.
       .post(
         "/api/workspaces/:id/archive",
         { body: t.Optional(t.Object({ discard: t.Optional(t.Boolean()) })) },
@@ -26248,7 +26453,9 @@ export const createServer = (
                   // the one its last connection held stops working.
                   machineCredentials.mint(message.machineId),
                   db.sessionLimits(),
-                  upstreamRules(db)
+                  upstreamRules(db),
+                  // Its machine id is this hub's own: the same computer.
+                  await isHubMachine(message.machineId)
                 )
               );
               for (const row of toEnd) {
@@ -28515,6 +28722,6 @@ export const createServer = (
           streams.dropSocket(ws.id);
         },
       }),
-    { previews: previewListeners }
+    { previews: previewListeners, tailnet: tailnetHttps }
   );
 };

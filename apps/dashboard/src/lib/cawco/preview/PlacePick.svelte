@@ -3,8 +3,11 @@
    * `cawco.pickPlace()` (wire.ts): a page asks the person for a machine and a
    * folder on it, and gets CawCo's own pickers, over the whole of the
    * preview's well: the machine select and the folder browser New Session
-   * uses. "Use this place" answers the page; Cancel or Escape answers null.
+   * uses. "Use this place" answers the page with the machine, its label (the
+   * name the dashboard shows it by) and the folder; Cancel or Escape answers
+   * null.
    */
+  import { machineLabel, placePickWords as words } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -18,7 +21,11 @@
     onpick,
     oncancel,
   }: {
-    onpick: (place: { machineId: string; path: string }) => Promise<void>;
+    onpick: (place: {
+      label: string;
+      machineId: string;
+      path: string;
+    }) => Promise<void>;
     oncancel: () => void;
   } = $props();
 
@@ -47,17 +54,21 @@
   async function use(event: SubmitEvent) {
     event.preventDefault();
     if (!machine) {
-      problem = "Choose a machine that is online.";
+      problem = words.needsMachine;
       return;
     }
     if (!folder.startsWith("/")) {
-      problem = "A folder is its full path, starting with /.";
+      problem = words.needsPath;
       return;
     }
     saving = true;
     problem = null;
     try {
-      await onpick({ machineId: machine.machineId, path: folder });
+      await onpick({
+        label: machineLabel(machine.hostname),
+        machineId: machine.machineId,
+        path: folder,
+      });
     } catch (error) {
       problem = failureWords(error);
     } finally {
@@ -76,15 +87,15 @@
 />
 
 <form
-  aria-label="Pick a machine and folder"
+  aria-label={words.title}
   class="place-pick"
   onsubmit={use}
   transition:appear
 >
-  <h2 class="pick-title">Pick a machine and folder</h2>
+  <h2 class="pick-title">{words.title}</h2>
   <div class="flex flex-col gap-1">
     <span class="text-label text-muted-foreground" id="place-machine-label"
-      >Machine</span
+      >{words.machine}</span
     >
     <Select.Root
       type="single"
@@ -100,17 +111,21 @@
         class="w-full text-foreground"
         size="sm"
       >
-        {machine ? `${machine.hostname} · ${machine.os}` : "No machines online"}
+        {machine
+          ? words.machineOption(machineLabel(machine.hostname), machine.os)
+          : words.noMachines}
       </Select.Trigger>
       <Select.Content>
         {#each onlineMachines as row (row.machineId)}
-          <Select.Item label="{row.hostname} · {row.os}" value={row.machineId}>
-            {row.hostname}
-            · {row.os}
+          <Select.Item
+            label={words.machineOption(machineLabel(row.hostname), row.os)}
+            value={row.machineId}
+          >
+            {words.machineOption(machineLabel(row.hostname), row.os)}
           </Select.Item>
         {:else}
           <span data-slot="block" class="block px-2 py-1.5 text-label"
-            >No machines online</span
+            >{words.noMachines}</span
           >
         {/each}
       </Select.Content>
@@ -118,7 +133,7 @@
   </div>
   <div class="flex flex-col gap-1">
     <label class="text-label text-muted-foreground" for="place-folder"
-      >Folder</label
+      >{words.folder}</label
     >
     <Input
       autocomplete="off"
@@ -127,7 +142,7 @@
       oninput={() => {
         problem = null;
       }}
-      placeholder="/home/you/project"
+      placeholder={words.folderPlaceholder}
       spellcheck="false"
       bind:value={path}
     />
@@ -147,13 +162,13 @@
     <Button
       class="pressable"
       failed={problem !== null}
-      label="Use this place"
+      label={words.use}
       pending={saving}
-      pendingLabel="Saving…"
+      pendingLabel={words.saving}
       size="sm"
       type="submit"
     />
-    <Button label="Cancel" onclick={oncancel} size="sm" variant="ghost" />
+    <Button label={words.cancel} onclick={oncancel} size="sm" variant="ghost" />
     {#if problem}
       <span class="text-label text-error" role="alert" in:appear>{problem}</span
       >

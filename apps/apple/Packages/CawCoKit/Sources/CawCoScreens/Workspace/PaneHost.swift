@@ -58,7 +58,16 @@ final class PaneHost {
     func controller(for id: String) -> UIViewController {
         if let kept = built[id] { return kept }
         let made: UIViewController
-        if let runId = BoardRun.runId(of: id) {
+        if let artifactId = ArtifactTabs.artifactId(of: id) {
+            let tab = ArtifactTabController(hub: hub, artifactId: artifactId)
+            tab.onBackToSession = { [weak self] session in self?.onOpen(session) }
+            tab.onReturnToFleet = { [weak self] in self?.onReturnToFleet(id) }
+            tab.onNamed = { [weak self] name in self?.name(id, name) }
+            made = tab
+            #if DEBUG
+            PreviewProbe.say("pane built \(id) kind=artifact")
+            #endif
+        } else if let runId = BoardRun.runId(of: id) {
             let run = WorkflowRunViewController(hub: hub, runId: runId)
             run.onReturn = { [weak self] in self?.onReturnToFleet(id) }
             run.onOpen = { [weak self] id in self?.onOpen(id) }
@@ -78,6 +87,7 @@ final class PaneHost {
             let session = SessionViewController(hub: hub, id: id)
             session.onReturnToFleet = { [weak self] in self?.onReturnToFleet(id) }
             session.onOpenSession = { [weak self] id in self?.onOpen(id) }
+            session.onOpenProject = { [weak self] projectId in self?.onOpenProject(projectId) }
             if let values = parked.removeValue(forKey: id) { session.restoreValues(values) }
             made = session
         }
@@ -125,6 +135,7 @@ final class PaneHost {
     }
 
     func session(_ id: String) -> SessionViewController? { built[id] as? SessionViewController }
+    func artifactTab(_ id: String) -> ArtifactTabController? { built[id] as? ArtifactTabController }
 
     /// A restored scene's draft and scroll for `id`: given to its screen if
     /// that is built, else kept for when it is. The screen is built when its
@@ -190,6 +201,8 @@ final class PaneHost {
     func label(_ id: String) -> String {
         // A thread not started yet (FolderMenu.svelte "New thread").
         if ThreadTabs.newProject(of: id) != nil { return "New thread" }
+        // An artifact's own tab: its name once the hub has said it.
+        if ArtifactTabs.artifactId(of: id) != nil { return names[id] ?? "Artifact" }
         let fleet = hub.fleet
         let row = fleet.byId[id]
         if let row, let title = row.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -203,6 +216,17 @@ final class PaneHost {
         return names[id] ?? title(id) ?? row.map(fleet.title)
             ?? hub.needs.parked[id]?.lazy.compactMap(HomeModel.asker).first ?? String(id.prefix(8))
     }
+
+    /// A tab no fleet row names (an artifact's own): what it is called, kept as the others' names are.
+    private func name(_ id: String, _ name: String) {
+        guard names[id] != name else { return }
+        names[id] = name
+        saveNames()
+        onNamed(id)
+    }
+
+    /// A tab's name changed outside the fleet's frames: its strip draws it again.
+    var onNamed: (String) -> Void = { _ in }
 
     private func forgetName(_ id: String) {
         guard names.removeValue(forKey: id) != nil else { return }

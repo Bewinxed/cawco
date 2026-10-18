@@ -175,7 +175,7 @@ export interface HarnessContext {
   readonly sessionCredential?: string;
   /**
    * The workspace whose {@link boundary} this is, by id: a delegation
-   * workspace's clone, or a project lead's place the spawn named (core
+   * workspace's clone, or a place the spawn named (core
    * `isPlace`). Absent with the boundary.
    */
   readonly workspace?: string;

@@ -2,6 +2,7 @@ import { dirname, resolve } from "node:path";
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
+  localDashboardPort,
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
@@ -67,6 +68,13 @@ export const DASHBOARD_PORT = (() => {
 })();
 
 /**
+ * The dashboard's port on every computer's loopback (core
+ * `localDashboardPort`): the dashboard's socket listens on it on this
+ * computer, and every agent serves it on its own, carried here.
+ */
+export const LOCAL_DASHBOARD_PORT = localDashboardPort();
+
+/**
  * The fleet's own listeners on the hub's machine, each in the words a moved
  * preview's line says it with: no session's preview ever takes one of these
  * ports, even while its listener is down (a restart, a socket being
@@ -76,6 +84,7 @@ export const DASHBOARD_PORT = (() => {
 export const FLEET_PORTS: ReadonlyMap<number, string> = new Map([
   [mcpGatewayPort(), "the MCP gateway's"],
   [DASHBOARD_PORT, "the dashboard's"],
+  [LOCAL_DASHBOARD_PORT, "the dashboard's loopback"],
   [HUB_PORT, "the hub's"],
 ]);
 

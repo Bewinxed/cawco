@@ -1318,6 +1318,13 @@ export type WorkOrigin = Origin | "kept";
 export type WorkItemState =
   "starting" | "running" | "done" | "failed" | "cancelled";
 
+/** What a work item's landing put where ({@link workItems} `landed`). */
+export interface WorkLanding {
+  /** The base commit its commits were rebased onto; null for a push to a branch of its own. */
+  onto: string | null;
+  sha: string;
+}
+
 /** What a delegate hands in with `finish_item`. */
 export interface WorkItemSubmission {
   blocked?: { command: string; error: string };
@@ -1461,7 +1468,19 @@ export const workItems = sqliteTable(
      * until then.
      */
     headline: text("headline"),
-    /** Why it failed. */
+    /**
+     * What its landing put where, kept when it runs again: the commit pushed,
+     * and the base commit it was rebased onto (`onto..sha` landed on its base
+     * branch), null for a push to a branch of its own. Set, its work is landed,
+     * and a follow-up that ends without landing leaves it done (work-items.ts
+     * `finish`). Null: nothing of it landed.
+     */
+    landed: text("landed", { mode: "json" }).$type<WorkLanding>(),
+    /**
+     * Why it failed; on a done item, why the follow-up of its landed work
+     * ended without landing (blocked, stopped, failed), what its task's
+     * review shows.
+     */
     error: text("error"),
     createdAt: timestamp("created_at")
       .notNull()
@@ -3288,7 +3307,7 @@ export const projectStarterSets = sqliteTable(
     generatedAt: timestamp("generated_at").notNull(),
     /** The hash of the inputs Jev was asked over. */
     inputHash: text("input_hash").notNull(),
-    /** What asked for it: `project created`, `task moved`, `turn ended`, `commit landed`, `attempt failed`, `routine failed`, `routine made`, `event received`, `stale`. */
+    /** What asked for it, several joined by `, ` (project-starters.ts `StartersTrigger`): `project created`, `task moved`, `turn ended`, `commit landed`, `attempt failed`, `routine failed`, `routine made`, `event received`, `design offer declined`, `read` (`stale` before 2026-10-18). */
     trigger: text("trigger").notNull(),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.place] })]
@@ -3420,6 +3439,14 @@ export const artifacts = sqliteTable(
     sourceWorkspace: text("source_workspace").references(() => workspaces.id, {
       onDelete: "set null",
     }),
+    /**
+     * A sheet's place instead (core `isPlace`): the boundary over the
+     * folder of a session with no workspace, whose stage runs there. No
+     * workspace row is ever made for a place (archiving one deletes its
+     * folder), so it is no key: the hub finds it through the session that
+     * names it (server.ts `stageWhere`).
+     */
+    sourcePlace: text("source_place"),
     /** A sheet's: the stage's toolchain root and its story file, from the clone's root. */
     sourceStageDir: text("source_stage_dir"),
     sourceStageFile: text("source_stage_file"),

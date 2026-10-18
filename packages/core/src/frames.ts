@@ -27,6 +27,11 @@ import type {
 import type { MoveJob } from "./move";
 import type { PermissionPresentation } from "./permission-presentation";
 import type { StageState } from "./stage";
+import {
+  onTailnet,
+  type TailnetHttps,
+  type TailnetOrigin,
+} from "./tailnet-https";
 import type { ThreadMessage, ThreadSummary } from "./threads";
 import type { UsageLimitsReading, UsageSpend } from "./usage";
 
@@ -70,6 +75,8 @@ export interface PreviewFrame {
    */
   stage?: StageState;
   state: "open" | "closed";
+  /** The session's origin on the tailnet name while the hub serves HTTPS there ({@link PreviewAddress}). */
+  tailnet?: TailnetOrigin;
 }
 
 /**
@@ -94,6 +101,12 @@ export interface PreviewAddress {
   origin?: string;
   /** The session's own preview port, listened on in either mode. */
   port: number;
+  /**
+   * The session's origin on the hub machine's tailnet name, while the hub
+   * serves HTTPS there (core tailnet-https.ts): on the tailnet addresses the
+   * port answers HTTPS alone.
+   */
+  tailnet?: TailnetOrigin;
 }
 
 /**
@@ -117,17 +130,23 @@ const under = (hostname: string, domain: string): boolean => {
  * Where a client loads a session's previews from, picked by where it
  * reached the hub or dashboard (`at`). Reached under host mode's domain
  * (the dashboard behind the same DNS or proxy as the pattern's names): the
- * origin the hub named, entered with a ticket (`byHost`). Reached any other
- * way (a tailnet name, a LAN address, localhost): that host and scheme on
- * the session's own port, with no ticket. Null when the hub named nothing
- * this client can load.
+ * origin the hub named, entered with a ticket (`byHost`). Reached over the
+ * tailnet while the hub serves HTTPS on its name (a tailnet address, the
+ * short name, the full one): the session's origin on that name, since the
+ * port answers HTTPS alone there; a client that reached the hub's own port
+ * over plain http (the app) loads it too. Reached any other way (a LAN
+ * address, `.local`, localhost): that host and scheme on the session's own
+ * port, with no ticket. Null when the hub named nothing this client can load.
  */
 export const previewRoute = (
-  address: { origin?: string; port?: number },
+  address: { origin?: string; port?: number; tailnet?: TailnetOrigin },
   at: { hostname: string; protocol: string }
 ): { origin: string; byHost: boolean } | null => {
   if (address.origin && under(at.hostname, hostModeDomain(address.origin))) {
     return { origin: address.origin, byHost: true };
+  }
+  if (address.tailnet && onTailnet(address.tailnet, at.hostname)) {
+    return { origin: address.tailnet.origin, byHost: false };
   }
   if (address.port) {
     const host =
@@ -596,6 +615,18 @@ export interface FleetUpstreamFrame {
   kind: "fleet.upstream";
   /** Whether agents may post to other people's repositories: off, ask the person first, or on. */
   upstream: import("./upstream-guard").UpstreamPosts;
+}
+
+/**
+ * Hub-originated: HTTPS on the hub machine's tailnet name changed state (hub
+ * tailnet-https.ts): a step came to need the person, they took it, or the
+ * name began or stopped answering. Every dashboard takes it at once, so its
+ * onboarding row in Needs you shows the step that stands, or ticks.
+ */
+export interface TailnetHttpsFrame {
+  instanceId?: undefined;
+  kind: "tailnet.https";
+  tailnet: TailnetHttps;
 }
 
 /**

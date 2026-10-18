@@ -36,6 +36,17 @@ public enum ThreadTabs {
     public static func isThread(_ id: String) -> Bool { id.hasPrefix(prefix) }
 }
 
+/// An artifact in a tab of its own (routes/artifact/[id]): its tab's id is the
+/// artifact's, under a prefix of its own.
+public enum ArtifactTabs {
+    public static let prefix = "artifact:"
+    public static func tabId(_ artifactId: String) -> String { prefix + artifactId }
+    /// The artifact a tab's id names; nil for any other tab.
+    public static func artifactId(of id: String) -> String? {
+        id.hasPrefix(prefix) ? String(id.dropFirst(prefix.count)) : nil
+    }
+}
+
 /// One message of a thread (core threads.ts `ThreadMessage`), read off the
 /// hub's JSON once: yours, Caw's, or an event that woke him.
 public struct ThreadNote: Sendable, Equatable {
@@ -60,6 +71,9 @@ public struct ThreadNote: Sendable, Equatable {
     let answer: Data?
     /// A not-woken note's data: your words he has not read, and why.
     public let notWoken: ThreadNotWoken?
+    /// Caw asking whether to build a design system: the project it is for
+    /// (EventThreadMessage `designOffer`, held beside a null `event`).
+    public let designOffer: String?
     /// What rode with your words, as a send's row carries it (`images`,
     /// `attachments`): the JSON of each, drawn on your row.
     let carried: Data?
@@ -82,6 +96,7 @@ public struct ThreadNote: Sendable, Equatable {
         question = (raw["question"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         answer = (raw["answer"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         notWoken = ((raw["event"] as? [String: Any])?["notWoken"] as? [String: Any]).flatMap(ThreadNotWoken.init)
+        designOffer = (raw["designOffer"] as? [String: Any])?["projectId"] as? String
         var carried: [String: Any] = [:]
         if let images = raw["images"] as? [[String: Any]], !images.isEmpty { carried["images"] = images }
         if let attachments = raw["attachments"] as? [[String: Any]], !attachments.isEmpty { carried["attachments"] = attachments }
@@ -95,8 +110,9 @@ public struct ThreadNote: Sendable, Equatable {
         return ThreadNote(raw)
     }
 
+    /// The block's ISO 8601 timestamp, its zone with it (`Z`): the transcript reads no time without one.
     static func stamp(_ ms: Double) -> String {
-        Date(timeIntervalSince1970: ms / 1000).formatted(.iso8601.year().month().day().time(includingFractionalSeconds: true))
+        Date(timeIntervalSince1970: ms / 1000).formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
     }
 
     /// The message as the transcript's block (ThreadPane.svelte `blockOf`):
@@ -112,7 +128,10 @@ public struct ThreadNote: Sendable, Equatable {
         case .event:
             raw["type"] = "ui.system_note"
             raw["content"] = body
-            raw["metadata"] = ["noteTitle": noteTitle ?? "", "noteKind": ThreadNote.cawEvent]
+            var metadata: [String: Any] = ["noteTitle": noteTitle ?? "", "noteKind": ThreadNote.cawEvent]
+            // What SystemLine draws under it: a design offer's Build and Not now (thread-blocks.ts `eventMetadata`).
+            if let designOffer { metadata["designOffer"] = ["projectId": designOffer] }
+            raw["metadata"] = metadata
         case .you:
             guard let question = question.flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }),
                   let answer = answer.flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) else {
@@ -332,19 +351,34 @@ public final class ThreadsStore {
     private static let noHub = "No hub is connected."
 
     /// Your words in a thread, or the first of a new one (`sayInThread`,
-    /// `startThread`): Caw is woken with them. `id` is the message's, so its
-    /// row lands the words that flew under it. Answers the thread they went to.
+    /// `startThread`): Caw is woken with them, and with what rides with them
+    /// (client.svelte.ts `carriedOf`: its pictures, its texts and the files
+    /// already on the hub). `id` is the message's, so its row lands the words
+    /// that flew under it. Answers the thread they went to.
     @discardableResult
-    public func say(projectId: String, threadId: String?, body: String, id: String) async throws -> ThreadSummary {
+    public func say(projectId: String, threadId: String?, body: String, id: String,
+                    images: [(mediaType: String, data: Data)] = [], texts: [(name: String, content: String)] = [],
+                    files: [SentFile] = []) async throws -> ThreadSummary {
         guard let client = hub.client else { throw TaskRefusal(message: Self.noHub) }
         let said: Components.Schemas.ThreadSaid
         if let threadId {
+            typealias Said = Operations.PostApiProjectsByIdThreadsByThreadIdMessages.Input.Body.JsonPayload
+            let carried = images.map { Said.ImagesPayloadPayload(mediaType: $0.mediaType, data: $0.data.base64EncodedString()) }
+            let attached = texts.map { Said.AttachmentsPayloadPayload(value1: .init(kind: .text, name: $0.name, content: $0.content)) }
+                + files.map { Said.AttachmentsPayloadPayload(value2: .init(kind: .file, name: $0.name, mediaType: $0.mediaType, size: $0.size, ref: $0.ref)) }
             let output = try await client.postApiProjectsByIdThreadsByThreadIdMessages(
-                path: .init(id: projectId, threadId: threadId), body: .json(.init(body: body, id: id)))
+                path: .init(id: projectId, threadId: threadId),
+                body: .json(.init(body: body, id: id, images: carried.isEmpty ? nil : carried, attachments: attached.isEmpty ? nil : attached)))
             guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
             said = try ok.body.json
         } else {
-            let output = try await client.postApiProjectsByIdThreads(path: .init(id: projectId), body: .json(.init(body: body, id: id)))
+            typealias Started = Operations.PostApiProjectsByIdThreads.Input.Body.JsonPayload
+            let carried = images.map { Started.ImagesPayloadPayload(mediaType: $0.mediaType, data: $0.data.base64EncodedString()) }
+            let attached = texts.map { Started.AttachmentsPayloadPayload(value1: .init(kind: .text, name: $0.name, content: $0.content)) }
+                + files.map { Started.AttachmentsPayloadPayload(value2: .init(kind: .file, name: $0.name, mediaType: $0.mediaType, size: $0.size, ref: $0.ref)) }
+            let output = try await client.postApiProjectsByIdThreads(
+                path: .init(id: projectId),
+                body: .json(.init(body: body, id: id, images: carried.isEmpty ? nil : carried, attachments: attached.isEmpty ? nil : attached)))
             guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
             said = try ok.body.json
             if messages[said.thread.id] == nil { messages[said.thread.id] = [] }
@@ -516,117 +550,6 @@ public final class ThreadsStore {
         let output = try await client.getApiProjectsByIdFolderFile(path: .init(id: projectId), query: .init(path: path))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
         return try ok.body.json.content
-    }
-}
-
-/// One step of a session's plan (core plan.ts `PlanStep`).
-public struct PlanStep: Sendable, Equatable {
-    public let id: String
-    public let content: String
-    public let depth: Int
-    /// `pending`, `in_progress` or `completed`.
-    public let status: String
-}
-
-/// A session's plan as the hub keeps it (core plan.ts `SessionPlan`): its
-/// steps, else a task attempt's to-dos as steps.
-public struct SessionPlan: Sendable, Equatable {
-    public let steps: [PlanStep]
-    /// The spec's Markdown, once the session has written one.
-    public let spec: String?
-
-    init(_ raw: [String: Any]) {
-        let steps = (raw["steps"] as? [[String: Any]] ?? []).enumerated().map { index, step in
-            PlanStep(id: step["id"] as? String ?? "\(index)", content: step["content"] as? String ?? "",
-                     depth: (step["depth"] as? NSNumber)?.intValue ?? 0, status: step["status"] as? String ?? "pending")
-        }
-        let todos = (raw["todos"] as? [[String: Any]] ?? []).enumerated().map { index, todo in
-            PlanStep(id: todo["path"] as? String ?? "\(index)", content: todo["text"] as? String ?? "",
-                     depth: (todo["depth"] as? NSNumber)?.intValue ?? 0, status: todo["done"] as? Bool == true ? "completed" : "pending")
-        }
-        self.steps = steps.isEmpty ? todos : steps
-        spec = (raw["spec"] as? [String: Any])?["markdown"] as? String
-    }
-
-    /// How far along it is (PlanPane.svelte `planProgress`).
-    public var done: Int { steps.filter { $0.status == "completed" }.count }
-    /// It has anything to show (PlanPane.svelte `planShows`).
-    public var shows: Bool { !steps.isEmpty || spec != nil }
-}
-
-/// The plans this device follows beside the sessions it streams (a thread
-/// showing its lead's plan): `plan.follow` names them, the hub answers each
-/// new one with its `plan.snapshot`, then `plan.delta`s (client.svelte.ts
-/// `watchPlan`, core plan.ts).
-@MainActor
-@Observable
-public final class PlanFollows {
-    public private(set) var plans: [String: SessionPlan] = [:]
-    @ObservationIgnored private var held: [String: (rev: Int, raw: [String: Any])] = [:]
-    @ObservationIgnored private var readers: [String: Int] = [:]
-    @ObservationIgnored private var sent: [String]?
-    @ObservationIgnored var post: (Data) -> Bool = { _ in false }
-    private let log = Logger(subsystem: "dev.cawco.app", category: "Plan")
-
-    /// One more reader of a session's plan; it stays followed while any remains.
-    public func follow(_ instanceId: String) {
-        readers[instanceId, default: 0] += 1
-        sync()
-    }
-
-    /// A reader let go; the last one stops following it.
-    public func unfollow(_ instanceId: String) {
-        guard let count = readers[instanceId] else { return }
-        if count > 1 {
-            readers[instanceId] = count - 1
-            return
-        }
-        readers[instanceId] = nil
-        held[instanceId] = nil
-        plans[instanceId] = nil
-        sync()
-    }
-
-    /// The socket opened: the hub follows nothing for it yet.
-    func reconnected() {
-        sent = nil
-        held = [:]
-        sync()
-    }
-
-    private func sync() {
-        let ids = readers.keys.sorted()
-        guard ids != sent else { return }
-        let message: [String: Any] = ["type": "plan.follow", "instanceIds": ids]
-        guard let data = try? JSONSerialization.data(withJSONObject: message), post(data) else { return }
-        sent = ids
-    }
-
-    /// A `plan.snapshot` or `plan.delta` off the socket.
-    func take(_ data: Data) {
-        guard let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let id = raw["instanceId"] as? String, readers[id] != nil,
-              let rev = (raw["rev"] as? NSNumber)?.intValue else { return }
-        switch raw["type"] as? String {
-        case "plan.snapshot":
-            held[id] = (rev, raw)
-        case "plan.delta":
-            // A gap, or a patch that does not apply: the hub sends it whole.
-            guard let before = held[id], before.rev == rev - 1, let patch = raw["patch"] as? [[String: Any]],
-                  let after = JSONPatch.apply(patch, to: before.raw) else {
-                let resync: [String: Any] = ["type": "plan.resync", "instanceId": id]
-                if let ask = try? JSONSerialization.data(withJSONObject: resync) { _ = post(ask) }
-                log.notice("plan \(id.prefix(8), privacy: .public) delta \(rev, privacy: .public) not applied: asked whole")
-                return
-            }
-            held[id] = (rev, after)
-        default:
-            return
-        }
-        if let now = held[id] {
-            let plan = SessionPlan(now.raw)
-            if plans[id] != plan { plans[id] = plan }
-        }
     }
 }
 

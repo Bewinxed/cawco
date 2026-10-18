@@ -65,6 +65,7 @@ import {
   type CawNotWokenReason,
   type CawRunning,
   type CawView,
+  type ConnectionView,
   CURATOR_DENIED_TOOLS,
   type Envelope,
   type EventThreadMessage,
@@ -78,6 +79,7 @@ import {
   type ProjectStopFrame,
   type ProjectView,
   questionsOf,
+  type RelayProvider,
   type SendPayload,
   type SpawnPayload,
   type ThreadAnswer,
@@ -112,12 +114,12 @@ import type {
   WorkItemRow,
 } from "./db";
 import type { Origin, WorkOrigin } from "./db/schema";
+import type { Decisions } from "./decisions";
 import { inboxText } from "./ingress";
 import { mediaBase64, storeImage } from "./media";
 import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import type { Caps } from "./project-caps";
-import { readProjectTypes } from "./project-delegate-types";
 import {
   FOLDER_CONTENT_LIMIT,
   FOLDER_ENCODINGS,
@@ -426,6 +428,8 @@ const TASK_ID = /^tsk-\d{1,9}$/;
 /** The most files one reply names. */
 const FILES_MAX = 40;
 const STAGES_FILE = "stages.md";
+/** A project's delegate types: Caw's write there is a proposal the person approves (memory.ts `proposeType`). */
+const DELEGATES_DIR = "delegates/";
 /** Attempts whose thread is kept for the other half of their end ({@link createCaw}'s `attemptThread`). */
 const ATTEMPT_THREADS_KEPT = 200;
 
@@ -438,6 +442,16 @@ const folderCall = async <T>(call: () => T | Promise<T>): Promise<T> => {
       throw new Error(error.message, { cause: error });
     }
     throw error;
+  }
+};
+
+/** stages.md as Caw writes it, refused with what does not read. */
+const stagesRead = (body: string | Uint8Array): void => {
+  const reading = readStages(
+    typeof body === "string" ? body : new TextDecoder().decode(body)
+  );
+  if (!reading.ok) {
+    throw new Error(`stages.md was not written: ${reading.problems.join(" ")}`);
   }
 };
 
@@ -542,7 +556,7 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
 const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
-    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, delegates/, decisions/), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
+    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, decisions/, and delegates/, where a type you write is a proposal the person approves or declines before it is committed), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks; when the decisions form a graph, decision_add, decision_link and decision_group draw it), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
     "You have shell and edit tools, inside the boundary of your place, this folder: you write only here and in $TMPDIR, read no credential store, reach no service manager and see no other session's processes, and files only their owner may read are hidden from you. The hub decides each call before it runs. Read-only commands (ls, cat, grep, find, file, stat, du, wc, head, tail, git that only reads, chained with ; && || or |, output only into /dev/null or 2>&1) run without asking whatever woke you. In a turn the person's own message woke, so do git init, git add <paths> and git commit where no one else works; every other shell or edit call raises an Approve card the person answers, wherever they are. In a turn anything else woke (an event, a routine, a report, outside text riding on your wake) every call but a read-only command raises the card, and so does every such call after you read web content in a turn. In a shared checkout git checkout, switch, restore, reset, stash, clean, rebase and push, git add -A or git add ., and any git alias are refused: file a task. Your edits are docs, config and assets only, 5 files a wake at most: anything bigger, file a task. At most 20 shell or edit calls a wake: delegate the rest. Every call shows in your thread. A task whose only changes are your own passes review only once the person approved them.",
     "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must.",
     "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
@@ -591,6 +605,8 @@ export interface CawDeps {
     | "updateWorkItem"
     | "workItem"
   >;
+  /** The decision graph's writers behind `decision_add`, `decision_link` and `decision_group` (decisions.ts); bound late, made after Caw. */
+  readonly decisions: () => Pick<Decisions, "add" | "group" | "link">;
   /** Ends a session (the lead, when Caw moves harness or model). */
   readonly end: (instanceId: string) => void;
   /** Whether the fleet's two choices were ever set (the setup page asks for them until they are). */
@@ -618,6 +634,17 @@ export interface CawDeps {
   readonly online: (machineId?: string) => boolean;
   /** Every dashboard and the app read the projects again: his switch, harness or model moved. */
   readonly projectsChanged: () => void;
+  /**
+   * His `folder_write` of a `delegates/` file, parked as the person's
+   * proposal in his thread and drawn at the call `toolUseId` (memory.ts
+   * `proposeType`): nothing is committed until they approve it.
+   */
+  readonly proposeType: (
+    actor: InstanceRow,
+    path: string,
+    content: string,
+    toolUseId: string | undefined
+  ) => Promise<{ id: string; path: string; waiting: string }>;
   /**
    * Tells every open dashboard a thread changed, or (`project.stop`) that his
    * turn an event started stopped as he was turned off (the ledger's
@@ -680,6 +707,7 @@ export const createCaw = ({
   blocks,
   caps,
   db,
+  decisions,
   end,
   fleetChoicesSet,
   upstreamAnswered,
@@ -690,6 +718,7 @@ export const createCaw = ({
   makeNote,
   online,
   projectsChanged,
+  proposeType,
   publish,
   refreshPlace,
   send,
@@ -2221,6 +2250,27 @@ export const createCaw = ({
     view,
 
     /**
+     * §5.5: "Caw offers the relay when you connect a push-only service". The
+     * project now has `connection` signed in, whose service pushes its
+     * events and is never polled, and no relay for `provider`: an event wake
+     * (so only while he is on) on the project's newest conversation, whose
+     * words ask him to offer one with relay_create. It carries no note: he
+     * makes the offer there himself, as his question card.
+     */
+    offerRelay(
+      projectId: string,
+      connection: Pick<ConnectionView, "account" | "name" | "service">,
+      provider: RelayProvider
+    ): void {
+      const threadId = db.newestConversation(projectId)?.id;
+      wakeQuietly(projectId, {
+        by: "event",
+        ...(threadId ? { threadId } : {}),
+        text: `Event connection: the person signed in the connection “${connection.name}” (${connection.service}, ${connection.account}) for this project. ${connection.service} pushes its events instead of being polled, so none of them reach the project until it has a relay. Offer one: ask the person with AskUserQuestion${threadId ? ` in thread ${threadId}` : ""} whether to open a public webhook path for it. On yes, call relay_create({ provider: "${provider}" }), which puts the opening in front of them as an Approve card, then tell them in the thread what to register at ${connection.service}. On no, leave it: polling stays as it is.`,
+      });
+    },
+
+    /**
      * Whose turn the project's Caw `instanceId` is in, for what he starts in
      * it (work-items `origin`): `you` once your words are in it, `kept` once
      * you let his own turn finish as you turned him off, else `event`;
@@ -3088,8 +3138,12 @@ export const createCaw = ({
       cutConfirmed(instanceId);
     },
 
-    /** Caw's thread and view tools, for the session `actor`; refused to any session but its project's lead. */
-    tools(actor: InstanceRow | undefined) {
+    /**
+     * Caw's thread, view, folder and decision graph tools, for the session
+     * `actor` and its call `toolUseId` (where a proposal it parks is drawn);
+     * refused to any session but its project's lead.
+     */
+    tools(actor: InstanceRow | undefined, toolUseId?: string) {
       const mine = (): string => {
         const project = leadOf(actor);
         if (!project) {
@@ -3098,6 +3152,13 @@ export const createCaw = ({
           );
         }
         return project.id;
+      };
+      /** The lead calling: discovery, with no session, executes nothing. */
+      const me = (): InstanceRow => {
+        if (!actor) {
+          throw new Error("Discovery cannot execute tools");
+        }
+        return actor;
       };
       /**
        * The project whose folder `folder_read` reads: the lead's, or a
@@ -3205,7 +3266,7 @@ export const createCaw = ({
         ),
         tool(
           "folder_write",
-          "Commit a file to your project's hub folder; bytes as base64. stages.md must parse.",
+          "Commit a file to your project's hub folder; bytes as base64. stages.md must parse; a delegates/ type waits for the person's approval.",
           {
             path: z.string().min(1),
             content: z.string().max(FOLDER_CONTENT_LIMIT),
@@ -3221,15 +3282,16 @@ export const createCaw = ({
             const body = await folderCall(() =>
               folderContent(content, encoding)
             );
-            if (rel === STAGES_FILE) {
-              const reading = readStages(
-                typeof body === "string" ? body : new TextDecoder().decode(body)
-              );
-              if (!reading.ok) {
+            if (rel.startsWith(DELEGATES_DIR)) {
+              if (typeof body !== "string") {
                 throw new Error(
-                  `stages.md was not written: ${reading.problems.join(" ")}`
+                  `${rel} was not proposed: a delegate type is text, not bytes.`
                 );
               }
+              return ok(await proposeType(me(), rel, body, toolUseId));
+            }
+            if (rel === STAGES_FILE) {
+              stagesRead(body);
             }
             const written = await folderCall(() =>
               writeFolderFile(projectId, rel, body, {
@@ -3237,23 +3299,43 @@ export const createCaw = ({
               })
             );
             folderChanged(projectId);
-            const problems = rel.startsWith("delegates/")
-              ? readProjectTypes(projectId).problems.filter(
-                  (problem) => problem.path === rel
-                )
-              : [];
-            return ok({
-              ok: true,
-              path: rel,
-              sha: written.sha,
-              ...(problems.length
-                ? {
-                    problems: problems.map((problem) => problem.problem),
-                    note: `${rel} was written but does not make a delegate type yet; fix it and write it again.`,
-                  }
-                : {}),
-            });
+            return ok({ ok: true, path: rel, sha: written.sha });
           }
+        ),
+        tool(
+          "decision_add",
+          "Put decision pages' cards on decisions/decisions.json, the project's decision graph, on a new row.",
+          {
+            cards: z
+              .array(
+                z.object({
+                  page: z.string().describe("Its decisions/<page>/."),
+                  card: z.string().describe("Its data-cawco-choice."),
+                  name: z.string().optional().describe("Else its question."),
+                })
+              )
+              .min(1),
+          },
+          async ({ cards }) =>
+            ok({ added: await decisions().add(mine(), cards) })
+        ),
+        tool(
+          "decision_link",
+          "Draw edges on the decision graph, each from a card to one it leads to.",
+          {
+            edges: z
+              .array(z.object({ from: z.string(), to: z.string() }))
+              .min(1),
+          },
+          async ({ edges }) =>
+            ok({ added: await decisions().link(mine(), edges) })
+        ),
+        tool(
+          "decision_group",
+          "Frame cards on the decision graph as one named group; its name again sets its cards, none removes it.",
+          { name: z.string(), cards: z.array(z.string()) },
+          async ({ name, cards }) =>
+            ok({ group: await decisions().group(mine(), name, cards) })
         ),
         tool(
           "view_draft",

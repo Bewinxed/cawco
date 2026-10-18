@@ -49,6 +49,7 @@ import {
 import {
   ARTIFACTS_ROOT,
   FLEET_PORTS,
+  LOCAL_DASHBOARD_PORT,
   PREVIEW_PORTS,
   PREVIEW_PORTS_TEXT,
 } from "./config";
@@ -61,6 +62,7 @@ import {
   passSession,
 } from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
+import type { TailnetHttpsService } from "./tailnet-https";
 
 /**
  * A session's preview: the artifact its panel shows, and the machine and
@@ -115,6 +117,8 @@ export const noteParent = (origin: string | undefined): void => {
 
 // The operator's own dashboard address, before any dashboard has connected.
 noteParent(readEnv(CAWCO_ENV.dashboardUrl));
+// The dashboard on every computer's loopback (core `localDashboardPort`).
+noteParent(`http://localhost:${LOCAL_DASHBOARD_PORT}`);
 
 /** Every origin that may frame a preview now. */
 export const previewParents = (): string[] => [...parents];
@@ -291,6 +295,12 @@ const HUB_SERVES: Record<Exclude<ArtifactKind, "sheet">, typeof servePage> = {
 };
 
 type ListenerSocket = PreviewSocket | ArtifactSocket;
+
+/** A preview origin's listener on its port: the plain one and its TLS twins, stopped together with their connections. */
+interface Listener {
+  port: number;
+  stop: () => Promise<void>;
+}
 
 const isArtifact = (
   socket: ServerWebSocket<ListenerSocket>
@@ -738,11 +748,18 @@ const probePattern = async (pattern: HostPattern): Promise<string | null> => {
  * domain loads the names; any other loads the ports (core `previewRoute`).
  * (The hub's own server is Elysia's, whose sockets run its lifecycle: a
  * previewed app's HMR socket cannot be upgraded there.)
+ *
+ * While the hub serves HTTPS on its machine's tailnet name
+ * (tailnet-https.ts), every listener has a TLS twin on each tailnet address,
+ * the same handler behind it, and a session's address names its origin on
+ * that name too (`tailnet`). Both bind with `reusePort`, which Linux needs on
+ * both sockets to let an address's listener stand beside the wildcard one.
  */
 export function createPreviewListeners(
   hostname: string,
   deps: PreviewListenerDeps,
-  db: PreviewsDb
+  db: PreviewsDb,
+  tailnet: Pick<TailnetHttpsService, "beside" | "origin">
 ) {
   const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
   const websocket: WebSocketHandler<ListenerSocket> = {
@@ -762,7 +779,8 @@ export function createPreviewListeners(
     return downResponse("machine");
   };
   /**
-   * A listener on `port`, each request's session from `route`. `lock` (host
+   * A listener on `port`, each request's session from `route`, and its TLS
+   * twins on the tailnet addresses while those serve HTTPS. `lock` (host
    * mode, preview-access.ts): a request to a session's name needs that
    * session's pass, WebSocket upgrades too, but the dashboard's ping and the
    * entry that spends a ticket for one.
@@ -771,46 +789,70 @@ export function createPreviewListeners(
     port: number,
     route: (request: Request) => string | undefined,
     lock?: PassCookie
-  ): Server<ListenerSocket> =>
-    Bun.serve<ListenerSocket>({
+  ): Listener => {
+    const fetch = async (
+      request: Request,
+      server: Server<ListenerSocket>
+    ): Promise<Response | undefined> => {
+      const instanceId = route(request);
+      const stopped = lock && atTheLock(request, lock, instanceId);
+      if (stopped) {
+        return framedBy(stopped);
+      }
+      // Port mode: every listener is one session's, so a route names it.
+      if (!instanceId) {
+        previewFailed(
+          HOP,
+          null,
+          `no session's preview at ${request.headers.get("host")}`
+        );
+        return framedBy(downResponse("closed", 404));
+      }
+      // A session's own port has no CDN in front of it; host mode's names
+      // (the lock's) may.
+      const answer = await serveSession(
+        request,
+        server,
+        instanceId,
+        deps,
+        lock === undefined
+      );
+      // Gzipped here, once, after the overlay tag is keyed.
+      return (
+        answer &&
+        compressed(
+          framedBy(await withKeyedOverlay(answer)),
+          request.headers.get("accept-encoding")
+        )
+      );
+    };
+    const plain = Bun.serve<ListenerSocket>({
       hostname,
       port,
+      reusePort: true,
       websocket,
       error,
-      async fetch(request, server) {
-        const instanceId = route(request);
-        const stopped = lock && atTheLock(request, lock, instanceId);
-        if (stopped) {
-          return framedBy(stopped);
-        }
-        // Port mode: every listener is one session's, so a route names it.
-        if (!instanceId) {
-          previewFailed(
-            HOP,
-            null,
-            `no session's preview at ${request.headers.get("host")}`
-          );
-          return framedBy(downResponse("closed", 404));
-        }
-        // A session's own port has no CDN in front of it; host mode's names
-        // (the lock's) may.
-        const answer = await serveSession(
-          request,
-          server,
-          instanceId,
-          deps,
-          lock === undefined
-        );
-        // Gzipped here, once, after the overlay tag is keyed.
-        return (
-          answer &&
-          compressed(
-            framedBy(await withKeyedOverlay(answer)),
-            request.headers.get("accept-encoding")
-          )
-        );
-      },
+      fetch,
     });
+    const secure = tailnet.beside(port, (address, tls) =>
+      Bun.serve<ListenerSocket>({
+        hostname: address,
+        port,
+        tls,
+        reusePort: true,
+        websocket,
+        error,
+        fetch,
+      })
+    );
+    return {
+      port,
+      stop: (): Promise<void> => {
+        secure.close();
+        return plain.stop(true);
+      },
+    };
+  };
 
   let settings = db.settings();
   // A pattern stored before patterns carried their scheme took the client's
@@ -830,9 +872,9 @@ export function createPreviewListeners(
     );
   }
   /** Each session's listener on its own port, by session. */
-  const sessions = new Map<string, Server<ListenerSocket>>();
+  const sessions = new Map<string, Listener>();
   /** Host mode's one listener. */
-  let byHost: Server<ListenerSocket> | undefined;
+  let byHost: Listener | undefined;
 
   /**
    * Serves `instanceId` on `port`: false when another process holds it
@@ -988,7 +1030,7 @@ export function createPreviewListeners(
   /** Every listener stopped, each one's connections closed, before the mode changes. */
   const stopAll = async (): Promise<void> => {
     const stopping = [...sessions.values(), ...(byHost ? [byHost] : [])].map(
-      (server) => server.stop(true)
+      (listener) => listener.stop()
     );
     sessions.clear();
     byHost = undefined;
@@ -1018,6 +1060,8 @@ export function createPreviewListeners(
      */
     address(instanceId: string): PreviewAddress {
       const port = portOf(instanceId);
+      const secure = tailnet.origin(port);
+      const onTailnet = secure ? { tailnet: secure } : {};
       if (settings.mode === "host") {
         const pattern = parsePattern(settings.pattern ?? "");
         const origin = originFor(
@@ -1025,16 +1069,16 @@ export function createPreviewListeners(
           pattern.key === "port" ? port : instanceId
         );
         // core `PreviewAddress`: `host` is a bridge for readers before `origin`.
-        return { port, origin, host: new URL(origin).host };
+        return { port, origin, host: new URL(origin).host, ...onTailnet };
       }
-      return { port };
+      return { port, ...onTailnet };
     },
 
     /** The session ended: its listener stops and its port is free again. */
     release(instanceId: string): void {
-      const server = sessions.get(instanceId);
-      if (server) {
-        detach(server.stop(true), "preview listener stop");
+      const listener = sessions.get(instanceId);
+      if (listener) {
+        detach(listener.stop(), "preview listener stop");
       }
       sessions.delete(instanceId);
       db.dropPort(instanceId);

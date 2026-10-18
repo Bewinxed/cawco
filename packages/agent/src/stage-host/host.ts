@@ -6,10 +6,11 @@
  * inside it ({@link cawcoStage}, {@link stamp}) and nothing written into the
  * project. The daemon (agent `stage.ts`) writes this file, bundled, to
  * `<toolchain root>/.cawco/stage/host.mjs` and runs it there inside the
- * workspace's boundary under the runtime the project's lockfile implies, so
- * the project's toolchain never meets CawCo's process (the spike: the
- * compiled binary can't load a project's Vite, `Cannot find module
- * 'rolldown/parseAst'`).
+ * workspace's boundary on the agent's own bun (boundary.ts
+ * `bunScriptRuntime`: a binary install's run as bun with `BUN_BE_BUN=1`), a
+ * process of its own, so the project's toolchain never meets CawCo's process
+ * (the spike: the compiled binary's own module graph can't load a project's
+ * Vite, `Cannot find module 'rolldown/parseAst'`).
  *
  * Its environment: `CAWCO_STAGE=1`, which a config reads to know it runs on
  * a stage (as Storybook's `STORYBOOK`); `CAWCO_STAGE_PORT`, the port it
@@ -1456,15 +1457,18 @@ const onPort = (got: number | undefined, name: string): number => {
 
 /**
  * The project's Vite, from its own config file (vite.dev/guide/api-javascript
- * `createServer`), loaded by the stage's own runtime: `native` "executes the
- * original config file directly … It requires a runtime that supports the
- * syntax used by your config file, such as Node.js 22.18+ for TypeScript
- * files" (vite.dev/config), and is Vite 9's planned default (vitejs/vite
- * #21546). The default `bundle` "writes the bundled config to
- * `node_modules/.vite-temp`" and fails on a read-only one (Vite 8.3.2
- * `loadConfigFromBundledFile` falls back beside the config only on EACCES);
- * `runner` can't read SvelteKit 3's `"extends": "$app/tsconfig"`
- * (`TSCONFIG_ERROR … Tsconfig not found`, measured on the dashboard).
+ * `createServer`), loaded by the stage's own runtime, which is always bun
+ * (agent stage.ts): `native` "executes the original config file directly …
+ * It requires a runtime that supports the syntax used by your config file"
+ * (vite.dev/config), and bun reads what the default `bundle` loader does
+ * (TS enums, extensionless relative imports, `__dirname` in ESM). `bundle`
+ * itself "writes the bundled config to `node_modules/.vite-temp`" and fails
+ * on a read-only one (Vite 8.3.4 `loadConfigFromBundledFile` falls back
+ * beside the config only on EACCES, so EROFS throws; vitejs/vite#18839 open).
+ * `runner` transforms the config with Vite's own oxc, which fails the whole
+ * load on any `extends` it can't follow (oxc-resolver#1185, vitejs/vite
+ * #21852), such as SvelteKit 3's `$app/tsconfig` before `svelte-kit sync`
+ * has written it.
  */
 async function startVite(): Promise<Started> {
   const vite = (await import(projectPackage("vite").href)) as Vite;
@@ -1566,6 +1570,11 @@ async function startNuxt(): Promise<Started> {
     overrides: {
       modules: [cawcoNuxtModule],
       vite: { cacheDir: CACHE_DIR },
+      // Chrome DevTools Workspaces ("Default: `true`", nuxt.com/docs/api/
+      // nuxt-config): its `chrome-workspace.json` goes into
+      // node_modules/.cache/nuxt, and its route hands the project's root path
+      // to whoever views the preview. A sheet is no workspace to map.
+      experimental: { chromeDevtoolsProjectSettings: false },
       // A stage reports nothing anywhere: no telemetry from a boundary.
       telemetry: false,
     },

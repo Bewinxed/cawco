@@ -9,6 +9,7 @@
     resultField,
   } from "@cawco/core/tool-presentation";
   import { getContext, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { showArtifact } from "#lib/cawco/artifact-api.js";
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
@@ -281,6 +282,35 @@
   ): boolean {
     return !!wanted && preview?.artifact?.id === wanted.id;
   }
+
+  /**
+   * The card on screen asks for its page's thumbnail, once per revision
+   * (PreviewPane takes it): a card nobody scrolls to, or one in a tab off
+   * screen, never costs the page a capture. A new revision watches it again,
+   * and the observer's first report asks again.
+   */
+  const wantsThumbnail =
+    (
+      record: () => (typeof cawco.previews)[string] | undefined
+    ): Attachment<HTMLElement> =>
+    (node) => {
+      const revision = record()?.revision;
+      if (!revision) {
+        return;
+      }
+      const watch = new IntersectionObserver((entries) => {
+        const preview = untrack(record);
+        if (
+          entries.some((entry) => entry.isIntersecting) &&
+          preview?.revision === revision &&
+          preview.thumbnailRevision !== revision
+        ) {
+          preview.thumbnailWanted = true;
+        }
+      });
+      watch.observe(node);
+      return () => watch.disconnect();
+    };
 </script>
 
 <div data-slot="tools" data-tool-group-rail-row class="tools rail-row">
@@ -393,6 +423,7 @@
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
+              {@attach wantsThumbnail(() => preview)}
             >
               <button
                 aria-busy={busy || undefined}

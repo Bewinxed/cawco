@@ -98,7 +98,7 @@ const untrackedIn = async (
     "--",
     ...denies.map((deny) => relative(clone, deny.path)),
   ]);
-  // A plain folder (a project lead's place before it is a repository) tracks
+  // A plain folder (a place before it is a repository) tracks
   // nothing; a repository git cannot read is refused.
   const repository = await statOf(join(clone, ".git"));
   if (listed === undefined && repository) {
@@ -234,7 +234,7 @@ export const listStandIns = async (
   willStandIn: boolean
 ): Promise<void> => {
   const { clone, entries } = await untrackedIn(ref.path);
-  // A plain folder (a project lead's place before it is a repository) has
+  // A plain folder (a place before it is a repository) has
   // no status to keep them out of.
   if (!(await statOf(join(clone, ".git")))) {
     return;
@@ -348,7 +348,7 @@ export const straysIn = async (
 export const removeStandIns = async (ref: WorkspaceRef): Promise<void> => {
   // Gone, or a delegate's clone that is no git clone any more: a husk goes
   // whole with its workspace's archive (workspace.ts `closeClone`), and any
-  // other such folder is kept. A lead's place is a plain folder as often as
+  // other such folder is kept. A place is a plain folder as often as
   // a repository, and its earlier stand-ins go as ever.
   if (
     !(await statOf(ref.path)) ||

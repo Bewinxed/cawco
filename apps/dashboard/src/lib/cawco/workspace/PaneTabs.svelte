@@ -547,9 +547,15 @@
   // The morph mark changes as the surface retargets. It is set on the
   // element: as a prop of the popover's content the change re-mounts
   // bits-ui's focus scope, which runs its close auto-focus on a surface
-  // that is still open.
+  // that is still open. The card's floating wrapper (HangCard draws it) is
+  // marked the card's, and while the card glides it says so too: the
+  // wrapper's move is the glide (the styles below).
   $effect(() => {
-    cardEl?.toggleAttribute("data-morph", morphing);
+    const card = cardEl;
+    const wrapper = card?.parentElement;
+    card?.toggleAttribute("data-morph", morphing);
+    wrapper?.setAttribute("data-session-details", "");
+    wrapper?.toggleAttribute("data-details-morph", morphing);
   });
   function hoverTab(id: string, event: PointerEvent) {
     if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
@@ -1906,19 +1912,13 @@
   /* A pinned card follows its tab as the strip scrolls, frame by frame: its
      wrapper moves on its own layer, so each step is the compositor's, not a
      repaint of the card. */
-  :global(
-    [data-bits-floating-content-wrapper]:has(> .session-details-popover)
-  ) {
+  :global([data-bits-floating-content-wrapper][data-session-details]) {
     will-change: transform;
   }
   /* The glide to another tab: the wrapper's move and the card's height
      together; the outline follows them frame by frame (HangCard). */
   @media (prefers-reduced-motion: no-preference) {
-    :global(
-      [data-bits-floating-content-wrapper]:has(
-        > .session-details-popover[data-morph]
-      )
-    ) {
+    :global([data-bits-floating-content-wrapper][data-details-morph]) {
       transition: transform var(--dur-pop) var(--ease-drawer);
     }
     :global(.session-details-popover[data-morph]) .details-morph {

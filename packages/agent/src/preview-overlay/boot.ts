@@ -11,19 +11,37 @@
  * mark stands down. The mark is set here, synchronously, before the
  * document holds any frame, so a frame never misses its parent's.
  */
+import { hold, isHeld } from "./hold";
 
 /** What a document's overlay answers its frames' overlays, under {@link MARK}. */
 export interface OverlayMark {
   /** A frame inside navigated in place (history): the marks in it are placed again. */
   frameChanged: () => void;
+  /** Whether this document is held: a frame loading inside a held one starts held. */
+  held: () => boolean;
+  /** This document held or let go (hold.ts), by the overlay that runs above it. */
+  hold: (on: boolean) => void;
 }
 
 const MARK = "__cawcoOverlay";
 type Marked = Window & { [MARK]?: OverlayMark };
 
 /** This window's mark: an overlay runs here, or runs above and reaches here. */
-export const mark: OverlayMark = { frameChanged: () => undefined };
+export const mark: OverlayMark = {
+  frameChanged: () => undefined,
+  held: isHeld,
+  hold,
+};
 Object.defineProperty(window, MARK, { value: mark });
+
+/** A same-origin window's mark; null for another origin's, or one no overlay loaded in. */
+export function markOf(view: Window): OverlayMark | null {
+  try {
+    return (view as Marked)[MARK] ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** This document's own: the tag that loaded the script, and what an in-place navigation tells. */
 export const here: {
@@ -33,14 +51,7 @@ export const here: {
 
 /** The same-origin parent's mark; null at the top, under another origin, or where no overlay was loaded. */
 export function parentMark(): OverlayMark | null {
-  if (window.parent === window) {
-    return null;
-  }
-  try {
-    return (window.parent as Marked)[MARK] ?? null;
-  } catch {
-    return null;
-  }
+  return window.parent === window ? null : markOf(window.parent);
 }
 
 /**

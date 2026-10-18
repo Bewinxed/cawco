@@ -83,6 +83,8 @@ export * from "./secret-text";
 export * from "./starters";
 // The Ledger Protocol: canonical session streams + acknowledged commands.
 export * from "./stream";
+// HTTPS on the hub machine's tailnet name: its state, and a preview's origin there.
+export * from "./tailnet-https";
 // A project's threads with its Caw: rows, messages and their frames.
 export * from "./threads";
 // The workflow-tool catalog and its status/policy shapes (NEW.md §10).
@@ -1480,6 +1482,7 @@ export type FramePayload =
   | import("./starters").StartersChangedFrame
   | import("./frames").ProjectsChangedFrame
   | import("./frames").FleetUpstreamFrame
+  | import("./frames").TailnetHttpsFrame
   | import("./frames").FleetFetchFrame
   | import("./frames").ProjectCapFrame
   | import("./actions").ActionsFrame
@@ -1504,6 +1507,17 @@ export type FramePayload =
   | import("./workflow").WorkflowFrame;
 
 export const CAWCO_HUB_PORT = 3456;
+
+/**
+ * The dashboard's port on every computer's loopback, beside the hub's
+ * (IANA lists 3455 as `prsvp`, a legacy RSVP encapsulation; no dev server
+ * defaults to it, unlike 3000): `http://localhost:3455` is the dashboard on
+ * the hub's computer, where the dashboard's socket listens on it, and on
+ * every other computer running the agent, which carries it to the hub
+ * (agent hub-loopback.ts). Loopback is a secure context, so its previews run
+ * in a process of their own.
+ */
+export const CAWCO_LOCAL_DASHBOARD_PORT = 3455;
 
 /**
  * A preview's start page: a path on the previewed server, one leading slash
@@ -1706,6 +1720,8 @@ export const CAWCO_ENV = {
    * hub's composed links point at it.
    */
   dashboardPort: "CAWCO_DASHBOARD_PORT",
+  /** The dashboard's loopback port on every computer ({@link localDashboardPort}). */
+  localDashboardPort: "CAWCO_LOCAL_DASHBOARD_PORT",
   /** GitHub's REST API origin the hub's pollers call, for pointing them at a proxy. */
   githubApi: "CAWCO_GITHUB_API",
   /** TypeSafe's System One URL Jev's typesafe route posts to, for pointing it at a local stand-in in its live proof. */
@@ -1790,19 +1806,42 @@ export const mcpGatewayPort = (): number => {
 };
 
 /**
+ * The dashboard's loopback port: `CAWCO_LOCAL_DASHBOARD_PORT`, else
+ * {@link CAWCO_LOCAL_DASHBOARD_PORT}. The hub names it to every agent in its
+ * register answer, and the installer listens on it with the dashboard's
+ * socket on the hub's computer; both read it here.
+ */
+export const localDashboardPort = (): number => {
+  const named = readEnv(CAWCO_ENV.localDashboardPort);
+  const port = named === undefined ? CAWCO_LOCAL_DASHBOARD_PORT : Number(named);
+  if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
+    throw new Error(
+      `${CAWCO_ENV.localDashboardPort} must be a port number, not "${named}"`
+    );
+  }
+  return port;
+};
+
+/**
  * The mDNS service the hub advertises and `cawco` browses for.
  */
 export const CAWCO_MDNS_TYPE = "cawco";
 export * from "./image-generation";
 // The words the dashboard and the native app share (Words.generated.swift).
 export * from "./words/accounts";
+export * from "./words/artifacts";
 export * from "./words/catalog";
 export * from "./words/configure";
 export * from "./words/helpers";
+export * from "./words/offers";
 export * from "./words/pairing";
+export * from "./words/place";
+export * from "./words/plan";
 export * from "./words/preview";
 export * from "./words/sheet";
+export * from "./words/side";
 export * from "./words/sidebar";
+export * from "./words/tailnet";
 export * from "./workflow";
 export * from "./workflow-compile";
 

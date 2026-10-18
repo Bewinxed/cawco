@@ -134,6 +134,7 @@ import {
   TRAILERS,
   taskFileIn,
 } from "./task-history";
+import { runsOf, skillTypes, templateTypes, typeFiles } from "./template-types";
 import {
   budgetProblem,
   isLive,
@@ -400,6 +401,8 @@ export interface TaskStore {
   readonly put: (rows: TaskIndexRow[]) => void;
   /** The tasks whose hook start waits for a slot (dispatch.ts). */
   readonly queuedStarts?: (projectId: string) => string[];
+  /** Whether a session of the project resolves `type`: a type file of its own, or a fleet type (project-delegate-types.ts). */
+  readonly resolvesType: (projectId: string, type: string) => boolean;
   /** Keeps an attempt's result, replacing the one it had. */
   readonly saveResult: (workItemId: string, result: AttemptResult) => void;
   /** Records the template a project's stages came from: its starter skills follow it. */
@@ -691,6 +694,19 @@ export const STAGES_FILE = "stages.md";
 const DEFAULT_TEMPLATE: StagesTemplate = "code";
 
 /** Takes stages.md away, so the project reads the code template; one without it has nothing to take. */
+/**
+ * The files of `types` a template defines that the project has no file
+ * for (template-types.ts): what applying a template and filling a project's
+ * types both write.
+ */
+const missingTypes = async (
+  projectId: string,
+  types: readonly string[]
+): Promise<{ content: string; path: string }[]> =>
+  types.length === 0
+    ? []
+    : typeFiles(types, new Set(await folderFileNames(projectId, "delegates")));
+
 const removeStages = async (
   projectId: string,
   options: FolderWriteOptions
@@ -943,7 +959,11 @@ const stopperWords = (by: EndedBy): string => {
   }
 };
 
-/** How an attempt ended when it did not land ({@link TaskAttempt.endedHow}). */
+/**
+ * How an attempt ended when it did not land, or how the follow-up of one
+ * that landed ended without landing (a done item's `error`, work-items.ts
+ * `finish`) ({@link TaskAttempt.endedHow}).
+ */
 const endedHowOf = (
   item: ReturnType<TaskStore["attempts"]>[number]
 ): string | null => {
@@ -952,7 +972,10 @@ const endedHowOf = (
       ? `Stopped by ${stopperWords(item.stoppedBy)}`
       : "Stopped";
   }
-  if (item.state !== "failed") {
+  if (item.state === "done" && item.error && item.stoppedBy) {
+    return `Its follow-up was stopped by ${stopperWords(item.stoppedBy)}`;
+  }
+  if (item.state !== "failed" && !(item.state === "done" && item.error)) {
     return null;
   }
   const why = item.error?.trim().split("\n")[0]?.trim();
@@ -2411,6 +2434,52 @@ export const createTasks = (store: TaskStore) => {
     );
   };
 
+  /**
+   * A type the project's stages run, or its template's skills file tasks
+   * with, that resolves to nothing (no file of its own, no fleet type) and
+   * that a template defines is written, as applying that template writes
+   * it: a project made before templates wrote their types, or whose
+   * stages.md was written by hand or by Caw, can start every stage and every
+   * task its skills file. A file of its own, readable or not, stays as it is.
+   */
+  const fillTypes = async (projectId: string): Promise<void> => {
+    const { reading } = await stagesOf(projectId);
+    if (!reading.ok) {
+      return;
+    }
+    const wanted = new Set([
+      ...runsOf(reading.stages),
+      ...skillTypes(store.project(projectId)?.template ?? null),
+    ]);
+    const unresolved = [...wanted].filter(
+      (type) => !store.resolvesType(projectId, type)
+    );
+    const writes = await missingTypes(projectId, unresolved);
+    if (writes.length === 0) {
+      return;
+    }
+    const names = writes.map((write) => write.path).join(", ");
+    await writeFolderFiles(projectId, writes, {
+      author: { name: AUTHOR.hub },
+      message: `delegates: ${names}, which its stages run or its template's skills file tasks with, and nothing defined (by hub)`,
+    });
+    console.info(
+      `[tasks] project ${projectId}: wrote ${names}, which its stages run or its template's skills file tasks with, and nothing defined.`
+    );
+  };
+
+  /** {@link fillTypes} in the project's turn; a failure is said, never thrown. */
+  const fillTypesSoon = (projectId: string): void => {
+    detach(
+      inTurn(projectId, () => fillTypes(projectId)).catch((error: unknown) =>
+        console.warn(
+          `[tasks] project ${projectId}'s delegate types were not filled: ${error instanceof Error ? error.message : String(error)}`
+        )
+      ),
+      "fill a project's delegate types"
+    );
+  };
+
   /** The project's stages; undefined while stages.md does not read. */
   const currentStages = async (
     projectId: string
@@ -3478,6 +3547,7 @@ export const createTasks = (store: TaskStore) => {
           author: actor.author,
           message: message?.trim() || `stages: update ${byWhom(actor)}`,
         });
+        await fillTypes(projectId);
         return stagesView(
           "file",
           content,
@@ -3490,8 +3560,11 @@ export const createTasks = (store: TaskStore) => {
     /**
      * Writes a template as the project's stages.md; the code template is
      * the hub's own, so applying it takes stages.md away and the project
-     * reads the template. Answers the stages, and the tasks whose stage the
-     * template does not have (they stay where they are until moved).
+     * reads the template. Each delegate type its stages run that the
+     * project has no file for is written with it (template-types.ts); a
+     * project's own file of that name stays as it is. Answers the stages,
+     * and the tasks whose stage the template does not have (they stay where
+     * they are until moved).
      */
     applyTemplate(
       projectId: string,
@@ -3502,10 +3575,18 @@ export const createTasks = (store: TaskStore) => {
         writable(projectId);
         const content = templateText(template);
         const message = `stages: apply the ${template} template ${byWhom(actor)}`;
+        const types = await missingTypes(projectId, templateTypes(template));
         if (template === DEFAULT_TEMPLATE) {
           await removeStages(projectId, { author: actor.author, message });
-        } else {
-          await writeFolderFile(projectId, STAGES_FILE, content, {
+        }
+        const writes = [
+          ...(template === DEFAULT_TEMPLATE
+            ? []
+            : [{ path: STAGES_FILE, content }]),
+          ...types,
+        ];
+        if (writes.length > 0) {
+          await writeFolderFiles(projectId, writes, {
             author: actor.author,
             message,
           });
@@ -3533,9 +3614,14 @@ export const createTasks = (store: TaskStore) => {
       return () => listeners.delete(listener);
     },
 
-    /** Tells listeners a project's folder changed under the tasks (a write through the folder's own routes). */
+    /**
+     * Tells listeners a project's folder changed under the tasks (a write
+     * through the folder's own routes); its stages may now run a type it
+     * has no file for ({@link fillTypes}).
+     */
     touched(projectId: string): void {
       emit({ kind: "changed", projectId });
+      fillTypesSoon(projectId);
     },
 
     /** The stage templates a project can apply. */
@@ -3570,7 +3656,10 @@ export const createTasks = (store: TaskStore) => {
         // biome-ignore lint/performance/noAwaitInLoops: one project at a time keeps a start from reading every folder at once
         if (await hasProjectFolder(projectId)) {
           try {
-            await inTurn(projectId, () => dropTemplateCopy(projectId));
+            await inTurn(projectId, async () => {
+              await dropTemplateCopy(projectId);
+              await fillTypes(projectId);
+            });
             await sync(projectId);
           } catch (error) {
             console.warn(
