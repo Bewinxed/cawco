@@ -292,6 +292,7 @@
   .crepe-host
     :global(.milkdown .milkdown-slash-menu .tab-group ul li.selected) {
     background: var(--selected-bg);
+    color: var(--selected-ink);
   }
   @media (hover: none) {
     .crepe-host :global(.milkdown) {

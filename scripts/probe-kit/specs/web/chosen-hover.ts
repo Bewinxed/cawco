@@ -10,7 +10,10 @@
  * one is DESIGN.md's recipe for it, resolved in the same page: a list's
  * chosen row the selection wash (`selected-bg`, Colors: Selected; the kit's
  * selection pill), a pressed toggle the kit Toggle's on step
- * (`light-dark(surface-fill-strong, surface-fill)`).
+ * (`light-dark(surface-fill-strong, surface-fill)`). The wash comes with
+ * its ink (DESIGN.md Colors: Selected; the kit's selected row,
+ * `text-selected-ink`): a washed row's label is `selected-ink`, and every
+ * text in the row holds 4.5:1 on the wash.
  *
  * A row in the new-session popovers hovers by the list's ghost
  * (components/ui/highlight), moved by the pointer: there the pointer rests
@@ -35,6 +38,11 @@ interface Control {
   /** How the unchosen item hovers. */
   hover: "ghost" | "force";
   name: string;
+  /**
+   * On the wash: the chosen row whose every text is read against it, and its
+   * label, which takes the wash's paired ink (`selected-ink`).
+   */
+  onWash?: { label: string; row: string };
   /** The unchosen item. */
   other: string;
   /** Read the background of `::before`, where the control paints it. */
@@ -53,6 +61,10 @@ const CONTROLS: Control[] = [
     recipe: WASH,
     chosen: ".ns-pop .row.on",
     other: ".ns-pop .row[aria-pressed='false']",
+    onWash: {
+      row: ".ns-pop .row.on",
+      label: ".ns-pop .row.on .name",
+    },
   },
   {
     name: "Project row",
@@ -61,6 +73,10 @@ const CONTROLS: Control[] = [
     recipe: WASH,
     chosen: ".ns-pop .row.on",
     other: ".ns-pop .row[aria-pressed='false']",
+    onWash: {
+      row: ".ns-pop .row.on",
+      label: ".ns-pop .row.on .name",
+    },
   },
   {
     name: "Machine row",
@@ -69,6 +85,10 @@ const CONTROLS: Control[] = [
     recipe: WASH,
     chosen: ".ns-pop .row.on",
     other: ".ns-pop .row[aria-pressed='false']",
+    onWash: {
+      row: ".ns-pop .row.on",
+      label: '.ns-pop .row.on [data-slot="name"]',
+    },
   },
   {
     name: "Permission mode row",
@@ -76,6 +96,11 @@ const CONTROLS: Control[] = [
     recipe: WASH,
     chosen: '[data-probe="permission"] [data-slot="fill"]',
     other: '[data-probe="permission"] [role="radio"][aria-checked="false"]',
+    onWash: {
+      row: '[data-probe="permission"] [role="radio"][aria-checked="true"]',
+      label:
+        '[data-probe="permission"] [role="radio"][aria-checked="true"] .name',
+    },
   },
   {
     name: "Side panel's pressed head button",
@@ -98,6 +123,10 @@ const CONTROLS: Control[] = [
     recipe: WASH,
     chosen: '[data-probe="pins"] .pin-row[aria-current="true"]',
     other: '[data-probe="pins"] .pin-row:not([aria-current])',
+    onWash: {
+      row: '[data-probe="pins"] .pin-row[aria-current="true"]',
+      label: '[data-probe="pins"] .pin-row[aria-current="true"] .name',
+    },
   },
 ];
 
@@ -212,6 +241,113 @@ async function readHovered(
   return { hovered, ghostShown };
 }
 
+interface Ink {
+  color: string;
+  rgb: number[];
+  text: string;
+}
+
+/**
+ * Every text in the chosen row (each element with words of its own) and its
+ * label: their computed ink, as sRGB bytes.
+ */
+function readInks(
+  page: Page,
+  onWash: { label: string; row: string }
+): Promise<{ label: Ink | null; texts: Ink[] }> {
+  return page.evaluate(({ label, row }) => {
+    const ink = (el: Element): Ink | null => {
+      const { color } = getComputedStyle(el);
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const pen = canvas.getContext("2d");
+      if (!pen) {
+        return null;
+      }
+      pen.fillStyle = color;
+      pen.fillRect(0, 0, 1, 1);
+      const own = [...el.childNodes]
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent ?? "")
+        .join("")
+        .trim();
+      return { color, rgb: [...pen.getImageData(0, 0, 1, 1).data], text: own };
+    };
+    const root = document.querySelector(row);
+    // Words on a ground of their own inside the row (a pin's disc) stand
+    // on that ground, not on the wash.
+    const onOwnGround = (el: Element): boolean => {
+      for (let at: Element | null = el; at && at !== root;) {
+        const bg = getComputedStyle(at).backgroundColor;
+        if (bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") {
+          return true;
+        }
+        at = at.parentElement;
+      }
+      return false;
+    };
+    const texts = root
+      ? [root, ...root.querySelectorAll("*")]
+          .filter((el) => !onOwnGround(el))
+          .map(ink)
+          .filter((one): one is Ink => one !== null && one.text.length > 0)
+      : [];
+    const labelEl = document.querySelector(label);
+    return { label: labelEl ? ink(labelEl) : null, texts };
+  }, onWash);
+}
+
+/** The relative luminance's contrast ratio (WCAG 2) of two sRGB colours. */
+function ratio(a: number[], b: number[]): number {
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.040_45 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = (p: number[]) =>
+    0.2126 * lin(p[0] ?? 0) + 0.7152 * lin(p[1] ?? 0) + 0.0722 * lin(p[2] ?? 0);
+  const x = lum(a);
+  const y = lum(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/**
+ * The chosen row's words on the wash: its label in `selected-ink`, and every
+ * text 4.5:1 or more against the wash.
+ */
+async function checkInks(
+  kit: Kit,
+  page: Page,
+  theme: string,
+  c: Control,
+  wash: Read | null
+): Promise<void> {
+  if (!c.onWash) {
+    return;
+  }
+  const { label, texts } = await readInks(page, c.onWash);
+  const paired = await resolve(page, "var(--selected-ink)");
+  const measured = texts.map((one) => ({
+    text: one.text.slice(0, 24),
+    ink: one.color,
+    ratio: wash ? Math.round(ratio(one.rgb, wash.rgb) * 100) / 100 : 0,
+  }));
+  kit.check(
+    `${theme}: ${c.name}: its label takes selected-ink and every text on the wash holds 4.5:1`,
+    wash !== null &&
+      label !== null &&
+      paired !== null &&
+      same(label.rgb, paired.rgb) &&
+      measured.length > 0 &&
+      measured.every((one) => one.ratio >= 4.5),
+    JSON.stringify({
+      label: label?.color,
+      selectedInk: paired?.color,
+      measured,
+    })
+  );
+}
+
 const same = (a: number[], b: number[]) =>
   a.length === b.length && a.every((c, i) => Math.abs(c - (b[i] ?? 0)) <= 1);
 
@@ -237,6 +373,7 @@ const spec: Spec = {
         await settle(page, 400);
         const chosen = await readBackground(page, c.chosen, c.pseudo ?? null);
         const recipe = await resolve(page, c.recipe);
+        await checkInks(kit, page, theme, c, chosen);
         const { hovered, ghostShown } = await readHovered(page, cdp, c);
         const ok =
           chosen !== null &&

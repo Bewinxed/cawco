@@ -223,4 +223,17 @@
     height: 16px;
     color: var(--ink-strong);
   }
+  /* The chosen mode's ink and icon, paired with the wash its fill draws. */
+  .row[aria-checked="true"] {
+    color: var(--selected-ink);
+
+    /* Its second line too: ink-subtle measures 4.23:1 on the wash by day,
+       selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
+    & .desc {
+      color: var(--selected-ink);
+    }
+    & :global(svg.check) {
+      color: var(--selected-icon);
+    }
+  }
 </style>

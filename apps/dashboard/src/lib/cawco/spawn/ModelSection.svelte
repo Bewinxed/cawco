@@ -791,4 +791,14 @@
       font-size: 1rem;
     }
   }
+  /* The chosen model's ink, paired with the wash its fill draws. */
+  .row[aria-selected="true"] {
+    color: var(--selected-ink);
+
+    /* Its second line too: ink-subtle measures 4.23:1 on the wash by day,
+       selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
+    & .meta {
+      color: var(--selected-ink);
+    }
+  }
 </style>
