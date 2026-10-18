@@ -14,13 +14,13 @@
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { type KeeperName, keeperService } from "@cawco/core/keepers";
 import {
-  forgetKeeperStart,
-  type KeeperName,
-  keeperService,
-  readKeeperStart,
-} from "@cawco/core/keepers";
-import { launchdEnded, launchdJob, launchdJobs } from "@cawco/core/launchd";
+  forgetLaunchdStart,
+  launchdEnded,
+  launchdJob,
+  launchdJobs,
+} from "@cawco/core/launchd";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   isAlive,
@@ -198,7 +198,6 @@ const systemdJob = (service: string): KeeperJob => {
       await rm(file, { force: true });
       await rm(`${file}.d`, { recursive: true, force: true });
       await reload();
-      await forgetKeeperStart(service);
     },
   };
 };
@@ -217,25 +216,18 @@ const launchdKeeperJob = (service: string): KeeperJob => {
     file: plist,
     service,
     pid,
-    // Loaded, with no process, and a failing status since it last ran: it
-    // ended by itself (KeepAlive starts it again only after launchd's throttle).
-    // A status of 0 is launchd's for a job that never ran too: its keeper's
-    // start record says it ran, and exited 0.
+    // Loaded, with no process, and ended since it last started (a failing
+    // status, or 0 with its start record): it ended by itself (KeepAlive
+    // starts it again only after launchd's throttle).
     exited: async () => {
       const state = await launchdJob(label);
-      if (!state || state.pid !== undefined) {
-        return;
-      }
-      return (
-        launchdEnded(state) ??
-        ((await readKeeperStart(service)) ? "it exited with code 0" : undefined)
-      );
+      return state && launchdEnded(state);
     },
     async start() {
       const state = await launchdJob(label);
       if (state?.pid === undefined) {
         // Only the process this start runs writes the record read above.
-        await forgetKeeperStart(service);
+        await forgetLaunchdStart(label);
       }
       if (state === undefined) {
         await must(["launchctl", "bootstrap", domain, plist]);
@@ -267,7 +259,7 @@ const launchdKeeperJob = (service: string): KeeperJob => {
       }
       await run(["launchctl", "bootout", target]);
       await rm(plist, { force: true });
-      await forgetKeeperStart(service);
+      await forgetLaunchdStart(label);
     },
   };
 };

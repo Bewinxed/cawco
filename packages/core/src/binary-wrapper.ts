@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
+import { LAUNCHD_START_XML } from "./launchd";
 import { writeStateFile } from "./state-file";
 
 /**
@@ -63,7 +64,12 @@ launch_decider() {
     plist="$ROOT/$label.plist"
     {
       printf '<?xml version="1.0" encoding="UTF-8"?>\\n<plist version="1.0"><dict><key>Label</key><string>%s</string>' "$label"
-      printf '<key>ProgramArguments</key><array><string>%s</string><string>binary-apply</string><string>--resume</string></array>' "$1"
+      # Its start record first, as every launchd job CawCo writes (launchd.ts launchdProgram).
+      printf '<key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>'
+      cat <<'CAWCO_LAUNCHD_START'
+${LAUNCHD_START_XML}
+CAWCO_LAUNCHD_START
+      printf '</string><string>cawco-launchd-start</string><string>%s</string><string>%s</string><string>binary-apply</string><string>--resume</string></array>' "$HOME/.cawco/launchd/$label.start.json" "$1"
       printf '<key>EnvironmentVariables</key><dict>'
       while IFS='=' read -r key value; do
         printf '<key>%s</key><string>%s</string>' "$key" "$(printf '%s' "$value" | sed 's/&/\\&amp;/g;s/</\\&lt;/g;s/>/\\&gt;/g')"

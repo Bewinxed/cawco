@@ -85,6 +85,14 @@ const SENDS_KEPT = 2000;
 export type GateVerdict =
   { kind: "allow" } | { kind: "deny"; message: string } | { kind: "card" };
 
+/**
+ * What {@link createLeadGate}'s `decide` answers: a verdict, or `withdrawn`
+ * for an edit whose ask was over before gate.md was read (the harness
+ * settled it, or its process ended): nothing is kept of it, and nothing
+ * parks it.
+ */
+export type GateDecision = GateVerdict | { kind: "withdrawn"; why: string };
+
 const GATED: ReadonlySet<string> = new Set([
   ...LEAD_GATED_TOOLS.claude,
   ...LEAD_GATED_TOOLS.opencode,
@@ -1076,6 +1084,8 @@ export interface LeadGateDeps {
   /** The files the lead's project declares its Caw edits (gate-file.ts `projectCawEdits`). */
   readonly cawEdits: (projectId: string) => Promise<CawEdits>;
   readonly db: Pick<DbShape, "leadCalls">;
+  /** Why the ask is no longer one its session waits on (server.ts `askRefusal`, read again now); undefined while it is. */
+  readonly gone: (envelope: Envelope) => string | undefined;
   /** A note in the thread the lead's turn answers (caw.ts `noteCall`). */
   readonly note: (instanceId: string, note: ThreadNote) => void;
   /** Whether the lead's place is a shared checkout: one another live session uses, or the project's folder on the hub. */
@@ -1249,6 +1259,7 @@ const exitOf = (
 export const createLeadGate = ({
   cawEdits,
   db,
+  gone,
   note,
   shared,
   thread,
@@ -1257,6 +1268,11 @@ export const createLeadGate = ({
 }: LeadGateDeps) => {
   /** Each lead's wake under way, by session. */
   const wakes = new Map<string, Wake>();
+  /**
+   * The edits waiting on their project's gate.md, by request: whose they
+   * are, and why the ask was over meanwhile, once it was.
+   */
+  const reading = new Map<string, { instanceId: string; over?: string }>();
   /** What each send the hub woke a lead with was: your words alone, or outside text, by its uuid (caw.ts `wake`). */
   const sends = new Map<string, "owner" | "outside">();
   const wakeOf = (instanceId: string): Wake => {
@@ -1422,7 +1438,7 @@ export const createLeadGate = ({
     async decide(
       lead: InstanceRow,
       envelope: Envelope
-    ): Promise<GateVerdict | undefined> {
+    ): Promise<GateDecision | undefined> {
       const ask = envelope.payload as PermissionRequestFrame;
       const { requestId } = envelope;
       if (
@@ -1438,12 +1454,25 @@ export const createLeadGate = ({
         return verdictOf(known);
       }
       const call = describe(lead, ask);
-      const edits: CawEdits = call.shell
-        ? { kind: "none" }
-        : await cawEdits(lead.projectId).catch((error: unknown): CawEdits => ({
+      let edits: CawEdits = { kind: "none" };
+      if (!call.shell) {
+        reading.set(requestId, { instanceId: lead.id });
+        // The read never throws: a failure is what gate.md says now.
+        edits = await cawEdits(lead.projectId).catch(
+          (error: unknown): CawEdits => ({
             kind: "unreadable",
             problems: [error instanceof Error ? error.message : String(error)],
-          }));
+          })
+        );
+        const over = reading.get(requestId)?.over ?? gone(envelope);
+        reading.delete(requestId);
+        if (over) {
+          console.log(
+            `[lead-gate] ${lead.id} ${ask.toolName} withdrawn while gate.md was read (${over}): not judged, not parked: ${shortly(call.command)}`
+          );
+          return { kind: "withdrawn", why: over };
+        }
+      }
       // A replay that came in while gate.md was read was judged by then.
       const judged = db.leadCalls.ofRequest(requestId);
       if (judged) {
@@ -1546,9 +1575,25 @@ export const createLeadGate = ({
       }
     },
 
-    /** A lead's process ended: its wake with it. */
+    /**
+     * An ask was settled by its harness (a `permission_settled` frame): one
+     * whose edit waits on gate.md is over, and is never parked.
+     */
+    settled(requestId: string): void {
+      const waiting = reading.get(requestId);
+      if (waiting) {
+        waiting.over ??= "its harness settled it";
+      }
+    },
+
+    /** A lead's process ended: its wake with it, and every ask of it waiting on gate.md. */
     ended(instanceId: string): void {
       wakes.delete(instanceId);
+      for (const waiting of reading.values()) {
+        if (waiting.instanceId === instanceId) {
+          waiting.over ??= "its process ended";
+        }
+      }
     },
   };
 };

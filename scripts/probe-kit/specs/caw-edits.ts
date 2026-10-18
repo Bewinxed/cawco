@@ -11,14 +11,20 @@
  *   docs/in.md runs with no card (`ran`), and the file is there.
  * - O: under the same list, a Write of src/out.ts is refused with "is not in
  *   this project's Caw edits: file a task.", and no file is written.
+ * - R: gate.md is a FIFO in the project's hub folder, so the gate's read of
+ *   it waits until the probe writes it. While it waits, Caw's process is
+ *   killed (its open ask settled, `cancelled`). Once the read ends the ask is
+ *   dropped with the gate's "withdrawn while gate.md was read" line: no card
+ *   parked, no `lead_calls` row, no file.
  *
  * Run it where a workspace boundary can start (not inside another one).
  *
  *   bun scripts/probe-kit/run.ts caw-edits
  */
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, open, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { signal } from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -35,6 +41,7 @@ const LEGS = {
   N: { words: "PROBE-N write the notes", file: "notes-n.md" },
   I: { words: "PROBE-I write the doc", file: "docs/in.md" },
   O: { words: "PROBE-O write the source", file: "src/out.ts" },
+  R: { words: "PROBE-R write the race", file: "docs/race.md" },
 } as const;
 type Leg = keyof typeof LEGS;
 
@@ -248,6 +255,64 @@ const run = async (kit: Kit) => {
       !existsSync(join(place, LEGS.O.file)) &&
       (await writeAsks()).length === 0,
     JSON.stringify({ row: outside })
+  );
+
+  // ── R: an ask over while the gate reads gate.md is never parked ───────
+  const gateFile = join(
+    dirname(fleet.env.CAWCO_DB_PATH ?? ""),
+    "projects",
+    project.id,
+    "gate.md"
+  );
+  await rm(gateFile, { force: true });
+  await Bun.$`mkfifo ${gateFile}`.quiet();
+  await say(LEGS.R.words);
+  // The writer's open resolves once the hub opens gate.md to read it: the
+  // gate is waiting on the read now.
+  const writer = await open(gateFile, "w");
+  const pid = await until(
+    "R: Caw's process",
+    () => fleet.sessionPid(leadId),
+    (one) => one > 0
+  );
+  signal(pid, "SIGKILL");
+  await until(
+    "R: Caw's process gone, as the hub keeps it",
+    () =>
+      fleet.query<{ status: string }>(
+        "SELECT status FROM instances WHERE id = ?",
+        leadId
+      )[0]?.status,
+    (status) => !["running", "starting"].includes(status),
+    60_000
+  ).catch(() => undefined);
+  await writer.writeFile(DOCS_ONLY);
+  await writer.close();
+  const said = await until(
+    "R: the gate's withdrawn line",
+    () => fleet.logs("hub"),
+    (log) =>
+      log.includes("withdrawn while gate.md was read") &&
+      log.includes(LEGS.R.file),
+    60_000
+  ).catch(() => "");
+  const raceRows = fleet.query<CallRow>(
+    "SELECT command, outcome, why FROM lead_calls WHERE project_id = ? AND command = ?",
+    project.id,
+    LEGS.R.file
+  );
+  const raceLine =
+    said
+      .split("\n")
+      .find((line) => line.includes("withdrawn while gate.md was read")) ??
+    "none";
+  kit.check(
+    "R: a Write whose ask is over (its process killed) while gate.md is read is dropped: no card, no row, no file",
+    raceLine !== "none" &&
+      raceRows.length === 0 &&
+      (await writeAsks()).length === 0 &&
+      !existsSync(join(place, LEGS.R.file)),
+    JSON.stringify({ line: raceLine, rows: raceRows })
   );
 };
 

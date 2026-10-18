@@ -25,7 +25,7 @@ import {
   removeFinishedHelpers,
 } from "../../packages/agent/src/helper-jobs";
 import { binaryRoot } from "../../packages/core/src/binary-installation";
-import { launchdJob } from "../../packages/core/src/launchd";
+import { launchdJob, launchdStartPath } from "../../packages/core/src/launchd";
 
 if (process.platform !== "darwin") {
   throw new Error(
@@ -113,8 +113,8 @@ try {
     10_000
   );
   step(
-    "launchd says how the helper's job ended",
-    said,
+    "launchd says how the helper's job ended: status 0 with its start record is an exit 0, not a job never run",
+    said && (await present(launchdStartPath(first.label ?? ""))),
     await helperJobSays(first)
   );
 
@@ -122,9 +122,10 @@ try {
   await pastStartWindow(firstAt);
   await removeFinishedHelpers();
   step(
-    "a helper's job that ended is booted out, and its plist removed, by the next sweep",
+    "a helper's job that ended is booted out, and its plist and start record removed, by the next sweep",
     (await launchdJob(first.label ?? "")) === undefined &&
-      !(await present(plistOf(first)))
+      !(await present(plistOf(first))) &&
+      !(await present(launchdStartPath(first.label ?? "")))
   );
 
   // 3. A helper still running past its start window, holding no lock, is not ended by a sweep.
@@ -168,6 +169,11 @@ try {
           ["launchctl", "bootout", `gui/${process.getuid?.()}/${job.label}`],
           { stdout: "ignore", stderr: "ignore" }
         ).exited
+    )
+  );
+  await Promise.all(
+    launched.map((job) =>
+      rm(launchdStartPath(job.label ?? ""), { force: true })
     )
   );
   await rm(scratch, { recursive: true, force: true });

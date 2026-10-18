@@ -13,11 +13,7 @@ import { lstat, readlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { readKeeperVersion } from "@cawco/core/binary-installation";
 import { detach } from "@cawco/core/detach";
-import {
-  MACHINE_ENDPOINT,
-  publishKeeper,
-  writeKeeperStart,
-} from "@cawco/core/keepers";
+import { MACHINE_ENDPOINT, publishKeeper } from "@cawco/core/keepers";
 import { runtimeVersion } from "@cawco/core/runtime";
 import {
   sessiondEndpoint,
@@ -31,14 +27,6 @@ import { childCapRefusal } from "./tasks";
 const main = async (): Promise<void> => {
   // Read directly: `CAWCO_ENV` has no key for sessiond's own override.
   const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
-  // Its start record first, before anything here can end it: what tells its
-  // job's "last exit status 0" from a job that never ran (keepers.ts
-  // `KeeperStart`).
-  await writeKeeperStart(endpoint).catch((error: unknown) =>
-    console.error(
-      `[sessiond] no start record: ${error instanceof Error ? error.message : String(error)}; an exit of this keeper reads as never started`
-    )
-  );
   // A unit names the endpoint by its short name on macOS; after a restart
   // cleared `/private/tmp`, the keeper may be the first to start, so it makes
   // the name again before it binds through it.

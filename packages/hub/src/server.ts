@@ -2971,6 +2971,11 @@ export const createServer = (
   const leadGate = createLeadGate({
     cawEdits: projectCawEdits,
     db,
+    gone: (envelope) =>
+      askRefusal(
+        db.getInstancesByIds([envelope.instanceId ?? ""])[0],
+        envelope
+      ),
     note: (instanceId, note) => lead?.noteCall(instanceId, note),
     shared: (row) => sharedPlace(row),
     thread: (row) => lead?.askThread(row),
@@ -27800,6 +27805,11 @@ export const createServer = (
                 const gated = owner
                   ? await leadGate.decide(owner, message)
                   : undefined;
+                // Over while his gate read gate.md (lead-gate.ts says why):
+                // nothing waits on it, so nothing parks it.
+                if (gated?.kind === "withdrawn") {
+                  break;
+                }
                 if (owner && gated && gated.kind !== "card") {
                   const askerAgent = registry.agent(message.machineId);
                   if (askerAgent) {
@@ -27941,6 +27951,10 @@ export const createServer = (
               // screen, through `pending.onSettled`; the daemon's frame itself
               // goes no further.
               if (kind === "permission_settled") {
+                // An edit of Caw's still waiting on gate.md is over now too.
+                if (message.requestId) {
+                  leadGate.settled(message.requestId);
+                }
                 // Most of these echo an answer the hub relayed and has already
                 // settled; only one still parked is news here.
                 const parked = message.requestId

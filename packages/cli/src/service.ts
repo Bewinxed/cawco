@@ -13,7 +13,12 @@ import {
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
-import { launchdJob } from "@cawco/core/launchd";
+import {
+  forgetLaunchdStart,
+  launchdEnded,
+  launchdJob,
+  launchdProgram,
+} from "@cawco/core/launchd";
 import { hubDbPath } from "@cawco/core/paths";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -1241,7 +1246,9 @@ const plist = (
   <string>${xml(label(spec.name))}</string>
   <key>ProgramArguments</key>
   <array>
-${spec.command.map((argument) => `    <string>${xml(argument)}</string>`).join("\n")}
+${launchdProgram(label(spec.name), spec.command)
+  .map((argument) => `    <string>${xml(argument)}</string>`)
+  .join("\n")}
   </array>
 ${
   spec.sockets
@@ -1429,6 +1436,8 @@ const loadLaunchAgent = async (
     await Bun.sleep(250);
   }
 
+  // Its start record is the run this bootstrap starts, or none (launchd.ts).
+  await forgetLaunchdStart(label(spec.name));
   const bootstrapped = await run(["launchctl", "bootstrap", guiDomain(), path]);
   if (bootstrapped.exitCode !== 0) {
     throw failed("launchctl bootstrap", bootstrapped);
@@ -1493,6 +1502,7 @@ const uninstallLaunchAgents = async (
     const path = launchAgentPath(spec.name);
     // biome-ignore lint/performance/noAwaitInLoops: services uninstall one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
     await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.name)}`]);
+    await forgetLaunchdStart(label(spec.name));
     await Bun.file(path)
       .delete()
       .catch(() => {
@@ -2013,6 +2023,8 @@ const restartLaunchAgent = async (
       `${spec.id} is not installed — \`cawco service install ${spec.id}\` first.`
     );
   }
+  // The run this starts writes its own start record (launchd.ts).
+  await forgetLaunchdStart(label(spec.name));
   const kicked = await run([
     "launchctl",
     "kickstart",
@@ -2093,7 +2105,7 @@ const launchAgentStatus = async (
   if (job === undefined) {
     state = "not loaded";
   } else if (job.pid === undefined) {
-    state = "loaded, not running";
+    state = `loaded, not running: ${launchdEnded(job) ?? "launchd never ran it"}`;
   } else {
     state = `running (pid ${job.pid})`;
   }

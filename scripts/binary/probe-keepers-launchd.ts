@@ -11,7 +11,8 @@
  * `0.0.0-probe.2`, signed (`codesign --force --sign -`). A second scratch
  * job, `dev.cawco.sessiond-0.0.0-probe.3`, loaded from a plist in the scratch
  * directory and never run at load, proves a job that never ran from one whose
- * keeper exited 0 (launchd states status 0 for both). Each step prints one
+ * keeper exited 0 (launchd states status 0 for both; its start record, as
+ * every job CawCo writes has, tells them apart). Each step prints one
  * line ending in PASS or FAIL; the last line counts them. Everything it made
  * is removed at the end, whatever happened.
  */
@@ -37,10 +38,13 @@ import { EXECUTABLE_IN_VERSION } from "../../packages/core/src/binary-installati
 import {
   keeperEndpoint,
   keeperEndpoints,
-  keeperStartPath,
   publishKeeper,
 } from "../../packages/core/src/keepers";
-import { launchdJob } from "../../packages/core/src/launchd";
+import {
+  launchdJob,
+  launchdProgram,
+  launchdStartPath,
+} from "../../packages/core/src/launchd";
 import { isAlive, listedPid, signal } from "../../packages/core/src/signal";
 import { welcomed } from "../lib/keeper-dial";
 
@@ -343,7 +347,15 @@ try {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>${QUIET_LABEL}</string>
-<key>ProgramArguments</key><array><string>${binary}</string><string>sessiond</string></array>
+<key>ProgramArguments</key><array>${launchdProgram(QUIET_LABEL, [
+      binary,
+      "sessiond",
+    ])
+      .map(
+        (argument) =>
+          `<string>${argument.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</string>`
+      )
+      .join("")}</array>
 <key>EnvironmentVariables</key><dict>
 <key>XDG_DATA_HOME</key><string>${data}</string>
 <key>CAWCO_SESSIOND_ENDPOINT</key><string>${quietEndpoint}</string>
@@ -354,7 +366,7 @@ try {
 </dict></plist>
 `
   );
-  await rm(keeperStartPath(QUIET_SERVICE), { force: true });
+  await rm(launchdStartPath(QUIET_LABEL), { force: true });
   const loadedQuiet = await launchctl(
     "bootstrap",
     `gui/${process.getuid?.()}`,
@@ -384,7 +396,7 @@ try {
     quietExit === "it exited with code 0" &&
       ranQuiet?.lastExit === 0 &&
       readIn < HEALTH_MS / 3 &&
-      (await present(keeperStartPath(QUIET_SERVICE))),
+      (await present(launchdStartPath(QUIET_LABEL))),
     `${quietExit ?? "nothing"} after ${readIn} ms; listed ${JSON.stringify(ranQuiet)}; its log: ${await tail(quietLog)}`
   );
   await launchctl("bootout", `gui/${process.getuid?.()}/${QUIET_LABEL}`);
@@ -464,8 +476,8 @@ try {
   legacy?.kill("SIGKILL");
   await launchctl("bootout", `gui/${process.getuid?.()}/${LABEL}`);
   await launchctl("bootout", `gui/${process.getuid?.()}/${QUIET_LABEL}`);
-  await rm(keeperStartPath(SERVICE), { force: true });
-  await rm(keeperStartPath(QUIET_SERVICE), { force: true });
+  await rm(launchdStartPath(LABEL), { force: true });
+  await rm(launchdStartPath(QUIET_LABEL), { force: true });
   await rm(PLIST, { force: true });
   await rm(LOG, { force: true });
   await rm(scratch, { recursive: true, force: true });
