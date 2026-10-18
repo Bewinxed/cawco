@@ -8,8 +8,11 @@
  * hub afterwards, which is what the web reads:
  *
  * 1. Spend: "Stop waking Caw" chosen; the hub's spend settings say `quiet`.
- * 2. Delegate types: a new type made in its editor; the hub lists it, its
- *    model and effort as typed.
+ * 2. Delegate types: the project's own types (its `delegates/` files)
+ *    under its name, each with its path, the one named like a fleet type
+ *    saying it shadows it, and a file that made no type said in the hub's
+ *    words; a row opens its file. Then a new type made in its editor; the
+ *    hub lists it, its model and effort as typed.
  * 3. MCP: a command server for one project, made in its editor, then
  *    switched off from its row; the hub's fleet holds it so.
  * 4. Connections: GitHub signed in to with a key from the form, then one
@@ -59,6 +62,9 @@ const TYPE = "probe-type";
 const SERVER = "probe-mcp";
 const CONNECTION = "github-probe";
 const DOC = "probe/notes.md";
+/** A file in the project's `delegates/` that makes no type, and what the hub says of it (project-delegate-types.ts). */
+const BROKEN_TYPE = "delegates/broken.md";
+const NO_FRONT_MATTER = `${BROKEN_TYPE}: the file has no front matter (a --- block on top)`;
 const SECTIONS = [
   "spend",
   "delegate-types",
@@ -159,6 +165,30 @@ async function run(kit: Kit): Promise<void> {
     { name: "Config probe", machineId: MACHINE, cwd: src, caw: false }
   );
   const projectId = made.project?.id ?? made.id ?? "";
+  // Its own delegate types: one new, one named like a fleet type, one broken.
+  const [shadowed] = (
+    await fleet.api<{ types: { name: string }[] }>("/api/delegate-types")
+  ).types.map((one) => one.name);
+  const typeFile = (description: string) =>
+    `---\nharness: claude\nmodel: claude-opus-5-5\neffort: high\nlands: none\n---\n${description}\n`;
+  for (const [path, content] of [
+    ["delegates/writer.md", typeFile("Draft posts in the brand voice.")],
+    [`delegates/${shadowed}.md`, typeFile("The project's own take on it.")],
+    [BROKEN_TYPE, "Just a brief, with no front matter.\n"],
+  ]) {
+    // biome-ignore lint/performance/noAwaitInLoops: three files, in order
+    const put = await fetch(
+      `${fleet.base}/api/projects/${projectId}/folder/file`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path, content }),
+      }
+    );
+    if (!put.ok) {
+      throw new Error(`${path}: ${put.status} ${await put.text()}`);
+    }
+  }
 
   const http = async (method: string, path: string, body?: object) => {
     const response = await fetch(`${fleet.base}${path}`, {
@@ -286,6 +316,28 @@ async function run(kit: Kit): Promise<void> {
           `${at}: Spend: the choice made in the app is the fleet's`,
           spend.onCap === "quiet",
           `hub ${spend.onCap}; app ${said("spend chosen").slice(0, 300)}`
+        );
+        const projects = said("delegate-types projects");
+        kit.check(
+          `${at}: Delegate types: the project's own types under its name, each with its path, one shadowing the fleet's, and its broken file in the hub's words`,
+          projects.includes("Config probe") &&
+            projects.includes(
+              "delegates/writer.md · Draft posts in the brand voice."
+            ) &&
+            projects.includes(
+              `delegates/${shadowed}.md · The project's own take on it.`
+            ) &&
+            projects.includes(`shadows the fleet's ${shadowed}`) &&
+            !projects.includes("shadows the fleet's writer") &&
+            projects.includes(NO_FRONT_MATTER),
+          projects.slice(0, 600)
+        );
+        const file = said("delegate-types file");
+        kit.check(
+          `${at}: Delegate types: a project type's row opens its file`,
+          file.includes("opened true") &&
+            file.includes("Draft posts in the brand voice."),
+          file.slice(0, 300)
         );
         const types = await fleet.api<{
           types: { effort?: string; model: string; name: string }[];

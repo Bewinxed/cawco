@@ -127,6 +127,22 @@ enum ConfigProbe {
 
         // Delegate types: a new one, made in its editor.
         if let types = await open("delegate-types", DelegateTypesSectionController.self, shell) {
+            // The project's own types under its name, and the file that made none; a row opens its file.
+            if await until(30, { types.probeProjectsDrawn }) {
+                await capture("delegate-types-projects", shell)
+                say("delegate-types projects", types.probeProjects())
+                types.probeOpenFile("writer")
+                let opened = await until(30) { onScreen(FolderFileController.self, shell) != nil }
+                let sheet = types.presentedViewController
+                try? await Task.sleep(for: .seconds(1))
+                say("delegate-types file", "opened \(opened) | " + (sheet.map { AccountsProbe.texts(in: $0.view).joined(separator: " | ") } ?? ""))
+                if let sheet {
+                    sheet.dismiss(animated: false)
+                    await until { types.presentedViewController == nil }
+                }
+            } else {
+                say("delegate-types projects", "never drawn")
+            }
             types.probeOpenNew()
             guard await until(30, { onScreen(DelegateTypeEditorController.self, shell) != nil }),
                   let editor = onScreen(DelegateTypeEditorController.self, shell) else { return say("delegate-types editor", "never opened") }

@@ -7,8 +7,12 @@ import UIKit
 /// the presets a session's `delegate` call routes against. A calling agent
 /// reads the description and picks the type that matches what it needs
 /// done, so the description is each row's meta; how it runs follows it.
-/// Each row, led by its harness's mark, opens its editor; its ⋯ deletes it
-/// at once, with Undo in the toast.
+/// Grouped by where they apply: the fleet's, each row led by its harness's
+/// mark, opening its editor, its ⋯ deleting it at once with Undo in the
+/// toast; then each project's own, the files in its `delegates/` folder,
+/// which its sessions pick before a fleet type of the same name, each row
+/// opening its file. A file there that made no type is said under its
+/// project in the hub's words, so it never just goes missing.
 final class DelegateTypesSectionController: ConfigSectionController {
     private let types: FleetDelegateTypes
     private lazy var add = KitButton.make(Words.DelegateTypes.add, glyph: .plus, variant: .action) { [weak self] in self?.open(nil) }
@@ -16,6 +20,18 @@ final class DelegateTypesSectionController: ConfigSectionController {
     private let rows = KeyedRows()
     private var empty: KitEmptyState?
     private var busy: Set<String> = []
+    /// Each project's group, under the fleet's, in the hub's order.
+    private let projectGroups = UIStackView()
+    private var drawnProjects: [String: ProjectGroup] = [:]
+
+    /// One project's group (`.group`): its name over its types, then its files that made none.
+    private struct ProjectGroup {
+        let view: UIStackView
+        let list: RowList
+        let rows: KeyedRows
+        let faults: UIStackView
+        let name: String
+    }
 
     override init(section: ConfigSection, context: ShellContext) {
         types = FleetDelegateTypes(hub: context.hub)
@@ -33,7 +49,11 @@ final class DelegateTypesSectionController: ConfigSectionController {
         setActions([add])
         let empty = KitEmptyState(icon: section.glyph, title: Words.DelegateTypes.emptyTitle, line: Words.DelegateTypes.emptyLine)
         self.empty = empty
-        setContent([empty, list])
+        let fleet = UIStackView(arrangedSubviews: [nsSectionHeader(section.glyph, hue: section.hue, Words.DelegateTypes.fleet), empty, list])
+        fleet.axis = .vertical
+        fleet.spacing = 8
+        projectGroups.axis = .vertical
+        setContent([fleet, projectGroups])
     }
 
     override func viewIsAppearing(_ animated: Bool) {
@@ -43,7 +63,7 @@ final class DelegateTypesSectionController: ConfigSectionController {
 
     override func refreshContent() {
         ready = types.types != nil
-        problem = types.types == nil ? types.problem : nil
+        problem = (types.types == nil ? types.problem : nil) ?? types.projectProblem
         let down = hub.writesBlocked
         add.isEnabled = down == nil
         add.accessibilityHint = down
@@ -66,6 +86,63 @@ final class DelegateTypesSectionController: ConfigSectionController {
             }
         }
         list.set(shown)
+        drawProjects(types.projectTypes ?? [])
+    }
+
+    /// Each project's group, made once and redrawn in place; one the hub no longer lists goes.
+    private func drawProjects(_ entries: [ProjectTypes]) {
+        let listed = Set(entries.map(\.projectId))
+        for (id, group) in drawnProjects where !listed.contains(id) {
+            group.view.removeFromSuperview()
+            drawnProjects[id] = nil
+        }
+        for entry in entries {
+            let group = projectGroup(entry)
+            let shown = group.rows.keep(entry.types.map(\.value1.name))
+            for type in entry.types {
+                let row = group.rows.row(type.value1.name).row
+                let path = type.value2.path ?? ""
+                let projectId = entry.projectId
+                row.opens = path.isEmpty ? nil : { [weak self] in self?.openFile(path, in: projectId) }
+                row.show(name: type.value1.name, meta: [path, type.value1.description, Self.runsOn(type.value1)].filter { !$0.isEmpty }.joined(separator: " · "),
+                         mark: BrandLogo.harnessView(type.value1.harness.rawValue), mono: true)
+                row.setBadge(type.value2.shadows == true ? KitBadge(Words.DelegateTypes.shadows(name: type.value1.name), variant: .secondary) : nil)
+                row.accessibilityIdentifier = "delegate-types.project.\(projectId).\(type.value1.name)"
+            }
+            group.list.isHidden = shown.isEmpty
+            group.list.set(shown)
+            group.faults.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            for fault in entry.problems {
+                group.faults.addArrangedSubview(RowFault(Words.DelegateTypes.fileProblem(path: fault.path, problem: fault.problem), again: nil))
+            }
+            group.faults.isHidden = entry.problems.isEmpty
+        }
+        let order = entries.compactMap { drawnProjects[$0.projectId]?.view }
+        if projectGroups.arrangedSubviews != order {
+            projectGroups.arrangedSubviews.forEach { projectGroups.removeArrangedSubview($0) }
+            order.forEach(projectGroups.addArrangedSubview)
+        }
+    }
+
+    /// A project's group, made the first time it is listed, its header's name kept to the project's.
+    private func projectGroup(_ entry: ProjectTypes) -> ProjectGroup {
+        if let kept = drawnProjects[entry.projectId], kept.name == entry.projectName { return kept }
+        drawnProjects[entry.projectId]?.view.removeFromSuperview()
+        let list = RowList(label: Words.DelegateTypes.projectList(project: entry.projectName))
+        let faults = UIStackView()
+        faults.axis = .vertical
+        faults.spacing = 8
+        let view = editorSection(.folder, hue: section.hue, entry.projectName, [list, faults])
+        let made = ProjectGroup(view: view, list: list,
+                                rows: drawnProjects[entry.projectId]?.rows ?? KeyedRows(), faults: faults, name: entry.projectName)
+        drawnProjects[entry.projectId] = made
+        return made
+    }
+
+    /// A project type's file, read as it is on the hub (the project page's `?file=`).
+    private func openFile(_ path: String, in projectId: String) {
+        let sheet = FolderFileController(hub: hub, projectId: projectId, path: path)
+        present(HouseSheetController(sheet, title: path, scroller: sheet.scroll), animated: true)
     }
 
     /// Harness, model, effort, and every narrowing, as one short line.
@@ -80,6 +157,19 @@ final class DelegateTypesSectionController: ConfigSectionController {
 
     #if DEBUG
     func probeOpenNew() { open(nil) }
+
+    /// The projects' types have been read and drawn.
+    var probeProjectsDrawn: Bool { types.projectTypes.map { $0.count == projectGroups.arrangedSubviews.count } ?? false }
+
+    /// Each project's group as it reads: its header, each row's name, meta and badge, its files that made no type.
+    func probeProjects() -> String {
+        projectGroups.arrangedSubviews.map { AccountsProbe.texts(in: $0).joined(separator: " | ") }.joined(separator: " || ")
+    }
+
+    /// A project type's row tapped: its file opens.
+    func probeOpenFile(_ name: String) {
+        drawnProjects.values.lazy.compactMap { $0.rows.rows[name] }.first?.opens?()
+    }
     #endif
 
     private func open(_ name: String?) {
