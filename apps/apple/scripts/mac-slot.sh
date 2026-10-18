@@ -13,7 +13,7 @@
 # sim: one of two simulator slots. It clones a simulator named "CawCo slot
 # <n>" from a settled template (below) and boots it (by default the newest
 # iPhone Pro whose runtime meets project.yml's iOS target, as build-both.sh
-# picks), waits until its Accessibility answers axe (90 s at most), runs the
+# picks), waits until its Accessibility answers axe (180 s at most), runs the
 # command with CAWCO_SIM_UDID set, then shuts the simulator down and deletes
 # it.
 # A waiter prints "CAWCO-QUEUE wait <slot>: <who holds it, for how long>"
@@ -286,9 +286,10 @@ make_template() { # the new template's UDID
 # misses that: on iOS 27.2 straight after boot (2026-10-18) the first three
 # calls failed with "Timed out creating the simulator remote automation
 # session" over 20 s, the fourth answered in 12.5 s, and every call after it
-# in 1.2 to 1.4 s.
+# in 1.2 to 1.4 s. A fresh iOS 27.2 iPad Pro 13-inch answered only after 78 s
+# the same day, so the bound leaves room for a loaded Mac.
 AXE=/opt/homebrew/bin/axe
-ACCESSIBILITY_LIMIT=90 # s
+ACCESSIBILITY_LIMIT=180 # s
 accessibility_ready() { # <udid>
   local started=$SECONDS said
   until said=$("$AXE" describe-ui --udid "$1" 2>&1 >/dev/null); do
