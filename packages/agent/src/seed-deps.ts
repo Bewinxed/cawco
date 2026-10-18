@@ -21,15 +21,16 @@
  * bunfig is read; the cache is `--cache-dir`, which no project bunfig moves.
  * Every package whose install runs a script is then taken out again
  * ({@link scriptedPackages}), and the boundary's own `bun install`
- * ({@link finishInstall}) puts those back and runs their scripts inside it,
+ * ({@link installDependencies}) puts those back and runs their scripts inside it,
  * as any install there does. bun installs a package that is missing and
  * leaves one that is there (install docs: the isolated linker "checks only
  * that the package's store entry exists"), so that install copies those few
  * and runs only their scripts and the project's own.
  *
  * Only for a `bun.lock` or `bun.lockb` at the clone's root: other package
- * managers copy inside a boundary as before. On macOS bun clones files
- * (`clonefile`) inside its boundary already: Seatbelt makes no mounts.
+ * managers install inside the boundary alone. On macOS bun clones files
+ * (`clonefile`) inside its boundary already: Seatbelt makes no mounts, so
+ * nothing is seeded there and the boundary's install is the whole install.
  */
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
@@ -107,22 +108,22 @@ const scriptedPackages = async (clone: string): Promise<string[]> => {
 
 /**
  * Seeds the dependencies of workspace `id`'s clone at `path` on this host,
- * before its boundary starts. Answers whether it seeded: false where there
- * is nothing to seed (not Linux, no bun lockfile) or bun refused, which the
- * log says; the clone is then installed inside its boundary as before.
+ * before its boundary starts. Nothing where there is nothing to seed (not
+ * Linux, no bun lockfile) or bun refused, which the log says; either way
+ * {@link installDependencies} installs what is left inside the boundary.
  */
 export const seedDependencies = async (
   id: string,
   path: string
-): Promise<boolean> => {
+): Promise<void> => {
   if (process.platform !== "linux") {
-    return false;
+    return;
   }
   const found = await Promise.all(
     BUN_LOCKFILES.map((name) => exists(join(path, name)))
   );
   if (!found.some(Boolean)) {
-    return false;
+    return;
   }
   const cache = workspaceCacheEnv();
   const home = await mkdtemp(join(workspaceStateDir(id), "seed-home-"));
@@ -189,7 +190,7 @@ export const seedDependencies = async (
       console.warn(
         `[workspace] ${id}: its dependencies were not linked from the workspaces' cache (${why}); they install inside its boundary as copies`
       );
-      return false;
+      return;
     }
     const scripted = await scriptedPackages(path);
     await Promise.all(
@@ -198,20 +199,24 @@ export const seedDependencies = async (
     console.info(
       `[workspace] ${id}: its dependencies linked from the workspaces' cache in ${((Date.now() - started) / 1000).toFixed(1)}s; ${scripted.length} with install scripts left to its boundary (${scripted.map((dir) => relative(path, dir).split(sep).at(-1)).join(", ") || "none"})`
     );
-    return true;
   } finally {
     await rm(home, { recursive: true, force: true });
   }
 };
 
 /**
- * The install a seeded clone's boundary finishes, as the hub's checks run it
- * (core `depsScript`): the packages {@link seedDependencies} left out, their
- * scripts and the project's own, then the lockfile's stamp, so a check finds
- * them installed. One that fails is logged, and its next install there runs
- * it again.
+ * Every cut's dependency install, inside its boundary, as the hub's checks
+ * run it (core `depsScript`), on every OS and for every lockfile: on a
+ * seeded clone the packages {@link seedDependencies} left out, their scripts
+ * and the project's own; on any other (macOS, a lockfile not bun's, a seed
+ * bun refused) the whole install. Then the stamp, so a check finds them
+ * installed. A cut again after its workspace retired is a fresh clone, so it
+ * installs here too: its delegate's next lint or typecheck finds them. One
+ * that fails is logged, and its next install there runs it again.
  */
-export const finishInstall = async (workspace: WorkspaceRef): Promise<void> => {
+export const installDependencies = async (
+  workspace: WorkspaceRef
+): Promise<void> => {
   const result = await runWorkflowCommand(
     workspace.path,
     `${SAFE_GIT_SHELL}${depsScript()}`,

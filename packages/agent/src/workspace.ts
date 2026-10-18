@@ -84,7 +84,7 @@ import {
   withoutCredential,
 } from "./move";
 import { placedMemoryDir } from "./placed-memory";
-import { finishInstall, seedDependencies } from "./seed-deps";
+import { installDependencies, seedDependencies } from "./seed-deps";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
 import { cloneHolding } from "./workspace-records";
@@ -296,6 +296,9 @@ const readySource = (
  * held it then, tracking the default branch as a first cut does. Something
  * already at that path refuses it, and is left as it is; so does a commit
  * that branch no longer holds, which a cut anywhere else would leave behind.
+ * Every cut, first or again, on every OS, answers with the clone's
+ * dependencies installed (seed-deps.ts `installDependencies`): its delegate's
+ * first lint or typecheck runs without an install of its own.
  */
 export const createWorkspace = async (
   cwd: unknown,
@@ -380,12 +383,11 @@ export const createWorkspace = async (
     if (typeof projectId === "string" && projectId) {
       await setProject(id, projectId);
     }
-    // Before the boundary: inside it bun copies every file (seed-deps.ts).
-    const seeded = await seedDependencies(id, path);
+    // The seed before the boundary: inside it bun copies every file on Linux
+    // (seed-deps.ts).
+    await seedDependencies(id, path);
     const boundary = await ensureBoundary({ id, path });
-    if (seeded) {
-      await finishInstall({ id, path });
-    }
+    await installDependencies({ id, path });
     return {
       repoRoot,
       path,
