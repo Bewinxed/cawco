@@ -33,6 +33,7 @@
  * ({@link WEIGHT_PATH}) and lists the components ({@link COMPONENTS_PATH},
  * spec §6's discovery).
  */
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   readdirSync,
@@ -69,6 +70,7 @@ import { propsNames, propsOf } from "./docgen";
 import {
   readStoryFile,
   StoryRefusal,
+  storyStatement,
   writeArgs,
   writeStoryOp,
 } from "./story-file";
@@ -782,8 +784,125 @@ async function written(write: SheetWrite): Promise<SheetWritten> {
     }
     out = writeStoryOp(file, text, op);
   }
+  const printedInto = printedStory(write);
+  if (printedInto) {
+    out = await inProjectStyle(file, abs, out.text, printedInto);
+  }
   writeFileSync(abs, out.text);
   return { file, lines: out.lines, sheet: await sheetRead(file, out.text) };
+}
+
+/** The story whose statement a write printed values into: an args write's, an added or duplicated one's; none for a removal or a move, which only move text. */
+const printedStory = (write: SheetWrite): string | null => {
+  if ("args" in write) {
+    return write.args.story;
+  }
+  const op = write.story;
+  if ("add" in op) {
+    return op.add;
+  }
+  return "duplicate" in op ? op.as : null;
+};
+
+/**
+ * Story file `file` (`abs`, its absolute path) with story `story`'s
+ * statement formatted by the project's own formatter and spliced back, every
+ * other byte of the file as it was; the statement's lines are what changed.
+ * The formatter is the project's Prettier where one resolves from the
+ * toolchain root (its config and `.editorconfig` for this file,
+ * prettier.io/docs/api: `resolveConfig(fileUrlOrPath [, options])`), else
+ * its Biome where its config and `@biomejs/biome` are there. With neither,
+ * the write is refused: a write in a style the project never chose fails its
+ * own checks (a one-line literal, 330 characters, failed Prettier and Biome).
+ */
+async function inProjectStyle(
+  file: string,
+  abs: string,
+  text: string,
+  story: string
+): Promise<{ lines: { from: number; to: number }; text: string }> {
+  const { from, to } = storyStatement(file, text, story);
+  const styled = (await formatted(abs, text.slice(from, to))).trimEnd();
+  const out = text.slice(0, from) + styled + text.slice(to);
+  const lineAt = (offset: number) => out.slice(0, offset).split("\n").length;
+  return {
+    text: out,
+    lines: { from: lineAt(from), to: lineAt(from + styled.length) },
+  };
+}
+
+/** Whether package `name` is installed from the toolchain root up, where {@link projectPackage} finds it. */
+const projectInstalled = (name: string): boolean => {
+  for (let dir = root; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, "node_modules", name, "package.json"))) {
+      return true;
+    }
+    if (dirname(dir) === dir) {
+      return false;
+    }
+  }
+};
+
+/** The biome binary the project installed, from the toolchain root up; none when it has none. */
+const projectBiome = (): string | null => {
+  for (let dir = root; ; dir = dirname(dir)) {
+    const bin = join(dir, "node_modules", ".bin", "biome");
+    if (existsSync(bin)) {
+      return bin;
+    }
+    if (dirname(dir) === dir) {
+      return null;
+    }
+  }
+};
+
+/** Whether a Biome config (`biome.json`, `biome.jsonc`) stands at the toolchain root or above it. */
+const biomeConfigured = (): boolean => {
+  for (let dir = root; ; dir = dirname(dir)) {
+    if (BIOME_CONFIGS.some((name) => existsSync(join(dir, name)))) {
+      return true;
+    }
+    if (dirname(dir) === dir) {
+      return false;
+    }
+  }
+};
+const BIOME_CONFIGS = ["biome.json", "biome.jsonc"];
+
+/** `code`, as story file `abs` holds it, formatted by the project's Prettier or Biome; refused in words when it has neither. */
+async function formatted(abs: string, code: string): Promise<string> {
+  // The project's Prettier, from the toolchain root up; none installed, its Biome or none.
+  const prettier = projectInstalled("prettier")
+    ? projectPackage("prettier")
+    : null;
+  if (prettier) {
+    const api = (await import(prettier.href)) as {
+      format: (code: string, options: object) => Promise<string>;
+      resolveConfig: (
+        file: string,
+        options: { editorconfig: boolean }
+      ) => Promise<object | null>;
+    };
+    const config = await api.resolveConfig(abs, { editorconfig: true });
+    return api.format(code, { ...config, filepath: abs });
+  }
+  const biome = biomeConfigured() ? projectBiome() : null;
+  if (biome) {
+    const ran = spawnSync(biome, ["format", `--stdin-file-path=${abs}`], {
+      cwd: root,
+      input: code,
+      encoding: "utf8",
+    });
+    if (ran.status !== 0) {
+      throw new StoryRefusal(
+        `The project's Biome could not format the story it wrote, so nothing was written: ${(ran.stderr || ran.stdout || `exit ${ran.status}`).trim().split("\n").slice(-3).join(" ")}`
+      );
+    }
+    return ran.stdout;
+  }
+  throw new StoryRefusal(
+    `Neither Prettier nor Biome resolves from ${root}, so the sheet can't write ${relative(root, abs)} in the project's own style, and nothing was written: add the project's formatter, or edit the story file by hand.`
+  );
 }
 
 /** Folders whose components are a framework's routes, never a component a sheet shows (spec §6). */
@@ -858,17 +977,21 @@ const fileName = (file: string): string =>
 const EXTENSION = /\.[^.]+$/;
 
 /**
- * The toolchain root's components (spec §6's discovery): every `.svelte` and
- * `.vue` file under its source folder (`src/` when it has one), and every
- * `.tsx`/`.jsx` exporting a component react-docgen recognises, routes and
- * builds left out; each with the story files whose meta mounts it.
+ * The components in folder `under` (absolute, in the toolchain root) (spec
+ * §6's discovery): every `.svelte` and `.vue` file of the root's source
+ * folder (`src/` when it has one) inside it, and every `.tsx`/`.jsx`
+ * exporting a component react-docgen recognises, routes and builds left
+ * out; each with the story files whose meta mounts it, wherever in the
+ * source folder they are.
  */
-async function discovered(): Promise<Found[]> {
+async function discovered(under: string): Promise<Found[]> {
   // Nuxt's source dir is its own (`app/` from Nuxt 4), and its `app/` holds components, not routes.
   const top =
     nuxtOptions?.srcDir ??
     (existsSync(join(root, "src")) ? join(root, "src") : root);
-  const all = componentFiles(top);
+  const all = componentFiles(top).filter(
+    (file) => file === under || file.startsWith(`${under}${sep}`)
+  );
   // Each story file's meta component, resolved as Vite resolves the import: no props read.
   const shown = await Promise.all(
     (all.length > 0 ? storyFilesUnder(top) : []).map(async (story) => {
@@ -1071,7 +1194,18 @@ async function serveStage(
     return;
   }
   if (path === COMPONENTS_PATH) {
-    await discovered().then(
+    // `?dir=`: the folder asked for, from the root ("." the root itself).
+    const under = resolve(root, url.searchParams.get("dir") ?? "");
+    if (
+      !url.searchParams.has("dir") ||
+      relative(root, under).startsWith("..")
+    ) {
+      json(res, 400, {
+        error: `The components are read from a folder of ${root}, named as dir.`,
+      });
+      return;
+    }
+    await discovered(under).then(
       (components) => json(res, 200, { components }),
       (error) => refusedWith(res, error)
     );

@@ -12,7 +12,9 @@
  * its property taken out with its comma; the rest of the file, its quote
  * style, indent and trailing commas, stays as it was. Values are written
  * as JSON literals in the file's own quote; an arg whose value is code (a
- * fixture import, a function) is never touched.
+ * fixture import, a function) is never touched. The stage then formats the
+ * one statement a write printed into ({@link storyStatement}) with the
+ * project's own formatter (host.ts `inProjectStyle`).
  */
 import { parse } from "@babel/parser";
 import type { Story, StoryOp } from "@cawco/core/stage";
@@ -698,6 +700,23 @@ function freshName(file: string, exports: Export[], name: string): void {
   if (exports.some((one) => one.name === name)) {
     throw new StoryRefusal(`${file} has a story ${name} already.`);
   }
+}
+
+/**
+ * Where story `name`'s statement stands in `text`, from its first character
+ * to its last: what the stage formats in the project's style after a write
+ * printed values into it (host.ts `inProjectStyle`).
+ */
+export function storyStatement(
+  file: string,
+  text: string,
+  name: string
+): { from: number; to: number } {
+  const story = exportsOf(parsed(file, text)).find((one) => one.name === name);
+  if (!story) {
+    throw new StoryRefusal(`${file} has no story ${name}.`);
+  }
+  return { from: story.statement.start ?? 0, to: story.statement.end ?? 0 };
 }
 
 /** Story file `file` with `op` made: a story added after the last, duplicated after its original, removed, or moved before another. */

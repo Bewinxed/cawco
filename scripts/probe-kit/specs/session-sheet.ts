@@ -57,6 +57,17 @@
  * 12. The next `components_list` there cuts it again and answers the card,
  *     and the sweep holds it again.
  *
+ * Then back in the SvelteKit checkout, which also holds
+ * `src/other/Other.svelte` and its own Prettier with this repository's
+ * `.prettierrc`:
+ *
+ * 13. `components_list({ dir: "src/lib" })` answers `src/lib/Card.svelte`
+ *     alone: the folder asked for, not the whole app.
+ * 14. `components_list({ dir: "../.." })` is refused, saying it is outside.
+ * 15. `artifact_update` of story `One`'s args with a title past the print
+ *     width leaves the story file passing the project's `prettier --check`,
+ *     and changes nothing outside that story's statement.
+ *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
@@ -64,7 +75,14 @@
  *   bun scripts/probe-kit/run.ts session-sheet
  */
 import { existsSync } from "node:fs";
-import { mkdir, readdir, realpath, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { STAGE_ENSURE } from "../../../packages/core/src/stage";
@@ -115,10 +133,15 @@ const KIT: Record<string, string> = {
     devDependencies: {
       "@sveltejs/kit": "^3.1.0",
       "@sveltejs/vite-plugin-svelte": "^7.3.1",
+      // Its own formatter, as this repository pins it with the plugin its .prettierrc names: a sheet's write is formatted by it (leg 15).
+      prettier: "3.9.10",
+      "prettier-plugin-svelte": "4.1.1",
       svelte: "5.57.1",
       vite: "^8.3.4",
     },
   }),
+  // A component outside src/lib: a components_list of src/lib leaves it out (leg 13).
+  "src/other/Other.svelte": "<p>other</p>\n",
   "vite.config.ts": `import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 
@@ -137,6 +160,10 @@ const KIT_CARD: Record<string, string> = {
   "src/lib/Card.svelte": PROJECT["src/Card.svelte"] as string,
   [KIT_STORY]: PROJECT[STORY] as string,
 };
+
+/** A title long enough that a one-line `export const One = { args: { title: … } };` runs past Prettier's print width (leg 15). */
+const LONG_TITLE =
+  "A card title long enough to carry the story's args past the print width";
 
 /** What the session's edit writes: the same card, its heading changed. */
 const EDITED = `<script>\n  let { title } = $props();\n</script>\n\n<h2 data-probe="title">Edited {title}</h2>\n`;
@@ -203,7 +230,11 @@ const writeFiles = async (dir: string, files: Record<string, string>) => {
  * with its bun.lock, and {@link KIT_CARD} left uncommitted.
  */
 const writeKit = async (dir: string) => {
-  await writeFiles(dir, KIT);
+  await writeFiles(dir, {
+    ...KIT,
+    // This repository's own Prettier config: its fmt.ts checks with it.
+    ".prettierrc": await readFile(join(ROOT, ".prettierrc"), "utf8"),
+  });
   await Bun.$`bun install --no-progress`.cwd(dir).quiet();
   await Bun.$`git init -q && git add -A && git -c user.email=p@p -c user.name=p commit -q -m kit`
     .cwd(dir)
@@ -480,6 +511,68 @@ const run = async (kit: Kit) => {
       again.kept.some((one) => one.workspaceId === clone.id),
     `${short(relisted)}; sweep ${JSON.stringify(again).slice(0, 300)}`
   );
+
+  await scopedAndStyled(kitCreated.match(ID)?.[1]);
+
+  /** Legs 13 to 15, in the SvelteKit checkout of legs 6 to 8 (its session `kitSession`), on the sheet leg 7 made (`kitId`). */
+  async function scopedAndStyled(kitId: string | undefined): Promise<void> {
+    // 13. A components_list of one folder answers that folder's components alone.
+    const scoped = await call(
+      "13",
+      "mcp__cawco__components_list",
+      { dir: "src/lib" },
+      kitSession
+    );
+    kit.check(
+      "13: components_list with dir src/lib answers src/lib/Card.svelte alone, not src/other/Other.svelte",
+      scoped.includes('"src/lib/Card.svelte"') &&
+        !scoped.includes("Other.svelte") &&
+        (scoped.match(/"name":/g)?.length ?? 0) === 1,
+      short(scoped)
+    );
+
+    // 14. A dir outside the session's folder is refused in words.
+    const outside = await call(
+      "14",
+      "mcp__cawco__components_list",
+      { dir: "../.." },
+      kitSession
+    );
+    kit.check(
+      "14: components_list with a dir outside the folder is refused, saying it is outside",
+      outside.includes("is outside") && !outside.includes('"components"'),
+      short(outside)
+    );
+
+    // 15. An args write in the project's own style: its Prettier passes, and only the story's statement changed.
+    const storyPath = join(kitDir, KIT_STORY);
+    const beforeWrite = await readFile(storyPath, "utf8");
+    const wrote = kitId
+      ? await call(
+          "15",
+          "mcp__cawco__artifact_update",
+          { id: kitId, args: { story: "One", values: { title: LONG_TITLE } } },
+          kitSession
+        )
+      : "no sheet from leg 7";
+    const afterWrite = await readFile(storyPath, "utf8");
+    const statement = beforeWrite.indexOf("export const One");
+    const prefix = beforeWrite.slice(0, statement);
+    const suffix = beforeWrite.slice(beforeWrite.indexOf(";", statement) + 1);
+    const pretty =
+      await Bun.$`${join(kitDir, "node_modules", ".bin", "prettier")} --check ${KIT_STORY}`
+        .cwd(kitDir)
+        .quiet()
+        .nothrow();
+    kit.check(
+      "15: an args edit leaves the story file passing its project's prettier --check, and changes only the edited story's statement",
+      afterWrite.includes(LONG_TITLE) &&
+        pretty.exitCode === 0 &&
+        afterWrite.startsWith(prefix) &&
+        afterWrite.endsWith(suffix),
+      `prettier --check exit ${pretty.exitCode}; the file after: ${JSON.stringify(afterWrite.slice(statement)).slice(0, 300)}; the write answered ${short(wrote).slice(0, 200)}`
+    );
+  }
 
   /** Legs 4 and 5, on the sheet `sheet` leg 2 made. */
   async function readAndEdit(sheet: string): Promise<void> {

@@ -767,7 +767,7 @@ export interface ArtifactServiceDeps {
     at: StageAt,
     file: string
   ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
-  /** The components of the toolchain root `dir` names in session `instance`'s workspace (agent stage.ts `stageComponents`). */
+  /** The components in folder `dir` of session `instance`'s workspace, and that folder (agent stage.ts `stageComponents`). */
   stageComponents: (
     instance: InstanceRow,
     dir: string | undefined
@@ -2617,7 +2617,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): Promise<ArtifactRead> =>
       writeSheet(own(sessionOf(instanceId), id), change, "person"),
 
-    /** `components_list`: the components of a toolchain root in the session's workspace, each with the sheets that show it. */
+    /** `components_list`: the components in a folder of the session's workspace, each with the sheets that show it. */
     components: (
       instanceId: string,
       dir: string | undefined

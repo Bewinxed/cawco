@@ -1231,10 +1231,11 @@ export async function writeSheet(
 }
 
 /**
- * The components of the toolchain root `dir` is in (`dir` from the clone's
- * root; omitted, the clone's own root): spec §6's discovery, read by its
- * stage. A dir under no toolchain root is refused with the roots the clone
- * has.
+ * The components in folder `dir` (from the clone's root; omitted, the clone's
+ * own root), each with the story files that show it: spec §6's discovery,
+ * read by the stage of the toolchain root it is in. A dir that is no folder,
+ * or under no toolchain root (refused with the roots the clone has), is
+ * refused in words.
  */
 export async function stageComponents(
   workspace: WorkspaceRef,
@@ -1242,6 +1243,11 @@ export async function stageComponents(
 ): Promise<{ components: Found[]; dir: string }> {
   const tree = await treeOf(workspace);
   const abs = inTree(tree, dir, "name a folder in it.");
+  if (!statSync(abs, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new StageRefusal(
+      `${dir} is no folder in ${workspace.path}: name one, from your folder's root.`
+    );
+  }
   const root = upFrom(abs, tree.folder).find(toolchainAt);
   if (!root) {
     const found = rootsUnder(tree.folder);
@@ -1257,14 +1263,16 @@ export async function stageComponents(
     stageFor(tree, join(root, "package.json"), true),
     "a components list"
   );
+  // The folder asked for, from the toolchain root: the stage lists only what is in it.
+  const asked = relative(root, abs) || ".";
   const { components } = await answerOf<{ components: Found[] }>(
     stage,
-    COMPONENTS_PATH,
+    `${COMPONENTS_PATH}?dir=${encodeURIComponent(asked)}`,
     READ_WAIT_MS * 4,
     "list its components"
   );
   return {
-    dir: stage.dir,
+    dir: relative(tree.folder, abs) || ".",
     components: components.map((one) => ({
       ...one,
       file: join(stage.dir, one.file),
