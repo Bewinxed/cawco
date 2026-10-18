@@ -8,7 +8,7 @@
  * This spec delegates, so its fleet cuts workspaces: it runs on the host,
  * outside every boundary, on Linux or macOS.
  *
- * Two projects, each with a `typecheck` script (`tsc --noEmit`, TypeScript a
+ * Two projects, each with a `typecheck` script (its own `tsc --noEmit`, TypeScript a
  * dev dependency) and node_modules ignored: L has a bun.lock, N has none (as
  * nightly 3981's ds-probe-sendback, a copy of `site/`, had none). For each:
  *
@@ -42,11 +42,18 @@ const TAG = /PROBE-RECUT-GATE-([LNS])/;
 type Tag = "L" | "N" | "S";
 /** The projects that land, retire and land again; S's gate refuses its stale lockfile. */
 type LegTag = Exclude<Tag, "S">;
+/**
+ * The projects' typecheck: the clone's own tsc, so a clone with no install
+ * fails it. `bun run` puts every enclosing folder's `node_modules/.bin` on
+ * PATH, and a home with its own TypeScript (the Mac's `~/node_modules/.bin/tsc`)
+ * passed a bare `tsc` in a clone with no dependencies (2026-10-18).
+ */
+const TYPECHECK = "./node_modules/.bin/tsc --noEmit -p .";
 /** S's package.json: the project's, with a dependency bun.lock does not hold. */
 const STALE_MANIFEST = {
   name: "landing-recut-probe",
   private: true,
-  scripts: { typecheck: "tsc --noEmit -p ." },
+  scripts: { typecheck: TYPECHECK },
   devDependencies: { typescript: "5.9.3", "is-number": "7.0.0" },
 };
 /** How finish_item names a stale lockfile, in its first sentence (work-items.ts `failedRun`). */
@@ -215,7 +222,7 @@ const makeRepo = async (
       {
         name: "landing-recut-probe",
         private: true,
-        scripts: { typecheck: "tsc --noEmit -p ." },
+        scripts: { typecheck: TYPECHECK },
         devDependencies: { typescript: "5.9.3" },
       },
       null,
