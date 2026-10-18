@@ -353,7 +353,7 @@ const timeOf = (id: string): string => {
 /** The probe's project on its fleet, and what every leg does with it. */
 const standUp = async (kit: Kit, jevUrl: string) => {
   const fleet = await kit.fleet(respond);
-  fleet.env.CAWCO_TYPESAFE_URL = jevUrl;
+  fleet.standIns.typesafeUrl = jevUrl;
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");

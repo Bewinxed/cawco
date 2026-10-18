@@ -105,8 +105,8 @@ interface Setup {
 const setUp = async (kit: Kit): Promise<Setup> => {
   const jev = jevMock();
   const fleet = await kit.fleet(respond);
-  fleet.env.CAWCO_TYPESAFE_URL = jev.url;
-  fleet.env.CAWCO_STARTERS_PACE = "1000/4000";
+  fleet.standIns.typesafeUrl = jev.url;
+  fleet.standIns.startersPace = { quiet: 1000, gap: 4000 };
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
