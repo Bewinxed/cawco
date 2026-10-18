@@ -24,7 +24,9 @@ import {
 const dashboard = join(dirname(fileURLToPath(import.meta.url)), "..");
 const name = process.env.HARNESS;
 if (!name) {
-  throw new Error("HARNESS names the entry to build: bun harness/build.ts <name>.");
+  throw new Error(
+    "HARNESS names the entry to build: bun harness/build.ts <name>."
+  );
 }
 
 export default defineConfig({

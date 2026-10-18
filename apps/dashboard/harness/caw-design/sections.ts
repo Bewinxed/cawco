@@ -32,8 +32,7 @@ export const DECISIONS: Decision[] = [
   {
     id: "read-failed",
     question: "When a thread can't be read, what leads the message?",
-    differs:
-      "Caw, with a way to ask him to look into it, or a history glyph.",
+    differs: "Caw, with a way to ask him to look into it, or a history glyph.",
     options: [
       { id: "today", name: "Today" },
       { id: "caw", name: "Caw, and Ask Caw to look" },
@@ -65,26 +64,22 @@ export const DECISIONS: Decision[] = [
   },
 ];
 
-/** Decided: shown with his pick, the others still there to change it. */
-export const DECIDED: Decision & { picked: string } = {
-  id: "empty-board",
+/**
+ * Decided: the empty board as main draws it now (the project page's empty
+ * board, `data-slot="caw-empty"`), with what it does in one line.
+ */
+export const DECIDED = {
   question: "Where do Caw's suggestions stand on an empty board?",
-  differs: "",
-  options: [
-    { id: "today", name: "Today" },
-    { id: "offers-in-backlog", name: "Waiting in Backlog" },
-    { id: "centred", name: "Centred on the board" },
-  ],
-  picked: "centred",
+  now: "Caw stands on the empty board in place of his seat in the head, the line on what he does over his suggestions, which stand under him as cards from the board's start edge. A card opens his panel with its words in the message box.",
 };
 
 export interface Fix {
   /** What now stands where he pinned, in one line. */
   changed: string;
-  /** The state drawn for it; none where a decision above already shows it. */
-  shows?: "suggestions" | "title-bar" | "off" | "why-cannot-start";
   /** His words, verbatim, one per pin it answers. */
   said: string[];
+  /** The state drawn for it; none where a decision above already shows it. */
+  shows?: "suggestions" | "title-bar" | "off" | "why-cannot-start";
 }
 
 export const FIXES: Fix[] = [

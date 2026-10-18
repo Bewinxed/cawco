@@ -124,6 +124,7 @@ export const starters: ProjectStarter[] = [
 ];
 
 const stagesWith = (list: ProjectStarter[]): StagesView => ({
+  decisionStarters: [],
   moves: [],
   problems: [],
   routineStarters: [],
@@ -715,7 +716,11 @@ export const GROUPS: StateGroup[] = [
     heading: "Read failed · pins 4–5",
     states: [
       { key: "read-failed", label: "Can't be read", variants: READ },
-      { key: "read-failed-details", label: "Can't be read, details", variants: READ },
+      {
+        key: "read-failed-details",
+        label: "Can't be read, details",
+        variants: READ,
+      },
       {
         key: "read-failed-stretched",
         label: "Can't be read, stretched",
@@ -727,7 +732,11 @@ export const GROUPS: StateGroup[] = [
   {
     heading: "Can't start · pins 7–8",
     states: [
-      { key: "cannot-start-empty", label: "Can't start, empty thread", variants: START },
+      {
+        key: "cannot-start-empty",
+        label: "Can't start, empty thread",
+        variants: START,
+      },
       {
         key: "cannot-start-thread",
         label: "Can't start, with messages",
@@ -802,14 +811,24 @@ export const GROUPS: StateGroup[] = [
   {
     heading: "Question · pins 9–10",
     states: [
-      { key: "ask", label: "Three short choices", variants: LANDED, landed: true },
+      {
+        key: "ask",
+        label: "Three short choices",
+        variants: LANDED,
+        landed: true,
+      },
       {
         key: "ask-descriptions",
         label: "Described choices",
         variants: LANDED,
         landed: true,
       },
-      { key: "ask-long", label: "Long question", variants: LANDED, landed: true },
+      {
+        key: "ask-long",
+        label: "Long question",
+        variants: LANDED,
+        landed: true,
+      },
       { key: "ask-many", label: "Six choices", variants: LANDED, landed: true },
       {
         key: "ask-stretched",
@@ -929,7 +948,11 @@ const asking = (key: string, count: number): Partial<Fixture> => ({
  * Caw can't start, the composer drawn while the hub is away), the proposal
  * reads the data that draws it, and the page draws the rest over it.
  */
-export function fixtureOf(key: string, variant: string, count: number): Fixture {
+export function fixtureOf(
+  key: string,
+  variant: string,
+  count: number
+): Fixture {
   const base: Fixture = { caw: caw(), tasks: filed, ...all(copy, copySaid) };
   const shipping = (tasks: TaskSummary[]): Fixture => ({
     ...base,
@@ -1003,7 +1026,10 @@ export function fixtureOf(key: string, variant: string, count: number): Fixture 
           messages: { ...base.messages, [COPY]: notWokenSaid },
         };
       }
-      return { ...base, caw: proposedStart ? caw({ leadInstanceId: null }) : problem };
+      return {
+        ...base,
+        caw: proposedStart ? caw({ leadInstanceId: null }) : problem,
+      };
     }
     case "suggestions-generating":
     case "suggestions-generated":

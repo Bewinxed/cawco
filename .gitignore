@@ -11,6 +11,7 @@ dist
 apps/dashboard/build
 apps/dashboard/.build-next
 apps/dashboard/.build-old
+apps/dashboard/dist-harness
 
 # database
 *.db

@@ -33,6 +33,11 @@
     {/each}
   </ul>
   <div class="mt-(--space-3)">
-    <Button class="pressable" label="Open the board" size="sm" variant="outline" />
+    <Button
+      class="pressable"
+      label="Open the board"
+      size="sm"
+      variant="outline"
+    />
   </div>
 </div>

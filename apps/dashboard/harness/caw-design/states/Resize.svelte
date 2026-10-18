@@ -18,15 +18,19 @@
    *   no room on a 380px panel.
    * - `edges` (C): a handle on the trailing edge and one on the bottom.
    */
-  import { MediaQuery } from "svelte/reactivity";
   import { store } from "#lib/cawco/storage.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import type { Form } from "../form";
 
-  let { mode }: { mode: "grip" | "wide" | "edges" } = $props();
-
-  /** Desk only: on a phone the panel is the sheet, which never resizes. */
-  const phone = new MediaQuery("(max-width: 639px)");
+  let {
+    form,
+    mode,
+  }: {
+    /** Desk only: on a phone the panel is the sheet, which never resizes. */
+    form: Form;
+    mode: "grip" | "wide" | "edges";
+  } = $props();
 
   const KEPT = "cawco.design.caw-panel-size";
   const REST = { w: 380, h: 640 };
@@ -54,7 +58,10 @@
     if (!pop) {
       return;
     }
-    const { w: [w0, w1], h: [h0, h1] } = bounds();
+    const {
+      w: [w0, w1],
+      h: [h0, h1],
+    } = bounds();
     const width = Math.round(Math.min(w1, Math.max(w0, w)));
     const height = Math.round(Math.min(h1, Math.max(h0, h)));
     pop.style.setProperty("--c-panel-w", `${width}px`);
@@ -62,14 +69,25 @@
     store("local", KEPT, JSON.stringify({ w: width, h: height }));
   }
 
-  let drag: { x: number; y: number; w: number; h: number; axes: string } | null =
-    null;
+  let drag: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    axes: string;
+  } | null = null;
   function down(event: PointerEvent, axes: string) {
     if (!pop || event.button !== 0) {
       return;
     }
     const box = pop.getBoundingClientRect();
-    drag = { x: event.clientX, y: event.clientY, w: box.width, h: box.height, axes };
+    drag = {
+      x: event.clientX,
+      y: event.clientY,
+      w: box.width,
+      h: box.height,
+      axes,
+    };
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     event.preventDefault();
   }
@@ -77,8 +95,12 @@
     if (!drag) {
       return;
     }
-    const w = drag.axes.includes("x") ? drag.w + event.clientX - drag.x : drag.w;
-    const h = drag.axes.includes("y") ? drag.h + event.clientY - drag.y : drag.h;
+    const w = drag.axes.includes("x")
+      ? drag.w + event.clientX - drag.x
+      : drag.w;
+    const h = drag.axes.includes("y")
+      ? drag.h + event.clientY - drag.y
+      : drag.h;
     size(w, h);
   }
   function up() {
@@ -104,7 +126,7 @@
   });
 </script>
 
-{#if phone.current}
+{#if form === "phone"}
   <!-- The sheet has no size to choose. -->
 {:else if mode === "wide"}
   <DropdownMenu.CheckboxItem
@@ -173,14 +195,6 @@
     touch-action: none;
     --leg: 12px;
     --in: 6px;
-
-    /* Up to 900px wide the composer runs to --space-3 from the panel's
-       edge (Composer), so the grip keeps to the strip it leaves. */
-    @media (max-width: 900px) {
-      inline-size: var(--space-3);
-      --leg: 8px;
-      --in: 2px;
-    }
   }
   /* An L in the control line, inside the corner and concentric with the
      panel's radius. */

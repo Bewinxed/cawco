@@ -1,9 +1,12 @@
 <script lang="ts">
   /**
-   * Caw's panel: what to pick, then what was fixed from his pins. Every
-   * state is the panel at its real size (Panel: 380 × 640 on a desk, the
-   * sheet's width on a phone), set in a grid of real-size columns, so a
-   * wide screen fits more panels on a row and never stretches one.
+   * Caw's panel: what to pick, the board he decided, then what was fixed
+   * from his pins. Every frame is drawn in one form, which the control
+   * under the intro picks and the address keeps (`?form=phone`): the
+   * desk's floating panel at 380 × 640, or the sheet on a 390 × 844 phone.
+   * Each frame's caption says its form first. A decision's options share
+   * one row, which scrolls sideways where the window can't hold them, so
+   * no option ever wraps under another.
    *
    * A decision is a section with `data-cawco-choice`, each option's Pick a
    * `data-option` (the hub's overlay keeps the picks and reflects them; the
@@ -15,8 +18,10 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import { IconCheck } from "#lib/icons.js";
+  import { FORMS, type Form, formIn, formWords } from "./form";
   import Panel from "./Panel.svelte";
   import { DECIDED, DECISIONS, FIXES, type Fix } from "./sections";
   import Blocked from "./states/Blocked.svelte";
@@ -51,14 +56,51 @@
       .find((one) => one.author === "caw" && one.tasks?.length)?.body ?? "";
   const COMPOSER = { placeholder: "Message the project…" };
 
+  /** The form every frame draws, kept in the address. */
+  let form = $state<Form>(formIn(location.search));
+  const choose = (next: string) => {
+    if (next !== "desk" && next !== "phone") {
+      return;
+    }
+    form = next;
+    const url = new URL(location.href);
+    url.searchParams.set("form", next);
+    history.replaceState(history.state, "", url);
+  };
+  const words = $derived(formWords(form));
+
+  /** The empty board's frame: a device's size, scaled to fit the column. */
+  const BOARD = {
+    desk: {
+      w: 1280,
+      h: 800,
+      not: "the app's rail and top bar, where a desk's views stand",
+    },
+    phone: { w: 390, h: 844, not: "the app's top bar" },
+  };
+  const device = $derived(BOARD[form]);
+  let room = $state(0);
+  const scale = $derived(room > 0 ? Math.min(1, room / device.w) : 1);
+
   /** His picks: the hub's, where the page is served with its overlay. */
-  const picks = $state<Record<string, string | null>>({
-    [DECIDED.id]: DECIDED.picked,
-  });
-  const served = typeof window.cawco?.on === "function";
+  const picks = $state<Record<string, string | null>>({});
+  /** The hub's overlay, where it serves the page (preview-overlay page.ts). */
+  const overlay = (
+    window as Window & {
+      cawco?: {
+        on?: (
+          event: "picks",
+          listener: (
+            state: Record<string, { options?: string[] } | undefined>
+          ) => void
+        ) => () => void;
+      };
+    }
+  ).cawco;
+  const served = typeof overlay?.on === "function";
   $effect(() =>
     served
-      ? window.cawco.on("picks", (state) => {
+      ? overlay?.on?.("picks", (state) => {
           for (const [choice, held] of Object.entries(state)) {
             picks[choice] = held?.options?.[0] ?? null;
           }
@@ -111,7 +153,7 @@
 
 {#snippet option(choice: string, id: string)}
   {#if choice === "filed-tasks"}
-    <Panel composer={COMPOSER} {current} {threads}>
+    <Panel {form} composer={COMPOSER} {current} {threads}>
       {@render said()}
       {#if id === "today"}
         <TodayTasks tasks={filed} />
@@ -125,6 +167,7 @@
     </Panel>
   {:else if choice === "read-failed"}
     <Panel
+      {form}
       composer={COMPOSER}
       {current}
       draft={draftOf(`read-${id}`)}
@@ -146,6 +189,7 @@
     </Panel>
   {:else if choice === "cannot-start"}
     <Panel
+      {form}
       composer={id === "box-stays"
         ? { placeholder: "Caw reads it when a machine is back" }
         : null}
@@ -171,6 +215,7 @@
     </Panel>
   {:else if choice === "resize"}
     <Panel
+      {form}
       composer={COMPOSER}
       {current}
       {threads}
@@ -179,8 +224,8 @@
       {@render said()}
       <FiledTasks form="cards" projectId={PROJECT_ID} tasks={filed} />
       {#snippet extra()}
-        {#if id === "corner-grip"}<Resize mode="grip" />{/if}
-        {#if id === "edge-handles"}<Resize mode="edges" />{/if}
+        {#if id === "corner-grip"}<Resize {form} mode="grip" />{/if}
+        {#if id === "edge-handles"}<Resize {form} mode="edges" />{/if}
       {/snippet}
     </Panel>
   {/if}
@@ -188,13 +233,15 @@
 
 {#snippet fixed(shows: NonNullable<Fix["shows"]>)}
   {#if shows === "suggestions"}
-    <Panel composer={COMPOSER} draft={draftOf("suggestions")} {threads}>
+    <Panel {form} composer={COMPOSER} draft={draftOf("suggestions")} {threads}>
       {@render hero("suggestions", undefined, SUGGESTED_MANY)}
     </Panel>
   {:else if shows === "title-bar"}
-    <Panel composer={COMPOSER} {current} {threads}>{@render said()}</Panel>
+    <Panel {form} composer={COMPOSER} {current} {threads}
+      >{@render said()}</Panel
+    >
   {:else if shows === "why-cannot-start"}
-    <Panel {current} {threads}>
+    <Panel {form} {current} {threads}>
       {@render said()}
       {#snippet foot()}
         <Blocked
@@ -210,7 +257,7 @@
       {/snippet}
     </Panel>
   {:else if shows === "off"}
-    <Panel composer={COMPOSER} draft={draftOf("off")} {threads}>
+    <Panel {form} composer={COMPOSER} draft={draftOf("off")} {threads}>
       {@render hero(
         "off",
         "Caw is off, so he acts only when you write to him.",
@@ -220,7 +267,7 @@
   {/if}
 {/snippet}
 
-{#snippet words(said: string[])}
+{#snippet his(said: string[])}
   <ul class="said">
     {#each said as one, at (at)}
       <li><q>{one}</q></li>
@@ -229,7 +276,7 @@
 {/snippet}
 
 {#snippet stage(caption: Snippet, panel: Snippet)}
-  <figure class="frame">
+  <figure class="frame" data-design-frame={form}>
     <figcaption class="caption">{@render caption()}</figcaption>
     {@render panel()}
   </figure>
@@ -237,13 +284,25 @@
 
 <!-- The app's tooltip provider, as its layout stands it over every page. -->
 <Tooltip.Provider>
-  <main class="page">
+  <main class="page" data-form={form}>
     <header class="intro">
       <h1 class="h1">Caw's panel</h1>
       <p class="lede">
-        Four choices to make, then what changed from your pins. Every panel
-        is at its real size.
+        Four choices to make, the board you decided, then what changed from your
+        pins. Every panel is at its real size, as a desk or a phone draws it.
       </p>
+      <ToggleGroup.Root
+        aria-label="Draw every panel as"
+        class="mt-(--space-3) self-start"
+        data-design-forms
+        onValueChange={choose}
+        type="single"
+        value={form}
+      >
+        {#each FORMS as one (one.id)}
+          <ToggleGroup.Item value={one.id}>{one.name}</ToggleGroup.Item>
+        {/each}
+      </ToggleGroup.Root>
     </header>
 
     {#each DECISIONS as decision (decision.id)}
@@ -252,10 +311,12 @@
           <h2 class="h2">{decision.question}</h2>
           <p class="why">{decision.differs}</p>
         </header>
-        <div class="frames">
+        <div class="row" data-design-row>
           {#each decision.options as one (one.id)}
             {#snippet caption()}
-              <span class="name">{one.name}</span>
+              <span class="name"
+                ><span class="form">{words}</span> · {one.name}</span
+              >
               <Button
                 aria-pressed={picks[decision.id] === one.id}
                 data-option={one.id}
@@ -274,42 +335,53 @@
       </section>
     {/each}
 
-    <section class="part" data-cawco-choice={DECIDED.id}>
+    <section class="part" data-design-decided>
       <header class="head">
         <h2 class="h2">{DECIDED.question}</h2>
-        <p class="why">
-          Decided: {DECIDED.options.find((one) => one.id === picks[DECIDED.id])
-            ?.name ?? "not yet"}.
-        </p>
+        <p class="why">Decided: {DECIDED.now}</p>
       </header>
-      <div class="decided" role="group" aria-label={DECIDED.question}>
-        {#each DECIDED.options as one (one.id)}
-          {@const chosen = picks[DECIDED.id] === one.id}
-          <!-- His pick reads as chosen and takes no press: a press on it
-               would take it back. -->
-          <Button
-            aria-pressed={chosen}
-            class={chosen ? "pointer-events-none" : undefined}
-            data-option={one.id}
-            icon={chosen ? IconCheck : undefined}
-            label={one.name}
-            onclick={pick(DECIDED.id, one.id)}
-            size="sm"
-            variant={chosen ? "default" : "outline"}
-          />
-        {/each}
-      </div>
+      <figure
+        class="frame board"
+        data-design-frame={form}
+        bind:clientWidth={room}
+      >
+        <figcaption class="caption">
+          <span class="name"
+            ><span class="form">{form === "phone" ? "Phone" : "Desk"}</span> ·
+            the empty board, {device.w} × {device.h}, shown at {Math.round(
+              scale * 100
+            )}%. Not drawn: {device.not}.</span
+          >
+        </figcaption>
+        <div
+          class="device"
+          style:block-size="{device.h * scale}px"
+          style:inline-size="{device.w * scale}px"
+        >
+          <iframe
+            data-design-board-frame={form}
+            src="?board={form}"
+            style:block-size="{device.h}px"
+            style:inline-size="{device.w}px"
+            style:scale
+            title="The empty board, as a {form === 'phone'
+              ? 'phone'
+              : 'desk'} draws it"
+          ></iframe>
+        </div>
+      </figure>
     </section>
 
     <section class="part">
       <header class="head">
         <h2 class="h2">Fixed from your pins</h2>
       </header>
-      <div class="frames">
+      <div class="row" data-design-row>
         {#each FIXES.filter((one) => one.shows) as fix (fix.shows)}
           {#snippet caption()}
             <div class="fix">
-              {@render words(fix.said)}
+              <span class="name"><span class="form">{words}</span></span>
+              {@render his(fix.said)}
               <p class="changed">{fix.changed}</p>
             </div>
           {/snippet}
@@ -322,7 +394,7 @@
       <ul class="notes">
         {#each FIXES.filter((one) => !one.shows) as fix (fix.changed)}
           <li class="fix">
-            {@render words(fix.said)}
+            {@render his(fix.said)}
             <p class="changed">{fix.changed}</p>
           </li>
         {/each}
@@ -333,18 +405,27 @@
 
 <style>
   /* One start edge for the whole page; the reading measure on its words,
-     the panels at their real width in as many columns as fit. */
+     the frames at their real size. A frame is the form's: the desk's panel,
+     or a 390 × 844 phone's screen (a device's size, not a design length). */
   .page {
+    --pad: var(--space-7);
+    --frame-w: var(--c-panel-w);
+
     display: flex;
     flex-direction: column;
     gap: calc(var(--space-8) * 2);
     min-block-size: 100dvh;
-    padding: var(--space-8) var(--space-7);
+    padding: var(--space-8) var(--pad);
     background: var(--surface-page);
     color: var(--ink-strong);
 
+    &[data-form="phone"] {
+      --frame-w: 390px;
+    }
+
     @media (width < 640px) {
-      padding: var(--space-6) var(--space-3);
+      --pad: var(--space-3);
+      padding-block: var(--space-6);
     }
   }
   .intro,
@@ -380,22 +461,34 @@
     gap: var(--space-5);
     min-inline-size: 0;
   }
-  /* Real-size columns: a wide screen adds columns, never width. Each frame
-     takes two rows of the grid (subgrid), so the captions of a row share
-     one height and the panels beside each other start on one line. */
-  .frames {
+  /* One row of real-size frames, never wrapped: where the window can't
+     hold them the row scrolls sideways, each frame snapping to the start
+     edge, and runs on to the window's trailing edge so the next frame
+     peeks there. Each frame takes the row's two tracks (subgrid), so the
+     captions share one height and the panels start on one line. */
+  .row {
     display: grid;
-    grid-template-columns: repeat(auto-fill, var(--c-panel-w));
-    gap: var(--space-8) var(--space-7);
+    grid-auto-columns: var(--frame-w);
+    grid-auto-flow: column;
+    grid-template-rows: auto auto;
+    column-gap: var(--space-7);
     align-items: start;
+    margin-inline-end: calc(var(--pad) * -1);
+    padding-inline-end: var(--pad);
+    padding-block-end: var(--space-3);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
 
     @media (width < 640px) {
-      grid-template-columns: minmax(0, 1fr);
+      column-gap: var(--space-4);
     }
   }
+  /* A frame in a row snaps its start to the row's. */
   .frame {
     display: grid;
     grid-row: span 2;
+    scroll-snap-align: start;
     grid-template-rows: subgrid;
     row-gap: var(--space-3);
     min-inline-size: 0;
@@ -416,10 +509,26 @@
     color: var(--ink-strong);
     overflow-wrap: anywhere;
   }
-  .decided {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
+  /* The form leads every caption, a step under the option's name. */
+  .form {
+    color: var(--ink-muted);
+  }
+  /* The empty board: a device's whole screen, scaled down to the column
+     where it is wider, its scale said in the caption. */
+  .board {
+    grid-template-rows: auto auto;
+  }
+  .device {
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    box-shadow:
+      var(--shadow-tile),
+      0 0 0 1px var(--border-hairline);
+  }
+  .device > iframe {
+    display: block;
+    border: 0;
+    transform-origin: 0 0;
   }
   .fix {
     display: flex;

@@ -1,11 +1,17 @@
 <script lang="ts">
   /**
-   * Caw's floating panel as it ships (CawFloat, d2cd27d1a): the kit popover
-   * at --c-panel-w by --c-caw-panel-h on a desk, the sheet's width (the
-   * viewport less --space-3 a side) on a phone. Under the proposed title bar
-   * (HeadBar) the thread's recessed room, whose content stands on the
-   * composer's own column (--c-composer-w, measured on the panel), and the
-   * real Composer docked at its foot in a place of its own (ThreadPane's
+   * Caw's floating panel as it ships (CawFloat), in the form its frame
+   * names (`form`), never the window's:
+   *
+   * - `desk`: the kit popover at --c-panel-w by --c-caw-panel-h.
+   * - `phone`: a 390 × 844 phone's screen with the sheet CawFloat opens on
+   *   it (`.caw-float-sheet`): --space-3 in from each side, --space-4 over
+   *   the foot, 85% of the screen tall, the composer's shell for a surface,
+   *   over the kit's scrim.
+   *
+   * Inside, under the proposed title bar (HeadBar), the thread's recessed
+   * room, whose content stands on the composer's own column, and the real
+   * Composer docked at its foot in a place of its own (ThreadPane's
    * composer room: the composer, its tray row and its lift), which the
    * room's scroll ends above, so nothing runs under it.
    *
@@ -18,11 +24,13 @@
   import type { Snippet } from "svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import type { Form } from "./form";
   import { lead } from "./lead.svelte";
   import { PROJECT_NAME } from "./states/fixtures";
   import HeadBar from "./states/HeadBar.svelte";
 
   let {
+    form,
     threads,
     current = "",
     children,
@@ -32,6 +40,8 @@
     draft = new ComposerDraft(),
     extra,
   }: {
+    /** The panel's form: the desk's popover or the phone's sheet. */
+    form: Form;
     threads: ThreadSummary[];
     current?: string;
     children?: Snippet;
@@ -47,8 +57,15 @@
   } = $props();
 </script>
 
-<div class="kit-pop caw-float-pop panel" data-caw-panel data-design-panel>
-  <HeadBar {current} {lead} projectName={PROJECT_NAME} {threads} {wide} />
+{#snippet inside()}
+  <HeadBar
+    {current}
+    {form}
+    {lead}
+    projectName={PROJECT_NAME}
+    {threads}
+    {wide}
+  />
   <div class={["body", { composed: !!composer }]}>
     <div class="room" data-design-room>
       <div class="column" data-design-column>
@@ -79,25 +96,90 @@
       </div>
     {/if}
   </div>
-  {@render extra?.()}
-</div>
+{/snippet}
+
+{#if form === "phone"}
+  <div class="screen" data-design-form="phone" data-design-screen>
+    <div
+      class="sheet panel"
+      data-caw-panel
+      data-design-form="phone"
+      data-design-panel
+    >
+      {@render inside()}
+    </div>
+  </div>
+{:else}
+  <div
+    class="kit-pop caw-float-pop panel desk"
+    data-caw-panel
+    data-design-form="desk"
+    data-design-panel
+  >
+    {@render inside()}
+    {@render extra?.()}
+  </div>
+{/if}
 
 <style>
   /* CawFloat's `.kit-pop.caw-float-pop`: a conversation's width, edge to
-     edge inside, clipped by the popover's radius; the sheet's width on a
-     phone (CawFloat `.caw-float-sheet`: --space-3 in from each side). */
+     edge inside, clipped by the popover's radius. */
   .panel {
     position: relative;
     display: flex;
     flex-direction: column;
-    inline-size: var(--c-panel-w);
-    block-size: var(--c-caw-panel-h);
     padding: 0;
     overflow: hidden;
 
-    @media (width < 640px) {
-      inline-size: 100%;
-      block-size: min(var(--c-caw-panel-h), 85dvh);
+    /* The composer's column, as Composer sets it on a desk: --c-composer-w
+       (min(720px, 100% − 50px)). */
+    --column: min(720px, calc(100cqi - 50px));
+  }
+  .desk {
+    inline-size: var(--c-panel-w);
+    block-size: var(--c-caw-panel-h);
+  }
+  /* A 390 × 844 phone's screen, the kit's scrim over the page. */
+  .screen {
+    container: screen / size;
+    position: relative;
+    inline-size: 390px;
+    block-size: 844px;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--surface-page);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+  }
+  .screen::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+  }
+  /* CawFloat `.caw-float-sheet` on it: --space-3 in from each side,
+     --space-4 over the foot, 85% of the screen tall less that foot; its
+     surface the composer's shell (the panel's glass, the control edge all
+     round, the 12px radius and the tile shadow). Up to 900px wide the
+     composer runs the room less --space-3 a side (Composer), so its column
+     does too. */
+  .sheet {
+    position: absolute;
+    inset-inline: var(--space-3);
+    inset-block-end: var(--space-4);
+    block-size: calc(85cqb - var(--space-4));
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-lg);
+    background: var(--material-panel);
+    -webkit-backdrop-filter: blur(var(--material-blur))
+      saturate(var(--material-saturate));
+    backdrop-filter: blur(var(--material-blur))
+      saturate(var(--material-saturate));
+    box-shadow: var(--shadow-tile);
+
+    --column: calc(100cqi - var(--space-3) * 2);
+
+    @media (prefers-reduced-transparency: reduce) {
+      background: var(--surface-raised);
     }
   }
   /* ThreadPane `.pane` and `.body`: the recessed room the composer docks in.
@@ -114,29 +196,16 @@
   /* The composer's own place at the foot, outside the room's scroll: the
      composer, its tray row over it and its lift (ThreadPane's composer
      room), so no line of the room ever runs under it. The lift is the
-     Composer's own: --space-4, and --space-2 up to 900px wide. */
+     Composer's own, --space-4 on a desk and --space-2 on a phone, and the
+     Composer picks it by the window's width, not the frame's: the room
+     keeps the larger, so the box never stands over a line in either. */
   .composed {
-    --lift: var(--space-4);
     padding-block-end: calc(
-      var(--c-composer-panel) + var(--c-tray-row) + var(--lift)
+      var(--c-composer-panel) + var(--c-tray-row) + var(--space-4)
     );
-
-    @media (max-width: 900px) {
-      --lift: var(--space-2);
-    }
   }
-  /* The composer's column, as Composer sets it: --c-composer-w (min(720px,
-     100% − 50px)), and up to 900px wide the whole room less --space-3 a
-     side. Taken on the room rather than the scroller, so a scrollbar never
-     moves its start edge off the composer's. */
-  .room,
-  .foot {
-    --column: min(720px, calc(100cqi - 50px));
-
-    @media (max-width: 900px) {
-      --column: calc(100cqi - var(--space-3) * 2);
-    }
-  }
+  /* Taken on the room rather than the scroller, so a scrollbar never moves
+     its start edge off the composer's. */
   .room {
     flex: 1 1 auto;
     min-block-size: 0;

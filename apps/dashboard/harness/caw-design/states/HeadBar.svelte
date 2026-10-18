@@ -26,7 +26,6 @@
     type HarnessKind,
     type ThreadSummary,
   } from "@cawco/core";
-  import { MediaQuery } from "svelte/reactivity";
   import { clock } from "#lib/cawco/home/home-state.svelte.js";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
@@ -45,15 +44,19 @@
     IconUser,
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
+  import type { Form } from "../form";
   import Resize from "./Resize.svelte";
 
   let {
+    form,
     threads,
     current,
     lead,
     projectName,
     wide = false,
   }: {
+    /** The panel's form, as its frame names it: the desk's popover or the phone's sheet. */
+    form: Form;
     threads: ThreadSummary[];
     /** The thread on show; "" for a new thread not yet started. */
     current: string;
@@ -63,9 +66,9 @@
     wide?: boolean;
   } = $props();
 
-  const phone = new MediaQuery("(max-width: 639px)");
+  const phone = $derived(form === "phone");
   /** Wide panel is a desk item only: a phone's sheet has no size to choose. */
-  const widens = $derived(wide && !phone.current);
+  const widens = $derived(wide && !phone);
   const on = $derived(threads.find((one) => one.id === current) ?? null);
   const title = $derived(on?.title ?? "New thread");
   const leadId = $derived(lead.view?.leadInstanceId ?? null);
@@ -122,15 +125,15 @@
   class="flex min-w-0 flex-none flex-col border-[var(--border-hairline)] border-b"
   data-design-toolbar
 >
-  {#if phone.current}
+  {#if phone}
     <span
       aria-hidden="true"
       class="mx-auto mt-(--space-2) block h-1.5 w-[100px] max-w-[40%] rounded-full bg-[var(--border-control)]"
       data-design-grabber
     ></span>
   {/if}
-  <div class={["row", { phone: phone.current }]} data-design-toolbar-row>
-    {#if phone.current}
+  <div class={["row", { phone }]} data-design-toolbar-row>
+    {#if phone}
       <Button
         aria-label="Close"
         class="justify-self-start"
@@ -152,10 +155,7 @@
               <Button
                 {...props}
                 aria-label={title}
-                class={[
-                  "min-w-0 max-w-full shrink",
-                  !phone.current && "-ms-[12px]",
-                ]}
+                class={["min-w-0 max-w-full shrink", !phone && "-ms-[12px]"]}
                 press="tint"
                 size="sm"
                 variant="ghost"
@@ -163,7 +163,7 @@
                 <span
                   class={[
                     "min-w-0 truncate",
-                    phone.current ? "text-title" : "text-label",
+                    phone ? "text-title" : "text-label",
                   ]}>{title}</span
                 >
                 <IconChevronDown aria-hidden="true" class="shrink-0" />
@@ -171,7 +171,7 @@
             {/snippet}
           </DropdownMenu.Trigger>
           <DropdownMenu.Content
-            align={phone.current ? "center" : "start"}
+            align={phone ? "center" : "start"}
             class="w-[min(20rem,calc(100vw-24px))]"
           >
             {#each threads as one (one.id)}
@@ -191,7 +191,7 @@
         <span
           class={[
             "min-w-0 truncate text-[var(--ink-strong)]",
-            phone.current ? "text-title" : "text-label",
+            phone ? "text-title" : "text-label",
           ]}>{title}</span
         >
       {/if}
@@ -237,7 +237,7 @@
             </DropdownMenu.Item>
             {#if widens}
               <DropdownMenu.Separator />
-              <Resize mode="wide" />
+              <Resize {form} mode="wide" />
             {/if}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
@@ -279,8 +279,7 @@
 
 <style>
   /* A desk: the title on the content's start edge (the composer's: --space-7
-     in a panel, --space-3 where the composer goes edge to edge, Composer's
-     max-width 900px), its actions trailing. */
+     in a panel), its actions trailing. */
   .row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -289,10 +288,6 @@
     min-block-size: calc(var(--c-btn-h-sm) + var(--space-2) * 2);
     padding-block: var(--space-2);
     padding-inline: var(--space-7) var(--space-2);
-
-    @media (max-width: 900px) {
-      padding-inline-start: var(--space-3);
-    }
   }
   .title {
     display: flex;
@@ -307,10 +302,9 @@
      of one width (two icon buttons), the actions trailing. */
   .row.phone {
     --side: calc(var(--c-btn-h-sm) * 2 + var(--space-1));
-    grid-template-columns: minmax(var(--side), 1fr) minmax(0, max-content) minmax(
-        var(--side),
-        1fr
-      );
+    grid-template-columns:
+      minmax(var(--side), 1fr) minmax(0, max-content)
+      minmax(var(--side), 1fr);
     padding-inline: var(--space-2);
 
     & .title {

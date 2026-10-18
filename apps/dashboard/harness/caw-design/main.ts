@@ -1,12 +1,15 @@
 /**
  * Caw's panel: the owner's open decisions and what changed from his pins,
- * on the real components and fixture data, as one page (Page.svelte).
+ * on the real components and fixture data, as one page (Page.svelte). With
+ * `?board=desk` or `?board=phone` it is the empty board alone (Board.svelte),
+ * which the page frames at a device's size.
  */
 // biome-ignore assist/source/organizeImports: ./assets keeps the browser's own fetch, so it loads before the guard
 import { keepCawsFiles } from "./assets";
 import "../guard";
 import "./page.css";
 import { mount } from "svelte";
+import Board from "./Board.svelte";
 import Page from "./Page.svelte";
 
 keepCawsFiles();
@@ -22,4 +25,6 @@ const target = document.getElementById("page");
 if (!target) {
   throw new Error("index.html holds #page.");
 }
-mount(Page, { target });
+mount(new URLSearchParams(location.search).has("board") ? Board : Page, {
+  target,
+});

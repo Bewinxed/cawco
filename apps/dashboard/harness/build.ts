@@ -12,7 +12,9 @@ import { build } from "vite";
 const dashboard = join(dirname(fileURLToPath(import.meta.url)), "..");
 const [, , name] = process.argv;
 if (!(name && /^[a-z0-9][a-z0-9-]*$/.test(name))) {
-  console.error("usage: bun harness/build.ts <name>  (a folder under harness/)");
+  console.error(
+    "usage: bun harness/build.ts <name>  (a folder under harness/)"
+  );
   process.exit(2);
 }
 if (!existsSync(join(dashboard, "harness", name, "index.html"))) {

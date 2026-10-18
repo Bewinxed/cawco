@@ -41,8 +41,7 @@ export function ease(name: string): (t: number) => number {
   };
 }
 
-const reduced = () =>
-  matchMedia("(prefers-reduced-motion: reduce)").matches;
+const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Uncovered: up from --pop-rise and in over --dur-pop (opacity only, reduced). */
 export function uncover(
@@ -68,8 +67,7 @@ export function leave(node: Element): TransitionConfig {
   return {
     duration: ms("--dur-exit"),
     easing: ease("--ease-out"),
-    css: (t) =>
-      `opacity: ${t}; block-size: ${t * height}px; overflow: clip`,
+    css: (t) => `opacity: ${t}; block-size: ${t * height}px; overflow: clip`,
   };
 }
 

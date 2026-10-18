@@ -95,7 +95,12 @@
 
   const shown = $derived(list.slice(0, cap));
   const rest = $derived(list.slice(cap));
-  const step = $derived(Math.min(ms("--dur-stagger"), ms("--dur-cascade") / Math.max(shown.length, 1)));
+  const step = $derived(
+    Math.min(
+      ms("--dur-stagger"),
+      ms("--dur-cascade") / Math.max(shown.length, 1)
+    )
+  );
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   /** Each reason's element, the tile's accessible description. */
   const uid = $props.id();
@@ -198,7 +203,9 @@
     </div>
   </section>
 {:else if first}
-  <p class="none">Suggestions appear once the project has tasks, threads or a repository.</p>
+  <p class="none">
+    Suggestions appear once the project has tasks, threads or a repository.
+  </p>
 {/if}
 
 <style>
