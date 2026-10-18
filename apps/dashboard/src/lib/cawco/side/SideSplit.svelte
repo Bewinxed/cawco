@@ -4,10 +4,11 @@
    * one side of the resizable split (Split), and on the other, inset on the
    * preview sheet's recipe, what the conversation has to show — its plan,
    * its preview, a task one of its cards opened, a project folder's file
-   * one of its chips opened, or more than one under a switch. On a desk it
-   * is the split. Under 900px each rises on its own: the preview or the
-   * file as a sheet standing on the composer (SideSheet), so the reader can
-   * write while it is up; the plan as the house bottom sheet
+   * one of its chips opened, or more than one under a switch. On a desk
+   * and at an iPad's regular width it is the split. On a phone, or in a
+   * desk's pane under 900px (layoutPolicy.sideDrawer), each rises on its
+   * own: the preview or the file as a sheet standing on the composer
+   * (SideSheet), so the reader can write while it is up; the plan as the house bottom sheet
    * (the kit Drawer), from the screen's foot over the composer, as tall as
    * what it holds. A task there is its own page (the project page's
    * `?task=`), never a sheet: the thread's cards link to it. A session and
@@ -74,7 +75,11 @@
      */
     active: boolean;
     visible: boolean;
-    /** Under 900px: the surface is a sheet, not a split. */
+    /**
+     * The surface is a sheet, not a split (layoutPolicy.sideDrawer): a phone,
+     * or a fine pointer's pane under 900px; an iPad's regular width splits a
+     * pane 640px or wider.
+     */
     phone: boolean;
     /** A task one of the conversation's cards opened stands beside it (a desk only). */
     taskOpen?: boolean;

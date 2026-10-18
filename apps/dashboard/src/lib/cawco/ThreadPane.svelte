@@ -107,6 +107,7 @@
     composerBindings,
   } from "./workspace/composer-dock.svelte";
   import { settleWhile } from "./workspace/dock.svelte";
+  import { layoutPolicy } from "./workspace/layout-policy.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
   let {
@@ -332,7 +333,8 @@
   let side = $state<ReturnType<typeof SideSplit>>();
   /** The side surface's share of the width, in percent. */
   let sideShare = $state(0);
-  const phone = $derived(paneWidth > 0 && paneWidth < 900);
+  /** The side surface is the bottom drawer, a task its own page (layoutPolicy.sideDrawer). */
+  const phone = $derived(layoutPolicy.sideDrawer(paneWidth));
 
   /** What Caw plays on the composer: the thread's status, his loop or its still. */
   const seatStatus = $derived(thread?.status ?? "ready");

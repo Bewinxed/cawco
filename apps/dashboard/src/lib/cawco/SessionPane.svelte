@@ -86,6 +86,7 @@
     composerBindings,
   } from "./workspace/composer-dock.svelte";
   import { settleWhile } from "./workspace/dock.svelte";
+  import { layoutPolicy } from "./workspace/layout-policy.svelte";
   import { rebuildScheduler } from "./workspace/scheduler.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
@@ -136,6 +137,8 @@
    */
   let previewShare = $state(0);
   const phone = $derived(paneWidth > 0 && paneWidth < 900);
+  /** The side surface is the bottom drawer, not the split (layoutPolicy.sideDrawer). */
+  const drawer = $derived(layoutPolicy.sideDrawer(paneWidth));
   let side = $state<ReturnType<typeof SideSplit>>();
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
@@ -1143,7 +1146,7 @@
   {:else if session}
     <SideSplit
       {active}
-      {phone}
+      phone={drawer}
       planOf={viewId}
       task={besideStages ? besideSurface : undefined}
       taskOpen={!!beside}

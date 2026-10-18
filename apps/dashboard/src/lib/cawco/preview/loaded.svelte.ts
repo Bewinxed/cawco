@@ -22,7 +22,7 @@
 import { layoutPolicy } from "../workspace/layout-policy.svelte";
 
 /** How many panes off screen keep their page: the owner's bound. */
-const loadedHidden = (): number => (layoutPolicy.phone ? 1 : 2);
+const loadedHidden = (): number => (layoutPolicy.compact ? 1 : 2);
 
 interface Entry {
   /** When its tab went off screen; null while on screen. */
