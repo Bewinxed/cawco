@@ -103,7 +103,7 @@
       </div>
     </div>
   {:else if text.trim()}
-    <div class="prose prose-sm dark:prose-invert max-w-none">
+    <div class="prose prose-sm dark:prose-invert max-w-none wrap-anywhere">
       <Markdown source={text} />
     </div>
   {:else}

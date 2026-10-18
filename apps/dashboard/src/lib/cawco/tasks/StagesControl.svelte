@@ -183,7 +183,7 @@
               >
                 <span>{NAMES[template.name]}</span>
                 {#if applying === template.name}
-                  <Spinner class="ml-auto" />
+                  <Spinner class="ms-auto" />
                 {/if}
               </span>
               <span class="type-meta text-ink-muted">

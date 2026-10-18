@@ -98,7 +98,7 @@
           type="single"
           value={into}
         >
-          <Select.Trigger aria-label="Stage" class="mr-auto" size="sm">
+          <Select.Trigger aria-label="Stage" class="me-auto" size="sm">
             {stageLabel(into)}
           </Select.Trigger>
           <Select.Content>

@@ -50,12 +50,12 @@
   {#each labels as label (label)}
     <Badge
       data-task-labels-label
-      class="group/label"
+      class="group/label max-w-full"
       data-label
       gap="tight"
       variant="secondary"
     >
-      <span>{label}</span>
+      <span class="min-w-0 overflow-clip text-ellipsis">{label}</span>
       <button
         aria-label="Remove the label {label}"
         class="-me-space-row inline-grid w-0 cursor-pointer place-items-center overflow-hidden border-none border-current bg-transparent p-0 text-inherit opacity-0 transition-[inline-size,opacity] dur-control ease-out group-hover/label:w-icon-sm group-hover/label:opacity-100 focus-visible:w-icon-sm focus-visible:opacity-100 coarse:w-icon-sm coarse:opacity-100"

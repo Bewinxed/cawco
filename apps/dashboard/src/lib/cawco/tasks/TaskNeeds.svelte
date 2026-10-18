@@ -142,7 +142,7 @@
               : ""}</span
           >
         </h3>
-        <p class="m-0 type-body text-ink-strong">
+        <p class="m-0 type-body text-ink-strong wrap-anywhere">
           {blocked.request.presentation.summary}
         </p>
         <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
@@ -167,7 +167,9 @@
               data-task-needs-glyph
               class="flex-none size-icon-md text-status-attn-glyph"
             />
-            <span>Approve {action.tool} on {action.connection}</span>
+            <span class="min-w-0 wrap-anywhere"
+              >Approve {action.tool} on {action.connection}</span
+            >
           {:else}
             <IconError
               data-task-needs-glyph
@@ -185,7 +187,7 @@
             >{ago(action.endedAt ?? action.createdAt)}</span
           >
         </h3>
-        <p class="m-0 type-body text-ink-strong">
+        <p class="m-0 type-body text-ink-strong wrap-anywhere">
           {#if action.state === "unknown"}
             Check {action.service}.
           {:else if action.state === "failed"}
@@ -198,7 +200,7 @@
           <!-- literal: 12rem -->
           <pre
             data-slot="args"
-            class="max-h-(--args-max) m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere"
+            class="max-h-(--args-max) m-0 py-space-2 px-space-3 overflow-auto overscroll-contain border border-border-well rounded-sm bg-surface-well type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere"
             style:--args-max="12rem">{action.args}</pre>
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
@@ -274,7 +276,9 @@
           >
         </h3>
         {#if lastAttempt.endedHow}
-          <p class="m-0 type-body text-ink-strong">{lastAttempt.endedHow}</p>
+          <p class="m-0 type-body text-ink-strong wrap-anywhere">
+            {lastAttempt.endedHow}
+          </p>
         {/if}
         <RowFault reason={retryProblem} />
         <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
