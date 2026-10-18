@@ -131,6 +131,29 @@ export function createDeck(
     }
   };
 
+  /** The cards on a layer of their own now. */
+  let layered: HTMLElement[] = [];
+  /**
+   * The cards in view on layers of their own for the gesture alone: on as
+   * the pair lands, before the claim (the frame the lift starts on, which a
+   * neighbour's first paint once took), and off as the settle lands or the
+   * pair leaves without moving the stack, so each is painted again where it
+   * rests. MDN (will-change): "switch will-change on and off using script
+   * code before and after the change occurs".
+   */
+  const layer = (on: Card[]) => {
+    const els = on.map(({ el }) => el);
+    for (const el of layered) {
+      if (!els.includes(el)) {
+        el.style.removeProperty("will-change");
+      }
+    }
+    for (const el of els) {
+      el.style.willChange = "transform";
+    }
+    layered = els;
+  };
+
   const stopSettle = () => {
     for (const animation of animations) {
       animation.cancel();
@@ -146,6 +169,7 @@ export function createDeck(
   const land = () => {
     stopSettle();
     clear();
+    layer([]);
     offset = 0;
     lifted = false;
   };
@@ -260,9 +284,16 @@ export function createDeck(
     paint(offset);
   }
 
-  /** The pair that stopped the settle left without moving it: let it go on. */
+  /**
+   * The pair that stopped the settle left without moving it: let it go on.
+   * A pair that landed on a stack at rest leaves it at rest, its layers let
+   * go.
+   */
   function resume() {
     if (held === null) {
+      if (animations.length === 0) {
+        layer([]);
+      }
       return;
     }
     const velocity = held;
@@ -292,6 +323,7 @@ export function createDeck(
       flushSync();
       clear();
       cards = gather();
+      layer(cards);
       offset += up ? height + GAP : -(height + GAP);
       paint(offset);
     }
@@ -344,6 +376,7 @@ export function createDeck(
         samples = [{ y: mid.y, t: performance.now() }];
         phase = "armed";
         hold();
+        layer(gather());
       };
 
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two-finger swipe/settle touchmove handler — one state machine, not split in this pass
@@ -377,6 +410,7 @@ export function createDeck(
           base = offset;
           height = node.clientHeight;
           cards = gather();
+          layer(cards);
           lifted = true;
           dragging = true;
           phase = "claimed";
@@ -408,6 +442,7 @@ export function createDeck(
       return {
         destroy() {
           stopSettle();
+          layer([]);
           root = null;
           node.removeEventListener("touchstart", onStart);
           node.removeEventListener("touchmove", onMove);

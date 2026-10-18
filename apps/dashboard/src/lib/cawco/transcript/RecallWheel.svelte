@@ -426,8 +426,32 @@
     const trail = () => {
       placeRows();
       deckFrame = deck().still ? 0 : requestAnimationFrame(trail);
+      if (deckFrame === 0) {
+        rowsLayer();
+      }
     };
     deckFrame = requestAnimationFrame(trail);
+    rowsLayer();
+  }
+
+  /** A press holding the rows: the composer's (`follow`) or one on the rows. */
+  let pressing = false;
+  /**
+   * The rows on layers of their own while they move (`--ghost-moves`, which
+   * each row's `will-change` reads): a roll, a press moving them, the deck's
+   * slide they follow; let go once all of them stand, so each row is
+   * painted again where it rests. MDN (will-change): "switch will-change on
+   * and off using script code before and after the change occurs".
+   */
+  function rowsLayer(): void {
+    if (frame !== 0 || deckFrame !== 0 || pressing) {
+      ghosts?.style.setProperty(
+        "--ghost-moves",
+        "translate, rotate, scale, opacity"
+      );
+    } else {
+      ghosts?.style.removeProperty("--ghost-moves");
+    }
   }
 
   /** Places every row and the draft, and keeps the pick. Writes only. */
@@ -483,9 +507,11 @@
       speed += (STIFFNESS * (goal - pos) - DAMPING * speed) * dt;
       pos += speed * dt;
       if (Math.abs(goal - pos) < 0.002 && Math.abs(speed) < 0.05) {
+        frame = 0;
         stand(goal);
         speed = 0;
         draw();
+        rowsLayer();
         settled?.();
         atRest();
         return;
@@ -494,6 +520,7 @@
       frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
+    rowsLayer();
   }
 
   /** Rolls to row `k`: a move of the reader's, so a pending close is off. */
@@ -698,6 +725,9 @@
     }
     settled = null;
     cancelAnimationFrame(frame);
+    frame = 0;
+    pressing = true;
+    rowsLayer();
     // Dragging down pulls older messages down into the field.
     stand(soft(1 + dy / row));
     draw();
@@ -705,6 +735,7 @@
 
   /** The press lifted, moving at `speedAt` px a ms: the wheel stays up. */
   export function release(speedAt: number): void {
+    pressing = false;
     target = clamp(Math.round(pos + speedAt * 6));
     roll();
   }
@@ -735,6 +766,8 @@
     dragY = event.clientY;
     dragAt = performance.now();
     flick = 0;
+    pressing = true;
+    rowsLayer();
     ghosts?.setPointerCapture(event.pointerId);
   }
   function onmove(event: PointerEvent): void {
@@ -747,6 +780,7 @@
     dragY = event.clientY;
     dragAt = now;
     cancelAnimationFrame(frame);
+    frame = 0;
     stand(soft(pos + dy / row));
     draw();
   }
@@ -921,7 +955,6 @@
       style:--ghost-pad="calc((var(--c-composer-field) - 1lh) / 2)"
       style:--ghost-cols="minmax(0, 1fr) auto"
       style:--ghost-size="16px"
-      style:--ghost-moves="translate, rotate, scale, opacity"
     >
       <span class="min-w-0 truncate group-data-none/ghost:text-ink-muted">
         {#if entry.kind === "none"}

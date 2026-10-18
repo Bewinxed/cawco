@@ -398,9 +398,27 @@ function growMotion(
   };
 }
 
+/**
+ * The card's own layer for its slide alone: on a frame before an open
+ * starts (the card still up behind the cut), on as a close starts, and let
+ * go as either run ends, so the card is painted again where it stands. Kept
+ * for as long as it was mounted, a layer kept the raster of whichever frame
+ * of its entrance first painted it, and its text stayed soft at rest. MDN
+ * (will-change): "it is a good practice to switch will-change on and off
+ * using script code before and after the change occurs".
+ */
+const slideLayer = (node: HTMLElement, on: boolean): void => {
+  if (on) {
+    node.style.willChange = "translate";
+  } else {
+    node.style.removeProperty("will-change");
+  }
+};
+
 function slideMotion(node: HTMLElement, options: Hang) {
   let run: Animation | null = null;
   let placed = false;
+  let frame = 0;
   const OPEN = "0px 0px";
   /**
    * Up behind the cut by the card's whole height and the reach of its shadow
@@ -437,6 +455,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
   const rest = () => {
     run?.cancel();
     run = null;
+    slideLayer(node, false);
     standing.delete(node);
     delete node.dataset.shown;
     node.dispatchEvent(new Event(FOLDED));
@@ -452,6 +471,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
     if (!motionOk.current || options.held?.()) {
       run?.cancel();
       run = null;
+      slideLayer(node, false);
       grown(node);
       return;
     }
@@ -462,10 +482,16 @@ function slideMotion(node: HTMLElement, options: Hang) {
           // At rest the card's own rules hold it open.
           growth.cancel();
           run = null;
+          slideLayer(node, false);
           grown(node);
         }
       })
       .catch(() => undefined);
+  };
+  /** An open on the next frame, the card on its layer for it now. */
+  const growNext = () => {
+    slideLayer(node, true);
+    frame = requestAnimationFrame(grow);
   };
   const fold = () => {
     options.onshown?.(false);
@@ -479,6 +505,9 @@ function slideMotion(node: HTMLElement, options: Hang) {
       rest();
       return;
     }
+    // Bits-ui holds the card mounted only while a close animation runs as
+    // it closes, so the close starts now, its layer with it.
+    slideLayer(node, true);
     const folding = play(drawn(OPEN), shut(), dur("--dur-exit"));
     folding.finished
       .then(() => {
@@ -488,7 +517,6 @@ function slideMotion(node: HTMLElement, options: Hang) {
       })
       .catch(() => undefined);
   };
-  let frame = 0;
   // Every open once the card is placed: a card caught mid-close, and a card
   // kept mounted while shut (Caw's panel), which bits-ui placed once.
   const state = new MutationObserver(() => {
@@ -500,7 +528,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
       // that draws the card open (its layers, its focus scope) is not also
       // the slide's first.
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(grow);
+      growNext();
     }
   });
   state.observe(node, { attributes: true, attributeFilter: ["data-state"] });
@@ -508,21 +536,18 @@ function slideMotion(node: HTMLElement, options: Hang) {
     placed() {
       const first = !placed;
       placed = true;
-      if (first) {
-        // After the frame that lays the placed card out, so the growth
-        // starts on a frame of its own; and only open (a card kept mounted
-        // while shut is placed as it first opens).
-        frame = requestAnimationFrame(() => {
-          if (node.dataset.state === "open") {
-            grow();
-          }
-        });
+      // After the frame that lays the placed card out, so the growth starts
+      // on a frame of its own; and only open (a card kept mounted while
+      // shut is placed as it first opens).
+      if (first && node.dataset.state === "open") {
+        growNext();
       }
     },
     stop() {
       cancelAnimationFrame(frame);
       state.disconnect();
       run?.cancel();
+      slideLayer(node, false);
     },
   };
 }

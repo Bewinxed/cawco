@@ -1435,7 +1435,6 @@
     box-shadow: none;
     clip-path: path("M 0 0 Z");
     translate: none;
-    will-change: auto;
 
     &::before,
     &::after {
@@ -1505,6 +1504,23 @@
   [data-bits-floating-content-wrapper]:has(> .kit-pop.kit-hang) {
     clip-path: inset(0 -120px -120px);
   }
+  /* bits-ui places every floating wrapper by `transform` and, at a device
+     pixel ratio of 1.5 or more, gives it `will-change: transform` inline
+     for as long as it is mounted (bits-ui 2.19.5, the latest,
+     internal/floating-svelte/use-floating.svelte.js), so a card kept
+     mounted while shut (Caw's panel) held a layer for good. Placed on whole
+     device pixels (its `roundByDPR`), a wrapper needs none at rest; one that
+     follows its anchor frame by frame takes one while it moves
+     (`data-follows`, PaneTabs `followLayer`: an attribute, since bits-ui
+     writes the wrapper's style whole on every placement). `!important` is
+     how a rule holds against bits-ui's inline style. */
+  [data-bits-floating-content-wrapper] {
+    will-change: auto !important;
+
+    &[data-follows] {
+      will-change: transform !important;
+    }
+  }
   /* Open and close are the card's own (`hang`): the kit's rise, scale and
      fade do not apply, and until it is placed it is held shut, up behind
      the cut. With reduced motion the kit's fade runs and the card stands
@@ -1522,13 +1538,6 @@
        cut. */
     .kit-pop.kit-hang:not(.tab-hang, [data-shown]) {
       translate: 0 calc(-100% - var(--hang-reach, 0px));
-    }
-    /* Its own layer for as long as it is mounted: WebKit gave the card one
-       for its slide alone and took it away when the slide ended, and that
-       repainted the whole card, its shadow and its rows, in the frame it
-       landed in (75–80 ms in Playwright WebKit at 3x). */
-    .kit-pop.kit-hang:not(.tab-hang) {
-      will-change: translate;
     }
     @starting-style {
       .kit-pop.kit-hang[data-state="open"] {
@@ -1781,6 +1790,19 @@
      frame would paint the sheet back fully open. It holds the last frame. */
   [data-vaul-drawer][data-state="closed"] {
     animation-fill-mode: forwards;
+  }
+  /* vaul keeps the drawer on a layer of its own for as long as it is drawn
+     (its `[data-vaul-drawer] { will-change: transform }`, vaul-svelte
+     1.0.0-next.7, the latest, unlayered), so the drawer kept the raster of
+     a frame of its slide in and its text stayed soft at rest (vaul-svelte
+     #132, open). The layer is the drag's alone: vaul marks the drawer
+     `vaul-dragging` while a finger moves it, and its own slides and its
+     settle after a release animate `transform`, which MDN's will-change
+     counts as included already ("Animated properties are treated as if
+     they're already included in a will-change"). `!important` is how a
+     layered rule holds against vaul's unlayered one. */
+  [data-vaul-drawer]:not(.vaul-dragging) {
+    will-change: auto !important;
   }
   /* A closing drawer and its scrim let presses through to the page, as a
      closing dialog's and sheet's do (floating-presence `pressable`): left

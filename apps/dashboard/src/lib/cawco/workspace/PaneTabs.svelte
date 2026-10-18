@@ -579,6 +579,19 @@
     }
   }
   /**
+   * A pinned card follows its tab as the strip scrolls, frame by frame
+   * (bits-ui places its floating wrapper again on every scroll): the wrapper
+   * moves on a layer of its own for the scroll, so each step is the
+   * compositor's, not a repaint of the card, and lets it go as the scroll
+   * ends (`scrollend`), painted again where it stands: its `data-follows`
+   * (app.css, an attribute because bits-ui writes the wrapper's style whole
+   * on every placement). MDN (will-change): "switch will-change on and off
+   * using script code before and after the change occurs".
+   */
+  function followLayer(on: boolean) {
+    cardEl?.parentElement?.toggleAttribute("data-follows", on);
+  }
+  /**
    * The strip scrolled: a card the pointer opened by hovering its tab
    * closes, since that tab has moved out from under the pointer, and it
    * does not open again until the pointer moves (`hoverTab`, a tab come
@@ -589,6 +602,7 @@
    */
   function scrolledUnderCard() {
     if (pinned) {
+      followLayer(true);
       return;
     }
     // A card about to open on hover would open on a tab that has moved on.
@@ -1406,6 +1420,7 @@
   <TabsList
     aria-label="Open sessions in this group"
     onscroll={scrolledUnderCard}
+    onscrollend={() => followLayer(false)}
     scrollable
   >
     {#each tabs as tab, i (tab.key)}
@@ -2201,17 +2216,10 @@
       var(--border-control)
     );
   }
-  /* A pinned card follows its tab as the strip scrolls, frame by frame: its
-     wrapper moves on its own layer, so each step is the compositor's, not a
-     repaint of the card. The glide to another tab: the wrapper's move and
-     the card's height together; the outline follows them frame by frame
-     (HangCard). */
-  /* css-scope: bits-ui's floating wrapper, only while it holds the details card */
-  :global(
-    [data-bits-floating-content-wrapper]:has(> [data-session-details-popover])
-  ) {
-    will-change: transform;
-  }
+  /* The glide to another tab: the wrapper's move and the card's height
+     together; the outline follows them frame by frame (HangCard). A pinned
+     card following its tab as the strip scrolls is the script's
+     (`followLayer`). */
   @media (prefers-reduced-motion: no-preference) {
     /* css-scope: the same wrapper, while the card glides between tabs */
     :global(
