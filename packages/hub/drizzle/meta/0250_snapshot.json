@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3d06571d-865a-461e-9838-f122bd200493",
-  "prevId": "f4892471-bd7b-4bc2-aaf9-434de77529ea",
+  "id": "229707f8-54a5-4818-9311-a934cfd52304",
+  "prevId": "cbce4395-146f-46a9-b050-c59330a83f49",
   "tables": {
     "account_bench": {
       "name": "account_bench",
@@ -948,14 +948,6 @@
     "agents": {
       "name": "agents",
       "columns": {
-        "address_contract": {
-          "name": "address_contract",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
         "machine_capabilities": {
           "name": "machine_capabilities",
           "type": "text",
@@ -1557,6 +1549,52 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "chosen_modes": {
+      "name": "chosen_modes",
+      "columns": {
+        "machine_id": {
+          "name": "machine_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "harness": {
+          "name": "harness",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "permission_mode": {
+          "name": "permission_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "chosen_at": {
+          "name": "chosen_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "chosen_modes_machine_id_harness_pk": {
+          "columns": [
+            "machine_id",
+            "harness"
+          ],
+          "name": "chosen_modes_machine_id_harness_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -2228,6 +2266,66 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "declined_rewrites": {
+      "name": "declined_rewrites",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "path": {
+          "name": "path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "words": {
+          "name": "words",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "declined_rewrites_project_id_projects_id_fk": {
+          "name": "declined_rewrites_project_id_projects_id_fk",
+          "tableFrom": "declined_rewrites",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "declined_rewrites_project_id_path_pk": {
+          "columns": [
+            "project_id",
+            "path"
+          ],
+          "name": "declined_rewrites_project_id_path_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "delegate_events": {
       "name": "delegate_events",
       "columns": {
@@ -2746,6 +2844,67 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "fact_uses": {
+      "name": "fact_uses",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "path": {
+          "name": "path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "used_at": {
+          "name": "used_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "fact_uses_project_id_projects_id_fk": {
+          "name": "fact_uses_project_id_projects_id_fk",
+          "tableFrom": "fact_uses",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "fact_uses_project_id_path_key_pk": {
+          "columns": [
+            "project_id",
+            "path",
+            "key"
+          ],
+          "name": "fact_uses_project_id_path_key_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -3995,14 +4154,6 @@
     "instances": {
       "name": "instances",
       "columns": {
-        "address_required": {
-          "name": "address_required",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
         "machine_removed": {
           "name": "machine_removed",
           "type": "integer",
@@ -4017,14 +4168,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "address_protocol": {
-          "name": "address_protocol",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         },
         "end_reason": {
           "name": "end_reason",
@@ -4222,7 +4365,7 @@
           "name": "harness",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "account_id": {
@@ -7063,6 +7206,51 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "prose_backfills": {
+      "name": "prose_backfills",
+      "columns": {
+        "instance_id": {
+          "name": "instance_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "messages": {
+          "name": "messages",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "prose_backfills_instance_id_instances_id_fk": {
+          "name": "prose_backfills_instance_id_instances_id_fk",
+          "tableFrom": "prose_backfills",
+          "tableTo": "instances",
+          "columnsFrom": [
+            "instance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "push_devices": {
       "name": "push_devices",
       "columns": {
@@ -8199,7 +8387,7 @@
           "name": "body",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "mode": {
@@ -8512,6 +8700,81 @@
       },
       "indexes": {},
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "session_prose": {
+      "name": "session_prose",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "instance_id": {
+          "name": "instance_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "who": {
+          "name": "who",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "session_prose_project_at": {
+          "name": "session_prose_project_at",
+          "columns": [
+            "project_id",
+            "at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "session_prose_project_id_projects_id_fk": {
+          "name": "session_prose_project_id_projects_id_fk",
+          "tableFrom": "session_prose",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -8945,14 +9208,6 @@
           "primaryKey": true,
           "notNull": true,
           "autoincrement": false
-        },
-        "denied_seeded": {
-          "name": "denied_seeded",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         },
         "cawco_todos": {
           "name": "cawco_todos",
@@ -11253,6 +11508,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "stage_for": {
+          "name": "stage_for",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         }
       },
