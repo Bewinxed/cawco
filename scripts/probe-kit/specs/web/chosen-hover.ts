@@ -21,11 +21,28 @@
  * hovers by `:hover`, forced on the unchosen item through the DevTools
  * protocol (`CSS.forcePseudoState`), the pointer away.
  *
+ * The canvas's tool rail (DESIGN.md, The tool rail): its chosen tool is on
+ * the kit Toggle's on step, a hovered unchosen tool differs from it, and the
+ * chosen tool stands 3:1 against the rail. The canvas host is its own
+ * bundle, whose sheet styles html and body, so the rail is drawn on a page of
+ * its own from the sheets the host loads: the decision-page kit's tokens
+ * (host.tsx) and canvas.css, in the host's scheme (`color-scheme` on the
+ * root, as host.tsx sets it). The rail's material is translucent: each
+ * ground is painted as it stacks (the canvas's surface-raised, the rail's
+ * material, the box), its backdrop's blur and saturation left out, which
+ * over the flat raised ground changes nothing measurable.
+ *
+ * Caw's panel's section rule (DESIGN.md, Caw's panel), on the
+ * /motion/caw-notices bench with both sections: solid `brand-solid`, and
+ * 3:1 or more against the raised panel (`surface-raised`).
+ *
  *   bun scripts/probe-kit/run.ts web chosen-hover
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { CDPSession, Page } from "playwright-core";
 import type { Kit, Spec } from "../../kit";
-import { open, settle, THEMES } from "../../kit";
+import { open, ROOT, settle, THEMES } from "../../kit";
 
 const WASH = "var(--selected-bg)";
 const ON_STEP = "light-dark(var(--surface-fill-strong), var(--surface-fill))";
@@ -410,6 +427,175 @@ async function checkInks(
 const same = (a: number[], b: number[]) =>
   a.length === b.length && a.every((c, i) => Math.abs(c - (b[i] ?? 0)) <= 1);
 
+const RAIL_SHEETS = [
+  join(ROOT, "packages/hub/skills/decision-page/kit/tokens.css"),
+  join(ROOT, "packages/agent/src/canvas-host/canvas.css"),
+];
+
+/** Two tools of the rail's tools group, the first chosen, as rail.tsx draws them. */
+const RAIL_PAGE = (scheme: string) => `<!doctype html>
+<html data-canvas-inset style="color-scheme: ${scheme}">
+<head>${RAIL_SHEETS.map((path) => `<style>${readFileSync(path, "utf8")}</style>`).join("")}</head>
+<body><div id="canvas-root"><div class="canvas-host">
+  <div aria-label="Tools" class="rail rail-tools" role="toolbar">
+    <button class="rail-box" data-chosen data-probe="chosen" type="button"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 4h16v16H4z" fill="currentColor"/></svg></button>
+    <button class="rail-box" data-probe="other" type="button"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 4h16v16H4z" fill="currentColor"/></svg></button>
+  </div>
+</div></div></body></html>`;
+
+/**
+ * The colours of `selectors`' backgrounds (each `null` entry a value to
+ * resolve instead) painted one over the next on one pixel, as they stack:
+ * the sRGB bytes the eye gets where the last one is.
+ */
+function paintStack(
+  page: Page,
+  layers: { selector?: string; value?: string }[]
+): Promise<{ colors: string[]; rgb: number[] }> {
+  return page.evaluate((stack) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const pen = canvas.getContext("2d");
+    const colors: string[] = [];
+    for (const layer of stack) {
+      let color = "transparent";
+      if (layer.selector) {
+        const el = document.querySelector(layer.selector);
+        color = el ? getComputedStyle(el).backgroundColor : "transparent";
+      } else if (layer.value) {
+        const probe = document.createElement("div");
+        probe.style.background = layer.value;
+        document.body.append(probe);
+        color = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+      }
+      colors.push(color);
+      if (pen) {
+        pen.fillStyle = color;
+        pen.fillRect(0, 0, 1, 1);
+      }
+    }
+    return {
+      colors,
+      rgb: pen ? [...pen.getImageData(0, 0, 1, 1).data] : [],
+    };
+  }, layers);
+}
+
+/** The rail's chosen tool: the Toggle's on step, not its hover, 3:1 against the rail. */
+async function checkRail(
+  kit: Kit,
+  theme: string,
+  cdp: CDPSession,
+  page: Page
+): Promise<void> {
+  await page.setContent(RAIL_PAGE(theme));
+  await page.mouse.move(1, 1);
+  await settle(page, 400);
+  const host = { selector: ".canvas-host" };
+  const rail = { selector: ".rail-tools" };
+  const ground = await paintStack(page, [host, rail]);
+  const chosen = await paintStack(page, [
+    host,
+    rail,
+    { selector: '[data-probe="chosen"]' },
+  ]);
+  const recipe = await paintStack(page, [host, rail, { value: ON_STEP }]);
+  const release = await forceHover(cdp, '[data-probe="other"]');
+  await settle(page, 400);
+  const hovered = await paintStack(page, [
+    host,
+    rail,
+    { selector: '[data-probe="other"]' },
+  ]);
+  await release();
+  const glyph = await page.evaluate(() => {
+    const el = document.querySelector('[data-probe="chosen"]');
+    return el ? getComputedStyle(el).color : null;
+  });
+  const glyphRgb = glyph
+    ? (await paintStack(page, [{ value: glyph }])).rgb
+    : [];
+  const against = Math.round(ratio(chosen.rgb, ground.rgb) * 100) / 100;
+  const ink = Math.round(ratio(glyphRgb, chosen.rgb) * 100) / 100;
+  kit.check(
+    `${theme}: Canvas rail's chosen tool: chosen differs from a hovered unchosen tool and is DESIGN's Toggle on step`,
+    same(chosen.rgb, recipe.rgb) && !same(chosen.rgb, hovered.rgb),
+    JSON.stringify({
+      chosen: chosen.colors.at(-1),
+      chosenRgb: chosen.rgb.join(","),
+      hovered: hovered.colors.at(-1),
+      hoveredRgb: hovered.rgb.join(","),
+      recipe: recipe.colors.at(-1),
+    })
+  );
+  kit.check(
+    `${theme}: Canvas rail's chosen tool stands 3:1 against the rail`,
+    against >= 3,
+    JSON.stringify({
+      rail: ground.colors,
+      railRgb: ground.rgb.join(","),
+      chosenRgb: chosen.rgb.join(","),
+      fillAgainstRail: against,
+      glyph,
+      glyphOnFill: ink,
+    })
+  );
+}
+
+/** Caw's panel's section rule: solid brand-solid, 3:1 against the raised panel. */
+async function checkCawRule(
+  kit: Kit,
+  theme: string,
+  page: Page,
+  bench: string
+): Promise<void> {
+  const rule =
+    ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"]) .section + .section';
+  await open(page, `${bench}/motion/caw-notices?fixture=full`, rule);
+  await settle(page, 400);
+  const read = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) {
+      return null;
+    }
+    const style = getComputedStyle(el);
+    return {
+      color: style.borderBlockStartColor,
+      style: style.borderBlockStartStyle,
+      width: style.borderBlockStartWidth,
+    };
+  }, rule);
+  const drawn = read
+    ? await paintStack(page, [
+        { value: "var(--surface-raised)" },
+        { value: read.color },
+      ])
+    : null;
+  const brand = await paintStack(page, [{ value: "var(--brand-solid)" }]);
+  const raised = await paintStack(page, [{ value: "var(--surface-raised)" }]);
+  const contrast = drawn
+    ? Math.round(ratio(drawn.rgb, raised.rgb) * 100) / 100
+    : 0;
+  kit.check(
+    `${theme}: Caw's panel's section rule is 1px of solid brand-solid, 3:1 or more on the raised panel`,
+    read !== null &&
+      drawn !== null &&
+      read.style === "solid" &&
+      read.width === "1px" &&
+      same(drawn.rgb, brand.rgb) &&
+      contrast >= 3,
+    JSON.stringify({
+      rule: read,
+      ruleRgb: drawn?.rgb.join(","),
+      brandSolid: brand.colors[0],
+      raised: raised.colors[0],
+      contrast,
+    })
+  );
+}
+
 const spec: Spec = {
   name: "chosen-hover",
   run: async (kit: Kit) => {
@@ -455,6 +641,8 @@ const spec: Spec = {
           })
         );
       }
+      await checkCawRule(kit, theme, page, bench);
+      await checkRail(kit, theme, cdp, page);
     }
   },
 };

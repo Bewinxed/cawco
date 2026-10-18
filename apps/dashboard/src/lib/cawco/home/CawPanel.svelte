@@ -331,18 +331,12 @@
     );
   }
   /* Sections part with a vermillion hairline: 1px of the brand's vermillion
-     (`brand-solid`) at `tab-rim-mix` (the strength a status rim holds 3:1 at),
-     across the rows' width. Increase Contrast draws it solid. */
+     (`brand-solid`), solid, across the rows' width, as Files draws it: it
+     holds 3:1 on the raised panel in both schemes. */
   .section + .section {
     margin-block-start: var(--space-2);
     padding-block-start: var(--space-2);
-    border-block-start: 1px solid
-      color-mix(in oklab, var(--brand-solid) var(--tab-rim-mix), transparent);
-  }
-  @media (prefers-contrast: more) {
-    .section + .section {
-      border-block-start-color: var(--brand-solid);
-    }
+    border-block-start: 1px solid var(--brand-solid);
   }
   .head {
     display: flex;
