@@ -29,7 +29,7 @@
 
 <DialogPrimitive.Title
   class={cn(
-    "text-title wrap-anywhere",
+    "wrap-anywhere text-title",
     dialogTitleVariants({ gap, look }),
     className
   )}

@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   export const tableCellVariants = tv({
-    base: "whitespace-nowrap wrap-anywhere p-3 align-middle [&:has([role=checkbox])]:pe-0",
+    base: "wrap-anywhere whitespace-nowrap p-3 align-middle [&:has([role=checkbox])]:pe-0",
     variants: {
       variant: {
         /** A list row's cell: meta text on the row's own spacing. */

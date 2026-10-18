@@ -41,10 +41,10 @@
       },
       size: {
         default:
-          "min-h-9 gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3",
-        xs: "min-h-6 min-w-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
-        sm: "min-h-c-btn-h-sm gap-(--btn-gap) px-[11px] text-label [--btn-gap:7px] [--btn-icon:16px] has-data-[icon=inline-end]:pe-2 has-data-[icon=inline-start]:ps-2",
-        lg: "min-h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pe-3 has-data-[icon=inline-start]:ps-3",
+          "min-h-9 gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-start]:ps-3 has-data-[icon=inline-end]:pe-3",
+        xs: "min-h-6 min-w-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-start]:ps-1.5 has-data-[icon=inline-end]:pe-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
+        sm: "min-h-c-btn-h-sm gap-(--btn-gap) px-[11px] text-label [--btn-gap:7px] [--btn-icon:16px] has-data-[icon=inline-start]:ps-2 has-data-[icon=inline-end]:pe-2",
+        lg: "min-h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-start]:ps-3 has-data-[icon=inline-end]:pe-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
         "icon-sm": "size-[30px]",
