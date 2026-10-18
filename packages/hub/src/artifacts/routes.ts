@@ -17,6 +17,7 @@ import {
 import { Elysia, t } from "elysia";
 import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
+import { PROGRAM_MAX } from "../decision-program";
 import {
   ArtifactRefusal,
   type Artifacts,
@@ -108,7 +109,7 @@ const sheetChangeOf = (body: {
   return body.args ? { args: body.args } : { story: body.story as StoryOp };
 };
 
-/** The one change an update names: a page's html or patch, a canvas's elements, delete or mermaid, a sheet's args or story. */
+/** The one change an update names (a decision page's statements have their own route): a page's html or patch, a canvas's elements, delete or mermaid, a sheet's args or story. */
 const changeOf = (body: {
   args?: Extract<SheetChange, { args: unknown }>["args"];
   delete?: string[];
@@ -117,14 +118,15 @@ const changeOf = (body: {
   mermaid?: string;
   patch?: unknown[];
   story?: StoryOp;
-}): PageChange | CanvasChange | SheetChange => {
+}):
+  Exclude<PageChange, { statements: string }> | CanvasChange | SheetChange => {
   const named = (
     ["html", "patch", "elements", "delete", "mermaid", "args", "story"] as const
   ).filter((key) => body[key] !== undefined);
   if (named.length !== 1) {
     throw new ArtifactRefusal(
       400,
-      "Pass exactly one of html or patch (a page), elements, delete or mermaid (a canvas), or args or story (a sheet)."
+      "Pass exactly one of statements (a decision page), html or patch (a page), elements, delete or mermaid (a canvas), or args or story (a sheet)."
     );
   }
   if (body.args !== undefined || body.story !== undefined) {
@@ -179,6 +181,9 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           mermaid: t.Optional(mermaid),
           name: t.String({ pattern: ARTIFACT_NAME.source }),
           html: t.Optional(t.String({ minLength: 1, maxLength: PAGE_LIMIT })),
+          program: t.Optional(
+            t.String({ minLength: 1, maxLength: PROGRAM_MAX })
+          ),
           file: t.Optional(
             t.String({
               minLength: 1,
@@ -266,6 +271,26 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           return "args" in change || "story" in change
             ? await artifacts.sheetUpdate(params.id, params.artifact, change)
             : await artifacts.update(params.id, params.artifact, change);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // A decision page's revision (artifact_update's statements): merged into its program by name; what changed.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/statements",
+      {
+        body: t.Object({
+          statements: t.String({ minLength: 1, maxLength: PROGRAM_MAX }),
+        }),
+      },
+      async ({ params, body }) => {
+        try {
+          return await artifacts.revise(
+            params.id,
+            params.artifact,
+            body.statements
+          );
         } catch (error) {
           return refused(error);
         }

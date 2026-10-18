@@ -44,6 +44,13 @@ declare global {
   }
 }
 
+/**
+ * Embedded in a decision page (its Canvas, `?embed=1`, the overlay's tag
+ * marked `data-embed`): the drawing shown live and read-only, no rail and no
+ * empty state's call to draw. The panel's own canvas is where it is drawn.
+ */
+const EMBEDDED = document.querySelector("script[data-embed]") !== null;
+
 /** Excalidraw's grid step, which ours draws in `code-bg`. */
 const GRID = 20;
 
@@ -504,10 +511,10 @@ function Host() {
         onScrollChange={scrolled}
         theme={theme}
         UIOptions={UI_OPTIONS}
-        viewModeEnabled={unlinked}
+        viewModeEnabled={unlinked || EMBEDDED}
         zenModeEnabled={false}
       />
-      {api ? (
+      {api && !EMBEDDED ? (
         <Rail
           api={api}
           docked={docked}
@@ -519,7 +526,7 @@ function Host() {
         />
       ) : null}
       {unlinkedShown ? <Unlinked why={unlinkedBecause(hold)} /> : null}
-      {!unlinked && empty ? <Empty onDraw={draw} /> : null}
+      {!(unlinked || EMBEDDED) && empty ? <Empty onDraw={draw} /> : null}
       {refusal ? <Refusal gone={cleared} refusal={refusal} /> : null}
     </div>
   );

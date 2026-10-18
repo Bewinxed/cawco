@@ -1,12 +1,14 @@
 <script lang="ts">
   /**
-   * The decisions as a graph (`decisions/decisions.json`): its cards where
-   * the file places them, its edges routed square from one card to the
-   * next, its groups as labelled frames round their cards, on the project's
-   * graph canvas (ViewCanvas's Svelte Flow, its zoom, tools and dots). Caw
-   * edits the file and the graph follows it; the person's drags save their
-   * places to it on release. A press on a card opens its page scrolled to
-   * it. Fitted to the canvas once, and again when the cards come or go.
+   * The decisions as a graph, derived by the hub from the project's decision
+   * pages: a card per decision where the person put it (or laid out by its
+   * depth), an edge from each decision another names in `after`, routed
+   * square from one card to the next, a labelled frame round each Section's
+   * cards, on the project's graph canvas (ViewCanvas's Svelte Flow, its
+   * zoom, tools and dots). The writer revises a page and the graph follows
+   * it; the person's drags save their places on release, into each page's
+   * artifact. A press on a card opens its page scrolled to it. Fitted to the
+   * canvas once, and again when the cards come or go.
    */
   import type { DecisionGraph as Graph } from "@cawco/core/decisions";
   import {
@@ -44,7 +46,7 @@
   const edgeTypes = { decision: DecisionEdge };
   const uid = $props.id();
   const marker = `decision-edge-${uid}`;
-  /** A card's box, as the file's places assume it. */
+  /** A card's box, as the hub's layout assumes it. */
   const CARD = { width: 148, height: 56 };
   /** How far a group's frame stands off its cards. */
   const FRAME = 16;
@@ -87,7 +89,7 @@
       ];
     });
 
-  // The file's cards and edges, drawn where it places them.
+  // The cards and edges, drawn where they stand.
   $effect(() => {
     const at = new Map(
       graph.cards.map((card) => [card.id, { x: card.x, y: card.y }])
@@ -102,8 +104,9 @@
         selectable: false,
         data: {
           name: card.name,
-          picked: card.picked === true,
+          picked: card.picked,
           page: card.page,
+          card: card.card,
         },
       })),
     ];
@@ -169,9 +172,9 @@
       nodesDraggable
       {nodeTypes}
       onnodeclick={({ node }) => {
-        const data = node.data as { page?: string };
-        if (node.type === "decision" && data.page) {
-          onopen(data.page, node.id);
+        const data = node.data as { card?: string; page?: string };
+        if (node.type === "decision" && data.page && data.card) {
+          onopen(data.page, data.card);
         }
       }}
       onnodedrag={follow}

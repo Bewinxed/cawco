@@ -10,7 +10,7 @@
  */
 import { join } from "node:path";
 import type { Locator } from "playwright-core";
-import { pageHtml, type SeedPage } from "../../decisions-preview/seed";
+import { pageProgram, type SeedPage } from "../../decisions-preview/seed";
 import { MACHINE, type Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
 import { say } from "./mock";
@@ -95,7 +95,7 @@ async function walk(leg: Leg): Promise<void> {
   await fleet.api(`/api/instances/${writer}/artifacts`, {
     kind: "page",
     name,
-    html: pageHtml(decisionPage(name, title)),
+    program: pageProgram(decisionPage(name, title)),
   });
   const decision = () =>
     fleet.api<DecisionRead>(`/api/projects/${projectId}/decisions/${name}`);

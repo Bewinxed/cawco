@@ -31,6 +31,7 @@ import {
   Map as YMap,
   YMapEvent,
 } from "yjs";
+import { here } from "./boot";
 
 /** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
 const REFUSED = 4400;
@@ -326,9 +327,10 @@ const connect = () => {
       disableBc: true,
       resyncInterval: RESYNC_MS,
       WebSocketPolyfill: LiveWebSocket,
-      // A canvas's page is a screen: it converts the agent's writes.
+      // A canvas's page is a screen: it converts the agent's writes. One
+      // embedded in a decision page only shows it.
       params:
-        joined.kind === "canvas"
+        joined.kind === "canvas" && here.tag?.dataset.embed === undefined
           ? { screen: "1" }
           : ({} as Record<string, string>),
     }

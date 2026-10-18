@@ -2,11 +2,13 @@
  * A project's decision pages, as the project page's Decisions tab reads and
  * acts on them (Projects spec §5.8; core decisions.ts for the shapes).
  *
- * - **The pages** are the folder's `decisions/<name>/` with a built page and
- *   the project's page artifacts, by name; the newest artifact of a name is
- *   the page. Its cards are read from the built page as the kit draws them
- *   (RECIPES.md: `article.dp-card`, its `h2`, `.dp-why`, its
- *   `[data-cawco-choice]` and their `[data-option]`s), so the record holds
+ * - **The pages** are the folder's `decisions/<name>/` with a program or a
+ *   built page, and the project's page artifacts, by name; the newest
+ *   artifact of a name is the page. A program's cards are its Decision
+ *   statements (core `readProgram`); an HTML page's (one whose pick the
+ *   person places or operates) are read from the built page as the kit
+ *   draws them (RECIPES.md: `article.dp-card`, its `h2`, `.dp-why`, its
+ *   `[data-cawco-choice]` and their `[data-option]`s). So the record holds
  *   what the person saw and to-tasks needs no page definitions of its own.
  * - **A send** (I'm done picking, a comment) goes to the session that wrote
  *   the page, as its own Send does (artifacts/service.ts `send`), which
@@ -19,12 +21,12 @@
  *   back out, so the page stands as it was.
  * - **The record keeps its tasks**: whenever the project's tasks change, a
  *   record whose cards' tasks moved is written again with them.
- * - **The graph** (`decisions/decisions.json`) is the person's drags and
- *   Caw's: he writes the file, or calls `decision_add` (a page's cards, each
- *   checked against the built page and placed on a new row under the rest),
- *   `decision_link` (edges between cards on it) and `decision_group` (a named
- *   frame round some of them). Each is one commit as Caw that keeps whatever
- *   else the file holds, the person's places included.
+ * - **The graph** is derived from the programs on every read: each
+ *   decision a card, an edge from each decision its `after` names
+ *   (`page#card` across pages), a frame per Section. The writer edits the
+ *   program (artifact_update's statements); the person's drags are theirs,
+ *   kept in each page's artifact state under `graph.places` by card id, so
+ *   they outlive revisions; a card with no place is laid out by its depth.
  */
 import {
   type ChoiceEntry,
@@ -44,13 +46,17 @@ import {
   type DecisionsList,
   type DecisionWriter,
   decidedOf,
-  GRAPH_FILE,
   type GraphCard,
+  type GraphPlace,
+  graphId,
   logOf,
+  PLACES_KEY,
   type RecordCard,
 } from "@cawco/core/decisions";
+import { AFTER_REF } from "@cawco/core/decisions-library";
 import { Elysia, status, t } from "elysia";
 import type { ArtifactRow } from "./db/artifacts";
+import { PROGRAM_FILE, readKept } from "./decision-program";
 import { boardTitle } from "./labels";
 
 export class DecisionRefusal extends Error {
@@ -108,9 +114,11 @@ const shown = (raw: string): string =>
 const MOCKUP_CLASS = /(?:^|\s)mk-([a-z0-9-]+)(?:\s|$)/;
 const RECOMMENDED = /recommended/i;
 
-/** What a built page says of itself: its title and its cards, in page order. */
+/** What a page says of itself: its title and its cards, in page order, and a program's Sections. */
 export interface ReadPage {
   cards: DecisionCard[];
+  /** Its Sections, by id, with their titles; none on an HTML page. */
+  sections?: { id: string; title: string }[];
   title: string;
 }
 
@@ -208,6 +216,8 @@ export const readPage = async (html: string): Promise<ReadPage> => {
           multiple: element.hasAttribute("data-cawco-multiple"),
           mockup: open?.mockup ?? null,
           options: [],
+          after: [],
+          section: null,
         };
         card = next;
         element.onEndTag(() => {
@@ -301,15 +311,14 @@ export interface DecisionsDeps {
   builtPage: (artifactId: string) => Promise<string | undefined>;
   /** Broadcasts that a project's decision pages changed. */
   changed: (projectId: string) => void;
-  /** Writes and deletes files of the project's folder in one commit, as the operator, or as Caw for his graph tools. */
+  /** Writes and deletes files of the project's folder in one commit, as the operator. */
   commit: (
     projectId: string,
     change: {
       deletes: string[];
       writes: { content: string; path: string }[];
     },
-    message: string,
-    by?: "caw"
+    message: string
   ) => Promise<void>;
   /** The names of the entries in one folder of the project's. */
   folderNames: (projectId: string, path: string) => Promise<string[]>;
@@ -321,6 +330,10 @@ export interface DecisionsDeps {
     meta: PageArtifact["meta"];
     state: Record<string, ChoiceEntry>;
   };
+  /** Keeps the person's places of a page's cards on the graph in its artifact's state, by card id. */
+  place: (artifactId: string, places: Record<string, GraphPlace>) => void;
+  /** A decision page artifact's program; undefined for an HTML page. */
+  program: (artifactId: string) => string | undefined;
   /** Whether the project is the hub's. */
   projectExists: (projectId: string) => boolean;
   /** The person's Send on a session's artifact (artifacts/service.ts `send`). */
@@ -349,54 +362,40 @@ interface StoredRecord extends DecisionRecord {
   askedIn?: string | null;
 }
 
-/**
- * Where `decision_add` places new cards: rows of {@link ROW_CARDS} under the
- * lowest card, a step apart that clears the graph view's card (148 × 56,
- * DecisionGraph.svelte) and a group's frame round it.
- */
-const STEP = { x: 188, y: 120 };
-const ROW_CARDS = 4;
-const GROUP_ID = /[^a-z0-9]+/g;
-const EDGE_ENDS = /^-+|-+$/g;
-
-/** The graph file as written: what a change keeps beside the cards, edges and groups it rewrites. */
-type GraphFile = Record<string, unknown>;
-
-/**
- * A page's card going onto the graph: its question, or null when the graph
- * has it already; refused when the page has no such card, or the graph has
- * that id from another page.
- */
-const newCard = (
-  onGraph: GraphCard[],
-  page: string,
-  card: string,
-  cards: DecisionCard[]
-): string | null => {
-  const drawn = cards.find((each) => each.id === card);
-  if (!drawn) {
-    throw new DecisionRefusal(
-      404,
-      `decisions/${page}/ has no card ${card}; its cards are ${cards.map((each) => each.id).join(", ") || "none"}.`
-    );
-  }
-  const there = onGraph.find((each) => each.id === card);
-  if (there && there.page !== page) {
-    throw new DecisionRefusal(
-      409,
-      `The graph has a card ${card} from decisions/${there.page}/ already, and cards are keyed by id.`
-    );
-  }
-  return there ? null : drawn.question;
-};
-
-/** A list the file holds, or none when it holds something else there. */
-const listed = (value: unknown): unknown[] =>
-  Array.isArray(value) ? value : [];
-
 const recordPath = (name: string) => `decisions/${name}/record.json`;
 const logPath = (name: string) => `decisions/${name}/log.md`;
 const builtPath = (name: string) => `decisions/${name}/index.html`;
+const programPath = (name: string) => `decisions/${name}/${PROGRAM_FILE}`;
+
+/**
+ * Where a card with no place of the person's stands: a column per depth
+ * along its `after`s, its row its place among that depth's cards, a step
+ * apart that clears the graph view's card (148 × 56, DecisionGraph.svelte)
+ * and a Section's frame round it.
+ */
+const STEP = { x: 220, y: 104 };
+
+/** The person's places of a page's cards, as its state keeps them. */
+const placesIn = (
+  state: Record<string, ChoiceEntry>
+): Record<string, GraphPlace> => {
+  const value = (state[PLACES_KEY] as ChoiceEntry | undefined)?.value;
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, Partial<GraphPlace>>).filter(
+      (entry): entry is [string, GraphPlace] =>
+        Number.isFinite(entry[1]?.x) && Number.isFinite(entry[1]?.y)
+    )
+  );
+};
+
+/** A page's picks and notes, the person's graph places not among them. */
+const responses = (state: Record<string, ChoiceEntry>): ChoiceEntry[] =>
+  Object.entries(state)
+    .filter(([key]) => key !== PLACES_KEY)
+    .map(([, entry]) => entry);
 
 const isRecord = (value: unknown): value is StoredRecord =>
   !!value &&
@@ -436,6 +435,128 @@ const dialsOf = (
  */
 const stillOf = (_name: string, _mockup: string | null): string | null => null;
 
+/** A page as the graph reads it: its cards and Sections, its picks, and the person's places. */
+interface GraphPage {
+  cards: DecisionCard[];
+  name: string;
+  places: Record<string, GraphPlace>;
+  sections: { id: string; title: string }[];
+  state: Record<string, ChoiceEntry>;
+}
+
+/** Every `after` as an edge, from the decision depended on; one naming no decision of the project goes to `problems`. */
+const edgesOf = (
+  pages: GraphPage[],
+  problems: string[]
+): [string, string][] => {
+  const ids = new Set(
+    pages.flatMap((page) =>
+      page.cards.map((card) => graphId(page.name, card.id))
+    )
+  );
+  const edges: [string, string][] = [];
+  for (const page of pages) {
+    for (const card of page.cards) {
+      for (const ref of card.after) {
+        const found = AFTER_REF.exec(ref);
+        const from = found
+          ? graphId(found[1] ?? page.name, found[2] ?? "")
+          : ref;
+        if (ids.has(from)) {
+          edges.push([from, graphId(page.name, card.id)]);
+        } else {
+          problems.push(
+            `${page.name}#${card.id} comes after ${ref}, which no decision page of this project has.`
+          );
+        }
+      }
+    }
+  }
+  return edges;
+};
+
+/** Each card's depth along the edges: one more than the deepest it comes after; a cycle stops at 0. */
+const depthsOf = (edges: [string, string][]): ((id: string) => number) => {
+  const into = new Map<string, string[]>();
+  for (const [from, to] of edges) {
+    into.set(to, [...(into.get(to) ?? []), from]);
+  }
+  const depth = new Map<string, number>();
+  const depthOf = (id: string, path: Set<string>): number => {
+    const known = depth.get(id);
+    if (known !== undefined) {
+      return known;
+    }
+    if (path.has(id)) {
+      return 0;
+    }
+    path.add(id);
+    const deepest = Math.max(
+      -1,
+      ...(into.get(id) ?? []).map((from) => depthOf(from, path))
+    );
+    path.delete(id);
+    depth.set(id, deepest + 1);
+    return deepest + 1;
+  };
+  return (id) => depthOf(id, new Set());
+};
+
+/** Every card where the person put it, else in its depth's column, one row after the last there. */
+const placedCards = (
+  pages: GraphPage[],
+  edges: [string, string][]
+): GraphCard[] => {
+  const columnOf = depthsOf(edges);
+  const rows = new Map<number, number>();
+  return pages.flatMap((page) =>
+    page.cards.map((card) => {
+      const id = graphId(page.name, card.id);
+      const column = columnOf(id);
+      const row = rows.get(column) ?? 0;
+      rows.set(column, row + 1);
+      const placed = page.places[card.id];
+      return {
+        id,
+        card: card.id,
+        page: page.name,
+        name: card.question || card.id,
+        picked: (page.state[card.id]?.options ?? []).length > 0,
+        x: placed?.x ?? column * STEP.x,
+        y: placed?.y ?? row * STEP.y,
+      };
+    })
+  );
+};
+
+/** A page's Sections as frames round their cards. */
+const groupsOf = (page: GraphPage) => {
+  const members = new Map<string, string[]>();
+  for (const card of page.cards) {
+    if (card.section) {
+      members.set(card.section, [
+        ...(members.get(card.section) ?? []),
+        graphId(page.name, card.id),
+      ]);
+    }
+  }
+  const titles = new Map(page.sections.map((each) => [each.id, each.title]));
+  return [...members].map(([section, cards]) => ({
+    id: graphId(page.name, section),
+    name: titles.get(section) ?? section,
+    cards,
+  }));
+};
+
+/** A page's own file in the folder: its program, else its built HTML; undefined when it has neither. */
+const keptIn = async (
+  folderText: DecisionsDeps["folderText"],
+  projectId: string,
+  name: string
+): Promise<string | undefined> =>
+  (await folderText(projectId, programPath(name))) ??
+  (await folderText(projectId, builtPath(name)));
+
 export const createDecisions = (deps: DecisionsDeps) => {
   const known = (projectId: string) => {
     if (!deps.projectExists(projectId)) {
@@ -456,8 +577,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
     for (const name of await deps.folderNames(projectId, "decisions")) {
       if (NAME.test(name) && !byName.has(name)) {
         // biome-ignore lint/performance/noAwaitInLoops: a project holds a handful of pages; read one at a time
-        const built = await deps.folderText(projectId, builtPath(name));
-        if (built !== undefined) {
+        const kept = await keptIn(deps.folderText, projectId, name);
+        if (kept !== undefined) {
           byName.set(name, null);
         }
       }
@@ -508,26 +629,44 @@ export const createDecisions = (deps: DecisionsDeps) => {
       return making(record) ? "making" : "decided";
     }
     const sentAt = page?.meta.sentAt;
-    if (
-      sentAt &&
-      !Object.values(page.state).some((entry) => entry.at > sentAt)
-    ) {
+    if (sentAt && !responses(page.state).some((entry) => entry.at > sentAt)) {
       return "sent";
     }
     return "picking";
   };
 
-  /** One page read whole: its built page, its doc, its record and its tasks. */
+  /**
+   * A page's title and cards: its program's (the artifact's, else the
+   * folder's page.oui), or an HTML page's read from its built page.
+   */
+  const pageOf = async (
+    projectId: string,
+    name: string,
+    artifact: ArtifactRow | null
+  ): Promise<ReadPage> => {
+    const program =
+      (artifact ? deps.program(artifact.id) : undefined) ??
+      (artifact?.kind === "page" && (await deps.builtPage(artifact.id))
+        ? undefined
+        : await deps.folderText(projectId, programPath(name)));
+    if (program !== undefined) {
+      const { title, cards, sections } = readKept(program);
+      return { title, cards, sections };
+    }
+    const html =
+      (artifact ? await deps.builtPage(artifact.id) : undefined) ??
+      (await deps.folderText(projectId, builtPath(name)));
+    return html ? await readPage(html) : { title: name, cards: [] };
+  };
+
+  /** One page read whole: its program or built page, its doc, its record and its tasks. */
   const readOne = async (
     projectId: string,
     name: string,
     artifact: ArtifactRow | null,
     tasks: DecidedTask[]
   ): Promise<{ read: DecisionPageRead; page: ReadPage }> => {
-    const html =
-      (artifact ? await deps.builtPage(artifact.id) : undefined) ??
-      (await deps.folderText(projectId, builtPath(name)));
-    const page = html ? await readPage(html) : { title: name, cards: [] };
+    const page = await pageOf(projectId, name, artifact);
     const doc: PageArtifact | null = artifact
       ? { row: artifact, ...deps.page(artifact.id) }
       : null;
@@ -664,73 +803,17 @@ export const createDecisions = (deps: DecisionsDeps) => {
     }
   };
 
-  /** The graph file as it stands, and read; an empty one while the folder has none. */
-  const graphFile = async (
-    projectId: string
-  ): Promise<{ file: GraphFile; graph: DecisionGraph }> => {
-    known(projectId);
-    const text = await deps.folderText(projectId, GRAPH_FILE);
-    if (text === undefined) {
-      return { file: {}, graph: { cards: [], edges: [], groups: [] } };
-    }
-    const graph = graphOf(text);
-    const file = jsonOf(text);
-    if (Array.isArray(file)) {
-      throw new DecisionRefusal(
-        422,
-        `${GRAPH_FILE} is a list; Caw writes it as { cards, edges, groups }.`
-      );
-    }
-    return { file: file as GraphFile, graph };
-  };
-
-  /** Caw's change to the graph: one commit as Caw, keeping what else the file holds. */
-  const writeGraph = async (
-    projectId: string,
-    file: GraphFile,
-    change: Partial<Record<keyof DecisionGraph, unknown[]>>,
-    message: string
-  ): Promise<void> => {
-    await deps.commit(
-      projectId,
-      {
-        writes: [
-          {
-            path: GRAPH_FILE,
-            content: `${JSON.stringify({ ...file, ...change }, null, 2)}\n`,
-          },
-        ],
-        deletes: [],
-      },
-      message,
-      "caw"
-    );
-    deps.changed(projectId);
-  };
-
-  /** The ids named that are not cards on the graph, refused in one sentence. */
-  const onGraph = (graph: DecisionGraph, ids: string[]): void => {
-    const there = new Set(graph.cards.map((card) => card.id));
-    const missing = [...new Set(ids)].filter((id) => !there.has(id));
-    if (missing.length > 0) {
-      throw new DecisionRefusal(
-        404,
-        `${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not on the graph; put ${missing.length > 1 ? "them" : "it"} there with decision_add first.`
-      );
-    }
-  };
-
   return {
     /** The project's pages, newest first, and whether its decisions form a graph. */
     async list(projectId: string): Promise<DecisionsList> {
       known(projectId);
-      const [names, tasks, graph] = await Promise.all([
+      const [names, tasks] = await Promise.all([
         pageNames(projectId),
         deps.tasks(projectId),
-        deps.folderText(projectId, GRAPH_FILE),
       ]);
       const problems: string[] = [];
       const pages: DecisionPageSummary[] = [];
+      let graph = false;
       for (const { name, artifact } of names) {
         try {
           // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
@@ -743,6 +826,9 @@ export const createDecisions = (deps: DecisionsDeps) => {
           if (!decisionPage(read, page)) {
             continue;
           }
+          graph ||= page.cards.some(
+            (card) => card.after.length > 0 || card.section !== null
+          );
           const { record: _record, sentAt: _sentAt, ...summary } = read;
           pages.push(summary);
         } catch (error) {
@@ -752,7 +838,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
         }
       }
       pages.sort((a, b) => b.updatedAt - a.updatedAt);
-      return { pages, graph: graph !== undefined, problems };
+      return { pages, graph, problems };
     },
 
     /** One page: its summary, its record (each card's tasks as filed now) and its last send. */
@@ -927,186 +1013,92 @@ export const createDecisions = (deps: DecisionsDeps) => {
       return (await find(projectId, name)).read;
     },
 
-    /** The graph, each card's pick read from its page; null when the decisions form none. */
+    /**
+     * The graph, derived from the project's pages now: a card per decision
+     * of each page whose artifact the hub holds (a page whose artifact is
+     * gone is named in `problems`), edges from each `after`, a frame per
+     * Section, each card where the person put it or laid out by its depth.
+     * Null when no decision names another or stands in a Section.
+     */
     async graph(projectId: string): Promise<DecisionGraph | null> {
       known(projectId);
-      const text = await deps.folderText(projectId, GRAPH_FILE);
-      if (text === undefined) {
+      const problems: string[] = [];
+      const pages: GraphPage[] = [];
+      for (const { name, artifact } of await pageNames(projectId)) {
+        // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
+        const page = await pageOf(projectId, name, artifact);
+        if (page.cards.length === 0) {
+          continue;
+        }
+        if (!artifact) {
+          problems.push(
+            `decisions/${name}/ has no artifact on this hub, so its decisions are not on the graph; its session can publish it again.`
+          );
+          continue;
+        }
+        const { state } = deps.page(artifact.id);
+        pages.push({
+          name,
+          cards: page.cards,
+          sections: page.sections ?? [],
+          state,
+          places: placesIn(state),
+        });
+      }
+      if (
+        !pages.some((page) =>
+          page.cards.some((card) => card.after.length > 0 || card.section)
+        )
+      ) {
         return null;
       }
-      const graph = graphOf(text);
-      const states = new Map<string, Record<string, ChoiceEntry>>();
-      for (const { name, artifact } of await pageNames(projectId)) {
-        if (artifact) {
-          states.set(name, deps.page(artifact.id).state);
-        }
-      }
+      const edges = edgesOf(pages, problems);
       return {
-        ...graph,
-        cards: graph.cards.map((card) => ({
-          ...card,
-          picked: (states.get(card.page)?.[card.id]?.options ?? []).length > 0,
-        })),
+        cards: placedCards(pages, edges),
+        edges,
+        groups: pages.flatMap(groupsOf),
+        problems,
       };
     },
 
-    /** The person's drags: each card named takes its new place in the file. */
+    /**
+     * The person's drags: each card named by its graph id takes its new
+     * place in its page's artifact state, beside the places it kept.
+     */
     async place(
       projectId: string,
       places: { id: string; x: number; y: number }[]
     ): Promise<void> {
       known(projectId);
-      const text = await deps.folderText(projectId, GRAPH_FILE);
-      if (text === undefined) {
-        throw new DecisionRefusal(404, `${GRAPH_FILE} is not in the folder.`);
-      }
-      const raw = jsonOf(text) as { cards?: Partial<GraphCard>[] } | null;
-      if (!raw || typeof raw !== "object") {
-        throw new DecisionRefusal(
-          422,
-          `${GRAPH_FILE} is not JSON, so its places weren't saved.`
-        );
-      }
-      const at = new Map(places.map((place) => [place.id, place]));
-      const cards = (raw.cards ?? []).map((card) => {
-        const moved = card.id ? at.get(card.id) : undefined;
-        return moved
-          ? { ...card, x: Math.round(moved.x), y: Math.round(moved.y) }
-          : card;
-      });
-      await deps.commit(
-        projectId,
-        {
-          writes: [
-            {
-              path: GRAPH_FILE,
-              content: `${JSON.stringify({ ...raw, cards }, null, 2)}\n`,
-            },
-          ],
-          deletes: [],
-        },
-        "decisions: the graph's places"
+      const artifacts = new Map(
+        (await pageNames(projectId)).flatMap(({ name, artifact }) =>
+          artifact ? [[name, artifact] as const] : []
+        )
       );
+      const byPage = new Map<string, Record<string, GraphPlace>>();
+      for (const place of places) {
+        const at = place.id.indexOf("#");
+        const page = place.id.slice(0, at);
+        const card = place.id.slice(at + 1);
+        if (at < 1 || !card || !artifacts.has(page)) {
+          throw new DecisionRefusal(
+            404,
+            `${place.id} is no card of this project's decision pages.`
+          );
+        }
+        byPage.set(page, {
+          ...byPage.get(page),
+          [card]: { x: Math.round(place.x), y: Math.round(place.y) },
+        });
+      }
+      for (const [page, moved] of byPage) {
+        const artifact = artifacts.get(page) as ArtifactRow;
+        deps.place(artifact.id, {
+          ...placesIn(deps.page(artifact.id).state),
+          ...moved,
+        });
+      }
       deps.changed(projectId);
-    },
-
-    /**
-     * `decision_add`: cards of the project's pages onto the graph, each a card
-     * its built page has, named by `name` or else its question, placed on new
-     * rows under the lowest card. A card already on the graph stays where it
-     * is; one id on two pages is refused, since the graph keys cards by id.
-     */
-    async add(
-      projectId: string,
-      asked: { card: string; name?: string; page: string }[]
-    ): Promise<GraphCard[]> {
-      const { file, graph } = await graphFile(projectId);
-      const pages = new Map<string, DecisionCard[]>();
-      for (const { page } of asked) {
-        if (!pages.has(page)) {
-          // biome-ignore lint/performance/noAwaitInLoops: a call names a page or two; read one at a time
-          pages.set(page, (await find(projectId, page)).page.cards);
-        }
-      }
-      const bottom = graph.cards.length
-        ? Math.max(...graph.cards.map((card) => card.y)) + STEP.y
-        : 0;
-      const added: GraphCard[] = [];
-      for (const { page, card, name } of asked) {
-        const question = newCard(
-          [...graph.cards, ...added],
-          page,
-          card,
-          pages.get(page) ?? []
-        );
-        if (question !== null) {
-          added.push({
-            id: card,
-            name: name?.trim() || question,
-            page,
-            x: (added.length % ROW_CARDS) * STEP.x,
-            y: bottom + Math.floor(added.length / ROW_CARDS) * STEP.y,
-          });
-        }
-      }
-      if (added.length > 0) {
-        await writeGraph(
-          projectId,
-          file,
-          { cards: [...listed(file.cards), ...added] },
-          `decisions: Caw puts ${added.map((card) => card.id).join(", ")} on the graph`
-        );
-      }
-      return added;
-    },
-
-    /** `decision_link`: edges between cards on the graph, each from one to the card it leads to; one there already stays one. */
-    async link(
-      projectId: string,
-      asked: { from: string; to: string }[]
-    ): Promise<[string, string][]> {
-      const { file, graph } = await graphFile(projectId);
-      onGraph(
-        graph,
-        asked.flatMap((edge) => [edge.from, edge.to])
-      );
-      const drawn = new Set(graph.edges.map(([from, to]) => `${from}\0${to}`));
-      const added: [string, string][] = [];
-      for (const { from, to } of asked) {
-        if (from === to) {
-          throw new DecisionRefusal(400, `${from} can't lead to itself.`);
-        }
-        if (!drawn.has(`${from}\0${to}`)) {
-          drawn.add(`${from}\0${to}`);
-          added.push([from, to]);
-        }
-      }
-      if (added.length > 0) {
-        await writeGraph(
-          projectId,
-          file,
-          { edges: [...listed(file.edges), ...added] },
-          `decisions: Caw links ${added.map(([from, to]) => `${from} → ${to}`).join(", ")}`
-        );
-      }
-      return added;
-    },
-
-    /**
-     * `decision_group`: a named frame round cards on the graph. Its id is its
-     * name made a slug; the same name again sets its cards, and no cards
-     * takes the group away.
-     */
-    async group(
-      projectId: string,
-      name: string,
-      cards: string[]
-    ): Promise<{ cards: string[]; id: string; name: string } | null> {
-      const { file, graph } = await graphFile(projectId);
-      const id = name
-        .trim()
-        .toLowerCase()
-        .replace(GROUP_ID, "-")
-        .replace(EDGE_ENDS, "");
-      if (!id) {
-        throw new DecisionRefusal(400, "Name the group in words.");
-      }
-      onGraph(graph, cards);
-      const group = cards.length
-        ? { id, name: name.trim(), cards: [...new Set(cards)] }
-        : null;
-      const others = listed(file.groups).filter(
-        (each) => (each as { id?: unknown } | null)?.id !== id
-      );
-      await writeGraph(
-        projectId,
-        file,
-        { groups: group ? [...others, group] : others },
-        group
-          ? `decisions: Caw groups ${group.cards.join(", ")} as ${group.name}`
-          : `decisions: Caw takes the group ${name.trim()} away`
-      );
-      return group;
     },
 
     /** The project's tasks changed: records whose tasks moved are written again, one at a time. */
@@ -1119,58 +1111,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
           )
         );
     },
-  };
-};
-
-/** A file's JSON, or null when it is not JSON. */
-const jsonOf = (text: string): unknown => {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-};
-
-/** `decisions.json` read leniently: what is not a card, edge or group is left out. */
-export const graphOf = (text: string): DecisionGraph => {
-  const raw = jsonOf(text) as Partial<DecisionGraph> | null;
-  if (!raw || typeof raw !== "object") {
-    throw new DecisionRefusal(
-      422,
-      `${GRAPH_FILE} is not JSON; Caw writes it as { cards, edges, groups }.`
-    );
-  }
-  const cards = (Array.isArray(raw.cards) ? raw.cards : []).filter(
-    (card): card is GraphCard =>
-      !!card &&
-      typeof card.id === "string" &&
-      typeof card.page === "string" &&
-      Number.isFinite(card.x) &&
-      Number.isFinite(card.y)
-  );
-  const ids = new Set(cards.map((card) => card.id));
-  return {
-    cards: cards.map(({ id, name, page, x, y }) => ({
-      id,
-      name: typeof name === "string" && name ? name : id,
-      page,
-      x,
-      y,
-    })),
-    edges: (Array.isArray(raw.edges) ? raw.edges : []).filter(
-      (edge): edge is [string, string] =>
-        Array.isArray(edge) && ids.has(edge[0]) && ids.has(edge[1])
-    ),
-    groups: (Array.isArray(raw.groups) ? raw.groups : [])
-      .filter(
-        (group) =>
-          !!group && typeof group.id === "string" && Array.isArray(group.cards)
-      )
-      .map((group) => ({
-        id: group.id,
-        name: typeof group.name === "string" ? group.name : group.id,
-        cards: group.cards.filter((id) => ids.has(id)),
-      })),
   };
 };
 
@@ -1208,7 +1148,10 @@ export const decisionRoutes = (decisions: Decisions) =>
       try {
         return (
           (await decisions.graph(params.id)) ??
-          status(404, `${GRAPH_FILE} is not in the folder.`)
+          status(
+            404,
+            "This project's decisions form no graph: none names another in after, or stands in a Section."
+          )
         );
       } catch (error) {
         return refused(error);

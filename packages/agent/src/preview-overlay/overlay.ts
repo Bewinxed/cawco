@@ -11,7 +11,9 @@
  *   navigations its history patch sees. The parent's overlay ran before any
  *   of its own scripts, so its mark stands before any frame of its exists;
  * - otherwise (the top document, a frame of another origin's page, the
- *   preview inside the dashboard's pane): the overlay runs (page.ts).
+ *   preview inside the dashboard's pane, or an artifact embedded in a page
+ *   whose tag says so, `data-embed`: a decision page's Canvas, which joins
+ *   its own doc): the overlay runs (page.ts).
  *
  * page.ts is reached only through `import()`, which the IIFE bundle keeps
  * lazy, so a frame that stands down never evaluates it. Where it runs, it
@@ -25,7 +27,7 @@ installHold();
 here.tag = document.currentScript as HTMLScriptElement | null;
 watchHistory();
 
-const above = parentMark();
+const above = here.tag?.dataset.embed === undefined ? parentMark() : null;
 if (above) {
   // A frame loaded inside a held page is held with it.
   if (above.held()) {

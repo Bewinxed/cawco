@@ -295,11 +295,13 @@ function overlayAt(html: string): number {
  * The page with the overlay's script tag in it ({@link overlayAt}), carrying
  * the page's hash and `data` as `data-*` attributes (the hub's page
  * artifacts add their id and their document's state, so the overlay fills
- * the page before it paints).
+ * the page before it paints). `hash` is the page's when its HTML is not what
+ * it is: a decision page's program, which the host page around it draws.
  */
 export function injectOverlay(
   html: string,
-  data: Record<string, string> = {}
+  data: Record<string, string> = {},
+  hash: string = pageHash(html)
 ): string {
   const extra = Object.entries(data)
     .map(
@@ -307,7 +309,7 @@ export function injectOverlay(
         ` data-${name}="${value.replaceAll(/[&"<]/g, (char) => ATTRIBUTE_ESCAPES[char] ?? char)}"`
     )
     .join("");
-  const script = `<script src="${OVERLAY_PATH}" data-page-hash="${pageHash(html)}"${extra}></script>`;
+  const script = `<script src="${OVERLAY_PATH}" data-page-hash="${hash}"${extra}></script>`;
   const at = overlayAt(html);
   return html.slice(0, at) + script + html.slice(at);
 }

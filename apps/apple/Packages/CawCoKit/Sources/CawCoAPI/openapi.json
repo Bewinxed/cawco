@@ -4949,6 +4949,11 @@
                     "maxLength": 524288,
                     "type": "string"
                   },
+                  "program": {
+                    "minLength": 1,
+                    "maxLength": 131072,
+                    "type": "string"
+                  },
                   "file": {
                     "minLength": 1,
                     "maxLength": 1000,
@@ -5433,6 +5438,71 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Removed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/statements": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "statements": {
+                    "minLength": 1,
+                    "maxLength": 131072,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "statements"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdArtifactsByArtifactStatements",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactStatements 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revised"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsByArtifactStatements 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -25480,6 +25550,9 @@
           "description": {
             "type": "string"
           },
+          "program": {
+            "type": "string"
+          },
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
           },
@@ -25490,9 +25563,6 @@
             }
           },
           "slug": {
-            "type": "string"
-          },
-          "program": {
             "type": "string"
           }
         },
@@ -25552,6 +25622,9 @@
           "description": {
             "type": "string"
           },
+          "program": {
+            "type": "string"
+          },
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
           },
@@ -25562,9 +25635,6 @@
             }
           },
           "slug": {
-            "type": "string"
-          },
-          "program": {
             "type": "string"
           }
         },
@@ -25610,6 +25680,9 @@
           "description": {
             "type": "string"
           },
+          "program": {
+            "type": "string"
+          },
           "graph": {
             "$ref": "#/components/schemas/WorkflowGraph"
           },
@@ -25620,9 +25693,6 @@
             }
           },
           "slug": {
-            "type": "string"
-          },
-          "program": {
             "type": "string"
           }
         },
@@ -25855,6 +25925,9 @@
             "type": "string",
             "format": "date-time"
           },
+          "program": {
+            "type": "string"
+          },
           "workspace": {
             "type": "string"
           },
@@ -25884,9 +25957,6 @@
               "null",
               "string"
             ]
-          },
-          "program": {
-            "type": "string"
           },
           "workflowId": {
             "type": "string"
@@ -26022,6 +26092,9 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "program": {
+                "type": "string"
+              },
               "workspace": {
                 "type": "string"
               },
@@ -26051,9 +26124,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "program": {
-                "type": "string"
               },
               "workflowId": {
                 "type": "string"
@@ -33417,6 +33487,20 @@
       "Created": {
         "type": "object",
         "properties": {
+          "decisions": {
+            "description": "A decision page's decisions, by id, in page order.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dropped": {
+            "description": "Components a decision page's program names that the library does not have: dropped, never drawn.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "host": {
             "description": "Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`).",
             "type": "string"
@@ -34233,6 +34317,98 @@
           }
         }
       },
+      "Revised": {
+        "description": "What a decision page's revision (`statements`) answers: what it changed,\nnot the page. The person's picks are read with `artifact_read`.",
+        "type": "object",
+        "properties": {
+          "decisions": {
+            "description": "Its decisions now, by id, in page order.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dropped": {
+            "description": "Components the library does not have, dropped and never drawn.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "moved": {
+            "description": "Decisions the revision added or took out, by id; a removed one's pick is kept.",
+            "type": "object",
+            "properties": {
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "added",
+              "removed"
+            ]
+          },
+          "pageHash": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "number"
+          },
+          "statements": {
+            "$ref": "#/components/schemas/StatementChange",
+            "description": "Statements by name: new, rewritten, and dropped because nothing reaches them."
+          }
+        },
+        "required": [
+          "decisions",
+          "id",
+          "moved",
+          "pageHash",
+          "revision",
+          "statements"
+        ]
+      },
+      "StatementChange": {
+        "description": "What a revision changed, by statement name: new ones, rewritten ones, and those it dropped (unreachable now).",
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "replaced": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "added",
+          "removed",
+          "replaced"
+        ]
+      },
       "Found": {
         "description": "A component the stage found (§6's discovery): its name, its file, and the story files that show it.",
         "type": "object",
@@ -35007,7 +35183,7 @@
         "type": "object",
         "properties": {
           "graph": {
-            "description": "`decisions/decisions.json` is in the folder: the decisions form a graph.",
+            "description": "The decisions form a graph: one names another in `after`, or stands in a Section.",
             "type": "boolean"
           },
           "pages": {
@@ -35122,7 +35298,7 @@
         ]
       },
       "DecisionGraph": {
-        "description": "`decisions/decisions.json`.",
+        "description": "The project's decisions as a graph, derived from its programs on each read.",
         "type": "object",
         "properties": {
           "cards": {
@@ -35132,6 +35308,7 @@
             }
           },
           "edges": {
+            "description": "From the decision depended on to the one that depends on it, by graph id.",
             "type": "array",
             "items": {
               "type": "array",
@@ -35152,22 +35329,36 @@
             "items": {
               "$ref": "#/components/schemas/GraphGroup"
             }
+          },
+          "problems": {
+            "description": "What could not be drawn, one sentence each: an `after` naming no decision.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
           "cards",
           "edges",
-          "groups"
+          "groups",
+          "problems"
         ]
       },
       "GraphCard": {
-        "description": "One card on the graph: its page's card by id, and its place.",
+        "description": "One card on the graph: its page's decision, and where it stands.",
         "type": "object",
         "properties": {
+          "card": {
+            "description": "Its decision's id on its page.",
+            "type": "string"
+          },
           "id": {
+            "description": "`page#card`: one id across the project's pages.",
             "type": "string"
           },
           "name": {
+            "description": "Its question.",
             "type": "string"
           },
           "page": {
@@ -35175,7 +35366,7 @@
             "type": "string"
           },
           "picked": {
-            "description": "Picked on its page: derived on read, never written to the file.",
+            "description": "Picked on its page.",
             "type": "boolean"
           },
           "x": {
@@ -35186,23 +35377,28 @@
           }
         },
         "required": [
+          "card",
           "id",
           "name",
           "page",
+          "picked",
           "x",
           "y"
         ]
       },
       "GraphGroup": {
+        "description": "A Section, as a frame round its cards.",
         "type": "object",
         "properties": {
           "cards": {
+            "description": "The graph ids of its cards.",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "id": {
+            "description": "`page#section`.",
             "type": "string"
           },
           "name": {

@@ -161,7 +161,8 @@
       .then((read) => {
         if (live) {
           graph = read;
-          graphProblem = null;
+          graphProblem =
+            read.problems.length > 0 ? read.problems.join(" ") : null;
         }
       })
       .catch((error: unknown) => {

@@ -11,6 +11,7 @@ import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { SERVE_COMMAND_LIMIT, STORY_FILE } from "@cawco/core/stage";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
+import { PROGRAM_MAX } from "../decision-program";
 
 /** A workspace id, or the 8-character prefix delegate reports. */
 export const WORKSPACE_ID = /^[0-9a-f][0-9a-f-]{7,35}$/;
@@ -72,9 +73,9 @@ const mermaid = z
 export const artifactCreate = {
   name: "artifact_create",
   description:
-    "Make an artifact and open it in your panel. A page is `html`, or `dir` " +
-    "holding a decision page's page.html (decision-page skill); in a project, neither builds decisions/<name>/page.html " +
-    "from its folder. A sheet is a component's states: `file`, a CSF 3 story file beside the real component " +
+    "Make an artifact and open it in your panel. A page is `program` (a decision page, decision-page skill) or " +
+    "`html`, or `dir` holding page.oui or page.html; in a project, neither builds decisions/<name>/ from its folder. " +
+    "A sheet is a component's states: `file`, a CSF 3 story file beside the real component " +
     "(`export default { component, args }`, a named export per state), run on the project's own Vite, Astro or Nuxt. " +
     "A preview is a whole app: a folder (`dir`) or a server on `port`; in a workspace `serve` is its command, which " +
     "CawCo runs there with PORT and keeps up (never start it yourself). Options to pick between: " +
@@ -87,6 +88,7 @@ export const artifactCreate = {
       .string()
       .regex(ARTIFACT_NAME)
       .describe("Lowercase letters, digits and dashes, like onboarding."),
+    program: z.string().min(1).max(PROGRAM_MAX).optional(),
     html: z.string().min(1).max(PAGE_LIMIT).optional(),
     file: z
       .string()
@@ -149,8 +151,9 @@ export const artifactCreateToParent = {
 export const artifactUpdate = {
   name: "artifact_update",
   description:
-    "Change one of your artifacts in place. `html` replaces a page without a reload; picks, fields, focus and " +
-    "scroll stay. `patch` is a " +
+    "Change one of your artifacts in place. `statements` revises a decision page's program: only the statements " +
+    "that change, merged by name. `html` replaces a page without a reload; picks, fields, focus and scroll stay. " +
+    "`patch` is a " +
     'JSON Patch (RFC 6902) over its state, keyed by choice id or field name, like [{"op":"replace","path":"/hero/options","value":["b"]}]; ' +
     "all of it applies or none. Answers the state after the change. A canvas takes `elements` (added, or replacing " +
     'the one of the id given), `delete` (ids) or `mermaid` (added below); it answers its outline and "<id> changed ' +
@@ -184,6 +187,7 @@ export const artifactUpdate = {
       .min(1)
       .max(CANVAS_LIMITS.deletePerCall)
       .optional(),
+    statements: z.string().min(1).max(PROGRAM_MAX).optional(),
     html: z.string().min(1).max(PAGE_LIMIT).optional(),
     patch: z
       .array(

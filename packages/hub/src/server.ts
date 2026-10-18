@@ -396,6 +396,7 @@ import {
   createArtifacts,
   type MarksDelivery,
   type MarksOutcome,
+  type PageFrom,
   type StageAt,
 } from "./artifacts/service";
 import {
@@ -490,6 +491,13 @@ import type { LimitCompaction } from "./db/at-limit";
 import type { PriorConversation, TrashKind } from "./db/schema";
 import { undoable } from "./db/trash";
 import { buildDecisionPage, type PageSources } from "./decision-page";
+import {
+  type BuiltProgram,
+  buildProgram,
+  type ImageRead,
+  PROGRAM_FILE,
+  scriptJson,
+} from "./decision-program";
 import {
   createDecisions,
   DecisionRefusal,
@@ -644,7 +652,6 @@ import {
   projectRoot,
   readFolderFile,
   trashProjectFolder,
-  writeFolderFile,
 } from "./project-folder";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
@@ -738,6 +745,11 @@ import {
 import { workflowRoutes } from "./workflows/routes";
 import { createWorkflowRuntime } from "./workflows/runtime";
 import { createWorkspaceRetire } from "./workspace-retire";
+
+/** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
+const NOT_NAME = /[^a-z0-9]+/g;
+const NAME_ENDS = /^-+|-+$/g;
+const NAME_TAIL = /-+$/;
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
@@ -10016,7 +10028,8 @@ export const createServer = (
    * committed to `decisions/<name>/index.html` by the session, as before.
    */
   type BuiltArtifactPage =
-    { html: string } | { refused: string; status: PageRefusal["code"] };
+    | { html: string; program?: BuiltProgram }
+    | { refused: string; status: PageRefusal["code"] };
 
   /** page.html and what it names, for `from`; or the page already published, or why neither. */
   const artifactPageSources = async (
@@ -10057,13 +10070,156 @@ export const createServer = (
         };
   };
 
+  /** The most one Image's file may hold. Our bound: a page's pictures load with it. */
+  const IMAGE_LIMIT = 2 * 1024 * 1024;
+
+  /**
+   * A decision page's program, for `from`: given inline, a work folder's
+   * page.oui on the session's machine, or the project folder's
+   * `decisions/<name>/page.oui` (Caw's); undefined when `from` holds none,
+   * and the page is HTML.
+   */
+  const programFrom = async (
+    row: InstanceRow,
+    folder: string,
+    from: PageFrom
+  ): Promise<
+    | { dir?: string | undefined; inFolder?: true; text: string }
+    | PageRefusal
+    | undefined
+  > => {
+    if ("program" in from) {
+      return { text: from.program, dir: from.dir };
+    }
+    if ("dir" in from) {
+      const agent = registry.agent(row.machineId);
+      if (!agent) {
+        return { code: 503, refused: "Machine is not connected" };
+      }
+      const read = await callFs(row.machineId, agent, {
+        op: "read",
+        path: posix.join(from.dir, PROGRAM_FILE),
+      });
+      if (read.kind === "unanswered") {
+        return { code: 504, refused: "Machine did not answer" };
+      }
+      return read.value.ok
+        ? { text: read.value.result as string, dir: from.dir }
+        : undefined;
+    }
+    if ("folder" in from && row.projectId) {
+      const text = await folderText(row.projectId, `${folder}/${PROGRAM_FILE}`);
+      return text === undefined ? undefined : { text, inFolder: true };
+    }
+  };
+
+  /** An Image's file: an absolute path on the session's machine, or one in the work folder the program came from. */
+  const programImage = async (
+    row: InstanceRow,
+    file: string,
+    at: { dir?: string | undefined; inFolder?: true }
+  ): Promise<ImageRead> => {
+    let path = file;
+    if (!file.startsWith("/")) {
+      if (!at.dir) {
+        return {
+          problem: at.inFolder
+            ? "the project's folder keeps text only: name the picture by its absolute path on your machine."
+            : "a file beside the program needs your work folder: publish with dir, or name the picture by its absolute path.",
+        };
+      }
+      path = posix.join(at.dir, file);
+    }
+    const read = await readMachineMedia(row.machineId, path);
+    if (read === "offline") {
+      return { problem: "your machine is not connected." };
+    }
+    if (read === "timeout") {
+      return { problem: "your machine didn't answer." };
+    }
+    if ("refused" in read) {
+      return { problem: read.refused };
+    }
+    return read.bytes.byteLength > IMAGE_LIMIT
+      ? {
+          problem: `it is ${Math.round(read.bytes.byteLength / 1024)} KiB; a picture on a page is ${IMAGE_LIMIT / 1024 / 1024} MiB at most.`,
+        }
+      : { bytes: read.bytes };
+  };
+
+  /**
+   * A project's decision page kept in its folder as its source: a
+   * program's page.oui, or an HTML page's built index.html, the other taken
+   * out so the folder holds one; one commit by the session, none when the
+   * folder holds it already.
+   */
+  const keepInFolder = async (
+    row: InstanceRow,
+    name: string,
+    keep: { content: string; path: string },
+    drop: string
+  ): Promise<PageRefusal | undefined> => {
+    const { projectId } = row;
+    if (!projectId) {
+      return;
+    }
+    try {
+      const [kept, dropped] = await Promise.all([
+        folderText(projectId, keep.path),
+        folderText(projectId, drop),
+      ]);
+      if (kept === keep.content && dropped === undefined) {
+        return;
+      }
+      await changeFolderFiles(
+        projectId,
+        {
+          writes: kept === keep.content ? [] : [keep],
+          deletes: dropped === undefined ? [] : [drop],
+        },
+        {
+          author: { name: sessionLabel(row).name },
+          message: `decisions: ${name}`,
+        }
+      );
+    } catch (error) {
+      if (!(error instanceof FolderRefusal)) {
+        throw error;
+      }
+      return { code: error.status === 413 ? 413 : 400, refused: error.message };
+    }
+    decisionsChanged(projectId);
+  };
+
   const buildArtifactPage = async (
     row: InstanceRow,
     name: string,
-    from: { html: string } | { dir: string } | { folder: true }
+    from: PageFrom
   ): Promise<BuiltArtifactPage> => {
-    const path = `decisions/${name}/index.html`;
-    const read = await artifactPageSources(row, `decisions/${name}`, from);
+    const folder = `decisions/${name}`;
+    const program = await programFrom(row, folder, from);
+    if (program && "refused" in program) {
+      return { status: program.code, refused: program.refused };
+    }
+    if (program) {
+      // A refusal of the program's is thrown, and answered by the service.
+      const built = await buildProgram(program.text, (file) =>
+        programImage(row, file, program)
+      );
+      const refused = await keepInFolder(
+        row,
+        name,
+        { path: `${folder}/${PROGRAM_FILE}`, content: built.program },
+        `${folder}/index.html`
+      );
+      return refused
+        ? { status: refused.code, refused: refused.refused }
+        : { html: built.html, program: built };
+    }
+    if ("program" in from) {
+      return { status: 400, refused: "A program is required." };
+    }
+    const read = await artifactPageSources(row, folder, from);
     if (!("source" in read)) {
       return read;
     }
@@ -10071,24 +10227,15 @@ export const createServer = (
     if ("problem" in built) {
       return { status: 422, refused: built.problem };
     }
-    if (row.projectId) {
-      try {
-        await writeFolderFile(row.projectId, path, built.html, {
-          author: { name: sessionLabel(row).name },
-          message: `decisions: ${name}`,
-        });
-      } catch (error) {
-        if (!(error instanceof FolderRefusal)) {
-          throw error;
-        }
-        return {
-          status: error.status === 413 ? 413 : 400,
-          refused: error.message,
-        };
-      }
-      decisionsChanged(row.projectId);
-    }
-    return { html: built.html };
+    const refused = await keepInFolder(
+      row,
+      name,
+      { path: `${folder}/index.html`, content: built.html },
+      `${folder}/${PROGRAM_FILE}`
+    );
+    return refused
+      ? { status: refused.code, refused: refused.refused }
+      : { html: built.html };
   };
 
   /**
@@ -10854,6 +11001,61 @@ export const createServer = (
   // Marks the person wrote just before the hub went down still go.
   offBoot.push(() => artifacts.resumeMarks());
 
+  /**
+   * A decision page's Diagram opened as a canvas (its "Open as canvas"): a
+   * canvas artifact in the page's session's panel drawn from the Diagram's
+   * Mermaid, named after the page and the Diagram's statement, so opening
+   * the same one again redraws that canvas. The person's, from the page.
+   */
+  const openDiagramAsCanvas = async (
+    request: Request,
+    instanceId: string,
+    artifactId: string
+  ): Promise<Response> => {
+    if (request.method !== "POST") {
+      return new Response("Open a canvas with a POST.", {
+        status: 405,
+        headers: { allow: "POST" },
+      });
+    }
+    const page = db.artifacts.get(artifactId);
+    if (page?.kind !== "page" || artifacts.program(artifactId) === undefined) {
+      return new Response("Only a decision page's Diagram opens as a canvas.", {
+        status: 409,
+      });
+    }
+    const body = (await request.json().catch(() => null)) as {
+      from?: unknown;
+      mermaid?: unknown;
+    } | null;
+    if (typeof body?.mermaid !== "string" || !body.mermaid.trim()) {
+      return new Response("Name the Diagram's Mermaid to draw.", {
+        status: 400,
+      });
+    }
+    const of =
+      typeof body.from === "string"
+        ? body.from.toLowerCase().replaceAll(NOT_NAME, "-")
+        : "diagram";
+    const name = `${page.name}-${of}`
+      .replaceAll(NAME_ENDS, "")
+      .slice(0, 63)
+      .replace(NAME_TAIL, "");
+    try {
+      const made = await artifacts.create(instanceId, {
+        kind: "canvas",
+        name,
+        mermaid: body.mermaid,
+      });
+      return Response.json({ id: made.id, name: made.name }, { status: 201 });
+    } catch (error) {
+      if (error instanceof ArtifactRefusal) {
+        return new Response(error.message, { status: error.status });
+      }
+      throw error;
+    }
+  };
+
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
     ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
@@ -10865,6 +11067,14 @@ export const createServer = (
     send: artifactSend(artifacts.send),
     socket: artifactSocket(artifactDocs),
     state: artifactDocs.snapshot,
+    program: (artifactId) => {
+      const served = artifacts.programServed(artifactId);
+      return served
+        ? { hash: served.hash, media: scriptJson("cawco-media", served.media) }
+        : null;
+    },
+    canvasFrom: (request, instanceId, artifactId) =>
+      openDiagramAsCanvas(request, instanceId, artifactId),
   };
   /**
    * HTTPS on the machine's tailnet name (tailnet-https.ts): the dashboard's
@@ -18634,8 +18844,6 @@ export const createServer = (
     inTurn: (instanceId) => pulses.get(instanceId)?.busy === true,
     caps,
     db,
-    // The decisions are made further down; Caw's graph tools reach them only once a call runs.
-    decisions: () => decisions,
     proposeType: (actor, path, content, toolUseId) =>
       projectMemory.proposeType(actor, path, content, toolUseId),
     interrupt: interruptTurn,
@@ -18916,10 +19124,20 @@ export const createServer = (
       const file = Bun.file(join(ARTIFACTS_ROOT, artifactId, "index.html"));
       return (await file.exists()) ? await file.text() : undefined;
     },
+    program: (artifactId) => artifacts.program(artifactId),
+    place: (artifactId, places) => {
+      try {
+        artifacts.keepPlaces(artifactId, places);
+      } catch (error) {
+        throw error instanceof ArtifactRefusal
+          ? new DecisionRefusal(422, error.message, { cause: error })
+          : error;
+      }
+    },
     changed: decisionsChanged,
-    commit: async (projectId, change, message, by) => {
+    commit: async (projectId, change, message) => {
       await changeFolderFiles(projectId, change, {
-        author: by === "caw" ? { name: "Caw" } : FOLDER_YOU,
+        author: FOLDER_YOU,
         message,
       });
     },

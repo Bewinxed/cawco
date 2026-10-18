@@ -115,7 +115,6 @@ import type {
   WorkItemRow,
 } from "./db";
 import type { Origin, WorkOrigin } from "./db/schema";
-import type { Decisions } from "./decisions";
 import { inboxText } from "./ingress";
 import { mediaBase64, storeImage } from "./media";
 import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
@@ -558,7 +557,7 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
 const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
-    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, decisions/, and delegates/, where a type you write is a proposal the person approves or declines before it is committed), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks; when the decisions form a graph, decision_add, decision_link and decision_group draw it), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
+    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, decisions/, and delegates/, where a type you write is a proposal the person approves or declines before it is committed), decision pages (the decision-page skill: write decisions/<name>/page.oui, a program over the decision library, then artifact_create with kind page and the name builds and shows it; artifact_read has the picks; artifact_update's statements revise it; a decision's after and a Section draw the project's decision graph), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
     "You have shell and edit tools, inside the boundary of your place, this folder: you write only here and in $TMPDIR, read no credential store, reach no service manager and see no other session's processes, and files only their owner may read are hidden from you. The hub decides each call before it runs. Read-only commands (ls, cat, grep, find, file, stat, du, wc, head, tail, git that only reads, chained with ; && || or |, output only into /dev/null or 2>&1) run without asking whatever woke you. In a turn the person's own message woke, so do git init, git add <paths> and git commit where no one else works; every other shell or edit call raises an Approve card the person answers, wherever they are. In a turn anything else woke (an event, a routine, a report, outside text riding on your wake) every call but a read-only command raises the card, and so does every such call after you read web content in a turn. In a shared checkout git checkout, switch, restore, reset, stash, clean, rebase and push, git add -A or git add ., and any git alias are refused: file a task. Your edits are docs, config and assets only, 5 files a wake at most: anything bigger, file a task. At most 20 shell or edit calls a wake: delegate the rest. Every call shows in your thread. A task whose only changes are your own passes review only once the person approved them.",
     "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must.",
     "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
@@ -607,8 +606,6 @@ export interface CawDeps {
     | "updateWorkItem"
     | "workItem"
   >;
-  /** The decision graph's writers behind `decision_add`, `decision_link` and `decision_group` (decisions.ts); bound late, made after Caw. */
-  readonly decisions: () => Pick<Decisions, "add" | "group" | "link">;
   /** Ends a session (the lead, when Caw moves harness or model). */
   readonly end: (instanceId: string) => void;
   /** Whether the fleet's two choices were ever set (the setup page asks for them until they are). */
@@ -713,7 +710,6 @@ export const createCaw = ({
   blocks,
   caps,
   db,
-  decisions,
   end,
   fleetChoicesSet,
   upstreamAnswered,
@@ -3313,41 +3309,6 @@ export const createCaw = ({
             folderChanged(projectId);
             return ok({ ok: true, path: rel, sha: written.sha });
           }
-        ),
-        tool(
-          "decision_add",
-          "Put decision pages' cards on decisions/decisions.json, the project's decision graph, on a new row.",
-          {
-            cards: z
-              .array(
-                z.object({
-                  page: z.string().describe("Its decisions/<page>/."),
-                  card: z.string().describe("Its data-cawco-choice."),
-                  name: z.string().optional().describe("Else its question."),
-                })
-              )
-              .min(1),
-          },
-          async ({ cards }) =>
-            ok({ added: await decisions().add(mine(), cards) })
-        ),
-        tool(
-          "decision_link",
-          "Draw edges on the decision graph, each from a card to one it leads to.",
-          {
-            edges: z
-              .array(z.object({ from: z.string(), to: z.string() }))
-              .min(1),
-          },
-          async ({ edges }) =>
-            ok({ added: await decisions().link(mine(), edges) })
-        ),
-        tool(
-          "decision_group",
-          "Frame cards on the decision graph as one named group; its name again sets its cards, none removes it.",
-          { name: z.string(), cards: z.array(z.string()) },
-          async ({ name, cards }) =>
-            ok({ group: await decisions().group(mine(), name, cards) })
         ),
         tool(
           "view_draft",

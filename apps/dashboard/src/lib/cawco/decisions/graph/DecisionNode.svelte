@@ -3,7 +3,7 @@
    * One card of the decisions graph: a raised 12px card with its name (two
    * lines at most, never cut mid-letter) and its ring, filled in the done
    * glyph once picked. A press opens its page scrolled to it; a drag moves
-   * it, and its place is saved to the graph's file on release.
+   * it, and its place is saved to its page's artifact on release.
    */
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
 

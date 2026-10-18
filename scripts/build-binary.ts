@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
+import { decisionHostAssets } from "../packages/core/src/decision-host";
 
 export const PINNED_BUN = "1.4.3";
 export const TARGETS = [
@@ -230,6 +231,8 @@ export async function buildBinary(options: {
     ["stage/host.mjs", join(work, "stage-host.mjs")],
     // A canvas's host page, its bundle and Excalidraw's fonts (core canvas-host.ts).
     ...(await canvasHostAssets(join(work, "canvas"), filesUnder)),
+    // A decision page's host bundle and DialKit (core decision-host.ts).
+    ...(await decisionHostAssets(join(work, "decision"), filesUnder)),
     // Run as plain Bun as each workspace's judge, never as cawco (boundary.ts).
     ["boundary/judge.ts", join(ROOT, "packages/agent/src/boundary-judge.ts")],
     // Run as plain Bun by a macOS workspace's `log` shim (boundary.ts).

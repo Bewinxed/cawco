@@ -48,6 +48,8 @@ import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
+/** A page hash: sha256, hex. */
+const PAGE_HASH = /^[0-9a-f]{64}$/;
 /** The page hash on the overlay's tag in a page's HTML (core `injectOverlay`). */
 const SERVED_HASH =
   /<script src="\/__cawco\/overlay\.js(?:\?k=[0-9a-z]+)?" data-page-hash="([0-9a-f]{64})"/;
@@ -217,8 +219,18 @@ function framesChanged() {
 }
 watchFrames(framesChanged);
 // A sheet's stage swapped a component in place (its sheet module says so on
-// each Vite HMR update): every pin's anchor is read again, its source and chain with it.
-addEventListener("cawco:hmr", () => {
+// each Vite HMR update), or a decision page's host drew a revision of its
+// program (decision-host, naming the program's hash): every pin's anchor is
+// read again, its source and chain with it, and every option marked again
+// from the stored picks, which a re-render does not carry over.
+addEventListener("cawco:hmr", (event) => {
+  const hash = (event as CustomEvent<{ pageHash?: unknown } | null>).detail
+    ?.pageHash;
+  if (typeof hash === "string" && PAGE_HASH.test(hash)) {
+    pageHash = hash;
+  }
+  reflect();
+  told();
   pins.draw();
   ink.replace();
 });
@@ -535,6 +547,19 @@ function morphTo(html: string) {
 async function republished() {
   const wanted = artifact.meta().pageHash;
   if (!(keepsFields() && wanted) || wanted === pageHash) {
+    return;
+  }
+  // A page that draws itself (a decision page's host, from its program)
+  // takes the revision: it draws the new program and says so with
+  // `cawco:hmr`, so its DOM is never swapped under it.
+  if (
+    !dispatchEvent(
+      new CustomEvent("cawco:revision", {
+        cancelable: true,
+        detail: { pageHash: wanted },
+      })
+    )
+  ) {
     return;
   }
   if (fetching) {

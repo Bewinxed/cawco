@@ -14,6 +14,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { decisionHostFile } from "@cawco/core/decision-host";
 import { detach } from "@cawco/core/detach";
 import {
   cachePreview,
@@ -55,6 +56,7 @@ import {
   PREVIEW_PORTS_TEXT,
 } from "./config";
 import type { PreviewsDb } from "./db/previews";
+import { DECISION_ASSETS } from "./decision-program";
 import {
   enter,
   lockedResponse,
@@ -230,7 +232,7 @@ export function previewFrame(
 async function servePage(
   artifactId: string,
   pathname: string,
-  state: (artifactId: string) => string,
+  deps: Pick<PreviewListenerDeps, "program" | "state">,
   /** Where the page stands on its origin: its root, or the Decisions tab's `/__cawco/page/<id>/`. */
   mount = "/"
 ): Promise<Response> {
@@ -271,11 +273,18 @@ async function servePage(
   if (!body.type.startsWith("text/html")) {
     return new Response(body, { headers });
   }
-  // The overlay hashes the page as it was written, before its files are keyed.
-  const page = injectOverlay(await body.text(), {
-    artifact: artifactId,
-    state: state(artifactId),
-  });
+  // The overlay hashes the page as it was written, before its files are
+  // keyed; a decision page's hash is its program's, and it carries what the
+  // artifacts its media show are now.
+  const program = deps.program(artifactId);
+  const injected = injectOverlay(
+    await body.text(),
+    { artifact: artifactId, state: deps.state(artifactId) },
+    program?.hash
+  );
+  const page = program
+    ? injected.replace("</head>", `${program.media}</head>`)
+    : injected;
   return new Response(
     versioned === null
       ? versionAssets(page, await folderKey(root), mount, pathname)
@@ -289,10 +298,18 @@ async function servePage(
  * canvas's host page. A sheet is its workspace's stage, relayed as a port
  * preview: its source names no page, and it never comes here.
  */
-const HUB_SERVES: Record<Exclude<ArtifactKind, "sheet">, typeof servePage> = {
+const HUB_SERVES: Record<
+  Exclude<ArtifactKind, "sheet">,
+  (
+    artifactId: string,
+    pathname: string,
+    deps: PreviewListenerDeps
+  ) => Promise<Response>
+> = {
   page: servePage,
   preview: servePage,
-  canvas: serveCanvas,
+  canvas: (artifactId, pathname, deps) =>
+    serveCanvas(artifactId, pathname, deps.state),
 };
 
 type ListenerSocket = PreviewSocket | ArtifactSocket;
@@ -309,6 +326,12 @@ const isArtifact = (
 
 /** What a listener needs of the hub to serve a session's previews and artifacts. */
 export interface PreviewListenerDeps {
+  /** A Diagram of a decision page opened as a canvas in its session's panel (`/canvas`). */
+  canvasFrom: (
+    request: Request,
+    instanceId: string,
+    artifactId: string
+  ) => Promise<Response>;
   /** An artifact's kind; undefined when there is none. */
   kindOf: (artifactId: string) => ArtifactKind | undefined;
   /** The session that owns an artifact; undefined when there is none. */
@@ -316,6 +339,12 @@ export interface PreviewListenerDeps {
   picture: ReturnType<typeof artifactPicture>;
   /** The page's pictures of the person's marks, held for their delivery. */
   pictures: ReturnType<typeof artifactPictures>;
+  /**
+   * A decision page's program: its hash (the page's, for the overlay) and
+   * the script tag naming what the artifacts its Canvas and Preview pieces
+   * show are now; null for any other page.
+   */
+  program: (artifactId: string) => { hash: string; media: string } | null;
   /** Where a shown preview of a machine's is served now, its listener started when it has none. */
   reach: (instanceId: string) => Promise<PreviewReach>;
   send: ReturnType<typeof artifactSend>;
@@ -348,6 +377,9 @@ const joinArtifact = (
   }
   if (action === "/pictures") {
     return deps.pictures(request, instanceId, artifactId);
+  }
+  if (action === "/canvas") {
+    return deps.canvasFrom(request, instanceId, artifactId);
   }
   const screen = new URL(request.url).searchParams.get("screen") === "1";
   return server.upgrade(request, { data: { artifactId, screen } })
@@ -580,6 +612,44 @@ async function relay(
   });
 }
 
+/**
+ * What the hub serves on a session's origin by an artifact's id, whatever
+ * the panel shows: a decision page's host bundle (`/__cawco/decision/`), a
+ * canvas (`/__cawco/canvas/<id>/`, `?embed=1` in a decision page) or a page
+ * (`/__cawco/page/<id>/`) of the session's own; null for any other path.
+ */
+async function artifactById(
+  url: URL,
+  instanceId: string,
+  deps: PreviewListenerDeps
+): Promise<Response | null> {
+  const { pathname } = url;
+  if (pathname.startsWith(DECISION_ASSETS)) {
+    return (
+      (await decisionHostFile(pathname.slice(DECISION_ASSETS.length))) ??
+      new Response("Not found", { status: 404 })
+    );
+  }
+  const canvas = pathname.match(CANVAS_PATH);
+  if (canvas) {
+    const [, artifactId, rest] = canvas;
+    const embed = url.searchParams.get("embed") === "1";
+    return deps.ownerOf(artifactId) === instanceId &&
+      deps.kindOf(artifactId) === "canvas"
+      ? serveCanvas(artifactId, rest, deps.state, embed)
+      : new Response("This session has no such canvas.", { status: 404 });
+  }
+  const paged = pathname.match(PAGE_PATH);
+  if (paged) {
+    const [, artifactId, rest] = paged;
+    return deps.ownerOf(artifactId) === instanceId &&
+      deps.kindOf(artifactId) === "page"
+      ? servePage(artifactId, rest, deps, `/__cawco/page/${artifactId}/`)
+      : new Response("This session has no such page.", { status: 404 });
+  }
+  return null;
+}
+
 /** One request to session `instanceId`'s preview origin, at its root; `direct` as {@link relay} takes it. */
 async function serveSession(
   request: Request,
@@ -604,21 +674,9 @@ async function serveSession(
   if (synced) {
     return joinArtifact(request, server, synced, instanceId, deps);
   }
-  const canvas = pathname.match(CANVAS_PATH);
-  if (canvas) {
-    const [, artifactId, rest] = canvas;
-    return deps.ownerOf(artifactId) === instanceId &&
-      deps.kindOf(artifactId) === "canvas"
-      ? serveCanvas(artifactId, rest, deps.state)
-      : new Response("This session has no such canvas.", { status: 404 });
-  }
-  const paged = pathname.match(PAGE_PATH);
-  if (paged) {
-    const [, artifactId, rest] = paged;
-    return deps.ownerOf(artifactId) === instanceId &&
-      deps.kindOf(artifactId) === "page"
-      ? servePage(artifactId, rest, deps.state, `/__cawco/page/${artifactId}/`)
-      : new Response("This session has no such page.", { status: 404 });
+  const byId = await artifactById(url, instanceId, deps);
+  if (byId) {
+    return byId;
   }
   if (hubsOwn(pathname)) {
     return new Response("Not found", { status: 404 });
@@ -629,11 +687,7 @@ async function serveSession(
     return downResponse("closed", 404);
   }
   if ("page" in target.source && target.artifact.kind !== "sheet") {
-    return HUB_SERVES[target.artifact.kind](
-      target.artifact.id,
-      pathname,
-      deps.state
-    );
+    return HUB_SERVES[target.artifact.kind](target.artifact.id, pathname, deps);
   }
   // No listener serves it now (its machine restarted, or the last start
   // failed): started here, or the hop that failed says why.

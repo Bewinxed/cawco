@@ -5,13 +5,7 @@
  * thread asks it for), so every call goes through the hub's MCP bridge as
  * the lead.
  *
- * 1. Decision graph (Projects spec §5.8: "Caw edits the file or calls
- *    `decision_add`, `decision_link`, `decision_group`"): Caw puts two cards
- *    of a built decision page on the graph, links them and groups them; the
- *    hub's `GET /api/projects/{id}/decisions/graph` answers the two cards
- *    (named by their questions, on one row), the edge and the group, each
- *    change a commit as Caw; a link to a card not on the graph is refused.
- * 2. Delegate type (§5.1: "Caw can propose a new type as a file diff you
+ * 1. Delegate type (§5.1: "Caw can propose a new type as a file diff you
  *    approve"): Caw's `folder_write` of `delegates/writer.md` commits
  *    nothing; it is the person's ask, drawn as the file's diff ("Add
  *    delegates/writer.md") in his thread. Approved, it is committed as the
@@ -20,7 +14,7 @@
  *    `delegates/editor.md`, declined: no commit touches it and the catalog
  *    has no `editor`. A file that makes no type is refused with why, and
  *    parks nothing.
- * 3. Relay offer (§5.5: "Caw offers the relay when you connect a push-only
+ * 2. Relay offer (§5.5: "Caw offers the relay when you connect a push-only
  *    service"): a stand-in Stripe connection (its MCP server in this
  *    process, signed in with no key) made with no project wakes no one; once
  *    it is granted to the project, Caw is woken exactly once, with words
@@ -105,22 +99,6 @@ const respond = (request: Seen): Reply => {
       }
     : text(`${ask.name} is not offered`);
 };
-
-/** A built decision page with two cards, as the decision-page kit draws them. */
-const PAGE = `<!doctype html><html><head><title>Launch</title></head><body>
-<section class="dp-hero"><h1>Launch</h1></section>
-<article class="dp-card"><h2>Which stack?</h2><p class="dp-why">It sets the rest.</p>
-<div data-cawco-choice="stack" role="group">
-<button data-option="svelte"><b>SvelteKit</b><span>Ours already.</span></button>
-<button data-option="astro"><b>Astro</b><span>Content first.</span></button>
-</div></article>
-<article class="dp-card"><h2>Where does it run?</h2>
-<div data-cawco-choice="host" role="group">
-<button data-option="hub"><b>The hub</b><span>Nothing new.</span></button>
-<button data-option="edge"><b>An edge host</b><span>Closer to readers.</span></button>
-</div></article>
-</body></html>
-`;
 
 /** A stand-in for a service's MCP server: one read tool, enough to sign in by. */
 const rpc = (id: unknown, result: unknown) =>
@@ -259,87 +237,8 @@ try {
   });
   const projectId = project.id;
 
-  // ── 1: the decision graph, drawn by Caw's tools ───────────────────────────
-  await section("1: decision graph", async () => {
-    await ok("PUT", `/api/projects/${projectId}/folder/file`, {
-      path: "decisions/launch/index.html",
-      content: PAGE,
-    });
-    const added = await cawCalls(projectId, "decision_add", {
-      cards: [
-        { page: "launch", card: "stack" },
-        { page: "launch", card: "host" },
-      ],
-    });
-    const linked = await cawCalls(projectId, "decision_link", {
-      edges: [{ from: "stack", to: "host" }],
-    });
-    const grouped = await cawCalls(projectId, "decision_group", {
-      name: "Build",
-      cards: ["stack", "host"],
-    });
-    const graph = await ok<{
-      cards: { id: string; name: string; page: string; x: number; y: number }[];
-      edges: [string, string][];
-      groups: { cards: string[]; id: string; name: string }[];
-    }>("GET", `/api/projects/${projectId}/decisions/graph`).catch(
-      (error: unknown) => {
-        throw new Error(
-          `${error instanceof Error ? error.message : String(error)}; Caw heard ${JSON.stringify([added, linked, grouped])}`
-        );
-      }
-    );
-    const stack = graph.cards.find((card) => card.id === "stack");
-    const host = graph.cards.find((card) => card.id === "host");
-    check(
-      "1a: decision_add puts both cards on the graph, named by their questions, on one row",
-      graph.cards.length === 2 &&
-        stack?.name === "Which stack?" &&
-        host?.name === "Where does it run?" &&
-        stack.page === "launch" &&
-        stack.y === host.y &&
-        stack.x !== host.x,
-      `cards ${JSON.stringify(graph.cards)}; Caw heard ${added.slice(0, 200)}`
-    );
-    check(
-      "1b: decision_link draws stack → host",
-      JSON.stringify(graph.edges) === JSON.stringify([["stack", "host"]]),
-      `edges ${JSON.stringify(graph.edges)}; Caw heard ${linked.slice(0, 200)}`
-    );
-    check(
-      "1c: decision_group frames both as Build",
-      JSON.stringify(graph.groups) ===
-        JSON.stringify([
-          { id: "build", name: "Build", cards: ["stack", "host"] },
-        ]),
-      `groups ${JSON.stringify(graph.groups)}; Caw heard ${grouped.slice(0, 200)}`
-    );
-    const history = await ok<{
-      commits: { author: string; subject: string }[];
-    }>(
-      "GET",
-      `/api/projects/${projectId}/folder/history?path=decisions/decisions.json`
-    );
-    check(
-      "1d: each change is a commit as Caw",
-      history.commits.length === 3 &&
-        history.commits.every((commit) => commit.author === "Caw"),
-      JSON.stringify(
-        history.commits.map((commit) => [commit.author, commit.subject])
-      )
-    );
-    const unknown = await cawCalls(projectId, "decision_link", {
-      edges: [{ from: "stack", to: "budget" }],
-    });
-    check(
-      "1e: a link to a card not on the graph is refused, saying so",
-      unknown.includes("budget is not on the graph"),
-      unknown.slice(0, 200)
-    );
-  });
-
   // ── 2: a delegate type, proposed by Caw and approved or declined ─────────
-  await section("2: delegate type proposal", async () => {
+  await section("1: delegate type proposal", async () => {
     const commitsTo = async (path: string) =>
       (
         await ok<{ commits: { author: string; subject: string }[] }>(
@@ -360,7 +259,7 @@ try {
       content: "No front matter here.\n",
     });
     check(
-      "2a: a file that makes no type is refused with why, and parks nothing",
+      "1a: a file that makes no type is refused with why, and parks nothing",
       broken.includes("was not proposed") &&
         broken.includes("front matter") &&
         (await typeProposals()).length === 0,
@@ -378,7 +277,7 @@ try {
       30_000
     );
     check(
-      "2b: Caw's folder_write of delegates/writer.md parks a proposal in his thread and commits nothing",
+      "1b: Caw's folder_write of delegates/writer.md parks a proposal in his thread and commits nothing",
       writer?.payload.input.path === "delegates/writer.md" &&
         writer.payload.presentation?.summary === "Add delegates/writer.md" &&
         typeof writer.payload.threadId === "string" &&
@@ -399,7 +298,7 @@ try {
     const approved = await commitsTo("delegates/writer.md");
     const listed = await catalog();
     check(
-      "2c: approved, writer is committed as the person and the project's catalog lists it",
+      "1c: approved, writer is committed as the person and the project's catalog lists it",
       approved.length === 1 &&
         approved[0]?.author !== "Caw" &&
         listed.some(
@@ -431,14 +330,14 @@ try {
     const declined = await commitsTo("delegates/editor.md");
     const after = await catalog();
     check(
-      "2d: declined, nothing is committed to delegates/editor.md and the catalog has no editor",
+      "1d: declined, nothing is committed to delegates/editor.md and the catalog has no editor",
       declined.length === 0 && !after.some((type) => type.name === "editor"),
       `commits ${JSON.stringify(declined)}; catalog ${JSON.stringify(after.map((type) => type.name))}`
     );
   });
 
   // ── 3: a push-only service connected, and Caw woken once to offer a relay ─
-  await section("3: relay offer", async () => {
+  await section("2: relay offer", async () => {
     const made = await ok<{ state: string }>("POST", "/api/connections", {
       name: "stripe-shop",
       service: "stripe",
@@ -450,7 +349,7 @@ try {
     });
     await delay(QUIET_MS);
     check(
-      "3a: a Stripe connection signed in with no project wakes no one",
+      "2a: a Stripe connection signed in with no project wakes no one",
       made.state === "signed-in" && relayWakes.length === 0,
       `state ${made.state}; wakes ${relayWakes.length}`
     );
@@ -466,7 +365,7 @@ try {
     await delay(QUIET_MS);
     const [words = ""] = relayWakes;
     check(
-      "3b: granted to the project, it wakes Caw exactly once, naming relay_create and the stripe provider",
+      "2b: granted to the project, it wakes Caw exactly once, naming relay_create and the stripe provider",
       relayWakes.length === 1 &&
         words.includes("stripe-shop") &&
         words.includes('relay_create({ provider: "stripe" })'),
@@ -483,7 +382,7 @@ try {
     });
     await delay(QUIET_MS);
     check(
-      "3c: a polled service's connection, granted the same way, wakes no one",
+      "2c: a polled service's connection, granted the same way, wakes no one",
       relayWakes.length === 1,
       `wakes ${relayWakes.length}`
     );

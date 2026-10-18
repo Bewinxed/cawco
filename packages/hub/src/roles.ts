@@ -77,8 +77,8 @@ const TASK_WRITE = [
 ] as const;
 
 /**
- * Caw's own: a project's conversations with it, the views it drafts, its
- * folder on the hub, and its decision graph (caw.ts).
+ * Caw's own: a project's conversations with it, the views it drafts, and
+ * its folder on the hub (caw.ts).
  */
 export const CAW_TOOLS = [
   "thread_read",
@@ -87,9 +87,6 @@ export const CAW_TOOLS = [
   "view_query",
   "folder_read",
   "folder_write",
-  "decision_add",
-  "decision_link",
-  "decision_group",
 ] as const;
 
 /**
@@ -202,7 +199,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "memory_note",
     "memory_propose",
     "memory_recall",
-    // Decision pages: Caw builds them from his folder's decisions/<name>/page.html.
+    // Decision pages: Caw builds them from his folder's decisions/<name>/page.oui.
     ...ARTIFACT_TOOLS,
     ...ROUTINE,
     ...LEAD_OWN,

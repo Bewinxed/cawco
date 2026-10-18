@@ -63,14 +63,14 @@ export async function makeDecisionTasks(
   );
 }
 
-/** The graph (`decisions/decisions.json`), each card's pick read from its page. */
+/** The graph the hub derives from the project's decision pages, each card's pick read from its page. */
 export async function readDecisionGraph(
   projectId: string
 ): Promise<DecisionGraph> {
   return answered(await fetch(`${base(projectId)}/graph`));
 }
 
-/** The person's drags: each card's new place, saved into the file. */
+/** The person's drags: each card's new place (by `page#card`), kept in its page's artifact. */
 export async function placeDecisionCards(
   projectId: string,
   places: { id: string; x: number; y: number }[]

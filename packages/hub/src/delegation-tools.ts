@@ -1096,14 +1096,29 @@ export function handoffTools(deps: HandoffDeps) {
       artifactUpdate.name,
       artifactUpdate.description,
       artifactUpdate.input,
-      async ({ id, ...change }) =>
-        json(
+      async ({ id, statements, ...change }) => {
+        if (statements === undefined) {
+          return json(
+            await actions.artifactCall(
+              "PATCH",
+              `/${encodeURIComponent(id)}`,
+              change
+            )
+          );
+        }
+        if (Object.values(change).some((value) => value !== undefined)) {
+          throw new Error(
+            "statements revises a decision page alone: pass it without html, patch, elements, delete, mermaid, args or story."
+          );
+        }
+        return json(
           await actions.artifactCall(
-            "PATCH",
-            `/${encodeURIComponent(id)}`,
-            change
+            "POST",
+            `/${encodeURIComponent(id)}/statements`,
+            { statements }
           )
-        )
+        );
+      }
     ),
     tool(
       artifactRead.name,

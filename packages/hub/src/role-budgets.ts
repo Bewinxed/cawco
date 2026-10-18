@@ -194,11 +194,20 @@ import type { Tasks } from "./tasks";
  * About 300 tokens for each (worker 24,877, delegate 7,624, lead 16,466
  * measured). Raised deliberately for the delegate and the lead; the
  * worker's fits.
+ * 2026-10-18: decision pages as OpenUI programs (Projects spec §5.8, the
+ * owner's picks of 2026-10-18): artifact_create's `program` and
+ * artifact_update's `statements`, the page clause of each rewritten to
+ * name them, and the lead's decision_add, decision_link and decision_group
+ * gone with decisions.json (the graph is derived from the programs). About
+ * 70 tokens for the worker and the delegate, about 300 fewer for the lead
+ * (worker 25,192, delegate 7,693, lead 16,148 measured, landed together
+ * with memory_recall). Raised deliberately for the worker and the delegate,
+ * both owner-picked features; the lead's lowered to what it measures.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 25_000,
-  delegate: 7650,
-  lead: 16_480,
+  worker: 25_200,
+  delegate: 7700,
+  lead: 16_160,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -290,7 +299,6 @@ export const measureRoles = (): RoleSize[] => {
         caps: {} as never,
         // Caw reads back the turns his leads are in as he is made: none here.
         db: { leadTurns: () => [] } as never,
-        decisions: () => ({}) as never,
         proposeType: () => Promise.reject(new Error("measuring")),
         end: () => undefined,
         inTurn: () => false,
