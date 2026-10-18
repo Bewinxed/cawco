@@ -107,6 +107,7 @@ import {
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
+  RELAY_REMOVE,
   RELAY_RENEW,
   RELAY_START,
   RELAY_STOP,
@@ -143,6 +144,7 @@ import {
   watchBrowsers,
 } from "./browser/browsers";
 import {
+  removeRelay,
   renewRelay,
   setRelaySink,
   startRelay,
@@ -3032,6 +3034,7 @@ export const startDaemon = (rediscover = false) =>
         : startRelay(relayStartOf(args))
     );
     supervisor.registerDaemonFunction(RELAY_STOP, () => stopRelay());
+    supervisor.registerDaemonFunction(RELAY_REMOVE, () => removeRelay());
     supervisor.registerDaemonFunction(RELAY_RENEW, () => renewRelay());
     yield* Effect.forkScoped(
       Effect.promise(() =>

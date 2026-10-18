@@ -147,6 +147,7 @@ const askUnder = (page: Page, rowSelector: string, at: string) =>
       );
       return {
         title: tile.querySelector('[data-slot="title"]')?.textContent?.trim(),
+        body: tile.querySelector('[data-slot="body"]')?.textContent?.trim(),
         tileTop: Math.round(t.top),
         triggerBottom: trigger
           ? Math.round(trigger.getBoundingClientRect().bottom)
@@ -349,10 +350,18 @@ const running = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
   await settle(page, 500);
   const asked = await askUnder(page, "[data-relay-row]", "relay");
   const scroll = await sideways(page);
+  const removeBody = STREAM_RELAY_WORDS.removeBody(
+    one.name,
+    "relay.example.com"
+  );
   kit.check(
-    `${leg.name} live: Remove relay asks in place under the row, its title "${STREAM_RELAY_WORDS.removeTitle(one.name)}"; nothing sideways`,
+    `${leg.name} live: Remove relay asks in place under the row, its title "${STREAM_RELAY_WORDS.removeTitle(one.name)}", its consequence naming the certificate ("${removeBody}"); nothing sideways`,
     asked !== null &&
       asked.title === STREAM_RELAY_WORDS.removeTitle(one.name) &&
+      asked.body === removeBody &&
+      removeBody.includes(
+        "its certificate for relay.example.com is deleted from relay"
+      ) &&
       asked.triggerBottom !== null &&
       asked.tileTop >= asked.triggerBottom &&
       asked.insideRow &&

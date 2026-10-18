@@ -139,7 +139,7 @@
     asks.ask({
       at: "relay",
       title: words.removeTitle(view.machineName),
-      body: words.removeBody,
+      body: words.removeBody(view.machineName, view.hostname),
       confirmLabel: words.remove,
       pendingLabel: "Removing…",
       destructive: true,

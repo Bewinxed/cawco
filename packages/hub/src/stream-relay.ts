@@ -30,6 +30,7 @@ import type { BrowserRelay } from "@cawco/core/browser";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import { isPublicAddress, plainAddress } from "@cawco/core/public-address";
 import {
+  RELAY_REMOVE,
   RELAY_RENEW,
   RELAY_START,
   RELAY_STOP,
@@ -392,8 +393,9 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       }
       const before = db.read();
       if (before && before.machineId !== machineId) {
-        // One relay for the fleet: the one before stops on its own machine.
-        await call(before.machineId, RELAY_STOP, [], STOP_MS);
+        // One relay for the fleet: the one before goes from its own machine,
+        // its certificate volume with it.
+        await call(before.machineId, RELAY_REMOVE, [], STOP_MS);
       }
       db.set({
         machineId,
@@ -434,13 +436,14 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       if (!relay) {
         return;
       }
-      const read = await call(relay.machineId, RELAY_STOP, [], STOP_MS);
-      // A machine that is gone holds nothing the hub could stop; the record
+      // Its container and its certificate volume go from the machine.
+      const read = await call(relay.machineId, RELAY_REMOVE, [], STOP_MS);
+      // A machine that is gone holds nothing the hub could remove; the record
       // goes either way, and every credential minted from it lapses.
       if (read.kind === "answered" && !read.value.ok) {
         throw new RelayRefusal(
           409,
-          read.value.error ?? "The relay did not stop, so it was kept."
+          read.value.error ?? "The relay was not removed, so it was kept."
         );
       }
       db.forget();

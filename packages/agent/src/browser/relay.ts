@@ -675,6 +675,30 @@ export const stopRelay = (): Promise<RelayFrame> =>
   });
 
 /**
+ * The relay gone from this machine: its container removed, then its
+ * certificate volume, so nothing of it stays behind. Stop keeps the volume;
+ * this is Remove relay's, and a relay moved to another machine's.
+ */
+export const removeRelay = (): Promise<RelayFrame> =>
+  serial(async () => {
+    const found = await browserRuntime();
+    if (!("missing" in found)) {
+      await removeRelayContainer(found.docker);
+      await found.docker
+        .getVolume(CERTS_VOLUME)
+        .remove()
+        .catch((error: unknown) => {
+          if (!notFound(error)) {
+            throw error;
+          }
+        });
+    }
+    tell({ state: "stopped", ports: NO_PORTS });
+    console.info("[relay] removed, its certificate volume with it");
+    return { kind: "stream_relay", machineId, ...current };
+  });
+
+/**
  * Renews the relay's certificate when certbot says it is due (`certbot
  * renew` decides by the certificate's own lifetime), and restarts coturn on a
  * new one. Asked every day: a fixed interval does not hold as Let's Encrypt

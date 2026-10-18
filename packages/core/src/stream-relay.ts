@@ -77,8 +77,11 @@ export interface RelayStartArgs {
   secret: string;
 }
 
-/** Hub → daemon: stop the relay and remove its container; its certificate is kept. */
+/** Hub → daemon: stop the relay and remove its container; its certificate is kept, so a start again reuses it. */
 export const RELAY_STOP = "relay.stop";
+
+/** Hub → daemon: the relay gone from the machine: its container, then its certificate volume (Remove relay, or the relay moved elsewhere). */
+export const RELAY_REMOVE = "relay.remove";
 
 /** Hub → daemon: renew the relay's certificate when its issuer says it is due, and restart coturn on a new one. */
 export const RELAY_RENEW = "relay.renew";
@@ -186,8 +189,10 @@ export const STREAM_RELAY_WORDS = {
   stopBody:
     "Streams that go through it stop connecting until it starts again; a screen on the same network as a browser's machine still connects directly.",
   removeTitle: (machine: string) => `Remove the stream relay on ${machine}?`,
-  removeBody:
-    "Streams from screens off the network of a browser's machine stop connecting. Its secret is forgotten, so a new relay starts with a new one.",
+  removeBody: (machine: string, hostname: string | null) =>
+    hostname
+      ? `Streams from screens off the network of a browser's machine stop connecting. Its secret is forgotten and its certificate for ${hostname} is deleted from ${machine}, so a new relay starts with a new secret and a new certificate.`
+      : "Streams from screens off the network of a browser's machine stop connecting. Its secret is forgotten, so a new relay starts with a new one.",
   answering: (address: string) => `Relay · ${address} · answering`,
   seenAs: (seen: string) => `seen by the hub as ${seen}`,
 } as const;

@@ -12,7 +12,12 @@
  *   check C10), and one whose username's timestamp has passed is refused 401;
  * - a permission to 10.0.0.5 is refused 403 (`denied-peer-ip`);
  * - with `--hostname`: the certificate issued, and TLS on 443 and 5349
- *   answering with the Let's Encrypt chain.
+ *   answering with the Let's Encrypt chain;
+ * - Stop relay keeps the certificate volume; Remove relay takes the
+ *   container and then the volume, so nothing of the relay stays.
+ *
+ * It runs only where the machine has no relay yet (no `cawco-relay`
+ * container, no `cawco-relay-certs` volume): its Remove would delete them.
  *
  * On a rootless runtime whose `ip_unprivileged_port_start` is above the
  * lowest port the relay needs (obelisk: rootless Podman, 1024), the start
@@ -335,6 +340,57 @@ const refusedLegs = async (
   }
 };
 
+/** Whether the runtime holds the relay's container, and its certificate volume. */
+const relayLeft = async (
+  relay: Relay,
+  runtime: Runtime
+): Promise<{ container: boolean; volume: boolean }> => {
+  const there = (read: Promise<unknown>) =>
+    read.then(
+      () => true,
+      () => false
+    );
+  return {
+    container: await there(
+      runtime.docker.getContainer(relay.RELAY_CONTAINER).inspect()
+    ),
+    volume: await there(runtime.docker.getVolume(relay.CERTS_VOLUME).inspect()),
+  };
+};
+
+/**
+ * Stop, then Remove: Stop keeps the certificate volume (when one was made),
+ * Remove takes the container and then the volume. Where no certificate was
+ * issued (no `--hostname`, or 443 refused), the volume is made empty first so
+ * Remove has one to take.
+ */
+const removeLegs = async (
+  kit: Kit,
+  relay: Relay,
+  runtime: Runtime,
+  certified: boolean
+): Promise<void> => {
+  await relay.stopRelay();
+  const stopped = await relayLeft(relay, runtime);
+  if (certified) {
+    kit.check(
+      `Stop relay: container ${relay.RELAY_CONTAINER} gone, volume ${relay.CERTS_VOLUME} kept for the next start`,
+      !stopped.container && stopped.volume,
+      JSON.stringify(stopped)
+    );
+  }
+  if (!stopped.volume) {
+    await runtime.docker.createVolume({ Name: relay.CERTS_VOLUME });
+  }
+  const frame = await relay.removeRelay();
+  const removed = await relayLeft(relay, runtime);
+  kit.check(
+    `Remove relay: container ${relay.RELAY_CONTAINER} and volume ${relay.CERTS_VOLUME} both gone${certified ? "" : " (the volume made empty by this spec)"}; state ${frame.state}`,
+    !(removed.container || removed.volume) && frame.state === "stopped",
+    JSON.stringify(removed)
+  );
+};
+
 const run = async (kit: Kit): Promise<void> => {
   const machine = flag("machine");
   const address = flag("address");
@@ -372,16 +428,29 @@ const run = async (kit: Kit): Promise<void> => {
     relayRange: STREAM_RELAY_PORTS.relayRange,
     ...(name ? { hostname: name } : {}),
   };
-  await relay.stopRelay();
+  // The spec removes what a relay leaves, certificate included: it never
+  // runs over a relay this machine already has.
+  const before = await relayLeft(relay, runtime);
+  if (
+    !kit.check(
+      `no relay on ${machine} before this spec (container ${relay.RELAY_CONTAINER} ${before.container ? "present" : "absent"}, volume ${relay.CERTS_VOLUME} ${before.volume ? "present" : "absent"}): remove one in Settings › Browsers first`,
+      !(before.container || before.volume)
+    )
+  ) {
+    return;
+  }
+  let certified = false;
   try {
     const refusal = await relay.lowPortsRefusal(runtime, !!name);
     if (refusal) {
       await refusedLegs(kit, relay, runtime, args, refusal);
     } else {
       await relayLegs(kit, relay, runtime, args);
+      certified = !!name;
     }
+    await removeLegs(kit, relay, runtime, certified);
   } finally {
-    await relay.stopRelay().catch(() => undefined);
+    await relay.removeRelay().catch(() => undefined);
   }
 };
 
