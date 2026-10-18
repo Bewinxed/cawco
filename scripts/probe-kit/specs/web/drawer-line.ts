@@ -32,6 +32,7 @@ import {
   firefox,
   type Page,
 } from "playwright-core";
+import { readWithin } from "../../../../packages/core/src/bounded";
 import { type Kit, open, ROOT, type Spec, settle } from "../../kit";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
@@ -518,7 +519,109 @@ async function onTheLine(kit: Kit, base: string): Promise<void> {
   kit.note(`readings:\n${table(rows)}`);
 }
 
-/** One route at one width, read once its page has settled. */
+/** Two frames of the page's own. */
+const twoFrames = (page: Page): Promise<void> =>
+  page.evaluate(
+    () =>
+      new Promise<void>((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => done()))
+      )
+  );
+
+/**
+ * Every scrolling box walked from its top to its end, half a view a step,
+ * then put back where it rested (its end when it rested there). A virtual
+ * list sizes itself from the rows it has measured and estimates the rest,
+ * so at rest its height and its rows' offsets told which rows the load
+ * happened to measure (2315, 2450 and 2565px, on one bench at 390): walked
+ * through, every row is measured and the list is its rows' real height.
+ */
+const measureEveryRow = (page: Page): Promise<void> =>
+  page.evaluate(async () => {
+    const frames = () =>
+      new Promise<void>((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => done()))
+      );
+    const atEnd = (el: HTMLElement) =>
+      el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    /** Top to end, half a view a step, each step drawn before the next. */
+    const walk = async (el: HTMLElement) => {
+      el.scrollTop = 0;
+      await frames();
+      for (let step = 0; step < 400 && !atEnd(el); step += 1) {
+        el.scrollTop += Math.max(1, Math.floor(el.clientHeight / 2));
+        // biome-ignore lint/performance/noAwaitInLoops: each step is measured before the next
+        await frames();
+      }
+    };
+    /** The end moves while the last rows are measured: followed until it holds. */
+    const toEnd = async (el: HTMLElement) => {
+      for (let step = 0; step < 20; step += 1) {
+        const end = el.scrollHeight;
+        el.scrollTop = end;
+        // biome-ignore lint/performance/noAwaitInLoops: each try reads the height the last one left
+        await frames();
+        if (el.scrollHeight === end) {
+          return;
+        }
+      }
+    };
+    const scrollers = [...document.querySelectorAll<HTMLElement>("*")].filter(
+      (el) => {
+        const y = getComputedStyle(el).overflowY;
+        return (
+          (y === "auto" || y === "scroll") &&
+          el.scrollHeight > el.clientHeight + 1
+        );
+      }
+    );
+    for (const el of scrollers) {
+      const restedAtEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+      const rested = el.scrollTop;
+      // biome-ignore lint/performance/noAwaitInLoops: one scroller at a time, so none moves another mid-walk
+      await walk(el);
+      if (restedAtEnd) {
+        await toEnd(el);
+      } else {
+        el.scrollTop = rested;
+        await frames();
+      }
+    }
+  });
+
+/**
+ * The page's snapshot once it has come to rest: every element's computed
+ * style and box the same in two snapshots two frames apart, with no finite
+ * animation running between them. Box stillness alone was not rest: a
+ * virtual list's rows stand still a frame before its measurements move
+ * them, and Caw's panel (a hang card kept mounted while shut) folds, and
+ * takes its `--hang-reach`, after the frames that drew it still.
+ */
+async function restingSnapshot(
+  page: Page,
+  route: string
+): Promise<Record<string, string>> {
+  await settle(page, 0);
+  await measureEveryRow(page);
+  const until = performance.now() + 20_000;
+  let last: Record<string, string> = {};
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: one read after another, each waiting on the last
+    await settle(page, 0);
+    const now = await snapshot(page);
+    const read = difference(last, now);
+    if (read.same) {
+      return now;
+    }
+    if (performance.now() > until) {
+      throw new Error(`${route}: still changing after 20s: ${read.detail}`);
+    }
+    last = now;
+    await twoFrames(page);
+  }
+}
+
+/** One route at one width, read once, when its page has come to rest. */
 async function takeAway(
   kit: Kit,
   base: string,
@@ -530,19 +633,45 @@ async function takeAway(
   // `Date.now()` (DelegateTray's `animation-delay: -{now % 2000}ms`)
   // reads the same before and after. Timers run on as they do.
   await page.clock.setFixedTime(AWAY_CLOCK);
+  // The hub answers: the dashboard's socket opens here and stays quiet. With
+  // no hub behind the dev server the client tries, fails and backs off
+  // again and again, and HubBand opens on each failure and shuts on each
+  // try (its `fault` is null while "connecting" before the tab ever had the
+  // hub), so no read could land on one state. Answered, the client is
+  // connected and the band rests shut. (Its heartbeat asks first after 20s,
+  // and with `Date.now()` pinned it never finds the hub silent.)
+  const { promise: answered, resolve: answer } = Promise.withResolvers<void>();
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws/dashboard",
+    () => answer()
+  );
   await openBench(page, base, route);
-  // Off the benches the hub band runs, and with no hub it opens once its
-  // connect grace is over (HubBand's CONNECT_GRACE, 4s from its mount) or
-  // the socket reports a failed connect, whichever comes first: past the
-  // grace, every take reads it open.
-  await page.waitForTimeout(route.startsWith("/motion/") ? 1500 : 5000);
-  await settle(page, 400);
-  const taken = await snapshot(page);
+  if (!route.startsWith("/motion/")) {
+    const socket = await readWithin(15_000, () => answered);
+    switch (socket.kind) {
+      case "answered":
+        break;
+      case "unanswered":
+        throw new Error(
+          `${route}: the dashboard opened no hub socket in ${socket.after} ms`
+        );
+      default:
+        throw new Error(`unknown read ${socket satisfies never}`);
+    }
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".band-slot > .band-row > :not([data-open])") !==
+        null,
+      undefined,
+      { timeout: 15_000 }
+    );
+  }
+  const taken = await restingSnapshot(page, route);
   await page.close();
   return taken;
 }
 
-/** How one take differs from the snapshot before, as a check's detail. */
+/** How one read differs from the snapshot before, as a check's detail. */
 function difference(
   was: Record<string, string>,
   now: Record<string, string>
@@ -565,14 +694,6 @@ function difference(
   };
 }
 
-/**
- * Takes of one page after the first: a virtual list's rows land where its
- * measurements had reached, so one take can catch another moment than the
- * snapshot before did. An entry passes only when a whole take computes
- * exactly as before.
- */
-const RETAKES = 3;
-
 /** 3: away from the line, every element as it was. */
 async function awayFromTheLine(kit: Kit, base: string): Promise<void> {
   const away: Record<string, Record<string, string>> = {};
@@ -590,26 +711,13 @@ async function awayFromTheLine(kit: Kit, base: string): Promise<void> {
     return;
   }
   const then = JSON.parse(readFileSync(before, "utf8")) as typeof away;
-  for (const width of AWAY_WIDTHS) {
-    for (const route of AWAY_ROUTES) {
-      const key = `${width} ${route}`;
-      const was = then[key] ?? {};
-      let take = 1;
-      let read = difference(was, away[key]);
-      const first = read.detail;
-      while (!read.same && take <= RETAKES) {
-        take += 1;
-        // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-        read = difference(was, await takeAway(kit, base, width, route));
-      }
-      kit.check(
-        `${key}: every element computes as it did before`,
-        read.same,
-        take === 1
-          ? read.detail
-          : `take ${take}: ${read.detail} (take 1: ${first})`
-      );
-    }
+  for (const [key, now] of Object.entries(away)) {
+    const read = difference(then[key] ?? {}, now);
+    kit.check(
+      `${key}: every element computes as it did before`,
+      read.same,
+      read.detail
+    );
   }
 }
 
