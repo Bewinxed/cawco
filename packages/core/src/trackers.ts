@@ -26,12 +26,83 @@ export const TRACKER_NAMES: Readonly<Record<Tracker, string>> = {
  */
 export type TrackerSyncState = "syncing" | "synced" | "refused";
 
+/** One option of a GitHub Project's single-select Status field. */
+export interface StatusOption {
+  /** GitHub's option id (`ProjectV2SingleSelectFieldOption.id`). */
+  id: string;
+  name: string;
+}
+
+/**
+ * A GitHub Project (v2) a GitHub binding carries its stages on, through the
+ * Project's single-select field named Status (PRD §5.2: "With GitHub, stages
+ * map onto a Projects single-select field"). Issues' open and closed carry
+ * only open against done or dropped; Status carries every stage.
+ */
+export interface GithubProject {
+  /** Its Status field's node id; null when the Project has no single-select Status. */
+  fieldId: string | null;
+  /** GitHub's node id for the Project. */
+  id: string;
+  /** Each stage's Status option by the stage's name, as set in the binding's form; null leaves Status alone for that stage. A stage missing here takes the option named as it. */
+  map: Record<string, string | null>;
+  number: number;
+  /** Its Status field's options, in GitHub's order. */
+  options: StatusOption[];
+  title: string;
+  url: string;
+}
+
+/** A GitHub Project a connection reaches, offered in the binding's form. */
+export interface GithubProjectChoice {
+  fieldId: string | null;
+  id: string;
+  /** Linked to the bound repository on GitHub: the form's first pick. */
+  linked: boolean;
+  number: number;
+  options: StatusOption[];
+  title: string;
+  url: string;
+}
+
+/** What a GitHub connection reaches of a repository owner's Projects: its Projects, or GitHub's refusal in its words. */
+export interface GithubProjectsView {
+  projects: GithubProjectChoice[];
+  /** GitHub's words when the connection may not read the owner's Projects; null when it may. */
+  refused: string | null;
+}
+
+const sameName = (a: string, b: string): boolean =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * The Status option a stage puts its issue's Project item in: the one the
+ * binding set for it, else the option named as the stage; null when it
+ * leaves Status alone.
+ */
+export const statusOptionFor = (
+  stage: string,
+  project: Pick<GithubProject, "map" | "options">
+): string | null =>
+  Object.hasOwn(project.map, stage)
+    ? (project.map[stage] ?? null)
+    : (project.options.find((option) => sameName(option.name, stage))?.id ??
+      null);
+
 /** A project's binding: one connection and one target on it. */
 export interface TrackerBindingView {
   /** When the project was bound, ms epoch: issues opened after it become tasks. */
   boundAt: number;
   /** The connection's name (hub connections.ts). */
   connection: string;
+  /** GitHub: the Project its stages show on through Status; null when none is set. */
+  githubProject: GithubProject | null;
+  /**
+   * GitHub: why stages do not show on a Project, in GitHub's words (the
+   * connection may not read or write the owner's Projects); null when
+   * nothing stops them. Issues sync either way.
+   */
+  githubProjectReason: string | null;
   /** Issues linked to the project's tasks. */
   linked: number;
   /** When its last poll answered, ms epoch; null before its first. */

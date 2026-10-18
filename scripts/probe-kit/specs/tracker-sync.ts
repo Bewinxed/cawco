@@ -29,7 +29,24 @@
  *     rewrite puts it back in review; closed it is done; reopened, review.
  *  G9 a comment by someone with no standing on a member's issue is carried,
  *     and its task, in ready, waits in review saying why.
- *  G7 a sync with nothing changed writes nothing, and both lists answer 304.
+ *  G7 a sync with nothing changed writes nothing, and both lists answer 304
+ *     (Sync now asks GitHub's Projects again, a read).
+ *  P5 the token given the Projects permission since: Sync now takes the
+ *     Project linked to the repository, GitHub's words gone, and the next
+ *     move shows on GitHub (#1 to working, its item in Working).
+ * GitHub Projects (P): a binding's stages on a Project's Status field.
+ *  P0 a token without the organization permission Projects: the binding
+ *     says GitHub's words ("Resource not accessible by personal access
+ *     token") and names no Project, and issues sync as G2–G9 show.
+ *  P1 a token with Projects: read and write binds to the Project linked to
+ *     the repository, each stage on the Status option named as it; a task
+ *     filed in CawCo puts its new issue on the Project in Ready.
+ *  P2 the task moved ready → working: its item's Status is Working, the
+ *     issue still open.
+ *  P3 its Status moved to Review on GitHub: the task is in review; to Done:
+ *     the task is done and its issue closed.
+ *  P4 a stage mapped in the binding's form (working → Review): the next
+ *     move to working puts the item in Review.
  * GitHub, a GitHub App (A):
  *  A1 its registration set (its private key pasted on one line, as a
  *     password field takes it): the hub mints an installation token with a
@@ -62,7 +79,8 @@
  * The dashboard (U), at the desk and on a phone:
  *  U1 a linked task's pane shows its issue line, a link, inside the pane.
  *  U2 a refused task's pane says the tracker's words with Sync now.
- *  U3 the project's details show the tracker bound; Change opens the form
+ *  U3 the project's details show the tracker bound (its tasks linked as the
+ *     hub counts them); Change opens the form
  *     on the binding as it stands; another project binds from its Tasks row.
  *  U4 Connections makes a GitHub App through its form, the private key in
  *     a password field with show and hide, and the app mints its
@@ -75,6 +93,10 @@
  *     author).
  *  U6 a comment taken out of the file by hand comes back, as the hub keeps
  *     comments append-only; the pane shows every comment in order.
+ *  U7 a binding without the Projects permission shows GitHub's words, in
+ *     its row and in its form; one with a Project names it, and Change opens
+ *     the form on it, each stage on its Status option (working on Review as
+ *     P4 set it); review put on Done there and Use binds that mapping.
  *  U  none of these pages threw.
  *
  *   bun scripts/probe-kit/run.ts tracker-sync
@@ -87,18 +109,21 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
-import { githubStub, linearStub } from "../tracker-stubs";
+import { type GitHubGrant, githubStub, linearStub } from "../tracker-stubs";
 
 const OWNER = "probe-owner";
 const REPO = "probe-app";
 const FULL = `${OWNER}/${REPO}`;
 const PAT = `github_pat_probe_${crypto.randomUUID().replaceAll("-", "")}`;
 const READ_PAT = `github_pat_reader_${crypto.randomUUID().replaceAll("-", "")}`;
+const PROJECTS_PAT = `github_pat_projects_${crypto.randomUUID().replaceAll("-", "")}`;
 const LINEAR_KEY = `lin_api_probe${crypto.randomUUID().replaceAll("-", "")}`;
 const LINEAR_LIMITED = `lin_api_limited${crypto.randomUUID().replaceAll("-", "")}`;
 const CLIENT_SECRET = `lin_secret_${crypto.randomUUID().replaceAll("-", "")}`;
 const TEAM = { id: "team-eng", key: "ENG", name: "Engineering" };
 const APP_ID = "424242";
+/** The review stage's label in the binding's stage-to-Status map. */
+const REVIEW_STAGE = /^review$/;
 const INSTALLATION = "7777";
 
 interface IssueLink {
@@ -129,6 +154,13 @@ interface Task {
 interface TrackerView {
   binding: {
     connection: string;
+    githubProject: {
+      id: string;
+      map: Record<string, string | null>;
+      options: { id: string; name: string }[];
+      title: string;
+    } | null;
+    githubProjectReason: string | null;
     linked: number;
     reason: string | null;
     state: string;
@@ -148,6 +180,8 @@ interface Connection {
 
 const run = async (kit: Kit) => {
   const { check } = kit;
+  /** The fine-grained token's grant: P5 gives it the Projects permission. */
+  const person: GitHubGrant = { issuesWrite: true, login: "probe-person" };
   const keys = generateKeyPairSync("rsa", {
     modulusLength: 2048,
     publicKeyEncoding: { type: "spki", format: "pem" },
@@ -161,9 +195,18 @@ const run = async (kit: Kit) => {
       installationId: INSTALLATION,
       publicKey: keys.publicKey,
     },
+    project: {
+      title: "Probe roadmap",
+      status: ["Ready", "Working", "Review", "Done"],
+    },
     tokens: {
-      [PAT]: { issuesWrite: true, login: "probe-person" },
+      [PAT]: person,
       [READ_PAT]: { issuesWrite: false, login: "probe-reader" },
+      [PROJECTS_PAT]: {
+        issuesWrite: true,
+        login: "probe-planner",
+        projects: "write",
+      },
     },
   });
   const linear = linearStub({
@@ -179,7 +222,7 @@ const run = async (kit: Kit) => {
     app: { clientId: "lin-client-probe", clientSecret: CLIENT_SECRET },
   });
   try {
-    await legs(kit, github, linear, keys.privateKey);
+    await legs(kit, github, linear, keys.privateKey, person);
   } finally {
     github.stop();
     linear.stop();
@@ -191,7 +234,8 @@ const legs = async (
   kit: Kit,
   github: ReturnType<typeof githubStub>,
   linear: ReturnType<typeof linearStub>,
-  privateKey: string
+  privateKey: string,
+  person: GitHubGrant
 ) => {
   const { check } = kit;
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
@@ -377,6 +421,19 @@ const legs = async (
     })
   );
 
+  const withoutProjects = (
+    await hub<TrackerView>("GET", `/api/projects/${gh}/tracker`)
+  ).body.binding;
+  check(
+    "P0: without the Projects permission the binding says GitHub's words and names no Project; the issue synced all the same",
+    withoutProjects?.githubProject === null &&
+      (withoutProjects.githubProjectReason ?? "").includes(
+        "“Resource not accessible by personal access token”"
+      ) &&
+      issue1 !== undefined,
+    JSON.stringify(withoutProjects)
+  );
+
   await hub("PATCH", `/api/projects/${gh}/tasks/${t1}`, {
     title: "Add the CSV export button",
   });
@@ -548,12 +605,143 @@ const legs = async (
   await sync(gh);
   const quiet = github.calls.slice(before);
   check(
-    "G7: a sync with nothing changed writes nothing, and both lists answer 304",
-    quiet.every((one) => one.method === "GET") &&
-      quiet.filter((one) => one.status === 304).length === 2,
+    "G7: a sync with nothing changed writes nothing, and both lists answer 304 (Sync now asks GitHub's Projects again, a read)",
+    quiet.every(
+      (one) => one.method === "GET" || one.operation === "CawcoProjects"
+    ) && quiet.filter((one) => one.status === 304).length === 2,
     JSON.stringify(
-      quiet.map((one) => `${one.method} ${one.path} ${one.status}`)
+      quiet.map(
+        (one) =>
+          `${one.method} ${one.path}${one.operation ? ` ${one.operation}` : ""} ${one.status}`
+      )
     )
+  );
+
+  // The token given the Projects permission since: Sync now takes it up.
+  person.projects = "write";
+  const recovered = (await sync(gh)).binding;
+  await hub("POST", `/api/projects/${gh}/tasks/${t1}/stage`, {
+    stage: "working",
+  });
+  await sync(gh);
+  check(
+    "P5: given the Projects permission since, Sync now takes the Project linked to the repository, GitHub's words gone; #1 moved to working is Working on GitHub",
+    recovered?.githubProject?.title === "Probe roadmap" &&
+      recovered.githubProjectReason === null &&
+      issue1 !== undefined &&
+      github.statusOf(issue1) === "Working",
+    JSON.stringify({
+      project: recovered?.githubProject?.title,
+      reason: recovered?.githubProjectReason,
+      status: issue1 && github.statusOf(issue1),
+    })
+  );
+
+  // ── GitHub Projects: stages on Status ────────────────────────────────
+  const pj = await project("Tracker GitHub Project");
+  await connect("github-planner", "github", "bearer");
+  await setKey("github-planner", PROJECTS_PAT);
+  const pBound = await bind(pj, "github", "github-planner", FULL);
+  const onProject = pBound.body.binding;
+  const pTask = (
+    await hub<Task>("POST", `/api/projects/${pj}/tasks`, {
+      title: "Move the settings page",
+    })
+  ).body;
+  await sync(pj);
+  const pIssue = github.issues.find(
+    (one) => one.title === "Move the settings page"
+  );
+  check(
+    "P1: with Projects: read and write the binding takes the Project linked to the repository; the task's new issue goes on it in Ready",
+    pBound.status === 200 &&
+      onProject?.githubProject?.title === "Probe roadmap" &&
+      onProject.githubProjectReason === null &&
+      pTask.stage === "ready" &&
+      pIssue !== undefined &&
+      github.statusOf(pIssue) === "Ready",
+    JSON.stringify({
+      binding: onProject,
+      stage: pTask.stage,
+      status: pIssue && github.statusOf(pIssue),
+    })
+  );
+  await hub("POST", `/api/projects/${pj}/tasks/${pTask.id}/stage`, {
+    stage: "working",
+  });
+  await sync(pj);
+  check(
+    "P2: the task moved ready → working: its item's Status is Working on GitHub, the issue still open",
+    pIssue !== undefined &&
+      github.statusOf(pIssue) === "Working" &&
+      pIssue.state === "open" &&
+      (await task(pj, pTask.id)).issue?.problem === null,
+    JSON.stringify({
+      status: pIssue && github.statusOf(pIssue),
+      state: pIssue?.state,
+      issue: (await task(pj, pTask.id)).issue,
+    })
+  );
+  if (pIssue) {
+    github.setStatus(pIssue, "Review");
+  }
+  await sync(pj);
+  const inReview = await task(pj, pTask.id);
+  const reviewWhy = await reasonOf(pj, pTask.id, "moved");
+  if (pIssue) {
+    github.setStatus(pIssue, "Done");
+  }
+  await sync(pj);
+  const finished = await task(pj, pTask.id);
+  check(
+    "P3: its Status moved to Review on GitHub puts the task in review; to Done, the task is done and its issue closed",
+    inReview.stage === "review" &&
+      (reviewWhy ?? "").includes("#4 is “Review” on Probe roadmap") &&
+      finished.stage === "done" &&
+      pIssue?.state === "closed" &&
+      pIssue.state_reason === "completed",
+    JSON.stringify({
+      review: inReview.stage,
+      reviewWhy,
+      done: finished.stage,
+      state: pIssue?.state,
+    })
+  );
+  // The binding's form maps a stage onto another option: working → Review.
+  const options = onProject?.githubProject?.options ?? [];
+  const optionId = (name: string) =>
+    options.find((one) => one.name === name)?.id ?? null;
+  const remapped = await hub<TrackerView>(
+    "PUT",
+    `/api/projects/${pj}/tracker`,
+    {
+      tracker: "github",
+      connection: "github-planner",
+      target: FULL,
+      githubProject: {
+        id: onProject?.githubProject?.id ?? "",
+        map: { working: optionId("Review") },
+      },
+    }
+  );
+  await hub("POST", `/api/projects/${pj}/tasks/${pTask.id}/stage`, {
+    stage: "working",
+  });
+  await sync(pj);
+  check(
+    "P4: working mapped to Review in the binding's form: the move to working puts the item in Review, the issue reopened",
+    remapped.status === 200 &&
+      remapped.body.binding?.githubProject?.map.working ===
+        optionId("Review") &&
+      pIssue !== undefined &&
+      github.statusOf(pIssue) === "Review" &&
+      pIssue.state === "open" &&
+      (await task(pj, pTask.id)).stage === "working",
+    JSON.stringify({
+      map: remapped.body.binding?.githubProject?.map,
+      status: pIssue && github.statusOf(pIssue),
+      state: pIssue?.state,
+    })
   );
 
   // ── GitHub, a GitHub App ─────────────────────────────────────────────
@@ -1097,6 +1285,11 @@ const legs = async (
   const desk = await kit.page("desk");
   desk.setDefaultTimeout(60_000);
   watch(desk);
+  /** How many tasks the hub says are linked to the project's issues. */
+  const linkedOf = async (projectId: string) =>
+    (await hub<TrackerView>("GET", `/api/projects/${projectId}/tracker`)).body
+      .binding?.linked ?? -1;
+  const linkedBefore = await linkedOf(gh);
   await open(desk, `${base}/project/${gh}`, "[data-place-line]");
   await desk.locator("[data-place-line]").click();
   await desk.waitForSelector('[data-detail="tracker"] [data-tracker-state]');
@@ -1117,14 +1310,21 @@ const legs = async (
   await desk
     .locator('[data-detail="tracker"]')
     .screenshot({ path: join(kit.out, "details-tracker.png") });
+  // Every issue opened on the repository after binding becomes a task here,
+  // the P legs' too, as the minute's poll finds them: the row shows the
+  // hub's count from just before the tray opened or just after it was read.
+  const linkedAfter = await linkedOf(gh);
   check(
-    "U3: the project's details show GitHub Issues picked, its repository, the connection and the tasks linked",
+    "U3: the project's details show GitHub Issues picked, its repository, the connection and the tasks linked, as the hub counts them",
     row.picked.join() === "GitHub Issues" &&
       row.target === FULL &&
-      (row.state ?? "").startsWith(
-        "Through github-probe · 3 tasks linked · Synced"
+      linkedBefore >= 3 &&
+      [linkedBefore, linkedAfter].some((count) =>
+        (row.state ?? "").startsWith(
+          `Through github-probe · ${count} tasks linked · Synced`
+        )
       ),
-    JSON.stringify(row)
+    JSON.stringify({ row, linkedBefore, linkedAfter })
   );
   await desk.locator("[data-change-tracker]").click();
   // An option is never visible to the engine: in the page is what counts.
@@ -1150,12 +1350,17 @@ const legs = async (
     .click();
   const fresh = await project("Tracker bound in the dashboard");
   await open(desk, `${base}/project/${fresh}`, "[data-place-line]");
-  // A new project opens on Caw: his panel stands over its empty board and
-  // its head (CawFloat), and Escape puts it away, as a person does before
-  // opening the details.
-  const caw = desk.locator(".caw-float-pop");
+  // A new project opens on Caw: his panel docks beside its empty board and
+  // its head (CawFloat's `[data-caw-dock]`), and a press on his seat puts it
+  // away, as a person does before opening the details. (Escape puts it away
+  // only from inside it, where the caret lands once his composer is drawn.)
+  const caw = desk.locator("[data-caw-dock]");
   await caw.waitFor({ state: "visible" });
-  await desk.keyboard.press("Escape");
+  await desk
+    .locator('[data-slot="caw-seat"][aria-expanded="true"]')
+    .filter({ visible: true })
+    .first()
+    .click();
   await caw.waitFor({ state: "detached" });
   await desk.locator("[data-place-line]").click();
   await desk.waitForSelector('[data-detail="tracker"]');
@@ -1188,6 +1393,104 @@ const legs = async (
       viaUi.binding?.connection === "linear-key" &&
       viaUi.binding.targetName === "ENG · Engineering",
     JSON.stringify(viaUi)
+  );
+
+  // The Projects permission: GitHub's words where it is missing, the Project and its mapping where it is not.
+  await open(desk, `${base}/project/${refusedProject}`, "[data-place-line]");
+  await desk.locator("[data-place-line]").click();
+  await desk.waitForSelector(
+    '[data-detail="tracker"] [data-github-project-reason]'
+  );
+  const refusedRow = await desk
+    .locator('[data-detail="tracker"] [data-github-project-reason]')
+    .textContent();
+  await desk.locator("[data-change-tracker]").click();
+  await desk.waitForSelector(
+    '[data-bind-form="github"] [data-projects-refused]'
+  );
+  const refusedForm = await desk
+    .locator('[data-bind-form="github"] [data-projects-refused]')
+    .textContent();
+  check(
+    "U7: without the Projects permission the bound row and its form say GitHub's words",
+    (refusedRow ?? "").includes(
+      "“Resource not accessible by personal access token”"
+    ) &&
+      (refusedForm ?? "").includes(
+        "“Resource not accessible by personal access token”"
+      ),
+    JSON.stringify({ refusedRow, refusedForm })
+  );
+  await open(desk, `${base}/project/${pj}`, "[data-place-line]");
+  await desk.locator("[data-place-line]").click();
+  await desk.waitForSelector('[data-detail="tracker"] [data-github-project]');
+  const named = (
+    await desk
+      .locator('[data-detail="tracker"] [data-github-project]')
+      .textContent()
+  )
+    ?.replace(/\s+/g, " ")
+    .trim();
+  await desk.locator("[data-change-tracker]").click();
+  await desk.waitForSelector(
+    '[data-bind-form="github"] [data-status-map] select'
+  );
+  const form = await desk.evaluate(() => {
+    const at = document.querySelector('[data-bind-form="github"]');
+    return {
+      project: at?.querySelector<HTMLSelectElement>(".bind-project select")
+        ?.value,
+      map: Object.fromEntries(
+        [...(at?.querySelectorAll("[data-status-map] label") ?? [])].map(
+          (label) => [
+            label.textContent?.trim(),
+            (
+              document.getElementById(
+                label.getAttribute("for") ?? ""
+              ) as HTMLSelectElement | null
+            )?.selectedOptions[0]?.textContent?.trim(),
+          ]
+        )
+      ),
+      sideways:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    };
+  });
+  await desk
+    .locator('[data-detail="tracker"]')
+    .screenshot({ path: join(kit.out, "details-github-project.png") });
+  check(
+    "U7: the bound row names its Project; Change opens the form on it, each stage on its Status option, working on Review as bound",
+    named === "Stages show on Probe roadmap, in its Status." &&
+      form.project === "PVT_probe1" &&
+      form.map.ready === "Ready" &&
+      form.map.working === "Review" &&
+      form.map.review === "Review" &&
+      form.map.done === "Done" &&
+      form.sideways === 0,
+    JSON.stringify({ named, form })
+  );
+  const reviewPick = await desk
+    .locator("[data-status-map] label", { hasText: REVIEW_STAGE })
+    .getAttribute("for");
+  await desk.selectOption(`[id="${reviewPick}"]`, { label: "Done" });
+  await desk.getByRole("button", { name: "Use GitHub Issues" }).click();
+  const remappedInUi = await until(
+    "U7: Use binds the mapping",
+    async () =>
+      (await hub<TrackerView>("GET", `/api/projects/${pj}/tracker`)).body,
+    (view) => view.binding?.githubProject?.map.review === optionId("Done"),
+    15_000
+  ).catch(
+    async () =>
+      (await hub<TrackerView>("GET", `/api/projects/${pj}/tracker`)).body
+  );
+  check(
+    "U7: review put on Done in the form, Use binds it on the hub",
+    remappedInUi.binding?.githubProject?.map.review === optionId("Done") &&
+      remappedInUi.binding.githubProject.map.working === optionId("Review"),
+    JSON.stringify(remappedInUi.binding?.githubProject?.map)
   );
 
   await open(desk, `${base}/config/connections`, '[aria-label="Connections"]');

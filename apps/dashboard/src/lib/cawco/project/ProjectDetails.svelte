@@ -21,9 +21,13 @@
    *   link to edit the file.
    * - Tasks: where they live (WORDS.md: tracker). CawCo's files alone, or
    *   GitHub Issues or Linear through a connection, on one repository or
-   *   team: picked, then bound with Use. Bound, it names the target, the
-   *   connection, how many tasks are linked and how its sync stands, the
-   *   tracker's refusal in its words with Try again.
+   *   team: picked, then bound with Use. With GitHub, a GitHub Project too
+   *   (the one linked to the repository first), and each stage's option of
+   *   its Status field (the one named as the stage first): its open stages
+   *   then show on GitHub, which an issue's open and closed cannot carry.
+   *   Bound, it names the target, the connection, how many tasks are linked
+   *   and how its sync stands, the tracker's refusal in its words with Try
+   *   again, and the GitHub Project, or GitHub's words for why there is none.
    * - Caw: his lead switch (CawLeadSwitch), its ways off with it.
    * - Review before done.
    *
@@ -36,11 +40,13 @@
   import {
     type ConnectionView,
     type DeclaredStep,
+    type GithubProjectChoice,
     type IssueTracker,
     LANDS_MODES,
     type LandsMode,
     machineLabel,
     type ProjectGate,
+    statusOptionFor,
     TRACKER_NAMES,
     type Tracker,
     type TrackerBindingView,
@@ -61,7 +67,9 @@
   import OsMark from "#lib/cawco/OsMark.svelte";
   import {
     folderFileHref,
+    githubProjects,
     readGate,
+    readStages,
     readTracker,
     send,
     setTracker,
@@ -223,6 +231,21 @@
     picking ?? tracker?.tracker ?? "cawco"
   );
 
+  /** GitHub: the Projects the connection reaches for the repository picked; null while they are read. */
+  let ghProjects = $state<GithubProjectChoice[] | null>(null);
+  /** GitHub's words when the connection may not read the owner's Projects. */
+  let ghRefused = $state<string | null>(null);
+  let ghFault = $state<string | null>(null);
+  /** The Project picked: its id, or "" for none. */
+  let pickProject = $state("");
+  /** The project's stages, by name, in its order: each takes a Status option. */
+  let stageNames = $state<string[]>([]);
+  /** Each stage's Status option picked; null leaves Status alone. */
+  let statusMap = $state<Record<string, string | null>>({});
+  const chosenProject = $derived(
+    ghProjects?.find((each) => each.id === pickProject)
+  );
+
   onMount(() => {
     readTracker(project.id).then(
       (read) => {
@@ -265,6 +288,63 @@
         "";
     } catch (error) {
       targetsFault = failureWords(error);
+      return;
+    }
+    await readProjects(connection, pickTarget);
+  }
+
+  /** Each stage's Status option for a Project: as bound when it is the bound one, else the option named as the stage. */
+  function mapFor(id: string): void {
+    const choice = ghProjects?.find((each) => each.id === id);
+    const bound =
+      tracker?.binding?.githubProject?.id === id
+        ? tracker.binding.githubProject.map
+        : {};
+    statusMap = choice
+      ? Object.fromEntries(
+          stageNames.map((name) => [
+            name,
+            statusOptionFor(name, { map: bound, options: choice.options }),
+          ])
+        )
+      : {};
+  }
+
+  /**
+   * GitHub: the repository's Projects and the project's stages, the bound
+   * Project chosen (none, when it was bound with none), else the first
+   * linked to the repository; GitHub's words when it may not read them.
+   */
+  async function readProjects(connection: string, repo: string) {
+    ghProjects = null;
+    ghRefused = null;
+    ghFault = null;
+    pickProject = "";
+    if (picking !== "github" || !(connection && repo)) {
+      return;
+    }
+    try {
+      const [read, stages] = await Promise.all([
+        githubProjects(connection, repo),
+        readStages(project.id),
+      ]);
+      if (pickConnection !== connection || pickTarget !== repo) {
+        return;
+      }
+      stageNames = stages.stages.map((stage) => stage.name);
+      ghRefused = read.refused;
+      ghProjects = read.projects;
+      const was =
+        tracker?.binding?.provider === "github" &&
+        tracker.binding.target === repo
+          ? tracker.binding
+          : null;
+      pickProject = was
+        ? (was.githubProject?.id ?? "")
+        : (read.projects.find((each) => each.linked)?.id ?? "");
+      mapFor(pickProject);
+    } catch (error) {
+      ghFault = failureWords(error);
     }
   }
 
@@ -303,7 +383,15 @@
   async function bind(
     asked:
       | { tracker: "cawco" }
-      | { connection: string; target: string; tracker: IssueTracker }
+      | {
+          connection: string;
+          githubProject?: {
+            id: string;
+            map: Record<string, string | null>;
+          } | null;
+          target: string;
+          tracker: IssueTracker;
+        }
   ): Promise<void> {
     binding = true;
     bindFault = null;
@@ -449,6 +537,73 @@
     return () => node.removeEventListener("keydown", onKey);
   }
 </script>
+
+<!-- GitHub: the Project whose Status carries the stages, and each stage's option. -->
+{#snippet projectPick()}
+  {#if ghRefused}
+    <p data-slot="note" class="note" data-projects-refused>{ghRefused}</p>
+  {:else if ghProjects}
+    <NativeSelect.Root
+      aria-label="GitHub Project"
+      class="bind-project"
+      size="sm"
+      bind:value={
+        () => pickProject,
+        (next) => {
+          pickProject = next;
+          mapFor(next);
+        }
+      }
+    >
+      <NativeSelect.Option value="">No GitHub Project</NativeSelect.Option>
+      {#each ghProjects as each (each.id)}
+        <NativeSelect.Option value={each.id}>{each.title}</NativeSelect.Option>
+      {/each}
+    </NativeSelect.Root>
+    {#if chosenProject && chosenProject.options.length === 0}
+      <p data-slot="note" class="note" data-no-status>
+        {chosenProject.title} has no single-select field named Status: stages show
+        on GitHub only as open and closed.
+      </p>
+    {:else if chosenProject}
+      {@const options = chosenProject.options}
+      <fieldset class="status-map" data-status-map>
+        <legend data-slot="note" class="note">
+          Each stage's Status on {chosenProject.title}
+        </legend>
+        {#each stageNames as stage, at (stage)}
+          <label class="status-stage" for="{uid}-status-{at}"
+            ><bdi>{stage}</bdi></label
+          >
+          <NativeSelect.Root
+            class="status-pick"
+            id="{uid}-status-{at}"
+            size="sm"
+            bind:value={
+              () => statusMap[stage] ?? "",
+              (next) => {
+                statusMap = { ...statusMap, [stage]: next || null };
+              }
+            }
+          >
+            <NativeSelect.Option value=""
+              >Leave Status alone</NativeSelect.Option
+            >
+            {#each options as option (option.id)}
+              <NativeSelect.Option value={option.id}
+                >{option.name}</NativeSelect.Option
+              >
+            {/each}
+          </NativeSelect.Root>
+        {/each}
+      </fieldset>
+    {/if}
+  {:else if !ghFault}
+    <p data-slot="note" class="note">
+      Reading the GitHub Projects {pickConnection} reaches…
+    </p>
+  {/if}
+{/snippet}
 
 <section
   aria-label="Project details"
@@ -742,6 +897,14 @@
                   tracker: picking,
                   connection: pickConnection,
                   target: pickTarget,
+                  // Read and not refused: the Project picked, or none.
+                  ...(picking === "github" && ghProjects && !ghRefused
+                    ? {
+                        githubProject: chosenProject
+                          ? { id: chosenProject.id, map: statusMap }
+                          : null,
+                      }
+                    : {}),
                 });
               }
             }}
@@ -783,7 +946,13 @@
                   aria-label={picking === "github" ? "Repository" : "Team"}
                   class="bind-target"
                   size="sm"
-                  bind:value={pickTarget}
+                  bind:value={
+                    () => pickTarget,
+                    (next) => {
+                      pickTarget = next;
+                      readProjects(pickConnection, next);
+                    }
+                  }
                 >
                   {#each targets as each (each.id)}
                     <NativeSelect.Option value={each.id}
@@ -791,6 +960,9 @@
                     >
                   {/each}
                 </NativeSelect.Root>
+                {#if picking === "github"}
+                  {@render projectPick()}
+                {/if}
               {:else if !targetsFault}
                 <p data-slot="note" class="note">
                   Reading what {pickConnection} reaches…
@@ -822,6 +994,11 @@
             again={() => readTargets(pickConnection)}
             data-targets-fault
             reason={targetsFault}
+          />
+          <RowFault
+            again={() => readProjects(pickConnection, pickTarget)}
+            data-projects-fault
+            reason={ghFault}
           />
           <p data-slot="note" class="note">
             New issues there become tasks here, and new tasks become issues.
@@ -855,6 +1032,20 @@
             Through {bound.connection} · {bound.linked}
             {bound.linked === 1 ? "task" : "tasks"} linked · {syncWords(bound)}
           </p>
+          {#if bound.githubProject}
+            <p data-slot="note" class="note" data-github-project>
+              Stages show on <a
+                href={bound.githubProject.url}
+                rel="noreferrer"
+                target="_blank">{bound.githubProject.title}</a
+              >, in its Status.
+            </p>
+          {/if}
+          {#if bound.githubProjectReason}
+            <p data-slot="note" class="note" data-github-project-reason>
+              {bound.githubProjectReason}
+            </p>
+          {/if}
           <RowFault
             again={syncNow}
             againLabel="Sync now"
@@ -1125,6 +1316,40 @@
   .bind :global(.bind-connection),
   .bind :global(.bind-target) {
     inline-size: 100%;
+  }
+  /* The GitHub Project under the repository, as wide as the form. */
+  .bind :global(.bind-project) {
+    grid-column: 1 / -1;
+    inline-size: 100%;
+  }
+  /* Each stage beside its Status option; on a narrow tray, over it. */
+  .status-map {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: var(--space-1) var(--space-2);
+    align-items: center;
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .status-map > legend {
+    padding: 0 0 var(--space-1);
+  }
+  .status-stage {
+    min-inline-size: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .status-map :global(.status-pick) {
+    inline-size: 100%;
+  }
+  @container details (width < 30rem) {
+    .status-map {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
   @container details (width < 30rem) {
     .bind {

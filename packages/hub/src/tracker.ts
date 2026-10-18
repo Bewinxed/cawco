@@ -47,13 +47,26 @@
  *   ETag; a 304 is free", §5.5), and half a second after a task change:
  *   its own writes go through tasks.ts as an actor marked `tracker`, never
  *   sent back. One sync of a project at a time.
+ * - **Stages on a GitHub Project.** GitHub's open stands for every open
+ *   stage, so a GitHub binding may name a Project (v2): each stage puts its
+ *   issue's item in a Status option (the one set in the binding's form, else
+ *   the option named as the stage), and a Status moved on GitHub moves the
+ *   task, with the same last-agreed rule as every field
+ *   (tracker-github-project.ts). The binding's Projects are read through its
+ *   connection; one that may not read or write them leaves Status alone, the
+ *   binding saying GitHub's words, and issues sync as before. Sync now asks
+ *   again at once, the poll every ten minutes: given the permission since,
+ *   the binding takes its Project and Status starts.
  * - **No fallbacks.** A refused write leaves both sides as they are and says
  *   the tracker's words on the task's link, and on the binding when the
  *   connection's sign-in or scope is what refused: a sign-in refused marks
  *   the connection too. The next sync tries again.
  */
 import {
+  type GithubProject,
+  type GithubProjectsView,
   type IssueTracker,
+  statusOptionFor,
   type TaskIssueLink,
   TRACKER_NAMES,
   type Tracker,
@@ -95,10 +108,19 @@ import {
   TrackerRefusal,
 } from "./tracker-adapter";
 import { githubAdapter, githubTargets } from "./tracker-github";
+import {
+  type GithubProjectStatus,
+  githubProjectStatus,
+  githubProjects,
+  type ProjectRead,
+  type StatusItem,
+} from "./tracker-github-project";
 import { linearAdapter, linearTargets } from "./tracker-linear";
 
 /** How often every binding polls. The GitHub poller's 60 s (§5.5). */
 const POLL_MS = 60_000;
+/** How often a binding whose GitHub Projects were refused asks again on its own; Sync now asks at once. Our choice. */
+const RECHECK_MS = 10 * 60_000;
 /** How long after a task change its project syncs, so a burst of changes is one sync. Our choice. */
 const SOON_MS = 500;
 /** A task changed this close before its last sync is looked at again: commit times are whole seconds. */
@@ -145,6 +167,12 @@ export class TrackerProblem extends Error {}
 export interface BindInput {
   /** The connection's name: GitHub Issues and Linear need one. */
   connection?: string;
+  /**
+   * GitHub: the Project whose Status carries its stages, and each stage's
+   * option; null for none. Left out, the first Project linked to the
+   * repository, each stage on the option named as it.
+   */
+  githubProject?: { id: string; map: Record<string, string | null> } | null;
   /** GitHub: `owner/repo`; Linear: the team's id. */
   target?: string;
   tracker: Tracker;
@@ -185,11 +213,27 @@ interface Sync {
   binding: TrackerBindingRow;
   /** Where what the tracker does not vouch for waits for you: the first stage of kind `you`. */
   hold: Stage;
+  /** GitHub: the Project its stages show on, as this sync read it; unset while there is none or it does not run. */
+  onProject?: {
+    client: GithubProjectStatus;
+    fieldId: string;
+    project: GithubProject;
+    read: ProjectRead;
+  };
   /** Each task's problem this sync, by task (or `issue:<key>`): the binding says the first the connection caused. */
   problems: Map<string, Problem>;
   projectId: string;
+  /** GitHub: the binding's Project and its words as a permission check found them again after a refusal. */
+  projectProbe?: Pick<
+    TrackerBindingRow,
+    "githubProject" | "githubProjectReason"
+  >;
+  /** GitHub: the Project as this sync read it (its title, Status field and options), kept on the binding. */
+  projectRead?: GithubProject;
   stages: Stage[];
   states: IssueState[];
+  /** GitHub's words when this sync found the connection may not read or write the Project: Status stops. */
+  statusRefused?: string;
 }
 
 /** One linked task made one record with its issue again: what each side moved, and where they agree after. */
@@ -198,6 +242,8 @@ interface Round {
   /** Why its move goes to the hold stage, when it does (`holdPulls`). */
   held: string | undefined;
   issue: Issue;
+  /** The issue's item on the binding's Project; undefined when it is not on it. */
+  item: StatusItem | undefined;
   link: TrackerLinkRow;
   /** The stage the issue's state puts the task in, when that is a move. */
   moveTo: string | undefined;
@@ -207,9 +253,15 @@ interface Round {
   pull: TaskPatch;
   /** The task's changes, for the issue. */
   push: IssuePatch;
+  /** The Status option the task's move puts its item in. */
+  pushStatus: string | undefined;
   remote: Fields;
   /** Why a part of the round stopped short, in words. */
   said: string[];
+  /** GitHub moved its item's Status off what they agreed. */
+  statusMoved: boolean;
+  /** Why the task moves, when its item's Status moved it. */
+  statusWhy: string | undefined;
   sync: Sync;
   task: TaskView;
 }
@@ -387,6 +439,119 @@ const planState = (round: Round): void => {
   }
 };
 
+/**
+ * The Status option an issue's item stands in on the Project as this sync
+ * read it; null when it is not on it. An issue a partial read did not reach
+ * stands where they agreed: nothing is moved on what was not read.
+ */
+const remoteStatus = (
+  read: ProjectRead,
+  issueKey: string,
+  agreed: string | null | undefined
+): string | null => {
+  const item = read.items.get(issueKey);
+  if (item) {
+    return item.optionId;
+  }
+  return read.complete ? null : (agreed ?? null);
+};
+
+/** The stage a Status option puts its task in: `current` when it maps there, else the first stage that does. */
+const stageForStatus = (
+  sync: Sync,
+  project: GithubProject,
+  optionId: string,
+  current: string
+): Stage | undefined => {
+  const onIt = (stage: Stage) =>
+    statusOptionFor(stage.name, project) === optionId;
+  const here = stageOf(sync, current);
+  return here && onIt(here) ? here : sync.stages.find(onIt);
+};
+
+const optionName = (project: GithubProject, id: string): string =>
+  project.options.find((option) => option.id === id)?.name ?? id;
+
+/**
+ * GitHub moved the item's Status: the task goes to the stage it maps to, as
+ * the tracker's side of any field stands. The issue's state follows that
+ * stage (a Status mapped to done closes it). Where the issue's own state
+ * moved too, to another kind of stage, the state stands.
+ */
+const planStatus = (round: Round): void => {
+  const { sync, link, task, issue } = round;
+  const { onProject } = sync;
+  if (!onProject) {
+    return;
+  }
+  const remote = remoteStatus(
+    onProject.read,
+    link.issueKey,
+    link.synced.status
+  );
+  if (remote === (link.synced.status ?? null)) {
+    return;
+  }
+  round.statusMoved = true;
+  round.next.status = remote;
+  if (remote === null) {
+    // Taken off the Project, or its Status cleared: nothing says where to go.
+    return;
+  }
+  const to = stageForStatus(sync, onProject.project, remote, task.stage);
+  if (!to) {
+    round.said.push(
+      `${link.ref} is “${optionName(onProject.project, remote)}” on ${onProject.project.title}, and no stage maps to it: map one in the project's details.`
+    );
+    return;
+  }
+  const state = stateFor(to, sync.states);
+  if (
+    issue.state.token !== link.synced.state &&
+    state?.token !== issue.state.token
+  ) {
+    return;
+  }
+  // GitHub's Status stands over a stage moved in CawCo meanwhile.
+  const { state: _moved, ...rest } = round.push;
+  round.push = rest;
+  if (state && state.token !== issue.state.token) {
+    round.push.state = state;
+  } else {
+    round.next.state = issue.state.token;
+  }
+  if (to.name === task.stage) {
+    round.moveTo = undefined;
+    round.next.stage = task.stage;
+  } else {
+    round.moveTo = to.name;
+    round.statusWhy = `${link.ref} is “${optionName(onProject.project, remote)}” on ${onProject.project.title}`;
+  }
+};
+
+/** The task moved, here or by its issue's state: its item's Status follows the stage it ends in. */
+const planStatusPush = (round: Round): void => {
+  const { sync, link, task } = round;
+  if (!sync.onProject || round.statusMoved) {
+    return;
+  }
+  const remote = remoteStatus(
+    sync.onProject.read,
+    link.issueKey,
+    link.synced.status
+  );
+  const ends = round.moveTo ?? task.stage;
+  if (ends === link.synced.stage) {
+    return;
+  }
+  const want = statusOptionFor(ends, sync.onProject.project);
+  if (want !== null && want !== remote) {
+    round.pushStatus = want;
+  } else {
+    round.next.status = remote;
+  }
+};
+
 /** A field the task sent to its issue: agreed as the tracker took it, its own form brought back. */
 const agreePushed = (round: Round, field: Field): void => {
   const { remote, file, link, sync } = round;
@@ -452,6 +617,17 @@ const outcomeOf = (sync: Sync): Pick<TrackerBindingRow, "reason" | "state"> => {
   };
 };
 
+/** The binding's Project as the sync read it, and GitHub's words when it refused it. */
+const projectAfter = (
+  sync: Sync
+): Partial<
+  Pick<TrackerBindingRow, "githubProject" | "githubProjectReason">
+> => ({
+  ...sync.projectProbe,
+  ...(sync.projectRead ? { githubProject: sync.projectRead } : {}),
+  ...(sync.statusRefused ? { githubProjectReason: sync.statusRefused } : {}),
+});
+
 /** Where a binding stands after a sync that stopped: refused for a sign-in or scope, else as it stood. */
 const stateAfter = (
   refusal: TrackerRefusal,
@@ -466,6 +642,8 @@ export const createTrackers = (deps: TrackersDeps) => {
   const inTurn = turnTaker();
   /** A sync asked for soon, by project. */
   const soon = new Map<string, ReturnType<HubLifetimeShape["after"]>>();
+  /** When each project's refused GitHub Projects were last asked (binding asks too), ms. */
+  const checkedAt = new Map<string, number>();
   /** Tasks changed since their project's last sync, by project. */
   const dirty = new Map<string, Set<string>>();
   /** The tasks the sync is writing now (`<project>\0<task>`): their events are its own. */
@@ -545,6 +723,8 @@ export const createTrackers = (deps: TrackersDeps) => {
         reason: binding.reason,
         polledAt: binding.polledAt?.getTime() ?? null,
         linked: db.trackers.linkedCount(projectId),
+        githubProject: binding.githubProject ?? null,
+        githubProjectReason: binding.githubProjectReason ?? null,
       },
     };
   };
@@ -586,6 +766,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     const { provider } = sync.binding;
     const where =
       round.held ??
+      round.statusWhy ??
       `${link.ref} is “${issue.state.name}” on ${TRACKER_NAMES[provider]}`;
     try {
       await own(sync.projectId, link.taskId, () =>
@@ -606,6 +787,52 @@ export const createTrackers = (deps: TrackersDeps) => {
           `${where}, and ${link.taskId} could not move to ${moveTo}: ${wordsOf(error)}`
         )
       );
+    }
+  };
+
+  /**
+   * The Project stops for this sync and every later one: GitHub's words go
+   * on the binding, and issues keep syncing. Answers the words.
+   */
+  const statusStopped = (sync: Sync, error: unknown): string => {
+    const refusal = problemOf(error);
+    if (
+      refusal instanceof TrackerRefusal &&
+      (refusal.kind === "scope" || refusal.kind === "sign-in")
+    ) {
+      sync.statusRefused = refusal.message;
+      sync.onProject = undefined;
+    }
+    return problemWords(refusal);
+  };
+
+  /** The task's move put on its item: added to the Project when it is not on it, its Status set. */
+  const applyStatus = async (round: Round): Promise<void> => {
+    const { sync, link, task, pushStatus } = round;
+    const { onProject } = sync;
+    if (
+      !onProject ||
+      pushStatus === undefined ||
+      // The move did not go through: its Status waits for it.
+      round.next.stage !== (round.moveTo ?? task.stage)
+    ) {
+      return;
+    }
+    try {
+      const item = await onProject.client.put(
+        link.issueKey,
+        round.item,
+        onProject.fieldId,
+        pushStatus
+      );
+      onProject.read.items.set(link.issueKey, item);
+      round.next.status = item.optionId;
+    } catch (error) {
+      if (error instanceof TrackerRefusal && error.kind === "rate") {
+        throw error;
+      }
+      round.next.stage = link.synced.stage;
+      round.said.push(statusStopped(sync, error));
     }
   };
 
@@ -697,19 +924,26 @@ export const createTrackers = (deps: TrackersDeps) => {
       file: fileFields(task),
       remote: remoteFields(issue),
       next: { ...link.synced },
+      item: sync.onProject?.read.items.get(link.issueKey),
       pull: {},
       push: {},
+      pushStatus: undefined,
+      statusMoved: false,
+      statusWhy: undefined,
       moveTo: undefined,
       held: undefined,
       said: [],
     };
     planFields(round);
     planState(round);
+    planStatus(round);
     holdPulls(round);
+    planStatusPush(round);
     // The task's changes go to the issue first: what the tracker answers is what they agree on.
     await applyPush(round);
     await applyPull(round);
     await applyMove(round);
+    await applyStatus(round);
     await carryOut(round);
     db.trackers.updateLink(sync.projectId, link.taskId, {
       synced: round.next,
@@ -812,7 +1046,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     sync: Sync,
     task: TaskView,
     issue: Issue,
-    agreed: Fields & { state: string },
+    agreed: Fields & Pick<TrackerSynced, "state" | "status">,
     /** Comments written after it, on either side, are carried to the other. */
     linkedAt: Date,
     /** Its opener, when the tracker does not vouch for them: its pulls wait for you. */
@@ -861,6 +1095,41 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
   };
 
+  /**
+   * A new issue on the binding's Project in its task's stage's Status, when
+   * the stage maps to one; the Status agreed on, or nothing when there is no
+   * Project or it refused (its words kept).
+   */
+  const placeOnProject = async (
+    sync: Sync,
+    task: TaskView,
+    issue: Issue
+  ): Promise<Pick<TrackerSynced, "status">> => {
+    const { onProject } = sync;
+    const want = onProject
+      ? statusOptionFor(task.stage, onProject.project)
+      : null;
+    if (!onProject || want === null) {
+      return onProject ? { status: null } : {};
+    }
+    try {
+      const item = await onProject.client.put(
+        issue.key,
+        undefined,
+        onProject.fieldId,
+        want
+      );
+      onProject.read.items.set(issue.key, item);
+      return { status: item.optionId };
+    } catch (error) {
+      if (error instanceof TrackerRefusal && error.kind === "rate") {
+        throw error;
+      }
+      fail(sync, task.id, statusStopped(sync, error));
+      return {};
+    }
+  };
+
   /** A task with no issue: one made for it, linked, and what the tracker made of its words taken back. */
   const fileIssue = async (sync: Sync, task: TaskView): Promise<void> => {
     const { provider, targetName } = sync.binding;
@@ -880,6 +1149,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       state,
     });
     const remote = remoteFields(issue);
+    const placed = await placeOnProject(sync, task, issue);
     db.trackers.dropLink(sync.projectId, task.id);
     // Linked from the task's making: what was said on it before its issue was made goes too.
     db.trackers.putLink(
@@ -887,7 +1157,7 @@ export const createTrackers = (deps: TrackersDeps) => {
         sync,
         task,
         issue,
-        { ...remote, state: issue.state.token },
+        { ...remote, state: issue.state.token, ...placed },
         new Date(task.createdAt)
       )
     );
@@ -956,7 +1226,15 @@ export const createTrackers = (deps: TrackersDeps) => {
   const fileTask = async (sync: Sync, issue: Issue): Promise<void> => {
     const { provider, targetName } = sync.binding;
     const { unvouched } = issue.opener;
-    const placed = stageFor(issue.state, undefined, sync.stages, sync.states);
+    const item = sync.onProject?.read.items.get(issue.key);
+    const byStatus =
+      sync.onProject && item?.optionId
+        ? stageForStatus(sync, sync.onProject.project, item.optionId, "")
+        : undefined;
+    const placed =
+      byStatus && stateFor(byStatus, sync.states)?.token === issue.state.token
+        ? byStatus
+        : stageFor(issue.state, undefined, sync.stages, sync.states);
     if (!placed) {
       sync.problems.set(
         `issue:${issue.key}`,
@@ -984,7 +1262,11 @@ export const createTrackers = (deps: TrackersDeps) => {
           sync,
           task,
           issue,
-          { ...fields, state: issue.state.token },
+          {
+            ...fields,
+            state: issue.state.token,
+            ...(sync.onProject ? { status: item?.optionId ?? null } : {}),
+          },
           new Date(issue.createdAt),
           unvouched
         )
@@ -1031,6 +1313,94 @@ export const createTrackers = (deps: TrackersDeps) => {
     };
   };
 
+  /**
+   * After a refusal, GitHub's Projects asked again (Sync now, else every
+   * {@link RECHECK_MS}): a connection given the permission since takes its
+   * Project as binding would (the one bound, else the first linked to the
+   * repository), GitHub's words gone. Answers the Project to read now; null
+   * while it is still refused, or not asked yet.
+   */
+  const checkAgain = async (
+    sync: Sync,
+    retry: boolean
+  ): Promise<GithubProject | null> => {
+    const { binding } = sync;
+    const last = checkedAt.get(binding.projectId) ?? 0;
+    if (!retry && Date.now() - last < RECHECK_MS) {
+      return null;
+    }
+    checkedAt.set(binding.projectId, Date.now());
+    const bound = binding.githubProject;
+    try {
+      sync.projectProbe = await projectOf(
+        binding.connection,
+        binding.target,
+        bound ? { id: bound.id, map: bound.map } : undefined
+      );
+    } catch (error) {
+      if (stopsSync(error)) {
+        throw error;
+      }
+      // The bound Project gone, or GitHub not answering: its words stand.
+      sync.statusRefused = wordsOf(error);
+      return null;
+    }
+    const { githubProject, githubProjectReason } = sync.projectProbe;
+    return githubProjectReason ? null : githubProject;
+  };
+
+  /**
+   * GitHub: the binding's Project read for this sync, its Status field and
+   * each of the repository's issues on it. A connection that may not read it
+   * stops Status, GitHub's words on the binding; issues sync either way.
+   */
+  const openStatus = async (sync: Sync, retry: boolean): Promise<void> => {
+    const { binding } = sync;
+    if (binding.provider !== "github") {
+      return;
+    }
+    const project = binding.githubProjectReason
+      ? await checkAgain(sync, retry)
+      : binding.githubProject;
+    if (!project) {
+      return;
+    }
+    const client = githubProjectStatus(
+      deps.connections.githubClient(binding.connection),
+      binding.target,
+      project
+    );
+    let read: ProjectRead;
+    try {
+      read = await client.read();
+    } catch (error) {
+      if (stopsSync(error)) {
+        throw error;
+      }
+      const words = statusStopped(sync, error);
+      if (!sync.statusRefused) {
+        sync.problems.set("status", words);
+      }
+      return;
+    }
+    const fresh: GithubProject = {
+      ...project,
+      title: read.title,
+      url: read.url || project.url,
+      fieldId: read.fieldId,
+      options: read.options,
+    };
+    sync.projectRead = fresh;
+    if (!read.fieldId) {
+      sync.problems.set(
+        "status",
+        `${fresh.title} has no single-select field named Status: stages show on GitHub only as open and closed.`
+      );
+      return;
+    }
+    sync.onProject = { client, fieldId: read.fieldId, project: fresh, read };
+  };
+
   /** Each linked task on the board whose issue moved, or that moved itself or has a problem, made one record. */
   const reconcileLinks = async (
     sync: Sync,
@@ -1044,10 +1414,16 @@ export const createTrackers = (deps: TrackersDeps) => {
       const issue = moved.get(link.issueKey);
       moved.delete(link.issueKey);
       // An archived or deleted task stays as it was, and so does its issue.
+      // GitHub moved its item's Status: the issue's own list does not say so.
+      const statusMoved =
+        sync.onProject !== undefined &&
+        remoteStatus(sync.onProject.read, link.issueKey, link.synced.status) !==
+          (link.synced.status ?? null);
       const touched =
         task !== undefined &&
         (marked.has(link.taskId) ||
           link.problem !== null ||
+          statusMoved ||
           task.updatedAt > (link.syncedAt?.getTime() ?? 0) - CLOCK_MARGIN_MS);
       if (task && !link.issueKey.startsWith(PENDING) && (issue || touched)) {
         // biome-ignore lint/performance/noAwaitInLoops: one task's sync at a time, inside one rate limit
@@ -1116,8 +1492,12 @@ export const createTrackers = (deps: TrackersDeps) => {
     });
   };
 
-  /** One sync of a project, in its turn: every step in order, its cursor kept when all went through. */
-  const syncProject = (projectId: string): Promise<void> =>
+  /**
+   * One sync of a project, in its turn: every step in order, its cursor kept
+   * when all went through. `retry` (Sync now) asks refused GitHub Projects
+   * again at once.
+   */
+  const syncProject = (projectId: string, retry = false): Promise<void> =>
     inTurn(projectId, async () => {
       const binding = db.trackers.binding(projectId);
       if (
@@ -1131,6 +1511,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       dirty.delete(projectId);
       try {
         const sync = await openSync(binding);
+        await openStatus(sync, retry);
         const { cursor } = binding;
         const changed: Listed<Issue> = await sync.adapter.changed({
           since: cursor.since,
@@ -1153,6 +1534,7 @@ export const createTrackers = (deps: TrackersDeps) => {
         db.trackers.updateBinding(projectId, {
           cursor: { ...comments, since: issues.since, etag: issues.etag },
           ...outcomeOf(sync),
+          ...projectAfter(sync),
           polledAt: new Date(),
           resumeAt: null,
         });
@@ -1261,13 +1643,11 @@ export const createTrackers = (deps: TrackersDeps) => {
       reason: null,
       polledAt: null,
       resumeAt: null,
+      githubProject: null,
+      githubProjectReason: null,
     };
-    let target: TrackerTarget;
-    try {
-      target = await (await adapterOf(draft)).describe();
-    } catch (error) {
-      throw new TrackerProblem(wordsOf(error), { cause: error });
-    }
+    const { target, onProject } = await targetOf(draft, input.githubProject);
+    checkedAt.set(projectId, Date.now());
     const was = db.trackers.binding(projectId);
     // The same target bound again (another connection) keeps where it stood: nothing is missed or copied twice.
     const kept =
@@ -1280,8 +1660,13 @@ export const createTrackers = (deps: TrackersDeps) => {
         target: target.id,
         targetName: target.name,
         targetUrl: target.url,
+        ...onProject,
         ...kept,
       });
+      // Another Project's options are other ids: what the links agreed on Status starts again.
+      if (was?.githubProject?.id !== onProject.githubProject?.id) {
+        db.trackers.forgetStatus(projectId);
+      }
       return Promise.resolve();
     });
     console.info(
@@ -1289,6 +1674,95 @@ export const createTrackers = (deps: TrackersDeps) => {
     );
     await syncProject(projectId);
     return view(projectId);
+  };
+
+  /** A binding's target as its connection reads it, and on GitHub its Project; a refusal in words. */
+  const targetOf = async (
+    draft: TrackerBindingRow,
+    asked: BindInput["githubProject"]
+  ): Promise<{
+    onProject: Pick<TrackerBindingRow, "githubProject" | "githubProjectReason">;
+    target: TrackerTarget;
+  }> => {
+    try {
+      const target = await (await adapterOf(draft)).describe();
+      return {
+        target,
+        onProject:
+          draft.provider === "github"
+            ? await projectOf(draft.connection, target.id, asked)
+            : { githubProject: null, githubProjectReason: null },
+      };
+    } catch (error) {
+      throw error instanceof TrackerProblem
+        ? error
+        : new TrackerProblem(wordsOf(error), { cause: error });
+    }
+  };
+
+  /**
+   * The Project a GitHub binding's stages show on: the one asked for, else
+   * (left out) the first linked to the repository, each stage on the option
+   * named as it unless the form set another. A connection that may not read
+   * the owner's Projects binds with none, GitHub's words kept.
+   */
+  const projectOf = async (
+    connection: string,
+    repo: string,
+    asked: BindInput["githubProject"]
+  ): Promise<
+    Pick<TrackerBindingRow, "githubProject" | "githubProjectReason">
+  > => {
+    const listed = await githubProjects(
+      deps.connections.githubClient(connection),
+      repo
+    );
+    if (listed.refused) {
+      return { githubProject: null, githubProjectReason: listed.refused };
+    }
+    if (asked === null) {
+      return { githubProject: null, githubProjectReason: null };
+    }
+    const chosen = asked
+      ? listed.projects.find((each) => each.id === asked.id)
+      : listed.projects.find((each) => each.linked);
+    if (asked && !chosen) {
+      throw new TrackerProblem(
+        `${connection} reaches no open GitHub Project ${asked.id} for ${repo}: pick one it lists.`
+      );
+    }
+    return {
+      githubProject: chosen
+        ? {
+            id: chosen.id,
+            number: chosen.number,
+            title: chosen.title,
+            url: chosen.url,
+            fieldId: chosen.fieldId,
+            options: chosen.options,
+            map: asked?.map ?? {},
+          }
+        : null,
+      githubProjectReason: null,
+    };
+  };
+
+  /** The Projects a GitHub connection reaches for a repository, for the binding's choice; GitHub's words when it may not read them. */
+  const githubProjectsOf = async (
+    name: string,
+    repo: string
+  ): Promise<GithubProjectsView> => {
+    const connection = connectionNamed(name);
+    if (appServiceOf(connection.service) !== "github") {
+      throw new TrackerProblem(
+        `${name} is a ${connection.service} connection: GitHub Projects need a GitHub one.`
+      );
+    }
+    try {
+      return await githubProjects(deps.connections.githubClient(name), repo);
+    } catch (error) {
+      throw new TrackerProblem(wordsOf(error), { cause: error });
+    }
   };
 
   /** The repositories or teams a connection reaches, for the binding's choice. */
@@ -1351,6 +1825,7 @@ export const createTrackers = (deps: TrackersDeps) => {
 
   return {
     bind,
+    githubProjects: githubProjectsOf,
     issueOf,
     targets,
     view,
@@ -1359,7 +1834,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       if (!db.project(projectId)) {
         throw new TrackerProblem(`The hub keeps no project ${projectId}.`);
       }
-      await syncProject(projectId);
+      await syncProject(projectId, true);
       return view(projectId);
     },
   };
@@ -1377,7 +1852,9 @@ const refused = (error: unknown) => {
 /**
  * `/api/projects/:id/tracker`: where a project's tasks live, its binding
  * set or let go, and a sync now; `/api/connections/:name/targets`: what a
- * connection reaches, for the binding's choice.
+ * connection reaches, for the binding's choice;
+ * `/api/connections/:name/github-projects?repo=`: the GitHub Projects it
+ * reaches for a repository, or GitHub's words when it may not.
  */
 export const trackerRoutes = (trackers: Trackers) =>
   new Elysia()
@@ -1395,6 +1872,16 @@ export const trackerRoutes = (trackers: Trackers) =>
           connection: t.Optional(t.String()),
           /** GitHub: `owner/repo`; Linear: the team's id. */
           target: t.Optional(t.String()),
+          /** GitHub: the Project whose Status carries the stages, and each stage's option (null leaves Status alone); null for none; left out, the first linked to the repository. */
+          githubProject: t.Optional(
+            t.Union([
+              t.Null(),
+              t.Object({
+                id: t.String(),
+                map: t.Record(t.String(), t.Union([t.String(), t.Null()])),
+              }),
+            ])
+          ),
         }),
       },
       async ({ params, body }) => {
@@ -1418,4 +1905,15 @@ export const trackerRoutes = (trackers: Trackers) =>
       } catch (error) {
         return refused(error);
       }
-    });
+    })
+    .get(
+      "/api/connections/:name/github-projects",
+      { query: t.Object({ repo: t.String() }) },
+      async ({ params, query }) => {
+        try {
+          return await trackers.githubProjects(params.name, query.repo);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    );

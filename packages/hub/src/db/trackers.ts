@@ -29,6 +29,8 @@ export interface TrackersDb {
   readonly carry: (row: typeof trackerComments.$inferSelect) => void;
   /** Lets a task's link go (its issue is gone, or the task is). */
   readonly dropLink: (projectId: string, taskId: string) => void;
+  /** Lets go of the Status every link agreed on: the binding's GitHub Project changed. */
+  readonly forgetStatus: (projectId: string) => void;
   readonly link: (
     projectId: string,
     taskId: string
@@ -174,6 +176,27 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
           )
         )
         .run();
+    },
+    forgetStatus: (projectId) => {
+      db.transaction((tx) => {
+        const rows = tx
+          .select({ taskId: trackerLinks.taskId, synced: trackerLinks.synced })
+          .from(trackerLinks)
+          .where(eq(trackerLinks.projectId, projectId))
+          .all();
+        for (const row of rows) {
+          const { status: _was, ...synced } = row.synced;
+          tx.update(trackerLinks)
+            .set({ synced })
+            .where(
+              and(
+                eq(trackerLinks.projectId, projectId),
+                eq(trackerLinks.taskId, row.taskId)
+              )
+            )
+            .run();
+        }
+      });
     },
     unbind: (projectId) => {
       db.transaction((tx) => {

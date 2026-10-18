@@ -13,6 +13,16 @@
  * - A token without "Issues" write is refused as the troubleshooting page
  *   says: 403 "Resource not accessible by personal access token", with
  *   `X-Accepted-GitHub-Permissions: issues=write`.
+ * - Projects (v2) through `POST /graphql`, as the sync names its
+ *   operations: the repository's and its owner's Projects with their Status
+ *   field (`ProjectV2SingleSelectField` and its `options`), a Project's items
+ *   with `fieldValueByName`, `addProjectV2ItemById` (an item already there
+ *   answers its own id) and `updateProjectV2ItemFieldValue` with
+ *   `singleSelectOptionId` (docs.github.com, using the API to manage
+ *   Projects). A credential without the organization permission "Projects"
+ *   is refused as GitHub refuses it: an `errors` entry of type `FORBIDDEN`,
+ *   "Resource not accessible by personal access token" (an app's: "by
+ *   integration").
  * - A GitHub App's installation token is minted at `POST
  *   /app/installations/{id}/access_tokens` for a JWT signed with the app's
  *   key (RS256, `iss` its id), answered 201 with `token` and `expires_at`.
@@ -110,6 +120,15 @@ export interface GitHubComment {
 export interface GitHubGrant {
   issuesWrite: boolean;
   login: string;
+  /** The organization permission "Projects": none when left out. */
+  projects?: "read" | "write";
+}
+
+/** An item on the stand-in's Project: its issue, and the Status option it stands in. */
+interface ProjectItem {
+  id: string;
+  number: number;
+  optionId: string | null;
 }
 
 const base64url = (text: string) => Buffer.from(text, "base64url").toString();
@@ -119,16 +138,32 @@ export const githubStub = (options: {
   app: { appId: string; installationId: string; publicKey: string };
   owner: string;
   repo: string;
+  /** The owner's one Project (v2), linked to the repository: its title and its Status options' names. */
+  project: { status: string[]; title: string };
   /** Each personal access token the stand-in takes, and what it may do. */
   tokens: Record<string, GitHubGrant>;
 }) => {
   const full = `${options.owner}/${options.repo}`;
+  const project = {
+    id: "PVT_probe1",
+    number: 1,
+    title: options.project.title,
+    url: `https://github.com/orgs/${options.owner}/projects/1`,
+    closed: false,
+    fieldId: "PVTSSF_probe1",
+    options: options.project.status.map((name, at) => ({
+      id: `opt${at + 1}`,
+      name,
+    })),
+  };
+  const projectItems: ProjectItem[] = [];
   const issues: GitHubIssue[] = [];
   const comments: GitHubComment[] = [];
-  /** Every request, as `METHOD path`, with the credential it carried and the status answered. */
+  /** Every request, as `METHOD path` (and a GraphQL request's operation), with the credential it carried and the status answered. */
   const calls: {
     auth: string;
     method: string;
+    operation: string | undefined;
     path: string;
     status: number;
   }[] = [];
@@ -301,6 +336,167 @@ export const githubStub = (options: {
     return one;
   };
 
+  const optionNamed = (name: string) =>
+    project.options.find((one) => one.name === name);
+  const itemOf = (number: number) =>
+    projectItems.find((one) => one.number === number);
+  /** Someone puts an issue's item in a Status on GitHub, adding it first when it is not on the Project. */
+  const setStatus = (issue: GitHubIssue, name: string) => {
+    const option = optionNamed(name);
+    const item = itemOf(issue.number) ?? {
+      id: `PVTI_probe${issue.number}`,
+      number: issue.number,
+      optionId: null,
+    };
+    if (!projectItems.includes(item)) {
+      projectItems.push(item);
+    }
+    item.optionId = option?.id ?? null;
+  };
+  /** The Status an issue's item stands in, by name; null when it has none, undefined when it is not on the Project. */
+  const statusOf = (issue: GitHubIssue) => {
+    const item = itemOf(issue.number);
+    return item
+      ? (project.options.find((one) => one.id === item.optionId)?.name ?? null)
+      : undefined;
+  };
+
+  /** GitHub's answer to an operation the credential may not run: 200, its `errors` typed FORBIDDEN. */
+  const forbidden = (grant: GitHubGrant, path: string[]) =>
+    json(200, {
+      data: null,
+      errors: [
+        {
+          type: "FORBIDDEN",
+          path,
+          extensions: { saml_failure: false },
+          locations: [{ line: 2, column: 3 }],
+          message: `Resource not accessible by ${grant.login.endsWith("[bot]") ? "integration" : "personal access token"}`,
+        },
+      ],
+    });
+
+  const projectOut = {
+    id: project.id,
+    number: project.number,
+    title: project.title,
+    url: project.url,
+    closed: project.closed,
+    field: { id: project.fieldId, options: project.options },
+  };
+
+  /** The sync's GraphQL operations on Projects, by name. */
+  const graphql = async (request: Request, grant: GitHubGrant) => {
+    const body = (await request.json()) as {
+      query: string;
+      variables?: Record<string, unknown>;
+    };
+    const operation = OPERATION.exec(body.query)?.[1] ?? "";
+    const variables = body.variables ?? {};
+    const issueNumber = (number: unknown) =>
+      issues.find((one) => one.number === Number(number));
+    switch (operation) {
+      case "CawcoProjects":
+        return grant.projects
+          ? json(200, {
+              data: {
+                repository: {
+                  projectsV2: { nodes: [projectOut] },
+                  owner: { projectsV2: { nodes: [projectOut] } },
+                },
+              },
+            })
+          : forbidden(grant, ["repository", "projectsV2"]);
+      case "CawcoProjectItems":
+        if (!grant.projects) {
+          return forbidden(grant, ["node"]);
+        }
+        return json(200, {
+          data: {
+            node:
+              variables.id === project.id
+                ? {
+                    title: project.title,
+                    url: project.url,
+                    field: projectOut.field,
+                    items: {
+                      pageInfo: { hasNextPage: false, endCursor: null },
+                      nodes: projectItems.map((one) => ({
+                        id: one.id,
+                        content: {
+                          number: one.number,
+                          repository: { nameWithOwner: full },
+                        },
+                        fieldValueByName: one.optionId
+                          ? { optionId: one.optionId }
+                          : null,
+                      })),
+                    },
+                  }
+                : null,
+          },
+        });
+      case "CawcoIssueNode": {
+        const issue = issueNumber(variables.number);
+        return json(200, {
+          data: { repository: { issue: issue ? { id: issue.node_id } : null } },
+        });
+      }
+      case "CawcoProjectAdd": {
+        if (grant.projects !== "write") {
+          return forbidden(grant, ["addProjectV2ItemById"]);
+        }
+        const issue = issues.find((one) => one.node_id === variables.content);
+        if (!issue) {
+          return json(200, {
+            data: null,
+            errors: [
+              { type: "NOT_FOUND", message: "Could not resolve to a node" },
+            ],
+          });
+        }
+        const item = itemOf(issue.number) ?? {
+          id: `PVTI_probe${issue.number}`,
+          number: issue.number,
+          optionId: null,
+        };
+        if (!projectItems.includes(item)) {
+          projectItems.push(item);
+        }
+        return json(200, {
+          data: { addProjectV2ItemById: { item: { id: item.id } } },
+        });
+      }
+      case "CawcoProjectStatus": {
+        if (grant.projects !== "write") {
+          return forbidden(grant, ["updateProjectV2ItemFieldValue"]);
+        }
+        const item = projectItems.find((one) => one.id === variables.item);
+        const option = project.options.find(
+          (one) => one.id === variables.option
+        );
+        if (!(item && option) || variables.field !== project.fieldId) {
+          return json(200, {
+            data: null,
+            errors: [
+              { type: "NOT_FOUND", message: "Could not resolve to a node" },
+            ],
+          });
+        }
+        item.optionId = option.id;
+        return json(200, {
+          data: {
+            updateProjectV2ItemFieldValue: { projectV2Item: { id: item.id } },
+          },
+        });
+      }
+      default:
+        return json(200, {
+          errors: [{ message: `Unknown operation ${operation}` }],
+        });
+    }
+  };
+
   const repoPath = `/repos/${full}`;
   const ISSUE_ONE = new RegExp(`^${repoPath}/issues/(\\d+)$`);
   const ISSUE_COMMENTS = new RegExp(`^${repoPath}/issues/(\\d+)/comments$`);
@@ -414,6 +610,9 @@ export const githubStub = (options: {
     if (url.pathname === repoPath) {
       return json(200, repository);
     }
+    if (url.pathname === "/graphql" && request.method === "POST") {
+      return graphql(request, grant);
+    }
     if (url.pathname === "/installation/repositories") {
       return json(200, { total_count: 1, repositories: [repository] });
     }
@@ -431,10 +630,18 @@ export const githubStub = (options: {
     port: 0,
     fetch: async (request) => {
       const auth = request.headers.get("authorization") ?? "";
+      const path = new URL(request.url).pathname;
+      const operation =
+        path === "/graphql"
+          ? OPERATION.exec(
+              ((await request.clone().json()) as { query: string }).query
+            )?.[1]
+          : undefined;
       const response = await handle(request);
       calls.push({
         method: request.method,
-        path: new URL(request.url).pathname,
+        path,
+        operation,
         auth,
         status: response.status,
       });
@@ -454,6 +661,10 @@ export const githubStub = (options: {
     edit,
     /** Someone comments on an issue on GitHub. */
     comment,
+    project,
+    /** Someone moves an issue's item to a Status on the Project. */
+    setStatus,
+    statusOf,
     stop: () => server.stop(true),
   };
 };

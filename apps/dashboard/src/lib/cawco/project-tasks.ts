@@ -11,6 +11,7 @@
  */
 import {
   type AttemptResult,
+  type GithubProjectsView,
   type IssueTracker,
   outputArtifacts,
   type ProjectGate,
@@ -445,7 +446,16 @@ export const setTracker = (
   projectId: string,
   binding:
     | { tracker: "cawco" }
-    | { connection: string; target: string; tracker: IssueTracker }
+    | {
+        connection: string;
+        /** GitHub: the Project whose Status carries the stages, each stage's option by its name; null for none. */
+        githubProject?: {
+          id: string;
+          map: Record<string, string | null>;
+        } | null;
+        target: string;
+        tracker: IssueTracker;
+      }
 ): Promise<TrackerView> =>
   send(`${base(projectId)}/tracker`, json("PUT", binding));
 
@@ -458,6 +468,15 @@ export const trackerTargets = (
   connection: string
 ): Promise<{ targets: TrackerTarget[] }> =>
   send(`/api/connections/${encodeURIComponent(connection)}/targets`);
+
+/** The GitHub Projects a connection reaches for a repository, or GitHub's words when it may not read them. */
+export const githubProjects = (
+  connection: string,
+  repo: string
+): Promise<GithubProjectsView> =>
+  send(
+    `/api/connections/${encodeURIComponent(connection)}/github-projects?repo=${encodeURIComponent(repo)}`
+  );
 
 /** The project's archived tasks, instead of the board's. */
 export const listArchived = (projectId: string): Promise<TaskList> =>

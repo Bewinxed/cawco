@@ -11605,6 +11605,32 @@
                   },
                   "target": {
                     "type": "string"
+                  },
+                  "githubProject": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "map": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^.*$": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "map"
+                    ]
                   }
                 },
                 "required": [
@@ -11716,6 +11742,61 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections/{name}/github-projects": {
+      "get": {
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiConnectionsByNameGithubProjects",
+        "responses": {
+          "200": {
+            "description": "getApiConnectionsByNameGithubProjects 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubProjectsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiConnectionsByNameGithubProjects 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiConnectionsByNameGithubProjects 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -39606,6 +39687,17 @@
             "description": "The connection's name (hub connections.ts).",
             "type": "string"
           },
+          "githubProject": {
+            "description": "GitHub: the Project its stages show on through Status; null when none is set.",
+            "$ref": "#/components/schemas/GithubProject"
+          },
+          "githubProjectReason": {
+            "description": "GitHub: why stages do not show on a Project, in GitHub's words (the\nconnection may not read or write the owner's Projects); null when\nnothing stops them. Issues sync either way.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "linked": {
             "description": "Issues linked to the project's tasks.",
             "type": "number"
@@ -39645,6 +39737,7 @@
         "required": [
           "boundAt",
           "connection",
+          "githubProjectReason",
           "linked",
           "polledAt",
           "provider",
@@ -39653,6 +39746,69 @@
           "target",
           "targetName",
           "targetUrl"
+        ]
+      },
+      "GithubProject": {
+        "description": "A GitHub Project (v2) a GitHub binding carries its stages on, through the\nProject's single-select field named Status (PRD §5.2: \"With GitHub, stages\nmap onto a Projects single-select field\"). Issues' open and closed carry\nonly open against done or dropped; Status carries every stage.",
+        "type": "object",
+        "properties": {
+          "fieldId": {
+            "description": "Its Status field's node id; null when the Project has no single-select Status.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "GitHub's node id for the Project.",
+            "type": "string"
+          },
+          "map": {
+            "type": "object",
+            "description": "Each stage's Status option by the stage's name, as set in the binding's form; null leaves Status alone for that stage. A stage missing here takes the option named as it."
+          },
+          "number": {
+            "type": "number"
+          },
+          "options": {
+            "description": "Its Status field's options, in GitHub's order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusOption"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fieldId",
+          "id",
+          "map",
+          "number",
+          "options",
+          "title",
+          "url"
+        ]
+      },
+      "StatusOption": {
+        "description": "One option of a GitHub Project's single-select Status field.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "GitHub's option id (`ProjectV2SingleSelectFieldOption.id`).",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
         ]
       },
       "TrackerSyncState": {
@@ -39683,6 +39839,72 @@
         "required": [
           "id",
           "name",
+          "url"
+        ]
+      },
+      "GithubProjectsView": {
+        "description": "What a GitHub connection reaches of a repository owner's Projects: its Projects, or GitHub's refusal in its words.",
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GithubProjectChoice"
+            }
+          },
+          "refused": {
+            "description": "GitHub's words when the connection may not read the owner's Projects; null when it may.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "projects",
+          "refused"
+        ]
+      },
+      "GithubProjectChoice": {
+        "description": "A GitHub Project a connection reaches, offered in the binding's form.",
+        "type": "object",
+        "properties": {
+          "fieldId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "linked": {
+            "description": "Linked to the bound repository on GitHub: the form's first pick.",
+            "type": "boolean"
+          },
+          "number": {
+            "type": "number"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusOption"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fieldId",
+          "id",
+          "linked",
+          "number",
+          "options",
+          "title",
           "url"
         ]
       },

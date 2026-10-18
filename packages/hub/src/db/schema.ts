@@ -4465,6 +4465,12 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   polledAt: timestamp("polled_at"),
   /** The tracker's rate limit holds polls back until then. */
   resumeAt: timestamp("resume_at"),
+  /** GitHub: the Project its stages show on through Status (tracker-github-project.ts); null when none. */
+  githubProject: text("github_project", {
+    mode: "json",
+  }).$type<import("@cawco/core").GithubProject>(),
+  /** GitHub: why stages do not show on a Project, in GitHub's words; set, that part of the sync does not run. */
+  githubProjectReason: text("github_project_reason"),
 });
 
 /**
@@ -4479,6 +4485,11 @@ export interface TrackerSynced {
   stage: string;
   /** The issue's state, as tracker.ts names it (`open`, `closed:completed`, a Linear state's id). */
   state: string;
+  /**
+   * GitHub: the Status option its Project item stood in (null: not on the
+   * Project, or no Status); absent until the binding had a Project.
+   */
+  status?: string | null;
   title: string;
 }
 
