@@ -49,7 +49,7 @@ export BASE=0.0.1-test.2 NEXT=0.0.1-test.3 LEGACY=0.0.1-test.1
 PROOF_TIME_SCALE=6
 # The stand-ins are as slow and as late as production gets, never faster: what reached the person on 2026-10-16 came
 # from slowness the rigs did not have.
-#  - A retiring keeper answers each `list` this late (proof-clock.ts RETIRING_LIST_MS, set in every machine's service
+#  - A retiring keeper answers each `list` this late (proof-list-pace.ts, set in every machine's service
 #    manager beside the pace above): past the agent's 2000 ms wait for a listing (agent keepers.ts LIST_TIMEOUT_MS),
 #    as a keeper slow to list did when a reattach gave up on it ("no keeper that answered holds …") and failed an item.
 #  - Through an update, the machine's Claude Code answers `--version` and `auth status` this late (claude-late.sh):

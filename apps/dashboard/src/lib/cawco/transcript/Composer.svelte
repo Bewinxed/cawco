@@ -107,7 +107,6 @@
     userTurnActions,
   } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
-  import { debugFault } from "../debug-fault";
   import { felt } from "../feel.svelte";
   import MentionField from "../find/MentionField.svelte";
   import { readAs } from "../find/mention.svelte";
@@ -1056,7 +1055,6 @@
     if (entries.length === 0) {
       return [];
     }
-    debugFault("composer-menu");
     const groups = new Map<
       string,
       { heading: string; rank: number; sub: string; entries: Entry[] }

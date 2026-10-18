@@ -377,6 +377,15 @@ export async function buildBinary(options: {
               ),
               loader: "ts",
             }));
+            // And answer a retiring keeper's `list` as late as they set
+            // (scripts/binary/proof-list-pace.ts).
+            build.onLoad(
+              { filter: /packages\/sessiond\/src\/list-pace\.ts$/ },
+              () => ({
+                contents: `export * from ${JSON.stringify(join(ROOT, "scripts/binary/proof-list-pace.ts"))};`,
+                loader: "ts",
+              })
+            );
           }
           if (options.proof || options.stubHarness) {
             build.onLoad(

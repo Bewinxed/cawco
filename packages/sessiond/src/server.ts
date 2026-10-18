@@ -67,6 +67,7 @@ import {
   readGroup,
   removeGroup,
 } from "./cgroup";
+import { paceList } from "./list-pace";
 import { type Listed, processTable } from "./table";
 import { capChildTasks, START_ROOM, TASK_RESERVE, taskHeadroom } from "./tasks";
 
@@ -197,12 +198,6 @@ export interface SessiondOptions {
   build?: BuildInfo;
   /** Where each child's own cgroup is made, which it joins before it execs (cgroup.ts). */
   children?: Children;
-  /**
-   * How late this keeper answers a `list` now, in ms. Absent: at once, as
-   * every published build answers (main.ts sets it only under the stage 2
-   * proof's pace, clock.ts `RETIRING_LIST_MS`).
-   */
-  listLate?: () => Promise<number>;
 }
 
 const DEFAULT_BUILD: BuildInfo = { version: "0.1.0", startedAt: Date.now() };
@@ -257,12 +252,9 @@ export class SessiondServer {
   /** The listener's close, begun when the drain starts and awaited by {@link close}. */
   #listenerClosed: Promise<void> | undefined;
 
-  readonly #listLate: (() => Promise<number>) | undefined;
-
   constructor(options: SessiondOptions = {}) {
     this.#build = options.build ?? DEFAULT_BUILD;
     this.#children = options.children;
-    this.#listLate = options.listLate;
   }
 
   /**
@@ -530,15 +522,7 @@ export class SessiondServer {
           build: this.#build,
           procs: this.procs(),
         });
-      if (!this.#listLate) {
-        answer();
-        return;
-      }
-      // Every list on a connection waits as long, so they answer in the order asked.
-      this.#listLate().then(
-        (ms) => (ms > 0 ? setTimeout(answer, ms) : answer()),
-        () => answer()
-      );
+      paceList(answer);
       return;
     }
 

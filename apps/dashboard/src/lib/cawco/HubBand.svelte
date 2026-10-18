@@ -55,7 +55,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { browser } from "$app/env";
-  import { page } from "$app/state";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { dur } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
@@ -126,8 +125,7 @@
   onMount(() => () => clearTimeout(backTimer));
 
   const band = $derived.by((): BandState | null => {
-    // A bench (/motion/…) stages its own data and runs with no hub by design.
-    if (!browser || page.url.pathname.startsWith("/motion/")) {
+    if (!browser) {
       return null;
     }
     if (cawco.reloadHold) {

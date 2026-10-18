@@ -48,10 +48,8 @@
  */
 import { createHash } from "node:crypto";
 import {
-  CAWCO_ENV,
   type CommandResult,
   type ProjectStarter,
-  readEnv,
   STARTER_PLACES,
   type StarterPlace,
   type StartersChangedFrame,
@@ -73,29 +71,14 @@ import {
   type StarterTask,
 } from "./starter-asks";
 import type { TaskEvent, TaskSummary, Tasks } from "./tasks";
+import { STARTERS_GAP_MS, STARTERS_QUIET_MS } from "./upstreams";
 
-const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 
-/**
- * `CAWCO_STARTERS_PACE=<quietMs>/<gapMs>` paces a scratch fleet's starters
- * for their live proof, as `CAWCO_TYPESAFE_URL` points Jev at a stand-in;
- * every installed hub runs the defaults.
- */
-const pace = (() => {
-  const [quiet, gap] = (readEnv(CAWCO_ENV.startersPace) ?? "")
-    .split("/")
-    .map(Number);
-  return {
-    quiet: Number.isFinite(quiet) && quiet ? quiet : MINUTE_MS,
-    gap: Number.isFinite(gap) && gap ? gap : 10 * MINUTE_MS,
-  };
-})();
-
 /** Quiet before a project's starters are written: 60 s with no other ask. */
-export const QUIET_MS = pace.quiet;
+export const QUIET_MS = STARTERS_QUIET_MS;
 /** The least time between two of one project's asks of Jev: 10 min. */
-export const GAP_MS = pace.gap;
+export const GAP_MS = STARTERS_GAP_MS;
 /** The latest commits of the landed branch Jev reads (landed.ts). */
 const COMMITS_READ = 5;
 /** The newest events read for "an event source with no routine". Our own call: a fortnight's polls of a busy repository. */

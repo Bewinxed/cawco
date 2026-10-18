@@ -414,7 +414,9 @@ final class UsageTipController: KitPopoverController {
         }
         let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkRow, lines: 0)
         words.text = body
+        #if DEBUG
         usageProbe?.notice("tip title=\(self.titleText ?? "-", privacy: .public) body=\(self.body.replacingOccurrences(of: "\n", with: " / "), privacy: .public)")
+        #endif
         words.accessibilityIdentifier = "usage-tip"
         stack.addArrangedSubview(words)
         card.addSubview(stack)

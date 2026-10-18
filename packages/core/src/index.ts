@@ -1741,16 +1741,6 @@ export const CAWCO_ENV = {
   dashboardPort: "CAWCO_DASHBOARD_PORT",
   /** The dashboard's loopback port on every computer ({@link localDashboardPort}). */
   localDashboardPort: "CAWCO_LOCAL_DASHBOARD_PORT",
-  /** GitHub's REST API origin the hub's pollers call, for pointing them at a proxy. */
-  githubApi: "CAWCO_GITHUB_API",
-  /** TypeSafe's System One URL Jev's typesafe route posts to, for pointing it at a local stand-in in its live proof. */
-  typesafeUrl: "CAWCO_TYPESAFE_URL",
-  /**
-   * `<quietMs>/<gapMs>`: how long a project's starters wait for quiet, and
-   * the least time between two of its asks of Jev (hub project-starters.ts),
-   * for pacing a scratch fleet's live proof; unset, 60 s and 10 min.
-   */
-  startersPace: "CAWCO_STARTERS_PACE",
   /** The loopback port the hub's relay receiver listens on (default: one the OS picks free). */
   relayPort: "CAWCO_RELAY_PORT",
   /**

@@ -13,6 +13,7 @@
  */
 import { rm } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
+import { HOST_PLUGINS } from "./canvas-host-plugins";
 import { embeddedFile, standalone } from "./runtime";
 
 /** Where the page's bundle and fonts are served, under the canvas's root. */
@@ -75,10 +76,7 @@ const agentReact: Bun.BunPlugin = {
  * Bundles the host page: written to `outdir` for a release build, else
  * kept in memory. React and Excalidraw built for production; Mermaid's
  * converter is its own chunk, loaded when the agent first sends Mermaid.
- * Yjs is not in it: the overlay's is (`overlayYjs`). With
- * `CAWCO_PROBE_HOOKS=1` in the builder's environment (the probe kit's
- * scratch hub) the page exposes what it binds for the probe to read
- * (scene.ts); every other build folds the hook away.
+ * Yjs is not in it: the overlay's is (`overlayYjs`).
  */
 export async function buildCanvasHost(outdir?: string) {
   const result = await Bun.build({
@@ -88,10 +86,9 @@ export async function buildCanvasHost(outdir?: string) {
     splitting: true,
     minify: true,
     conditions: ["production"],
-    plugins: [overlayYjs, agentReact],
+    plugins: [overlayYjs, agentReact, ...HOST_PLUGINS],
     define: {
       "process.env.NODE_ENV": '"production"',
-      __CAWCO_PROBE_HOOKS__: String(process.env.CAWCO_PROBE_HOOKS === "1"),
     },
     naming: {
       entry: "[name].[ext]",

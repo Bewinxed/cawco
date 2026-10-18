@@ -1,6 +1,6 @@
 /**
  * Jev as a scratch fleet's hub reaches it on the TypeSafe route
- * (`CAWCO_TYPESAFE_URL`, hub jev.ts), as scripts/probe-fleet-watch.ts
+ * (`fleet.standIns.typesafeUrl`, scripts/stand-ins), as scripts/probe-fleet-watch.ts
  * stands one in: every request kept whole, every question answered by its
  * type (https://docs.typesafe.ai/api.md). A noul is answered no (0.05), or
  * as `noul` says, a score its lowest level, a choice `none` when it offers
@@ -38,7 +38,7 @@ export interface JevMock {
   /** The starters calls, oldest first; for one project when named. */
   starterCalls: (projectName?: string) => JevCall[];
   stop: () => void;
-  /** What `CAWCO_TYPESAFE_URL` names. */
+  /** What the fleet's `standIns.typesafeUrl` names. */
   url: string;
 }
 

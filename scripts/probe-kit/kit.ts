@@ -315,9 +315,14 @@ function installRuns(): void {
   };
 }
 
-/** The dashboard built: `vite build`, as the probes' `vite preview` serves it. */
+/**
+ * The dashboard built, as the probes' `vite preview` serves it: the shipped
+ * build's code in the `bench` mode, whose one difference is that the
+ * `/motion/` benches answer (routes/(app)/motion/+layout.ts), so a runtime
+ * spec times one as built.
+ */
 const viteBuild = async (): Promise<void> => {
-  const child = Bun.spawn(["bunx", "vite", "build"], {
+  const child = Bun.spawn(["bunx", "vite", "build", "--mode", "bench"], {
     cwd: DASHBOARD,
     // This process's own, git's repository variables gone (scratch-fleet.ts
     // `GIT_REPOSITORY_ENV`): the build reads `git rev-parse` for its version.
@@ -336,10 +341,9 @@ const viteBuild = async (): Promise<void> => {
 };
 
 /**
- * The dashboard served against `hub`: the dev server (`vite dev`, where the
- * `/motion/` benches live: a built dashboard 404s them), or the built one
- * (`vite preview`, what the runtime specs time: a dev build's own checks
- * would be in every long task). Its address and process.
+ * The dashboard served against `hub`: the dev server (`vite dev`), or the
+ * built one (`vite preview`, what the runtime specs time: a dev build's own
+ * checks would be in every long task). Its address and process.
  */
 async function serve(
   how: "dev" | "preview",
@@ -383,8 +387,40 @@ async function serve(
 }
 
 type Served = Promise<{ base: string; child: Bun.Subprocess }>;
-/** No hub answers here: the benches feed the client's own state. */
-const NO_HUB = "http://127.0.0.1:9";
+
+/**
+ * Where a bench's dashboard reaches its hub: a stand-in that is never one.
+ * The benches feed the client's own state. A read is refused (503). The
+ * socket is taken and answers each message with itself, so the page's
+ * heartbeat hears it and never drops it, and no board ever comes: the page
+ * stays connecting, the state a cold load passes through, and the Shell
+ * raises no hub banner over a bench (f57855286). A hub that refused the
+ * socket raised it 4 s in.
+ */
+let noHub: string | undefined;
+const benchHub = (): string => {
+  if (!noHub) {
+    const hub = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      // A socket the page holds open for the whole run.
+      idleTimeout: 0,
+      fetch: (request, server) =>
+        server.upgrade(request)
+          ? undefined
+          : new Response("no hub", { status: 503 }),
+      websocket: {
+        idleTimeout: 0,
+        message: (socket, message) => {
+          socket.send(message);
+        },
+      },
+    });
+    hub.unref();
+    noHub = `http://127.0.0.1:${hub.port}`;
+  }
+  return noHub;
+};
 
 /**
  * What one run holds across its specs: the browsers, the build and its
@@ -487,13 +523,13 @@ export class Run {
   }
 
   bench(): Promise<string> {
-    this.devServer ??= this.startServer("dev", NO_HUB);
+    this.devServer ??= this.startServer("dev", benchHub());
     return this.devServer.then((s) => s.base);
   }
 
   builtBench(): Promise<string> {
     this.builtServer ??= this.build().then(() =>
-      this.startServer("preview", NO_HUB)
+      this.startServer("preview", benchHub())
     );
     return this.builtServer.then((s) => s.base);
   }

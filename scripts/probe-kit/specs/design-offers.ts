@@ -13,7 +13,7 @@
  *    first to-do stage, its description naming the design-system skill.
  * 4. A project whose folder has design/ is never asked.
  * 5. On an empty design project's board, with Jev on (a stand-in on
- *    `CAWCO_TYPESAFE_URL`, probe-kit jev-mock.ts), the "Build a design
+ *    `standIns.typesafeUrl`, probe-kit jev-mock.ts), the "Build a design
  *    system" starter Jev offers for a design project with no design/ opens
  *    Caw's panel with its words in his composer, and sends nothing.
  * 6. The app (this checkout's simulator build, on an iPhone simulator of its
@@ -68,8 +68,8 @@ const run = async (kit: Kit) => {
   // for 5, so 1 to 4 run as they always have.
   const jev = jevMock();
   const fleet = await kit.fleet(respond);
-  fleet.env.CAWCO_TYPESAFE_URL = jev.url;
-  fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
+  fleet.standIns.typesafeUrl = jev.url;
+  fleet.standIns.startersPace = { quiet: 1500, gap: 5000 };
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");

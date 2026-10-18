@@ -600,7 +600,7 @@ const run = async (kit: Kit) => {
   );
   try {
     const fleet = await kit.fleet(respond);
-    fleet.env.CAWCO_TYPESAFE_URL = jev.url;
+    fleet.standIns.typesafeUrl = jev.url;
     fleet.launch("sessiond");
     await fleet.sessiondUp();
     fleet.launch("hub");

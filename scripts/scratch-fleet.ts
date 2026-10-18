@@ -18,6 +18,7 @@ import {
   mkdirSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   unlinkSync,
 } from "node:fs";
@@ -37,10 +38,7 @@ import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
-import {
-  socketPathProblem,
-  workspaceFleetDir,
-} from "../packages/core/src/paths";
+import { darwinUserDirs, socketPathProblem } from "../packages/core/src/paths";
 import { forgetSessiondLink } from "../packages/core/src/sessiond";
 import {
   listedPid,
@@ -53,6 +51,7 @@ import { ensureDeps } from "./lib/deps";
 import { type HeavySlot, heavySlot } from "./lib/heavy-run";
 import { welcomed } from "./lib/keeper-dial";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
+import { STAND_INS_ENV, type StandIns } from "./stand-ins/index";
 
 /**
  * WHERE GIT LOOKS. Git finds its repository from these variables before its
@@ -558,6 +557,33 @@ const chatEvents = (
   ];
 };
 
+/** A workspace's fleet folder's name ({@link workspaceFleetDir}). */
+const FLEET_DIR = /^cawco-[0-9a-f]{8}$/;
+
+/**
+ * macOS: where a scratch fleet that workspace `id` runs keeps its sandbox
+ * and its services' HOMEs, in the user's temp folder, `cawco-<id8>`; none
+ * elsewhere. Not the workspace's scratch dir: OpenCode resolves every folder
+ * above a location (its config discovery, 2.0.29 to 2.0.32), and Bun
+ * resolves a folder on macOS by opening it, which the boundary refuses for
+ * every folder above one under home, where a folder answers a lookup alone
+ * (core boundary-policy.ts `seatbeltProfile`): "EPERM … lstat
+ * '/Users/…/.cawco/tmp'", and every location read answered 500. Nothing
+ * above the user's temp folder is refused. No socket goes here: the boundary
+ * keeps the host's sockets in it out of reach, so the runtime dirs, where
+ * the agent binds its sockets, and sessiond's socket stay on the short link.
+ *
+ * Bun's realpath on macOS opens the folder `O_RDONLY` and asks
+ * `fcntl(F_GETPATH)` (oven-sh/bun#44606, open; fixed by PR #38365, which
+ * calls realpath(3), or #42374, which asks `getattrlist(ATTR_CMN_FULLPATH)`,
+ * neither merged as of Bun 1.4.2). Once OpenCode ships a Bun with that fix,
+ * the fleet goes back to the scratch dir and this folder goes.
+ */
+const workspaceFleetDir = async (id: string): Promise<string | undefined> => {
+  const [temp] = await darwinUserDirs();
+  return temp ? join(temp, `cawco-${id.slice(0, 8)}`) : undefined;
+};
+
 /**
  * Where a fleet's folders stand, all on real disk (not /tmp: a delegate's
  * workspace boundary mounts paths from its home, and a /tmp private to
@@ -570,18 +596,12 @@ const chatEvents = (
  * cache root (`~/.cache`, 22 bytes).
  *
  * On macOS a workspace's fleet keeps its sandbox and its services' HOMEs in
- * the workspace's fleet folder instead (core paths.ts `workspaceFleetDir`,
- * `$(getconf DARWIN_USER_TEMP_DIR)cawco-<id8>`, which its archive removes):
- * OpenCode resolves every folder above a location, Bun's realpath on macOS
- * opens a folder `O_RDONLY` and asks `fcntl(F_GETPATH)` (oven-sh/bun#44606,
- * open; fix PRs #38365 and #42374, unmerged as of Bun 1.4.2), and the
- * boundary lets a folder above one under home answer a lookup alone, never
- * an open: under home, OpenCode answered 500 to every location read ("EPERM
- * … lstat '/Users/…/.cawco/tmp'"). This branch goes once OpenCode ships a Bun
- * with that fix. Its runtime dirs, where the agent binds its sockets, and
- * sessiond's socket stay on the short link (`homes` is where a HOME goes).
+ * the workspace's fleet folder instead ({@link workspaceFleetDir}), which
+ * each fleet removes once it is empty ({@link FleetDirs.clearWhenEmpty}).
  */
 async function fleetRoots(): Promise<{
+  /** The workspace's fleet folder on macOS, which `scratch` and `homes` are. */
+  fleet?: string;
   homes: string;
   scratch: string;
   short: string;
@@ -598,7 +618,7 @@ async function fleetRoots(): Promise<{
   if (fleet) {
     await mkdir(fleet, { recursive: true, mode: 0o700 });
     const real = realpathSync(fleet);
-    return { scratch: real, homes: real, short };
+    return { fleet: real, scratch: real, homes: real, short };
   }
   return {
     scratch: workspaceTmp ? realpathSync(workspaceTmp) : cache,
@@ -651,6 +671,17 @@ class FleetDirs {
   readonly #stops: (() => Promise<void> | void)[] = [];
   /** The held locks of the folders' {@link OWNER_FILE}s, let go once the folders are gone. */
   readonly #locks: number[] = [];
+  /** Folders that hold this fleet's, removed after them if nothing else is left in them. */
+  readonly #holders: string[] = [];
+
+  /**
+   * `dir` goes after this fleet's folders when they leave it empty: the
+   * workspace's fleet folder on macOS, which no other part of CawCo
+   * removes. Another fleet still in it keeps it.
+   */
+  clearWhenEmpty(dir: string): void {
+    this.#holders.push(dir);
+  }
 
   /**
    * `dir`, made (with its parents) and stamped as this process's: its
@@ -731,6 +762,7 @@ class FleetDirs {
       forgetSessiondLink(dir);
     }
     this.#unlockAll();
+    this.#clearHolders();
   }
 
   /** Deletes every folder now, from an exit or a signal, where nothing can wait. */
@@ -741,6 +773,18 @@ class FleetDirs {
       forgetSessiondLink(dir);
     }
     this.#unlockAll();
+    this.#clearHolders();
+  }
+
+  /** Each holder this fleet left empty; one that still holds anything stays. */
+  #clearHolders(): void {
+    for (const dir of this.#holders.splice(0)) {
+      try {
+        rmdirSync(dir);
+      } catch {
+        // another fleet's folders are still in it, or it is gone
+      }
+    }
   }
 
   /** Leaves the folders for reading: unstamped, so no sweep takes them. */
@@ -836,11 +880,24 @@ async function heldByLive(dir: string): Promise<boolean> {
  * live process this one can see holds ({@link heldByLive}). The sweep holds
  * the lock while it removes the folder. The probe kit runs it as a run
  * starts. Answers the folders removed.
+ *
+ * On macOS that includes every workspace's fleet folder
+ * ({@link workspaceFleetDir}), each removed once it is empty: a workspace's
+ * archive does not remove one, so a fleet a SIGKILL cut short in a workspace
+ * since archived goes at the next run anywhere ("The Mac filled to 120 MB
+ * free on 2026-10-14 … because nothing removed a workspace once its work was
+ * over", d31b2f5ac).
  */
 export async function sweepDeadFleets(): Promise<string[]> {
   const { homes, scratch, short } = await fleetRoots();
+  const [temp] = await darwinUserDirs();
+  const fleetDirs = temp
+    ? (await readdir(temp).catch(() => [] as string[]))
+        .filter((entry) => FLEET_DIR.test(entry))
+        .map((entry) => join(temp, entry))
+    : [];
   const removed: string[] = [];
-  for (const root of new Set([scratch, homes, short])) {
+  for (const root of new Set([scratch, homes, short, ...fleetDirs])) {
     // biome-ignore lint/performance/noAwaitInLoops: one root at a time
     const entries = await readdir(root).catch(() => [] as string[]);
     for (const entry of entries) {
@@ -865,6 +922,13 @@ export async function sweepDeadFleets(): Promise<string[]> {
       } finally {
         unlock(fd);
       }
+    }
+  }
+  for (const dir of fleetDirs) {
+    try {
+      rmdirSync(dir);
+    } catch {
+      // a live fleet's folders are still in it
     }
   }
   return removed;
@@ -919,6 +983,8 @@ const serviceSpawn = (
       process.execPath,
       "--preload",
       join(import.meta.dir, "scratch-fleet-leash.ts"),
+      "--preload",
+      join(import.meta.dir, "stand-ins/preload.ts"),
       join(root, ENTRY[role]),
     ],
     {
@@ -1017,7 +1083,10 @@ async function standUp(
   /** The hub's address as a URL names it: an IPv6 one in brackets. */
   const hubAt = hub.at.includes(":") ? `[${hub.at}]` : hub.at;
   const root = resolve(import.meta.dir, "..");
-  const { homes, scratch, short: shortRoot } = await fleetRoots();
+  const { fleet, homes, scratch, short: shortRoot } = await fleetRoots();
+  if (fleet) {
+    dirs.clearWhenEmpty(fleet);
+  }
   const sandbox = await dirs.own(
     join(scratch, `${options.name}-${crypto.randomUUID().slice(0, 8)}`)
   );
@@ -1337,6 +1406,8 @@ async function standUp(
       })
     ),
   };
+  /** What the hub reaches in place of the world (stand-ins/index.ts): set before it launches. */
+  const standIns: StandIns = {};
   const procs: Partial<Record<Role, ReturnType<typeof Bun.spawn>>> = {};
   /** Each role's latest launch's stderr file. */
   const errs: Partial<Record<Role, string>> = {};
@@ -1360,7 +1431,12 @@ async function standUp(
         // writes `.opencode/` in its own directory: in the sandbox, never the
         // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
         cwd: role === "sessiond" ? sandbox : root,
-        env: { ...env, ...overrides, TMPDIR: tmpFor(role) },
+        env: {
+          ...env,
+          ...overrides,
+          [STAND_INS_ENV]: JSON.stringify(standIns),
+          TMPDIR: tmpFor(role),
+        },
         stdout: Bun.file(join(sandbox, `${role}-${launches}.log`)),
         stderr: Bun.file(err),
       },
@@ -2206,6 +2282,7 @@ async function standUp(
     sessiondSocket,
     /** The scratch services' environment: their HOME, hub and machine. */
     env,
+    standIns,
     repo,
     workdir,
     seen,

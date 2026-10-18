@@ -2,7 +2,7 @@
  * The design-system flow (Projects spec §5.7) from a project's first minute
  * to its system in use, on a scratch fleet (real hub, agent and sessiond;
  * Claude Code against the mock model; Jev a stand-in on
- * `CAWCO_TYPESAFE_URL`), read from the hub's answers, Jev's inputs and the
+ * `standIns.typesafeUrl`), read from the hub's answers, Jev's inputs and the
  * files on disk. One leg per defect the nightly-3903 run found:
  *
  * 1. A system that landed on origin's default branch, the person's checkout
@@ -107,7 +107,7 @@ interface Stage {
   name: string;
 }
 
-/** The pace the spec sets (`CAWCO_STARTERS_PACE`): quiet, then the gap between asks. */
+/** The pace the spec sets (`standIns.startersPace`): quiet, then the gap between asks. */
 const PACE = { quiet: 1500, gap: 5000 };
 
 /**
@@ -186,8 +186,8 @@ const staleSet = async (fleet: Fleet, kit: Kit): Promise<void> => {
 const run = async (kit: Kit) => {
   const jev = jevMock();
   const fleet = await kit.fleet(respond);
-  fleet.env.CAWCO_TYPESAFE_URL = jev.url;
-  fleet.env.CAWCO_STARTERS_PACE = `${PACE.quiet}/${PACE.gap}`;
+  fleet.standIns.typesafeUrl = jev.url;
+  fleet.standIns.startersPace = PACE;
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");

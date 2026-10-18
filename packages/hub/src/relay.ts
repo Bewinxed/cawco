@@ -73,6 +73,7 @@ import { createFunnel, type Funnel, type FunnelState } from "./funnel";
 import { type GitHubKind, githubRepoOf, normalizeGitHub } from "./github";
 import type { Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { GITHUB_API } from "./upstreams";
 
 /** The most a delivery's body holds: 1 MiB. */
 export const RELAY_BODY_MAX = 1024 * 1024;
@@ -316,7 +317,6 @@ export const createRelay = ({
   lifetime,
 }: RelayDeps) => {
   const store = db.relays;
-  const api = readEnv(CAWCO_ENV.githubApi) ?? "https://api.github.com";
   /** The hub's machine: the host whose Tailscale serves every relay. Read once, when first needed. */
   let hostId: Promise<string> | undefined;
   const hostOf = (): Promise<string> => {
@@ -553,7 +553,7 @@ export const createRelay = ({
     body?: unknown
   ): Promise<Bounded<Response>> =>
     readWithin(GITHUB_MS, async (signal) => {
-      const response = await fetch(`${new URL(api).origin}${path}`, {
+      const response = await fetch(`${new URL(GITHUB_API).origin}${path}`, {
         method,
         headers: {
           Accept: "application/vnd.github+json",
