@@ -212,11 +212,11 @@
     text-wrap: pretty;
   }
   /* Suggestion rows: one under the other, each as wide as its words (never
-     past the column), at a row's height rather than a card's. Each is a
-     button on the panel's own raised surface, so it takes the outline
-     button's edge (DESIGN.md, Buttons: `border-button-outline`, 3:1 against
-     the raised surface by day and at night) for the tile's drop, which the
-     same surface under it hides. */
+     past the column), at a row's height rather than a card's. Each is an
+     outline button standing on the thread's recess, so its edge is the one
+     made for that (`border-row-outline`: 3:1 against the recess and the
+     raised fill, by day and at night) in place of the tile's drop, which
+     reads at night as no edge at all. */
   [data-rows] .cards {
     display: flex;
     flex-direction: column;
@@ -232,7 +232,7 @@
     block-size: auto;
     min-block-size: var(--c-btn-h);
     padding: calc(var(--space-2) - 1px) calc(var(--space-3) - 1px);
-    border: 1px solid var(--border-button-outline);
+    border: 1px solid var(--border-row-outline);
     border-radius: var(--radius-md);
     box-shadow: none;
   }

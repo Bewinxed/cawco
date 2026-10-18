@@ -16,7 +16,7 @@
    *   a session tab's hover opens (SessionDetails), where his harness and
    *   model are chosen as any session's model is (ModelSection).
    * - Your first words on the hero start the thread, and the panel shows it
-   *   in place, the composer staying where it is. New session (the head's
+   *   in place, the composer staying where it is. Ask Caw (the head's
    *   button, the views bar's "+") shows a new thread here (`lead.fresh`).
    */
   import {
@@ -89,7 +89,7 @@
   const earlier = $derived(
     threads.filter((each) => each.id !== threadId).slice(0, 5)
   );
-  // New session asked for new work: a thread not yet started, its composer
+  // Ask Caw asked for new work: a thread not yet started, its composer
   // taking the caret (CawLead.newThread), whether the panel was drawn then
   // or opens with it.
   $effect(() => {

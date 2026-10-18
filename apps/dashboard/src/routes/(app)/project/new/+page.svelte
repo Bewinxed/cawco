@@ -201,16 +201,19 @@
         sending={starting}
       />
     </div>
-    <div data-slot="chips" class="chips kit-chips">
-      {#each STARTERS as text (text)}
-        <button
-          class="kit-chip touch-hit"
-          onclick={() => starter(text)}
-          type="button"
-        >
-          {text}
-        </button>
-      {/each}
+    <!-- As wide as the field, so the chips stand on its composer's column. -->
+    <div class="chips-box">
+      <div data-slot="chips" class="chips kit-chips">
+        {#each STARTERS as text (text)}
+          <button
+            class="kit-chip touch-hit"
+            onclick={() => starter(text)}
+            type="button"
+          >
+            {text}
+          </button>
+        {/each}
+      </div>
     </div>
   </div>
 
@@ -267,16 +270,22 @@
     text-align: center;
   }
   /* The session Composer stands on this box's foot (Composer .dock). */
-  .field {
+  .field,
+  .chips-box {
     position: relative;
     inline-size: 100%;
     max-inline-size: 570px;
   }
   /* The starters are the kit option chip (.kit-chips / .kit-chip in
-     app.css), centred under the field. */
+     app.css) under the field, on the composer's own column in it (Composer
+     `.composer`: --c-composer-w, centred; at 900px and under, --space-3 in
+     from its box), so the chips and the pill share one start edge. */
   .chips {
-    justify-content: center;
-    max-inline-size: 40rem;
+    padding-inline: calc((100% - var(--c-composer-w)) / 2);
+
+    @media (max-width: 900px) {
+      padding-inline: var(--space-3);
+    }
   }
   .cards {
     inline-size: 100%;

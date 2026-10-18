@@ -161,6 +161,8 @@ public enum Palette {
     public static let borderCard = Palette.named("border-card")
     /// The outline button's edge, 3:1 against the raised surface it stands on, where the control edge measures 1.37:1 by day and 1.43:1 at night (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night.
     public static let borderButtonOutline = Palette.named("border-button-outline")
+    /// A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess and 3.47:1 on raised by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.47:1 on the recess.
+    public static let borderRowOutline = Palette.named("border-row-outline")
     public static let input = Palette.named("input")
     /// Inks. Subtle is the weakest mix that holds 4.5:1 on fill, hover and raised.
     public static let inkStrong = Palette.named("ink-strong")

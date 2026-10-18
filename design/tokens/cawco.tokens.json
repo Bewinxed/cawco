@@ -1098,6 +1098,19 @@
         }
       }
     },
+    "border-row-outline": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.6275, 0.003703, 0.016077]
+      },
+      "$description": "A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess and 3.47:1 on raised by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.47:1 on the recess.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-8}, {color.neutral-9} 50%)"
+        }
+      }
+    },
     "input": {
       "$type": "color",
       "$value": "{color.neutral-7}"

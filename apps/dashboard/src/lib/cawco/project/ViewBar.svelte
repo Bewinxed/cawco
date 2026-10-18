@@ -17,7 +17,8 @@
    *   one stands on a view of the tasks (TaskFilterPopover `compact`; the
    *   head's `⋯` opens it);
    * - Needs you, the page's filter (NeedsYouChip), while something needs you;
-   * - New session, the screen's one coral control, on Send's recipe
+   * - Ask Caw (the head's own, which a phone's head has no room for), the
+   *   screen's one coral control, on Send's recipe
    *   (app.css `.kit-send`): it opens Caw's panel on a new thread, the
    *   caret in his composer (work in a project starts by telling Caw).
    *
@@ -60,7 +61,7 @@
     /** The Needs you filter is on. */
     needsOn: boolean;
     ontoggleneeds: () => void;
-    /** New session: Caw's panel on a new thread. */
+    /** Ask Caw: his panel on a new thread. */
     onnewsession: () => void;
   } = $props();
 
@@ -173,7 +174,7 @@
     {/if}
     <span class="spacer"></span>
     <button
-      aria-label="New session"
+      aria-label="Ask Caw"
       class="kit-send new-session touch-hit pressable"
       onclick={onnewsession}
       type="button"

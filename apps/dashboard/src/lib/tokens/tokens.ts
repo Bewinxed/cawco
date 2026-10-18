@@ -127,6 +127,7 @@ export type TokenColor =
   | "color.border-contrast"
   | "color.border-card"
   | "color.border-button-outline"
+  | "color.border-row-outline"
   | "color.input"
   | "color.ink-strong"
   | "color.ink-row"

@@ -912,7 +912,7 @@
 
     <div data-slot="foot" class="foot">
       <!-- Each row commits on its own: Done only folds the tray, so it
-           stays quiet beside the head's New session. -->
+           stays quiet beside the head's Ask Caw. -->
       <Button
         data-details-done
         label="Done"

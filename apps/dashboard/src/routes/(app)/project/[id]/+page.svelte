@@ -4,7 +4,7 @@
    * lead's face, then the view; the view strip stands in the shell's bar on
    * a wide screen and under the head on a narrow one. On a phone (under
    * 640px) the page is the one scroller: the head scrolls away with the
-   * view, and the views, Needs you and New session stand in one bar docked
+   * view, and the views, Needs you and Ask Caw stand in one bar docked
    * at the foot where a session's composer docks (ViewBar). Board, Table and
    * Pipeline always; Calendar when a task carries a date; then each view
    * kept in `views/`, then each Caw drafted, marked `draft`, with Keep and

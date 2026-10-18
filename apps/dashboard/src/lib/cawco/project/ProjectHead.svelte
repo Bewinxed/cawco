@@ -792,8 +792,8 @@
       margin-inline-end: calc((var(--c-btn-h) - 16px) / -2);
     }
   }
-  /* A phone's head carries no button but `⋯`, on the name's row: New
-     session is the views bar's "+", Spin off is in `⋯`. */
+  /* A phone's head carries no button but `⋯`, on the name's row: Ask Caw
+     is the views bar's "+", Spin off is in `⋯`. */
   @media (max-width: 639px) {
     .acts {
       flex: none;

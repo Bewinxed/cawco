@@ -121,7 +121,7 @@ export class CawLead {
   }
   anchor = $state<HTMLElement | null>(null);
   /**
-   * A New thread asked for (the head's New session, the views bar's "+"):
+   * A New thread asked for (the head's Ask Caw, the views bar's "+"):
    * his panel shows a thread not yet started, its composer taking the
    * caret, and clears it (CawThread).
    */
@@ -177,7 +177,7 @@ export class CawLead {
 
   /**
    * New work, told to him: his panel on a new thread, the caret in its
-   * composer (the head's New session, the views bar's "+"). What he does
+   * composer (the head's Ask Caw, the views bar's "+"). What he does
    * with it (files tasks, starts a session, asks back) is his.
    */
   newThread(): void {

@@ -212,6 +212,11 @@
       color-mix(in oklab, var(--neutral-8), var(--neutral-9) 40%),
       color-mix(in oklab, var(--neutral-9), var(--neutral-11) 10%)
     );
+    /* A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess and 3.47:1 on raised by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.47:1 on the recess. */
+    --border-row-outline: light-dark(
+      color-mix(in oklab, var(--neutral-8), var(--neutral-9) 50%),
+      color-mix(in oklab, var(--neutral-9), var(--neutral-11) 10%)
+    );
     --input: light-dark(
       var(--neutral-7),
       oklch(from var(--neutral-12) l c h / 0.14)

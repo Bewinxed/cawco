@@ -476,8 +476,8 @@ const rowChecks = (kit: Kit, tag: string, at: PanelRead) => {
     panel: contrast(row.edge.ink, row.edge.panel),
   }));
   kit.check(
-    `${tag}: every row has the outline button's edge, 3:1 on its raised fill`,
-    edges.every((each) => each.width >= 1 && each.fill >= 3),
+    `${tag}: every row has an edge, 3:1 on the panel and on its own fill`,
+    edges.every((each) => each.width >= 1 && each.fill >= 3 && each.panel >= 3),
     JSON.stringify(
       edges.map((each) => ({
         width: each.width,
@@ -651,9 +651,7 @@ const leg = async (kit: Kit, setup: Setup, one: Leg, theme: Theme) => {
   await page.keyboard.press("Escape");
   await page.locator(PANEL).waitFor({ state: "detached" });
   if (phone) {
-    await page
-      .locator('[data-slot="view-bar"] [aria-label="New session"]')
-      .click();
+    await page.locator('[data-slot="view-bar"] [aria-label="Ask Caw"]').click();
   } else {
     await page.locator("[data-new-session]").click();
   }
@@ -928,8 +926,8 @@ const sentShots = async (kit: Kit, setup: Setup) => {
   }
 };
 
-/** A page whose dashboard socket lets the spec hand it a hub frame. */
-const withSocket = async (page: Page) => {
+/** A page whose dashboard socket lets the spec hand it a hub frame (`payload`). */
+const hubFrames = async (page: Page) => {
   let inject: ((data: string) => void) | null = null;
   await page.routeWebSocket(HUB_SOCKET, (ws) => {
     const server = ws.connectToServer();
@@ -937,26 +935,28 @@ const withSocket = async (page: Page) => {
     server.onMessage((data) => ws.send(data));
     inject = (data) => ws.send(data);
   });
-  /** Caw's reply filing `ids`, as the hub's frame brings it. */
-  return (threadId: string, ids: string[]) =>
+  return (payload: unknown) =>
     (inject as ((data: string) => void) | null)?.(
-      JSON.stringify({
-        verb: "frames",
-        machineId: "hub",
-        payload: {
-          kind: "thread.message",
-          threadId,
-          message: {
-            id: crypto.randomUUID(),
-            threadId,
-            author: "caw",
-            body: "Three things, filed for Friday.",
-            tasks: ids,
-            createdAt: Date.now(),
-          },
-        },
-      })
+      JSON.stringify({ verb: "frames", machineId: "hub", payload })
     );
+};
+
+/** A page whose socket brings it Caw's reply filing `ids`, as the hub's frame does. */
+const withSocket = async (page: Page) => {
+  const send = await hubFrames(page);
+  return (threadId: string, ids: string[]) =>
+    send({
+      kind: "thread.message",
+      threadId,
+      message: {
+        id: crypto.randomUUID(),
+        threadId,
+        author: "caw",
+        body: "Three things, filed for Friday.",
+        tasks: ids,
+        createdAt: Date.now(),
+      },
+    });
 };
 
 /** 4. A reply filing three tasks, landing live: the stagger, and nothing left running after it. */
@@ -1244,11 +1244,39 @@ const routinesEdge = async (kit: Kit, setup: Setup) => {
     { name: "1280", view: "desk", width: 1280 },
     "light"
   );
+  // Its starters, as the hub's frame brings a set Jev wrote: inside a
+  // workspace's boundary Caw never answers, so nothing he did gives Jev a
+  // routine to offer.
+  const send = await hubFrames(page);
   await open(
     page,
     `${setup.url}?view=routines`,
     '[data-slot="ask-caw"] form[data-slot="cin"]'
   );
+  send({
+    kind: "starters.changed",
+    place: "routines",
+    projectId: setup.project.id,
+    starters: [
+      {
+        glyph: "triage",
+        text: "Every Monday, triage the week’s new bookings",
+        reason: "Bookings come in every week.",
+        sources: [],
+      },
+      {
+        glyph: "routine",
+        text: "Every Friday, write the launch changelog",
+        reason: "The launch is on Friday.",
+        sources: [],
+      },
+    ],
+  });
+  await page
+    .locator('[data-slot="routine-starters"] button')
+    .first()
+    .waitFor({ timeout: 20_000 })
+    .catch(() => undefined);
   await settle(page, 400);
   const read = await page.evaluate(() => ({
     chips: [
@@ -1274,6 +1302,22 @@ const newProject = async (kit: Kit, setup: Setup) => {
   const page = await kit.page("desk", { theme: "light" });
   await open(page, `${setup.base}/project/new`, COMPOSER);
   await settle(page, 300);
+  const edge = await page.evaluate(() => ({
+    chips: [...document.querySelectorAll('[data-slot="chips"] button')].map(
+      (chip) => chip.getBoundingClientRect().left
+    ),
+    field:
+      document
+        .querySelector('[data-slot="new-page-field"] form[data-slot="cin"]')
+        ?.getBoundingClientRect().left ?? null,
+  }));
+  kit.check(
+    "New project: its starter chips and the composer's field start on one edge",
+    edge.field !== null &&
+      edge.chips.length > 0 &&
+      Math.abs((edge.chips[0] ?? -99) - edge.field) <= 1,
+    JSON.stringify(edge)
+  );
   const words = "A ferry timetable site for the island";
   const field = page.locator(COMPOSER).first();
   await field.click();
