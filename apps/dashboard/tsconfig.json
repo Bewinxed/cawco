@@ -11,5 +11,5 @@
       "bits-ui": ["./node_modules/bits-ui"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "preview/*/*.ts", "preview/*/*.svelte"]
 }
