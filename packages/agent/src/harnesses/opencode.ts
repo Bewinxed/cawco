@@ -121,7 +121,13 @@ import type { SessiondClient } from "../sessiond-client";
 import { listStandIns } from "../stand-ins";
 import { installAdviceText, onToolsMoved, sawTool } from "../tools";
 import { cloneHolding, workspaceRefs } from "../workspace-records";
-import { readJson, readSidecar, writeJson } from "./fleet-common";
+import {
+  hashText,
+  readJson,
+  readSidecar,
+  syncMemory,
+  writeJson,
+} from "./fleet-common";
 import { OpencodeActivity } from "./opencode-activity";
 import {
   answerOf,
@@ -192,6 +198,16 @@ interface RecoveryWave {
 
 const OPENCODE_CONFIG = join(OPENCODE_DIR, "opencode.json");
 const OPENCODE_SIDECAR = join(OPENCODE_DIR, "cawco-fleet.json");
+
+/**
+ * The fleet's memory document for OpenCode: its global instructions file,
+ * which every session loads before the `AGENTS.md` files from its folder up
+ * ("OpenCode loads the global file followed by every `AGENTS.md` from the
+ * current workspace directory toward the home directory",
+ * opencode.ai/v2/docs/instructions). A project's own `AGENTS.md` OpenCode
+ * finds itself.
+ */
+const OPENCODE_MEMORY = join(OPENCODE_DIR, "AGENTS.md");
 
 /**
  * The static policy every server is launched with
@@ -5060,9 +5076,16 @@ export class OpencodeHarness implements Harness {
     // Before the poke below: a placement that changed restarts the server as
     // opencode.json changing does (`#hashConfig`).
     const placed = await placeOpencodeMcp(config.placedMcp);
+    const memory = await syncMemory(
+      OPENCODE_MEMORY,
+      config.memory,
+      sidecar.memory,
+      report
+    );
     await writeJson(OPENCODE_SIDECAR, {
       mcp,
       ...(planAgentDisabled ? { planAgentDisabled: true } : {}),
+      ...(memory ? { memory } : {}),
     });
     // Poke the watcher now rather than up to 2 s later.
     await this.#configTick();
@@ -5140,13 +5163,33 @@ export class OpencodeHarness implements Harness {
 
   async fleetStatus(): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(OPENCODE_SIDECAR);
-    return {
+    const report: FleetSyncReport = {
       mcp: await this.#readFleetMcp(sidecar.mcp ?? []),
       marketplaces: {},
       plugins: {},
       skills: {},
       at: Date.now(),
     };
+    if (sidecar.memory !== undefined) {
+      const file = Bun.file(OPENCODE_MEMORY);
+      const hash = (await file.exists()) ? hashText(await file.text()) : null;
+      if (hash === sidecar.memory) {
+        report.memory = { state: "applied" };
+      } else if (hash === null) {
+        report.memory = {
+          state: "failed",
+          cause: "absent",
+          detail: "not on disk",
+        };
+      } else {
+        report.memory = {
+          state: "failed",
+          cause: "drifted",
+          detail: "edited on this machine",
+        };
+      }
+    }
+    return report;
   }
 
   /**
