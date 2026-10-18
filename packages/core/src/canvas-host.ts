@@ -49,6 +49,29 @@ const overlayYjs: Bun.BunPlugin = {
 };
 
 /**
+ * React in the host bundle is the agent package's, whoever imports it: the
+ * page runs one React. Excalidraw's `tunnel-rat` imports `react` without
+ * declaring it (pmndrs/tunnel-rat#24, open; 0.1.2 is its latest), and the
+ * isolated install leaves it no shared fallback to reach one through
+ * (bunfig.toml `hoist = false`), so unpinned the bundle fails ("Could not
+ * resolve: \"react\""). Bun has no `packageExtensions` to declare it
+ * (oven-sh/bun#40053), and a root declaration never reaches a package in
+ * bun's global store, which a workspace installs from. This is the
+ * Bun.build twin of the dashboard's vite.config.ts `resolve.dedupe`
+ * (bits-ui for vaul-svelte): one copy, resolved from the package that
+ * declares it.
+ */
+const REACT = /^react(-dom)?(\/.*)?$/;
+const agentReact: Bun.BunPlugin = {
+  name: "agent-react",
+  setup(build) {
+    build.onResolve({ filter: REACT }, ({ path }) => ({
+      path: Bun.resolveSync(path, HOST_DIR),
+    }));
+  },
+};
+
+/**
  * Bundles the host page: written to `outdir` for a release build, else
  * kept in memory. React and Excalidraw built for production; Mermaid's
  * converter is its own chunk, loaded when the agent first sends Mermaid.
@@ -65,7 +88,7 @@ export async function buildCanvasHost(outdir?: string) {
     splitting: true,
     minify: true,
     conditions: ["production"],
-    plugins: [overlayYjs],
+    plugins: [overlayYjs, agentReact],
     define: {
       "process.env.NODE_ENV": '"production"',
       __CAWCO_PROBE_HOOKS__: String(process.env.CAWCO_PROBE_HOOKS === "1"),

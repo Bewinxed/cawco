@@ -61,6 +61,8 @@ export interface Run {
   loop: boolean;
   /** A CSS transition's property, a CSS animation's name, a Web Animation's id. */
   name: string;
+  /** Its target as the protocol reported it starting (`source.backendNodeId`). */
+  node?: number;
   /** Whether it runs on a scroller's or a view's timeline, not on time. */
   scroll: boolean;
   /**
@@ -102,6 +104,7 @@ const runOf = (one: Described): Run => {
     start: one.startTime ? one.startTime : null,
     // The protocol sends `iterations` only when it is finite.
     loop: s !== undefined && s.iterations === undefined,
+    node: s?.backendNodeId,
     scroll: one.viewOrScrollTimeline !== undefined,
     end:
       (s?.delay ?? 0) +
@@ -278,14 +281,16 @@ export class Clock {
           }),
       within
     );
-    if (seen.length < kept.length) {
+    const live = seen.length < kept.length ? await this.liveOf(kept) : kept;
+    if (live === null) {
+      const nodes = await Promise.all(kept.map((one) => this.nodeOf(one)));
       await this.release();
       throw new Error(
-        `the page reads ${seen.length} held runs inside ${within} (${seen.join(", ")}), the protocol caught ${kept.length} (${kept.map((one) => `${one.type} ${one.name}`).join(", ")})`
+        `the page reads ${seen.length} held runs inside ${within} (${seen.join(", ")}), the protocol caught ${kept.length}: ${kept.map((one, i) => `${one.type} ${one.name} on node ${one.node} ${nodes[i]}`).join("; ")}`
       );
     }
-    this.runs = kept;
-    return kept;
+    this.runs = live;
+    return live;
   }
 
   /**
@@ -316,6 +321,98 @@ export class Clock {
       arguments: [{ value: within }],
       returnByValue: true,
     })) as { result: { value: Place } };
+    return result.value;
+  }
+
+  /**
+   * The caught runs the page still holds, where it reads fewer than the
+   * protocol caught; null where it misses a live one. Per target node:
+   * one no longer in the document carries no run the page can draw (an
+   * outro whose element is gone), so its runs leave the clock; on one still
+   * in it, the page's held runs are the newest caught there, the older ones
+   * runs the page cancelled itself (Svelte reverses a transition by
+   * cancelling its run and starting another on the same element, which
+   * `animationCanceled` cannot tell from the clock's own pause). A node in
+   * the document whose runs the page lists none of is a run it never sees
+   * (a shadow tree's): null. Each run let go is said in the run's log.
+   */
+  private async liveOf(kept: Run[]): Promise<Run[] | null> {
+    const byNode = new Map<number | undefined, Run[]>();
+    for (const run of kept) {
+      byNode.set(run.node, [...(byNode.get(run.node) ?? []), run]);
+    }
+    const drop = new Set<Run>();
+    for (const [node, runs] of byNode) {
+      // biome-ignore lint/performance/noAwaitInLoops: one node at a time
+      const held = await this.heldOn(node);
+      if (held === null) {
+        for (const run of runs) {
+          drop.add(run);
+        }
+        console.log(
+          `… clock: ${runs.map((one) => `${one.type} ${one.name}`).join(", ")} on node ${node}, no longer in the document, left off the clock`
+        );
+        continue;
+      }
+      if (held === 0) {
+        return null;
+      }
+      const older = runs.slice(0, Math.max(0, runs.length - held));
+      for (const run of older) {
+        drop.add(run);
+      }
+      if (older.length > 0) {
+        console.log(
+          `… clock: ${older.map((one) => `${one.type} ${one.name}`).join(", ")} on node ${node}, in the document, replaced by the page's newer run (it holds ${held} of ${runs.length}), left off the clock`
+        );
+      }
+    }
+    return kept.filter((run) => !drop.has(run));
+  }
+
+  /** How many held runs the page lists on a node; null when it is no longer in the document. */
+  private async heldOn(node: number | undefined): Promise<number | null> {
+    const resolved =
+      node === undefined
+        ? null
+        : ((await this.cdp
+            .send("DOM.resolveNode", { backendNodeId: node })
+            .catch(() => null)) as { object: { objectId?: string } } | null);
+    const objectId = resolved?.object.objectId;
+    if (!objectId) {
+      return null;
+    }
+    const { result } = (await this.cdp.send("Runtime.callFunctionOn", {
+      objectId,
+      functionDeclaration:
+        "function () { const t = this instanceof Element ? this : this.element; if (!t.isConnected) { return null; } return window.kitRuns().filter((r) => r.playState === 'paused' && r.effect && r.effect.target === this).length; }",
+      returnByValue: true,
+    })) as { result: { value: number | null } };
+    return result.value;
+  }
+
+  /**
+   * A caught run's target as it stands now, in words: its tag and slot,
+   * whether it is still in the document, and the page's runs on it by play
+   * state; "gone" when the node no longer resolves.
+   */
+  private async nodeOf(run: Run): Promise<string> {
+    const resolved =
+      run.node === undefined
+        ? null
+        : ((await this.cdp
+            .send("DOM.resolveNode", { backendNodeId: run.node })
+            .catch(() => null)) as { object: { objectId?: string } } | null);
+    const objectId = resolved?.object.objectId;
+    if (!objectId) {
+      return "(gone)";
+    }
+    const { result } = (await this.cdp.send("Runtime.callFunctionOn", {
+      objectId,
+      functionDeclaration:
+        "function () { const t = this instanceof Element ? this : this.element; const states = {}; for (const r of t.getAnimations()) { states[r.playState] = (states[r.playState] || 0) + 1; } const all = {}; for (const r of window.kitRuns()) { if (r.effect && r.effect.target === t) { all[r.playState] = (all[r.playState] || 0) + 1; } } return '(<' + t.tagName.toLowerCase() + ' ' + (t.getAttribute('data-slot') || '') + '> connected ' + t.isConnected + '; its own ' + JSON.stringify(states) + '; on the page ' + JSON.stringify(all) + ')'; }",
+      returnByValue: true,
+    })) as { result: { value: string } };
     return result.value;
   }
 
