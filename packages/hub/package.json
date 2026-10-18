@@ -6,8 +6,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "db:generate": "drizzle-kit generate",
-    "db:push": "CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} drizzle-kit push",
+    "db:generate": "bun --bun drizzle-kit generate",
+    "db:push": "CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun --bun drizzle-kit push",
     "dev": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun --watch src/index.ts",
     "fixture-db": "bun scripts/fixture-db.ts",
     "migrations:check": "bun scripts/migrations-check.ts",
