@@ -1652,7 +1652,7 @@
          and where to switch how they are reached. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      class="absolute inset-0 overflow-auto overscroll-contain px-space-6 bg-surface-well"
       role="alert"
       transition:appear
     >
@@ -1755,7 +1755,7 @@
       ></div>
       <div
         data-slot="sheet-error"
-        class="absolute inset-x-space-3 bottom-space-3 grid gap-space-2 max-h-(--err-max) overflow-auto p-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-tile"
+        class="absolute inset-x-space-3 bottom-space-3 grid gap-space-2 max-h-(--err-max) overflow-auto overscroll-contain p-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-tile"
         style:--err-max="60%"
         role="alert"
         transition:appear
@@ -1782,7 +1782,7 @@
     <!-- The stage or the server didn't start, or failed its restarts: where the page would be. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      class="absolute inset-0 overflow-auto overscroll-contain px-space-6 bg-surface-well"
       role="alert"
       transition:appear
     >
@@ -1816,7 +1816,7 @@
     <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      class="absolute inset-0 overflow-auto overscroll-contain px-space-6 bg-surface-well"
       role="alert"
       transition:appear
     >
