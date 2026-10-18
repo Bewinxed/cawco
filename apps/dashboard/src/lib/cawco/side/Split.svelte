@@ -137,6 +137,9 @@
     get expanded() {
       return expanded;
     },
+    get moving() {
+      return moving;
+    },
     get backLabel() {
       return backLabel;
     },
@@ -229,6 +232,12 @@
   });
   /** The split is sliding: the reader is watching it open or close. */
   let sliding = $state(false);
+  /**
+   * The panes are on the way to the size last asked of them: from the ask
+   * until they land (the slide's runs finished, or the frame after a size
+   * taken at once). Unsized until the split is measured, so on the way.
+   */
+  let moving = $state(true);
   let mounted = $state(false);
   /** A surface opening out of a departed row: it clips open from it. */
   let fromRow = $state(false);
@@ -259,6 +268,7 @@
     const seen =
       untrack(() => visible && !fromRow) && motionOk.current && !snapped;
     sliding = seen;
+    moving = true;
     let settle = 0;
     let gone = false;
     // The size is this page's own, held to the floor (`sideSize`): paneforge
@@ -283,8 +293,11 @@
           Promise.allSettled(runs.map((run) => run.finished)).then(() => {
             if (!gone) {
               sliding = false;
+              moving = false;
             }
           });
+        } else {
+          moving = false;
         }
       });
     });
