@@ -9,7 +9,10 @@
  * excludes file), but for any whose text reads as a credential (core
  * secret-text.ts). A folder that is a git repository of its own is not
  * taken, as git takes no file of one. Nothing about a file's name decides
- * it: `Sessions.swift` and `tokens/` are a project's own.
+ * it: `Sessions.swift` and `tokens/` are a project's own. A file of
+ * {@link LARGE_FILE_BYTES} or more is left out too, never read, and offered
+ * to Git LFS by its pattern ({@link lfsRowsOf}); Track with LFS commits it through
+ * LFS in a second commit ({@link placeLfs}).
  *
  * What is left out is written into the place's `.gitignore` first, so the
  * owner's own `git status` there stays clean and a later `git add` takes no
@@ -23,12 +26,14 @@
  */
 import { lstat, mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import {
   credentialIn,
   LARGE_FILE_BYTES,
   PLACE_REPO_LIMIT_BYTES,
   type PlaceLeftOut,
+  type PlaceLfsMade,
+  type PlaceLfsRow,
   type PlaceRepo,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core";
@@ -37,6 +42,7 @@ import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
+import { configEnv, LFS_FILTERS } from "./move";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
 const AUTHOR = [
@@ -105,11 +111,15 @@ const HEAVIEST = 3;
 const ignoreLine = (path: string): string =>
   `/${path.replace(IGNORE_SPECIAL, (char) => `\\${char}`).replace(TRAILING_SPACE, "\\ ")}`;
 
+/** The heading of CawCo's block in the place's `.gitignore`. */
+const IGNORE_HEADING =
+  "# CawCo left these out of this folder's first commit: each holds what reads as a credential, is a large file, or is a git repository of its own.";
+
 /** The block the place's `.gitignore` gets: every path left out, one line each. */
 const ignoreBlock = (leftOut: readonly PlaceLeftOut[]): string =>
   leftOut.length === 0
     ? ""
-    : `# CawCo left these out of this folder's first commit: each holds what reads as a credential, is a large file, or is a git repository of its own.\n${leftOut
+    : `${IGNORE_HEADING}\n${leftOut
         .map((each) => ignoreLine(each.path))
         .join("\n")}\n`;
 
@@ -141,19 +151,33 @@ const within = async <T>(
   }
 };
 
-/** git as `safe-git.ts` says, in `cwd`, with pathspecs read literally (a file named `*` is that file). */
+/** What a git run is given beyond its argv: `config` env-only, and whether its pathspecs are literal. */
+interface GitSetting {
+  config: [string, string][];
+  literal: boolean;
+}
+
+const PLAIN: GitSetting = { config: [], literal: true };
+
+/**
+ * git as `safe-git.ts` says, in `cwd`, with `setting.config` given env-only
+ * and pathspecs read literally unless `setting.literal` is false (a file
+ * named `*` is that file).
+ */
 const spawnGit = (
   cwd: string,
   args: readonly string[],
   signal: AbortSignal,
-  stdin: "ignore" | Blob = "ignore"
+  stdin: "ignore" | Blob = "ignore",
+  setting: GitSetting = PLAIN
 ) =>
   Bun.spawn(safeGitArgv([...args]), {
     cwd,
     env: {
       ...hostEnvironment(),
       ...SAFE_GIT_ENV,
-      GIT_LITERAL_PATHSPECS: "1",
+      ...(setting.config.length > 0 ? configEnv(setting.config) : {}),
+      ...(setting.literal ? { GIT_LITERAL_PATHSPECS: "1" } : {}),
     },
     stdin,
     stdout: "pipe",
@@ -179,13 +203,14 @@ const failed = (
 
 /**
  * git in `cwd`, its stdout as written (never trimmed: a NUL-separated
- * list's first name may start with a space). git's stderr is the error.
+ * list's first name may start with a space), with `config` given env-only
+ * and pathspecs literal unless `literal` is false. git's stderr is the error.
  */
 const gitIn =
-  (deadline: number) =>
+  (deadline: number, config: [string, string][] = [], literal = true) =>
   (cwd: string, ...args: string[]): Promise<string> =>
     within(deadline, `git ${args[0]}`, async (signal) => {
-      const child = spawnGit(cwd, args, signal);
+      const child = spawnGit(cwd, args, signal, "ignore", { config, literal });
       const [stdout, stderr, code] = await Promise.all([
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
@@ -293,25 +318,47 @@ const untracked = async (
     )
   );
 
-/** What becomes of the paths git listed: the files a commit may take, by path, with their sizes, and what is left out and why. */
+/**
+ * What becomes of the paths git listed: the files a commit may take, by
+ * path, with their sizes, what is left out and why, and of that what its
+ * size alone kept out, with its size.
+ */
 interface Judged {
+  large: Map<string, number>;
   leftOut: PlaceLeftOut[];
   sizes: Map<string, number>;
 }
 
+/** Each of `paths` whose text reads as a credential, with what it reads as. */
+const credentialHits = async (
+  root: string,
+  paths: readonly string[]
+): Promise<PlaceLeftOut[]> => {
+  const hits: PlaceLeftOut[] = [];
+  for (const path of paths) {
+    // biome-ignore lint/performance/noAwaitInLoops: one file read at a time
+    const found = await credentialInFile(join(root, path));
+    if (found) {
+      hits.push({ path, why: `its text holds what reads as ${found}` });
+    }
+  }
+  return hits;
+};
+
 /**
  * The paths git listed, judged: a repository of its own is left out, as git
  * takes none of its files; so is a large file (core `LARGE_FILE_BYTES`, the
- * size a move sends separately), never read, and a file whose text reads as
- * a credential. A file or link is taken (a link as git takes one: its
- * target's path, never what it leads to); anything else git would not take
- * either.
+ * size a move sends separately), never read and offered to Git LFS instead,
+ * and a file whose text reads as a credential. A file or link is taken (a
+ * link as git takes one: its target's path, never what it leads to);
+ * anything else git would not take either.
  */
 const judge = async (
   root: string,
   listed: readonly string[]
 ): Promise<Judged> => {
   const sizes = new Map<string, number>();
+  const large = new Map<string, number>();
   const leftOut: PlaceLeftOut[] = [];
   for (const path of listed) {
     if (path.endsWith("/")) {
@@ -328,6 +375,7 @@ const judge = async (
         path,
         why: `a large file (${mb(info.size)}); a first commit takes none of ${mb(LARGE_FILE_BYTES)} or more`,
       });
+      large.set(path, info.size);
     } else if (info?.isFile()) {
       const found = await credentialInFile(full);
       if (found) {
@@ -339,8 +387,40 @@ const judge = async (
   }
   return {
     sizes,
+    large,
     leftOut: leftOut.sort((a, b) => a.path.localeCompare(b.path)),
   };
+};
+
+/** A file name's extension, without its dot; none for a dotfile or a name with none. */
+const extensionOf = (path: string): string | undefined => {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && dot < name.length - 1 ? name.slice(dot + 1) : undefined;
+};
+
+/**
+ * The large files a first commit left out, by the pattern Git LFS would
+ * track each under, in `git lfs migrate info`'s shape (pattern, count,
+ * size), biggest first: `*.<ext>` for a file with an extension, its own path
+ * for one without. Read here, not by `migrate info` itself, which "summarizes
+ * the sizes of file objects present in the Git history"
+ * (git-lfs-migrate(1)): these files are in none.
+ */
+export const lfsRowsOf = (
+  large: ReadonlyMap<string, number>
+): PlaceLfsRow[] => {
+  const rows = new Map<string, PlaceLfsRow>();
+  for (const [path, bytes] of large) {
+    const ext = extensionOf(path);
+    const pattern = ext ? `*.${ext}` : path;
+    const row = rows.get(pattern) ?? { pattern, count: 0, bytes: 0, paths: [] };
+    row.count += 1;
+    row.bytes += bytes;
+    row.paths.push(path);
+    rows.set(pattern, row);
+  }
+  return [...rows.values()].sort((a, b) => b.bytes - a.bytes);
 };
 
 /** A newline, which ends each header `git cat-file --batch` writes. */
@@ -517,6 +597,8 @@ export const publishCheck = async (
 interface Plan {
   bytes: number;
   leftOut: PlaceLeftOut[];
+  /** What of `leftOut` its size alone kept out, offered to Git LFS. */
+  lfs: PlaceLfsRow[];
   /** Each file it takes but its `.gitignore`, with its size. */
   sizes: Map<string, number>;
   /** Every file it takes but its `.gitignore`. */
@@ -533,13 +615,14 @@ const planOf = async (root: string, git: Git): Promise<Plan> => {
     const gitDir = join(scratch, "probe.git");
     await git(scratch, "init", "-q", "--bare", gitDir);
     const listed = await untracked(root, git, gitDir);
-    const { sizes, leftOut } = await judge(
+    const { sizes, large, leftOut } = await judge(
       root,
       listed.filter((path) => path !== ".gitignore")
     );
     return {
       sizes,
       leftOut,
+      lfs: lfsRowsOf(large),
       staged: [...sizes.keys()].sort(),
       bytes: [...sizes.values()].reduce((sum, size) => sum + size, 0),
     };
@@ -644,6 +727,7 @@ const commitPlan = async (
     const sizes = new Map([...plan.sizes].filter(([path]) => taken.has(path)));
     const kept: Plan = {
       leftOut,
+      lfs: plan.lfs,
       staged,
       sizes,
       bytes: [...sizes.values()].reduce((sum, size) => sum + size, 0),
@@ -863,6 +947,7 @@ const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
       bytes: plan.bytes + ignore,
       staged: [...plan.staged, ".gitignore"].sort(),
       leftOut: plan.leftOut,
+      lfs: plan.lfs,
     };
   }
   const made = await commitPlan(root, plan, git).catch((error: Error) => {
@@ -884,5 +969,143 @@ const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
     bytes: made.plan.bytes + made.ignoreBytes,
     staged: [...made.plan.staged, ".gitignore"].sort(),
     leftOut: made.plan.leftOut,
+    lfs: made.plan.lfs,
   };
+};
+
+/** `.gitignore`'s text with CawCo's lines for `paths` taken out, and its heading when none of its lines is left. */
+const unignored = (text: string, paths: readonly string[]): string => {
+  const gone = new Set(paths.map(ignoreLine));
+  const lines = text.split("\n").filter((line) => !gone.has(line));
+  const head = lines.indexOf(IGNORE_HEADING);
+  if (head >= 0 && !(lines[head + 1] ?? "").startsWith("/")) {
+    lines.splice(head, 1);
+  }
+  return lines.join("\n");
+};
+
+/** Whether `path` is `root` or lies inside it. */
+const under = (path: string, root: string): boolean =>
+  path === root || path.startsWith(`${root}${sep}`);
+
+/**
+ * {@link CONTROL_PLACE_LFS}: the large files a place's first commit left out
+ * (`rows`, as its offer named them) committed through Git LFS, by
+ * git-lfs-migrate(1)'s no-rewrite path: `git lfs track <patterns>`, their
+ * lines taken out of CawCo's block in `.gitignore`, then one commit as
+ * CawCo of `.gitattributes`, `.gitignore`, those files, and the files
+ * already committed that a pattern now covers, cleaned again (`git add
+ * --renormalize`). Only those paths are committed (`--only`): whatever else
+ * the person has changed or staged is left as it was. Each file is scanned
+ * for a credential first, as the first commit's were. git-lfs's filters are
+ * named here, whatever this machine's own config names.
+ */
+export const placeLfs = async (
+  path: unknown,
+  rows: unknown
+): Promise<PlaceLfsMade> => {
+  const root = String(path);
+  const offered = (Array.isArray(rows) ? rows : []) as PlaceLfsRow[];
+  const patterns = offered.map((row) => row.pattern);
+  const files = offered.flatMap((row) => row.paths);
+  if (patterns.length === 0) {
+    throw new Error("No large files were named to commit through Git LFS.");
+  }
+  if (!Bun.which("git-lfs")) {
+    throw new Error(
+      "git-lfs is not installed on this machine, so its large files can't be committed through it. Install git-lfs there and track them again."
+    );
+  }
+  const git = gitIn(Date.now() + WORKSPACE_GIT_TIMEOUT_MS, LFS_FILTERS);
+  const top = (await git(root, "rev-parse", "--show-toplevel")).trim();
+  if (top !== root) {
+    throw new Error(
+      `${root} is not the root of a git repository any more, so CawCo commits nothing there.`
+    );
+  }
+  let bytes = 0;
+  for (const file of files) {
+    // biome-ignore lint/performance/noAwaitInLoops: a handful of large files, each read once
+    const info = await lstat(join(root, file)).catch(() => undefined);
+    if (!(info?.isFile() && under(resolve(root, file), root))) {
+      throw new Error(
+        `${file} is no longer a file in ${root}, so nothing was committed. Its offer named it; track the rest yourself with \`git lfs track\`.`
+      );
+    }
+    bytes += info.size;
+  }
+  const hits = await credentialHits(root, files);
+  if (hits.length > 0) {
+    throw new Error(
+      `Nothing was committed: ${hits.map((hit) => `${hit.path} (${hit.why})`).join(", ")}.`
+    );
+  }
+  await git(root, "lfs", "track", "--", ...patterns);
+  const ignorePath = join(root, ".gitignore");
+  const ignore = await readFile(ignorePath, "utf8").catch(() => undefined);
+  if (ignore !== undefined) {
+    await writeStateFile(ignorePath, unignored(ignore, files));
+  }
+  const covered = nulList(
+    await gitIn(Date.now() + WORKSPACE_GIT_TIMEOUT_MS, LFS_FILTERS, false)(
+      root,
+      "ls-files",
+      "-z",
+      "--cached",
+      "--",
+      ...patterns.map((pattern) =>
+        pattern.startsWith("*.")
+          ? `:(glob)**/${pattern}`
+          : `:(literal)${pattern}`
+      )
+    )
+  );
+  const scratch = await mkdtemp(join(tmpdir(), "cawco-place-"));
+  try {
+    const pathspecs = join(scratch, "pathspecs");
+    const add = async (...args: string[]) => {
+      await git(
+        root,
+        ...args,
+        `--pathspec-from-file=${pathspecs}`,
+        "--pathspec-file-nul"
+      );
+    };
+    await writeStateFile(
+      pathspecs,
+      [
+        ".gitattributes",
+        ...(ignore === undefined ? [] : [".gitignore"]),
+        ...files,
+      ].join("\0")
+    );
+    await add("add");
+    const all = [
+      ".gitattributes",
+      ...(ignore === undefined ? [] : [".gitignore"]),
+      ...files,
+      ...covered,
+    ];
+    if (covered.length > 0) {
+      await writeStateFile(pathspecs, covered.join("\0"));
+      await add("add", "--renormalize");
+    }
+    await writeStateFile(pathspecs, all.join("\0"));
+    await add(
+      ...AUTHOR,
+      "commit",
+      "-q",
+      "--no-verify",
+      "--only",
+      "-m",
+      `CawCo: large files through Git LFS\n\n${files.length} ${files.length === 1 ? "file" : "files"}, ${mb(bytes)}, tracked as ${patterns.join(", ")}, by git-lfs-migrate(1)'s no-rewrite path. Nothing was pushed.`
+    );
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+  const commit = (await git(root, "rev-parse", "HEAD")).trim();
+  console.info(
+    `[place-repo] ${root}: ${files.length} large files committed through Git LFS in ${commit.slice(0, 9)}, tracked as ${patterns.join(" ")}`
+  );
+  return { commit, files: files.length, bytes, patterns };
 };

@@ -1839,11 +1839,35 @@ export const CONTROL_REPO_ROOT = "repoRoot";
 /** The most a place's first commit may weigh; a place past it stays a folder. */
 export const PLACE_REPO_LIMIT_BYTES = 500 * 1024 * 1024;
 
+/**
+ * The largest file a place's first commit takes; a bigger one is left out,
+ * and offered to Git LFS by its pattern ({@link PlaceLfsRow}). GitHub's
+ * line: "larger than 50 MiB, you will receive a warning … GitHub blocks
+ * files larger than 100 MiB".
+ */
+export const PLACE_REPO_FILE_LIMIT_BYTES = 50 * 1024 * 1024;
+
 /** One path a place's first commit leaves out, from the place's root, and why. */
 export interface PlaceLeftOut {
   /** From the place's root; a folder ends with `/`. */
   path: string;
   why: string;
+}
+
+/**
+ * Files a place's first commit left out for their size alone, by the
+ * pattern Git LFS would track them under, as `git lfs migrate info` rows
+ * read (extension, count, size): `*.<ext>` for a file with an extension,
+ * its own path from the place's root for one without. git-lfs-faq(7):
+ * "we recommend using patterns rather than `--above`".
+ */
+export interface PlaceLfsRow {
+  bytes: number;
+  /** How many of the left-out files it covers. */
+  count: number;
+  /** Those files, from the place's root. */
+  paths: string[];
+  pattern: string;
 }
 
 /** What {@link CONTROL_PLACE_REPO} found or did. */
@@ -1866,7 +1890,35 @@ export type PlaceRepo =
       /** Every path it takes, from the place's root. */
       staged: string[];
       leftOut: PlaceLeftOut[];
+      /**
+       * What of `leftOut` was left out for its size alone, past
+       * {@link PLACE_REPO_FILE_LIMIT_BYTES}, nothing else keeping it out
+       * (the folder's own ignore rules): what Git LFS is offered for, by
+       * pattern.
+       */
+      lfs: PlaceLfsRow[];
     };
+
+/**
+ * A place's left-out large files committed through Git LFS, once the person
+ * accepted the offer (hub lfs-offers.ts): `git lfs track <patterns>`, the
+ * paths taken out of CawCo's block in `.gitignore`, then a second commit as
+ * CawCo by git-lfs-migrate(1)'s no-rewrite path (`git add .gitattributes;
+ * git add --renormalize .; git commit`). Args `[path, PlaceLfsRow[]]`.
+ * Answers {@link PlaceLfsMade}. Refused, with the reason, when the place is
+ * no repository, git-lfs is not on the machine, or a path is no longer a
+ * file there. Machine-scoped.
+ */
+export const CONTROL_PLACE_LFS = "placeLfs";
+
+/** What {@link CONTROL_PLACE_LFS} committed. */
+export interface PlaceLfsMade {
+  bytes: number;
+  commit: string;
+  /** The left-out files it committed through LFS. */
+  files: number;
+  patterns: string[];
+}
 
 /**
  * Pushes a project's place, a git repository, to the hub's own remote of

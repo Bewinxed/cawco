@@ -168,6 +168,7 @@ import {
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PI_DEFAULT_MODEL,
+  CONTROL_PLACE_LFS,
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_PROBE_ACCOUNT,
@@ -543,7 +544,7 @@ import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
-import { addressOf, createHubAuth } from "./hub-auth";
+import { addressOf, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
@@ -566,6 +567,7 @@ import {
 import { type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { createLaws } from "./laws";
 import { createLeadGate, reviewProblem } from "./lead-gate";
+import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import {
@@ -18700,6 +18702,7 @@ export const createServer = (
       method === CONTROL_INPUTS_READ ||
       method === CONTROL_INPUTS_WRITE ||
       method === CONTROL_PLACE_REPO ||
+      method === CONTROL_PLACE_LFS ||
       method === CONTROL_PLACE_PUSH
         ? WORKSPACE_CREATE_TIMEOUT_MS
         : WORKSPACE_TIMEOUT_MS;
@@ -18733,9 +18736,8 @@ export const createServer = (
   const placeRepos = createPlaceRepos({
     call: callMachine,
     db,
-    notice: (projectId, threadId, note) => {
-      lead?.notice(projectId, threadId, note);
-    },
+    notice: (projectId, threadId, note) =>
+      lead?.notice(projectId, threadId, note) ?? null,
   });
   /** Each place's sheet stages as their machines last said, by port, and when: what holds its stage clone (work-items.ts `stageRuns`). */
   const placeStages = new Map<
@@ -19710,6 +19712,39 @@ export const createServer = (
     declined: (projectId) => projectStarters.designDeclined(projectId),
   });
   tasks.listen(designOffers.taskChanged);
+  /**
+   * Project `id` for a machine asking about its large files (agent
+   * host-lfs.ts): one that holds a place of it, and nothing else.
+   */
+  const lfsMachineProject = (
+    id: string,
+    caller: Caller
+  ): { row: ProjectRow } | { refused: string; status: 403 | 404 } => {
+    if (caller.kind !== "machine") {
+      return { status: 403, refused: "Only a machine asks this." };
+    }
+    const row = db.project(id);
+    if (!row) {
+      return { status: 404, refused: `There is no project ${id}.` };
+    }
+    return row.places.some((place) => place.machineId === caller.machineId)
+      ? { row }
+      : {
+          status: 403,
+          refused: `This machine holds no place of ${row.name}.`,
+        };
+  };
+  /** `<project>\n<endpoint>` refusals the project's thread was told of while the hub runs. */
+  const lfsRefusalsNoted = new Set<string>();
+  // Git LFS offered for the large files a place's first commit left out,
+  // under that note (lfs-offers.ts): tracked on the place's machine once the
+  // person says so.
+  const lfsOffers = createLfsOffers({
+    call: callMachine,
+    db,
+    notice: (projectId, threadId, note) =>
+      caw.notice(projectId, threadId, note),
+  });
   // A project's starters, written for it by Jev from what it holds now, on
   // its changes (project-starters.ts): a task filed or moved here; its
   // making, Caw's answers, attempts and routines at their own sites.
@@ -20255,6 +20290,7 @@ export const createServer = (
   const projectEdits = createProjectEdits({
     db,
     lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
+    lfsProblem: (connection) => connections.lfsProblem(connection),
     projectsChanged,
     stagesChanged: (projectId) => tasks.touched(projectId),
   });
@@ -22455,6 +22491,7 @@ export const createServer = (
         appleDiagnosticsRoutes(),
         projectOfferRoutes(projectOffers, YOU_ACTOR),
         designOfferRoutes(designOffers, YOU_ACTOR),
+        lfsOfferRoutes(lfsOffers),
         starterRoutes(projectStarters),
         planRoutes(plans),
         dispatchRoutes(dispatcher),
@@ -22677,6 +22714,79 @@ export const createServer = (
               "its process installed its credential"
             );
           }
+          return { ok: true };
+        }
+      )
+      // Where a project's large files live, for a machine that holds a place
+      // of it and runs git-lfs for it (agent host-lfs.ts): its declared LFS
+      // endpoint and the connection's key as HTTP Basic, or null when it
+      // declared none. Nothing but such a machine is answered.
+      .get(
+        "/api/lfs/projects/:id",
+        { ...hidden, params: t.Object({ id: t.String() }) },
+        ({ params, request, server, status }) => {
+          const project = lfsMachineProject(
+            params.id,
+            hubAuth.callerOf(request, addressOf(server, request))
+          );
+          if ("refused" in project) {
+            return status(project.status, project.refused);
+          }
+          const { lfsUrl, lfsConnection } = project.row;
+          if (!(lfsUrl && lfsConnection)) {
+            return { declared: null };
+          }
+          try {
+            return {
+              declared: {
+                endpoint: lfsUrl,
+                basic: connections.lfsBasic(lfsConnection),
+              },
+            };
+          } catch (error) {
+            return status(
+              409,
+              `${project.row.name}'s large files live at ${lfsUrl}, but its connection can't sign in there: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+      )
+      // A repository's `.lfsconfig` named an LFS endpoint that is neither its
+      // origin's nor the project's declared one (agent host-lfs.ts): its
+      // large files stayed pointers. The project's thread is told once per
+      // endpoint while the hub runs, with how to declare it.
+      .post(
+        "/api/lfs/projects/:id/refused",
+        {
+          ...hidden,
+          params: t.Object({ id: t.String() }),
+          body: t.Object({
+            root: t.String({ minLength: 1, maxLength: 4096 }),
+            endpoint: t.String({ minLength: 1, maxLength: 2000 }),
+          }),
+        },
+        ({ body, params, request, server, status }) => {
+          const caller = hubAuth.callerOf(request, addressOf(server, request));
+          const project = lfsMachineProject(params.id, caller);
+          if ("refused" in project) {
+            return status(project.status, project.refused);
+          }
+          const said = `${params.id}\n${body.endpoint}`;
+          if (lfsRefusalsNoted.has(said) || caller.kind !== "machine") {
+            return { ok: true };
+          }
+          lfsRefusalsNoted.add(said);
+          caw.notice(params.id, db.newestConversation(params.id)?.id ?? null, {
+            title: "Large files left as pointers: an undeclared LFS server",
+            event: {
+              kind: "repo",
+              root: body.root,
+              machineId: caller.machineId,
+              commit: null,
+              lfsRefused: body.endpoint,
+            },
+            body: `The repository's \`.lfsconfig\` says its large files live at ${body.endpoint}, which is neither its origin's LFS nor where ${project.row.name} declared its large files live. CawCo fetches nothing from a server it was not told of, so in ${body.root} on ${machineCalled(caller.machineId, db.listAgents())} they are pointer files, not the files themselves.\n\nIf they belong there, declare it: Project details › Large files, set to ${body.endpoint} with the connection that signs in there. Workspaces cut after that fetch them.`,
+          });
           return { ok: true };
         }
       )
@@ -25795,6 +25905,16 @@ export const createServer = (
             // Null: the fleet's answer (upstream.ts).
             upstreamPosts: t.Optional(
               t.Union([UPSTREAM_POSTS_SCHEMA, t.Null()])
+            ),
+            // Where its large files live; null: each origin's own LFS.
+            lfs: t.Optional(
+              t.Union([
+                t.Object({
+                  url: t.String({ maxLength: 2000 }),
+                  connection: t.String({ maxLength: 200 }),
+                }),
+                t.Null(),
+              ])
             ),
           }),
         },

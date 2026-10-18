@@ -7,7 +7,10 @@
  * a dispatch setting, written by the dispatcher's own `configure`
  * (`lands`), so the dispatcher looks at the project again as it changes.
  * The upstream choice is the person's alone: it is what keeps sessions, Caw
- * among them, off other people's repositories. The change reaches every
+ * among them, off other people's repositories. So is where its large files
+ * live (`lfs`): an LFS endpoint bound to a fleet connection, which every
+ * git-lfs run on a machine for the project is held to with that
+ * connection's key (agent host-lfs.ts). The change reaches every
  * dashboard and the app at once: `projects.changed` makes each read the
  * projects again, and a review change is a change to the stages the hub
  * applies, so the project's boards read its tasks and stages again too.
@@ -27,6 +30,12 @@ const CONTROL = /[\u0000-\u001f\u007f]/;
 export interface ProjectEdit {
   /** Where its attempts land when their task says nothing. */
   lands?: LandsMode;
+  /**
+   * Where its large files live: an LFS endpoint (or the clone URL of the
+   * repository whose LFS it is) and the connection whose key signs in
+   * there; null: each repository's own origin's LFS.
+   */
+  lfs?: { connection: string; url: string } | null;
   name?: string;
   review?: boolean;
   /** Whether its sessions may post to other repositories (off, ask first, on); null: the fleet's answer. */
@@ -60,15 +69,81 @@ export const projectName = (raw: string): string => {
   return name;
 };
 
+const LFS_PATH = /\/info\/lfs\/*$/;
+const TRAILING_SLASH = /\/+$/;
+
+/**
+ * An LFS endpoint as a project declares it: an https URL with no credential
+ * in it, taken as the endpoint when it ends in `/info/lfs`, else read as a
+ * repository's clone URL and given the endpoint git-lfs derives from one
+ * (`<url>.git/info/lfs`, lfsapi/endpoint_finder.go
+ * `NewEndpointFromCloneURL`).
+ */
+export const lfsEndpoint = (raw: string): string => {
+  if (!URL.canParse(raw.trim())) {
+    throw new ProjectEditRefusal(
+      400,
+      "Large files live at a URL: the repository's, or its LFS endpoint (…/info/lfs)."
+    );
+  }
+  const url = new URL(raw.trim());
+  if (url.protocol !== "https:") {
+    throw new ProjectEditRefusal(
+      400,
+      "Large files live at an https URL: a connection's key never goes over plain http."
+    );
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new ProjectEditRefusal(
+      400,
+      "Give the URL alone: the connection signs in, so it carries no name, key or query."
+    );
+  }
+  const plain = url.toString().replace(TRAILING_SLASH, "");
+  if (LFS_PATH.test(url.pathname)) {
+    return plain;
+  }
+  return plain.endsWith(".git") ? `${plain}/info/lfs` : `${plain}.git/info/lfs`;
+};
+
 export interface ProjectEditsDeps {
   readonly db: Pick<DbShape, "project" | "setProjectDetails">;
   /** Where its work lands, through the dispatch settings' own path (dispatch.ts `configure`). */
   readonly lands: (projectId: string, lands: LandsMode) => Promise<unknown>;
+  /** Why a connection cannot sign in to a declared LFS endpoint; none when it can (connections.ts `lfsProblem`). */
+  readonly lfsProblem: (connection: string) => string | undefined;
   /** Every dashboard and the app read the projects again. */
   readonly projectsChanged: () => void;
   /** The project's boards read its tasks and stages again (tasks.ts `touched`). */
   readonly stagesChanged: (projectId: string) => void;
 }
+
+/** The Large files setting as the row keeps it, checked; undefined when not asked or not changed. */
+const lfsChange = (
+  project: ProjectRow,
+  asked: ProjectEdit["lfs"],
+  lfsProblem: ProjectEditsDeps["lfsProblem"]
+): Pick<ProjectRow, "lfsConnection" | "lfsUrl"> | undefined => {
+  if (asked === undefined) {
+    return;
+  }
+  if (asked === null) {
+    return project.lfsUrl === null && project.lfsConnection === null
+      ? undefined
+      : { lfsUrl: null, lfsConnection: null };
+  }
+  const lfsUrl = lfsEndpoint(asked.url);
+  const lfsConnection = asked.connection.trim();
+  const why = lfsConnection
+    ? lfsProblem(lfsConnection)
+    : "Name the connection that signs in there.";
+  if (why) {
+    throw new ProjectEditRefusal(400, why);
+  }
+  return lfsUrl === project.lfsUrl && lfsConnection === project.lfsConnection
+    ? undefined
+    : { lfsUrl, lfsConnection };
+};
 
 /** What `asked` changes of `project`: each field asked that differs, the name checked. */
 const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
@@ -105,6 +180,7 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
 export const createProjectEdits = ({
   db,
   lands,
+  lfsProblem,
   projectsChanged,
   stagesChanged,
 }: ProjectEditsDeps) => ({
@@ -125,14 +201,19 @@ export const createProjectEdits = ({
       asked.name === undefined &&
       asked.review === undefined &&
       asked.lands === undefined &&
-      asked.upstreamPosts === undefined
+      asked.upstreamPosts === undefined &&
+      asked.lfs === undefined
     ) {
       throw new ProjectEditRefusal(
         400,
-        "Name what changes: the project's name, whether it reviews before done, where its work lands, or whether its agents may post to other repositories."
+        "Name what changes: the project's name, whether it reviews before done, where its work lands, whether its agents may post to other repositories, or where its large files live."
       );
     }
-    const { lands: landsTo, ...details } = changeOf(project, asked);
+    const { lands: landsTo, lfs: _lfs, ...asks } = changeOf(project, asked);
+    const details = {
+      ...asks,
+      ...lfsChange(project, asked.lfs, lfsProblem),
+    };
     if (Object.keys(details).length === 0 && landsTo === undefined) {
       return project;
     }

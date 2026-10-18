@@ -76,10 +76,23 @@ import type { GitPost, PushedRef } from "@cawco/core/upstream-post";
 import { upstreamRule } from "./github-door";
 import { hostGh } from "./host-gh";
 import {
+  declaredLfs,
+  hostSigns,
+  noteRefused,
+  undeclaredEndpoint,
+  workspaceProjectOf,
+} from "./host-lfs";
+import {
+  type DeclaredLfs,
+  declaredPins,
   hubGitEnv,
   hubGitLogin,
   isHubRemote,
   LFS_FILTERS,
+  lfsEndpointOf,
+  lfsPins,
+  originEndpoint,
+  urlOrigin,
   withoutCredential,
 } from "./move";
 import { noRepositoryAt } from "./stand-ins";
@@ -319,16 +332,47 @@ const movedRefs = (
     .map(([name]) => name);
 
 /**
+ * Where a workspace's git-lfs may reach for its clone's origin (host-lfs.ts):
+ * the project's declared endpoint, when it declared one, else the origin's
+ * own; and the project, whose thread is told of any other a `.lfsconfig`
+ * names.
+ */
+interface DoorLfs {
+  allowed: (string | undefined)[];
+  declared: DeclaredLfs | undefined;
+  projectId: string | undefined;
+}
+
+/** {@link DoorLfs} for `ref`'s clone, whose origin is `origin`, as its project declared it on the hub. */
+const doorLfsOf = async (
+  ref: WorkspaceRef,
+  origin: string
+): Promise<DoorLfs> => {
+  const projectId = await workspaceProjectOf(ref.id);
+  const declared = await declaredLfs(projectId);
+  return {
+    allowed: [originEndpoint(origin), declared?.endpoint],
+    declared,
+    projectId,
+  };
+};
+
+/**
  * The large files the trees of `refs` point at, fetched from the hub's LFS
  * into the clone's own store (`git lfs fetch origin <ref>…`, this machine's
  * credential): inside the boundary git-lfs reaches no hub, so a checkout or
  * rebase there onto a fetched commit (landing onto a newer default branch,
- * a session's own `git pull`) smudges from what is already here.
+ * a session's own `git pull`) smudges from what is already here. When a
+ * fetched commit's `.lfsconfig` names an endpoint that is none of `lfs`'s
+ * `allowed` (the origin's, the project's declared one), nothing is fetched
+ * from anywhere: its files live on a server CawCo was never told of, they
+ * stay pointers, and the project's thread is told (host-lfs.ts).
  */
 const fetchLfs = async (
   ref: WorkspaceRef,
   refs: string[],
-  env: Record<string, string>
+  env: Record<string, string>,
+  lfs: DoorLfs
 ): Promise<void> => {
   if (refs.length === 0 || !Bun.which("git-lfs")) {
     return;
@@ -336,6 +380,11 @@ const fetchLfs = async (
   const gone = await noClone(ref);
   if (gone) {
     throw new Error(`git lfs fetch of ${refs.join(" ")} did not run: ${gone}`);
+  }
+  const refused = await undeclaredEndpoint(ref.path, refs, lfs.allowed);
+  if (refused) {
+    await noteRefused(lfs.projectId, ref.path, refused);
+    return;
   }
   const child = Bun.spawn(safeGitArgv(["lfs", "fetch", "origin", ...refs]), {
     cwd: ref.path,
@@ -596,6 +645,37 @@ export const hostGitEnv = async (): Promise<Record<string, string>> => {
       ...DOOR_LFS,
     ]
   );
+};
+
+/**
+ * {@link hostGitEnv} for the clone's own origin `origin` outside the hub,
+ * with git-lfs held to one endpoint whatever the repository's committed
+ * `.lfsconfig` names (move.ts {@link lfsPins}): the project's `declared`
+ * one with its connection's credential ({@link declaredPins}), else the
+ * origin's own LFS, its access `basic` where the host signs in there (gh for
+ * github.com, or the host's own helpers, host-lfs.ts `hostSigns`). An ssh
+ * origin's endpoint is the URL itself, for which git-lfs asks that server
+ * over ssh, as {@link lfsConfigFor} gives another repository's. So a push's
+ * or a fetch's large files go nowhere else, and the host's credential goes
+ * to no other server.
+ */
+export const hostOriginGitEnv = async (
+  origin: string,
+  declared?: DeclaredLfs
+): Promise<Record<string, string>> => {
+  const env = await hostGitEnv();
+  if (declared) {
+    return withGitConfig(env, declaredPins(declared, urlOrigin(origin)));
+  }
+  const web = urlOrigin(origin);
+  if (!web?.startsWith("http")) {
+    return withGitConfig(env, lfsConfigFor(origin));
+  }
+  const endpoint = lfsEndpointOf(origin);
+  const signed =
+    (web === "https://github.com" && (await hostGh()) !== undefined) ||
+    (await hostSigns(endpoint));
+  return withGitConfig(env, lfsPins(endpoint, signed));
 };
 
 /**
@@ -1005,13 +1085,19 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
       throw new Error(`git did not run in ${ref.path}: ${problem}`);
     }
     const target = doorTarget(ref, url);
+    // git-lfs held to the clone's origin's LFS, or its project's declared
+    // one (host-lfs.ts): read before the door answers, so a run whose
+    // endpoint the hub could not say does not start.
+    const lfs = await doorLfsOf(ref, originOf(ref.path));
     socket.write("ok\n");
     switch (target.kind) {
       case "hub":
-        pipeHubHelper(ref, socket, url, rest);
+        pipeHubHelper(ref, socket, url, rest, lfs);
         return;
       case "host": {
-        const env = await hostGitEnv();
+        const env = target.origin
+          ? await hostOriginGitEnv(url, lfs.declared)
+          : await hostGitEnv();
         const before = remoteRefs(ref.path);
         serveHelper(
           socket,
@@ -1027,7 +1113,8 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
             await fetchLfs(
               ref,
               movedRefs(before, remoteRefs(ref.path)),
-              env
+              env,
+              lfs
             ).catch((error: unknown) =>
               console.warn(
                 `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
@@ -1047,14 +1134,19 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
   socket.on("error", () => undefined);
 };
 
-/** The hub's own remote: git's http helper on the host with this machine's hub credential, piped both ways, the hub's LFS with it. */
+/**
+ * The hub's own remote: git's http helper on the host with this machine's
+ * hub credential, piped both ways, the hub's LFS with it, or the project's
+ * declared LFS with its connection's credential (move.ts `hubGitEnv`).
+ */
 const pipeHubHelper = (
   ref: WorkspaceRef,
   socket: Socket,
   url: string,
-  rest: Buffer
+  rest: Buffer,
+  lfs: DoorLfs
 ): void => {
-  const env = hubGitEnv(url);
+  const env = hubGitEnv(url, [], lfs.declared);
   const scheme = new URL(url).protocol === "https:" ? "https" : "http";
   const child = spawn(
     "git",
@@ -1079,7 +1171,7 @@ const pipeHubHelper = (
     // git waits on the helper as it disconnects, after it has written the
     // refs it fetched: the door closes once their large files are here.
     const moved = code === 0 ? movedRefs(before, remoteRefs(ref.path)) : [];
-    fetchLfs(ref, moved, env)
+    fetchLfs(ref, moved, env, lfs)
       .catch((error: unknown) =>
         console.warn(
           `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`

@@ -77,10 +77,22 @@ import { placedAsMade } from "./fleet";
 import { expandHome } from "./fs";
 import { useHubCredentialHelper } from "./git-credential";
 import {
+  declaredLfs,
+  hostSigns,
+  noteRefused,
+  undeclaredEndpoint,
+} from "./host-lfs";
+import {
+  configEnv,
+  type DeclaredLfs,
+  declaredPins,
   hubGitEnv,
   hubRepo,
   isHubRemote,
   LFS_FILTERS,
+  lfsPins,
+  originEndpoint,
+  urlOrigin,
   withoutCredential,
 } from "./move";
 import { noRepositoryAt, straysIn } from "./stand-ins";
@@ -154,6 +166,71 @@ const marksLfs = (git: Git, repo: string, treeish: string): Promise<boolean> =>
     () => true,
     () => false
   );
+
+/**
+ * The git a new clone at `path` checks out `start` with when its tree marks
+ * files for LFS, git-lfs held to one endpoint whatever the branch's
+ * `.lfsconfig` says (host-lfs.ts): the project's `declared` one with its
+ * connection's credential, else the origin's own. A hub origin's comes
+ * from its repository's LFS on the hub with this machine's credential, and
+ * git-lfs's filters named here, whatever this machine's own config names;
+ * an outside origin's runs with this machine's own filters and credential
+ * helpers, its access `basic` only when those hold one for the endpoint
+ * (host-lfs.ts `hostSigns`). An ssh origin's endpoint is not pinned: git-lfs
+ * derives it, and authenticates over ssh. A `.lfsconfig` at `start` that
+ * names any other endpoint leaves every large file a pointer
+ * (`GIT_LFS_SKIP_SMUDGE=1`), and the project's thread is told.
+ */
+export const lfsCheckout = async ({
+  deadline,
+  declared,
+  hub,
+  path,
+  plain,
+  projectId,
+  start,
+}: {
+  deadline: number;
+  declared: DeclaredLfs | undefined;
+  hub: string | undefined;
+  path: string;
+  plain: Git;
+  projectId: unknown;
+  start: string;
+}): Promise<Git> => {
+  const origin = hub ?? (await plain(path, "remote", "get-url", "origin"));
+  const own = originEndpoint(origin);
+  const refused = await undeclaredEndpoint(
+    path,
+    [start],
+    [own, declared?.endpoint]
+  );
+  const project =
+    typeof projectId === "string" && projectId ? projectId : undefined;
+  if (refused) {
+    await noteRefused(project, path, refused);
+  }
+  const skip: Record<string, string> = refused
+    ? { GIT_LFS_SKIP_SMUDGE: "1" }
+    : {};
+  if (hub) {
+    return gitUntil(deadline, {
+      ...hubGitEnv(hub, LFS_FILTERS, declared),
+      ...skip,
+    });
+  }
+  let pins: [string, string][] = [];
+  if (declared) {
+    pins = declaredPins(declared, urlOrigin(origin));
+  } else if (urlOrigin(origin)?.startsWith("http")) {
+    pins = lfsPins(own, await hostSigns(own));
+  }
+  return gitUntil(deadline, {
+    ...hostEnvironment(),
+    ...configEnv(pins),
+    ...skip,
+  } as Record<string, string>);
+};
 
 /**
  * The branch a workspace of `repo`, whose `origin` is the hub, is cut from
@@ -239,13 +316,15 @@ const inSource = <T>(repo: string, work: () => Promise<T>): Promise<T> => {
  * `source` (another workspace's clone, whose config is that workspace's) is
  * none, and the branch the workspace starts from ({@link hubBase}). `hub` is
  * that origin's URL when it is the hub's, which every git that reaches it
- * runs under ({@link hubGitEnv}).
+ * runs under ({@link hubGitEnv}), git-lfs held to the project's `declared`
+ * endpoint when it has one.
  */
 const readySource = (
   repoRoot: string,
   projectId: unknown,
   fromClone: boolean,
-  deadline: number
+  deadline: number,
+  declared: DeclaredLfs | undefined
 ): Promise<{ hub: string | undefined; known: string | undefined }> =>
   inSource(repoRoot, async () => {
     const plain = gitUntil(deadline);
@@ -271,7 +350,10 @@ const readySource = (
       useHubCredentialHelper(repoRoot);
     }
     const known = hub
-      ? await hubBase(gitUntil(deadline, hubGitEnv(hub)), repoRoot)
+      ? await hubBase(
+          gitUntil(deadline, hubGitEnv(hub, [], declared)),
+          repoRoot
+        )
       : undefined;
     return { hub, known };
   });
@@ -324,11 +406,13 @@ export const createWorkspace = async (
   if (problem) {
     throw new Error(`${repoRoot} cannot have a workspace: ${problem}`);
   }
+  const declared = await declaredLfs(projectId);
   const { hub, known } = await readySource(
     repoRoot,
     projectId,
     Boolean(source),
-    deadline
+    deadline,
+    declared
   );
   const authed = hub ? gitUntil(deadline, hubGitEnv(hub)) : plain;
   const id = String(workspaceId);
@@ -354,13 +438,17 @@ export const createWorkspace = async (
       await fetchCut(path, id, base, cut, authed);
     }
     const start = cut ? cut.commit : `origin/${base}`;
-    // A hub branch's large files come down with the checkout, from its own
-    // repository's LFS on the hub, whatever filters this machine's own
-    // config names and whatever the branch's `.lfsconfig` says.
-    const checkout =
-      hub && (await marksLfs(authed, path, start))
-        ? gitUntil(deadline, hubGitEnv(hub, LFS_FILTERS))
-        : authed;
+    const checkout = (await marksLfs(authed, path, start))
+      ? await lfsCheckout({
+          deadline,
+          declared,
+          hub,
+          path,
+          plain,
+          projectId,
+          start,
+        })
+      : authed;
     await checkout(path, "checkout", "--quiet", "-b", branch, start);
     if (cut) {
       await plain(

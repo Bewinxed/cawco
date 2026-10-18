@@ -112,6 +112,7 @@ import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import { type FindDb, findDb } from "./find";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
+import { type LfsOffersDb, lfsOffersDb } from "./lfs-offers";
 import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
@@ -1029,6 +1030,8 @@ export interface DbShape {
   readonly leadSends: (projectId: string, after: Date) => SentMessageRow[];
   /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
   readonly leadTurns: () => LeadTurnRow[];
+  /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
+  readonly lfsOffers: LfsOffersDb;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -1998,7 +2001,12 @@ export interface DbShape {
   /** The project's name, its Review before done and its upstream choice, as project-edit.ts checked them. */
   readonly setProjectDetails: (
     id: string,
-    change: Partial<Pick<ProjectRow, "name" | "review" | "upstreamPosts">>
+    change: Partial<
+      Pick<
+        ProjectRow,
+        "lfsConnection" | "lfsUrl" | "name" | "review" | "upstreamPosts"
+      >
+    >
   ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
   readonly setProjectDispatch: (
@@ -9020,6 +9028,7 @@ const make = async (path: string): Promise<DbShape> => {
     atLimit: atLimitDb(db),
     designChecks: designChecksDb(db),
     designOffers: designOffersDb(db),
+    lfsOffers: lfsOffersDb(db),
     blocks: blocksDb(db),
     starters: startersDb(db),
     routines: routinesDb(db),

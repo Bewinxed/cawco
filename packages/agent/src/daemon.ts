@@ -43,6 +43,7 @@ import {
   CONTROL_MOVE_PREPARE,
   CONTROL_MOVE_REMOTE_CREDENTIAL,
   CONTROL_MOVE_SNAPSHOT,
+  CONTROL_PLACE_LFS,
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_READ_HOME_CREDENTIALS,
@@ -198,7 +199,7 @@ import {
   setMoveProgress,
 } from "./move";
 import { placePush } from "./place-push";
-import { placeRepo, repoRoot } from "./place-repo";
+import { placeLfs, placeRepo, repoRoot } from "./place-repo";
 import { servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
 import { parseProcId, procIdFor, SESSION_PROC_KINDS } from "./proc-id";
@@ -2988,6 +2989,12 @@ export const startDaemon = (rediscover = false) =>
     // What a workspace cut from a folder is cut from: read only.
     supervisor.registerDaemonFunction(CONTROL_REPO_ROOT, (path) =>
       repoRoot(path)
+    );
+    // A place's left-out large files through Git LFS, once the person accepted: a second commit.
+    supervisor.registerDaemonFunction(CONTROL_PLACE_LFS, (path, rows) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : placeLfs(path, rows)
     );
     // A place published to GitHub goes through the hub's remote first.
     supervisor.registerDaemonFunction(

@@ -15,6 +15,8 @@
    *   session's to continue or discard, never yours (hub work-items.ts
    *   `heldNotice`).
    * - Repository: read from the folder's remote, said so.
+   * - Large files: each origin's own LFS, or where the project declared
+   *   they live, bound to a connection with a key (hub project-edit.ts).
    * - Work lands: where its attempts land when their task says nothing.
    * - Landing checks: the steps the hub runs before work lands, read from
    *   the project folder's gate.md (`GET /api/projects/:id/gate`), with a
@@ -44,6 +46,7 @@
     type IssueTracker,
     LANDS_MODES,
     type LandsMode,
+    lfsWords,
     machineLabel,
     type ProjectGate,
     statusOptionFor,
@@ -60,6 +63,7 @@
     editProject,
     type Machine,
     type ProjectRow,
+    readConnections,
     removeProjectPlace,
   } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -442,6 +446,65 @@
     }
   }
 
+  /* ── Large files ────────────────────────────────────────────────── */
+
+  type LfsAsk = { connection: string; url: string } | null;
+
+  let lfsEditing = $state(false);
+  let lfsUrl = $state("");
+  let lfsConnection = $state("");
+  let lfsPending = $state(false);
+  let lfsFault = $state<string | null>(null);
+  /** The fleet's connections, read once the form opens; only one with a key signs in to an LFS server. */
+  let connections = $state<ConnectionView[]>([]);
+  let lfsListed = $state(false);
+  const lfsKeyed = $derived(
+    connections.filter(
+      (each) =>
+        each.hasSecret && (each.auth === "bearer" || each.auth === "header")
+    )
+  );
+
+  async function startLfs(): Promise<void> {
+    lfsEditing = true;
+    lfsFault = null;
+    lfsUrl = project.lfsUrl ?? "";
+    lfsConnection = project.lfsConnection ?? "";
+    try {
+      connections = await readConnections();
+      lfsListed = true;
+      lfsConnection ||= lfsKeyed[0]?.name ?? "";
+    } catch (error) {
+      lfsFault = failureWords(error);
+    }
+  }
+
+  function stopLfs(): void {
+    lfsEditing = false;
+    lfsFault = null;
+  }
+
+  /** Try again: the last setting asked, once more. */
+  let lfsTried: LfsAsk | undefined;
+
+  async function saveLfs(next: LfsAsk): Promise<void> {
+    if (lfsPending) {
+      return;
+    }
+    lfsTried = next;
+    lfsPending = true;
+    lfsFault = null;
+    try {
+      await editProject(project.id, { lfs: next });
+      lfsEditing = false;
+    } catch (error) {
+      // The typed URL stays, the hub's words under it.
+      lfsFault = failureWords(error);
+    } finally {
+      lfsPending = false;
+    }
+  }
+
   /* ── Places ─────────────────────────────────────────────────────── */
 
   let listOpen = $state(false);
@@ -770,6 +833,106 @@
             here.
           </p>
         {/if}
+      </div>
+    </div>
+
+    <!-- Large files: each origin's own LFS, or where the project declared
+         they live, bound to a connection with a key. -->
+    <div data-slot="row" class="row" data-detail="lfs">
+      <p data-slot="project-details-label" class="label">{lfsWords.label}</p>
+      <div data-slot="value" class="value">
+        {#if project.lfsUrl}
+          <p class="fact" data-lfs-url><bdi>{project.lfsUrl}</bdi></p>
+          <p data-slot="note" class="note">
+            {lfsWords.declared(project.lfsConnection ?? "")}
+            {lfsWords.pinned}
+          </p>
+        {:else}
+          <p data-slot="note" class="note">{lfsWords.own}</p>
+        {/if}
+        {#if lfsEditing}
+          <form
+            data-slot="add"
+            class="add"
+            data-lfs-form
+            onsubmit={(event) => {
+              event.preventDefault();
+              saveLfs({ url: lfsUrl.trim(), connection: lfsConnection });
+            }}
+            transition:unfold
+          >
+            <NativeSelect.Root
+              aria-label={lfsWords.connection}
+              class="add-machine"
+              disabled={lfsKeyed.length === 0}
+              size="sm"
+              bind:value={lfsConnection}
+            >
+              {#each lfsKeyed as each (each.name)}
+                <NativeSelect.Option value={each.name}
+                  >{each.name}</NativeSelect.Option
+                >
+              {/each}
+            </NativeSelect.Root>
+            <Input
+              aria-label={lfsWords.url}
+              autocomplete="off"
+              class="add-path h-[30px] text-label"
+              placeholder={lfsWords.urlPlaceholder}
+              spellcheck="false"
+              type="url"
+              bind:value={lfsUrl}
+            />
+            {#if lfsKeyed.length === 0 && lfsListed}
+              <p data-slot="note" class="note lfs-none">
+                {lfsWords.noConnections}
+              </p>
+            {/if}
+            <div class="add-acts">
+              <Button
+                label={lfsWords.cancel}
+                onclick={stopLfs}
+                size="sm"
+                type="button"
+                variant="ghost"
+              />
+              <Button
+                disabled={!(lfsConnection && lfsUrl.trim())}
+                label={lfsWords.save}
+                pending={lfsPending}
+                pendingLabel={lfsWords.saving}
+                size="sm"
+                type="submit"
+              />
+            </div>
+          </form>
+        {:else}
+          <div class="lfs-acts">
+            <Button
+              data-lfs-declare
+              label={project.lfsUrl ? lfsWords.change : lfsWords.declare}
+              onclick={startLfs}
+              size="xs"
+              variant="ghost"
+            />
+            {#if project.lfsUrl}
+              <Button
+                data-lfs-clear
+                label={lfsWords.clear}
+                onclick={() => saveLfs(null)}
+                pending={lfsPending}
+                pendingLabel={lfsWords.clearing}
+                size="xs"
+                variant="ghost"
+              />
+            {/if}
+          </div>
+        {/if}
+        <RowFault
+          again={() => (lfsTried === undefined ? undefined : saveLfs(lfsTried))}
+          data-lfs-fault
+          reason={lfsFault}
+        />
       </div>
     </div>
 
@@ -1279,6 +1442,15 @@
   }
   .add :global(.add-machine) {
     inline-size: 100%;
+  }
+  .lfs-none {
+    grid-column: 1 / -1;
+  }
+  .lfs-acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding-block-start: var(--space-1);
   }
   .add-acts {
     display: flex;

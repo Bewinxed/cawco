@@ -1986,6 +1986,7 @@ export * from "./words/connections";
 export * from "./words/decisions";
 export * from "./words/delegate-types";
 export * from "./words/helpers";
+export * from "./words/lfs";
 export * from "./words/made";
 export * from "./words/mcp";
 export * from "./words/memory";

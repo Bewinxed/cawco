@@ -32,6 +32,7 @@
    */
   import type { Message } from "../types";
   import DesignOfferActions from "./DesignOfferActions.svelte";
+  import LfsOfferActions from "./LfsOfferActions.svelte";
   import RoutineMadeActions from "./RoutineMadeActions.svelte";
   import type { HarnessNote } from "./rows";
 
@@ -108,6 +109,8 @@
   const designOffer = $derived(
     wokeCaw ? message?.metadata?.designOffer : undefined
   );
+  /** A folder made a repository with large files left out: Git LFS offered for them under its line. */
+  const lfsOffer = $derived(wokeCaw ? message?.metadata?.lfsOffer : undefined);
   /** The pane's word under a not-woken note's title: the reason and Try again. */
   const voice = useVoice();
   const under = $derived(
@@ -385,6 +388,9 @@
     {#if designOffer}
       <DesignOfferActions offer={designOffer} />
     {/if}
+    {#if lfsOffer}
+      <LfsOfferActions offer={lfsOffer} />
+    {/if}
   </div>
 {:else}
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
@@ -412,6 +418,9 @@
     {/if}
     {#if designOffer}
       <DesignOfferActions offer={designOffer} />
+    {/if}
+    {#if lfsOffer}
+      <LfsOfferActions offer={lfsOffer} />
     {/if}
   </div>
 {/if}

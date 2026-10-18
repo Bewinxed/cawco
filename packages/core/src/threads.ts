@@ -4,7 +4,7 @@
  * `thread.message` frames carry, and the dashboard draws.
  */
 import type { CawHarness } from "./delegate-types";
-import type { UserAnswers, UserQuestion } from "./harness";
+import type { PlaceLfsRow, UserAnswers, UserQuestion } from "./harness";
 
 /** A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
 export interface CawView {
@@ -272,8 +272,20 @@ export type ThreadEvent =
   | {
       commit: string | null;
       kind: "repo";
+      /**
+       * The large files its first commit left out, offered to Git LFS: the
+       * offer, read and answered at `/api/lfs-offers/:id` (hub
+       * lfs-offers.ts). Absent when nothing was left out for its size.
+       */
+      lfsOffer?: string;
+      /**
+       * An LFS endpoint the repository's `.lfsconfig` names that is neither
+       * its origin's nor the project's declared one: its large files stayed
+       * pointers, and nothing was fetched from there (agent host-lfs.ts).
+       */
+      lfsRefused?: string;
       machineId: string;
-      /** The folder made a repository. */
+      /** The folder made a repository, or the clone the refusal was in. */
       root: string;
     }
   | { kind: "hub"; what: "thread-repaired" }
@@ -339,6 +351,19 @@ export interface DesignOfferState {
   answer: "open" | "built" | "dismissed";
   /** The task Build filed. */
   builtTaskId: string | null;
+}
+
+/** Where a place's offer of Git LFS stands (`GET /api/lfs-offers/:id`, hub lfs-offers.ts). */
+export interface LfsOfferState {
+  /** `open` while unanswered; `tracked`: its files are committed through LFS; `dismissed`: Not now. */
+  answer: "open" | "tracked" | "dismissed";
+  /** The commit that took them through LFS; null until then. */
+  commit: string | null;
+  id: string;
+  /** The folder's root on its machine. */
+  root: string;
+  /** What is offered, a row per pattern. */
+  rows: PlaceLfsRow[];
 }
 
 /**

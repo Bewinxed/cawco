@@ -8360,6 +8360,387 @@
         }
       }
     },
+    "/api/lfs-offers/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiLfsOffersById",
+        "responses": {
+          "200": {
+            "description": "getApiLfsOffersById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LfsOfferState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiLfsOffersById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiLfsOffersById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiLfsOffersById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiLfsOffersById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiLfsOffersById 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiLfsOffersById 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiLfsOffersById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiLfsOffersById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiLfsOffersById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiLfsOffersById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lfs-offers/{id}/dismiss": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiLfsOffersByIdDismiss",
+        "responses": {
+          "200": {
+            "description": "postApiLfsOffersByIdDismiss 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LfsOfferState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiLfsOffersByIdDismiss 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiLfsOffersByIdDismiss 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiLfsOffersByIdDismiss 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiLfsOffersByIdDismiss 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiLfsOffersByIdDismiss 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiLfsOffersByIdDismiss 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiLfsOffersByIdDismiss 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiLfsOffersByIdDismiss 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiLfsOffersByIdDismiss 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiLfsOffersByIdDismiss 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lfs-offers/{id}/track": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiLfsOffersByIdTrack",
+        "responses": {
+          "200": {
+            "description": "postApiLfsOffersByIdTrack 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LfsOfferState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiLfsOffersByIdTrack 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiLfsOffersByIdTrack 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiLfsOffersByIdTrack 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiLfsOffersByIdTrack 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiLfsOffersByIdTrack 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiLfsOffersByIdTrack 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiLfsOffersByIdTrack 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiLfsOffersByIdTrack 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiLfsOffersByIdTrack 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiLfsOffersByIdTrack 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/starters/outcome": {
       "post": {
         "parameters": [
@@ -23448,6 +23829,26 @@
                       "ask",
                       "on"
                     ]
+                  },
+                  "lfs": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "url": {
+                        "maxLength": 2000,
+                        "type": "string"
+                      },
+                      "connection": {
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "url",
+                      "connection"
+                    ]
                   }
                 }
               }
@@ -28827,6 +29228,18 @@
             "upstreamPosts": {
               "$ref": "#/components/schemas/FleetChoicesUpstream"
             },
+            "lfsUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lfsConnection": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "createdAt": {
               "type": "string",
               "format": "date-time"
@@ -28851,6 +29264,8 @@
             "lands",
             "leadCostSeen",
             "leadInstanceId",
+            "lfsConnection",
+            "lfsUrl",
             "maxAttempts",
             "name",
             "places",
@@ -29041,6 +29456,18 @@
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -29065,6 +29492,8 @@
           "lands",
           "leadCostSeen",
           "leadInstanceId",
+          "lfsConnection",
+          "lfsUrl",
           "maxAttempts",
           "name",
           "place",
@@ -29242,6 +29671,18 @@
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -29266,6 +29707,8 @@
           "lands",
           "leadCostSeen",
           "leadInstanceId",
+          "lfsConnection",
+          "lfsUrl",
           "maxAttempts",
           "name",
           "places",
@@ -29463,6 +29906,18 @@
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -29487,6 +29942,8 @@
           "lands",
           "leadCostSeen",
           "leadInstanceId",
+          "lfsConnection",
+          "lfsUrl",
           "maxAttempts",
           "name",
           "place",
@@ -29636,6 +30093,18 @@
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -29660,6 +30129,8 @@
           "lands",
           "leadCostSeen",
           "leadInstanceId",
+          "lfsConnection",
+          "lfsUrl",
           "maxAttempts",
           "name",
           "places",
@@ -37848,6 +38319,73 @@
           "builtTaskId"
         ]
       },
+      "LfsOfferState": {
+        "description": "Where a place's offer of Git LFS stands (`GET /api/lfs-offers/:id`, hub lfs-offers.ts).",
+        "type": "object",
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/LfsOfferStateAnswer",
+            "description": "`open` while unanswered; `tracked`: its files are committed through LFS; `dismissed`: Not now."
+          },
+          "commit": {
+            "description": "The commit that took them through LFS; null until then.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "root": {
+            "description": "The folder's root on its machine.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "What is offered, a row per pattern.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceLfsRow"
+            }
+          }
+        },
+        "required": [
+          "answer",
+          "commit",
+          "id",
+          "root",
+          "rows"
+        ]
+      },
+      "PlaceLfsRow": {
+        "description": "Files a place's first commit left out for their size alone, by the\npattern Git LFS would track them under, as `git lfs migrate info` rows\nread (extension, count, size): `*.<ext>` for a file with an extension,\nits own path from the place's root for one without. git-lfs-faq(7):\n\"we recommend using patterns rather than `--above`\".",
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "count": {
+            "description": "How many of the left-out files it covers.",
+            "type": "number"
+          },
+          "paths": {
+            "description": "Those files, from the place's root.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pattern": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "count",
+          "paths",
+          "pattern"
+        ]
+      },
       "SessionPlan": {
         "description": "What `GET /api/instances/:id/plan` answers, and what the live frames keep\na client's copy equal to.",
         "type": "object",
@@ -39132,11 +39670,19 @@
                       "repo"
                     ]
                   },
+                  "lfsOffer": {
+                    "description": "The large files its first commit left out, offered to Git LFS: the\noffer, read and answered at `/api/lfs-offers/:id` (hub\nlfs-offers.ts). Absent when nothing was left out for its size.",
+                    "type": "string"
+                  },
+                  "lfsRefused": {
+                    "description": "An LFS endpoint the repository's `.lfsconfig` names that is neither\nits origin's nor the project's declared one: its large files stayed\npointers, and nothing was fetched from there (agent host-lfs.ts).",
+                    "type": "string"
+                  },
                   "machineId": {
                     "type": "string"
                   },
                   "root": {
-                    "description": "The folder made a repository.",
+                    "description": "The folder made a repository, or the clone the refusal was in.",
                     "type": "string"
                   }
                 },
@@ -45231,6 +45777,18 @@
           },
           "isRedactedThinking": {
             "type": "boolean"
+          },
+          "lfsOffer": {
+            "description": "A thread's note that a folder was made a repository with files left out\nfor their size: the offer of Git LFS for them (ThreadEvent `repo`'s\n`lfsOffer`), whose Track with LFS and Not now the note draws under it.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ]
           },
           "model": {
             "type": "string"
@@ -56284,6 +56842,14 @@
         "enum": [
           "1h",
           "5m"
+        ]
+      },
+      "LfsOfferStateAnswer": {
+        "type": "string",
+        "enum": [
+          "dismissed",
+          "open",
+          "tracked"
         ]
       },
       "MachineCapabilityId": {

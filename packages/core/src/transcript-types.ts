@@ -123,6 +123,12 @@ export interface BlockMetadata {
   /** A stored transcript can name an image it no longer carries, hence the optional src. */
   images?: Array<{ mediaType: string; src?: string }>;
   isRedactedThinking?: boolean;
+  /**
+   * A thread's note that a folder was made a repository with files left out
+   * for their size: the offer of Git LFS for them (ThreadEvent `repo`'s
+   * `lfsOffer`), whose Track with LFS and Not now the note draws under it.
+   */
+  lfsOffer?: { id: string };
   model?: string;
   /** Harness-injected user-role content (task notifications, reminders, compaction). */
   noteKind?: string;

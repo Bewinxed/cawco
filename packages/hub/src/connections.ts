@@ -1272,6 +1272,40 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return tools.find((one) => one.name === tool);
   };
 
+  /**
+   * Why connection `name` cannot sign in to a project's declared LFS
+   * endpoint, in words; none when it can: it exists and holds a key
+   * (`bearer` or `header`). An OAuth sign-in's tokens are its MCP server's,
+   * not a git host's.
+   */
+  const lfsProblem = (name: string): string | undefined => {
+    const r = db.byName(name);
+    if (!r) {
+      return `There is no connection ${name}.`;
+    }
+    if (r.auth !== "bearer" && r.auth !== "header") {
+      return `${name} signs in with ${r.auth}; large files sign in with a connection's key (bearer or header).`;
+    }
+    return opened(r).key ? undefined : `${name} needs its key: ${NO_SECRET}.`;
+  };
+
+  /**
+   * Connection `name`'s key as HTTP Basic for a project's declared LFS
+   * endpoint (`x-access-token:<key>`, the user name GitHub's tokens take;
+   * the hosts that take any user name take it too), answered to the
+   * machine that runs git-lfs for the project (server.ts `GET
+   * /api/lfs/projects/:id`) and nothing else: no view or tool answers it,
+   * and it is never logged. Refused in {@link lfsProblem}'s words.
+   */
+  const lfsBasic = (name: string): string => {
+    const why = lfsProblem(name);
+    if (why) {
+      problem(why);
+    }
+    const key = opened(row(name)).key ?? "";
+    return Buffer.from(`x-access-token:${key}`).toString("base64");
+  };
+
   /** Looks at a connection once (its tools), so its state says what is true; a failure is in its state. */
   const probe = (name: string) =>
     listConnectionTools(name).then(
@@ -1873,6 +1907,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
     githubClient,
     linearClient,
     refusedBy,
+    lfsBasic,
+    lfsProblem,
     sessionTools,
     callAs,
     list: () => db.list().map(view),

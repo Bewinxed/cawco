@@ -646,6 +646,15 @@ export const projects = sqliteTable("projects", {
    * answer ({@link upstreamSettings}).
    */
   upstreamPosts: text("upstream_posts", { enum: UPSTREAM_POSTS }),
+  /**
+   * Where its large files live (its Large files setting): an LFS endpoint
+   * every git-lfs run on a machine for it is held to (agent host-lfs.ts),
+   * with {@link lfsConnection}'s credential. Null: each repository's own
+   * origin's LFS.
+   */
+  lfsUrl: text("lfs_url"),
+  /** The fleet connection whose key signs in to {@link lfsUrl}, by name; set with it. */
+  lfsConnection: text("lfs_connection"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -3286,6 +3295,31 @@ export const designOffers = sqliteTable("design_offers", {
   answeredAt: timestamp("answered_at"),
   /** The "Build the design system" task Build filed. */
   builtTaskId: text("built_task_id"),
+});
+
+/**
+ * Git LFS offered for the large files a place's first commit left out
+ * (lfs-offers.ts): one row per offer, written as it is made. `answer` stays
+ * null while the card stands; `tracked` once its files are committed
+ * through LFS (`commit`), `dismissed` for Not now.
+ */
+export const lfsOffers = sqliteTable("lfs_offers", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  machineId: text("machine_id").notNull(),
+  /** The folder made a repository, on its machine. */
+  root: text("root").notNull(),
+  /** The thread the card went to. */
+  threadId: text("thread_id").notNull(),
+  /** What is offered, a row per pattern (core `PlaceLfsRow`). */
+  rows: text("rows", { mode: "json" })
+    .$type<import("@cawco/core").PlaceLfsRow[]>()
+    .notNull(),
+  offeredAt: timestamp("offered_at").notNull(),
+  answer: text("answer").$type<"tracked" | "dismissed">(),
+  answeredAt: timestamp("answered_at"),
+  /** The commit that took them through LFS. */
+  commit: text("commit"),
 });
 
 /** One must-fix finding of a design check, tied to an element (design-verify.ts). */

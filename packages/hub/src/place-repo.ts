@@ -28,6 +28,7 @@ import {
   CONTROL_PLACE_REPO,
   CONTROL_REPO_ROOT,
   machineCalled,
+  PLACE_REPO_FILE_LIMIT_BYTES,
   type PlaceLeftOut,
   type PlaceRepo,
   type ThreadNote,
@@ -42,16 +43,20 @@ export interface PlaceRepoDeps {
     method: string,
     args: unknown[]
   ) => Promise<unknown>;
-  readonly db: Pick<DbShape, "listAgents" | "newestConversation" | "project">;
+  readonly db: Pick<
+    DbShape,
+    "lfsOffers" | "listAgents" | "newestConversation" | "project"
+  >;
   /**
    * A note in a project's thread, waking no model (caw.ts `notice`); called
-   * only once the hub is up, so it may reach a Caw made after this.
+   * only once the hub is up, so it may reach a Caw made after this. Answers
+   * the thread it went to; null when no Caw took it.
    */
   readonly notice: (
     projectId: string,
     threadId: string | null,
     note: ThreadNote
-  ) => void;
+  ) => string | null;
 }
 
 /** A place as {@link PlaceRepos.ensure} takes it. */
@@ -100,13 +105,19 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
   const machineName = (machineId: string): string =>
     machineCalled(machineId, db.listAgents());
 
-  /** The note a made repository leaves in the project's newest conversation. */
+  /**
+   * The note a made repository leaves in the project's newest conversation;
+   * when its first commit left files out for their size alone, it carries
+   * the offer to commit them through Git LFS (lfs-offers.ts), filed with it.
+   */
   const noteMade = (
     place: PlaceRef,
     made: Exclude<PlaceRepo, { state: "checkout" }>
   ): void => {
     const leaf = made.root.split("/").filter(Boolean).at(-1) ?? made.root;
-    notice(
+    const offer = made.lfs.length > 0 ? crypto.randomUUID() : undefined;
+    const large = made.lfs.reduce((sum, row) => sum + row.count, 0);
+    const threadId = notice(
       place.projectId,
       db.newestConversation(place.projectId)?.id ?? null,
       {
@@ -116,10 +127,22 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
           root: made.root,
           machineId: place.machineId,
           commit: made.commit ?? null,
+          ...(offer ? { lfsOffer: offer } : {}),
         },
-        body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit?.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}`,
+        body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit?.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}${offer ? `\n\n${large} of them ${large === 1 ? "was" : "were"} left out for size alone, past the ${PLACE_REPO_FILE_LIMIT_BYTES / MB} MB a file in the first commit may be: Git LFS can keep ${large === 1 ? "it" : "them"} instead, by pattern.` : ""}`,
       }
     );
+    if (offer && threadId) {
+      db.lfsOffers.offer({
+        id: offer,
+        projectId: place.projectId,
+        machineId: place.machineId,
+        root: made.root,
+        threadId,
+        rows: made.lfs,
+        offeredAt: new Date(),
+      });
+    }
   };
 
   const make = async (place: PlaceRef): Promise<PlaceRepo> => {

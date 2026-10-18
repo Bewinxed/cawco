@@ -24,6 +24,7 @@ import type {
   CawView,
   ClaudeLimits,
   CommandKind,
+  ConnectionView,
   ContinuationJob,
   ControlPayload,
   DelegateEvent,
@@ -41,6 +42,7 @@ import type {
   InstanceRow,
   LandsMode,
   LawBroken,
+  LfsOfferState,
   McpServerStatus,
   MoveJob,
   NamedSpawn,
@@ -282,6 +284,10 @@ export interface ProjectRow {
   id: string;
   /** Where its attempts land when their task says nothing. */
   lands: LandsMode;
+  /** The connection that signs in to {@link lfsUrl}; null with it. */
+  lfsConnection: string | null;
+  /** Where its large files live, an LFS endpoint; null: each repository's origin's own LFS. */
+  lfsUrl: string | null;
   name: string;
   places: ProjectPlace[];
   /** Its primary checkout's id; null while it has none (a New project before its place is picked). */
@@ -5680,6 +5686,8 @@ export async function editProject(
   projectId: string,
   change: {
     lands?: LandsMode;
+    /** Where its large files live, and the connection that signs in there; null: each origin's own LFS. */
+    lfs?: { connection: string; url: string } | null;
     name?: string;
     review?: boolean;
     upstreamPosts?: UpstreamPosts | null;
@@ -6183,6 +6191,25 @@ export const answerDesignOffer = (
   answer: "build" | "dismiss"
 ): Promise<DesignOfferState> =>
   askHub(`${designOfferPath(projectId)}/${answer}`, json("POST", {}));
+
+const lfsOfferPath = (id: string): string =>
+  `/api/lfs-offers/${encodeURIComponent(id)}`;
+
+/** Where an offer of Git LFS for a place's left-out large files stands (hub lfs-offers.ts). */
+export const readLfsOffer = (id: string): Promise<LfsOfferState> =>
+  askHub(lfsOfferPath(id));
+
+/** Answers it: Track commits the files through LFS, Not now records it; the offer as it stands after. */
+export const answerLfsOffer = (
+  id: string,
+  answer: "track" | "dismiss"
+): Promise<LfsOfferState> =>
+  askHub(`${lfsOfferPath(id)}/${answer}`, json("POST", {}));
+
+/** The fleet's connections, never their keys (`GET /api/connections`). */
+export const readConnections = async (): Promise<ConnectionView[]> =>
+  (await askHub<{ connections: ConnectionView[] }>("/api/connections"))
+    .connections;
 
 /** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
 export const changeRoutine = (

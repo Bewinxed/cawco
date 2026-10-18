@@ -48,6 +48,9 @@ function eventMetadata(message: EventThreadMessage): Message["metadata"] {
         }
       : {}),
     ...(offer ? { designOffer: { projectId: offer.projectId } } : {}),
+    ...(message.event?.kind === "repo" && message.event.lfsOffer
+      ? { lfsOffer: { id: message.event.lfsOffer } }
+      : {}),
   };
 }
 
