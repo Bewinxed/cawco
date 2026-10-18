@@ -424,7 +424,7 @@ async function settle(page: Page): Promise<void> {
   await quiet(page);
 }
 
-/** Every scroll offset on the page and the root's box: what a still page keeps between two reads. */
+/** Every scroll offset on the page, the root's box and what its canvases draw: what a still page keeps between two reads. */
 const scrollsAndBoxes = () => {
   let sum = 0;
   // Every inline style's text, hashed: a value a script writes moves the
@@ -443,8 +443,32 @@ const scrollsAndBoxes = () => {
       scrolls += `;${el.scrollTop},${el.scrollLeft}`;
     }
   }
+  // What each canvas that can be seen draws: a script draws it frame by
+  // frame, on a loop of its own (Caw's clips over his face, on Rive's), and
+  // nothing else here moves while it does. Read mid-clip, one state gave two
+  // pictures (bench-usage-relay at the desk, Caw's clip canvas).
+  let drawn = 7;
+  for (const canvas of document.getElementsByTagName("canvas")) {
+    const r = canvas.getBoundingClientRect();
+    if (
+      r.width === 0 ||
+      r.height === 0 ||
+      getComputedStyle(canvas).visibility !== "visible"
+    ) {
+      continue;
+    }
+    let url = "tainted";
+    try {
+      url = canvas.toDataURL();
+    } catch {
+      // A canvas drawn from another origin can't be read; it counts as one.
+    }
+    for (let i = 0; i < url.length; i += 1) {
+      drawn = (drawn * 31 + url.charCodeAt(i)) % 2_147_483_647;
+    }
+  }
   const loading = [...document.images].filter((img) => !img.complete);
-  return `${all.length} ${sum.toFixed(3)} ${styles} ${loading.length} ${document.fonts.status} ${scrolls}`;
+  return `${all.length} ${sum.toFixed(3)} ${styles} ${drawn} ${loading.length} ${document.fonts.status} ${scrolls}`;
 };
 
 /** The window and every scroll container at the top and start: the one offset each is read at. */
@@ -462,8 +486,8 @@ const toTheStart = () => {
  * answering, the page's time run on its fixed stretches (`settle`), still in
  * its own time, then every scroll container at its start (what the page
  * scrolled itself is done by then) and still again: every animation held,
- * and its elements, their boxes, their inline styles and every scroll offset
- * the same over three stretches in a row.
+ * and its elements, their boxes, their inline styles, what its canvases draw
+ * and every scroll offset the same over three stretches in a row.
  */
 export async function stand(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
