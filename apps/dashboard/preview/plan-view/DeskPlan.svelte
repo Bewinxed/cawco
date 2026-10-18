@@ -17,6 +17,7 @@
     plan,
     today = false,
     toEnd = false,
+    fit = false,
     conversation,
     children,
   }: {
@@ -25,6 +26,8 @@
     today?: boolean;
     /** The card stands scrolled to its foot (the spec opened there). */
     toEnd?: boolean;
+    /** The frame grows to its plan's whole height, so nothing is cut at its foot. */
+    fit?: boolean;
     /** What the conversation shows; quiet lines when nothing is given. */
     conversation?: Snippet;
     children: Snippet;
@@ -57,67 +60,82 @@
   }
 </script>
 
-<div class="desk-frame" data-slot="desk-frame">
-  <div class="conversation" aria-hidden={conversation ? undefined : "true"}>
-    {#if conversation}
-      {@render conversation()}
-    {:else}
-      <span class="line" style:--w="72%"></span>
-      <span class="line" style:--w="90%"></span>
-      <span class="line" style:--w="54%"></span>
-      <span class="gap"></span>
-      <span class="line" style:--w="80%"></span>
-      <span class="line" style:--w="66%"></span>
-      <span class="composer"></span>
-    {/if}
-  </div>
-  <div class="desk">
-    <SideSurface label="Plan" onclose={() => undefined} recessed={false}>
-      {#snippet titleControl()}
-        <span class="head mark-line">
-          <span class="title">Plan</span>
-          {#if !today}
-            <span class="progress" data-slot="progress" data-box
-              ><TaskRing done={got.done} total={got.total} /></span
+<!-- Narrower than the frame, it scrolls sideways at full size inside its
+     own box, its edges fading where more lies past them; the page never
+     does. -->
+<div class="desk-scroll kit-edge-fade" data-slot="desk-scroll">
+  <div class="desk-frame" data-slot="desk-frame" data-fit={fit || undefined}>
+    <div class="conversation" aria-hidden={conversation ? undefined : "true"}>
+      {#if conversation}
+        {@render conversation()}
+      {:else}
+        <span class="line" style:--w="72%"></span>
+        <span class="line" style:--w="90%"></span>
+        <span class="line" style:--w="54%"></span>
+        <span class="gap"></span>
+        <span class="line" style:--w="80%"></span>
+        <span class="line" style:--w="66%"></span>
+        <span class="composer"></span>
+      {/if}
+    </div>
+    <div class="desk">
+      <SideSurface label="Plan" onclose={() => undefined} recessed={false}>
+        {#snippet titleControl()}
+          <span class="head mark-line">
+            <span class="title">Plan</span>
+            {#if !today}
+              <span class="progress" data-slot="progress" data-box
+                ><TaskRing done={got.done} total={got.total} /></span
+              >
+              <span data-num class="num figure">{got.done} of {got.total}</span>
+            {/if}
+          </span>
+        {/snippet}
+        {#snippet actions()}
+          {#if plan.task && !today}
+            <button
+              aria-label="Open the task {plan.task.title}, {plan.task.stage}"
+              class="task mark-line"
+              type="button"
             >
-            <span data-num class="num figure">{got.done} of {got.total}</span>
+              <span class="task-title">{plan.task.title}</span>
+              <span class="stage">· {plan.task.stage}</span>
+              <IconChevronRight aria-hidden="true" />
+            </button>
           {/if}
-        </span>
-      {/snippet}
-      {#snippet actions()}
-        {#if plan.task && !today}
-          <button
-            aria-label="Open the task {plan.task.title}, {plan.task.stage}"
-            class="task"
-            type="button"
-          >
-            <span class="task-title">{plan.task.title}</span>
-            <span class="stage">· {plan.task.stage}</span>
-            <IconChevronRight aria-hidden="true" />
-          </button>
-        {/if}
-      {/snippet}
-      <div class="body kit-edge-fade-block" {@attach foot}>
-        {@render children()}
-      </div>
-    </SideSurface>
+        {/snippet}
+        <div class="body kit-edge-fade-block" {@attach foot}>
+          {@render children()}
+        </div>
+      </SideSurface>
+    </div>
   </div>
 </div>
 
 <style>
-  /* The split: the conversation takes what the card leaves; under 640px of
-     frame there is room for the card alone. */
+  .desk-scroll {
+    display: flex;
+    max-inline-size: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-block-end: var(--space-1);
+  }
+  /* The split: the conversation takes what the card leaves. */
   .desk-frame {
-    container: desk-frame / inline-size;
     display: flex;
     gap: var(--space-3);
+    flex: none;
     inline-size: 780px;
-    max-inline-size: 100%;
     block-size: 680px;
     padding: var(--space-3);
     border-radius: var(--radius-panel);
     background: var(--background);
     box-shadow: var(--shadow-xs);
+
+    &[data-fit] {
+      block-size: auto;
+      min-block-size: 680px;
+    }
   }
   .conversation {
     flex: 1 1 0;
@@ -127,11 +145,6 @@
     gap: var(--space-3);
     padding: var(--space-6) var(--space-4) var(--space-3);
     overflow: clip;
-  }
-  @container desk-frame (width < 640px) {
-    .conversation {
-      display: none;
-    }
   }
   .line {
     inline-size: var(--w);

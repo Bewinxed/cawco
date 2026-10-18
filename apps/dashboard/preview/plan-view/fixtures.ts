@@ -67,6 +67,40 @@ export function folds(steps: Step[]): boolean {
   );
 }
 
+/** The delegates: the frames and the key draw the same tiles. */
+export const STRIPE: Carrier = {
+  id: "deposit-stripe-7f3",
+  place: "/srv/tidewater",
+  status: "live",
+};
+export const FABLE: Carrier = {
+  id: "fable-calendar-21c",
+  place: "fable",
+  status: "attn",
+};
+export const IPHONE: Carrier = {
+  id: "ios-booking-9a0",
+  place: "mac-studio",
+  status: "idle",
+};
+export const READER: Carrier = {
+  id: "a11y-check-44e",
+  place: "/srv/tidewater-a11y",
+  status: "fail",
+};
+
+/**
+ * A step's time, one way everywhere: seconds alone under a minute ("52s"),
+ * then minutes and two-figure seconds ("1m 05s"), as the run's times read.
+ */
+export function clockWords(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
 const SPEC = `## Booking page
 
 - **Classes** come from the \`classes\` table: this season's only, with the spaces left on each.
@@ -172,7 +206,7 @@ function datePicker(moment: Moment): Step {
       words: "Fable: is a calendar library the right approach?",
       state: "waiting",
       startedAgo: 3 * MIN + 5 * SEC,
-      carrier: { id: "fable-calendar-21c", place: "fable", status: "attn" },
+      carrier: FABLE,
       fold: { count: 2, noun: "step", open: true },
       wait: {
         kind: "you",
@@ -221,11 +255,7 @@ function deposit(moment: Moment): Step {
         words: "Take the deposit with Stripe",
         state: "doing",
         startedAgo: 4 * MIN + 2 * SEC,
-        carrier: {
-          id: "deposit-stripe-7f3",
-          place: "/srv/tidewater",
-          status: "live",
-        },
+        carrier: STRIPE,
         fold: { count: 3, noun: "step", open: moment.depositOpen },
         children: [
           {
@@ -270,7 +300,7 @@ function phoneAndReader(moment: Moment): Step {
         id: "a5i",
         words: "Build the booking page for the iPhone",
         state: "queued",
-        carrier: { id: "ios-booking-9a0", place: "mac-studio", status: "idle" },
+        carrier: IPHONE,
         wait: {
           kind: "slot",
           words: "Queued for the Mac's build slot, behind one build",
@@ -281,11 +311,7 @@ function phoneAndReader(moment: Moment): Step {
         words: "Check the page with a screen reader",
         state: "failed",
         took: "1m 18s",
-        carrier: {
-          id: "a11y-check-44e",
-          place: "/srv/tidewater-a11y",
-          status: "fail",
-        },
+        carrier: READER,
         fold: {
           count: 1,
           noun: "report",

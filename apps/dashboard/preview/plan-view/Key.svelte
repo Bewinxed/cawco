@@ -1,12 +1,13 @@
 <script lang="ts">
   /**
-   * The page's key: each mark a plan row can carry, drawn by the same pieces
-   * the frames draw, with what it says.
+   * The page's key: each mark and line a plan can carry, drawn by the same
+   * pieces and the same delegates' tiles the frames draw, with what it says.
    */
   import SessionMark from "#lib/cawco/SessionMark.svelte";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import TreeCount from "#lib/cawco/TreeCount.svelte";
-  import { IconChevronRight } from "#lib/icons.js";
+  import { IconChevronRight, IconExternal, IconMaximize } from "#lib/icons.js";
+  import { FABLE, READER, STRIPE } from "./fixtures";
   import StepMark from "./StepMark.svelte";
 </script>
 
@@ -14,7 +15,7 @@
   <h2 id="key-head">What the marks say</h2>
   <dl>
     <div class="item">
-      <dt><span class="cell"><TaskRing done={2} total={5} /></span></dt>
+      <dt><span class="cell"><TaskRing done={1} total={5} /></span></dt>
       <dd>How far the plan has got, beside the title, with its figure</dd>
     </div>
     <div class="item">
@@ -32,18 +33,22 @@
     <div class="item">
       <dt>
         <span class="cell"
-          ><SessionMark id="key-live" place="/srv/key" status="live" /></span
+          ><SessionMark
+            id={STRIPE.id}
+            place={STRIPE.place}
+            status="live"
+          /></span
         >
       </dt>
       <dd>
-        A step a delegate carries: its own mark, working (it echoes, then a
-        still blue dot)
+        A step a delegate carries, under the to-do it carries: its own tile,
+        working (it echoes, then a still blue dot)
       </dd>
     </div>
     <div class="item">
       <dt>
         <span class="cell"
-          ><SessionMark id="key-attn" place="/srv/key-2" status="attn" /></span
+          ><SessionMark id={FABLE.id} place={FABLE.place} status="attn" /></span
         >
       </dt>
       <dd>The yellow dot on its corner: it waits on you</dd>
@@ -51,7 +56,11 @@
     <div class="item">
       <dt>
         <span class="cell"
-          ><SessionMark id="key-fail" place="/srv/key-3" status="fail" /></span
+          ><SessionMark
+            id={READER.id}
+            place={READER.place}
+            status="fail"
+          /></span
         >
       </dt>
       <dd>The red dot: it failed</dd>
@@ -70,8 +79,40 @@
       </dt>
       <dd>
         Beside a delegate's step: what it folds open, its own steps or its
-        report, and the way into its session
+        report
       </dd>
+    </div>
+    <div class="item">
+      <dt>
+        <span class="sample link glyph-sm"
+          >Open its session <IconExternal aria-hidden="true" /></span
+        >
+      </dt>
+      <dd>Under an open delegate's step: the way into its own session</dd>
+    </div>
+    <div class="item">
+      <dt>
+        <span class="sample"
+          ><span class="link">→ Booking confirmation email</span> · Review</span
+        >
+      </dt>
+      <dd>Under a to-do that grew into a task: that task, and its stage</dd>
+    </div>
+    <div class="item">
+      <dt><span class="sample">Proposed by the session · Agree</span></dt>
+      <dd>A to-do the session offered; Agree makes it the task's</dd>
+    </div>
+    <div class="item">
+      <dt>
+        <span class="sample glyph"
+          ><IconMaximize aria-hidden="true" /> Expand</span
+        >
+      </dt>
+      <dd>In the card's head: the plan takes the whole split</dd>
+    </div>
+    <div class="item">
+      <dt><span class="sample link">Open in canvas</span></dt>
+      <dd>At a task's foot: the task on the project's canvas</dd>
     </div>
   </dl>
 </section>
@@ -90,21 +131,21 @@
   }
   dl {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
     gap: var(--space-2) var(--space-5);
     margin: 0;
   }
   .item {
-    display: flex;
+    display: grid;
+    grid-template-columns: 172px minmax(0, 1fr);
     align-items: start;
     gap: var(--space-3);
     min-inline-size: 0;
   }
   dt {
-    flex: none;
     display: flex;
-    justify-content: center;
-    inline-size: 44px;
+    justify-content: end;
+    min-inline-size: 0;
   }
   .cell {
     display: grid;
@@ -126,6 +167,27 @@
     & :global(svg) {
       inline-size: 12px;
       block-size: 12px;
+    }
+  }
+  .sample {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    text-align: end;
+
+    &.link,
+    & .link {
+      color: var(--link-ink);
+    }
+    &.glyph-sm :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+    }
+    &.glyph :global(svg) {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
     }
   }
   dd {
