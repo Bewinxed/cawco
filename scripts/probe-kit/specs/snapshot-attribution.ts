@@ -6,7 +6,8 @@
  *   bun scripts/probe-kit/run.ts snapshot-attribution --surfaces=a,b --out=<file.json>
  *
  * It walks the same surfaces, states and passes as the style snapshot (the
- * hub tape; light passes only, since a theme changes no element), on the
+ * hub tapes, each hub state on its own section, walk.ts `walkTapes`; light
+ * passes only, since a theme changes no element), on the
  * dev server, where Svelte gives each element `__svelte_meta`: the file and
  * line that wrote it and the component instances above it. Every element is
  * keyed as the snapshot keys it (its DOM path from the state's root,
@@ -25,11 +26,10 @@
  */
 import { writeFile } from "node:fs/promises";
 import type { Page } from "playwright-core";
-import { player, readTape } from "../hub-tape";
 import type { Spec } from "../kit";
 import { chosen, type State } from "../surfaces/catalogue";
 import type { Scene } from "../surfaces/scene";
-import { PASSES, Servers, TAPE, walk } from "../surfaces/walk";
+import { PASSES, walkTapes } from "../surfaces/walk";
 
 const flag = (name: string): string | undefined =>
   process.argv
@@ -179,40 +179,30 @@ const spec: Spec = {
       return;
     }
     const surfaces = chosen(flag("surfaces"));
-    const tape = await readTape(TAPE);
-    const hub = player(tape);
-    const servers = new Servers(kit, hub);
     const map: Record<string, Record<string, Record<string, string[]>>> = {};
     let elements = 0;
     let attributed = 0;
-    try {
-      await walk(
-        kit,
-        servers,
-        tape,
-        surfaces.map((s) => ({ ...s, serve: "dev" as const })),
-        PASSES.filter((p) => p.theme === "light"),
-        async ({ page, pass, state, surface }) => {
-          if (!(await hydrated(page, state, tape.scene as Scene))) {
-            kit.note(
-              `${surface.name}/${state.name} · ${pass.name}: its root did not hydrate in ${HYDRATE_MS / 1000}s`
-            );
-          }
-          const keys = await page.evaluate(keysAndFiles, state.root);
-          const files = Object.values(keys);
-          elements += files.length;
-          attributed += files.filter((f) => f.length > 0).length;
-          map[surface.name] ??= {};
-          (map[surface.name] as Record<string, Record<string, string[]>>)[
-            `${state.name} · ${pass.name}`
-          ] = keys;
-        },
-        (what, why) => kit.note(`${what}: did not open (${why})`)
-      );
-    } finally {
-      await servers.close();
-      hub.stop();
-    }
+    await walkTapes(
+      kit,
+      surfaces.map((s) => ({ ...s, serve: "dev" as const })),
+      PASSES.filter((p) => p.theme === "light"),
+      async ({ page, pass, scene, state, surface }) => {
+        if (!(await hydrated(page, state, scene))) {
+          kit.note(
+            `${surface.name}/${state.name} · ${pass.name}: its root did not hydrate in ${HYDRATE_MS / 1000}s`
+          );
+        }
+        const keys = await page.evaluate(keysAndFiles, state.root);
+        const files = Object.values(keys);
+        elements += files.length;
+        attributed += files.filter((f) => f.length > 0).length;
+        map[surface.name] ??= {};
+        (map[surface.name] as Record<string, Record<string, string[]>>)[
+          `${state.name} · ${pass.name}`
+        ] = keys;
+      },
+      (what, why) => kit.note(`${what}: did not open (${why})`)
+    );
     await writeFile(out, JSON.stringify(map));
     kit.check(
       `${attributed} of ${elements} elements carry their files (${out})`,

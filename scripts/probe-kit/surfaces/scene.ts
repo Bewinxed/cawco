@@ -31,6 +31,8 @@
  *    drawn as a graph;
  *  - a second Claude account, signed in once every session has started;
  *  - `~/code/chip-tray` on the machine, for the spawn sheet's folder browser.
+ * A delegate's sheet is a scene of its own, on a tape of its own
+ * (`seedSheet`, `--record --tape=sheet`).
  * The mock model plays a script per session: its first message carries
  * `PROBE-STEP:<name>`, and each request after it takes the plan's next step
  * by the tool results the conversation holds since (artifacts.ts's shape).
@@ -47,7 +49,7 @@ import type { Machine, Reply, Seen } from "../../scratch-fleet";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import type { TapeHold } from "../hub-tape";
 import { jevMock, jevOn } from "../jev-mock";
-import type { Kit, KitFleet } from "../kit";
+import { type Kit, type KitFleet, ROOT } from "../kit";
 import { type McpOauthMock, mcpOauthMock, signIn } from "../mcp-oauth-mock";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -577,6 +579,54 @@ const plans = (repo: string): Record<string, Step[]> => ({
     },
     { words: "The chip row's check is with a delegate." },
   ],
+  sheet: [
+    {
+      tool: {
+        name: DELEGATE,
+        input: {
+          title: SHEET_TITLE,
+          prompt: "Put the chip card on a sheet. PROBE-STEP:card",
+          checks: [{ name: "Nothing to check", command: "true" }],
+          lands: "none",
+        },
+      },
+    },
+    { words: "The chip card's sheet is with a delegate." },
+  ],
+  card: [
+    {
+      tool: {
+        name: "Bash",
+        input: {
+          command: linkPackages(),
+          description: "Link the dashboard's packages",
+        },
+      },
+    },
+    {
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${ARTIFACT_CREATE}`, max_results: 1 },
+      },
+    },
+    {
+      tool: {
+        name: ARTIFACT_CREATE,
+        input: { kind: "sheet", name: "chip-card", file: CARD_SHEET },
+      },
+    },
+    {
+      tool: {
+        name: FINISH_ITEM,
+        input: {
+          headline: "The chip card is on a sheet.",
+          summary:
+            "The card's two stories are on its sheet, each prop a control in the inspector.",
+        },
+      },
+    },
+    { words: "Reported." },
+  ],
   child: [
     {
       tool: {
@@ -658,6 +708,95 @@ Measure the chip row at 390px and say whether the count badge is whole.
 `;
 /** The delegate the "split" session starts: its card's name in the parent's transcript. */
 export const DELEGATE_TITLE = "Check the chip row";
+/** The delegate the sheet scene's session starts (`seedSheet`). */
+const SHEET_TITLE = "Put the chip card on a sheet";
+/** The sheet scene's card, from its clone's root: its stories, beside it. */
+const CARD_SHEET = "src/Card.stories.ts";
+/**
+ * The card's packages, as the dashboard installed them: its clone links
+ * each (`linkPackages`), and its package.json names each at the
+ * dashboard's version (`seedSheet`).
+ */
+const CARD_PACKAGES = [
+  "vite",
+  "svelte",
+  "typescript",
+  "@sveltejs/vite-plugin-svelte",
+];
+/**
+ * The command the sheet's delegate links the card's packages with: each
+ * the dashboard's own, read through a link (a workspace's boundary installs
+ * nothing from the network), in a node_modules of the clone's own, where
+ * Vite writes its caches.
+ */
+const linkPackages = (): string => {
+  const modules = join(ROOT, "apps", "dashboard", "node_modules");
+  return [
+    "mkdir -p node_modules/@sveltejs",
+    ...CARD_PACKAGES.map(
+      (name) => `ln -s '${join(modules, name)}' 'node_modules/${name}'`
+    ),
+  ].join(" && ");
+};
+/** The card: one prop for each control the sheet's inspector draws (sheet-inspector.svelte.ts `controlOf`). */
+const CARD = `<script lang="ts">
+  import type { Snippet } from "svelte";
+
+  let {
+    title,
+    count = 3,
+    tone = "calm",
+    size = "medium",
+    open = false,
+    children,
+    onpick,
+  }: {
+    /** What the card says first. */
+    title: string;
+    /** The chips under it. */
+    count?: number;
+    tone?: "calm" | "loud";
+    size?: "small" | "medium" | "large" | "extra-large" | "huge";
+    open?: boolean;
+    children?: Snippet;
+    onpick?: () => void;
+  } = $props();
+</script>
+
+<article data-size={size} data-tone={tone}>
+  <h1>{title}</h1>
+  <p>{count} chips{open ? ", open" : ""}</p>
+  {@render children?.()}
+  <button onclick={onpick} type="button">Pick</button>
+</article>
+`;
+const CARD_STORIES = `import Card from "./Card.svelte";
+
+export default {
+  component: Card,
+  args: { title: "Tray chips", count: 3 },
+};
+
+export const Calm = { args: {} };
+
+export const Loud = { args: { tone: "loud", open: true } };
+`;
+const CARD_CONFIG = `import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { defineConfig } from "vite";
+
+export default defineConfig({ plugins: [svelte()] });
+`;
+const CARD_TSCONFIG = {
+  compilerOptions: {
+    target: "esnext",
+    module: "esnext",
+    moduleResolution: "bundler",
+    strict: true,
+    verbatimModuleSyntax: true,
+    skipLibCheck: true,
+  },
+  include: ["src"],
+};
 const WORKFLOW_NAME = "Chip audit";
 /** The question the "named" session asks and the scene answers: the transcript's answered card. */
 const NAMED_QUESTION = "Which names do the hang card's three states take?";
@@ -2100,4 +2239,98 @@ export async function seedScene(
     memoryDoc: MODEL_DOC,
   };
   return seeded;
+}
+
+/**
+ * The sheet's own scene (`style-snapshot --record --tape=sheet`, a host
+ * only: its delegate's workspace needs user namespaces), stood up on a
+ * fleet of its own: the repo a Svelte and Vite project of one card and its
+ * stories, each package at the dashboard's version; a session that hands
+ * the card to a delegate, which links the dashboard's packages into its
+ * clone (`linkPackages`) and makes the card's sheet (`artifact_create`,
+ * kind sheet), which starts its stage, then hands in. Its scene names the
+ * sheet (`sheet`) and the session (`shower`).
+ */
+export async function seedSheet(
+  kit: Kit,
+  fleet: KitFleet
+): Promise<Record<string, string>> {
+  const { dependencies, devDependencies } = (await Bun.file(
+    join(ROOT, "apps", "dashboard", "package.json")
+  ).json()) as Record<
+    "dependencies" | "devDependencies",
+    Record<string, string> | undefined
+  >;
+  const versions = { ...dependencies, ...devDependencies };
+  const pinned = Object.fromEntries(
+    CARD_PACKAGES.map((name) => {
+      const version = versions[name];
+      if (!version) {
+        throw new Error(`the dashboard's package.json names no ${name}`);
+      }
+      return [name, version];
+    })
+  );
+  const files: Record<string, string> = {
+    "package.json": `${JSON.stringify(
+      {
+        name: "chip-card",
+        private: true,
+        type: "module",
+        devDependencies: pinned,
+      },
+      null,
+      2
+    )}\n`,
+    ".gitignore": "node_modules\n",
+    "tsconfig.json": `${JSON.stringify(CARD_TSCONFIG, null, 2)}\n`,
+    "vite.config.ts": CARD_CONFIG,
+    "src/Card.svelte": CARD,
+    [CARD_SHEET]: CARD_STORIES,
+  };
+  await mkdir(join(fleet.repo, "src"), { recursive: true });
+  await Promise.all(
+    Object.entries(files).map(([name, text]) =>
+      writeFile(join(fleet.repo, name), text)
+    )
+  );
+  await Bun.$`git -C ${fleet.repo} -c user.email=p@p -c user.name=p add -A && git -C ${fleet.repo} -c user.email=p@p -c user.name=p commit -qm 'The chip card'`.quiet();
+  // A person's identity for the delegate's workspace, as seedScene's.
+  await writeFile(
+    join(fleet.home, ".gitconfig"),
+    "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
+  );
+  const shower = await fleet.spawn("claude", "Show the chip card", fleet.repo);
+  await fleet.send(
+    shower,
+    "Hand the chip card's sheet to a delegate. PROBE-STEP:sheet"
+  );
+  // A sheet is filed once its stage answered (stage.ts `ensureStage`).
+  const sheet = await until(
+    "the delegate's sheet filed",
+    () =>
+      fleet.query<{ id: string }>(
+        "SELECT id FROM artifacts WHERE kind = 'sheet'"
+      )[0]?.id,
+    Boolean,
+    300_000
+  );
+  await until(
+    "the sheet's delegate done",
+    () =>
+      fleet.query<{ state: string }>(
+        "SELECT state FROM work_items WHERE parent_instance_id = ?",
+        shower
+      )[0]?.state,
+    (state) => state === "done",
+    300_000
+  );
+  await until(
+    "the sheet session's turn done",
+    () => fleet.instance(shower),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    180_000
+  );
+  kit.note(`sheet scene: session ${shower}; sheet ${sheet}`);
+  return { sheet: sheet as string, shower };
 }
