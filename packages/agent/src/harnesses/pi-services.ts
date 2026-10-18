@@ -42,7 +42,7 @@ import {
   writeJson,
 } from "./fleet-common";
 import { machineWithAccountsRuntime } from "./pi-accounts";
-import { checkPiProxyCredential, type PiCredentialState } from "./pi-auth";
+import { checkPiCredential, type PiCredentialState } from "./pi-auth";
 import { piOpenTurns } from "./pi-sessiond";
 
 const PI_SKILLS = piSkillsDir();
@@ -439,8 +439,8 @@ export async function piSessionPath(
 
 let servicesPromise: Promise<AgentSessionServices> | null = null;
 const PI_AUTH_STATE: Record<PiCredentialState["state"], AuthState> = {
-  live: "authenticated",
-  dead: "unauthenticated",
+  "signed-in": "authenticated",
+  "signed-out": "unauthenticated",
   unknown: "unreadable-credentials",
 };
 
@@ -524,14 +524,18 @@ export class PiProfile {
           ? `${defaultProvider}/${defaultId}`
           : defaultId;
       const asked = modelId && modelId !== "default" ? modelId : defaultValue;
+      // pi's resolver alone, not resolvePiModel: a model whose provider is
+      // signed out is not available, and that is what is asked here.
       const model = asked
-        ? await resolvePiModel(modelRuntime, asked).catch(() => undefined)
+        ? resolveCliModel({ cliModel: asked, modelRuntime }).model
         : undefined;
-      const credential: PiCredentialState | undefined = model
-        ? await checkPiProxyCredential(model)
+      const credential: PiCredentialState = model
+        ? await checkPiCredential(modelRuntime, model.provider)
         : {
             state: "unknown",
-            reason: "pi: sign-in status unknown — configured model unavailable",
+            reason: asked
+              ? `pi: sign-in status unknown — pi knows no model ${asked}`
+              : "pi: sign-in status unknown — pi has no default model",
           };
       if (
         !modelId ||
@@ -557,7 +561,7 @@ export class PiProfile {
   }
 
   #setCredential(credential: PiCredentialState | undefined): void {
-    this.auth = PI_AUTH_STATE[credential?.state ?? "live"];
+    this.auth = PI_AUTH_STATE[credential?.state ?? "signed-in"];
     this.authReason = credential?.reason;
   }
 

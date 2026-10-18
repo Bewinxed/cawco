@@ -49,11 +49,11 @@ export class PiHarness extends PiProfile implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession> {
-    // The proxy's credential check is the machine's store's; a session on an
-    // account runs its provider from the account's one credential.
+    // pi's sign-in check is the machine's store's; a session on an account
+    // runs its provider from the account's one credential.
     if (!spec.accountDir) {
       const credential = await this.checkCredential(spec.model);
-      if (credential?.state === "dead") {
+      if (credential?.state === "signed-out") {
         throw new Error(credential.reason);
       }
     }

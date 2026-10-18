@@ -1790,8 +1790,8 @@ const attach = (
       }
     }
 
-    // This probe counts tokens through pi's proxy; it never starts a Claude SDK
-    // query or rotates Claude Code's own login. The initial detect already ran it.
+    // pi's own word on its sign-in (pi-auth.ts), read again on a schedule
+    // beside the watch on its agent dir. The initial detect already read it.
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(async () => {
