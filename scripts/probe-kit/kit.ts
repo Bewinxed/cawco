@@ -11,7 +11,7 @@
  * one without draw the same frame.
  */
 import { existsSync } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -551,11 +551,20 @@ export class Run {
         ends.push(async () => {
           (await served)?.child.kill();
           (await servedDev)?.child.kill();
+          // A spec that failed keeps what says why, which goes with the
+          // fleet: into its output folder, the hub still answering.
+          if (this.failures > failuresBefore) {
+            const kept = join(out, "fleet-on-failure");
+            const said = await fleetEvidence(fleet, kept).then(
+              () => kept,
+              (error) => `${kept} (in part: ${error})`
+            );
+            const line = `FAIL ${spec.name}: the failed run's fleet, its logs and every session's transcript, are in ${said}`;
+            console.log(line);
+            this.failed.push(line);
+          }
           await fleet.close();
-          // A spec that failed keeps its fleet's sandbox, HOME and runtime
-          // dir (their logs, its delegates' workspaces) and says where: what
-          // says why is otherwise gone with the run.
-          await fleet.clean(this.failures > failuresBefore);
+          await fleet.clean(false);
         });
         return Object.assign(fleet, {
           dashboard: () => {
@@ -664,6 +673,72 @@ export type KitFleet = Fleet & {
    */
   devDashboard: () => Promise<string>;
 };
+
+/** What `fleetEvidence` copies of each kind, by where it goes under its folder. */
+const LOG_FILE = /\.(log|err)$/;
+
+/**
+ * A failed run's fleet, kept in `dir` before the fleet goes: its services'
+ * logs (`logs/`, the sandbox's `*.log` and `*.err`: the hub's, every
+ * agent's and sessiond's), every session's transcript as the hub serves it
+ * (`transcripts/<title>-<id>.json`), its work items and artifacts as the
+ * hub holds them, and every Claude Code session log under its HOME, each
+ * account's included (`claude/`). Read while the hub still runs. What
+ * cannot be read is said in `unread.txt`, never left out silently.
+ */
+async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
+  const unread: string[] = [];
+  await mkdir(join(dir, "logs"), { recursive: true });
+  for (const name of await readdir(fleet.sandbox)) {
+    if (LOG_FILE.test(name)) {
+      // biome-ignore lint/performance/noAwaitInLoops: a few files, one at a time
+      await cp(join(fleet.sandbox, name), join(dir, "logs", name));
+    }
+  }
+  await mkdir(join(dir, "transcripts"), { recursive: true });
+  const instances = fleet.query<{ id: string; title: string | null }>(
+    "SELECT id, title FROM instances"
+  );
+  for (const { id, title } of instances) {
+    const name = `${(title ?? "untitled").replace(/[^\w-]+/g, "-").slice(0, 60)}-${id.slice(0, 8)}.json`;
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: one session at a time, off a hub that is closing next
+      const response = await fetch(
+        `${fleet.base}/api/instances/${id}/transcript`
+      );
+      await writeFile(join(dir, "transcripts", name), await response.text());
+    } catch (error) {
+      unread.push(`transcript of ${id} (${title}): ${error}`);
+    }
+  }
+  for (const table of ["work_items", "artifacts"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: two tables, one at a time
+    await writeFile(
+      join(dir, `${table}.json`),
+      JSON.stringify(fleet.query(`SELECT * FROM ${table}`), null, 2)
+    );
+  }
+  // Claude Code's own session logs, the first account's and each other's.
+  // `claude/home/…` the HOME's own `.claude`, `claude/cawco/accounts/<id>/…` each account's.
+  const sessionLogs = new Bun.Glob("**/projects/**/*.jsonl");
+  for (const [root, under] of [
+    [join(fleet.home, ".claude"), "home"],
+    [join(fleet.home, ".cawco"), "cawco"],
+  ] as const) {
+    if (!existsSync(root)) {
+      continue;
+    }
+    for (const file of sessionLogs.scanSync({ cwd: root, dot: true })) {
+      const to = join(dir, "claude", under, file);
+      // biome-ignore lint/performance/noAwaitInLoops: one log at a time
+      await mkdir(join(to, ".."), { recursive: true });
+      await cp(join(root, file), to);
+    }
+  }
+  if (unread.length > 0) {
+    await writeFile(join(dir, "unread.txt"), `${unread.join("\n")}\n`);
+  }
+}
 
 /** Opens `url` and waits for `ready` in the page, fonts loaded. */
 export async function open(
