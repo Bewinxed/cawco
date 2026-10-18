@@ -171,7 +171,7 @@
     style:stroke-dashoffset={off(reserve === null ? 0 : Math.min(rim, reserve))}
   />
   <circle
-    class="notch fill-none origin-(--ring-origin) transform-(--ring-turn) transition-[opacity] dur-toggle ease-out data-off:opacity-0 motion-reduce:transition-none"
+    class="notch fill-none origin-(--ring-origin) transform-(--ring-turn) transition-[opacity] dur-toggle ease-out data-off:opacity-0 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || undefined}

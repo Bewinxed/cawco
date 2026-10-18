@@ -2337,6 +2337,14 @@
   transition: none;
 }
 
+/* The property list alone, as `transition-property` writes it. Tailwind's
+   `transition-[…]` also writes the theme's default duration and curve
+   (theme.css `--default-transition-*`), which a rule naming only its
+   properties never set: its element keeps 0s and `ease`. */
+@utility transition-property-* {
+  transition-property: --value([*]);
+}
+
 /* No outline, as `outline: none` writes it: its style, width and colour
    back to their initial values (none, medium, currentcolor). Tailwind's
    `outline-none` sets only the style, so the base's focus-ring colour and

@@ -264,7 +264,7 @@
             >
             <span
               data-slot="chev"
-              class="flex-none grid place-items-center text-ink-muted transition-[transform] dur-control ease-out motion-reduce:transition-none group-state-open:transform-(--chev-turn)"
+              class="flex-none grid place-items-center text-ink-muted transition-[transform] dur-control ease-out motion-reduce:transition-off group-state-open:transform-(--chev-turn)"
               data-box
               style:--chev-turn="rotate(90deg)"
               ><IconChevronRight class="size-icon-sm block" /></span

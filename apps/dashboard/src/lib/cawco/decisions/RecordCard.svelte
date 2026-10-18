@@ -193,7 +193,7 @@
           <IconChevronDown
             data-chev
             aria-hidden="true"
-            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-none"
+            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-off"
             data-icon="inline-end"
             style="--chev-flip: scaleY(-1)"
           />
@@ -202,7 +202,7 @@
       <!-- literal: 0fr, 1fr (the fold's track) -->
       <div
         data-slot="fold"
-        class="group/fold mt-(--fold-pull) grid max-w-full grid-rows-(--rows-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--rows-open) data-open:dur-panel motion-reduce:transition-none motion-reduce:data-open:dur-panel"
+        class="group/fold mt-(--fold-pull) grid max-w-full grid-rows-(--rows-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--rows-open) data-open:dur-panel motion-reduce:transition-off motion-reduce:data-open:dur-panel"
         data-open={open || undefined}
         id="{fid}-others"
         inert={!open}

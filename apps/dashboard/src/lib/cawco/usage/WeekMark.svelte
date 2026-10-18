@@ -31,7 +31,7 @@
   <circle class="fill-border-control" cx="5" cy="5" r="5" />
   <!-- literal: 5px 5px; rotate(-90deg) -->
   <circle
-    class="share fill-none stroke-5 origin-(--share-origin) transform-(--share-turn) transition-[stroke-dashoffset] dur-panel ease-in-out motion-reduce:transition-none"
+    class="share fill-none stroke-5 origin-(--share-origin) transform-(--share-turn) transition-[stroke-dashoffset] dur-panel ease-in-out motion-reduce:transition-off"
     cx="5"
     cy="5"
     pathLength="100"

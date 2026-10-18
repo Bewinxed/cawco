@@ -97,7 +97,7 @@
            reduced motion, not none: the fades stay, the movement goes. -->
       <div
         data-pane-lift
-        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:dur-pick-up motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-none"
+        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:dur-pick-up motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-off"
         style:--lift-rest="scale(1)"
         style:--lift-up="scale(var(--press-scale))"
       >

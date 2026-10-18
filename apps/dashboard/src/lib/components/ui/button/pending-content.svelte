@@ -200,7 +200,7 @@
       >
         <circle cx="12" cy="12" opacity="0.25" r="9" stroke-width="2.5" />
         <circle
-          class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] dur-pop ease-out motion-reduce:transition-none"
+          class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] dur-pop ease-out motion-reduce:transition-off"
           data-slot="ring-arc"
           cx="12"
           cy="12"

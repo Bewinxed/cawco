@@ -1792,7 +1792,7 @@
            presses through (floating-presence). -->
       <DialogPrimitive.Overlay
         data-slot="session-scrim"
-        class="ns-theme fixed inset-0 z-80 bg-scrim backdrop-blur-(--scrim-blur) motion-reduce:animate-none! motion-reduce:transition-none!"
+        class="ns-theme fixed inset-0 z-80 bg-scrim backdrop-blur-(--scrim-blur) motion-reduce:animate-none! motion-reduce:transition-off!"
       >
         {#snippet child({ props, open: shown })}
           <div {...props} style:pointer-events={pressable(shown)}></div>
@@ -1801,7 +1801,7 @@
       <DialogPrimitive.Content
         data-session-card
         aria-label="New Session"
-        class="ns-theme fixed z-81 flex origin-center flex-col outline-off inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-reduce:animate-none! motion-reduce:transition-none!"
+        class="ns-theme fixed z-81 flex origin-center flex-col outline-off inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-reduce:animate-none! motion-reduce:transition-off!"
         data-ns-dialog
         onCloseAutoFocus={(event) => {
           event.preventDefault();

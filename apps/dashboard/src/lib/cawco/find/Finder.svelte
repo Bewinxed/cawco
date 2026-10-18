@@ -507,7 +507,7 @@
   >
     {#each WHO as who (who.value)}
       <button
-        class="inline-flex items-center gap-space-row h-(--chip-h) px-(--chip-px) border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-[background-color,color,border-color] motion-safe:transition-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
+        class="inline-flex items-center gap-space-row h-(--chip-h) px-(--chip-px) border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
         aria-pressed={(finder.by ?? "anyone") === who.value}
         onclick={() => {
           if (finder.parsed.me && who.value !== "me") {
@@ -521,7 +521,7 @@
     {/each}
     {#each finder.projectChips as word (word)}
       <span
-        class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-[background-color,color,border-color] motion-safe:transition-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
+        class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
         data-flip="pop"
         ><span>{word}</span><button
           class="grid place-items-center size-(--chipx) border-none border-current rounded-pill bg-transparent"
@@ -535,7 +535,7 @@
     {#if finder.parsed.time}
       {@const time = finder.parsed.time}
       <span
-        class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-[background-color,color,border-color] motion-safe:transition-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
+        class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
         data-flip="pop"
         ><span>{time}</span><button
           class="grid place-items-center size-(--chipx) border-none border-current rounded-pill bg-transparent"

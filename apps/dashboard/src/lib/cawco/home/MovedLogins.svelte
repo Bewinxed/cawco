@@ -132,7 +132,7 @@
           <IconChevronDown
             data-chev
             aria-hidden="true"
-            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-none"
+            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-off"
             data-icon="inline-end"
             style="--chev-flip: scaleY(-1)"
           />
@@ -144,7 +144,7 @@
       <!-- literal: 0fr, 1fr -->
       <div
         data-slot="fold"
-        class="group grid grid-rows-(--fold-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--fold-open) data-open:dur-panel motion-reduce:transition-none"
+        class="group grid grid-rows-(--fold-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--fold-open) [&[data-open]]:dur-panel motion-reduce:transition-off"
         data-open={open || undefined}
         id="moved-done"
         inert={!open}

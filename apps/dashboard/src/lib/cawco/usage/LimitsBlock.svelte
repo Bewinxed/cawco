@@ -158,7 +158,7 @@
   <!-- literal: 8px, 50%, 3px -->
   <div
     data-slot="tile"
-    class="flex min-w-0 flex-col gap-space-3 rounded-md bg-surface-recess p-space-4 transition-[background-color] dur-fade ease-out data-limit:bg-meter-wash-over motion-reduce:transition-none"
+    class="flex min-w-0 flex-col gap-space-3 rounded-md bg-surface-recess p-space-4 transition-[background-color] dur-fade ease-out data-limit:bg-meter-wash-over motion-reduce:transition-off"
     data-account={ring.id}
     data-limit={ring.state === "limit" || undefined}
     data-tile
