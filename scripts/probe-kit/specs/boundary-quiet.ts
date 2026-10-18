@@ -62,7 +62,10 @@ import { join } from "node:path";
 import { QUIET_CLOSE_MS } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf, isJudgeOf } from "../../../packages/agent/src/proc-id";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { OVERLAY_PATH } from "../../../packages/core/src/preview-proxy";
+import {
+  OVERLAY_KEY,
+  OVERLAY_PATH,
+} from "../../../packages/core/src/preview-proxy";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -96,8 +99,9 @@ const CLOSE_SLACK_MS = 3 * 60_000;
 const ACCOUNT_ADDED = "acct-probe-older-form";
 const CLOSED_LINE = ": nothing holds it (";
 const START_LINE = "[workspace] boundary hooks written for ";
+/** The start-up pass's count of the workspaces it leaves as they are, armed only when a session there starts (agent boundary.ts `rearmHooks`, since bc1cb9f52). */
 const LEFT_IDLE =
-  /; (\d+) with a boundary running and nothing in it are left as they are/;
+  /; (\d+) with nothing in them are armed when a session there starts/;
 
 /** `word` as one single-quoted shell word. */
 const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -368,7 +372,7 @@ const stillOpen = async (
   );
 };
 
-/** Whether preview `instanceId`'s origin answers 200 with `tag`'s page and the overlay, within 30 s. */
+/** Whether preview `instanceId`'s origin answers 200 with `tag`'s page and the overlay at its key (preview-proxy.ts `keyOverlay`, since b61aa3890), within 30 s. */
 const serving = async (
   fleet: Fleet,
   instanceId: string,
@@ -395,7 +399,7 @@ const serving = async (
           if (
             status === 200 &&
             body.includes(`<title>${titleOf(tag)}</title>`) &&
-            body.includes(`src="${OVERLAY_PATH}"`)
+            body.includes(`src="${OVERLAY_PATH}?${OVERLAY_KEY}=`)
           ) {
             return { ok: true, last };
           }
@@ -722,14 +726,17 @@ const waiterHolds = async (
     Boolean(reached),
     `reached: ${Boolean(reached)}`
   );
-  const kept = (await fleet.logs("agent"))
-    .split("\n")
-    .find((line) => line.includes(w.workspaceId) && line.includes(KEPT_LINE));
   const last = await boundariesOf(fleet, w.workspaceId);
+  const said = (await fleet.logs("agent"))
+    .split("\n")
+    .filter((line) => line.includes(w.workspaceId));
+  const keptAt = said.findIndex((line) => line.includes(KEPT_LINE));
+  const unchanged = JSON.stringify(last) === JSON.stringify(had);
   kit.check(
     "7: W's boundary, of an older form since the restart, is kept as it is while its server listens: said in the agent's log, never handed over",
-    Boolean(kept) && JSON.stringify(last) === JSON.stringify(had),
-    `${kept ?? "no kept line"}; boundary ${last.join(",") || "none"}`
+    keptAt >= 0 && unchanged,
+    // What the agent said of W from the kept line on, when its boundary moved.
+    `${said[keptAt] ?? "no kept line"}; boundary ${last.join(",") || "none"}${unchanged ? "" : `; since: ${said.slice(keptAt + 1).join(" | ") || "nothing"}`}`
   );
 };
 
