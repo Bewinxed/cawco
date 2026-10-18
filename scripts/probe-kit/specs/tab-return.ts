@@ -32,6 +32,12 @@
  * Event Timing. Each return is a leg gated on the spec's own CPU pressure
  * (`quietLeg`). Every number is written to `numbers.json`.
  *
+ * The busy session streams as the spec lets it: once seeded, its live turns
+ * run only while the busy tab is away (one per `TURN_MS` of the absence) and
+ * land before the return, and none runs while a return is measured. Every
+ * run, on any tree, is shown the same turns at the same points; each return
+ * says how many elements the page put in from the reach on (`inserted`).
+ *
  * Asserted per return: its longest task within two frames' budget
  * (`2 × LONG_TASK_MS`) on the slower CPU, and its interaction under
  * `INPUT_MS`.
@@ -79,6 +85,15 @@ const OUTPUT_LINES = 400;
 const SCRIPT_FUNCTIONS = 60_000;
 /** A task this long or longer is listed with when it ran (`Back.heavy`), CPU ms. */
 const HEAVY_MS = 8;
+/**
+ * A live busy turn's length (its 30 words at 40ms, its tool's second, the
+ * harness's round trip): how many turns an absence lets through.
+ */
+const TURN_MS = 3000;
+/** The most a leg's released turns may take. */
+const RELEASE_MS = 5 * 60_000;
+/** After the last released turn, for its frames to reach the page. */
+const LANDED_MS = 1500;
 /** An interaction's length in `inputsOf`'s line. */
 const LENGTH = / (\d+)ms/;
 const RIVE = join(
@@ -95,6 +110,8 @@ interface Back {
   /** The press's interaction, Event Timing's longest entry. */
   input: string;
   inputMs: number;
+  /** Elements put into the page from the reach to the window's end, each with all it holds. */
+  inserted: number;
   /** The longest task from the reach to the window's end, CPU ms, and what it was. */
   longest: number;
   longestWhat: string;
@@ -149,41 +166,81 @@ var c = document.getElementById("c"), g = c.getContext("2d");
   );
 }
 
-/** The mock's answers, each session told apart by the mark its first message carries. */
+/**
+ * The mock's answers, each session told apart by the mark its first message
+ * carries. Once `hold` is called, the busy session's live turns go only as a
+ * leg lets them (`release`): every run, on any tree, is shown the same turns
+ * at the same points, and nothing streams while a return is measured.
+ */
 function sceneModel() {
   const tag = crypto.randomUUID().slice(0, 6);
   const mark = (name: string) => `tab-return ${name} ${tag}`;
   const counts: { busy?: number } = {};
-  const respond = (request: Seen): Reply => {
+  /** The last busy request let through; null while the turns run freely. */
+  const pace: { upTo: number | null; open: (() => void) | null } = {
+    upTo: null,
+    open: null,
+  };
+  const turn = () =>
+    new Promise<void>((resolve) => {
+      pace.open = resolve;
+    });
+  /** The busy session's `n`th turn: seeded fast, then live (30 words at 40ms, a second's tool), once its leg lets it. */
+  const busyTurn = async (n: number): Promise<Reply> => {
+    const live = n > SEED;
+    while (live && pace.upTo !== null && n > pace.upTo) {
+      await turn();
+    }
+    const id = String(n).padStart(5, "0");
+    return {
+      everyMs: live ? 40 : 1,
+      words:
+        live || n % 3 === 0
+          ? Array.from(
+              { length: live ? 30 : 4 },
+              (_, i) => `${i === 0 ? `busy ${id}: ` : ""}w${i} `
+            )
+          : [],
+      tool: {
+        name: "Bash",
+        input: {
+          command: `${live ? "sleep 1; " : ""}seq -f 'busy ${id} line %g' ${OUTPUT_LINES}`,
+          description: `Print busy ${id}`,
+        },
+      },
+    };
+  };
+  const respond = (request: Seen): Reply | Promise<Reply> => {
     if (!request.tools) {
       return { everyMs: 1, words: ["Tab return"] };
     }
     if (request.all.includes(mark("busy"))) {
       const n = (counts.busy ?? 0) + 1;
       counts.busy = n;
-      const live = n > SEED;
-      const id = String(n).padStart(5, "0");
-      return {
-        everyMs: live ? 40 : 1,
-        words:
-          live || n % 3 === 0
-            ? Array.from(
-                { length: live ? 30 : 4 },
-                (_, i) => `${i === 0 ? `busy ${id}: ` : ""}w${i} `
-              )
-            : [],
-        tool: {
-          name: "Bash",
-          input: {
-            command: `${live ? "sleep 1; " : ""}seq -f 'busy ${id} line %g' ${OUTPUT_LINES}`,
-            description: `Print busy ${id}`,
-          },
-        },
-      };
+      return busyTurn(n);
     }
     return { everyMs: 5, words: ["Done."] };
   };
-  return { counts, mark, respond };
+  /** From now on a busy turn waits for its leg. */
+  const hold = () => {
+    pace.upTo = counts.busy ?? 0;
+  };
+  /** Lets `turns` more busy turns run, and answers once each has run whole: its tool's output sent back, the next turn waiting. */
+  const release = async (turns: number) => {
+    const upTo = (pace.upTo ?? 0) + turns;
+    pace.upTo = upTo;
+    const began = Date.now();
+    while ((counts.busy ?? 0) <= upTo && Date.now() - began < RELEASE_MS) {
+      pace.open?.();
+      await Bun.sleep(50);
+    }
+    if ((counts.busy ?? 0) <= upTo) {
+      throw new Error(
+        `tab-return: ${turns} busy turns did not run within ${RELEASE_MS / 1000}s`
+      );
+    }
+  };
+  return { counts, hold, mark, release, respond };
 }
 
 /** The pane's frame for `id` and the press's input, the reach first, as two-pane-perf's `point`. */
@@ -241,6 +298,27 @@ async function measureBack(
 ): Promise<Read> {
   const point = await pointAt(page, input, id);
   const held = await census(page);
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __inserted: number;
+      __insertWatch?: MutationObserver;
+    };
+    w.__insertWatch?.disconnect();
+    w.__inserted = 0;
+    w.__insertWatch = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element) {
+            w.__inserted += 1 + node.querySelectorAll("*").length;
+          }
+        }
+      }
+    });
+    w.__insertWatch.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+  });
   let madeAt = 0;
   const main = await traceMain(
     page,
@@ -296,6 +374,14 @@ async function measureBack(
     );
   const longest = longestOf(own);
   const reach = longestOf(own.filter((task) => task.at < madeMark));
+  const inserted = await page.evaluate(() => {
+    const w = window as unknown as {
+      __inserted: number;
+      __insertWatch?: MutationObserver;
+    };
+    w.__insertWatch?.disconnect();
+    return w.__inserted;
+  });
   const cost = await costOf(page);
   const [press] = inputsOf(cost.events, [madeAt]);
   const inputMs = Number(LENGTH.exec(press ?? "")?.[1] ?? 0);
@@ -307,6 +393,7 @@ async function measureBack(
     : Number.NaN;
   return {
     held,
+    inserted,
     input: press ?? "none reported",
     inputMs,
     longest: Math.round(longest?.cpu ?? 0),
@@ -380,6 +467,7 @@ const run = async (kit: Kit) => {
     (c) => (c.busy ?? 0) > SEED + 5,
     30 * 60_000
   );
+  scene.hold();
   const base = await fleet.dashboard();
   /**
    * The dashboard at the desk on `tabs`, `shown` in front once each tab
@@ -423,6 +511,12 @@ const run = async (kit: Kit) => {
   const isolated = await desk([front, busy, previewed], busy, false);
 
   const backs: Back[] = [];
+  /**
+   * One return. Away from the busy tab, the busy session runs the turns of
+   * the absence's length (`TURN_MS` each) and they land before the pointer
+   * moves; a return to the preview runs none, so the busy tab behind it
+   * holds the same turns whatever leg was tried again.
+   */
   const leg = async (
     on: Awaited<ReturnType<typeof desk>>,
     name: string,
@@ -432,9 +526,15 @@ const run = async (kit: Kit) => {
   ) => {
     const { page, input, ready } = on;
     const got: { read?: Read } = {};
+    const turns = to === busy ? Math.round(absence / TURN_MS) : 0;
     const psi = await quietLeg(name, pressure, async () => {
       await away(page, front);
-      await page.waitForTimeout(absence);
+      const began = Date.now();
+      if (turns > 0) {
+        await scene.release(turns);
+        await page.waitForTimeout(LANDED_MS);
+      }
+      await page.waitForTimeout(Math.max(0, absence - (Date.now() - began)));
       got.read = await measureBack(
         page,
         input,
@@ -448,7 +548,7 @@ const run = async (kit: Kit) => {
     const back: Back = { scene: name, psi, ...got.read };
     backs.push(back);
     kit.note(
-      `${name}: ${back.psi} | longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
+      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
     );
   };
   await leg(

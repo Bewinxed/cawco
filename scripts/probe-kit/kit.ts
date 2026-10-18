@@ -230,7 +230,7 @@ export interface Kit {
    * (scratch-fleet.ts `HubAddress`), 127.0.0.1 unless named.
    */
   fleet: (
-    respond: (request: Seen) => Reply,
+    respond: (request: Seen) => Reply | Promise<Reply>,
     hub?: HubAddress
   ) => Promise<KitFleet>;
   /** A line that is neither a pass nor a fail (a capture awaiting its baseline). */

@@ -978,7 +978,8 @@ export interface HubAddress {
 export async function scratchFleet(options: {
   hub?: HubAddress;
   name: string;
-  respond: (request: Seen) => Reply;
+  /** A promise holds the request until it settles: a spec paces a session's turns. */
+  respond: (request: Seen) => Reply | Promise<Reply>;
 }) {
   const heavy = await heavySlot();
   const dirs = new FleetDirs();
@@ -995,7 +996,7 @@ async function standUp(
   options: {
     hub?: HubAddress;
     name: string;
-    respond: (request: Seen) => Reply;
+    respond: (request: Seen) => Reply | Promise<Reply>;
   },
   dirs: FleetDirs,
   heavy: HeavySlot
@@ -1125,7 +1126,7 @@ async function standUp(
         }),
       };
       seen.push(one);
-      const reply = options.respond(one);
+      const reply = await options.respond(one);
       const chat = path.endsWith("/chat/completions");
       const refused = refusalOf(reply, chat);
       if (refused) {
