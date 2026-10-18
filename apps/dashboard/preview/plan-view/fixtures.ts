@@ -317,7 +317,7 @@ function phoneAndReader(moment: Moment): Step {
           noun: "report",
           open: true,
           report:
-            "The browser on the Mac did not start, so nothing was read aloud. Retry once the Mac is back.",
+            "It had opened the booking form and was about to read it with VoiceOver. Retry it once the Mac is free, or run the check on the iPhone simulator instead.",
         },
         wait: {
           kind: "fail",

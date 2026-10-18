@@ -34,7 +34,7 @@
 </script>
 
 {#snippet desk(plan: PlanFixture, caption: string, toEnd = false, fit = false)}
-  <figure data-kind="desk">
+  <figure data-kind="desk" data-phone="hide">
     <DeskPlan {fit} {plan} {toEnd}>
       <ProposedPlan {loaded} {plan} />
     </DeskPlan>
@@ -54,13 +54,6 @@
 <main class="page">
   <header class="intro">
     <h1>The plan, redesigned</h1>
-    <p class="what">
-      A preview of the plan panel, on the desk beside a conversation and on the
-      phone as a sheet. Nothing here is built yet. Each state is drawn as
-      proposed, on the desk and on the phone; under the task and the delegates
-      states, Today draws the same plan as the panel draws it now, for
-      comparison.
-    </p>
     <p>
       The plan is one list of what a session is doing. Each step says its state,
       who's on it, what it's tied to, and what it waits on.
@@ -114,7 +107,7 @@
         Today, for comparison: the same task, as the panel draws it now
       </p>
       <div class="frames">
-        <figure data-kind="desk">
+        <figure data-kind="desk" data-phone="hide">
           <DeskPlan plan={attempt} today>
             <TodayPlan plan={attempt} />
           </DeskPlan>
@@ -160,7 +153,7 @@
       </p>
       <div class="frames">
         <figure data-kind="desk">
-          <DeskPlan plan={delegates} today>
+          <DeskPlan narrow="stack" plan={delegates} today>
             {#snippet conversation()}
               <TodayCards />
             {/snippet}
@@ -227,9 +220,6 @@
       margin: 0;
       font: var(--type-body);
       text-wrap: pretty;
-    }
-    & .what {
-      color: var(--ink-muted);
     }
   }
   nav ul {
@@ -324,6 +314,10 @@
     figure {
       inline-size: 100%;
       max-inline-size: 100%;
+    }
+    /* The phone's sheet shows the state: its desk frame steps aside. */
+    figure[data-phone="hide"] {
+      display: none;
     }
     figure[data-kind="phone"] {
       order: -1;
