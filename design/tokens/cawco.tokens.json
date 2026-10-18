@@ -4220,6 +4220,14 @@
         }
       }
     },
+    "c-new-project-field-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 570,
+        "unit": "px"
+      },
+      "$description": "New project's field at its widest: the session Composer under \"What are we working on?\", and the starter chips under it, which stand on that composer's column (the Composer's own --c-composer-w inside it)."
+    },
     "c-composer-w": {
       "$type": "dimension",
       "$value": {
@@ -4276,7 +4284,7 @@
         "value": 11,
         "unit": "rem"
       },
-      "$description": "A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters)."
+      "$description": "A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (StarterCards)."
     },
     "c-starter-h": {
       "$type": "dimension",

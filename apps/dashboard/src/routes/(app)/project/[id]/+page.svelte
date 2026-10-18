@@ -1883,156 +1883,159 @@
   <div class="caw-host">
     <div class="caw-docked" data-caw-open={docked || undefined}>
       <div class="caw-page">
-  {#if phone && openFile}
-    <!-- A phone: the folder's file is its own page, with Back to the view. -->
-    <div data-slot="project-page" class="project-page task-only">
-      {#key openFile}
-        <FolderFile
-          backLabel={project.name}
-          onclose={closeFile}
-          page
-          path={openFile}
-          {projectId}
-        />
-      {/key}
-    </div>
-  {:else if phone && openTask && stages}
-    <!-- A phone: the task is its own page, with Back to the view. -->
-    <div data-slot="project-page" class="project-page task-only">
-      <TaskPane
-        {allowedFrom}
-        backLabel={project.name}
-        onchanged={changed}
-        onclose={closeTask}
-        onmove={(id, stage) => move(id, stage)}
-        onopen={openOne}
-        page
-        {projectId}
-        {stages}
-        taskId={openTask}
-        {tasks}
-      />
-    </div>
-  {:else}
-    <!-- The frame the phone's views bar docks in, over the page's foot. -->
-    <div class="project-frame">
-      <div
-        data-slot="project-page"
-        class={["project-page", fadeOn === "page" && "kit-edge-fade-block"]}
-      >
-        <ProjectHead
-          {lead}
-          {machine}
-          onask={canTalk ? ask : null}
-          onfilter={(anchor) => {
-            filterAnchor = anchor;
-            filterOpen = true;
-          }}
-          onnewtask={() => {
-            choose("board");
-            adding = true;
-          }}
-          onstages={stages?.source === "template"
-            ? (anchor) => {
-                stagesAnchor = anchor;
-                stagesOpen = true;
-              }
-            : null}
-          {project}
-          seated={!standing}
-        />
-
-        {#if lead.view?.problem}
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription>{lead.view.problem}</AlertDescription>
-          </Alert>
-        {/if}
-        {#if stages && stages.problems.length > 0}
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription>{unreadStages}</AlertDescription>
-          </Alert>
-        {/if}
-        {#if list && list.problems.length > 0}
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription>{list.problems.join(" ")}</AlertDescription>
-          </Alert>
-        {/if}
-        {#if unread && !paneSaysUnread}
-          <!-- The tasks stand, but the stages or the views didn't come: said
-               once, here, with its Retry. -->
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription>{unread}</AlertDescription>
-            <AlertAction>
-              <Button
-                label="Retry"
-                onclick={readAgain}
-                pending={rereading}
-                pendingLabel="Retrying…"
-                size="sm"
-                variant="outline"
+        {#if phone && openFile}
+          <!-- A phone: the folder's file is its own page, with Back to the view. -->
+          <div data-slot="project-page" class="project-page task-only">
+            {#key openFile}
+              <FolderFile
+                backLabel={project.name}
+                onclose={closeFile}
+                page
+                path={openFile}
+                {projectId}
               />
-            </AlertAction>
-          </Alert>
-        {/if}
-
-        {#if !hosted}
-          <!-- Under the head from 640px; a phone's views are its bar's. -->
-          <div class="under-head">{@render strip(false)}</div>
-        {/if}
-
-        {#if phone}
-          <!-- Under 900px a task is its own page: the view stands alone,
-                 the page's one scroller on a phone. -->
-          {@render viewPane()}
+            {/key}
+          </div>
+        {:else if phone && openTask && stages}
+          <!-- A phone: the task is its own page, with Back to the view. -->
+          <div data-slot="project-page" class="project-page task-only">
+            <TaskPane
+              {allowedFrom}
+              backLabel={project.name}
+              onchanged={changed}
+              onclose={closeTask}
+              onmove={(id, stage) => move(id, stage)}
+              onopen={openOne}
+              page
+              {projectId}
+              {stages}
+              taskId={openTask}
+              {tasks}
+            />
+          </div>
         {:else}
-          <Split
-            backLabel="Back to {viewWord}"
-            defaultWidth={40}
-            keys={{
-              width: `cawco.task.width.${projectId}`,
-              expanded: `cawco.task.expanded.${projectId}`,
-            }}
-            main={viewPane}
-            mainClass="view-pane-side"
-            open={!!openFile || (!!openTask && !!stages)}
-            side={sideCard}
-          />
-        {/if}
-      </div>
-      {#if !hosted}
-        <ViewBar
-          {current}
-          needs={needsYou.length}
-          needsOn={filtering}
-          onchoose={choose}
-          onnewsession={() => lead.newThread()}
-          ontoggleneeds={() => {
-            needsOnly = !filtering;
-          }}
-          views={barViews}
-        >
-          {#snippet tools()}
-            <!-- As the strip draws it on a narrow screen: its glyph and count
-                 while a filter stands; the head's ⋯ opens it. -->
-            {#if filterHere && narrowed > 0}
-              <TaskFilterPopover
-                compact
-                {filter}
-                {find}
-                onchange={setFilter}
-                tasks={[...tasks, ...archived]}
+          <!-- The frame the phone's views bar docks in, over the page's foot. -->
+          <div class="project-frame">
+            <div
+              data-slot="project-page"
+              class={[
+                "project-page",
+                fadeOn === "page" && "kit-edge-fade-block",
+              ]}
+            >
+              <ProjectHead
+                {lead}
+                {machine}
+                onask={canTalk ? ask : null}
+                onfilter={(anchor) => {
+                  filterAnchor = anchor;
+                  filterOpen = true;
+                }}
+                onnewtask={() => {
+                  choose("board");
+                  adding = true;
+                }}
+                onstages={stages?.source === "template"
+                  ? (anchor) => {
+                      stagesAnchor = anchor;
+                      stagesOpen = true;
+                    }
+                  : null}
+                {project}
+                seated={!standing}
               />
+
+              {#if lead.view?.problem}
+                <Alert data-id-page-notice class="notice" variant="warning">
+                  <AlertDescription>{lead.view.problem}</AlertDescription>
+                </Alert>
+              {/if}
+              {#if stages && stages.problems.length > 0}
+                <Alert data-id-page-notice class="notice" variant="warning">
+                  <AlertDescription>{unreadStages}</AlertDescription>
+                </Alert>
+              {/if}
+              {#if list && list.problems.length > 0}
+                <Alert data-id-page-notice class="notice" variant="warning">
+                  <AlertDescription>{list.problems.join(" ")}</AlertDescription>
+                </Alert>
+              {/if}
+              {#if unread && !paneSaysUnread}
+                <!-- The tasks stand, but the stages or the views didn't come: said
+               once, here, with its Retry. -->
+                <Alert data-id-page-notice class="notice" variant="warning">
+                  <AlertDescription>{unread}</AlertDescription>
+                  <AlertAction>
+                    <Button
+                      label="Retry"
+                      onclick={readAgain}
+                      pending={rereading}
+                      pendingLabel="Retrying…"
+                      size="sm"
+                      variant="outline"
+                    />
+                  </AlertAction>
+                </Alert>
+              {/if}
+
+              {#if !hosted}
+                <!-- Under the head from 640px; a phone's views are its bar's. -->
+                <div class="under-head">{@render strip(false)}</div>
+              {/if}
+
+              {#if phone}
+                <!-- Under 900px a task is its own page: the view stands alone,
+                 the page's one scroller on a phone. -->
+                {@render viewPane()}
+              {:else}
+                <Split
+                  backLabel="Back to {viewWord}"
+                  defaultWidth={40}
+                  keys={{
+                    width: `cawco.task.width.${projectId}`,
+                    expanded: `cawco.task.expanded.${projectId}`,
+                  }}
+                  main={viewPane}
+                  mainClass="view-pane-side"
+                  open={!!openFile || (!!openTask && !!stages)}
+                  side={sideCard}
+                />
+              {/if}
+            </div>
+            {#if !hosted}
+              <ViewBar
+                {current}
+                needs={needsYou.length}
+                needsOn={filtering}
+                onchoose={choose}
+                onnewsession={() => lead.newThread()}
+                ontoggleneeds={() => {
+                  needsOnly = !filtering;
+                }}
+                views={barViews}
+              >
+                {#snippet tools()}
+                  <!-- As the strip draws it on a narrow screen: its glyph and count
+                 while a filter stands; the head's ⋯ opens it. -->
+                  {#if filterHere && narrowed > 0}
+                    <TaskFilterPopover
+                      compact
+                      {filter}
+                      {find}
+                      onchange={setFilter}
+                      tasks={[...tasks, ...archived]}
+                    />
+                  {/if}
+                {/snippet}
+              </ViewBar>
             {/if}
-          {/snippet}
-        </ViewBar>
-      {/if}
-      <!-- Outside the scroller, whose edge fade would mask it where it
+            <!-- Outside the scroller, whose edge fade would mask it where it
            floats: a fixed box is drawn under its ancestors' masks. -->
-      {#if shown === "board" || shown === "table"}
-        {@render bulkBar()}
-      {/if}
-    </div>
-  {/if}
+            {#if shown === "board" || shown === "table"}
+              {@render bulkBar()}
+            {/if}
+          </div>
+        {/if}
       </div>
       <CawFloat {lead} {projectId} projectName={project?.name ?? ""} />
     </div>
@@ -2193,8 +2196,14 @@
   }
   /* Room for the board beside it: a column of its own at the page's end,
      a conversation's width, from the head's top to --space-6 over the
-     foot, the page's own end padding between the two. */
-  @container (min-width: 56rem) {
+     foot, the page's own end padding between the two. The room is the
+     panel and the page at their narrowest, 938px, summed from the tokens
+     because a container query takes no var(): --c-panel-w (380px) and its
+     end margin, --space-6 (21px); the pane's inline padding, --space-7 and
+     --space-6 (25px, 21px); two of the board's columns at their narrowest
+     (TaskBoard `minmax(15rem, 22rem)`, 240px each) and the --space-3 (11px)
+     between. */
+  @container (min-width: 938px) {
     .caw-docked[data-caw-open] {
       grid-template:
         "page dock" minmax(0, 1fr)

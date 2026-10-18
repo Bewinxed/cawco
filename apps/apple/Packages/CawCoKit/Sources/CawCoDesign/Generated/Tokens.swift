@@ -595,6 +595,8 @@ public enum Size {
     /// How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach.
     public static let cAskDiffShare: Double = 0.4
     public static let cComposerPanel: Double = 50
+    /// New project's field at its widest: the session Composer under "What are we working on?", and the starter chips under it, which stand on that composer's column (the Composer's own --c-composer-w inside it).
+    public static let cNewProjectFieldW: Double = 570
     /// The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line).
     /// At most this, in points: on the web the least of it and a share of its container (min).
     public static let cComposerW: Double = 720
@@ -602,7 +604,7 @@ public enum Size {
     public static let cSuggestChip: Double = 30
     public static let cSuggestRow: Double = 52
     public static let cSuggestRoom: Double = 59
-    /// A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters).
+    /// A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (StarterCards).
     public static let cStarterW: Double = 176
     /// A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone.
     public static let cStarterH: Double = 56

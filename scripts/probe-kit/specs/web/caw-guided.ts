@@ -1237,11 +1237,81 @@ const longName = async (kit: Kit, setup: Setup) => {
   }
 };
 
-/** The routines' empty view at 1280: its starter chips stand on its composer field's start edge. */
-const routinesEdge = async (kit: Kit, setup: Setup) => {
+/** A name of 120 characters and no space stays inside the head, ellipsed (320, 1440). */
+const unbrokenName = async (kit: Kit, setup: Setup) => {
+  const name = "Tidewater".padEnd(120, "harbourfront");
+  for (const one of [
+    { name: "1440", view: "desk" },
+    { name: "320", view: "phone", width: 320 },
+  ] satisfies Leg[]) {
+    const page = await legPage(kit, one, "light");
+    await openPanel(page, setup.url);
+    await page.evaluate(
+      async ({ id, to }) => {
+        await fetch(`/api/projects/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: to }),
+        });
+      },
+      { id: setup.project.id, to: name }
+    );
+    await page.waitForFunction(
+      (to) =>
+        document
+          .querySelector('[data-slot="project-head"] [data-slot="name"]')
+          ?.textContent?.trim() === to,
+      name
+    );
+    await settle(page, 400);
+    const read = await page.evaluate(() => {
+      const of = (el: Element | null) =>
+        el
+          ? {
+              scroll: el.scrollWidth,
+              client: el.clientWidth,
+              right: el.getBoundingClientRect().right,
+            }
+          : null;
+      const nameEl = document.querySelector(
+        '[data-slot="project-head"] [data-slot="name"]'
+      );
+      return {
+        head: of(document.querySelector('[data-slot="project-head"]')),
+        title: of(
+          document.querySelector(
+            '[data-slot="project-head"] [data-slot="title"]'
+          )
+        ),
+        name: of(nameEl),
+        ellipsis: nameEl ? getComputedStyle(nameEl).textOverflow : "",
+      };
+    });
+    kit.check(
+      `${one.name}: a 120-character name with no space stays inside the head, ellipsed`,
+      read.head !== null &&
+        read.title !== null &&
+        read.name !== null &&
+        read.head.scroll <= read.head.client &&
+        read.title.scroll <= read.title.client &&
+        read.name.scroll > read.name.client &&
+        read.name.right <= read.head.right + 0.5 &&
+        read.ellipsis === "ellipsis",
+      JSON.stringify(read)
+    );
+    await page.close();
+  }
+};
+
+/**
+ * The routines' empty view: its starter chips stand on its composer field's
+ * start edge, at 1280 and on each side of the drawer line (900, 899), where
+ * the Composer's own margins change.
+ */
+const routinesEdge = async (kit: Kit, setup: Setup, width: number) => {
   const page = await legPage(
     kit,
-    { name: "1280", view: "desk", width: 1280 },
+    { name: String(width), view: "desk", width },
     "light"
   );
   // Its starters, as the hub's frame brings a set Jev wrote: inside a
@@ -1288,7 +1358,7 @@ const routinesEdge = async (kit: Kit, setup: Setup) => {
         ?.getBoundingClientRect().left ?? null,
   }));
   kit.check(
-    "1280 routines: the starter chips and the composer's field start on one edge",
+    `${width} routines: the starter chips and the composer's field start on one edge`,
     read.field !== null &&
       read.chips.length > 0 &&
       Math.abs((read.chips[0] ?? -99) - read.field) <= 1,
@@ -1364,8 +1434,11 @@ const run = async (kit: Kit) => {
     await sentShots(kit, setup);
     const ids = await filedTasks(kit, setup, threadId);
     await filedLegs(kit, setup, threadId, ids);
-    await routinesEdge(kit, setup);
+    for (const width of [1280, 900, 899]) {
+      await routinesEdge(kit, setup, width);
+    }
     await longName(kit, setup);
+    await unbrokenName(kit, setup);
     await newProject(kit, setup);
   } finally {
     setup.jev.stop();

@@ -4072,7 +4072,7 @@
      (docked at the bottom of the transcript pane) rather than viewport-fixed,
      so it sits ABOVE the thumb bar instead of overlapping it — the thumb bar
      owns the safe-area inset. */
-  @media (max-width: 900px) {
+  @media (width < 900px) {
     /* Clear the home indicator / gesture bar — the resting gap plus the safe
        area inset, so the composer never sits under the rounded-screen chrome. */
     .dock {

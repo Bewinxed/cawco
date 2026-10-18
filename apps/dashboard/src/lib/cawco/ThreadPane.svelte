@@ -1156,7 +1156,7 @@
   }
   /* Why the thread couldn't be read, where its first row would stand: from
      the room's top, on the composer's start edge (its column, or --space-3
-     where the composer goes edge to edge, Composer's max-width 900px). */
+     where the composer goes edge to edge, the Composer's under 900px). */
   .problem {
     max-inline-size: 60ch;
     margin: 0;
@@ -1165,7 +1165,7 @@
     font: var(--type-body);
     color: var(--ink-muted);
 
-    @media (max-width: 900px) {
+    @media (width < 900px) {
       margin-inline-start: var(--space-3);
     }
   }
@@ -1207,8 +1207,8 @@
        stays under the foot fade as it scrolls past the composer. */
     isolation: isolate;
 
-    /* Where the composer goes edge to edge (Composer, max-width 900px). */
-    @media (max-width: 900px) {
+    /* Where the composer goes edge to edge (the Composer's, under 900px). */
+    @media (width < 900px) {
       padding-inline: var(--space-3);
     }
   }

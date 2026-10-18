@@ -755,6 +755,8 @@
     --c-composer-panel: calc(
       var(--c-composer-field) + var(--c-composer-inset) * 2 + 2px
     );
+    /* New project's field at its widest: the session Composer under "What are we working on?", and the starter chips under it, which stand on that composer's column (the Composer's own --c-composer-w inside it). */
+    --c-new-project-field-w: 570px;
     /* The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line). */
     --c-composer-w: min(720px, calc(100% - 50px));
     /* A suggestion chip: its Tab key cap, padding and border. */
@@ -763,7 +765,7 @@
       var(--space-4) + var(--space-1) * 2 + var(--c-suggest-chip)
     );
     --c-suggest-room: calc(var(--c-suggest-row) + var(--space-2));
-    /* A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters). */
+    /* A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (StarterCards). */
     --c-starter-w: 11rem;
     /* A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone. */
     --c-starter-h: 56px;

@@ -274,16 +274,16 @@
   .chips-box {
     position: relative;
     inline-size: 100%;
-    max-inline-size: 570px;
+    max-inline-size: var(--c-new-project-field-w);
   }
   /* The starters are the kit option chip (.kit-chips / .kit-chip in
      app.css) under the field, on the composer's own column in it (Composer
-     `.composer`: --c-composer-w, centred; at 900px and under, --space-3 in
+     `.composer`: --c-composer-w, centred; under 900px, --space-3 in
      from its box), so the chips and the pill share one start edge. */
   .chips {
     padding-inline: calc((100% - var(--c-composer-w)) / 2);
 
-    @media (max-width: 900px) {
+    @media (width < 900px) {
       padding-inline: var(--space-3);
     }
   }
