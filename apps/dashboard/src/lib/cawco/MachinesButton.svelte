@@ -87,13 +87,21 @@
 </Tip>
 
 <style>
-  /* The number reads beside its glyph, --space-2 apart; the group's next
-     item (Caw's circle, his ring on its edge) stands the same --space-2 past
-     the number, the group's gap and this trailing pad together, so the
-     group reads at one spacing. */
+  /* An item with its number is a plain item widened by its number, its ink
+     as far inside its edges as a plain item's: the symbol's box the plain
+     item's inset in (the item less its symbol, halved), the number
+     --space-2 past the symbol, and after the number the same inset and the
+     symbol's grid margin (Solar draws on 24 units, 2 clear on each side:
+     1/12 of the box), which a number's glyphs do not keep, so its ink ends
+     where a symbol's would. Every item the group's gap from the next, the
+     group reads at one spacing between its items' ink (Caw's round face
+     standing as much nearer as a round's overshoot), its number held closer
+     to its symbol than to the item beside it. */
   .machines {
+    --mark-inset: calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2);
     gap: var(--space-2);
-    padding-inline: var(--space-2) calc(var(--space-2) - var(--c-bar-group-pad));
+    padding-inline: var(--mark-inset)
+      calc(var(--mark-inset) + var(--c-bar-symbol) / 12);
   }
   /* Named under `.machines` to outrank Shell's `.tools .bar-symbol` ink. */
   .machines[data-tone="attn"] :global(.bar-symbol) {

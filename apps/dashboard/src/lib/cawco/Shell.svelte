@@ -1568,7 +1568,15 @@
   }
   /* Jump is the group's search glyph alone, an item of the glass like the
      machines and Caw; its tip names it and ⌘K (owner: the search integrated
-     into the group, not "the whole expanded thing with 'jump'"). */
+     into the group, not "the whole expanded thing with 'jump'"). Its 16px
+     glyph (DESIGN.md) takes the muted ink every symbol of the group takes:
+     in the item's strong ink the lens's half-ink layer drew as a dark disc
+     with a tail. */
+  .tools :global(.jump > svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+    color: var(--ink-muted);
+  }
 
   @media (hover: hover) and (pointer: fine) {
     .burger:hover {
