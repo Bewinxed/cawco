@@ -282,6 +282,7 @@ export const measureRoles = (): RoleSize[] => {
         // Caw reads back the turns his leads are in as he is made: none here.
         db: { leadTurns: () => [] } as never,
         decisions: () => ({}) as never,
+        proposeType: () => Promise.reject(new Error("measuring")),
         end: () => undefined,
         inTurn: () => false,
         interrupt: () => undefined,

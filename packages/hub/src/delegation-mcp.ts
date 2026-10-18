@@ -241,8 +241,12 @@ export function createDelegationMcp(options: {
     actor: InstanceRow,
     include: DelegateListInclude
   ) => Promise<DelegateNode[]>;
-  /** Caw's own tools (threads, views), for a project's lead (caw.ts). */
-  cawTools?: (actor: InstanceRow | undefined) => CawTool[];
+  /**
+   * Caw's own tools (threads, views, his folder, the decision graph), for a
+   * project's lead (caw.ts). `toolUseId` is the call's own: a delegate type
+   * his `folder_write` parks as a proposal is drawn at it.
+   */
+  cawTools?: (actor: InstanceRow | undefined, toolUseId?: string) => CawTool[];
   /** The routine tools (routines.ts), for the roles that run a project. */
   routineTools?: (
     actor: InstanceRow | undefined,
@@ -639,13 +643,16 @@ export function createDelegationMcp(options: {
     )) as CallToolResult;
   };
 
-  /** One of Caw's own tools (threads, views), its role already checked. */
+  /** One of Caw's own tools (threads, views, his folder, the decision graph), its role already checked. */
   const cawCall = async (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    toolUseId: string | undefined
   ): Promise<CallToolResult> => {
-    const entry = options.cawTools?.(actor).find((tool) => tool.name === name);
+    const entry = options
+      .cawTools?.(actor, toolUseId)
+      .find((tool) => tool.name === name);
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
     }
@@ -697,7 +704,7 @@ export function createDelegationMcp(options: {
       return await taskCall(actor, name, input);
     }
     if (CAWS.has(name) && options.cawTools) {
-      return await cawCall(actor, name, input);
+      return await cawCall(actor, name, input, toolUseId);
     }
     if (TRIAGES.has(name) && options.triageTools) {
       const entry = options

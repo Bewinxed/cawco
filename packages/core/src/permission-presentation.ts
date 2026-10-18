@@ -1043,10 +1043,18 @@ function adminGroupWrite(
 export const MEMORY_PROPOSAL_TOOL = "mcp__cawco__memory_propose";
 
 /**
+ * The name Caw's delegate type is parked under as a proposal (hub memory.ts,
+ * from his `folder_write` of a `delegates/` file): no tool's, so his own
+ * `folder_write` call is never drawn as one.
+ */
+export const DELEGATE_TYPE_PROPOSAL_TOOL = "mcp__cawco__delegate_type_proposal";
+
+/**
  * A memory proposal (Projects spec §5.4): a change to the project's AGENTS.md
  * or a knowledge file, as the curator or Caw proposed it, citing the inbox
- * notes it comes from. The hub puts the file as it stood (`before`) beside
- * the proposed text (`content`) as it parks it.
+ * notes it comes from; and Caw's delegate type (§5.1, "a file diff you
+ * approve"), drawn the same. The hub puts the file as it stood (`before`)
+ * beside the proposed text (`content`) as it parks it.
  */
 function memoryProposal(input: Record<string, unknown>): Presented {
   const path = text(input.path) ?? "(no path)";
@@ -1469,7 +1477,10 @@ export function presentPermission(
       fields: [],
     };
   }
-  if (toolName === MEMORY_PROPOSAL_TOOL) {
+  if (
+    toolName === MEMORY_PROPOSAL_TOOL ||
+    toolName === DELEGATE_TYPE_PROPOSAL_TOOL
+  ) {
     return { ...who, ...memoryProposal(input) };
   }
   if (toolName === DESIGN_PROPOSAL_TOOL) {

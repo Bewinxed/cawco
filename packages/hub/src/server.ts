@@ -18339,6 +18339,8 @@ export const createServer = (
     db,
     // The decisions are made further down; Caw's graph tools reach them only once a call runs.
     decisions: () => decisions,
+    proposeType: (actor, path, content, toolUseId) =>
+      projectMemory.proposeType(actor, path, content, toolUseId),
     interrupt: interruptTurn,
     online: (machineId) =>
       machineId === undefined
@@ -19409,7 +19411,7 @@ export const createServer = (
       projectOffers.accept(actor.id, sessionActor(actor)),
     writePlan: (actor, written) => plans.write(actor, written),
     delegationTree: (actor, include) => delegationTree.read(actor, include),
-    cawTools: (actor) => caw.tools(actor),
+    cawTools: (actor, toolUseId) => caw.tools(actor, toolUseId),
     routineTools: (actor, toolUseId) => routines.tools(actor, toolUseId),
     ingressTools: (actor) => ingress.tools(actor),
     actionTools: (actor) => actions.tools(actor),

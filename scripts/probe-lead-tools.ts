@@ -11,6 +11,15 @@
  *    hub's `GET /api/projects/{id}/decisions/graph` answers the two cards
  *    (named by their questions, on one row), the edge and the group, each
  *    change a commit as Caw; a link to a card not on the graph is refused.
+ * 2. Delegate type (§5.1: "Caw can propose a new type as a file diff you
+ *    approve"): Caw's `folder_write` of `delegates/writer.md` commits
+ *    nothing; it is the person's ask, drawn as the file's diff ("Add
+ *    delegates/writer.md") in his thread. Approved, it is committed as the
+ *    person and the project's catalog (`GET /api/projects/{id}/delegate-types`,
+ *    the types its sessions see) lists `writer`. A second type,
+ *    `delegates/editor.md`, declined: no commit touches it and the catalog
+ *    has no `editor`. A file that makes no type is refused with why, and
+ *    parks nothing.
  *
  * Caw's session runs inside his place's boundary, so this runs where a
  * boundary can start: the host, outside every workspace.
@@ -44,7 +53,8 @@ const section = async (name: string, body: () => Promise<void>) => {
 };
 
 // ── The mock model: each PROBE-CALL:<n> message is one tool call ─────────────
-const asks = new Map<string, { input: object; name: string }>();
+/** The tool call each numbered message asks of Caw. */
+const toCall = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 /** What each numbered message's tool answered: the next request's last user text. */
 const answered = new Map<string, string>();
@@ -55,7 +65,7 @@ const respond = (request: Seen): Reply => {
     return text("Probe title");
   }
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
+  const ask = marker ? toCall.get(marker) : undefined;
   if (!(marker && ask)) {
     return text("ok");
   }
@@ -118,6 +128,42 @@ const ok = async <T>(method: string, path: string, body?: unknown) => {
   return JSON.parse(answer.text) as T;
 };
 
+/** An ask parked for the person, as `/api/pending` lists it. */
+interface Ask {
+  instanceId: string;
+  machineId: string;
+  payload: {
+    input: Record<string, unknown>;
+    presentation?: { summary: string };
+    threadId?: string;
+    toolName: string;
+  };
+  requestId: string;
+}
+const TYPE_PROPOSAL = "mcp__cawco__delegate_type_proposal";
+const typeProposals = async (): Promise<Ask[]> =>
+  (await fleet.api<Ask[]>("/api/pending")).filter(
+    (ask) => ask.payload.toolName === TYPE_PROPOSAL
+  );
+/** The person's answer as the dashboard's card sends it: a `permission.answer` command naming the ask's own machine. */
+const answer = (ask: Ask, result: object) =>
+  fleet.post({
+    type: "command",
+    commandId: crypto.randomUUID(),
+    kind: "permission.answer",
+    machineId: ask.machineId,
+    sessionId: ask.instanceId,
+    payload: {
+      instanceId: ask.instanceId,
+      requestId: ask.requestId,
+      method: "resolvePermission",
+      args: [ask.requestId, result],
+    },
+  });
+/** A delegate type's file, as Caw writes one. */
+const typeFile = (brief: string) =>
+  `---\nharness: claude\nmodel: claude-haiku-4-5\neffort: low\nlands: none\n---\n${brief}\n`;
+
 let sent = 0;
 /** One tool call by the project's Caw, asked for in a thread of yours; what the tool answered him. */
 const cawCalls = async (
@@ -127,7 +173,7 @@ const cawCalls = async (
 ): Promise<string> => {
   sent += 1;
   const marker = String(sent);
-  asks.set(marker, { name: `mcp__cawco__${name}`, input });
+  toCall.set(marker, { name: `mcp__cawco__${name}`, input });
   await ok("POST", `/api/projects/${projectId}/threads`, {
     body: `PROBE-CALL:${marker}`,
   });
@@ -233,6 +279,105 @@ try {
       "1e: a link to a card not on the graph is refused, saying so",
       unknown.includes("budget is not on the graph"),
       unknown.slice(0, 200)
+    );
+  });
+
+  // ── 2: a delegate type, proposed by Caw and approved or declined ─────────
+  await section("2: delegate type proposal", async () => {
+    const commitsTo = async (path: string) =>
+      (
+        await ok<{ commits: { author: string; subject: string }[] }>(
+          "GET",
+          `/api/projects/${projectId}/folder/history?path=${encodeURIComponent(path)}`
+        )
+      ).commits;
+    const catalog = async () =>
+      (
+        await ok<{ types: { name: string; source: string }[] }>(
+          "GET",
+          `/api/projects/${projectId}/delegate-types`
+        )
+      ).types;
+
+    const broken = await cawCalls(projectId, "folder_write", {
+      path: "delegates/broken.md",
+      content: "No front matter here.\n",
+    });
+    check(
+      "2a: a file that makes no type is refused with why, and parks nothing",
+      broken.includes("was not proposed") &&
+        broken.includes("front matter") &&
+        (await typeProposals()).length === 0,
+      broken.slice(0, 200)
+    );
+
+    const proposed = await cawCalls(projectId, "folder_write", {
+      path: "delegates/writer.md",
+      content: typeFile("Draft posts in the brand voice."),
+    });
+    const [writer] = await until(
+      "writer's proposal parked",
+      typeProposals,
+      (asks) => asks.length === 1,
+      30_000
+    );
+    check(
+      "2b: Caw's folder_write of delegates/writer.md parks a proposal in his thread and commits nothing",
+      writer?.payload.input.path === "delegates/writer.md" &&
+        writer.payload.presentation?.summary === "Add delegates/writer.md" &&
+        typeof writer.payload.threadId === "string" &&
+        (await commitsTo("delegates/writer.md")).length === 0 &&
+        !(await catalog()).some((type) => type.name === "writer"),
+      `Caw heard ${proposed.slice(0, 200)}; ask ${JSON.stringify(writer?.payload.presentation)} in thread ${writer?.payload.threadId}`
+    );
+    if (!writer) {
+      return;
+    }
+    await answer(writer, { behavior: "allow", updatedInput: {} });
+    await until(
+      "writer's proposal answered",
+      typeProposals,
+      (asks) => asks.length === 0,
+      30_000
+    );
+    const approved = await commitsTo("delegates/writer.md");
+    const listed = await catalog();
+    check(
+      "2c: approved, writer is committed as the person and the project's catalog lists it",
+      approved.length === 1 &&
+        approved[0]?.author !== "Caw" &&
+        listed.some(
+          (type) => type.name === "writer" && type.source === "project"
+        ),
+      `commits ${JSON.stringify(approved)}; catalog ${JSON.stringify(listed.map((type) => `${type.name}:${type.source}`))}`
+    );
+
+    await cawCalls(projectId, "folder_write", {
+      path: "delegates/editor.md",
+      content: typeFile("Edit drafts for length and tone."),
+    });
+    const [editor] = await until(
+      "editor's proposal parked",
+      typeProposals,
+      (asks) => asks.length === 1,
+      30_000
+    );
+    if (!editor) {
+      return;
+    }
+    await answer(editor, { behavior: "deny", message: "Not this one" });
+    await until(
+      "editor's proposal answered",
+      typeProposals,
+      (asks) => asks.length === 0,
+      30_000
+    );
+    const declined = await commitsTo("delegates/editor.md");
+    const after = await catalog();
+    check(
+      "2d: declined, nothing is committed to delegates/editor.md and the catalog has no editor",
+      declined.length === 0 && !after.some((type) => type.name === "editor"),
+      `commits ${JSON.stringify(declined)}; catalog ${JSON.stringify(after.map((type) => type.name))}`
     );
   });
 } catch (error) {
