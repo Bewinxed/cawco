@@ -76,8 +76,9 @@
  *    return finds its page as it was (the same document). Each switch shows
  *    one pane and puts another away, each pane saying so from its own effect
  *    in the tree's order.
- * 14. A phone's bound of 1, A→B→A with B's tab first in the strip: A's
- *    page is kept.
+ * 14. A phone's bound of 1: B's conversation opened, then A→B→A: A's page
+ *    is kept. Panes are built in the order they are first shown, so B's
+ *    effect runs before A's on B→A.
  * 15. A page artifact whose own script starts an interval as it is parsed,
  *    with no <head> and with one: off screen `DWELL_MS` its interval runs 0
  *    times, and runs again once its tab is back.
@@ -1052,34 +1053,43 @@ const run = async (kit: Kit) => {
   );
   await trio.close();
 
-  // 14. The phone's bound of 1, A→B→A, B's tab first in the strip: each
-  // pane's effect runs in the tree's order, B's before A's.
+  // 14. The phone's bound of 1, A→B→A, B's conversation opened before A's:
+  // panes are built in the order they are first shown, and each pane's
+  // effect runs in that order, so on B→A the leaving B says it went before
+  // the arriving A says it came.
   const pair = await kit.page("phone", { scale: 3, init: [watchDashboard] });
-  await tabsAt(pair, [paneB, paneA], paneA);
+  await tabsAt(pair, [paneA, paneB], paneB);
   const OPEN_SHEET =
     '[data-preview-sheet][data-state="open"] iframe[title="Preview"][data-ready]';
-  await open(pair, `${base}/session/${paneA}`, OPEN_SHEET);
-  const aSrc = await pair.locator(OPEN_SHEET).getAttribute("src");
-  const aOrigin = aSrc ? new URL(aSrc).origin : "";
+  const sheetSrc = () =>
+    pair
+      .locator(OPEN_SHEET)
+      .getAttribute("src", { timeout: 1000 })
+      .catch(() => null)
+      .then((src) => src ?? "");
+  await open(pair, `${base}/session/${paneB}`, OPEN_SHEET);
+  const bOrigin = new URL(await sheetSrc()).origin;
+  /** Conversation `pane` chosen, until its sheet shows another page than `other`'s. */
+  const showSheet = async (pane: string, other: string) => {
+    await choose(pair, pane);
+    await until(
+      "the shown conversation's sheet loaded",
+      sheetSrc,
+      (src) => !!src && !src.startsWith(other),
+      60_000
+    );
+  };
+  await showSheet(paneA, bOrigin);
+  const aOrigin = new URL(await sheetSrc()).origin;
   const aBorn = await bornOf(pair, aOrigin);
-  await choose(pair, paneB);
-  await until(
-    "B's sheet loaded",
-    async () =>
-      (await pair
-        .locator(OPEN_SHEET)
-        .getAttribute("src")
-        .catch(() => null)) ?? "",
-    (src) => !!src && !src.startsWith(aOrigin),
-    60_000
-  );
+  await showSheet(paneB, aOrigin);
   await pair.waitForTimeout(DWELL_MS);
   await choose(pair, paneA);
   await pair.waitForTimeout(2000);
   const aBack = await bornOf(pair, aOrigin);
   numbers.phoneSwitches = { aBorn, aBack };
   kit.check(
-    "14: a phone (bound 1), A→B→A with B's tab first: A's page is kept (same document)",
+    "14: a phone (bound 1), B opened, then A→B→A: A's page is kept (same document)",
     aBorn !== null && aBack === aBorn,
     `A's document ${aBorn} → ${aBack}`
   );
