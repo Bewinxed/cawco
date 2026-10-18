@@ -4,15 +4,15 @@
 
   export const tableVariants = tv({
     slots: {
-      container: "relative w-full overflow-x-auto",
+      container: "relative w-full overflow-x-auto overscroll-x-contain",
       table: "w-full caption-bottom text-body",
     },
     variants: {
       spacing: {
-        /** Cells apart by the caller's `--cell-gap`. */
-        gap: { table: "border-spacing-(--cell-gap)" },
-        /** Cells flush, by the caller's `--none`. */
-        flush: { table: "border-spacing-(--none)" },
+        /** Cells apart by the caller's `--cell-gap`; flush where it sets none. */
+        gap: { table: "border-spacing-(--cell-gap,0px)" },
+        /** Cells flush, by the caller's `--none`; flush where it sets none. */
+        flush: { table: "border-spacing-(--none,0px)" },
       },
       /** The sideways scroller fades the edges its content runs past. */
       fadeEdges: { true: { container: "kit-edge-fade" } },

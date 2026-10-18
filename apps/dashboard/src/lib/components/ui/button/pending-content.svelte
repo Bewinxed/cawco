@@ -179,13 +179,13 @@
 <span class="icon-swap kit-slot" data-over={Icon === undefined || undefined}>
   {#if Icon}
     <span data-active={phase === "idle" && !ringShown}
-      ><Icon class="size-(--btn-icon)" /></span
+      ><Icon class="size-(--btn-icon,var(--icon-md))" /></span
     >
   {/if}
   <span data-active={phase === "pending" && !ringShown} bind:this={spinnerCell}
     ><Spinner
       aria-hidden="true"
-      class="size-(--btn-icon)"
+      class="size-(--btn-icon,var(--icon-md))"
       role="presentation"
     /></span
   >
@@ -193,7 +193,7 @@
     <span data-active={ringShown}
       ><svg
         aria-hidden="true"
-        class="size-(--btn-icon)"
+        class="size-(--btn-icon,var(--icon-md))"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -216,7 +216,7 @@
   {/if}
   <span data-active={phase === "done"}
     ><IconTick
-      class="kit-tick size-(--btn-icon)"
+      class="kit-tick size-(--btn-icon,var(--icon-md))"
       data-on={phase === "done"}
     /></span
   >
@@ -230,7 +230,7 @@
   <!-- Icon only: nothing to morph. -->
 {:else}
   <span
-    class="has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-start"
+    class="min-w-0 overflow-clip text-ellipsis has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-start"
     ><span
       class="transition-[opacity] dur-morph ease-out covered-true:opacity-0"
       data-covered={covered}

@@ -952,7 +952,7 @@
       <div class="flex gap-space-2">
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse)"
+          class="min-h-space-8 coarse:min-h-(--btn-h-coarse)"
           fit="prompt-wide"
           disabled={disabledOf("answer") || (pressed === null && !allAnswered)}
           failed={failedOf("answer")}
@@ -965,7 +965,7 @@
         />
         <!-- literal: 12px, 2.75rem -->
         <Button
-          class="h-space-8 coarse:h-(--btn-h-coarse)"
+          class="min-h-space-8 coarse:min-h-(--btn-h-coarse)"
           disabled={disabledOf("deny")}
           fit="prompt"
           failed={failedOf("deny")}
@@ -1117,7 +1117,7 @@
         <!-- literal: 12px, 2.75rem -->
         <Button
           answer="approve-strong"
-          class="h-space-8 coarse:h-(--btn-h-coarse) flex-none"
+          class="min-h-space-8 coarse:min-h-(--btn-h-coarse) flex-none"
           fit="prompt"
           width="shrink"
           data-prompt-grant={grant}
@@ -1134,7 +1134,7 @@
         <!-- literal: 12px, 2.75rem -->
         <Button
           answer="deny-strong"
-          class="h-space-8 coarse:h-(--btn-h-coarse) flex-none"
+          class="min-h-space-8 coarse:min-h-(--btn-h-coarse) flex-none"
           fit="prompt"
           width="shrink"
           data-prompt-refuse={refuse}
@@ -1173,7 +1173,7 @@
              (warning tint, warning ink, a real edge). -->
           <!-- literal: 12px, 2.75rem -->
           <Button
-            class="h-space-8 coarse:h-(--btn-h-coarse)"
+            class="min-h-space-8 coarse:min-h-(--btn-h-coarse)"
             disabled={disabledOf("always")}
             fit="prompt"
             failed={failedOf("always")}

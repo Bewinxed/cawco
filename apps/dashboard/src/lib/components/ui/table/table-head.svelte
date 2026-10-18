@@ -3,14 +3,14 @@
   import { tv } from "#lib/utils.js";
 
   export const tableHeadVariants = tv({
-    base: "h-12 whitespace-nowrap px-3 text-left align-middle text-ink-strong text-label [&:has([role=checkbox])]:pr-0",
+    base: "h-12 whitespace-nowrap px-3 text-start align-middle text-ink-strong text-label [&:has([role=checkbox])]:pe-0",
     variants: {
       variant: {
         /**
          * A band's column heading: muted caps in the label role. Its inline
          * padding holds beside a tick too, over the base's checkbox rule.
          */
-        caps: "type-label px-space-3 text-ink-muted uppercase tracking-caps [&:has([role=checkbox])]:pr-space-3",
+        caps: "type-label px-space-3 text-ink-muted uppercase tracking-caps [&:has([role=checkbox])]:pe-space-3",
         /** The lead column's caps heading, flush against the next. */
         "caps-lead":
           "type-label px-space-3 pe-0 text-ink-muted uppercase tracking-caps",
@@ -18,22 +18,22 @@
         "caps-strong": "px-space-3 text-ink-muted uppercase tracking-caps",
         /** A matrix's corner heading. */
         "matrix-corner": "px-space-4 py-space-3 text-ink-muted text-meta",
-        /** A matrix's corner heading pinned to the left edge as it scrolls. */
+        /** A matrix's corner heading pinned to the start edge as it scrolls. */
         "matrix-corner-pinned":
-          "left-0 bg-surface-raised px-space-4 py-space-3 text-ink-muted text-meta",
-        /** A matrix's column heading, ruled on the left. */
+          "start-0 bg-surface-raised px-space-4 py-space-3 text-ink-muted text-meta",
+        /** A matrix's column heading, ruled at its inline start. */
         "matrix-column":
-          "border-border border-l px-space-4 py-space-3 text-ink-muted text-meta",
+          "border-border border-s px-space-4 py-space-3 text-ink-muted text-meta",
         /** A wide matrix column's heading. */
         "matrix-column-wide":
-          "min-w-56 border-border border-l px-space-4 py-space-3 text-ink-muted text-meta",
+          "min-w-56 border-border border-s px-space-4 py-space-3 text-ink-muted text-meta",
         /** A wide matrix column's heading whose content sets its own text. */
         "matrix-column-wide-plain":
-          "min-w-56 border-border border-l px-space-4 py-space-3",
+          "min-w-56 border-border border-s px-space-4 py-space-3",
         /** A matrix's row heading on the raised surface. */
         "matrix-row": "bg-surface-raised px-space-4 py-space-2",
-        /** A matrix's row heading pinned to the left edge as it scrolls. */
-        "matrix-row-pinned": "left-0 bg-surface-raised px-space-4 py-space-2",
+        /** A matrix's row heading pinned to the start edge as it scrolls. */
+        "matrix-row-pinned": "start-0 bg-surface-raised px-space-4 py-space-2",
       },
     },
   });
