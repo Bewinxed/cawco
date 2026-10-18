@@ -776,6 +776,24 @@ export interface NeutralAssistantMessage {
  * session — which always carries `origin` and `uuid` ({@link SentMessage}),
  * and nothing else does.
  */
+/**
+ * A notice the harness put in the user's role, as its agent's normaliser
+ * read it (agent claude-transcript.ts `harnessNoteOf`): Claude Code's
+ * `<task-notification>` block (`task-notification`) and its `[SYSTEM
+ * NOTIFICATION …]` line, and a whole `<system-reminder>` block
+ * (`system-reminder`). `title` is what a fold says closed, `status` the
+ * task's (`completed`, `failed`, `stopped`; empty when it said none), `body`
+ * the rest, as markdown. Never the reader's words.
+ */
+export interface HarnessNote {
+  body: string;
+  kind: "task-notification" | "system-reminder";
+  status: string;
+  title: string;
+  /** A task notification's Task call, when it names one. */
+  toolUseId?: string;
+}
+
 export interface NeutralUserMessage {
   /**
    * This message is a compaction's summary, in the harness's own words: pi
@@ -784,7 +802,12 @@ export interface NeutralUserMessage {
    */
   compactSummary?: true;
   keepAlive?: true;
-  message: { role: "user"; content: string | NeutralContentBlock[] };
+  /** `harnessNote`: the message is a notice of the harness's, typed where its normaliser read it ({@link HarnessNote}). */
+  message: {
+    role: "user";
+    content: string | NeutralContentBlock[];
+    harnessNote?: HarnessNote;
+  };
   origin?: NeutralOrigin;
   parent_tool_use_id?: string | null;
   raw?: unknown;

@@ -13,6 +13,7 @@ import { accountMoveWords } from "./accounts";
 import { attachedFiles } from "./attachments";
 import type {
   CompactionFailure,
+  HarnessNote,
   NeutralAssistantMessage,
   NeutralMessage,
   NeutralStatus,
@@ -764,10 +765,17 @@ export function mapFrame(
           content: "Interrupted",
           metadata: { noteTitle: "Interrupted" },
         });
-      } else if (text && (agentId || systemNote(text))) {
+      } else if (
+        text &&
+        (agentId || harnessNoteOf(sdk.message) || systemNote(text))
+      ) {
         mapping.blocks.push({
           ...base,
-          ...userBody(text, transcriptUserImages(sdk.message)),
+          ...userBody(
+            text,
+            transcriptUserImages(sdk.message),
+            harnessNoteOf(sdk.message)
+          ),
         });
       }
       if (typeof content === "string") {
@@ -1395,8 +1403,25 @@ export const storedAt = (entry: SessionMessage): string | undefined =>
  */
 function userBody(
   text: string,
-  images?: BlockMetadata["images"]
+  images?: BlockMetadata["images"],
+  harnessNote?: HarnessNote
 ): Pick<TranscriptBlock, "type" | "content" | "metadata"> {
+  // The harness's notice, typed: its note, and its words as `content` beside
+  // it, which the shipped app still reads.
+  if (harnessNote) {
+    return {
+      type: "ui.system_note",
+      content: text,
+      metadata: {
+        harnessNote,
+        noteKind: HARNESS_NOTE_KIND[harnessNote.kind],
+        noteTitle: harnessNote.title,
+        ...(harnessNote.toolUseId
+          ? { noteTaskToolId: harnessNote.toolUseId }
+          : {}),
+      },
+    };
+  }
   const note = systemNote(text);
   if (!note) {
     const { typed, attachments } = pastedText(text);
@@ -1452,33 +1477,27 @@ function pastedText(text: string): {
   return attachments.length ? { typed, attachments } : { typed };
 }
 
-const TASK_NOTIFICATION_SUMMARY = /<summary>([\s\S]*?)<\/summary>/;
-const TASK_NOTIFICATION_TOOL_USE_ID = /<tool-use-id>(\S+?)<\/tool-use-id>/;
 const LOCAL_COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/;
 
-/** Harness-injected content arrives with role "user" but is not the human. */
+/** The note kind a {@link HarnessNote} keeps for the readers that still name it so. */
+const HARNESS_NOTE_KIND: Record<HarnessNote["kind"], string> = {
+  "task-notification": "Task notification",
+  "system-reminder": "System reminder",
+};
+
+/** The typed notice its harness's normaliser put on a user message ({@link HarnessNote}), when it did. */
+const harnessNoteOf = (message: unknown): HarnessNote | undefined =>
+  (message as { harnessNote?: HarnessNote } | null | undefined)?.harnessNote;
+
+/**
+ * Harness-injected content arrives with role "user" but is not the human. A
+ * notice its harness typed ({@link HarnessNote}) is read off the message, never
+ * off its words; these are the rest.
+ */
 function systemNote(
   text: string
 ): { kind: string; title: string; taskToolId?: string } | null {
   const head = text.trimStart().slice(0, 200);
-  // Anchored, not `includes`: an operator who merely TYPES the tag mid-sentence
-  // ("fix the <task-notification> renderer") must keep their own voice — only a
-  // message the block itself opens is the harness speaking.
-  if (
-    head.startsWith("[SYSTEM NOTIFICATION") ||
-    head.startsWith("<task-notification>")
-  ) {
-    const summary = TASK_NOTIFICATION_SUMMARY.exec(text)?.[1]?.trim();
-    // The tool-use id names the Task call this notification echoes. When that
-    // call's branch is in the transcript, the branch already shows the same
-    // report — the renderer folds this note away on it.
-    const taskToolId = TASK_NOTIFICATION_TOOL_USE_ID.exec(text)?.[1];
-    return {
-      kind: "Task notification",
-      title: summary ?? firstPlainLine(text),
-      ...(taskToolId ? { taskToolId } : {}),
-    };
-  }
   // A slash command's local echo (`<local-command-caveat>`, `<command-name>`,
   // `<local-command-stdout>`): the harness's bookkeeping, not the human's words
   // — raw XML in a user bubble otherwise.
@@ -1489,9 +1508,6 @@ function systemNote(
   ) {
     const command = LOCAL_COMMAND_NAME.exec(text)?.[1]?.trim();
     return { kind: "Local command", title: command ?? firstPlainLine(text) };
-  }
-  if (head.startsWith("<system-reminder>")) {
-    return { kind: "System reminder", title: firstPlainLine(text) };
   }
   if (
     head.startsWith(
@@ -1543,9 +1559,7 @@ function compactSummaryNote(content: string, base: BlockBase): TranscriptBlock {
 
 /** A note's opening line, with the markup that wraps it taken back out. */
 function firstPlainLine(text: string): string {
-  const plain = text
-    .replace(/<[^>]+>/g, "")
-    .replace("[SYSTEM NOTIFICATION - NOT USER INPUT]", "");
+  const plain = text.replace(/<[^>]+>/g, "");
   const line = plain
     .split("\n")
     .map((each) => each.trim())
@@ -1741,7 +1755,7 @@ export function sentRow(
     artifactNoticeBlock(text, base) ??
     injectedBlock(text, base) ?? {
       ...base,
-      ...userBody(text, transcriptUserImages(message)),
+      ...userBody(text, transcriptUserImages(message), harnessNoteOf(message)),
     }
   );
 }

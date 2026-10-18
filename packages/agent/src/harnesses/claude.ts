@@ -220,6 +220,7 @@ import {
   readSessionFull,
   readSessionWhole,
   type SDKSessionMessage,
+  withHarnessNote,
 } from "./claude-transcript";
 
 /**
@@ -398,9 +399,18 @@ export const toNeutral = (
         : {}),
     } as unknown as NeutralMessage;
   }
+  // A notice of the CLI's in the user's role is typed here, where its markup
+  // is read once (claude-transcript.ts `harnessNoteOf`), as a stored read
+  // types it.
+  if (sdk.type === "user") {
+    return {
+      ...sdk,
+      message: withHarnessNote(sdk.message),
+      raw: sdk,
+    } as unknown as NeutralMessage;
+  }
   if (
     sdk.type === "assistant" ||
-    sdk.type === "user" ||
     sdk.type === "stream_event" ||
     sdk.type === "system"
   ) {
