@@ -789,10 +789,13 @@ export const createHubAuth = ({
   };
 
   /**
-   * The caller of a route handler: as the gate classified its request, else
-   * read again from it. Read again, a machine's proof is one the gate already
-   * spent (`machineOf`, against replay), so the handler would see an owner on
-   * a trusted hub, or no one.
+   * The caller of a route handler: as the gate classified its request (the
+   * root app's `.request` hook, server.ts, which Elysia hands the same
+   * Request a handler gets), else read from it, for one the gate never saw.
+   * Read a second time, a machine's proof is one the gate already spent
+   * (`machineOf`, against replay), so a handler saw an owner on a trusted
+   * hub and no one on a pairing one: `session-identities/install`'s "its own
+   * sessions only" never held, and no LFS read knew its machine.
    */
   const callerOf = (request: Request, address: string | null): Caller => {
     const known = gated.get(request);

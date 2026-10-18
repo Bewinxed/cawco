@@ -19741,8 +19741,6 @@ export const createServer = (
           refused: `This machine holds no place of ${row.name}.`,
         };
   };
-  /** `<project>\n<endpoint>` refusals the project's thread was told of while the hub runs. */
-  const lfsRefusalsNoted = new Set<string>();
   // Git LFS offered for the large files a place's first commit left out,
   // under that note (lfs-offers.ts): tracked on the place's machine once the
   // person says so.
@@ -22761,7 +22759,7 @@ export const createServer = (
       // A repository's `.lfsconfig` named an LFS endpoint that is neither its
       // origin's nor the project's declared one (agent host-lfs.ts): its
       // large files stayed pointers. The project's thread is told once per
-      // endpoint while the hub runs, with how to declare it.
+      // endpoint, ever (`lfs_refusals`), with how to declare it.
       .post(
         "/api/lfs/projects/:id/refused",
         {
@@ -22781,11 +22779,9 @@ export const createServer = (
           if ("refused" in project) {
             return status(project.status, project.refused);
           }
-          const said = `${params.id}\n${body.endpoint}`;
-          if (lfsRefusalsNoted.has(said)) {
+          if (!db.lfsOffers.refused(params.id, body.endpoint)) {
             return { ok: true };
           }
-          lfsRefusalsNoted.add(said);
           const machineId = project.machineId ?? body.machineId;
           caw.notice(params.id, db.newestConversation(params.id)?.id ?? null, {
             title: "Large files left as pointers: an undeclared LFS server",

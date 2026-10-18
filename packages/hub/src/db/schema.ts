@@ -3322,6 +3322,22 @@ export const lfsOffers = sqliteTable("lfs_offers", {
   commit: text("commit"),
 });
 
+/**
+ * The LFS endpoints a repository's `.lfsconfig` named that a project's
+ * thread was told git-lfs refused (server.ts `/api/lfs/projects/:id/refused`,
+ * agent host-lfs.ts): one row per project and endpoint, so the thread is
+ * told once, whatever restarts and however many fetches meet it.
+ */
+export const lfsRefusals = sqliteTable(
+  "lfs_refusals",
+  {
+    projectId: text("project_id").notNull(),
+    endpoint: text("endpoint").notNull(),
+    notedAt: timestamp("noted_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.endpoint] })]
+);
+
 /** One must-fix finding of a design check, tied to an element (design-verify.ts). */
 export interface DesignFinding {
   file: string;

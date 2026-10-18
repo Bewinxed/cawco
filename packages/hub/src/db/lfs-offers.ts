@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { lfsOffers } from "./schema";
+import { lfsOffers, lfsRefusals } from "./schema";
 
 export type LfsOfferRow = typeof lfsOffers.$inferSelect;
 
@@ -16,9 +16,21 @@ export interface LfsOffersDb {
   readonly offer: (
     offer: Omit<LfsOfferRow, "answer" | "answeredAt" | "commit">
   ) => void;
+  /**
+   * Records that project `projectId`'s thread is told git-lfs refused
+   * `endpoint` (schema `lfsRefusals`); false when it was told already.
+   */
+  readonly refused: (projectId: string, endpoint: string) => boolean;
 }
 
 export const lfsOffersDb = (db: BunSQLiteDatabase): LfsOffersDb => ({
+  refused: (projectId, endpoint) =>
+    db
+      .insert(lfsRefusals)
+      .values({ projectId, endpoint, notedAt: new Date() })
+      .onConflictDoNothing()
+      .returning({ projectId: lfsRefusals.projectId })
+      .all().length > 0,
   answer: (id, answer, commit) => {
     db.update(lfsOffers)
       .set({ answer, answeredAt: new Date(), commit: commit ?? null })
