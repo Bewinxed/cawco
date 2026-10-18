@@ -18154,6 +18154,8 @@ export const createServer = (
         threadId: db.threadOfTask(projectId, taskId)?.id,
       }),
     startProblem: (projectId, task) => dispatcher.problemOf(projectId, task),
+    resolvesType: (projectId, type) =>
+      projectTypes.resolveTypeFor(projectId, type) !== undefined,
     queuedStarts: (projectId) =>
       db.queuedTaskStarts(projectId).map((row) => row.taskId),
   });

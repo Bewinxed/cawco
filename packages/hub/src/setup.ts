@@ -145,7 +145,7 @@ const upstreamCard = `- \`fleet-upstream\`: "Other people's repositories" — ${
 export const setupEvent = (ask: SetupAsk): string => {
   const template = ask.template ?? "code";
   const types = TEMPLATE_DELEGATES[template];
-  const own = templateTypes(template).map(({ type }) => `\`${type}\``);
+  const own = templateTypes(template).map((type) => `\`${type}\``);
   const picked =
     types.length > 0
       ? " Write delegates/<type>.md for each type they picked (front matter: harness, model, effort, role, lands; the body is the type's brief, from their words; each goes to them as a proposal and is committed once they approve it)."

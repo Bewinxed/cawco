@@ -6,10 +6,12 @@
  *   session in a new workspace cut from one of the project's checkouts on a
  *   machine that is online, briefed from the task file (title, description,
  *   acceptance criteria, open to-dos, checks, and where it sits among its
- *   edges), with `work_items.task_id` naming the task. It runs the delegate
- *   type the stage it enters `runs:`, else the task's `type:`, else the
- *   fleet's default. Starting one moves the task to its active stage (the
- *   stage that runs it, else the first of kind `active`), as `hub`.
+ *   edges), with `work_items.task_id` naming the task. It runs the task's
+ *   own `type:`, else the type the stage it enters `runs:`, else the
+ *   judged one (spec §5.1: "the task names one → that type; else the
+ *   dispatcher asks"; {@link typeOf}). Starting one moves the task to its
+ *   active stage (the stage that runs it, else the first of kind
+ *   `active`), as `hub`.
  * - **Who it reports to.** A work item needs a parent session. `task_start`
  *   from a session you started (or Caw) makes that session the parent; the
  *   project's lead, its Caw (caw.ts), takes the reports of every attempt
@@ -27,8 +29,10 @@
  *   `review_limit` tasks or more wait in `you` stages.
  * - **Hooks.** A task entering an `active` stage with `runs: <type>`, by
  *   anyone's move but the hub's, or filed straight into one, starts an
- *   attempt of that type, reporting to the session that moved it or else the
- *   lead. A hook obeys `max_attempts`: at the cap its start is queued
+ *   attempt (of the task's own type when it names one, else that type),
+ *   reporting to the session that moved it or else the lead. A start that
+ *   cannot go, the lead's own start among them, is remembered on the task
+ *   and shown on its card. A hook obeys `max_attempts`: at the cap its start is queued
  *   (`queued_task_starts`) and runs, oldest first and before the frontier,
  *   as a slot frees. A start you or a session ask for is not capped. Only
  *   `runs` runs here.
@@ -408,6 +412,15 @@ const taskLimits = (
   ...(task.owns.length > 0 ? { owns: task.owns } : {}),
   ...(task.budget ? { budget: task.budget } : {}),
 });
+
+/**
+ * The type an attempt runs before any is judged: the task's own `type:`,
+ * else the `runs:` of the active stage it runs in (spec §5.1).
+ */
+const typeOf = (
+  task: Pick<TaskView, "type">,
+  active: Stage | undefined
+): string | undefined => task.type ?? active?.hooks.runs;
 
 /** What the brief says happens at finish_item, by where the attempt lands. */
 const AT_FINISH: Record<LandsMode, string> = {
@@ -1048,8 +1061,7 @@ export const createDispatcher = ({
     { origin, previous }: { origin?: Origin; previous?: WorkItemRow }
   ): Promise<WorkItemStart> => {
     const placed = placementOf(project, task, parent, previous);
-    const type =
-      active?.hooks.runs ?? task.type ?? (await chosenType(project, task));
+    const type = typeOf(task, active) ?? (await chosenType(project, task));
     const lands = landsOf(project, task, type);
     const { tasks: all } = await tasks.list(project.id);
     const retry = previous
@@ -1229,12 +1241,8 @@ export const createDispatcher = ({
       task: task.id,
       stage: task.stage,
       queued: true,
-      type: active?.hooks.runs ?? task.type,
-      lands: landsOf(
-        project,
-        task,
-        active?.hooks.runs ?? task.type ?? undefined
-      ),
+      type: typeOf(task, active) ?? null,
+      lands: landsOf(project, task, typeOf(task, active)),
       workItemId: null,
       workspaceId: null,
       instanceId: null,
@@ -1332,11 +1340,28 @@ export const createDispatcher = ({
       return;
     }
     const { project, ready } = look;
-    const reportsTo = await leadOf(project);
+    let slots = project.maxAttempts - look.live;
+    let reportsTo: InstanceRow | undefined;
+    try {
+      reportsTo = await leadOf(project);
+    } catch (error) {
+      // The tasks this look would have started say why they did not.
+      const why = failure(error).message;
+      const waiting = await Promise.all(
+        ready.slice(0, slots).map((id) => tasks.get(projectId, id))
+      );
+      for (const task of waiting) {
+        note(
+          projectId,
+          task,
+          `${task.id} is ready to start, but Caw, who takes the reports of the attempts the hub starts, did not start: ${why}`
+        );
+      }
+      return;
+    }
     if (!reportsTo) {
       return;
     }
-    let slots = project.maxAttempts - look.live;
     for (const id of ready) {
       if (slots <= 0) {
         break;
@@ -1369,16 +1394,40 @@ export const createDispatcher = ({
 
   /**
    * The session a hook's attempt reports to: the one that moved the task in
-   * when it can take reports, else the lead.
+   * when it can take reports, else the lead. With neither, or a lead whose
+   * session did not start (no account signed in, say), the reason is
+   * remembered on the task, so its card says why it did not start; `how`
+   * opens that sentence ("tsk-3 entered extract, which runs brand").
    */
   const hookParent = async (
     project: ProjectRow,
-    moverId: string | null | undefined
+    task: TaskView,
+    moverId: string | null | undefined,
+    how: string
   ): Promise<InstanceRow | undefined> => {
     const mover = moverId ? instance(moverId) : undefined;
-    return mover && !parentProblem(mover, project.id)
-      ? mover
-      : await leadOf(project);
+    if (mover && !parentProblem(mover, project.id)) {
+      return mover;
+    }
+    let caw: InstanceRow | undefined;
+    try {
+      caw = await leadOf(project);
+    } catch (error) {
+      note(
+        project.id,
+        task,
+        `${how}, but Caw, who takes its report, did not start: ${failure(error).message}`
+      );
+      return;
+    }
+    if (!caw) {
+      note(
+        project.id,
+        task,
+        `${how}, but no session can take the attempt's report. ${NO_LEAD}`
+      );
+    }
+    return caw;
   };
 
   /**
@@ -1433,13 +1482,13 @@ export const createDispatcher = ({
       );
       return;
     }
-    const parent = await hookParent(project, queued.parentInstanceId);
+    const parent = await hookParent(
+      project,
+      task,
+      queued.parentInstanceId,
+      `${task.id} waited in ${queued.stage} for ${owns ? "owned files" : "a slot"}`
+    );
     if (!parent) {
-      note(
-        project.id,
-        task,
-        `${task.id} waited in ${queued.stage} for ${owns ? "owned files" : "a slot"}, but no session can take the attempt's report now. ${NO_LEAD}`
-      );
       return;
     }
     await startAttempt(
@@ -1504,14 +1553,13 @@ export const createDispatcher = ({
       return;
     }
     const project = projectOf(projectId);
-    const parent = await hookParent(project, actor.instanceId);
+    const parent = await hookParent(
+      project,
+      await tasks.get(projectId, id),
+      actor.instanceId,
+      `${id} entered ${to}, which runs ${stage.hooks.runs}`
+    );
     if (!parent) {
-      const task = await tasks.get(projectId, id);
-      note(
-        projectId,
-        task,
-        `${id} entered ${to}, which runs ${stage.hooks.runs}, but no session can take the attempt's report. ${NO_LEAD}`
-      );
       return;
     }
     const live = liveIn(projectId);

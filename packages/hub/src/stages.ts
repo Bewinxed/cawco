@@ -29,7 +29,7 @@
  *   starts.
  * - **Hooks** are recorded here and run by the dispatcher (slice 5), not yet:
  *   `runs: <delegate type>` starts that type when a task enters (active
- *   stages only); `until: <field>` holds a task here until the time in that
+ *   stages only), unless the task names its own `type:`; `until: <field>` holds a task here until the time in that
  *   field of its file; `after: <n>m|h|d|w` holds it that long; then a routine
  *   moves it on. `by: <who>` says who alone may move a task into the stage.
  * - **Moves** are `from → to  who, who` (`->` works too; `*` is any

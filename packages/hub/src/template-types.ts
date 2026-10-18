@@ -3,9 +3,12 @@
  * the files a project made from it keeps in `delegates/`
  * (project-delegate-types.ts). Applying a template writes the ones the
  * project lacks (tasks.ts `applyTemplate`), whichever way the project was
- * made, so every stage a template names can start. Caw's setup tunes their
- * briefs to the person's words; it never writes them from nothing
- * (setup.ts).
+ * made, so every stage a template names can start. A project whose stages
+ * run one of these types that resolves to nothing (made before this, or its
+ * stages.md written by hand or by Caw) is given the file by the hub, at
+ * start and after each change to its folder (tasks.ts `fillTypes`). Caw's
+ * setup tunes their briefs to the person's words; it never writes them from
+ * nothing (setup.ts).
  *
  * - code, outreach: none (no stage runs a type).
  * - launch, social: `writer`.
@@ -13,7 +16,12 @@
  * - brand: `brand`.
  * - design: `explorer`, `builder`.
  */
-import { type StagesTemplate, TEMPLATES, templateStages } from "./stages";
+import {
+  type Stages,
+  type StagesTemplate,
+  TEMPLATES,
+  templateStages,
+} from "./stages";
 
 /** Every type a template stage runs, as its file: front matter and brief. */
 const TYPE_FILES: Record<string, string> = {
@@ -62,27 +70,41 @@ Build the direction the person picked for the task, in the project's design syst
 `,
 };
 
-/** A template's types as the files it writes under `delegates/`, one per type its stages run. */
-export const templateTypes = (
-  name: StagesTemplate
-): { content: string; path: string; type: string }[] => {
-  const runs = new Set(
-    templateStages(name).stages.flatMap((stage) =>
+/** The types a project's stages run, each once, in stage order. */
+export const runsOf = (stages: Stages): string[] => [
+  ...new Set(
+    stages.stages.flatMap((stage) =>
       stage.hooks.runs ? [stage.hooks.runs] : []
     )
-  );
-  return [...runs].map((type) => {
+  ),
+];
+
+/** The types a template's stages run. */
+export const templateTypes = (name: StagesTemplate): string[] =>
+  runsOf(templateStages(name));
+
+/**
+ * The files of `types` a template defines, as `delegates/<type>.md`, leaving
+ * out the ones `own` (the names already in the project's `delegates/`)
+ * holds: a project's own file is never written over.
+ */
+export const typeFiles = (
+  types: readonly string[],
+  own: ReadonlySet<string>
+): { content: string; path: string }[] =>
+  types.flatMap((type) => {
     const content = TYPE_FILES[type];
-    if (!content) {
-      throw new Error(
-        `The ${name} template runs ${type}, and no delegates/${type}.md is written for it.`
-      );
-    }
-    return { type, path: `delegates/${type}.md`, content };
+    return content && !own.has(`${type}.md`)
+      ? [{ path: `delegates/${type}.md`, content }]
+      : [];
   });
-};
 
 // Every type a template runs has its file, or the hub does not start.
 for (const name of TEMPLATES) {
-  templateTypes(name);
+  const missing = templateTypes(name).filter((type) => !TYPE_FILES[type]);
+  if (missing.length > 0) {
+    throw new Error(
+      `The ${name} template runs ${missing.join(", ")}, and template-types.ts has no file for ${missing.length > 1 ? "them" : "it"}.`
+    );
+  }
 }
