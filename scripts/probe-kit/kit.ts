@@ -112,6 +112,13 @@ export interface PageOptions {
   scale?: number;
   theme?: Theme;
   /**
+   * The WebKit build a WebKit page runs on, by its Playwright revision,
+   * where a spec reads a bug a phone's Safari still has and a newer build
+   * has fixed (`PINNED_WEBKIT`). Unset, the build this playwright-core
+   * expects, or the one `PROBE_WEBKIT` names.
+   */
+  webkit?: string;
+  /**
    * Chromium only: every tile rastered whole whenever it changes
    * (`--disable-partial-raster`), on a browser of its own. Partial raster
    * redraws only what was invalidated into a tile it keeps, so the
@@ -121,13 +128,6 @@ export interface PageOptions {
    * (walk.ts `passPage`) takes it; a spec timing the raster does not.
    */
   wholeRaster?: boolean;
-  /**
-   * The WebKit build a WebKit page runs on, by its Playwright revision,
-   * where a spec reads a bug a phone's Safari still has and a newer build
-   * has fixed (`PINNED_WEBKIT`). Unset, the build this playwright-core
-   * expects, or the one `PROBE_WEBKIT` names.
-   */
-  webkit?: string;
 }
 
 /**
