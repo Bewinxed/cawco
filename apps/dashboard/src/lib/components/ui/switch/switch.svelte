@@ -50,7 +50,7 @@
 >
   <SwitchPrimitive.Thumb
     data-switch-block
-    class="rounded-[var(--radius-pill)] bg-surface-page group-data-[size=default]/switch:size-icon-md group-data-[size=sm]/switch:size-icon-sm ltr:group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] ltr:group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] rtl:group-data-[size=default]/switch:data-checked:translate-x-[calc(2px-100%)] rtl:group-data-[size=sm]/switch:data-checked:translate-x-[calc(2px-100%)] dark:data-checked:bg-on-action group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-ink-strong kit-switch-thumb pointer-events-none block ring-0"
+    class="rounded-[var(--radius-pill)] bg-surface-page group-data-[size=default]/switch:size-icon-md group-data-[size=sm]/switch:size-icon-sm not-rtl:group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] not-rtl:group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] rtl:group-data-[size=default]/switch:data-checked:translate-x-[calc(2px-100%)] rtl:group-data-[size=sm]/switch:data-checked:translate-x-[calc(2px-100%)] dark:data-checked:bg-on-action group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-ink-strong kit-switch-thumb pointer-events-none block ring-0"
     data-slot="switch-thumb"
   />
 </SwitchPrimitive.Root>
