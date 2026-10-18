@@ -1104,8 +1104,6 @@ const shortly = (text: string): string => {
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 };
 
-const EXIT_CODE = /Exit code (\d+)/;
-
 /** A tool result's text. */
 const resultText = (content: unknown): string => {
   if (typeof content === "string") {
@@ -1201,7 +1199,9 @@ const ranBody = (row: LeadCallRow, shell: boolean): string => {
   const approved = row.approved ? " · you approved it" : "";
   if (shell) {
     const files = row.files.length > 0 ? ` · ${row.files.join(", ")}` : "";
-    return `Exit ${row.exit ?? "not reported"}${approved}${files}`;
+    const exit =
+      row.exit === "failed" ? "Failed" : `Exit ${row.exit ?? "not reported"}`;
+    return `${exit}${approved}${files}`;
   }
   return `${row.exit === "failed" ? "Did not apply" : "Applied"}${approved}`;
 };
@@ -1242,7 +1242,13 @@ const guardLines = (text: string): string[] =>
     line.slice("cawco place-guard: ".length)
   );
 
-/** A ran call's exit, from its result: a shell's code, an edit's `ok` or `failed`. */
+/**
+ * A ran call's exit, from its result's `is_error`: a shell's `0` or
+ * `failed`, an edit's `ok` or `failed`. A failed shell's code is not known:
+ * no harness hands one over (Claude Code's Bash result, agent SDK 0.3.302
+ * `BashOutput`, carries none; its number is only in the words the model
+ * reads), and those words are never read.
+ */
 const exitOf = (
   row: LeadCallRow,
   block: { content: unknown; is_error?: boolean }
@@ -1250,10 +1256,7 @@ const exitOf = (
   if (!LEAD_SHELL_TOOLS.has(row.tool)) {
     return block.is_error ? "failed" : "ok";
   }
-  if (!block.is_error) {
-    return "0";
-  }
-  return EXIT_CODE.exec(resultText(block.content))?.[1] ?? "failed";
+  return block.is_error ? "failed" : "0";
 };
 
 export const createLeadGate = ({

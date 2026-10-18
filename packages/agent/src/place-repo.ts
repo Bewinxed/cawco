@@ -23,7 +23,7 @@
  */
 import { lstat, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   credentialIn,
   PLACE_REPO_LIMIT_BYTES,
@@ -45,8 +45,41 @@ const AUTHOR = [
   "user.email=noreply@cawco.invalid",
 ];
 
-/** git's own words for a folder in no repository (setup.c, every version since 1.x). */
-const NOT_A_REPO = /not a git repository/i;
+/**
+ * git's exit for a folder in no repository: `die()` (usage.c) exits 128, and
+ * `rev-parse --is-inside-work-tree` dies so when discovery finds none
+ * (setup.c). Every other fatal setup error exits the same, so a 128 is read
+ * with the folders above the place ({@link gitAbove}).
+ */
+const NOT_A_REPO_EXIT = 128;
+
+/** git that failed: its argv, its exit status, and its stderr as it said it. */
+class GitFailed extends Error {
+  readonly code: number;
+  constructor(args: readonly string[], code: number, stderr: string) {
+    super(`git ${args[0]} failed: ${stderr.trim() || `exit ${code}`}`);
+    this.name = "GitFailed";
+    this.code = code;
+  }
+}
+
+/**
+ * The nearest `.git` at `root` or above it, when one is there: git's 128
+ * there is a repository it would not read (a damaged one, someone else's),
+ * never a folder in none.
+ */
+const gitAbove = async (root: string): Promise<string | undefined> => {
+  for (let at = root; ; at = dirname(at)) {
+    const dotGit = join(at, ".git");
+    // biome-ignore lint/performance/noAwaitInLoops: nearest first, and each step depends on the last
+    if (await lstat(dotGit).then(Boolean, () => false)) {
+      return dotGit;
+    }
+    if (dirname(at) === at) {
+      return;
+    }
+  }
+};
 
 /** How much of a file the credential scan reads for a NUL, to tell text from binary. */
 const BINARY_PROBE = 8000;
@@ -129,12 +162,11 @@ const failed = (
   code: number,
   stderr: string
 ): void => {
+  if (child.signalCode) {
+    throw new Error(`git ${args[0]} was ended by ${child.signalCode}`);
+  }
   if (code !== 0) {
-    throw new Error(
-      child.signalCode
-        ? `git ${args[0]} was ended by ${child.signalCode}`
-        : `git ${args[0]} failed: ${stderr.trim() || `exit ${code}`}`
-    );
+    throw new GitFailed(args, code, stderr);
   }
 };
 
@@ -601,26 +633,40 @@ const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
     );
   }
   const git = gitIn(Date.now() + WORKSPACE_GIT_TIMEOUT_MS);
-  const top = await git(root, "rev-parse", "--show-toplevel").then(
+  const couldNotTell = (error: Error): Error =>
+    new Error(
+      `CawCo couldn't tell whether ${root} is in a git repository: ${error.message}`,
+      { cause: error }
+    );
+  const inside = await git(root, "rev-parse", "--is-inside-work-tree").then(
     (out) => out.trim(),
     (error: Error) => {
-      if (NOT_A_REPO.test(error.message)) {
+      if (error instanceof GitFailed && error.code === NOT_A_REPO_EXIT) {
         return;
       }
-      throw new Error(
-        `CawCo couldn't tell whether ${root} is in a git repository: ${error.message}`,
-        { cause: error }
-      );
+      throw couldNotTell(error);
     }
   );
-  if (top) {
+  if (inside === "true") {
+    const top = await git(root, "rev-parse", "--show-toplevel").then(
+      (out) => out.trim(),
+      (error: Error) => {
+        throw couldNotTell(error);
+      }
+    );
     return { state: "checkout", root: top };
+  }
+  if (inside !== undefined) {
+    throw new Error(
+      `${root} is inside a git repository's own directory, not a checkout of it, so CawCo leaves the folder as it is.`
+    );
   }
   // One git cannot read is someone's, and a failed run would take it back
   // with its own: it is left alone, and so is the place.
-  if (await lstat(join(root, ".git")).then(Boolean, () => false)) {
+  const unread = await gitAbove(root);
+  if (unread) {
     throw new Error(
-      `${root} has a .git that git does not read as a repository, so CawCo leaves the folder as it is. Repair or remove that .git, and start the work again.`
+      `${root} is under ${unread}, which git does not read as a repository, so CawCo leaves the folder as it is. Repair or remove that .git, and start the work again.`
     );
   }
   const plan = await planOf(root, git).catch((error: Error) => {

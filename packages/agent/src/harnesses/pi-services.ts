@@ -785,9 +785,9 @@ export class PiProfile {
       const drift = skillDrift(held[name], recorded, recorded);
       let state: FleetItemState = { state: "applied" };
       if (held[name] === undefined) {
-        state = { state: "failed", detail: "not on disk" };
+        state = { state: "failed", cause: "absent", detail: "not on disk" };
       } else if (drift) {
-        state = { state: "failed", detail: drift };
+        state = { state: "failed", cause: "drifted", detail: drift };
       }
       (report.skills as NonNullable<FleetSyncReport["skills"]>)[name] = state;
     }
@@ -797,10 +797,13 @@ export class PiProfile {
       report.memory =
         hash === sidecar.memory
           ? { state: "applied" }
-          : {
-              state: "failed",
-              detail: hash === null ? "not on disk" : "edited on this machine",
-            };
+          : hash === null
+            ? { state: "failed", cause: "absent", detail: "not on disk" }
+            : {
+                state: "failed",
+                cause: "drifted",
+                detail: "edited on this machine",
+              };
     }
     return report;
   }

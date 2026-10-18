@@ -392,6 +392,14 @@ const custodyProbe = async <T>(
  */
 const HARNESS_LISTING_MS = 10_000;
 
+/** A call for a session this agent runs no process for: a control refusal of kind `not-running`. */
+class NotRunning extends Error {
+  constructor(instanceId: string) {
+    super(`no session ${instanceId}`);
+    this.name = "NotRunning";
+  }
+}
+
 const isDirectory = async (path: string): Promise<boolean> => {
   const info = await stat(path).catch(() => null);
   return info?.isDirectory() ?? false;
@@ -4599,11 +4607,21 @@ export class SessionSupervisor {
         result: await runFs(payload),
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       this.sink({
         kind: "control_result",
         requestId,
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        // Kept as said beside the refusal: the shipped app reads its
+        // `ENOENT:` prefix.
+        error: message,
+        refusal: {
+          kind:
+            (error as NodeJS.ErrnoException).code === "ENOENT"
+              ? "missing"
+              : "unknown",
+          message,
+        },
       });
     }
   }
@@ -4663,12 +4681,17 @@ export class SessionSupervisor {
             : result,
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       this.sink({
         kind: "control_result",
         instanceId,
         requestId,
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
+        refusal: {
+          kind: error instanceof NotRunning ? "not-running" : "unknown",
+          message,
+        },
       });
     }
   }
@@ -4786,7 +4809,7 @@ export class SessionSupervisor {
               row.name,
               "unavailable" in launcher
                 ? { state: "pending", detail: launcher.unavailable }
-                : { state: "failed", detail: launcher.failure }
+                : { state: "failed", cause: "unknown", detail: launcher.failure }
             );
             return { ...row, enabled: false };
           }
@@ -4866,7 +4889,11 @@ export class SessionSupervisor {
         mcpByHarness[adapter.kind] = Object.fromEntries(
           (config?.mcp ?? []).map((row) => [
             row.name,
-            { state: "failed", detail: `${adapter.kind}: ${String(error)}` },
+            {
+              state: "failed",
+              cause: "unknown",
+              detail: `${adapter.kind}: ${String(error)}`,
+            },
           ])
         );
         continue;
@@ -4898,7 +4925,10 @@ export class SessionSupervisor {
     ]);
     for (const [kind, detail] of mcpFailures) {
       mcpByHarness[kind] = Object.fromEntries(
-        [...names].map((name) => [name, { state: "failed", detail }])
+        [...names].map((name) => [
+          name,
+          { state: "failed", cause: "unknown", detail },
+        ])
       );
     }
     for (const [kind, report] of Object.entries(mcpByHarness)) {
@@ -5142,7 +5172,7 @@ export class SessionSupervisor {
   #session(instanceId: string): HarnessSession {
     const session = this.#sessions.get(instanceId);
     if (!session) {
-      throw new Error(`no session ${instanceId}`);
+      throw new NotRunning(instanceId);
     }
     return session;
   }

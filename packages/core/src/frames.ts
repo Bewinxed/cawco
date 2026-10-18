@@ -502,7 +502,20 @@ export interface HarnessFailed {
   harness: HarnessKind;
 }
 
+/**
+ * Why a machine's agent refused a control call or an `fs` request, typed
+ * where it refused it: `not-running`, the agent runs no process for the
+ * session (a session asleep, ended, or not this machine's); `missing`, the
+ * path an `fs` request names is not there (its error's `ENOENT`);
+ * `unknown`, any other refusal, its message as it was said.
+ */
+export type ControlRefusal =
+  | { kind: "not-running"; message: string }
+  | { kind: "missing"; message: string }
+  | { kind: "unknown"; message: string };
+
 export interface ControlResultFrame {
+  /** A refusal's words, as said; {@link refusal} is what a reader decides on. */
   error?: string;
   /** `listSessions` only, and only when some harness's listing threw: those harnesses, whose sessions `result` leaves out. */
   failed?: HarnessFailed[];
@@ -510,6 +523,8 @@ export interface ControlResultFrame {
   /** No `instanceId` when the call it answers was machine-scoped. */
   kind: "control_result";
   ok: boolean;
+  /** Why the machine's agent refused the call, typed; absent on an answer, and on a refusal the hub made itself. */
+  refusal?: ControlRefusal;
   requestId: string;
   result?: unknown;
   /** `listSessions` only, and only when some harness did not list in time: those harnesses, whose sessions `result` leaves out. */

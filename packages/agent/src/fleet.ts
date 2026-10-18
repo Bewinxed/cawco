@@ -17,6 +17,7 @@ import type {
   DiscoveredMcp,
   DiscoveredSkill,
   FleetConfig,
+  FleetFaultCause,
   FleetHoldings,
   FleetHook,
   FleetItemState,
@@ -298,10 +299,22 @@ const readSidecar = async (): Promise<Sidecar> => {
 
 type ClaudeJson = Record<string, unknown>;
 
+/** Why a write did not converge: its cause, named here, and its words. */
+interface Problem {
+  cause: FleetFaultCause;
+  detail: string;
+}
+
+/** A row that failed for `problem`. */
+const failedOf = (problem: Problem): FleetItemState => ({
+  state: "failed",
+  ...problem,
+});
+
 /** The file, or why it could not be read. Missing is a machine with nothing in it. */
 const readClaudeJson = async (
   path = CLAUDE_JSON
-): Promise<{ ok: true; root: ClaudeJson } | { ok: false; detail: string }> => {
+): Promise<({ ok: true; root: ClaudeJson }) | ({ ok: false } & Problem)> => {
   const file = Bun.file(path);
   if (!(await file.exists())) {
     return { ok: true, root: {} };
@@ -311,6 +324,7 @@ const readClaudeJson = async (
   } catch (error) {
     return {
       ok: false,
+      cause: "unparsable",
       detail: `could not parse ${path}: ${tail(said(error))}`,
     };
   }
@@ -330,12 +344,12 @@ const mergeFleetMcp = async (
   path: string,
   wanted: FleetMcpServer[],
   managed: string[]
-): Promise<string | undefined> => {
+): Promise<Problem | undefined> => {
   const file = await readClaudeJson(path);
   // Nothing is written over a file that cannot be read: the rest of it is the
   // user's own, and a rewrite from an empty root would take it with them.
   if (!file.ok) {
-    return file.detail;
+    return { cause: file.cause, detail: file.detail };
   }
   const servers = mcpServersOf(file.root);
   for (const server of wanted) {
@@ -351,7 +365,10 @@ const mergeFleetMcp = async (
       await writeJson(path, { ...file.root, mcpServers: servers });
     }
   } catch (error) {
-    return `could not write ${path}: ${tail(said(error))}`;
+    return {
+      cause: "unwritable",
+      detail: `could not write ${path}: ${tail(said(error))}`,
+    };
   }
   return undefined;
 };
@@ -370,7 +387,7 @@ const syncMcp = async (
   const problem = await mergeFleetMcp(CLAUDE_JSON, wanted, managed);
   if (problem) {
     for (const server of wanted) {
-      report[server.name] = { state: "failed", detail: problem };
+      report[server.name] = failedOf(problem);
     }
     return managed;
   }
@@ -378,7 +395,7 @@ const syncMcp = async (
     // biome-ignore lint/performance/noAwaitInLoops: one account's file at a time, each written whole
     const failed = await mergeFleetMcp(path, wanted, managed);
     if (failed) {
-      console.warn(`[fleet] ${failed}`);
+      console.warn(`[fleet] ${failed.detail}`);
     }
   }
 
@@ -406,10 +423,10 @@ const mergePlacedMcp = async (
   path: string,
   wanted: FleetMcpServer[],
   managed: Sidecar["placedMcp"]
-): Promise<string | undefined> => {
+): Promise<Problem | undefined> => {
   const file = await readClaudeJson(path);
   if (!file.ok) {
-    return file.detail;
+    return { cause: file.cause, detail: file.detail };
   }
   const before = JSON.stringify(file.root.projects ?? {});
   const projects = {
@@ -440,7 +457,10 @@ const mergePlacedMcp = async (
   try {
     await writeJson(path, { ...file.root, projects });
   } catch (error) {
-    return `could not write ${path}: ${tail(said(error))}`;
+    return {
+      cause: "unwritable",
+      detail: `could not write ${path}: ${tail(said(error))}`,
+    };
   }
   return undefined;
 };
@@ -462,7 +482,7 @@ const syncPlacedMcp = async (
   const problem = await mergePlacedMcp(CLAUDE_JSON, wanted, managed);
   if (problem) {
     for (const server of wanted) {
-      report[placedKey(server)] = { state: "failed", detail: problem };
+      report[placedKey(server)] = failedOf(problem);
     }
     return managed;
   }
@@ -470,7 +490,7 @@ const syncPlacedMcp = async (
     // biome-ignore lint/performance/noAwaitInLoops: one account's file at a time, each written whole
     const failed = await mergePlacedMcp(path, wanted, managed);
     if (failed) {
-      console.warn(`[fleet] ${failed}`);
+      console.warn(`[fleet] ${failed.detail}`);
     }
   }
   const placed: Sidecar["placedMcp"] = {};
@@ -624,9 +644,20 @@ export const machineToolchain = async (
 };
 
 interface Ran {
+  /** Its exit status; null when a signal ended it or it did not answer in time. */
+  code: number | null;
   /** The tail of what it said, which is what a failure's `detail` carries. */
   output: string;
+  /** It did not answer within {@link CLI_TIMEOUT_MS}, and was killed. */
+  timedOut?: true;
 }
+
+/** A row a `claude plugin …` run did not converge: its cause by how the run ended, and its words. */
+const ranFailed = (ran: Ran): FleetItemState => ({
+  state: "failed",
+  cause: ran.timedOut ? "timed-out" : "unknown",
+  detail: ran.output,
+});
 
 /**
  * One `claude plugin …`, with the daemon's environment and the PATH it can
@@ -649,15 +680,19 @@ const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
     ]);
     const code = await child.exited;
     if (child.signalCode) {
-      return { output: `was ended by ${child.signalCode}` };
+      return { code: null, output: `was ended by ${child.signalCode}` };
     }
-    return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
+    return { code, output: tail(stderr) || tail(stdout) || `exited ${code}` };
   });
   switch (ran.kind) {
     case "answered":
       return ran.value;
     case "unanswered":
-      return { output: `did not answer within ${CLI_TIMEOUT_MS / 1000}s` };
+      return {
+        code: null,
+        output: `did not answer within ${CLI_TIMEOUT_MS / 1000}s`,
+        timedOut: true,
+      };
     default: {
       const unhandled: never = ran;
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
@@ -762,8 +797,8 @@ const vendoredIdOf = (id: string): string =>
 /**
  * Why a plugin of a hub-only marketplace is not on this machine. The bytes the
  * hub carries are its only way here: the marketplace is a directory on the
- * hub's machine, which no command run here can link. The dashboard names the
- * fault by this sentence's last clause (fleet-faults.ts `HUB_ONLY`).
+ * hub's machine, which no command run here can link. Its row's cause is
+ * `hub-only`.
  */
 const hubOnlyMiss = (marketplace: string, hubError: string | undefined) =>
   `${hubError ? `the hub could not carry it (${hubError})` : "the hub has not resolved it yet"}, and its marketplace ${marketplace} is a directory on the hub's machine`;
@@ -787,6 +822,7 @@ const hubOnlyStates = (
         ? { state: "applied" }
         : {
             state: "failed",
+            cause: "hub-only",
             detail: missing
               .map(([id, item]) => `${id}: ${item.detail ?? "not installed"}`)
               .join("; "),
@@ -839,11 +875,16 @@ const syncPlugins = async (
     if (!(error instanceof ClaudeRefused)) {
       throw error;
     }
+    const refused: FleetItemState = {
+      state: "failed",
+      cause: error.reason === "version" ? "cli-too-old" : "cli-missing",
+      detail: error.message,
+    };
     for (const { name } of config.marketplaces) {
-      report.marketplaces[name] = { state: "failed", detail: error.message };
+      report.marketplaces[name] = refused;
     }
     for (const { id } of wantedPlugins) {
-      report.plugins[id] = { state: "failed", detail: error.message };
+      report.plugins[id] = refused;
     }
     return {
       marketplaces: managed.marketplaces,
@@ -886,12 +927,13 @@ const syncPlugins = async (
     if (other) {
       registered.add(other);
     }
-    report.marketplaces[name] = {
-      state: "failed",
-      detail: other
-        ? `${source} now calls itself ${other} in its marketplace.json, not ${name}`
-        : ran.output,
-    };
+    report.marketplaces[name] = other
+      ? {
+          state: "failed",
+          cause: "unknown",
+          detail: `${source} now calls itself ${other} in its marketplace.json, not ${name}`,
+        }
+      : ranFailed(ran);
   }
 
   // A hub-only marketplace cawco once linked here is unlinked like a removed
@@ -905,7 +947,7 @@ const syncPlugins = async (
     // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace remove` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     const ran = await runClaude(bin, ["plugin", "marketplace", "remove", name]);
     report.marketplaces[name] = (await isLinked(name))
-      ? { state: "failed", detail: ran.output }
+      ? ranFailed(ran)
       : { state: "removed" };
   }
 
@@ -931,6 +973,7 @@ const syncPlugins = async (
     if (hubOnly.includes(marketplace)) {
       report.plugins[id] = {
         state: "failed",
+        cause: "hub-only",
         detail: hubOnlyMiss(marketplace, error),
       };
       continue;
@@ -940,6 +983,7 @@ const syncPlugins = async (
     if (!linked[marketplace]) {
       report.plugins[id] = {
         state: "failed",
+        cause: "marketplace-unlinked",
         detail: `marketplace ${marketplace} is not linked`,
       };
       continue;
@@ -958,7 +1002,7 @@ const syncPlugins = async (
     ]);
     report.plugins[id] = (await isInstalled(id))
       ? { state: "applied" }
-      : { state: "failed", detail: ran.output };
+      : ranFailed(ran);
   }
 
   const plugins = wantedPlugins.map(({ id }) => id);
@@ -1402,6 +1446,7 @@ const syncVendoredPlugins = async (
       // next sync's read finds it missing and carries the bytes.
       report[id] = {
         state: "failed",
+        cause: "missing-bytes",
         detail: "the hub sent no files for this hash",
       };
       continue;
@@ -1422,10 +1467,9 @@ const syncVendoredPlugins = async (
 
     if (!(already || (await isInstalled(vendoredId)))) {
       // Left unmanaged so the next sync writes and installs it again.
-      report[id] = {
-        state: "failed",
-        detail: ran?.output ?? "install did not land",
-      };
+      report[id] = ran
+        ? ranFailed(ran)
+        : { state: "failed", cause: "absent", detail: "install did not land" };
       continue;
     }
 
@@ -1501,11 +1545,19 @@ const syncSkillFiles = async (
       // biome-ignore lint/performance/noAwaitInLoops: ownership is checked before this skill is written or claimed.
       const collision = await workflowSkillCollision(SKILLS_DIR, skill);
       if (collision) {
-        report[skill.name] = { state: "failed", detail: collision };
+        report[skill.name] = {
+          state: "failed",
+          cause: "unknown",
+          detail: collision,
+        };
         continue;
       }
     } catch (error) {
-      report[skill.name] = { state: "failed", detail: said(error) };
+      report[skill.name] = {
+        state: "failed",
+        cause: "unknown",
+        detail: said(error),
+      };
       continue;
     }
     if (
@@ -1526,7 +1578,7 @@ const syncSkillFiles = async (
     const drift = skillDrift(held[skill.name], managed[skill.name], skill.hash);
     if (drift && !skill.force) {
       written[skill.name] = managed[skill.name];
-      report[skill.name] = { state: "failed", detail: drift };
+      report[skill.name] = { state: "failed", cause: "drifted", detail: drift };
       continue;
     }
 
@@ -1540,6 +1592,7 @@ const syncSkillFiles = async (
       }
       report[skill.name] = {
         state: "failed",
+        cause: "missing-bytes",
         detail: "the hub sent no files for this hash",
       };
       continue;
@@ -1553,6 +1606,7 @@ const syncSkillFiles = async (
       }
       report[skill.name] = {
         state: "failed",
+        cause: "unsafe-path",
         detail: `unsafe path ${unsafe.path}`,
       };
       continue;
@@ -1569,7 +1623,11 @@ const syncSkillFiles = async (
       // whole trees), so the name stays managed — under a hash nothing
       // matches, which is what has the next sync write it again.
       written[skill.name] = "";
-      report[skill.name] = { state: "failed", detail: tail(said(error)) };
+      report[skill.name] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: tail(said(error)),
+      };
     }
   }
 
@@ -1598,7 +1656,11 @@ const syncSkillFiles = async (
       report[name] = { state: "removed" };
     } catch (error) {
       written[name] = managed[name];
-      report[name] = { state: "failed", detail: said(error) };
+      report[name] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: said(error),
+      };
     }
   }
   return written;
@@ -1636,6 +1698,7 @@ const placeSkill = async (
   if (!(await dirExists(cwd))) {
     report[key] = {
       state: "failed",
+      cause: "no-checkout",
       detail: `${cwd} is not on this machine`,
     };
     return recorded;
@@ -1643,6 +1706,7 @@ const placeSkill = async (
   if (await deletedClone(cwd)) {
     report[key] = {
       state: "failed",
+      cause: "no-checkout",
       detail: `${cwd} is a delegate workspace whose clone was deleted, so nothing is placed there; archiving the workspace takes the folder away`,
     };
     return recorded;
@@ -1657,21 +1721,33 @@ const placeSkill = async (
   if (disk !== undefined && !recorded) {
     report[key] = {
       state: "failed",
+      cause: "unknown",
       detail: `${dir} is the folder's own skill; cawco leaves it as it is`,
     };
     return recorded;
   }
   const drift = skillDrift(disk, recorded, skill.hash);
   if (drift && !skill.force) {
-    report[key] = { state: "failed", detail: `${dir}: ${drift}` };
+    report[key] = {
+      state: "failed",
+      cause: "drifted",
+      detail: `${dir}: ${drift}`,
+    };
     return recorded;
   }
   const unsafe = (skill.files ?? []).find(({ path }) => !isSafeSkillPath(path));
   if (!skill.files || unsafe) {
-    report[key] = {
-      state: "failed",
-      detail: unsafe ? `unsafe path ${unsafe.path}` : "the hub sent no files",
-    };
+    report[key] = unsafe
+      ? {
+          state: "failed",
+          cause: "unsafe-path",
+          detail: `unsafe path ${unsafe.path}`,
+        }
+      : {
+          state: "failed",
+          cause: "missing-bytes",
+          detail: "the hub sent no files",
+        };
     return recorded;
   }
   try {
@@ -1682,7 +1758,11 @@ const placeSkill = async (
     report[key] = { state: "applied" };
     return skill.hash;
   } catch (error) {
-    report[key] = { state: "failed", detail: tail(said(error)) };
+    report[key] = {
+      state: "failed",
+      cause: "unwritable",
+      detail: tail(said(error)),
+    };
     return recorded;
   }
 };
@@ -1723,7 +1803,7 @@ const syncPlacedSkills = async (
       report[key] = { state: "removed" };
     } catch (error) {
       placed[key] = record;
-      report[key] = { state: "failed", detail: said(error) };
+      report[key] = { state: "failed", cause: "unwritable", detail: said(error) };
     }
   }
   return placed;
@@ -1819,6 +1899,15 @@ export function memoryPlan(
 /** What a drifted machine reports, and what the dashboard offers to settle. */
 const DRIFTED = "edited on this machine — adopt it or overwrite";
 
+/** A file CawCo wrote that a status read finds gone (`null` hash), or changed. */
+const absentOrDrifted = (
+  fileHash: string | null,
+  gone: string
+): FleetItemState =>
+  fileHash === null
+    ? { state: "failed", cause: "absent", detail: gone }
+    : { state: "failed", cause: "drifted", detail: DRIFTED };
+
 /**
  * Applies the plan and answers with the hash cawco now manages, or nothing
  * when it manages none. The file is only ever deleted when it is still exactly
@@ -1845,7 +1934,7 @@ const syncMemory = async (
   }
 
   if (plan === "drift") {
-    report.memory = { state: "failed", detail: DRIFTED };
+    report.memory = { state: "failed", cause: "drifted", detail: DRIFTED };
     return managed;
   }
   if (plan === "skip") {
@@ -1860,7 +1949,11 @@ const syncMemory = async (
   } catch (error) {
     // The machine keeps the hash it had, so the next sync writes again rather
     // than believing this one landed.
-    report.memory = { state: "failed", detail: tail(said(error)) };
+    report.memory = {
+      state: "failed",
+      cause: "unwritable",
+      detail: tail(said(error)),
+    };
     return managed;
   }
 };
@@ -1990,7 +2083,7 @@ const syncMemoryDocs = async (
     if (managed[doc.path] !== undefined) {
       written[doc.path] = managed[doc.path];
     }
-    report[doc.path] = { state: "failed", detail: problem };
+    report[doc.path] = { state: "failed", cause: "unknown", detail: problem };
   }
 
   const onDisk: Record<string, string | null> = {};
@@ -2027,7 +2120,7 @@ const syncMemoryDocs = async (
     }
 
     if (plan === "drift") {
-      report[path] = { state: "failed", detail: DRIFTED };
+      report[path] = { state: "failed", cause: "drifted", detail: DRIFTED };
       if (managed[path] !== undefined) {
         written[path] = managed[path];
       }
@@ -2049,7 +2142,11 @@ const syncMemoryDocs = async (
       if (managed[path] !== undefined) {
         written[path] = managed[path];
       }
-      report[path] = { state: "failed", detail: tail(said(error)) };
+      report[path] = {
+      state: "failed",
+      cause: "unwritable",
+      detail: tail(said(error)),
+    };
     }
   }
   if (removed) {
@@ -2089,16 +2186,21 @@ const placeMemoryDoc = async (
   const cwd = doc.cwd as string;
   const problem = memoryDocProblem(doc.path);
   if (problem) {
-    report[key] = { state: "failed", detail: problem };
+    report[key] = { state: "failed", cause: "unknown", detail: problem };
     return recorded;
   }
   if (!(await dirExists(cwd))) {
-    report[key] = { state: "failed", detail: `${cwd} is not on this machine` };
+    report[key] = {
+      state: "failed",
+      cause: "no-checkout",
+      detail: `${cwd} is not on this machine`,
+    };
     return recorded;
   }
   if (await deletedClone(cwd)) {
     report[key] = {
       state: "failed",
+      cause: "no-checkout",
       detail: `${cwd} is a delegate workspace whose clone was deleted, so nothing is placed there; archiving the workspace takes the folder away`,
     };
     return recorded;
@@ -2112,12 +2214,17 @@ const placeMemoryDoc = async (
   if (disk !== null && !recorded) {
     report[key] = {
       state: "failed",
+      cause: "unknown",
       detail: `${file} is the folder's own; cawco leaves it as it is`,
     };
     return recorded;
   }
   if (disk !== null && disk !== recorded) {
-    report[key] = { state: "failed", detail: `${file}: ${DRIFTED}` };
+    report[key] = {
+      state: "failed",
+      cause: "drifted",
+      detail: `${file}: ${DRIFTED}`,
+    };
     return recorded;
   }
   try {
@@ -2126,7 +2233,11 @@ const placeMemoryDoc = async (
     report[key] = { state: "applied" };
     return doc.hash;
   } catch (error) {
-    report[key] = { state: "failed", detail: tail(said(error)) };
+    report[key] = {
+      state: "failed",
+      cause: "unwritable",
+      detail: tail(said(error)),
+    };
     return recorded;
   }
 };
@@ -2205,7 +2316,7 @@ const syncPlacedMemory = async (
       report[key] = { state: "removed" };
     } catch (error) {
       placed[key] = record;
-      report[key] = { state: "failed", detail: said(error) };
+      report[key] = { state: "failed", cause: "unwritable", detail: said(error) };
     }
   }
   return placed;
@@ -2394,13 +2505,18 @@ const syncHooks = async (
     const problems = Object.values(hookProblem(hook));
     if (problems.length > 0) {
       keep(hook.id);
-      report[hook.id] = { state: "failed", detail: problems[0] };
+      report[hook.id] = {
+        state: "failed",
+        cause: "unknown",
+        detail: problems[0],
+      };
       continue;
     }
     if (hook.scope && hook.scope !== "user" && !hook.cwd) {
       keep(hook.id);
       report[hook.id] = {
         state: "failed",
+        cause: "no-checkout",
         detail: "bound to a project this machine has no checkout for",
       };
       continue;
@@ -2440,11 +2556,11 @@ const syncHooks = async (
     );
     if (parseError) {
       keep(hook.id);
-      report[hook.id] = { state: "failed", detail: parseError };
+      report[hook.id] = { state: "failed", cause: "unknown", detail: parseError };
       continue;
     }
     if (plan === "drift") {
-      report[hook.id] = { state: "failed", detail: DRIFTED };
+      report[hook.id] = { state: "failed", cause: "drifted", detail: DRIFTED };
       hashes.set(hook.id, managed[hook.id]?.hash ?? scriptHash);
       scriptPaths.set(hook.id, path);
       settled.push(hook);
@@ -2458,7 +2574,11 @@ const syncHooks = async (
         await chmod(path, 0o755);
       } catch (error) {
         keep(hook.id);
-        report[hook.id] = { state: "failed", detail: tail(said(error)) };
+        report[hook.id] = {
+      state: "failed",
+      cause: "unwritable",
+      detail: tail(said(error)),
+    };
         continue;
       }
     }
@@ -2491,7 +2611,7 @@ const syncHooks = async (
       const detail = `could not parse ${path}`;
       for (const hook of hooks) {
         keep(hook.id);
-        report[hook.id] = { state: "failed", detail };
+        report[hook.id] = { state: "failed", cause: "unparsable", detail };
       }
       continue;
     }
@@ -2554,7 +2674,7 @@ const syncHooks = async (
         const detail = tail(said(error));
         for (const hook of hooks) {
           keep(hook.id);
-          report[hook.id] = { state: "failed", detail };
+          report[hook.id] = { state: "failed", cause: "unwritable", detail };
         }
         continue;
       }
@@ -2743,7 +2863,11 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   for (const [key, { cwd, name }] of Object.entries(managed.placedMcp)) {
     report.mcp[key] = projects[cwd]?.mcpServers?.[name]
       ? { state: "applied" }
-      : { state: "failed", detail: `not in ${CLAUDE_JSON} for ${cwd}` };
+      : {
+          state: "failed",
+          cause: "absent",
+          detail: `not in ${CLAUDE_JSON} for ${cwd}`,
+        };
   }
   for (const name of managed.marketplaces) {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
@@ -2751,6 +2875,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
       ? { state: "applied" }
       : {
           state: "failed",
+          cause: "absent",
           detail: `${name} is not in known_marketplaces.json`,
         };
   }
@@ -2762,7 +2887,11 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     report.plugins[id] = (await isInstalled(installedAs))
       ? { state: "applied" }
-      : { state: "failed", detail: "not in installed_plugins.json" };
+      : {
+          state: "failed",
+          cause: "absent",
+          detail: "not in installed_plugins.json",
+        };
   }
   hubOnlyStates(
     managed.hubOnlyMarketplaces,
@@ -2776,9 +2905,9 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     // edit is told apart from the record alone.
     const drift = skillDrift(heldNow[name], recorded, recorded);
     if (heldNow[name] === undefined) {
-      skills[name] = { state: "failed", detail: "not on disk" };
+      skills[name] = { state: "failed", cause: "absent", detail: "not on disk" };
     } else if (drift) {
-      skills[name] = { state: "failed", detail: drift };
+      skills[name] = { state: "failed", cause: "drifted", detail: drift };
     } else {
       skills[name] = { state: "applied" };
     }
@@ -2788,11 +2917,19 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     const disk = await heldHash(dir);
     if (disk === undefined) {
-      skills[key] = { state: "failed", detail: `${dir} is not on disk` };
+      skills[key] = {
+        state: "failed",
+        cause: "absent",
+        detail: `${dir} is not on disk`,
+      };
     } else if (disk === record.hash) {
       skills[key] = { state: "applied" };
     } else {
-      skills[key] = { state: "failed", detail: `${dir}: ${DRIFTED}` };
+      skills[key] = {
+        state: "failed",
+        cause: "drifted",
+        detail: `${dir}: ${DRIFTED}`,
+      };
     }
   }
   if (managed.memory !== undefined) {
@@ -2800,10 +2937,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     report.memory =
       fileHash === managed.memory
         ? { state: "applied" }
-        : {
-            state: "failed",
-            detail: fileHash === null ? "not on disk" : DRIFTED,
-          };
+        : absentOrDrifted(fileHash, "not on disk");
   }
   for (const [path, hash] of Object.entries(managed.memoryDocs)) {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
@@ -2811,10 +2945,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     memoryDocs[path] =
       fileHash === hash
         ? { state: "applied" }
-        : {
-            state: "failed",
-            detail: fileHash === null ? "not on disk" : DRIFTED,
-          };
+        : absentOrDrifted(fileHash, "not on disk");
   }
   for (const [key, record] of Object.entries(managed.placedMemory)) {
     const file = join(placedMemoryDir(record.cwd), record.name);
@@ -2823,27 +2954,24 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     memoryDocs[key] =
       fileHash === record.hash
         ? { state: "applied" }
-        : {
-            state: "failed",
-            detail: fileHash === null ? `${file} is not on disk` : DRIFTED,
-          };
+        : absentOrDrifted(fileHash, `${file} is not on disk`);
   }
   for (const [id, record] of Object.entries(managed.hooks)) {
     if (record.command.startsWith(HOOKS_DIR)) {
       const scriptFile = Bun.file(record.command);
       // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
       if (!(await scriptFile.exists())) {
-        hooks[id] = { state: "failed", detail: "not on disk" };
+        hooks[id] = { state: "failed", cause: "absent", detail: "not on disk" };
         continue;
       }
       const script = await scriptFile.text();
       const parseError = await scriptParseError(script);
       if (parseError) {
-        hooks[id] = { state: "failed", detail: parseError };
+        hooks[id] = { state: "failed", cause: "unknown", detail: parseError };
         continue;
       }
       if (hashText(script) !== record.hash) {
-        hooks[id] = { state: "failed", detail: DRIFTED };
+        hooks[id] = { state: "failed", cause: "drifted", detail: DRIFTED };
         continue;
       }
     }
@@ -2865,7 +2993,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     );
     hooks[id] = present
       ? { state: "applied" }
-      : { state: "failed", detail: `not in ${settingsPath}` };
+      : { state: "failed", cause: "absent", detail: `not in ${settingsPath}` };
   }
   // Claimed here too, and for the reason `have` above is: a status overwrites
   // the stored report, so a status that left the toolchain out would retract

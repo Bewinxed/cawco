@@ -351,12 +351,19 @@ export const limitsOf = (
     subscription: reading?.subscription ?? null,
   };
   if (!reading || reading.windows.length === 0) {
-    return { ...base, stale: false, windows: [], error: "no reading yet" };
+    return {
+      ...base,
+      stale: false,
+      windows: [],
+      error: "no reading yet",
+      errorKind: "no-reading",
+    };
   }
   return {
     ...base,
     stale: !watched,
     error: null,
+    errorKind: null,
     windows: reading.windows.map((window) =>
       window.resetsAt && Date.parse(window.resetsAt) <= now
         ? { ...window, percent: 0, severity: "normal", isActive: false }
@@ -481,6 +488,7 @@ export const machineReadings = (db: DbShape, now = Date.now()) => {
           subscription: null,
           windows: [],
           error: "not signed in",
+          errorKind: "not-signed-in",
         };
     return [
       {

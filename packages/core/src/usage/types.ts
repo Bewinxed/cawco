@@ -82,8 +82,18 @@ export interface OpenCodeGoLimits {
  * with no newer report reads 0%.
  */
 export interface ClaudeLimits {
-  /** Why there are no windows: nothing on the account has reported any yet. */
+  /**
+   * Why there are no windows, in words. Kept beside {@link errorKind} for the
+   * shipped app, which compares it to "not signed in"; a reader decides on
+   * `errorKind`.
+   */
   error: string | null;
+  /**
+   * Why there are no windows, typed: `not-signed-in`, no account on the
+   * machine is signed in to Claude; `no-reading`, nothing on the account has
+   * reported any yet. Null when there are windows.
+   */
+  errorKind: ClaudeLimitsGap | null;
   /** Extra usage as the last `rate_limit_event` said; null: it never said. */
   extraUsage: ClaudeExtraUsage | null;
   /** When Claude Code last reported on the account. */
@@ -96,6 +106,9 @@ export interface ClaudeLimits {
   subscription: string | null; // subscriptionType
   windows: LimitWindow[];
 }
+
+/** Why a {@link ClaudeLimits} has no windows. */
+export type ClaudeLimitsGap = "not-signed-in" | "no-reading";
 
 /** Extra usage: requests past the plan's limits, paid as they go. */
 export interface ClaudeExtraUsage {

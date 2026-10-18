@@ -959,6 +959,16 @@ export interface BridgeRing {
   readonly seqs: Map<string, number>;
 }
 
+/**
+ * How a child ended, as sessiond reaped it (`#reap`, from the child's own
+ * `exit`): its exit code, or the signal that ended it. What a harness
+ * decides a process's end by, never its SDK's words for it.
+ */
+export interface ProcessExit {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+}
+
 /** The previous host's control traffic, which an attach does not replay. */
 const PREVIOUS_HOST_LINES: ReadonlySet<unknown> = new Set([
   "control_request",
@@ -1008,19 +1018,20 @@ export const sessiondBridge = (
   /** The keeper refused the child its input ({@link KeeperRefused}): told once. */
   refused: (error: KeeperRefused) => void,
   /**
-   * The child is gone: sessiond reported its end, or the spawn never started
-   * one. Told once. A host that detaches (closes its `Query`) is not told:
-   * the child goes on.
+   * The child is gone: sessiond reported its end, with how it ended (its
+   * exit code or signal), or the spawn never started one, or sessiond could
+   * not say how it ended (no `exit`). Told once. A host that detaches
+   * (closes its `Query`) is not told: the child goes on.
    */
-  ended: () => void
+  ended: (exit: ProcessExit | undefined) => void
 ): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
   const { attach } = ring;
   const events = new EventEmitter();
   let isEnded = false;
-  const end = (): void => {
+  const end = (exit?: ProcessExit): void => {
     if (!isEnded) {
       isEnded = true;
-      ended();
+      ended(exit);
     }
   };
   let killed = false;
@@ -1157,7 +1168,7 @@ export const sessiondBridge = (
       exitCode = code;
       signalCode = sig;
       stdout.push(null);
-      end();
+      end(code === null && sig === null ? undefined : { code, signal: sig });
       // An `exit` with neither a code nor a signal is not one a process can
       // emit, and the SDK reads it as still running: its `waitForExit` waits
       // for another `exit` and never returns. A child whose end sessiond

@@ -853,22 +853,61 @@ export interface MachineFleetConfig extends FleetConfig {
 }
 
 /**
+ * Why one entry did not converge on a machine, named where it failed:
+ * - `cli-too-old`: the claude CLI the sync ran is older than
+ *   `CLAUDE_VERSION_FLOOR` (agent claude-version.ts), by its version;
+ * - `cli-missing`: the machine has no claude CLI to run;
+ * - `marketplace-unlinked`: a plugin's marketplace is not linked here;
+ * - `hub-only`: a plugin of a marketplace that is a directory on the hub's
+ *   machine, which the hub could not carry;
+ * - `drifted`: the machine edited the copy CawCo wrote;
+ * - `absent`: what CawCo recorded writing is no longer there;
+ * - `unparsable`, `unwritable`: a config file it could not read, or write;
+ * - `timed-out`: a run or a server that did not answer in time;
+ * - `no-checkout`: bound to a project this machine has no checkout of;
+ * - `missing-bytes`: the hub named a version and sent no files for it;
+ * - `unsafe-path`: a file the hub sent names a path outside its directory;
+ * - `unknown`: anything else, said as it was in `detail`.
+ */
+export type FleetFaultCause =
+  | "cli-too-old"
+  | "cli-missing"
+  | "marketplace-unlinked"
+  | "hub-only"
+  | "drifted"
+  | "absent"
+  | "unparsable"
+  | "unwritable"
+  | "timed-out"
+  | "no-checkout"
+  | "missing-bytes"
+  | "unsafe-path"
+  | "unknown";
+
+/**
  * What one desired entry came to on one machine. `removed` is a success: the
  * row was disabled or deleted and the machine no longer has it — reported
- * once so the dashboard can say so, gone from the next report.
+ * once so the dashboard can say so, gone from the next report. A `failed`
+ * one names its {@link FleetFaultCause} where it failed.
  */
-export interface FleetItemState {
-  /** `failed`: what the write or the CLI said — the tail of it. */
-  detail?: string;
-  state:
-    | "applied"
-    | "failed"
-    | "removed"
-    | "needs-auth"
-    | "disabled"
-    | "unsupported"
-    | "pending";
-}
+export type FleetItemState =
+  | {
+      cause: FleetFaultCause;
+      /** What the write or the CLI said — the tail of it. */
+      detail?: string;
+      state: "failed";
+    }
+  | {
+      cause?: never;
+      detail?: string;
+      state:
+        | "applied"
+        | "removed"
+        | "needs-auth"
+        | "disabled"
+        | "unsupported"
+        | "pending";
+    };
 
 /** Every runtime uses this translation; an unknown status cannot claim success. */
 export const mcpFleetState = (status?: {
@@ -896,6 +935,7 @@ export const mcpFleetState = (status?: {
     default:
       return {
         state: "failed",
+        cause: "unknown",
         detail:
           status?.error ??
           `MCP runtime reported ${status?.status ?? "no server"}.`,

@@ -678,6 +678,7 @@ const placeOpencodeMcp = async (
     } else {
       report[key] = {
         state: "failed",
+        cause: "no-checkout",
         detail: `${server.cwd} is not on this machine`,
       };
     }
@@ -5165,6 +5166,7 @@ export class OpencodeHarness implements Harness {
           } else if (this.#configState === "error") {
             return {
               state: "failed",
+              cause: "unknown",
               detail: `OpenCode did not load its new config: ${this.#configError ?? "the apply failed"}`,
             };
           }
@@ -5282,9 +5284,12 @@ export class OpencodeHarness implements Harness {
         })
       );
     } catch (error) {
-      return Object.fromEntries(
-        names.map((name) => [name, { state: "failed", detail: String(error) }])
-      );
+      const failed: FleetItemState = {
+        state: "failed",
+        cause: "unknown",
+        detail: String(error),
+      };
+      return Object.fromEntries(names.map((name) => [name, failed]));
     }
   }
 }

@@ -1076,6 +1076,12 @@ export const usageByModel = (
 };
 
 export interface NeutralResultMessage {
+  /**
+   * pi and OpenCode: the provider refused the turn at its account's limit,
+   * by the structured refusal its harness handed over (core
+   * `atProviderLimit`). Claude's is its assistant frame's `error`.
+   */
+  atLimit?: true;
   /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
   cache?: { read: number; write: number; write5m?: number; write1h?: number };
   /**
@@ -1203,10 +1209,12 @@ export interface NeutralSystemMessage {
    */
   result?: string;
   /**
-   * provider_retry ({@link PROVIDER_RETRY}): the provider's own message, and
-   * when the harness makes its next attempt (ms epoch) if it said.
+   * provider_retry ({@link PROVIDER_RETRY}): the provider's own message,
+   * when the harness makes its next attempt (ms epoch) if it said, and
+   * `atLimit` when the refusal it retries is the account's limit (core
+   * `atProviderLimit`).
    */
-  retry?: { message: string; nextAttemptAt?: number };
+  retry?: { atLimit?: true; message: string; nextAttemptAt?: number };
   session_id?: string;
   skills?: string[];
   slash_commands?: string[];

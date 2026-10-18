@@ -45,13 +45,19 @@ export const SAFE_GIT_FLAGS: readonly string[] = [
   "push.gpgSign=false",
 ];
 
-/** What git reads from its environment before any config. */
+/**
+ * What git reads from its environment before any config. `LC_ALL=C` keeps
+ * git's words in one language whatever the host's locale is: what CawCo
+ * decides on git is its exit status and its plumbing's output, and the words
+ * it quotes to a person are then the same on every machine.
+ */
 export const SAFE_GIT_ENV: Readonly<Record<string, string>> = {
   GIT_PAGER: "cat",
   GIT_EDITOR: "true",
   GIT_SEQUENCE_EDITOR: "true",
   GIT_ASKPASS: "/usr/bin/true",
   GIT_TERMINAL_PROMPT: "0",
+  LC_ALL: "C",
 };
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;

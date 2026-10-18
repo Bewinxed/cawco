@@ -65,7 +65,6 @@ import {
   folderHistory,
   folderPath,
   folderUncommitted,
-  HISTORY_LIMIT,
   hasProjectFolder,
   IMAGE_TYPES,
   listFolder,
@@ -122,12 +121,15 @@ import {
 } from "./task-file";
 import {
   AUTHOR,
+  CHANGES,
   COMMENT_CHANGE,
   goneTasks,
   historyOf,
+  hubFiled,
   inArchive,
   lifeOf,
   NO_STAGE,
+  type TaskChange,
   type TaskHistory,
   type TaskHistoryActor,
   type TaskLife,
@@ -1377,18 +1379,6 @@ const stagesView = (
 });
 
 /** Why the hub cannot put a task in `stage`: only that the project has no such stage. */
-/**
- * The subject of a commit the hub's own task-making code writes: a task
- * filed (`task tsk-3: create “…” in idea (by you)`), tasks merged from
- * another project (`tasks tsk-4, tsk-5: Old's tasks, merged in (by …)`), a
- * duplicate project's folder folded in (project-merge.ts, `Old's files,
- * merged in: …`), and a written-in task adopted at its start (`settle`).
- * Caw's folder_write cannot set a commit's subject; the folder
- * editor's message is yours.
- */
-const HUB_MADE =
-  /^task tsk-\d+: (?:create|adopt) |^tasks [^:]+: .*, merged in \(by |'s files, merged in: /;
-
 /** The mover a plain create by a folder commit's author would be checked as. */
 const moverOf = (author: string): Mover => {
   if (author === "Caw") {
@@ -1421,8 +1411,8 @@ const byWhom = (actor: TaskActor): string =>
 
 /** What one change to a task did, for its commit: its words, and a stage move and its reason when there is one. */
 interface Did {
-  /** What kind of change it was when its words do not say (`CawCo-Change`): a comment. */
-  change?: typeof COMMENT_CHANGE;
+  /** What kind of change it was when its words do not say (`CawCo-Change`). */
+  change?: TaskChange;
   /** Why, given with the change; the actor's own reason when left out. */
   reason?: string;
   /** The move it made; `from` empty for a task that had no stage. */
@@ -1445,21 +1435,24 @@ const WHITESPACE = /\s+/g;
 
 /**
  * A task commit's message: the subject as people read it (`task tsk-12:
- * stage draft → review (by you)`), then the trailers task-history.ts reads
- * back: who, the mover their stage rules were checked as, the stage move and
- * the reason when there are.
+ * stage draft → review (by you)`: the task ids `tasks` names, then `what`),
+ * then the trailers task-history.ts reads back, which alone it reads: who,
+ * the mover their stage rules were checked as, what it did, the stage move,
+ * the reason and the kind of change when there are.
  */
 const commitMessage = (
   actor: TaskActor,
-  subject: string,
+  tasks: string,
+  what: string,
   did: Omit<Did, "what"> = {}
 ): string => {
   const reason = (did.reason ?? actor.reason)?.replace(WHITESPACE, " ").trim();
   return [
-    `${subject} ${byWhom(actor)}`,
+    `${tasks}: ${what} ${byWhom(actor)}`,
     "",
     `${TRAILERS.actor}: ${actorTrailer(actor)}`,
     `${TRAILERS.mover}: ${actor.mover}`,
+    `${TRAILERS.what}: ${what.replace(WHITESPACE, " ").trim()}`,
     ...(did.stage
       ? [`${TRAILERS.stage}: ${did.stage.from || NO_STAGE} -> ${did.stage.to}`]
       : []),
@@ -1975,11 +1968,10 @@ export const createTasks = (store: TaskStore) => {
     const actor = hubActor(why);
     await writeFolderFile(projectId, path, restored, {
       author: actor.author,
-      message: commitMessage(
-        actor,
-        `task ${id}: ${said}`,
-        moved ? { stage: moved } : {}
-      ),
+      message: commitMessage(actor, `task ${id}`, said, {
+        ...(moved ? { stage: moved } : {}),
+        ...(fix.start ? { change: CHANGES.adopt } : {}),
+      }),
     });
     store.put([indexRow(projectId, path, number, restored, hashOf(restored))]);
     console.info(`[tasks] ${projectId} ${id}: ${said}`);
@@ -2002,16 +1994,16 @@ export const createTasks = (store: TaskStore) => {
     if (!stages) {
       return;
     }
-    const history = await folderHistory(projectId, path, HISTORY_LIMIT).catch(
-      () => undefined
-    );
+    const changes = (
+      await folderFileTimes(projectId, "tasks").catch(() => undefined)
+    )?.times.get(path)?.changes;
     if (
-      !history?.commits.length ||
-      history.commits.some((commit) => HUB_MADE.test(commit.message))
+      !changes?.length ||
+      changes.some(({ commit }) => hubFiled(commit.trailers))
     ) {
       return;
     }
-    const who = history.commits.at(-1)?.author || "someone";
+    const who = changes[0]?.commit.author || "someone";
     const written = new TaskDoc(path, content).read().fields.stage ?? "";
     if (written && !startProblem(stages, written, moverOf(who))) {
       return;
@@ -2657,7 +2649,9 @@ export const createTasks = (store: TaskStore) => {
         author: actor.author,
         message: commitMessage(
           actor,
-          `tasks ${written.map((each) => taskId(each.number)).join(", ")}: ${from}'s ${written.length === 1 ? "task" : "tasks"}, merged in`
+          `tasks ${written.map((each) => taskId(each.number)).join(", ")}`,
+          `${from}'s ${written.length === 1 ? "task" : "tasks"}, merged in`,
+          { change: CHANGES.merge }
         ),
         exclusive: sameNumber,
       }
@@ -2753,7 +2747,7 @@ export const createTasks = (store: TaskStore) => {
         number,
         next,
         actor,
-        commitMessage(actor, `task ${id}: ${what}`, did)
+        commitMessage(actor, `task ${id}`, what, did)
       );
     });
 
@@ -2897,7 +2891,7 @@ export const createTasks = (store: TaskStore) => {
     stands(projectId);
     await moveFolderFile(projectId, path, to, {
       author: actor.author,
-      message: commitMessage(actor, `task ${id}: archive`),
+      message: commitMessage(actor, `task ${id}`, "archive"),
     });
     store.drop(projectId, [path]);
     const { content } = await readFolderFile(projectId, to);
@@ -2938,7 +2932,8 @@ export const createTasks = (store: TaskStore) => {
       author: actor.author,
       message: commitMessage(
         actor,
-        `task ${id}: unarchive${settled ? `; ${settled.said}` : ""}`,
+        `task ${id}`,
+        `unarchive${settled ? `; ${settled.said}` : ""}`,
         settled ? { reason: settled.why } : {}
       ),
       ...(settled ? { content: settled.restored } : {}),
@@ -3136,8 +3131,9 @@ export const createTasks = (store: TaskStore) => {
             content: doc.toString(),
             message: commitMessage(
               actor,
-              `task ${taskId(number)}: create “${title}” in ${stage}`,
-              { stage: { from: "", to: stage } }
+              `task ${taskId(number)}`,
+              `create “${title}” in ${stage}`,
+              { stage: { from: "", to: stage }, change: CHANGES.create }
             ),
           };
         });
@@ -3501,7 +3497,8 @@ export const createTasks = (store: TaskStore) => {
           author: actor.author,
           message: commitMessage(
             actor,
-            `task ${id}: delete “${new TaskDoc(path, content).title()}”`
+            `task ${id}`,
+            `delete “${new TaskDoc(path, content).title()}”`
           ),
         });
         store.drop(projectId, [path]);

@@ -7,6 +7,7 @@ import type {
   SupportedCommands,
 } from "@cawco/core";
 import {
+  atProviderLimit,
   CAWCO_ENV,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
@@ -313,18 +314,34 @@ class CawcoTools {
   readonly #registered = new Map<string, ToolDefinition>();
   readonly #instanceId: string;
   readonly #credential: { value?: string };
+  /**
+   * The HTTP status of the provider's last answer since the turn's end was
+   * last read ({@link takeStatus}): pi's `after_provider_response`, fired for
+   * every answer before its stream is read. pi's own error message drops it.
+   */
+  #status: number | undefined;
 
   constructor(instanceId: string, credential: { value?: string }) {
     this.#instanceId = instanceId;
     this.#credential = credential;
   }
 
-  /** The inline extension: holds pi's API and registers the first list. */
+  /** The inline extension: holds pi's API, registers the first list, and hears each answer's status. */
   extension(first: ToolDefinition[]): ExtensionFactory {
     return (pi) => {
       this.#api = pi;
       this.#register(first);
+      pi.on("after_provider_response", (event) => {
+        this.#status = event.status;
+      });
     };
+  }
+
+  /** The status of the turn's last answer, cleared for the next turn's. */
+  takeStatus(): number | undefined {
+    const status = this.#status;
+    this.#status = undefined;
+    return status;
   }
 
   #register(tools: ToolDefinition[]): void {
@@ -619,6 +636,9 @@ class PiSession implements HarnessSession {
             message.errorMessage ? [message.errorMessage] : []
           ) ?? [];
         const failed = errors.length > 0;
+        // A failed turn whose last answer was a 429 ended on its account's
+        // limit (core `atProviderLimit`), whatever its error's words say.
+        const status = this.#tools.takeStatus();
         const leaf = this.#leaf();
         const context = this.#contextTokens();
         const turnUsage = usageByModel(this.#turnUsage);
@@ -631,6 +651,7 @@ class PiSession implements HarnessSession {
           is_error: failed,
           turnUsage,
           ...(failed ? { errors } : {}),
+          ...(failed && atProviderLimit({ status }) ? { atLimit: true } : {}),
           ...(context === undefined ? {} : { contextTokens: context }),
         });
         break;

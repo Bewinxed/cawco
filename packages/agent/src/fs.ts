@@ -70,10 +70,17 @@ const list = async (path: string): Promise<FsEntry[]> => {
   });
 };
 
+/**
+ * A file that is not there, coded as the system codes one (`ENOENT`), so its
+ * refusal is typed `missing` where it is sent (session.ts `#fs`).
+ */
+const notThere = (path: string): NodeJS.ErrnoException =>
+  Object.assign(new Error(`${path} does not exist`), { code: "ENOENT" });
+
 const read = async (path: string): Promise<string> => {
   const file = Bun.file(path);
   if (!(await file.exists())) {
-    throw new Error(`${path} does not exist`);
+    throw notThere(path);
   }
   if (file.size > MAX_READ_BYTES) {
     throw new Error(
@@ -122,7 +129,7 @@ const media = async (path: string): Promise<FsMedia> => {
   }
   const file = Bun.file(path);
   if (!(await file.exists())) {
-    throw new Error(`${path} does not exist`);
+    throw notThere(path);
   }
   if (file.size > MEDIA_LIMIT_BYTES) {
     throw new Error(

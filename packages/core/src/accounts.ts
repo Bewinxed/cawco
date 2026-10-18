@@ -801,16 +801,32 @@ export type ProviderSigninResult =
   | { state: "pending" };
 
 /**
- * A provider's usage-limit refusal, in its own words or as pi and OpenCode
- * pass it on: ChatGPT's `usage_limit_reached` ("You've hit your usage
- * limit"), OpenCode Go's `GoUsageLimitError`.
+ * A provider's refusal as its harness hands it over, structured: the HTTP
+ * status of the answer (pi's `after_provider_response`, OpenCode's error
+ * `status`), and OpenCode's own sort of the provider's answer (its error
+ * `type`: `provider.quota` for a usage or quota limit, among them ChatGPT's
+ * `usage_limit_reached` and OpenCode Go's `GoUsageLimitError`, and
+ * `provider.rate-limit` for a 429 or a rate-limit code; OpenCode 2.0.29's
+ * classifier, `QuotaExceeded` and `RateLimit`).
  */
-export const PROVIDER_LIMIT =
-  /usage_limit_reached|usage limit|GoUsageLimitError|rate_limit_exceeded|rate limit reached/i;
+export interface ProviderRefusal {
+  status?: number;
+  type?: string;
+}
 
-/** Whether a pi or OpenCode turn ended on its account's usage limit, by the error it ended on. */
-export const providerLimitRefused = (errors: readonly string[]): boolean =>
-  errors.some((error) => PROVIDER_LIMIT.test(error));
+/** OpenCode's error types for a provider refusing at the account's limits. */
+const LIMIT_TYPES: ReadonlySet<string> = new Set([
+  "provider.quota",
+  "provider.rate-limit",
+]);
+
+/**
+ * Whether a provider refused at its account's limit: a 429, or the limit
+ * types OpenCode sorts the provider's answer into. The one test every
+ * harness's refusal goes through; its words are never read.
+ */
+export const atProviderLimit = ({ status, type }: ProviderRefusal): boolean =>
+  status === 429 || (type !== undefined && LIMIT_TYPES.has(type));
 
 /**
  * One reading of an account's windows on a machine, made by its agent from

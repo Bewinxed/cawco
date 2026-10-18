@@ -200,6 +200,7 @@ import {
 import {
   type BridgeRing,
   endProc,
+  type ProcessExit,
   procEpoch,
   type SessiondClient,
   sessiondBridge,
@@ -222,28 +223,18 @@ import {
 } from "./claude-transcript";
 
 /**
- * The agent SDK's word for a CLI a signal killed: "Claude Code process
- * terminated by signal SIGKILL", then the tail of its stderr (agent SDK
- * 0.3.296, `sdk.mjs`).
+ * The signal a CLI's end names or encodes, as sessiond reaped it: the signal
+ * that ended it, or an exit over 128, a signal the CLI caught and exited on
+ * (128 + its number: SIGTERM is 143). Undefined for an exit of its own.
  */
-const KILLED_BY_SIGNAL =
-  /Claude Code process terminated by signal (SIG[A-Z0-9]+)/;
-/**
- * The same SDK's word for a CLI that exited: "Claude Code process exited
- * with code 143", then ". stderr: " and its stderr's tail. A code over 128 is
- * a signal the CLI caught and exited on (128 + its number: SIGTERM is 143).
- */
-const EXITED_WITH = /Claude Code process exited with code (\d+)/;
-const STDERR_TAIL = /\. stderr: ([\s\S]*)$/;
-
-/** The signal a CLI's end names or encodes; undefined for an exit of its own. */
-export const signalOfExit = (said: string): string | undefined => {
-  const named = said.match(KILLED_BY_SIGNAL)?.[1];
-  if (named) {
-    return named;
+export const signalOfExit = ({
+  code,
+  signal,
+}: ProcessExit): string | undefined => {
+  if (signal) {
+    return signal;
   }
-  const code = Number(said.match(EXITED_WITH)?.[1]);
-  if (!(Number.isInteger(code) && code > 128)) {
+  if (!(code !== null && code > 128)) {
     return;
   }
   return Object.entries(osConstants.signals).find(
@@ -252,35 +243,47 @@ export const signalOfExit = (said: string): string | undefined => {
 };
 
 /**
- * A Claude Code process's end, as the SDK said it, told to its session: a
- * signal (named, or an exit over 128) is a death the supervisor attributes,
- * to its own stop or to something outside CawCo; a conversation gone is its
- * own word; anything else is the CLI ending on its own, in its own words.
+ * A CLI that ended on its own. Its stderr is drained by sessiond, never
+ * carried (sessiond server.ts), so there is nothing of its own to quote;
+ * never a bare exit code, and what starts it again.
  */
-export const processEnded = (
-  ctx: Pick<HarnessContext, "died" | "failed">,
-  error: unknown
-): void => {
-  const said = String(error);
-  const signal = signalOfExit(said);
-  if (signal && ctx.died) {
-    ctx.died(signal, error);
-  } else if (said.includes("No conversation found with session ID:")) {
-    ctx.failed(new Error(CLAUDE_CONVERSATION_GONE));
-  } else {
-    ctx.failed(EXITED_WITH.test(said) ? new Error(crashWords(said)) : error);
-  }
-};
+export const CRASHED =
+  "Claude Code stopped on its own and said nothing about why. A message to it starts it again.";
 
 /**
- * A CLI that ended on its own, in words: what it said on its way out, never
- * a bare exit code, and what starts it again.
+ * A Claude Code process's end told to its session, read off how sessiond
+ * reaped it (`exit`, the bridge's {@link ProcessExit}), never off the SDK's
+ * words: a signal (named, or an exit over 128) is a death the supervisor
+ * attributes, to its own stop or to something outside CawCo; any other exit
+ * of a resumed conversation whose transcript is no longer there
+ * (`conversationKept`) is that conversation gone; any other is the CLI ending
+ * on its own. An error with no exit behind it (a keeper's refusal, a lost
+ * ring, a spawn that never ran) is not a process end, and is said as it is.
  */
-export const crashWords = (said: string): string => {
-  const tail = said.match(STDERR_TAIL)?.[1]?.trim();
-  return tail
-    ? `Claude Code stopped on its own: ${tail}. A message to it starts it again.`
-    : "Claude Code stopped on its own and said nothing about why. A message to it starts it again.";
+export const processEnded = async (
+  ctx: Pick<HarnessContext, "died" | "failed">,
+  error: unknown,
+  exit: ProcessExit | undefined,
+  conversationKept: (() => Promise<boolean>) | undefined
+): Promise<void> => {
+  if (!exit || exit.code === 0) {
+    ctx.failed(error);
+    return;
+  }
+  const signal = signalOfExit(exit);
+  if (signal) {
+    if (ctx.died) {
+      ctx.died(signal, error);
+    } else {
+      ctx.failed(new Error(`Claude Code's process was ended by ${signal}.`));
+    }
+    return;
+  }
+  if (conversationKept && !(await conversationKept())) {
+    ctx.failed(new Error(CLAUDE_CONVERSATION_GONE));
+    return;
+  }
+  ctx.failed(new Error(CRASHED));
 };
 
 /**
@@ -1587,7 +1590,9 @@ const launchUnderSessiond = (
     attach?: BridgeRing["attach"];
   },
   seqs: Map<string, number>,
-  spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
+  spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions,
+  /** How the child ended, as sessiond reaped it; told before the SDK says anything of it. */
+  exited: (exit: ProcessExit | undefined) => void
 ): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
   const attachedAt = Date.now();
   const launch = sessiond.attach
@@ -1601,10 +1606,14 @@ const launchUnderSessiond = (
       launch ? { ...spawnOptions, args: launch.args } : spawnOptions,
       { seqs, attach: sessiond.attach },
       (refusal) => ctx.keeperRefused(refusal),
-      () =>
-        file
-          ? removeMcpConfig(file)
-          : removeMcpConfigsOf(instanceId, attachedAt)
+      (exit) => {
+        exited(exit);
+        if (file) {
+          removeMcpConfig(file);
+        } else {
+          removeMcpConfigsOf(instanceId, attachedAt);
+        }
+      }
     );
   } catch (error) {
     if (file) {
@@ -1714,6 +1723,10 @@ class ClaudeSession implements HarnessSession {
   #restingSince: number | undefined;
   /** Whether the CLI writes this conversation down (`persistSession`). */
   readonly #stored: boolean;
+  /** How its CLI ended, as sessiond reaped it ({@link launchUnderSessiond}); undefined while it runs, or when no end was reaped. */
+  #exit: ProcessExit | undefined;
+  /** For a resumed conversation: whether its transcript is still where the CLI reads it ({@link processEnded}). */
+  readonly #conversationKept: (() => Promise<boolean>) | undefined;
   readonly instanceId: string;
   #lastRequestAt: number | undefined;
   /** The permission mode: the one it started (or was adopted) with, each `setPermissionMode`, and the CLI's own word. */
@@ -1748,16 +1761,19 @@ class ClaudeSession implements HarnessSession {
      * ({@link SpawnPayload.fence}) has CawCo's MCP server alone, from no
      * source but this launch. `instructions` are the scoped memory documents
      * it launches with ({@link SpawnPayload.instructions}); an attach
-     * launches nothing and passes none.
+     * launches nothing and passes none. `conversationKept` says, for a
+     * resumed conversation, whether its transcript is still on disk.
      */
     {
       lead,
       fence,
       instructions = [],
+      conversationKept,
     }: {
       lead: boolean;
       fence: boolean;
       instructions?: readonly SessionInstruction[];
+      conversationKept?: () => Promise<boolean>;
     },
     /**
      * The sessiond connection this session's CLI child lives under: `spawn()`
@@ -1799,6 +1815,7 @@ class ClaudeSession implements HarnessSession {
     this.#claudeJson = configDirClaudeJson(env.CLAUDE_CONFIG_DIR);
     this.#sessiond = sessiond;
     this.#stored = persistSession !== false;
+    this.#conversationKept = conversationKept;
     const seqs = this.#seqs;
     const input = new InputStream();
     this.#input = input;
@@ -1918,7 +1935,17 @@ class ClaudeSession implements HarnessSession {
         // ({@link launchUnderSessiond}).
         spawnClaudeCodeProcess: (
           spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
-        ) => launchUnderSessiond(instanceId, ctx, sessiond, seqs, spawnOptions),
+        ) =>
+          launchUnderSessiond(
+            instanceId,
+            ctx,
+            sessiond,
+            seqs,
+            spawnOptions,
+            (exit) => {
+              this.#exit = exit;
+            }
+          ),
         canUseTool: (
           toolName,
           toolInput,
@@ -2321,7 +2348,7 @@ class ClaudeSession implements HarnessSession {
       }
     } catch (error) {
       ctx.busy(false);
-      processEnded(ctx, error);
+      await processEnded(ctx, error, this.#exit, this.#conversationKept);
     } finally {
       this.#transcriptWatch?.close();
       for (const delivery of this.#delivery.values()) {
@@ -3920,13 +3947,23 @@ export class ClaudeHarness implements Harness {
       configDir,
       projectSlug(await projectMemoryRoot(cwd))
     );
+    // Whether the conversation it resumes is where its CLI reads it: asked
+    // before the launch, and again of a CLI that ends on its own, which is
+    // then that conversation gone ({@link processEnded}).
+    const resumed = spec.resume;
+    const conversationKept = resumed
+      ? async (): Promise<boolean> =>
+          resumed.fork
+            ? !!(await claudeSessionFile(resumed.sessionKey, ctx.cwd))
+            : !!(await transcriptIn(configDir, resumed.sessionKey, cwd))
+      : undefined;
     if (spec.resume) {
       // A conversation goes on in the dir it runs in now, carried whole
       // into it first, for the launch that places a row on its account
       // carries it here. A fork reads its origin's where it is: it runs on
       // its origin's account, and its origin may be running.
       if (spec.resume.fork) {
-        if (!(await claudeSessionFile(spec.resume.sessionKey, ctx.cwd))) {
+        if (!(await conversationKept?.())) {
           throw new Error(CLAUDE_CONVERSATION_GONE);
         }
       } else {
@@ -3938,7 +3975,7 @@ export class ClaudeHarness implements Harness {
             `Claude Code's conversation could not be brought into ${configDir}: ${carried.error}`
           );
         }
-        if (!(await transcriptIn(configDir, spec.resume.sessionKey, cwd))) {
+        if (!(await conversationKept?.())) {
           throw new Error(CLAUDE_CONVERSATION_GONE);
         }
       }
@@ -3988,6 +4025,7 @@ export class ClaudeHarness implements Harness {
         lead: spec.lead === true,
         fence: spec.fence === true,
         instructions: spec.instructions ?? [],
+        ...(conversationKept ? { conversationKept } : {}),
       },
       { client, procId: procIdFor("claude", ctx.instanceId), executable }
     );

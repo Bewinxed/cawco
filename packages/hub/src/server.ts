@@ -265,7 +265,6 @@ import {
   parseArtifactResponses,
   pauseClock,
   providerChoices,
-  providerLimitRefused,
   pushOnlyProvider,
   QUESTION_DISMISSED,
   QUEUE_WAIT_MAX_MS,
@@ -913,12 +912,16 @@ const RESTORE_MAX = 20;
  * Why a send failed when it failed only because a process went away, as the
  * hub said it before a send was the hub's to keep (UNREAD), or because the
  * account's limit refused the turn that read it: in both the session still
- * ought to read it.
+ * ought to read it. Read only by {@link foldFormerSessions}, the one-time
+ * migration over the sessions hubs before 8fe4fba31 (2026-10-10) chained at
+ * a limit: their failed sends carry no typed cause, only the reason those
+ * hubs stored, so a reason in the limit's words is the one reading of them.
+ * A live turn's limit is never read from words (`atLimit`).
  */
-const LIMIT_REFUSED_WORDS = /usage limit|hit your limit|rate[ _-]?limit/i;
+const FORMER_LIMIT_WORDS = /usage limit|hit your limit|rate[ _-]?limit/i;
 const failedOnlyForAProcess = (reason: string): boolean =>
   (Object.values(UNREAD) as string[]).includes(reason) ||
-  LIMIT_REFUSED_WORDS.test(reason);
+  FORMER_LIMIT_WORDS.test(reason);
 
 /**
  * At start, before any machine is heard: each chain of sessions a hub before
@@ -5645,7 +5648,7 @@ export const createServer = (
           !!provider &&
           provider !== CLAUDE_PROVIDER &&
           LIMITED_PROVIDERS.includes(provider) &&
-          providerLimitRefused(neutral.errors ?? []));
+          neutral.atLimit === true);
     }
     return refused && atLimit.manages(instanceId);
   };
@@ -28509,7 +28512,7 @@ export const createServer = (
                   // `retry` status, never an error). Its wait ends on the
                   // provider's words and the run stops its scratch session,
                   // so the continuation's caller decides what is next.
-                  if (providerLimitRefused([neutral.retry.message])) {
+                  if (neutral.retry.atLimit) {
                     turnWaiters
                       .get(message.instanceId)
                       ?.reject(new Error(neutral.retry.message));
@@ -28525,12 +28528,12 @@ export const createServer = (
                 const neutral = (
                   message.payload as FramePayload & { kind: "frame" }
                 ).message;
-                // A pi or OpenCode turn its ChatGPT account's usage limit
-                // refused, by the error it ended on.
+                // A pi or OpenCode turn its account's limit refused, as its
+                // harness typed the refusal it ended on.
                 if (
                   neutral.type === "result" &&
                   neutral.is_error &&
-                  providerLimitRefused(neutral.errors ?? [])
+                  neutral.atLimit === true
                 ) {
                   const [limited] = db.getInstancesByIds([message.instanceId]);
                   const provider = limited?.accountId
