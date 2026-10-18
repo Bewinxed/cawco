@@ -112,6 +112,16 @@ export interface PageOptions {
   scale?: number;
   theme?: Theme;
   /**
+   * Chromium only: every tile rastered whole whenever it changes
+   * (`--disable-partial-raster`), on a browser of its own. Partial raster
+   * redraws only what was invalidated into a tile it keeps, so the
+   * antialiasing at those rects' edges follows the order the page changed
+   * in: bench-usage-relay at the desk gave two pictures of one state, 5
+   * pixels apart on Caw's rim, its dumps identical. The surfaces' walk
+   * (walk.ts `passPage`) takes it; a spec timing the raster does not.
+   */
+  wholeRaster?: boolean;
+  /**
    * The WebKit build a WebKit page runs on, by its Playwright revision,
    * where a spec reads a bug a phone's Safari still has and a newer build
    * has fixed (`PINNED_WEBKIT`). Unset, the build this playwright-core
@@ -414,9 +424,16 @@ export class Run {
     engine: Engine,
     revision?: string,
     oneProcess = false,
-    own?: string
+    own?: string,
+    wholeRaster = false
   ): Promise<Browser> {
-    const key = [engine, revision, oneProcess && "one-process", own]
+    const key = [
+      engine,
+      revision,
+      oneProcess && "one-process",
+      wholeRaster && "whole-raster",
+      own,
+    ]
       .filter(Boolean)
       .join("-");
     const known = this.browsers.get(key);
@@ -445,6 +462,7 @@ export class Run {
           args: [
             "--no-sandbox",
             "--disable-gpu",
+            ...(wholeRaster ? ["--disable-partial-raster"] : []),
             ...(oneProcess
               ? [
                   "--disable-site-isolation-trials",
@@ -585,7 +603,8 @@ export class Run {
           options.engine ?? "chromium",
           options.engine === "webkit" ? options.webkit : undefined,
           options.oneProcess,
-          options.browser
+          options.browser,
+          options.wholeRaster
         );
         const phoneAgent = PHONE_AGENT[options.engine ?? "chromium"];
         const context = await browser.newContext({

@@ -234,7 +234,13 @@ export async function passPage(
   at: number
 ): Promise<Page> {
   const w = WIDTHS[pass.width];
-  const page = await kit.page(w.view, { theme: pass.theme, scale: 1 });
+  // Rastered whole, so a picture is the same whatever order the page
+  // changed in (kit `wholeRaster`).
+  const page = await kit.page(w.view, {
+    theme: pass.theme,
+    scale: 1,
+    wholeRaster: true,
+  });
   await page.setViewportSize({ width: w.width, height: w.height });
   if (pass.reduced) {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -445,8 +451,9 @@ const scrollsAndBoxes = () => {
   }
   // What each canvas that can be seen draws: a script draws it frame by
   // frame, on a loop of its own (Caw's clips over his face, on Rive's), and
-  // nothing else here moves while it does. Read mid-clip, one state gave two
-  // pictures (bench-usage-relay at the desk, Caw's clip canvas).
+  // nothing else here moves while it does. Read mid-clip, walks of one state
+  // held different drawings (bench-usage-relay at the desk: the dumps apart
+  // in Caw's clip canvas alone).
   let drawn = 7;
   for (const canvas of document.getElementsByTagName("canvas")) {
     const r = canvas.getBoundingClientRect();
