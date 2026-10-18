@@ -41554,15 +41554,15 @@
             "description": "What installs it here. Empty when nothing may: a copy came some way\nCawCo has no method for, and another would be a second copy (`reason`\nsays so).",
             "type": "string"
           },
+          "media": {
+            "$ref": "#/components/schemas/MachineCapabilityMedia",
+            "description": "`container-runtime` only: what the runtime forwards to the browser's media port. Short of `udp+tcp`, `reason` says how to get both."
+          },
           "path": {
             "type": "string"
           },
           "reason": {
             "type": "string"
-          },
-          "udp": {
-            "description": "`container-runtime` only: the runtime forwards UDP to the browser's media port. False, `reason` says how to get it back.",
-            "type": "boolean"
           },
           "version": {
             "type": "string"
@@ -53676,6 +53676,14 @@
           "pi",
           "public-address",
           "service-manager"
+        ]
+      },
+      "MachineCapabilityMedia": {
+        "type": "string",
+        "enum": [
+          "none",
+          "tcp",
+          "udp+tcp"
         ]
       },
       "MemoryScopeRole": {

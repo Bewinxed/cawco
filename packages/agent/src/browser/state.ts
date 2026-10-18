@@ -25,6 +25,7 @@ import {
   browserSlug,
   isBrowserKey,
 } from "@cawco/core/browser";
+import type { MediaPath } from "@cawco/core/capabilities";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { cawcoDataDir } from "@cawco/core/paths";
 import {
@@ -35,13 +36,13 @@ import {
 
 /** What a browser's record keeps between processes. */
 export interface BrowserRecord {
-  /** The container host's: its container, image and volume, whether its media port was published for UDP, and neko's two passwords. */
+  /** The container host's: its container, image and volume, what its media port was published for, and neko's two passwords. */
   container?: {
     adminPassword: string;
     id: string;
     image: string;
-    /** Published, and advertised, for UDP as well as TCP. */
-    udp: boolean;
+    /** What its media port was published, and neko's candidates advertised, for. */
+    media: MediaPath;
     userPassword: string;
     volume: string;
   };

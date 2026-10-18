@@ -19,12 +19,18 @@ export interface MachineCapability {
    * says so).
    */
   installCommand: string;
+  /** `container-runtime` only: what the runtime forwards to the browser's media port. Short of `udp+tcp`, `reason` says how to get both. */
+  media?: MediaPath;
   path?: string;
   reason?: string;
-  /** `container-runtime` only: the runtime forwards UDP to the browser's media port. False, `reason` says how to get it back. */
-  udp?: boolean;
   version?: string;
 }
+/**
+ * What a container runtime forwards from the host to a browser's media
+ * port: UDP and TCP, TCP alone, or nothing (a screen then reaches the
+ * browser only through a stream relay).
+ */
+export type MediaPath = "udp+tcp" | "tcp" | "none";
 export interface MachineCapabilities {
   at: number;
   items: MachineCapability[];

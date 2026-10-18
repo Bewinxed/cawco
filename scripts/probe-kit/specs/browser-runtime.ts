@@ -2,10 +2,11 @@
  * A project's browser on this machine (Projects spec §5.11, build item 1):
  * the container runtime found, our image built, a browser started cold and
  * warm on the container host with its profile kept, the media port
- * published for UDP and TCP on every address (TCP alone where the runtime
- * forwards no UDP, as Colima on ssh) with the capability saying the same, its
- * idle RAM, and the local host (a headless Chromium) when the runtime is
- * hidden. Each start and the
+ * published for what the runtime forwards (UDP and TCP on every address;
+ * TCP alone on Colima's ssh; nothing on Colima's none), the capability saying
+ * the same and the measurement kept for the runtime shown, its idle RAM, and
+ * the local host (a headless Chromium) when the runtime is hidden. Each start
+ * and the
  * RAM are the measurement table's rows: cold ≤ 15 s on Linux, ≤ 25 s on a
  * Mac; warm ≤ 6 s; idle RAM ≤ 1.2 GB; the local host ≤ 4 s.
  *
@@ -16,7 +17,9 @@
  *
  *   bun scripts/probe-kit/run.ts browser-runtime
  */
+import { createSocket } from "node:dgram";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { type AddressInfo, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
@@ -52,6 +55,65 @@ const listeners = (proto: "udp" | "tcp", port: number): string => {
     .split("\n")
     .filter((line) => line.includes(`:${port}`))
     .join(" | ");
+};
+
+/**
+ * What this machine binds for the media `port`, in the capability's terms
+ * (`udp+tcp`, `tcp`, `none`; anything else said as it is), and the listener
+ * lines it was read from.
+ */
+const mediaBound = (port: number): { bound: string; listed: string } => {
+  const udp = listeners("udp", port);
+  const tcp = listeners("tcp", port);
+  const everywhere = (line: string): boolean =>
+    line.includes(`0.0.0.0:${port}`) || line.includes(`*:${port}`);
+  const listed = `udp: ${udp || "nothing"}; tcp: ${tcp || "nothing"}`;
+  if (everywhere(tcp) && everywhere(udp)) {
+    return { bound: "udp+tcp", listed };
+  }
+  if (everywhere(tcp) && !udp) {
+    return { bound: "tcp", listed };
+  }
+  if (!(udp || tcp)) {
+    return { bound: "none", listed };
+  }
+  return {
+    bound: `udp ${udp ? "partly" : "absent"}, tcp ${tcp ? "partly" : "absent"}`,
+    listed,
+  };
+};
+
+/**
+ * The agent's forwarding reader against sockets this spec binds on every
+ * address of a free port: UDP and TCP, then TCP alone, then nothing. A reader
+ * that misreads would have the browser publish less than the runtime
+ * forwards, and the capability agree with it, so it is checked on its own.
+ */
+const readerReads = async (kit: Kit, runtime: Runtime): Promise<void> => {
+  const { forwardingReader } =
+    await import("../../../packages/agent/src/browser/media-forwarding");
+  const reader = forwardingReader(runtime);
+  if (!reader) {
+    kit.check("forwarding reader on this platform", false, process.platform);
+    return;
+  }
+  const tcp = createServer();
+  await new Promise<void>((resolve) => tcp.listen(0, "0.0.0.0", resolve));
+  const { port } = tcp.address() as AddressInfo;
+  const udp = createSocket("udp4");
+  await new Promise<void>((resolve) => udp.bind(port, "0.0.0.0", resolve));
+  const both = await reader.read(port);
+  await new Promise<void>((resolve) => udp.close(() => resolve()));
+  const tcpAlone = await reader.read(port);
+  await new Promise<void>((resolve) => tcp.close(() => resolve()));
+  const neither = await reader.read(port);
+  // Through the kernel's NAT a TCP connection taken stands for both.
+  const expected = reader.by === "nat" ? "udp+tcp" : "tcp";
+  kit.check(
+    `forwarding reader (${reader.by}) on ${port}: udp+tcp bound reads ${both}, tcp bound reads ${tcpAlone}, nothing bound reads ${neither}`,
+    both === "udp+tcp" && tcpAlone === expected && neither === "none",
+    `expected udp+tcp, ${expected}, none`
+  );
 };
 
 /** Runs `cmd` in the container as neko and answers what it wrote, once it has ended. */
@@ -151,37 +213,36 @@ const containerHost = async (
     JSON.stringify(version)
   );
 
-  const udp = listeners("udp", media);
-  const tcp = listeners("tcp", media);
-  const everywhere = (line: string): boolean =>
-    line.includes(`0.0.0.0:${media}`) || line.includes(`*:${media}`);
+  const { bound, listed } = mediaBound(media);
   const tool = MAC ? "lsof" : "ss -lunp / ss -ltnp";
-  const bound = `udp: ${udp || "nothing"}; tcp: ${tcp || "nothing"}`;
-  const { mediaForwarding } =
+  const { mediaForwarding, measurementOf } =
     await import("../../../packages/agent/src/browser/media-forwarding");
   const forwarding = await mediaForwarding(runtime.endpoint);
-  if (forwarding.udp) {
-    kit.check(
-      `media ${media} bound udp and tcp on 0.0.0.0 (${tool})`,
-      everywhere(udp) && everywhere(tcp),
-      bound
-    );
-  } else {
-    kit.check(
-      `media ${media} bound tcp on 0.0.0.0 and udp nowhere, the runtime forwarding no UDP (${tool})`,
-      everywhere(tcp) && !udp,
-      bound
-    );
+  const expected = {
+    "udp+tcp": "bound udp and tcp on 0.0.0.0",
+    tcp: "bound tcp on 0.0.0.0 and udp nowhere, the runtime forwarding no UDP",
+    none: "bound for neither udp nor tcp, the runtime forwarding no port",
+  }[forwarding.media];
+  kit.check(
+    `media ${media} ${expected} (${tool})`,
+    bound === forwarding.media,
+    listed
+  );
+  if (forwarding.advice) {
     kit.note(forwarding.advice);
   }
+  const measured = await measurementOf(runtime.endpoint);
+  kit.note(
+    `measurement kept for ${runtime.endpoint}: ${measured ? JSON.stringify(measured) : "none (the host forwarded all the media port was published for)"}`
+  );
   const { probeCapabilities } =
     await import("../../../packages/agent/src/capabilities");
   const capability = (await probeCapabilities()).items.find(
     (item) => item.id === "container-runtime"
   );
   kit.check(
-    `container-runtime capability udp=${capability?.udp} matches udp bound=${everywhere(udp)}`,
-    capability?.udp === everywhere(udp),
+    `container-runtime capability media=${capability?.media} matches bound=${bound}`,
+    capability?.media === bound,
     JSON.stringify(capability)
   );
 
@@ -274,6 +335,7 @@ const run = async (kit: Kit): Promise<void> => {
   try {
     const runtime = await runtimeAndImage(kit);
     if (runtime) {
+      await readerReads(kit, runtime);
       await containerHost(kit, browsers, runtime, data);
     }
     await localHost(kit, browsers, data);

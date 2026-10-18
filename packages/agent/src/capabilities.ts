@@ -205,19 +205,19 @@ async function readVersion(item: MachineCapability): Promise<void> {
 }
 
 /**
- * A found runtime's report: its socket and version, and whether it forwards
- * UDP to the browser's media port; when it does not, `reason` tells the
- * person how to get UDP back.
+ * A found runtime's report: its socket and version, and what it forwards to
+ * the browser's media port (measured, once a start has measured it short);
+ * short of UDP and TCP, `reason` tells the person how to get them.
  */
 async function foundRuntimeFacts(
   runtime: Runtime
-): Promise<Pick<MachineCapability, "path" | "reason" | "udp" | "version">> {
+): Promise<Pick<MachineCapability, "media" | "path" | "reason" | "version">> {
   const forwarding = await mediaForwarding(runtime.endpoint);
   return {
     path: runtime.endpoint,
     version: `${runtime.kind} ${runtime.version}`,
-    udp: forwarding.udp,
-    ...(forwarding.udp ? {} : { reason: forwarding.advice }),
+    media: forwarding.media,
+    ...(forwarding.advice ? { reason: forwarding.advice } : {}),
   };
 }
 

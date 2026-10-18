@@ -93,6 +93,7 @@ typeOverrides:
     LandsMode: OpenEnums.LandsMode
     Law: OpenEnums.Law
     MachineCapabilityId: OpenEnums.MachineCapabilityId
+    MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage

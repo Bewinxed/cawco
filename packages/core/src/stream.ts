@@ -68,12 +68,16 @@ import type { CarrySessionRequest } from "./harness";
  *    branch of `origin` that held it, where it is cut again, in place of
  *    `landed`, the commit its last landing recorded. No page reads it; a
  *    page built for 12 reloads first all the same.
+ * 14: a machine's `container-runtime` capability says `media`, what the
+ *    runtime forwards to a browser's media port (`udp+tcp`, `tcp` or
+ *    `none`), in place of `udp`. No page reads it; a page built for 13
+ *    reloads first all the same.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 13;
+export const WIRE_PROTOCOL = 14;
 
 /**
  * What a session's stream carries: the changes each frame made to its
