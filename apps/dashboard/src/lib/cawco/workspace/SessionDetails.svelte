@@ -917,7 +917,10 @@
      `data-ns-popover-trigger-class` (NsPopover). */
   [data-slot="settings"]
     :global(
-      :is([data-slot="ns-chip-btn"], [data-ns-popover-trigger-class~="ns-chip-btn"])
+      :is(
+        [data-slot="ns-chip-btn"],
+        [data-ns-popover-trigger-class~="ns-chip-btn"]
+      )
     ) {
     gap: var(--space-1);
     height: var(--chip-h);
@@ -951,7 +954,10 @@
        name included, with the chips' sides and gaps drawn in. */
     [data-slot="settings"]
       :global(
-        :is([data-slot="ns-chip-btn"], [data-ns-popover-trigger-class~="ns-chip-btn"])
+        :is(
+          [data-slot="ns-chip-btn"],
+          [data-ns-popover-trigger-class~="ns-chip-btn"]
+        )
       ) {
       height: var(--chip-h-phone);
       padding-inline: var(--chip-px-phone);
