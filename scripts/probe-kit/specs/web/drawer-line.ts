@@ -68,6 +68,8 @@ const AWAY_ROUTES = [
   "/config",
 ];
 const AWAY_WIDTHS = [390, 640, 1024, 1440];
+/** The wall clock the away-from-the-line pages read. */
+const AWAY_CLOCK = new Date("2026-10-18T12:00:00Z");
 const HEIGHT = 900;
 
 type Side = "drawer" | "desk";
@@ -512,6 +514,10 @@ async function awayFromTheLine(kit: Kit, base: string): Promise<void> {
     for (const route of AWAY_ROUTES) {
       // biome-ignore lint/performance/noAwaitInLoops: one page at a time
       const page = await chromiumAt(kit, width);
+      // One wall clock for every run: a running animation phased by
+      // `Date.now()` (DelegateTray's `animation-delay: -{now % 2000}ms`)
+      // reads the same before and after. Timers run on as they do.
+      await page.clock.setFixedTime(AWAY_CLOCK);
       await openBench(page, base, route);
       await page.waitForTimeout(1500);
       await settle(page, 400);
