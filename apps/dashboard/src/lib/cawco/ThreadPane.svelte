@@ -67,7 +67,6 @@
   import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
-  import FolderFile from "./project/FolderFile.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
   import {
     listTasks,
@@ -521,20 +520,6 @@
 
   setVoice({ event: eventUnder, face, tasks: taskCards, files: folderFiles });
 
-  // --- a file his reply names ------------------------------------------------------
-
-  /**
-   * The project folder's file open from its chip, in the page (The Open
-   * Page Rule): beside the thread in its split (SideSplit, on the phone's
-   * sheet over the composer), or, where the thread has no split (docked),
-   * in the thread's own place over its transcript, which keeps its scroll
-   * under it for Close to come back to.
-   */
-  let openFile = $state<string | null>(null);
-  const closeFile = () => {
-    openFile = null;
-  };
-
   /**
    * The Setup thread's newest reply that names files is where setup ends:
    * "Open the board" stands under it, to the project's landing page, unless
@@ -832,13 +817,7 @@
 {/snippet}
 
 {#snippet folderFiles(files: string[], messageId: string)}
-  <FolderFiles
-    {files}
-    onopen={(path) => {
-      openFile = path;
-    }}
-    shown={openFile}
-  />
+  <FolderFiles {files} {projectId} />
   {#if messageId === boardAfter}
     <div class="board-link">
       <Button
@@ -958,14 +937,10 @@
     style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
   >
     {#if docked}
-      <div class="under-file" inert={openFile !== null}>
-        {@render slide()}
-      </div>
+      {@render slide()}
     {:else}
       <SideSplit
         {active}
-        file={fileSurface}
-        fileOpen={openFile !== null}
         {phone}
         planOf={lead}
         previewOf={lead}
@@ -1008,15 +983,6 @@
         </RegionBoundary>
       </div>
     {/if}
-    {#if docked && openFile}
-      <!-- No split to stand in: the file takes the thread's place, over
-           its transcript and composer, until Close gives it back. -->
-      <div class="file-in-place" data-file-in-place in:crossIn out:crossOut>
-        <RegionBoundary region="file">
-          {@render fileSurface(undefined)}
-        </RegionBoundary>
-      </div>
-    {/if}
     {#if view?.problem}
       <!-- No composer: Caw cannot start to read it. What is true, and the
            one thing that changes it. -->
@@ -1046,14 +1012,6 @@
     {/if}
   </div>
 </div>
-
-{#snippet fileSurface(switcher: Snippet | undefined)}
-  {#if openFile && projectId}
-    {#key openFile}
-      <FolderFile onclose={closeFile} path={openFile} {projectId} {switcher} />
-    {/key}
-  {/if}
-{/snippet}
 
 {#snippet taskSurface(switcher: Snippet | undefined)}
   {#if stages && openTask}
@@ -1201,27 +1159,6 @@
     inset: 0;
     z-index: 1;
     pointer-events: none;
-  }
-  /* The transcript under a file in its place: laid out as it was, so its
-     scroll is where Close finds it. */
-  .under-file {
-    display: contents;
-  }
-  /* A file in the thread's own place, over its transcript and composer. The
-     pane is already a card (the dock's), so the file's card draws no frame
-     of its own inside it: no second shadow, corner or ground. */
-  .file-in-place {
-    position: absolute;
-    inset: 0;
-    z-index: 21;
-    display: flex;
-    background: var(--surface-raised);
-  }
-  .file-in-place :global(.side-card) {
-    flex: 1 1 auto;
-    padding-inline: 0;
-    border-radius: 0;
-    box-shadow: none;
   }
   .thread-tasks:has(.tasks-head) {
     padding-block-start: var(--space-3);

@@ -571,6 +571,14 @@ export const retryTask = (
 export const folderRawHref = (projectId: string, path: string): string =>
   `${base(projectId)}/folder/raw?${new URLSearchParams({ path })}`;
 
+/**
+ * A file of the project's folder as the project page shows it (`?file=`,
+ * FolderFile): its address in the dashboard, which any surface links to and
+ * a reload or a shared link opens. Its folders' slashes stay as they read.
+ */
+export const folderFileHref = (projectId: string, path: string): string =>
+  `/project/${encodeURIComponent(projectId)}?${new URLSearchParams({ file: path }).toString().replaceAll("%2F", "/")}`;
+
 export const readTemplates = (): Promise<StagesTemplateView[]> =>
   send("/api/stage-templates");
 

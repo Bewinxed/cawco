@@ -14,15 +14,18 @@
    * changed (`tasks.changed`: Caw filed one, an attempt moved one), on a
    * reconnect, and when the tab comes back.
    *
-   * The view and the open task live in the URL (`?view=`, `?task=`), so a
-   * link opens the same. Needs you is a filter, not a stage: the tasks whose
-   * stage is of kind `you`.
+   * The view, the open task and the open file of the project's folder live
+   * in the URL (`?view=`, `?task=`, `?file=`), so a link opens the same.
+   * Needs you is a filter, not a stage: the tasks whose stage is of kind
+   * `you`.
    *
    * A task opens in the page (DESIGN.md, The Open Page Rule): on a desk
    * beside the view it came from, in a resizable split (Split) whose width
    * and expansion the project keeps, the view live beside it, another card
    * swapping the task in place; under 900px it is its own page, with Back
-   * (a history entry of its own, so the browser's back is Back too).
+   * (a history entry of its own, so the browser's back is Back too). A file
+   * of the folder (FolderFile) opens the same way, in the task's place: one
+   * stands beside the view at a time.
    */
   import {
     BLOCK_PAGES,
@@ -65,6 +68,7 @@
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import FolderFile from "#lib/cawco/project/FolderFile.svelte";
   import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -202,6 +206,10 @@
   /** The task open beside the view, or as its own page on a phone: the URL's `?task=`. */
   const openTask = $derived(
     (page.shallow?.url ?? page.url).searchParams.get("task")
+  );
+  /** The folder's file open beside the view, or as its own page on a phone: the URL's `?file=`. */
+  const openFile = $derived(
+    (page.shallow?.url ?? page.url).searchParams.get("file")
   );
   let needsOnly = $state(false);
   let adding = $state(false);
@@ -481,11 +489,15 @@
     page?: string | null;
   }
 
-  /** The view and the open task in the URL, so a link opens the same. */
+  /**
+   * The view and the open task or file in the URL, so a link opens the
+   * same. A task opened puts the file away; with none, the file open stays.
+   */
   function hrefOf(
     id: string | null,
     as: string = current,
-    place: DecisionsPlace = {}
+    place: DecisionsPlace = {},
+    file: string | null = id ? null : openFile
   ): string {
     const query = new URLSearchParams();
     if (as !== "board") {
@@ -503,6 +515,8 @@
     }
     if (id) {
       query.set("task", id);
+    } else if (file) {
+      query.set("file", file);
     }
     writeFilter(query, filter);
     const search = query.toString();
@@ -624,14 +638,29 @@
     goto(hrefOf(null), { shallow: true, replace: true, state: {} });
   }
 
+  /** Close on a desk, Back on a phone, for the folder's file: the view, as it stood. */
+  function closeFile() {
+    if (phone && page.state.fileOpened) {
+      history.back();
+      return;
+    }
+    goto(hrefOf(null, current, {}, null), {
+      shallow: true,
+      replace: true,
+      state: {},
+    });
+  }
+
   /**
-   * The task the split's side holds: the open one, kept while the side
-   * closes, so it leaves as it stood.
+   * What the split's side holds: the open file, else the open task, kept
+   * while the side closes, so it leaves as it stood.
    */
-  let sideTask = $state<string | null>(null);
+  let sideHeld = $state<{ file: string } | { task: string } | null>(null);
   $effect(() => {
-    if (openTask) {
-      sideTask = openTask;
+    if (openFile) {
+      sideHeld = { file: openFile };
+    } else if (openTask) {
+      sideHeld = { task: openTask };
     }
   });
   const viewWord = $derived(
@@ -1786,7 +1815,20 @@
     </p>
   </div>
 {:else}
-  {#if phone && openTask && stages}
+  {#if phone && openFile}
+    <!-- A phone: the folder's file is its own page, with Back to the view. -->
+    <div data-slot="project-page" class="project-page task-only">
+      {#key openFile}
+        <FolderFile
+          backLabel={project.name}
+          onclose={closeFile}
+          page
+          path={openFile}
+          {projectId}
+        />
+      {/key}
+    </div>
+  {:else if phone && openTask && stages}
     <!-- A phone: the task is its own page, with Back to the view. -->
     <div data-slot="project-page" class="project-page task-only">
       <TaskPane
@@ -1882,8 +1924,8 @@
             }}
             main={viewPane}
             mainClass="view-pane-side"
-            open={!!openTask && !!stages}
-            side={taskSide}
+            open={!!openFile || (!!openTask && !!stages)}
+            side={sideCard}
           />
         {/if}
       </div>
@@ -1926,8 +1968,12 @@
   <CawFloat {lead} {projectId} projectName={project?.name ?? ""} />
 {/if}
 
-{#snippet taskSide()}
-  {#if sideTask && stages}
+{#snippet sideCard()}
+  {#if sideHeld && "file" in sideHeld}
+    {#key sideHeld.file}
+      <FolderFile onclose={closeFile} path={sideHeld.file} {projectId} />
+    {/key}
+  {:else if sideHeld && stages}
     <TaskPane
       {allowedFrom}
       onchanged={changed}
@@ -1936,7 +1982,7 @@
       onopen={openOne}
       {projectId}
       {stages}
-      taskId={sideTask}
+      taskId={sideHeld.task}
       {tasks}
     />
   {/if}

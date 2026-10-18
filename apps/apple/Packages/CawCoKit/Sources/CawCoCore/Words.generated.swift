@@ -876,8 +876,6 @@ public enum Words {
         public static let preview = "Preview"
 
         public static let task = "Task"
-
-        public static let file = "File"
     }
 
     public enum Artifacts {

@@ -13,5 +13,4 @@ export const sideWords = {
   plan: "Plan",
   preview: "Preview",
   task: "Task",
-  file: "File",
 };

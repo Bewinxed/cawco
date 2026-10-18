@@ -8,6 +8,7 @@
   import type { DelegateType } from "#lib/cawco/delegate-types.js";
   import HarnessLogo from "#lib/cawco/HarnessLogo.svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import { folderFileHref } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { toast } from "#lib/cawco/toasts.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -23,8 +24,9 @@
    *
    * Grouped by where they apply: the fleet's, then each project's own, the
    * files in its `delegates/` folder, which its sessions pick before a fleet
-   * type of the same name. A file there that made no type is said under its
-   * project in the hub's words, so it never just goes missing.
+   * type of the same name; each row opens its file on the project's page
+   * (`?file=`). A file there that made no type is said under its project in
+   * the hub's words, so it never just goes missing.
    */
   const store = configStore();
   const section = sectionOf("delegate-types");
@@ -132,6 +134,7 @@
         <RowList label="{entry.project.name}'s delegate types">
           {#each entry.types as row (row.name)}
             <SectionRow
+              href={folderFileHref(entry.project.id, row.path)}
               meta="{row.path} · {row.description} · {runsOn(row)}"
               mono
               name={row.name}
