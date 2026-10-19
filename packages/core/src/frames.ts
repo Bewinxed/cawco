@@ -5,6 +5,7 @@ import type {
   FleetMcpServer,
   FleetPlugin,
   FleetSkillMeta,
+  FleetSyncReport,
   MarketplaceLink,
   MarketplaceRead,
 } from "./fleet";
@@ -46,6 +47,18 @@ import type {
 export interface FleetMcpFrame {
   kind: "fleet_mcp";
   servers: FleetMcpServer[];
+}
+
+/**
+ * Machine-originated: the machine's fleet report (what `fleetStatus`
+ * answers), sent unasked when a harness's reading of a fleet MCP server moved
+ * with no fleet change: a server OpenCode held failed connected when CawCo
+ * started it again. The hub keeps it as `agents.fleet`, as it keeps a sync's.
+ */
+export interface FleetReportFrame {
+  instanceId?: undefined;
+  kind: "fleet_report";
+  report: FleetSyncReport;
 }
 
 export interface PreviewFrame {

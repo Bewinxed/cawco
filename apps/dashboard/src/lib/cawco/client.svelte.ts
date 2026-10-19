@@ -3440,6 +3440,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "stage-clone") {
     return;
   }
+  // A machine's fleet report travels machine → hub only; screens read the hub's row.
+  if (frame.kind === "fleet_report") {
+    return;
+  }
 
   const target = session(frame.instanceId);
 

@@ -26,6 +26,7 @@ import type {
   FleetHook,
   FleetMcpConfig,
   FleetPlugin,
+  FleetReportFrame,
   FleetSkillMeta,
   FleetSyncReport,
   FleetWatchNotice,
@@ -17138,6 +17139,66 @@ export const createServer = (
     return (placeId) => paths.get(placeId);
   };
 
+  /**
+   * A machine's own account of what it has of the fleet, kept as its
+   * `agents.fleet`: a sync's answer or a status read's, whoever asked, or
+   * one it sent unasked when a reading moved with no fleet change
+   * (`fleet_report`). What the sync carried rides with it (`riding`).
+   */
+  const keepFleetReport = (
+    machineId: string,
+    agent: HubSocket,
+    peeked: FleetSyncReport,
+    riding: RidingChanges | undefined
+  ): void => {
+    // A project-bound hook, MCP server or skill went out once per place; the
+    // hub keeps one state per row, the worst of its places.
+    const pathOf = placePathById();
+    const report = {
+      ...peeked,
+      mcp: foldPlacedStates(peeked.mcp, pathOf) ?? peeked.mcp,
+      ...(peeked.skills
+        ? { skills: foldPlacedStates(peeked.skills, pathOf) }
+        : {}),
+      ...(peeked.hooks
+        ? { hooks: foldPlacedStates(peeked.hooks, pathOf) }
+        : {}),
+      ...(peeked.memoryDocs
+        ? { memoryDocs: foldPlacedStates(peeked.memoryDocs, pathOf) }
+        : {}),
+    };
+    // Compare the machine's persisted content before overwriting its report;
+    // timestamps and insertion order cannot cause a reload.
+    const previous = db
+      .listAgents()
+      .find((row) => row.machineId === machineId)?.fleet;
+    const sameHashes = (
+      before: Record<string, string> = {},
+      after: Record<string, string> = {}
+    ): boolean =>
+      Object.keys(before).length === Object.keys(after).length &&
+      Object.entries(before).every(([key, hash]) => after[key] === hash);
+    const skillsChanged = !sameHashes(
+      previous?.have?.skills,
+      report.have?.skills
+    );
+    const pluginsChanged = !sameHashes(
+      previous?.have?.plugins,
+      report.have?.plugins
+    );
+    const hooksChanged =
+      JSON.stringify(previous?.hooks ?? {}) !==
+      JSON.stringify(report.hooks ?? {});
+    db.setAgentFleet(machineId, report);
+    publishInstances(machineId);
+    refreshSessions(machineId, agent, [
+      ...(pluginsChanged ? ["reloadPlugins"] : []),
+      ...(skillsChanged && !pluginsChanged ? [CONTROL_RELOAD_SKILLS] : []),
+      ...(hooksChanged ? ["reinitialize"] : []),
+    ]);
+    sendMcpChanges(machineId, agent, riding);
+  };
+
   /** Why a fleet row cannot be bound to `projectId`, or nothing when it can (null and left out always can). */
   const boundProblem = (
     projectId: string | null | undefined
@@ -28669,6 +28730,15 @@ export const createServer = (
                 );
                 break;
               }
+              // The machine's fleet report, sent unasked when a reading moved
+              // with no fleet change: kept as a sync's answer is.
+              if (kind === "fleet_report") {
+                const { report } = message.payload as FleetReportFrame;
+                if (isFleetReport(report)) {
+                  keepFleetReport(message.machineId, ws, report, undefined);
+                }
+                break;
+              }
               // A take-over its machine ended itself: the ask's call answers.
               if (kind === "browser_handback") {
                 browsers.heardHandback({
@@ -30079,64 +30149,8 @@ export const createServer = (
                 const riding = fleetMcpRiding.get(message.requestId);
                 fleetMcpRiding.delete(message.requestId);
                 const peeked = peekFleetReport(message.payload);
-                // A project-bound hook, MCP server or skill went out once per
-                // place; the hub keeps one state per row, the worst of its places.
-                const pathOf = placePathById();
-                const report = peeked
-                  ? {
-                      ...peeked,
-                      mcp: foldPlacedStates(peeked.mcp, pathOf) ?? peeked.mcp,
-                      ...(peeked.skills
-                        ? { skills: foldPlacedStates(peeked.skills, pathOf) }
-                        : {}),
-                      ...(peeked.hooks
-                        ? { hooks: foldPlacedStates(peeked.hooks, pathOf) }
-                        : {}),
-                      ...(peeked.memoryDocs
-                        ? {
-                            memoryDocs: foldPlacedStates(
-                              peeked.memoryDocs,
-                              pathOf
-                            ),
-                          }
-                        : {}),
-                    }
-                  : peeked;
-                if (report) {
-                  // Compare the machine's persisted content before overwriting
-                  // its report; timestamps and insertion order cannot cause a reload.
-                  const previous = db
-                    .listAgents()
-                    .find((row) => row.machineId === message.machineId)?.fleet;
-                  const sameHashes = (
-                    before: Record<string, string> = {},
-                    after: Record<string, string> = {}
-                  ): boolean =>
-                    Object.keys(before).length === Object.keys(after).length &&
-                    Object.entries(before).every(
-                      ([key, hash]) => after[key] === hash
-                    );
-                  const skillsChanged = !sameHashes(
-                    previous?.have?.skills,
-                    report.have?.skills
-                  );
-                  const pluginsChanged = !sameHashes(
-                    previous?.have?.plugins,
-                    report.have?.plugins
-                  );
-                  const hooksChanged =
-                    JSON.stringify(previous?.hooks ?? {}) !==
-                    JSON.stringify(report.hooks ?? {});
-                  db.setAgentFleet(message.machineId, report);
-                  publishInstances(message.machineId);
-                  refreshSessions(message.machineId, ws, [
-                    ...(pluginsChanged ? ["reloadPlugins"] : []),
-                    ...(skillsChanged && !pluginsChanged
-                      ? [CONTROL_RELOAD_SKILLS]
-                      : []),
-                    ...(hooksChanged ? ["reinitialize"] : []),
-                  ]);
-                  sendMcpChanges(message.machineId, ws, riding);
+                if (peeked) {
+                  keepFleetReport(message.machineId, ws, peeked, riding);
                 }
               }
               // A control a route is waiting on: the reply is that request's

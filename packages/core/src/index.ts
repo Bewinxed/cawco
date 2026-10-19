@@ -1616,6 +1616,7 @@ export const SERVER_STOPPED_MID_TURN =
  */
 export type FramePayload =
   | import("./frames").FleetMcpFrame
+  | import("./frames").FleetReportFrame
   | import("./frames").PreviewFrame
   | import("./frames").MessageFrame
   | import("./frames").SendFrame

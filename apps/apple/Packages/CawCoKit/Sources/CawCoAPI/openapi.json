@@ -31835,6 +31835,9 @@
             "$ref": "#/components/schemas/FleetMcpFrame"
           },
           {
+            "$ref": "#/components/schemas/FleetReportFrame"
+          },
+          {
             "$ref": "#/components/schemas/PreviewFrame"
           },
           {
@@ -31979,6 +31982,7 @@
             "stage": "#/components/schemas/StageFrame",
             "stage-clone": "#/components/schemas/StageCloneFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
+            "fleet_report": "#/components/schemas/FleetReportFrame",
             "preview": "#/components/schemas/PreviewFrame",
             "frame": "#/components/schemas/MessageFrame",
             "send": "#/components/schemas/SendFrame",
@@ -54735,6 +54739,25 @@
         "required": [
           "kind",
           "servers"
+        ]
+      },
+      "FleetReportFrame": {
+        "description": "Machine-originated: the machine's fleet report (what `fleetStatus`\nanswers), sent unasked when a harness's reading of a fleet MCP server moved\nwith no fleet change: a server OpenCode held failed connected when CawCo\nstarted it again. The hub keeps it as `agents.fleet`, as it keeps a sync's.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fleet_report"
+            ]
+          },
+          "report": {
+            "$ref": "#/components/schemas/FleetSyncReport"
+          }
+        },
+        "required": [
+          "kind",
+          "report"
         ]
       },
       "RejectedFrame": {
