@@ -17,6 +17,7 @@
  * which stand in the page's px.
  */
 import { createContext, destroyContext, domToCanvas } from "modern-screenshot";
+import { NON_INHERITED } from "./non-inherited";
 
 export interface Box {
   h: number;
@@ -198,6 +199,276 @@ function dropWebFamilies(el: Node, web: Set<string>) {
     );
   }
 }
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+/** A box's own size: modern-screenshot always copies it (its defaults never hold it), and a twin's would match only by chance. */
+const SIZES = new Set(["width", "height"]);
+
+/** A name's group as modern-screenshot's diff counts it: the name up to its last hyphen, "" for none. */
+const groupOf = (name: string) => {
+  const at = name.lastIndexOf("-");
+  return at > 0 ? name.slice(0, at) : "";
+};
+
+/** The attributes that change a tag's own style, carried by its twin. */
+const twinAttributes = (el: Element) => {
+  if (el.namespaceURI === SVG_NS) {
+    return ["stroke", "fill"];
+  }
+  return el.localName === "input" ? ["type"] : [];
+};
+
+const twinKey = (el: Element) =>
+  [
+    el.namespaceURI === SVG_NS ? "svg" : "",
+    el.localName,
+    ...twinAttributes(el).map((name) => el.getAttribute(name) ?? ""),
+  ].join(":");
+
+/** `el`'s twin, placed in `blank`'s body: an SVG shape inside an `svg` of its own. */
+function placeTwin(blank: Document, el: Element): Element {
+  const svg = el.namespaceURI === SVG_NS;
+  const made = svg
+    ? blank.createElementNS(SVG_NS, el.localName)
+    : blank.createElement(el.localName);
+  for (const name of twinAttributes(el)) {
+    const value = el.getAttribute(name);
+    if (value !== null) {
+      made.setAttribute(name, value);
+    }
+  }
+  made.textContent = " ";
+  if (svg && el.localName !== "svg") {
+    const root = blank.createElementNS(SVG_NS, "svg");
+    root.append(made);
+    blank.body.append(root);
+  } else {
+    blank.body.append(made);
+  }
+  return made;
+}
+
+/**
+ * The browser's own style for an element with no style of its own: a twin of
+ * its tag (an input's type and an SVG shape's `stroke` and `fill` with it),
+ * standing in a blank frame of ours, read a property at a time as asked. The
+ * frame stands inside the overlay's host when it has one, so none of the
+ * page's observers see it, and goes with {@link UaDefaults.close}.
+ */
+interface UaDefaults {
+  close: () => void;
+  /** `name` on `el`'s twin, or on its `pseudo` (`::before`) when given. */
+  value: (el: Element, name: string, pseudo?: string) => string;
+}
+
+function uaDefaults(doc: Document): UaDefaults {
+  let frame: HTMLIFrameElement | null = null;
+  const twins = new Map<
+    string,
+    { read: Map<string, string>; style: CSSStyleDeclaration }
+  >();
+  const sandbox = () => {
+    if (!frame) {
+      frame = doc.createElement("iframe");
+      frame.width = "0";
+      frame.height = "0";
+      frame.style.cssText = "position:fixed;visibility:hidden;border:0";
+      (
+        doc.querySelector("cawco-overlay")?.shadowRoot ?? doc.documentElement
+      ).append(frame);
+      const blank = frame.contentDocument;
+      // A standards-mode document, as the picture's SVG draws in.
+      blank?.open();
+      blank?.write("<!DOCTYPE html><title></title><body>");
+      blank?.close();
+    }
+    return frame;
+  };
+  const twinOf = (el: Element, pseudo: string | null) => {
+    const key = `${twinKey(el)}:${pseudo ?? ""}`;
+    let twin = twins.get(key);
+    if (!twin) {
+      const blank = sandbox().contentDocument;
+      const view = blank?.defaultView;
+      if (!(blank && view)) {
+        return null;
+      }
+      twin = {
+        read: new Map(),
+        style: view.getComputedStyle(placeTwin(blank, el), pseudo),
+      };
+      twins.set(key, twin);
+    }
+    return twin;
+  };
+  return {
+    value: (el, name, pseudo) => {
+      const twin = twinOf(el, pseudo ?? null);
+      if (!twin) {
+        return "";
+      }
+      let value = twin.read.get(name);
+      if (value === undefined) {
+        value = twin.style.getPropertyValue(name);
+        twin.read.set(name, value);
+      }
+      return value;
+    },
+    close: () => {
+      frame?.remove();
+      frame = null;
+      twins.clear();
+    },
+  };
+}
+
+/**
+ * `el`'s copied style without what restates its tag's default. modern-screenshot
+ * copies a property whenever the parent's copy declares it, inherited or not,
+ * and a whole group (a name up to its last hyphen) when one member is copied,
+ * so a page's copy grew to say every element's defaults over again: on the
+ * heavy phone page 485 KB of declarations, an 864 KB SVG for the dashboard's
+ * thread to decode. A non-inherited property ({@link NON_INHERITED}) takes its
+ * tag's default whatever the parent says, so one equal to it is dropped, unless
+ * a member of its group says something of its own (a `border-top-width` of 0
+ * stays with a `solid` style). Inherited ones stay: the parent's copy may differ.
+ * `parent` is the parent's copy, as modern-screenshot left it.
+ */
+function slim(
+  el: Element,
+  parent: CSSStyleDeclaration | null,
+  defaults: UaDefaults
+) {
+  const { style } = el as HTMLElement;
+  if (!style?.length) {
+    return;
+  }
+  const says = (name: string) =>
+    SIZES.has(name) ||
+    style.getPropertyPriority(name) !== "" ||
+    (!NON_INHERITED.has(name) && parent?.getPropertyValue(name)) ||
+    style.getPropertyValue(name) !== defaults.value(el, name);
+  for (const name of silent(Array.from(style), says)) {
+    style.removeProperty(name);
+  }
+}
+
+/** Of `names`, the non-inherited ones that say nothing and share no group with one that does: what {@link slim} drops. */
+function silent(names: string[], says: (name: string) => unknown) {
+  const speaking = new Set<string>();
+  const quiet: string[] = [];
+  for (const name of names) {
+    if (says(name)) {
+      speaking.add(groupOf(name));
+    } else if (NON_INHERITED.has(name)) {
+      quiet.push(name);
+    }
+  }
+  return new Set(
+    quiet.filter((name) => {
+      const group = groupOf(name);
+      return !(group && speaking.has(group));
+    })
+  );
+}
+
+/**
+ * modern-screenshot's rule for a copied `::before` or `::after`, in the form
+ * it writes into the picture's `<style>`: its selectors (`.u1a2b3::before`),
+ * then a declaration a line.
+ */
+const PSEUDO_RULE = /([^{}]+)\{\n {2}([^{}]*)\n\}\n/g;
+const DECLARATION = /^([-\w]+): (.*?)( !important)?;$/s;
+
+/**
+ * A copied pseudo-element's rule without what restates its default, by
+ * {@link slim}'s measure (an inherited name always stays, as does its
+ * `content`); null to leave it as it is, when nothing goes or any part of it
+ * is not in the form above.
+ */
+function slimRule(
+  svg: SVGSVGElement,
+  selectors: string,
+  body: string,
+  defaults: UaDefaults
+): string | null {
+  const hosts: { host: Element; pseudo: string }[] = [];
+  for (const selector of selectors.trim().split(",\n")) {
+    const at = selector.indexOf("::");
+    const host =
+      at > 1 ? svg.getElementsByClassName(selector.slice(1, at))[0] : null;
+    if (!host) {
+      return null;
+    }
+    hosts.push({ host, pseudo: selector.slice(at) });
+  }
+  const lines = body.split("\n  ");
+  const declared = new Map<string, { important: boolean; value: string }>();
+  for (const line of lines) {
+    const parts = DECLARATION.exec(line);
+    if (!parts) {
+      return null;
+    }
+    declared.set(parts[1], { value: parts[2], important: Boolean(parts[3]) });
+  }
+  const says = (name: string) => {
+    const { value, important } = declared.get(name) ?? {};
+    return (
+      name === "content" ||
+      important ||
+      SIZES.has(name) ||
+      !NON_INHERITED.has(name) ||
+      hosts.some(
+        ({ host, pseudo }) => defaults.value(host, name, pseudo) !== value
+      )
+    );
+  };
+  const dropped = silent([...declared.keys()], says);
+  if (dropped.size === 0) {
+    return null;
+  }
+  const kept = lines.filter(
+    (line) => !dropped.has(DECLARATION.exec(line)?.[1] ?? "")
+  );
+  return `${selectors}{\n  ${kept.join("\n  ")}\n}\n`;
+}
+
+/** {@link slimRule} for every rule of `svg`'s own `<style>`, a breath between rules. */
+async function slimPseudoRules(
+  svg: SVGSVGElement,
+  defaults: UaDefaults,
+  breathe: () => Promise<void>
+) {
+  const sheet = svg.querySelector(":scope > style");
+  const text = sheet?.textContent;
+  if (!(sheet && text)) {
+    return;
+  }
+  const slimmed: (string | null)[] = [];
+  for (const [, selectors, body] of text.matchAll(PSEUDO_RULE)) {
+    slimmed.push(slimRule(svg, selectors, body, defaults));
+    // biome-ignore lint/performance/noAwaitInLoops: a slice of the page's thread at a time
+    await breathe();
+  }
+  let next = 0;
+  sheet.textContent = text.replace(PSEUDO_RULE, (whole) => {
+    const rule = slimmed[next] ?? whole;
+    next += 1;
+    return rule;
+  });
+}
+
+/** {@link slim} for each element child of `node`, whose own copy still stands as made. */
+function slimChildren(node: Node, defaults: UaDefaults) {
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return;
+  }
+  const { style } = node as HTMLElement;
+  for (const child of (node as Element).children) {
+    slim(child, style ?? null, defaults);
+  }
+}
+
 const PNG_PREFIX = /^data:image\/png;base64,/;
 /** What a picture never draws: the overlay's own UI and layers, and what has no box. */
 export const SKIPPED =
@@ -403,7 +674,8 @@ const onPage = (view: Window, box: Box): Box => {
  * github.com/qq15725/modern-screenshot/issues/18), and asks it for none of
  * the page's web font families ({@link dropWebFamilies}). Every picture's
  * clone runs in slices ({@link breather}), so the page's thread, and on
- * WebKit the dashboard's, is never held for the whole of it.
+ * WebKit the dashboard's, is never held for the whole of it, and says no
+ * tag's default over again ({@link slim}).
  */
 export async function cropPicture(
   wanted: Box,
@@ -438,15 +710,27 @@ export async function cropPicture(
   const first = steps.find((step) => step.whole);
   const breathe = breather();
   const web = thumbnail ? webFamilies(view.document) : null;
+  const defaults = uaDefaults(view.document);
   const context = first
     ? await createContext(first.el, {
         scale,
+        // Each node's children are copied before it: its own copy stands as
+        // made while theirs are slimmed, and the part's root is slimmed last.
         onCloneEachNode: (node) => {
           if (web) {
             dropWebFamilies(node, web);
           }
+          slimChildren(node, defaults);
           return breathe();
         },
+        onCloneNode: (root) => {
+          if (root.nodeType === Node.ELEMENT_NODE) {
+            slim(root as Element, null, defaults);
+          }
+        },
+        // The copied pseudo-elements' rules, before the SVG is serialized.
+        onCreateForeignObjectSvg: (svg) =>
+          slimPseudoRules(svg, defaults, breathe),
         // By node type, not `instanceof`: a copy's nodes are another window's.
         filter: (node) =>
           !(
@@ -485,6 +769,7 @@ export async function cropPicture(
       }
     }
   } finally {
+    defaults.close();
     if (context) {
       destroyContext(context);
     }

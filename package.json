@@ -64,9 +64,6 @@
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "ultracite": "7.12.2"
   },
-  "patchedDependencies": {
-    "modern-screenshot@4.7.0": "patches/modern-screenshot@4.7.0.patch"
-  },
   "trustedDependencies": [
     "socket-activation"
   ]
