@@ -1,5 +1,9 @@
 # L05-kit-ui-5 (kit lane)
 
+Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, emil-design-eng, transitions-dev; before reporting, interface-craft and ui-observer.
+better-ui rules followed: transitions, not keyframes, for interactive state (the chevron and the toggle transition; keyframes only for the once-per-breath loops); transition only what changes (`transition-[rotate]`, never `all`); gate motion behind reduced motion (every animation under `motion-safe:`); hover effects only on hover-capable pointers (the header's `[&:hover]` → the guarded `hover:`); press scale kept at the house 0.97 with a `:disabled` exclusion.
+better-layout rules followed: a hit area never overlapping (the header's 44px target is the house touch-hit with its midpoint stops, none when disabled); plan for growth (the note's least height and ceiling, min-height not height); logical properties (`inset-inline`/`start-0`, `inline-size` in the theme utilities).
+
 Started from f5c5024ab (cawco/cutover-merge). Six kit parts under
 `apps/dashboard/src/lib/components/ui/`. No `<style>` is left in any of them.
 
@@ -306,4 +310,4 @@ fixed: thinking indicator — one light, not two: the global shimmer band no lon
 fixed: thinking step — the icon column matches its 16px cell, so the dot and glyph centre on the connector line instead of overhanging a 15px column by half a pixel each side.
 fixed: thinking steps header — the chevron turns on `rotate` (compositor) over 120ms ease-out, under motion-safe; hover is pointer-only; the 44px finger target is the house one.
 fixed: toggle — a pressed toggle holds its pressed fill under the pointer instead of the sort deciding it.
-gap: no rendered check: no `/motion` bench or stories file in this workspace renders these six parts, so ui-observer had nothing to measure; the critique is from markup and classes. Integration's compare is the rendered check.
+gap: no rendered check. Only `/motion/chosen-hover` renders one of these parts (Toggle, pressed and not); the thinking parts' animations exist only once integration adds the theme additions, so a render in this tree would not show them. ui-observer was not run, and the rendered layout is Not verified. The critique is from markup and classes, plus the compile of every class with the repo's Tailwind 4.3.3 (Theme additions). Integration's compare is the rendered check.
