@@ -1,0 +1,118 @@
+<!doctype html>
+<!--
+  A web page as a project's browser shows one, for the browser view's spec
+  (specs/web/browser-view.ts): a sign-in page at the browser's screen, 1280x800
+  (core BROWSER_SCREEN). Rendered to browser-frame.jpg, the frame the spec
+  streams, with:
+
+    bunx playwright-core screenshot --viewport-size=1280,800 file://$PWD/scripts/probe-kit/fixtures/browser-page.html scripts/probe-kit/fixtures/browser-frame.jpg
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sign in · Example Accounts</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #f6f8fa;
+        color: #1f2328;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 32px;
+        background: #24292f;
+        color: #fff;
+        font-weight: 600;
+      }
+      .mark {
+        inline-size: 28px;
+        block-size: 28px;
+        border-radius: 50%;
+        background: #fff;
+      }
+      main {
+        display: grid;
+        place-items: center;
+        padding-block: 64px;
+      }
+      h1 {
+        margin: 0 0 16px;
+        font-size: 24px;
+        font-weight: 300;
+        text-align: center;
+      }
+      form {
+        inline-size: 340px;
+        padding: 20px;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        background: #fff;
+      }
+      label {
+        display: block;
+        margin-block: 12px 6px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      input {
+        box-sizing: border-box;
+        inline-size: 100%;
+        padding: 8px 12px;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        font: inherit;
+      }
+      button {
+        inline-size: 100%;
+        margin-block-start: 20px;
+        padding: 9px;
+        border: 0;
+        border-radius: 6px;
+        background: #1f883d;
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+      }
+      .forgot {
+        float: inline-end;
+        font-size: 12px;
+        font-weight: 400;
+        color: #0969da;
+      }
+      p {
+        inline-size: 340px;
+        margin-block: 16px 0;
+        padding: 16px;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 14px;
+      }
+      a {
+        color: #0969da;
+      }
+    </style>
+  </head>
+  <body>
+    <header><span class="mark"></span>Example Accounts</header>
+    <main>
+      <h1>Sign in to Example</h1>
+      <form>
+        <label for="login">Username or email address</label>
+        <input id="login" value="" />
+        <label for="password"
+          >Password <a class="forgot" href="#">Forgot password?</a></label
+        >
+        <input id="password" type="password" />
+        <button type="button">Sign in</button>
+      </form>
+      <p>New to Example? <a href="#">Create an account</a>.</p>
+    </main>
+  </body>
+</html>

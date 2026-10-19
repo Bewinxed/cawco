@@ -26,14 +26,17 @@ export interface HeadItem {
   key: string;
   /** The same control as More's entries. */
   menu: Snippet;
+  /** It stands in More alone, never in the head (a browser's Sound on, Reload stream, Stop browser). */
+  menuOnly?: boolean;
   /** Its place in {@link HEAD_PRIORITY}: the lower stands while the higher goes to More. */
   priority: number;
   /** `bar` says words its glyph and count stand without (Send picks, Comments): drawn `compact`, they go, and they come back only on a pane {@link WORDS_FROM}px or wider. */
   words?: boolean;
 }
 
-/** The order the controls give up the head, first kept first (Send picks, the mode, Comments, Expand, Reload, Inspect, the canvas view, Undock, Open in new tab, New canvas). */
+/** The order the controls give up the head, first kept first (a browser's Take over or Hand back, Send picks, the mode, Comments, Expand, Reload, Inspect, the canvas view, Undock, Open in new tab, New canvas; More's own entries last). */
 export const HEAD_PRIORITY = {
+  takeover: 0,
   send: 1,
   mode: 2,
   comments: 3,
@@ -44,6 +47,7 @@ export const HEAD_PRIORITY = {
   undock: 8,
   open: 9,
   create: 10,
+  more: 11,
 } as const;
 
 /** The name keeps its own width up to this, in px, before any control stands. */

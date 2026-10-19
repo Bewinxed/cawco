@@ -14,6 +14,8 @@
    *   the hub say they can't be removed. A held workspace is its delegating
    *   session's to continue or discard, never yours (hub work-items.ts
    *   `heldNotice`).
+   * - Browser: the project's browser on each machine (ProjectBrowsers):
+   *   Open, Stop and Forget sign-ins.
    * - Repository: read from the folder's remote, said so.
    * - Large files: each origin's own LFS, or where the project declared
    *   they live, bound to a connection with a key (hub project-edit.ts).
@@ -93,6 +95,7 @@
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import CawLeadSwitch from "./CawLeadSwitch.svelte";
   import type { CawLead } from "./caw-lead.svelte";
+  import ProjectBrowsers from "./ProjectBrowsers.svelte";
 
   let {
     project,
@@ -817,6 +820,14 @@
           </form>
           <RowFault again={add} data-add-fault reason={addFault} />
         {/if}
+      </div>
+    </div>
+
+    <!-- Browser: the project's browser on each machine it ran on. -->
+    <div data-slot="row" class="row" data-detail="browser">
+      <p data-slot="project-details-label" class="label">Browser</p>
+      <div data-slot="value" class="value">
+        <ProjectBrowsers projectId={project.id} />
       </div>
     </div>
 

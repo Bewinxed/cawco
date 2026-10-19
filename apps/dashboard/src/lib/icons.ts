@@ -72,9 +72,10 @@ export {
 export { default as IconToolNavigate } from "~icons/solar/compass-bold-duotone";
 export { default as IconCopy } from "~icons/solar/copy-bold-duotone";
 export { default as IconCpu } from "~icons/solar/cpu-bold-duotone";
-/** A screen tool's row; the preview pane's Interact mode (the page gets the pointer). */
+/** A screen tool's row; the preview pane's Interact mode (the page gets the pointer); a browser's Take over. */
 export {
   default as IconInteract,
+  default as IconTakeOver,
   default as IconToolScreen,
 } from "~icons/solar/cursor-bold-duotone";
 export { default as IconAlert } from "~icons/solar/danger-circle-bold-duotone";
@@ -119,14 +120,20 @@ export { default as IconHourglass } from "~icons/solar/hourglass-bold-duotone";
 export { default as IconHandoff } from "~icons/solar/inbox-in-bold-duotone";
 export { default as IconInfo } from "~icons/solar/info-circle-bold-duotone";
 export { default as IconKey } from "~icons/solar/key-bold-duotone";
+/** A browser view's Keyboard: the soft keyboard raised over the page. */
+export { default as IconKeyboard } from "~icons/solar/keyboard-bold-duotone";
 export { default as IconLaptop } from "~icons/solar/laptop-minimalistic-bold-duotone";
 export { default as IconLayers } from "~icons/solar/layers-bold-duotone";
 export { default as IconLeaf } from "~icons/solar/leaf-bold-duotone";
 /** A connection: Configure › Connections' rail glyph, and a row whose service has no mark. */
 export { default as IconConnection } from "~icons/solar/link-bold-duotone";
 export { default as IconLink } from "~icons/solar/link-minimalistic-2-bold-duotone";
+/** A browser view's address band: an https page. */
+export { default as IconPageLock } from "~icons/solar/lock-bold-duotone";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
+/** A browser view's address band: a page over plain http. */
+export { default as IconPageUnlocked } from "~icons/solar/lock-unlocked-bold-duotone";
 export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
 export { default as IconSparkles } from "~icons/solar/magic-stick-3-bold-duotone";
 export {
@@ -223,7 +230,11 @@ export { default as IconSun } from "~icons/solar/sun-bold-duotone";
 export { default as IconLab } from "~icons/solar/test-tube-bold-duotone";
 export { default as IconTrash } from "~icons/solar/trash-bin-minimalistic-bold-duotone";
 export { default as IconTuning } from "~icons/solar/tuning-2-bold-duotone";
-export { default as IconReset } from "~icons/solar/undo-left-bold-duotone";
+export {
+  /** A browser view's Hand back. */
+  default as IconHandBack,
+  default as IconReset,
+} from "~icons/solar/undo-left-bold-duotone";
 export { default as IconUser } from "~icons/solar/user-bold-duotone";
 /** Delegated work: the subagents a session still has out. Accounts: Configure's sign-ins. */
 export {

@@ -19,12 +19,14 @@ import {
   type FsPayload,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { BrowserKey, ListedBrowser } from "@cawco/core/browser";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { deletePreview } from "../artifact-api";
 import { newId } from "../id";
 import { rowHref } from "../links";
 import type {
+  PaneBrowserAsk,
   PaneFleet,
   PaneMachine,
   PanePreview,
@@ -123,6 +125,32 @@ export class ArtifactSession implements PaneFleet {
     instanceId === this.#instanceId
       ? (this.#heard?.session ?? undefined)
       : undefined;
+
+  browserAsk = (
+    instanceId: string,
+    artifactId: string,
+    key: BrowserKey
+  ): PaneBrowserAsk | null => {
+    const ask = instanceId === this.#instanceId ? this.#heard?.ask : null;
+    return ask &&
+      (ask.browserAsk.artifactId === artifactId || ask.browserAsk.key === key)
+      ? ask
+      : null;
+  };
+
+  browser = (
+    key: BrowserKey,
+    machineId: string
+  ): ListedBrowser | null | undefined => {
+    const heard = this.#heard;
+    if (!heard) {
+      return;
+    }
+    const { browser } = heard;
+    return browser?.key === key && browser.machineId === machineId
+      ? browser
+      : null;
+  };
 
   get machines(): readonly PaneMachine[] {
     return this.#heard?.machines ?? [];

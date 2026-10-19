@@ -56,6 +56,10 @@
   } from "../client.svelte";
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
+  import {
+    askViewOnScreen,
+    cardOnScreen,
+  } from "../preview/browser-on-screen.svelte";
   import { questionAnswer, questionDismissal } from "../question";
 
   let {
@@ -90,13 +94,27 @@
 
   /**
    * A browser ask (core `BrowserAskFrame`): Take over is `takeOverBrowser`,
-   * the one take-over Needs you's row runs too; Deny answers the call,
-   * with the person's own words when its "Other" chip opened the line for
-   * them. That chip and its line are the question card's own (`openOther`,
-   * `writeOther`, `otherKey`): the ask is one question, its reason, with no
-   * options of its own.
+   * the one take-over Needs you's row runs too; Deny answers the call. One
+   * surface owns each thing (DESIGN.md, "Browser view"): while the session's
+   * panel shows this ask's browser, the view owns the origin and Take over,
+   * and the card keeps the reason and Deny, pointing at the panel for the
+   * rest; alone, the card shows everything.
    */
   const browserAsk = $derived(request.browserAsk ?? null);
+  /** The ask's browser stands in its session's panel on this screen. */
+  const viewShown = $derived(
+    browserAsk ? askViewOnScreen(request.instanceId, browserAsk) : false
+  );
+  // On screen while mounted: the view then sheds the reason, which is the card's.
+  $effect(() => {
+    if (!browserAsk) {
+      return;
+    }
+    return cardOnScreen({
+      instanceId: request.instanceId,
+      requestId: request.requestId,
+    });
+  });
   /** What the hub refused the take-over with. */
   let takeRefused = $state<string | null>(null);
 
@@ -113,18 +131,6 @@
     }
   }
 
-  /** Deny, with the words the person wrote on the "Other" line, if any. */
-  function denyBrowser(): void {
-    if (!(answerable && browserAsk)) {
-      return;
-    }
-    pressed = "deny";
-    commandId = onanswer({
-      behavior: "deny",
-      message: (others[browserAsk.reason] ?? "").trim(),
-    });
-  }
-
   /** What the card is, as its title and a screen reader name it. */
   const cardLabel = $derived.by(() => {
     if (browserAsk) {
@@ -139,23 +145,6 @@
   const claimId = $props.id();
   const input = $derived(request.input as Record<string, unknown>);
   const questions = $derived(questionsOf(request.toolName, input));
-  /**
-   * The questions the "Other" line answers: a question card's, or a
-   * browser ask's one, its reason, which Deny sends the line's words with.
-   */
-  const asked = $derived<UserQuestion[] | null>(
-    questions ??
-      (browserAsk
-        ? [
-            {
-              question: browserAsk.reason,
-              header: "",
-              options: [],
-              multiSelect: false,
-            },
-          ]
-        : null)
-  );
   const presentation = $derived(request.presentation);
   /** Who asks and where: "Caw · cockpit". */
   const who = $derived(askerLine(presentation));
@@ -399,7 +388,7 @@
 
   /** The field's words become the answer, in place of what they were before. */
   function writeOther(text: string): void {
-    const q = otherAt === null ? undefined : asked?.[otherAt];
+    const q = otherAt === null ? undefined : questions?.[otherAt];
     if (!q) {
       return;
     }
@@ -416,7 +405,7 @@
 
   /** "Other": the field's line opens for this question's own answer. */
   async function openOther(index: number): Promise<void> {
-    const q = asked?.[index];
+    const q = questions?.[index];
     if (!(q && answerable)) {
       return;
     }
@@ -449,11 +438,6 @@
     }
     event.preventDefault();
     event.stopPropagation();
-    // A browser ask's line goes with its Deny.
-    if (browserAsk) {
-      denyBrowser();
-      return;
-    }
     if (allAnswered) {
       submitQuestion();
       return;
@@ -792,63 +776,25 @@
 >
   {#if browserAsk}
     {@render title(cardLabel)}
-    <!-- What the agent needs the person for, as a question's text, and the
-         page's origin in code type: the person checks where they will be
-         typing before they take over. -->
+    <!-- What the agent needs the person for, as a question's text; alone,
+         the page's origin in code type under it, so the person checks where
+         they will be typing before they take over (with the view on screen
+         its band names it). -->
     <div data-slot="body" class="body part" style:--part="1">
       <p data-slot="lede" class="lede">{browserAsk.reason}</p>
-      <p
-        data-slot="browser-meta"
-        class="mb-(--space-2) min-w-0 text-(length:--text-meta) text-(--ink-muted)"
-      >
-        <!-- Broken only after its dots, never inside a label. -->
-        <code
-          data-slot="browser-origin"
-          class="min-w-0 [font:var(--type-code)] text-(--ink-strong) [overflow-wrap:break-word]"
-          ><OriginText origin={browserAsk.origin} /></code
+      {#if !viewShown}
+        <p
+          data-slot="browser-meta"
+          class="mb-(--space-2) min-w-0 text-(length:--text-meta) text-(--ink-muted)"
         >
-      </p>
-      <!-- The question card's "Other": its chip and its line, side by side
-           in one row of a fixed height, so nothing under the thumb moves as
-           the line opens. -->
-      <div
-        data-slot="browser-other"
-        class="mb-(--space-2) flex h-9 min-w-0 items-center gap-(--space-2)"
-      >
-        <ToggleGroup.Root
-          aria-label={`Other answer to: ${browserAsk.reason}`}
-          class="kit-chips flex-none"
-          type="single"
-          value={otherAt === 0 ? OTHER : ""}
-        >
-          <ToggleGroup.Item
-            data-sel={otherAt === 0 || undefined}
-            class="kit-chip touch-hit{otherAt === 0 ? ' sel' : ''}"
-            onclick={(event: MouseEvent) => {
-              event.preventDefault();
-              openOther(0);
-            }}
-            onkeydown={(event: KeyboardEvent) => otherChipKey(event, 0)}
-            type="button"
-            value={OTHER}
+          <!-- Broken only after its dots, never inside a label. -->
+          <code
+            data-slot="browser-origin"
+            class="min-w-0 [font:var(--type-code)] text-(--ink-strong) [overflow-wrap:break-word]"
+            ><OriginText origin={browserAsk.origin} /></code
           >
-            <span data-slot="opt-label" class="opt-label">Other</span>
-          </ToggleGroup.Item>
-        </ToggleGroup.Root>
-        {#if otherAt === 0}
-          <Input
-            data-other
-            aria-label={`Your answer to: ${browserAsk.reason}`}
-            class="other h-9 min-w-0 flex-1"
-            disabled={!answerable}
-            oninput={(event) => writeOther(event.currentTarget.value)}
-            onkeydown={otherKey}
-            placeholder="Your answer…"
-            value={others[browserAsk.reason] ?? ""}
-            bind:ref={otherField}
-          />
-        {/if}
-      </div>
+        </p>
+      {/if}
       <!-- What the answer reaches, before the person commits to it: the
            permission card's own line for that. -->
       <p data-slot="detail" class="detail">
@@ -859,22 +805,32 @@
       <!-- A refusal stands over the pair: the card grows upward from the
            composer's pill, so nothing under the thumb moves as it appears. -->
       {@render wait()}
-      <!-- The Peer Rule's transcript form: Take over and Deny at the row's
-           two ends, the one recessed fill, each outlined in its tint; no
-           third control between them. -->
+      <!-- Alone, the Peer Rule's transcript form: Take over and Deny at the
+           row's two ends, the one recessed fill, each outlined in its tint.
+           With the view on screen, Take over is the view's: the card points
+           at it and keeps the refusal. -->
       <div data-slot="choice" class="choice">
-        <Button
-          class={grant}
-          data-browser-take
-          disabled={disabledOf("allow")}
-          failed={takeRefused !== null}
-          icon={IconInteract}
-          label="Take over"
-          onclick={takeOver}
-          pending={pendingOf("allow")}
-          pendingLabel="Taking over…"
-          variant="secondary"
-        />
+        {#if viewShown}
+          <p
+            data-slot="browser-pointer"
+            class="m-0 min-w-0 !flex-1 self-center text-(--ink-muted) text-meta text-pretty"
+          >
+            Take over is in the browser panel.
+          </p>
+        {:else}
+          <Button
+            class={grant}
+            data-browser-take
+            disabled={disabledOf("allow")}
+            failed={takeRefused !== null}
+            icon={IconInteract}
+            label="Take over"
+            onclick={takeOver}
+            pending={pendingOf("allow")}
+            pendingLabel="Taking over…"
+            variant="secondary"
+          />
+        {/if}
         <Button
           class={refuse}
           data-browser-deny
@@ -882,7 +838,7 @@
           failed={failedOf("deny")}
           icon={IconClose}
           label="Deny"
-          onclick={denyBrowser}
+          onclick={() => answer("deny")}
           pending={pendingOf("deny")}
           pendingLabel="Denying…"
           variant="secondary"

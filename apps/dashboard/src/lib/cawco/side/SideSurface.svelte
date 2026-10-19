@@ -133,7 +133,12 @@
   let nameKeeps = $state(0);
   /** Each control's width as last drawn in the head, whole (`key`) and in its narrowest form (`key:compact`), and More's, its glyph alone (`more`) and saying a count (`more:counted`): what a control in More would take back. */
   const widths = new Map<string, number>();
-  const stands = (key: string) => shown === null || shown.has(key);
+  /** The keys of what stands in More alone (`menuOnly`). */
+  const menuOnly = $derived(
+    new Set(all.filter((one) => one.menuOnly).map((one) => one.key))
+  );
+  const stands = (key: string) =>
+    !menuOnly.has(key) && (shown === null || shown.has(key));
   const formOf = (key: string): Standing => shown?.get(key) ?? "whole";
   const more = $derived(all.filter((one) => !stands(one.key)));
   /** The count a control in More says on it (Comments'), only above 0 (The Earned Count Rule). */
@@ -258,7 +263,10 @@
       all.map((one) => ({
         key: one.key,
         priority: one.priority,
-        width: widths.get(one.key) ?? 0,
+        // More's own: no room holds it, so it and every one after it go to More.
+        width: one.menuOnly
+          ? Number.POSITIVE_INFINITY
+          : (widths.get(one.key) ?? 0),
         counted: !!one.count && one.count.n > 0,
         words: one.words,
         ...(one.compact || one.words
@@ -413,7 +421,9 @@
         class="head-item"
         hidden={!stands(one.key)}
       >
-        {#if one.compact && formOf(one.key) === "compact"}
+        {#if one.menuOnly}
+          <!-- More's own: never drawn in the head. -->
+        {:else if one.compact && formOf(one.key) === "compact"}
           {@render one.compact()}
         {:else}
           {@render one.bar()}
@@ -646,6 +656,18 @@
     .side-head
       :global(:is(button, a):not([role="tab"], [aria-pressed="true"]):hover) {
       background: var(--surface-hover);
+    }
+  }
+  /* The one filled control a pane may stand in its head, its act (a
+     browser's Hand back, DESIGN.md "Browser view"): the primary button's
+     coral and ink, its own hover, never the ghost's. */
+  .side-head :global(:is(button, a)[data-head-primary]) {
+    color: var(--on-action);
+    background: var(--action-surface), var(--action-solid);
+  }
+  @media (hover: hover) {
+    .side-head :global(:is(button, a)[data-head-primary]:hover) {
+      background: var(--action-surface-hover), var(--action-hover);
     }
   }
   /* The content's ground: a well inside its edge (surface-well, border-well:

@@ -41,11 +41,15 @@
     IconComment,
     IconExternal,
     IconEyeClosed,
+    IconHandBack,
     IconInteract,
     IconPen,
     IconPlus,
     IconRefresh,
     IconSend,
+    IconSound,
+    IconStop,
+    IconTakeOver,
     IconTrash,
     IconTuning,
     IconUndock,
@@ -90,6 +94,8 @@
     type ListHold,
     sendArtifact,
   } from "./artifact-doc";
+  import BrowserView from "./BrowserView.svelte";
+  import { BrowserPanel } from "./browser-panel.svelte";
   import CanvasView from "./CanvasView.svelte";
   import { CanvasViewState } from "./canvas-view.svelte";
   import { loadedPanes } from "./loaded.svelte";
@@ -102,6 +108,7 @@
   import SheetInspector from "./SheetInspector.svelte";
   import { isSetupPage } from "./setup-page";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
+  import { BROWSER_WORDS, browserKeyOf } from "./source";
   import {
     type PaneKey,
     previewError,
@@ -324,7 +331,12 @@
     const origin = paneOrigin;
     // biome-ignore lint/complexity/noVoid: read-only dependency — each bump probes again
     void probe;
-    if (!origin || untrack(() => reached?.origin === origin && reached.ok)) {
+    // A browser's stream has its own way (BrowserView): no page origin to probe.
+    if (
+      !origin ||
+      isBrowser ||
+      untrack(() => reached?.origin === origin && reached.ok)
+    ) {
       return;
     }
     let live = true;
@@ -440,6 +452,30 @@
       : `${ports}, or switch previews to a hostname pattern`;
   }
   const artifact = $derived(preview?.artifact);
+  /**
+   * A project's browser (Projects spec §5.11): its own view in the well
+   * (BrowserView), its head Take over or Hand back and a More of its own;
+   * the overlay, Comments, Inspect, the mode, Reload and the page's ticket
+   * are not drawn for it.
+   */
+  const isBrowser = $derived(artifact?.kind === "browser");
+  /** The browser's place, as one string: the panel's frame comes again with the same, and keeps its view. */
+  const browserPlace = $derived.by(() => {
+    const key = isBrowser ? browserKeyOf(source) : null;
+    const id = artifact?.id;
+    const machineId = owner?.machineId;
+    return key && id && machineId
+      ? JSON.stringify({ key, artifactId: id, instanceId, machineId })
+      : null;
+  });
+  const browserPanel = $derived.by(() => {
+    const at = browserPlace;
+    return at
+      ? untrack(
+          () => new BrowserPanel(JSON.parse(at) as BrowserPanel["place"], fleet)
+        )
+      : null;
+  });
   const frameKey = $derived(`${preview?.revision}:${reload}`);
   // The old paint bridges navigation only until the replacement finishes loading.
   let standing = $state<string | null>(null);
@@ -737,7 +773,10 @@
     }
     const current = loadedKey === frameKey;
     let word: { ok: true } | { ok: false; error: ShownFailure } | null = null;
-    if (isCanvas) {
+    if (isBrowser) {
+      // The browser's view is its own: on screen once it stands here.
+      word = { ok: true };
+    } else if (isCanvas) {
       word = stage?.connected && stage.at === "panel" ? { ok: true } : null;
     } else if (current && down) {
       word = { ok: false, error: down };
@@ -1058,7 +1097,8 @@
   $effect(() => {
     const id = artifactId;
     const session = instanceId;
-    if (!id) {
+    // A browser keeps no page document: no pins, no picks.
+    if (!id || isBrowser) {
       return;
     }
     docSync = { state: "reading" };
@@ -1554,6 +1594,8 @@
   function paneKey(event: KeyboardEvent) {
     const { target } = event;
     if (
+      // A browser's keys are the page's, once the person holds it.
+      isBrowser ||
       event.defaultPrevented ||
       event.metaKey ||
       event.ctrlKey ||
@@ -1581,6 +1623,7 @@
   export function parentEscape(event: KeyboardEvent) {
     if (
       event.key !== "Escape" ||
+      isBrowser ||
       event.defaultPrevented ||
       (event.target instanceof Element && event.target.closest("dialog[open]"))
     ) {
@@ -1977,8 +2020,64 @@
     }
   }
 
+  /**
+   * A browser's head (DESIGN.md "Browser view"): Take over while the agent
+   * drives, Hand back while the person holds it, in the head at every width
+   * with their words (the one act); then More: Open in new tab, Sound on
+   * (the container host's), Reload stream, Stop browser.
+   */
+  const browserItems = $derived.by((): HeadItem[] => {
+    const all: HeadItem[] = [
+      {
+        key: "takeover",
+        priority: HEAD_PRIORITY.takeover,
+        bar: browserControlBar,
+        menu: browserControlMenu,
+      },
+    ];
+    if (artifact && !ownTab) {
+      all.push({
+        key: "open",
+        priority: HEAD_PRIORITY.more,
+        bar: browserOpenMenu,
+        menu: browserOpenMenu,
+        menuOnly: true,
+      });
+    }
+    if (browserPanel?.row?.host === "container") {
+      all.push({
+        key: "sound",
+        priority: HEAD_PRIORITY.more,
+        bar: browserSoundMenu,
+        menu: browserSoundMenu,
+        menuOnly: true,
+      });
+    }
+    all.push(
+      {
+        key: "reload",
+        priority: HEAD_PRIORITY.more,
+        bar: browserReloadMenu,
+        menu: browserReloadMenu,
+        menuOnly: true,
+      },
+      {
+        key: "stop",
+        priority: HEAD_PRIORITY.more,
+        bar: browserStopMenu,
+        menu: browserStopMenu,
+        menuOnly: true,
+        group: true,
+      }
+    );
+    return all;
+  });
+
   /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
   const headItems = $derived.by(() => {
+    if (isBrowser) {
+      return browserItems;
+    }
     const all: HeadItem[] = [];
     if (artifact && unsentPicks) {
       all.push({
@@ -2065,6 +2164,124 @@
   }}
   onmessage={receive}
 />
+
+<!-- A browser's head: Take over or Hand back, swapped in place (nothing
+     else moves under the pointer), their words kept at every width; then
+     More's own entries. -->
+{#snippet browserControlBar()}
+  {#if browserPanel}
+    {@const one = browserPanel}
+    <!-- Both stand in one cell, the one not in use unseen and out of
+         reach, so the cell is as wide as the wider: taking over or handing
+         back moves nothing in the head, the name included. -->
+    <span data-slot="browser-control" class="grid [&>*]:[grid-area:1/1]">
+      <Button
+        aria-hidden={one.held ? undefined : "true"}
+        class={[
+          "touch-hit",
+          !one.held && "invisible",
+          one.acting === "handback" && "opacity-50",
+        ]}
+        data-head-primary
+        data-slot={one.held ? "hand-back" : undefined}
+        icon={IconHandBack}
+        inert={!one.held}
+        label={BROWSER_WORDS.handBack}
+        onclick={() => one.handBack()}
+        pending={one.acting === "handback"}
+        pendingLabel={BROWSER_WORDS.handingBackLabel}
+        size="sm"
+        tabindex={one.held ? undefined : -1}
+        title={BROWSER_WORDS.handBackTitle}
+      />
+      <Button
+        aria-hidden={one.held ? "true" : undefined}
+        class={["touch-hit", one.held && "invisible"]}
+        data-slot={one.held ? undefined : "take-over"}
+        disabled={!!one.takeOverWaits}
+        icon={IconTakeOver}
+        inert={one.held}
+        label={BROWSER_WORDS.takeOver}
+        onclick={() => one.takeOver()}
+        pending={one.acting === "takeover"}
+        pendingLabel={BROWSER_WORDS.takingOver}
+        size="sm"
+        tabindex={one.held ? -1 : undefined}
+        title={one.takeOverWaits ??
+          (one.ask
+            ? BROWSER_WORDS.takeOverAskTitle
+            : BROWSER_WORDS.takeOverTitle)}
+        variant="ghost"
+      />
+    </span>
+  {/if}
+{/snippet}
+{#snippet browserControlMenu()}
+  {#if browserPanel}
+    {@const one = browserPanel}
+    {#if one.held}
+      <DropdownMenu.Item onSelect={() => one.handBack()}>
+        <IconHandBack /><span>{BROWSER_WORDS.handBack}</span>
+      </DropdownMenu.Item>
+    {:else}
+      <DropdownMenu.Item
+        disabled={!!one.takeOverWaits}
+        onSelect={() => one.takeOver()}
+      >
+        <IconTakeOver /><span>{BROWSER_WORDS.takeOver}</span>
+      </DropdownMenu.Item>
+    {/if}
+  {/if}
+{/snippet}
+{#snippet browserOpenMenu()}
+  {#if artifact}
+    <DropdownMenu.Item>
+      {#snippet child({ props })}
+        <a
+          {...props}
+          class={[props.class, "mark-line"]}
+          href={`/browser/${encodeURIComponent(artifact.id)}`}
+          rel="noopener"
+          target="_blank"
+          ><IconExternal /><span>{BROWSER_WORDS.more.openTab}</span></a
+        >
+      {/snippet}
+    </DropdownMenu.Item>
+  {/if}
+{/snippet}
+{#snippet browserSoundMenu()}
+  {#if browserPanel}
+    {@const one = browserPanel}
+    <DropdownMenu.CheckboxItem
+      checked={one.soundOn}
+      onCheckedChange={(on) => one.setSound(on)}
+      ><IconSound /><span>{BROWSER_WORDS.more.soundOn}</span
+      ></DropdownMenu.CheckboxItem
+    >
+  {/if}
+{/snippet}
+{#snippet browserReloadMenu()}
+  {#if browserPanel}
+    {@const one = browserPanel}
+    <DropdownMenu.Item
+      disabled={one.phase !== "live"}
+      onSelect={() => one.restream()}
+    >
+      <IconRefresh /><span>{BROWSER_WORDS.more.reloadStream}</span>
+    </DropdownMenu.Item>
+  {/if}
+{/snippet}
+{#snippet browserStopMenu()}
+  {#if browserPanel}
+    {@const one = browserPanel}
+    <DropdownMenu.Item
+      disabled={one.phase !== "live" || one.acting !== null}
+      onSelect={() => one.stop()}
+    >
+      <IconStop /><span>{BROWSER_WORDS.more.stop}</span>
+    </DropdownMenu.Item>
+  {/if}
+{/snippet}
 
 <!-- The head's controls, each as the head draws it and as More's entries
      (SideSurface `items`, by the head's priority rule). -->
@@ -2333,6 +2550,9 @@
     <ArtifactMenu
       {instanceId}
       held={preview?.artifacts}
+      label={isBrowser
+        ? BROWSER_WORDS.title(browserPanel?.row?.name || null)
+        : undefined}
       line={headLine}
       lineDropped={!lineStands}
       lineId={`${paneId}-line`}
@@ -2341,7 +2561,7 @@
   {/if}
 {/snippet}
 
-{#if !isCanvas}
+{#if !(isCanvas || isBrowser)}
   <!-- The Comments panel: the kit's Popover, anchored under the head's
        Comments at the page's top-right, over the page and never pushing it.
        It stays while the person works the page and opens threads (a press
@@ -2395,11 +2615,17 @@
     class="preview-pane preview-inset"
     bind:this={section}
   >
-    <div class="inset-well" bind:this={well}>{@render framed()}</div>
+    <div class="inset-well" bind:this={well}>
+      {#if isBrowser}{@render browserWell()}{:else}{@render framed()}{/if}
+    </div>
   </section>
 {:else}
   <SideSurface
-    class={["preview-pane", mode !== "interact" && !isCanvas && `mode-${mode}`]
+    class={[
+      "preview-pane",
+      mode !== "interact" && !(isCanvas || isBrowser) && `mode-${mode}`,
+      browserPanel?.held && "browser-held",
+    ]
       .filter(Boolean)
       .join(" ")}
     closeFailed={failure?.again === "close"}
@@ -2415,9 +2641,16 @@
     bind:subtitleStands={lineStands}
     bind:well
   >
-    {@render framed()}
+    {#if isBrowser}{@render browserWell()}{:else}{@render framed()}{/if}
   </SideSurface>
 {/if}
+
+<!-- A browser in the well: the band, the stream and its states (BrowserView). -->
+{#snippet browserWell()}
+  {#if browserPanel}
+    <BrowserView {onScreen} panel={browserPanel} />
+  {/if}
+{/snippet}
 
 <!-- The page in the well, and what stands over it: the panel's and an
      inset's alike. -->
@@ -2821,8 +3054,9 @@
     background: var(--surface-well);
   }
   /* The header's controls are the card's (SideSurface); in Comment and
-     Draw the ones that would leave the page wait. */
-  :global(.preview-pane:is(.mode-comment, .mode-draw) .other) {
+     Draw, and while the person holds a browser, the ones that would leave
+     the page wait. */
+  :global(.preview-pane:is(.mode-comment, .mode-draw, .browser-held) .other) {
     opacity: 0.5;
   }
   /* The well is the card's (SideSurface). Comment and Draw turn the well's

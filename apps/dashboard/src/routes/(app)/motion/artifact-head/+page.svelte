@@ -78,6 +78,8 @@
     }, after);
   }
   const fleet: PaneFleet = {
+    browser: () => null,
+    browserAsk: () => null,
     closePreview: () => Promise.resolve(),
     folders: {
       list: () =>

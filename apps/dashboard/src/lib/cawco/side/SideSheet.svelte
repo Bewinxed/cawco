@@ -61,7 +61,10 @@
    * reader's to answer, and the sheet standing over it hid it: while it is
    * up the sheet folds to its tab on its floor, the ask card's top, and
    * opens again to the height it had once the ask is gone. Opened from the
-   * tab meanwhile, it stands above the card.
+   * tab meanwhile, it stands above the card. A browser ask is the one that
+   * folds nothing: it is about the page this sheet shows, whose origin the
+   * person reads in its band before pressing Take over on the card, so the
+   * sheet keeps standing, above the card as on any composer.
    */
   const TAB = "44px";
   const DRAWN = { opacityProperty: true, visibilityProperty: true };
@@ -112,7 +115,7 @@
         : Number.parseFloat(snap);
     return Math.max(0, availableHeight - visible);
   });
-  /** An ask stands on the composer (its `.dock.asking`): the sheet is folded to its tab. */
+  /** An ask stands on the composer (its `.dock.asking`), and no browser ask: the sheet is folded to its tab. */
   let asking = $state(false);
   /** Where the sheet stood as the ask came up: the middle snap, the full height, or the tab. */
   let beforeAsk: "middle" | number | string | null = null;
@@ -231,7 +234,11 @@
         getComputedStyle(node).getPropertyValue("--space-4")
       );
       const composerTop = composer ? drawnTop(composer) : box.bottom - offset;
-      asking = composer?.classList.contains("asking") ?? false;
+      asking =
+        (composer?.classList.contains("asking") ?? false) &&
+        // A browser ask's card, in every form, by its Deny: with this
+        // sheet's view on screen it carries no Take over of its own.
+        !composer?.querySelector("[data-browser-deny]");
       const viewport = window.visualViewport;
       // A keyboard that resizes the web view (Brave) reports the new visible
       // area a frame before the page is laid out in it, with the composer

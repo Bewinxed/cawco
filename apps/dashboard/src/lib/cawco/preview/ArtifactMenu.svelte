@@ -37,6 +37,7 @@
   import { reflow } from "../motion/rows.svelte";
   import { toast } from "../toasts.js";
   import LiveDot from "./LiveDot.svelte";
+  import { BROWSER_WORDS } from "./source";
 
   let {
     instanceId,
@@ -45,6 +46,7 @@
     lineId,
     lineDropped,
     shown,
+    label,
   }: {
     instanceId: string;
     /** The head's line under the name (the ask, or "Sent to <session>"); empty: the name alone. */
@@ -61,7 +63,13 @@
     held: string[] | undefined;
     /** The artifact the panel shows. */
     shown: { id: string; kind: ArtifactKind; name: string };
+    /** What the name reads, where the kind says it better than the name (a browser's "Browser · <project>"). */
+    label?: string;
   } = $props();
+
+  /** A row's name: a browser's is its kind's word, the hub naming every one alike. */
+  const nameOf = (artifact: { kind: ArtifactKind; name: string }): string =>
+    artifact.kind === "browser" ? BROWSER_WORDS.name : artifact.name;
 
   const GLYPHS: Record<ArtifactKind, Component> = {
     page: IconArtifactPage,
@@ -226,7 +234,7 @@
   >
     {@const Glyph = GLYPHS[shown.kind]}
     <Glyph />
-    <span class="artifact-name">{shown.name}</span>
+    <span class="artifact-name">{label ?? nameOf(shown)}</span>
     <IconChevronDown />
   </DropdownMenu.Trigger>
   <DropdownMenu.Content
@@ -272,7 +280,7 @@
             <span
               data-slot="row-name"
               class="row-name"
-              id={part(artifact.id, "name")}>{artifact.name}</span
+              id={part(artifact.id, "name")}>{nameOf(artifact)}</span
             >
             {#if artifact.promoted}
               <span
