@@ -16,8 +16,11 @@
  * image, `resultImages`), then replies in the owner's shape: a table of
  * three columns (Variation | What happens | What it costs), four rows whose
  * cells run 15–40 words, then paragraphs, a three-item list and a closing
- * line. The built app runs on an iPhone 16 Pro and an iPad Pro 11-inch (M4),
- * iOS 18.5, each in a mac-slot.sh slot of its own, opened on that session
+ * line. The built app runs on an iPhone 16 Pro and an iPad Pro 13-inch (M4)
+ * (1032pt wide upright: over the rail's 900pt breakpoint, ShellController
+ * `fitRail`, so its sidebar stands beside the transcript; an 11-inch's 834pt
+ * hid it from launch, and there was no "Hide sidebar" to press), iOS 18.5,
+ * each in a mac-slot.sh slot of its own, opened on that session
  * with `-probe-pace`, and reads the app's own geometry (TranscriptView
  * `probe bounds`, once a frame for each row on the screen; a table's row
  * adds the table's frame, each row's frame and its tallest cell's words
@@ -38,7 +41,14 @@
  *     shut calls' pictures among them;
  *  f. noted: what laying tables out cost (`probe table cost`): drawing the
  *     message once, and a turn that streams the same message a word at a
- *     time, per word appended.
+ *     time, per word appended;
+ *  g. each device: a reply's row a cell takes holds no constraint, its
+ *     table's cells a reader acted on (their text views standing in) included
+ *     (Pace `pieceStood`, `probe piece stood`): the cell's `addSubview:`
+ *     moves nothing into a layout engine. TestFlight 20261018 aborted there
+ *     on iOS 27.0, an Auto Layout exception under HostCell `host`.
+ *
+ * `PROBE_IOS_RUNTIME=iOS-27-0` runs it on another runtime than iOS 18.5.
  *
  * `PROBE_CAPTURE=<dir>` also writes the iPhone's table, light and dark, there.
  *
@@ -55,16 +65,17 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
-/** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
-const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
+/** iOS 18.5, the app's oldest target, as the other iOS specs run it; `PROBE_IOS_RUNTIME` names another (iOS-27-0). */
+const RUNTIME = `com.apple.CoreSimulator.SimRuntime.${process.env.PROBE_IOS_RUNTIME ?? "iOS-18-5"}`;
 const IPHONE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro";
-const IPAD = "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB";
+const IPAD = "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB";
 const TITLE = "Table height probe";
 /** A compact log line's head, through its subsystem and category: a message with `] ` in it (a table's rows) keeps its own. */
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const MARK = /(seed|stream)-mark-[0-9a-f]{6}/g;
 const TABLE =
   /probe bounds .* table (w=([\d.]+) table=([\d.]+)\+([\d.]+) rows=\[([^\]]*)\] next=([\d.]+) (block|end))/;
+const HELD = /probe piece stood touched=(\d+) constraints=(\d+) held by ?(.*)$/;
 const COST =
   /probe table cost heights=(\d+) heightMs=([\d.]+) layouts=(\d+) layoutMs=([\d.]+) configures=(\d+)/;
 const PACE = /probe pace .*heightsChecked=(\d+) drifts=(\d+) maxDrift=([\d.]+)/;
@@ -524,6 +535,7 @@ async function leg(
       await streamed(kit, heard, on.turns);
     }
     judgeDrift(kit, device.tag, heard);
+    judgeHeld(kit, device.tag, heard);
   } finally {
     await writeFile(
       join(kit.out, `app-log-${device.tag}.txt`),
@@ -595,6 +607,35 @@ async function streamed(kit: Kit, heard: Heard[], turns: Turns): Promise<void> {
   );
   judge(kit, "iPhone, after the streamed reply", await settled(heard, from));
   judgeBounds(kit, "iPhone, while and after the reply streamed", heard, from);
+}
+
+/**
+ * A reply's row a cell takes holds no constraint, the text views of its
+ * table's cells a reader acted on included (FrameRow, CellText `promote`):
+ * the cell's `addSubview:` moves nothing into a layout engine. TestFlight
+ * 20261018 aborted there, iOS 27.0, an Auto Layout exception under HostCell
+ * `host`. The app's own walk of each such row (Pace `pieceStood`, `probe
+ * piece stood`); the screen's accessibility read (axe) makes a cell's text
+ * view stand in, and the flings stand the row in another cell.
+ */
+function judgeHeld(kit: Kit, tag: string, heard: Heard[]): void {
+  const stood = heard
+    .map((h) => HELD.exec(h.line))
+    .filter((m) => m !== null)
+    .map((m) => ({
+      touched: Number(m[1]),
+      constraints: Number(m[2]),
+      by: m[3],
+    }));
+  const touched = stood.filter((s) => s.touched > 0);
+  const holding = stood.filter((s) => s.constraints > 0);
+  kit.check(
+    `${tag}: a reply's row a cell takes holds no constraint, with its table's cells acted on`,
+    touched.length > 0 && holding.length === 0,
+    holding.length > 0
+      ? `${holding.length} of ${stood.length} row(s) held constraints, the first ${holding[0].constraints} held by ${holding[0].by}`
+      : `${touched.length} row(s) taken with ${touched.reduce((n, s) => n + s.touched, 0)} table cell text view(s) in them, none holding a constraint`
+  );
 }
 
 /** No row stood at a worked-out height draws at another (RowStore `verify`). */

@@ -531,18 +531,32 @@ final class CellText: UIView, NSTextLayoutManagerDelegate {
         }
     }
 
-    /// The text view the cell becomes where a reader acts on it: its words, at its width.
+    /// The text view the cell becomes where a reader acts on it: its words, at
+    /// its width. It stands by frame, as the cell does: a table stands in a
+    /// row laid out by frame (FrameRow), which holds no constraint. Pinned by
+    /// constraints, a touched cell's text view made its table, the table's
+    /// scroller and the row a tree of them, every one moved into the cell's
+    /// layout engine when the row was stood in another cell (TestFlight
+    /// 20261018: an Auto Layout exception under HostCell `host`'s
+    /// `addSubview:`, iOS 27.0).
     @discardableResult
     private func promote() -> ProseView {
         if let prose { return prose }
         let view = ProseView()
+        view.translatesAutoresizingMaskIntoConstraints = true
         view.attributedText = text
         view.fitWidth = measuredAt ?? bounds.width
+        view.frame = bounds
         prose = view
-        pin(view)
+        addSubview(view)
         setNeedsDisplay()
-        layoutIfNeeded()
+        view.layoutIfNeeded()
         return view
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        prose?.frame = bounds
     }
 
     /// A touch on the cell is the text view's from its start: it stands in

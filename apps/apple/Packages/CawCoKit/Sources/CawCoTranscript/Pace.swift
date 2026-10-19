@@ -1,5 +1,6 @@
 import OSLog
 import QuartzCore
+import UIKit
 
 /// Says when the main thread was held long enough to be seen. A stretch is
 /// one turn of the main run loop, from waking to waiting again: everything
@@ -290,6 +291,29 @@ extension Pace {
         DispatchQueue.main.async {
             log.notice("probe row \(String(describing: kind), privacy: .public): made \(made * 1000, format: .fixed(precision: 1)) ms, set \(configured * 1000, format: .fixed(precision: 1)) ms")
         }
+    }
+
+    /// A reply's row (PieceView) a cell is taking holds no constraint: it is
+    /// laid out by frame (FrameRow), so its cell's `addSubview:` moves nothing
+    /// into a layout engine (probe-kit spec `ios-table-height`; TestFlight
+    /// 20261018 aborted there, iOS 27.0). Says, for one holding a table cell
+    /// a reader acted on (CellText `promote`) or a constraint, how many of
+    /// each, and the views holding the constraints.
+    static func pieceStood(_ row: UIView) {
+        var owners: [String] = []
+        var count = 0
+        var touched = 0
+        var stack = [row]
+        while let view = stack.popLast() {
+            if !view.constraints.isEmpty {
+                count += view.constraints.count
+                owners.append("\(type(of: view))×\(view.constraints.count)")
+            }
+            if (view as? CellText)?.prose != nil { touched += 1 }
+            stack += view.subviews
+        }
+        guard count > 0 || touched > 0 else { return }
+        log.notice("probe piece stood touched=\(touched) constraints=\(count) held by \(owners.joined(separator: " "), privacy: .public)")
     }
 
     /// A row stood at its exact height was measured as its view lays out

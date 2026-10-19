@@ -43,8 +43,19 @@
  *    the rows that streamed it, drawn anew in place, in under 8 ms (the
  *    app says `probe landing in place` or `as new rows`).
  *
+ * 3. The same turn again, the list flung up through its rows and jumped
+ *    back to latest while it streams (the owner's TestFlight 20261018 crash:
+ *    a session scrolled as a reply came in): the turn ends with the app up.
+ *
+ * Throughout, the app never aborts: its process's errors and faults are
+ * read off the simulator, and an uncaught exception's `Terminating app`
+ * line (with its reason) fails the run.
+ *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-scroll-up
+ *
+ * `PROBE_IOS_RUNTIME=iOS-27-0` runs it on that runtime in place of iOS 18.5
+ * (the crash above was on iOS 27.0).
  *
  * With `PROBE_SAMPLE=1` the app also samples its main thread's stack every
  * millisecond (MainSampler.swift), writes the busy stacks to its caches as
@@ -66,11 +77,16 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
-/** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
+/**
+ * iOS 18.5, the app's oldest target, as the other iOS specs run it;
+ * `PROBE_IOS_RUNTIME` names another (`iOS-27-0`, the owner's phone's).
+ */
 const SIM = {
-  runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+  runtime: `com.apple.CoreSimulator.SimRuntime.${process.env.PROBE_IOS_RUNTIME ?? "iOS-18-5"}`,
   device: "iPhone 16 Pro",
 };
+/** The runtime's own uncaught-exception line (CoreFoundation's), with its reason. */
+const ABORT = /Terminating app due to uncaught exception.*$/;
 const TITLE = "Scroll-up probe";
 /** Replies in the seeding turn, each a stretch of Markdown and a Bash call. */
 const CALLS = 360;
@@ -226,6 +242,40 @@ function listen(udid: string, heard: Heard[]): () => void {
         if (line.includes("dev.cawco.app")) {
           heard.push({ at: Date.now(), line: line.replace(LOG_HEAD, "") });
         }
+      }
+    }
+  })().catch(() => undefined);
+  return () => child.kill();
+}
+
+/**
+ * Streams the app process's errors and faults into `faults`: an uncaught
+ * exception's `Terminating app` line, with its reason, among them.
+ */
+function listenFaults(udid: string, faults: Heard[]): () => void {
+  const child = Bun.spawn(
+    [
+      "bash",
+      "-c",
+      `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'process == "CawCo" AND (messageType == error OR messageType == fault)'`,
+    ],
+    { stdout: "pipe", stderr: "ignore" }
+  );
+  (async () => {
+    const decoder = new TextDecoder();
+    const reader = child.stdout.getReader();
+    let rest = "";
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: the stream is read in order
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      rest += decoder.decode(value, { stream: true });
+      const split = rest.split("\n");
+      rest = split.pop() ?? "";
+      for (const line of split) {
+        faults.push({ at: Date.now(), line });
       }
     }
   })().catch(() => undefined);
@@ -657,6 +707,78 @@ function judge(kit: Kit, passes: Pass[]): void {
   }
 }
 
+/**
+ * The owner's crash (TestFlight 20261018): scrolling a session while a reply
+ * came in. Rows leave their cells and are stood in others while the live
+ * tail is drawn anew each frame; a word under the reader's finger selected
+ * first, so its row leaves the screen with a selection in it.
+ */
+async function flungWhileStreaming(
+  kit: Kit,
+  udid: string,
+  line: Awaited<ReturnType<typeof flingLine>>,
+  turn: { send: () => Promise<unknown>; held: () => Promise<{ busy: boolean }> }
+): Promise<void> {
+  await turn.send();
+  await until(
+    "the second streamed turn began",
+    turn.held,
+    (h) => h.busy,
+    60_000
+  );
+  let flung = 0;
+  const middle = Math.round((line.from + line.to) / 2);
+  for (let round = 0; round < 4; round += 1) {
+    // A word held a second (a drag of a point, which axe needs to move).
+    // biome-ignore lint/performance/noAwaitInLoops: each round starts where the last one left the list
+    await sh(
+      `${AXE} drag --start-x ${line.x} --start-y ${middle} --end-x ${line.x} --end-y ${middle + 1} --duration 1.0 --steps 2 --udid ${udid}`
+    );
+    await Bun.sleep(400);
+    for (let i = 0; i < 6; i += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: each fling starts where the last one left the list
+      await sh(
+        `${AXE} drag --start-x ${line.x} --start-y ${line.from} --end-x ${line.x} --end-y ${line.to} --duration 0.06 --steps 6 --udid ${udid}`
+      );
+      flung += 1;
+      await Bun.sleep(250);
+    }
+    await sh(`${AXE} tap --label "Jump to latest" --udid ${udid}`).catch(
+      () => undefined
+    );
+    await Bun.sleep(600);
+  }
+  const ended = await until(
+    "the second streamed turn ended",
+    turn.held,
+    (h) => !h.busy,
+    5 * 60_000
+  );
+  kit.check(
+    "flung through while a turn streams, the turn ends with the app up",
+    !ended.busy,
+    `${flung} flings and 4 jumps to latest while the reply streamed`
+  );
+}
+
+/**
+ * The app never aborts: no layout pass raises on a row it stands
+ * (TestFlight 20261018's crash, an Auto Layout exception under
+ * `addSubview:` in HostCell `host`, iOS 27.0).
+ */
+async function judgeAborts(kit: Kit, faults: Heard[]): Promise<void> {
+  await Bun.sleep(1500);
+  const aborted = faults
+    .map((f) => ABORT.exec(f.line)?.[0])
+    .find((abort) => abort !== undefined);
+  kit.check(
+    "the app never aborts (no uncaught exception)",
+    aborted === undefined,
+    aborted ??
+      `${faults.length} error or fault line(s) from the app, none an uncaught exception`
+  );
+}
+
 async function run(kit: Kit): Promise<void> {
   const { path: app, problem } = freshApp(ROOT);
   if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
@@ -670,13 +792,16 @@ async function run(kit: Kit): Promise<void> {
 
   const sim = await macSim(SIM);
   const heard: Heard[] = [];
+  const faults: Heard[] = [];
   let stop: () => void = () => undefined;
+  let stopFaults: () => void = () => undefined;
   try {
     const { udid } = sim;
-    console.log(`  simulator ${udid}`);
+    console.log(`  simulator ${udid} (${SIM.runtime})`);
     await sh(`xcrun simctl bootstatus ${udid} -b >/dev/null`);
     await sh(`xcrun simctl install ${udid} "${app}"`);
     stop = listen(udid, heard);
+    stopFaults = listenFaults(udid, faults);
     await Bun.sleep(1500);
     /** The app opened fresh on the session, its newest page drawn; `extra`: launch arguments of a pass's own. */
     const launch = async (extra = "") => {
@@ -818,12 +943,24 @@ async function run(kit: Kit): Promise<void> {
     if (SAMPLE) {
       await readProfiles(kit, udid);
     }
+
+    // ── 4. Flung through while a turn streams ────────────────────────────
+    await flungWhileStreaming(kit, udid, line, {
+      send: () => fleet.send(session, `${marks.stream}: stream it again.`),
+      held,
+    });
   } finally {
+    await judgeAborts(kit, faults);
     await writeFile(
       join(kit.out, "app-log.txt"),
       heard.map((h) => `${new Date(h.at).toISOString()} ${h.line}`).join("\n")
     );
+    await writeFile(
+      join(kit.out, "app-faults.txt"),
+      faults.map((f) => `${new Date(f.at).toISOString()} ${f.line}`).join("\n")
+    );
     stop();
+    stopFaults();
     await sim.release();
   }
 }
