@@ -77,6 +77,15 @@ export interface OpenCodeGoLimits {
 }
 
 /**
+ * How long an account's reading stands as current after the last word on it:
+ * a `rate_limit_event`, or a turn on the account that ended without one
+ * (Claude Code emits the event whenever a window's rounded percent or reset
+ * moves, so a turn with none confirms the reading). Past this it is stale:
+ * use from anywhere else (claude.ai, another client) goes unseen.
+ */
+export const CLAUDE_READING_CURRENT_MS = 60 * 60_000;
+
+/**
  * A Claude account's limits, as its sessions' Claude Code reported them
  * (`rate_limit_event`, `accountInfo()`). A window whose `resetsAt` has passed
  * with no newer report reads 0%.
@@ -89,18 +98,21 @@ export interface ClaudeLimits {
    */
   error: string | null;
   /**
-   * Why there are no windows, typed: `not-signed-in`, no account on the
-   * machine is signed in to Claude; `no-reading`, nothing on the account has
-   * reported any yet. Null when there are windows.
+   * Why there are no windows, typed: `not-signed-in`, the account is signed
+   * in on no machine; `no-reading`, nothing on the account has reported any
+   * yet. Null when there are windows.
    */
   errorKind: ClaudeLimitsGap | null;
   /** Extra usage as the last `rate_limit_event` said; null: it never said. */
   extraUsage: ClaudeExtraUsage | null;
-  /** When Claude Code last reported on the account. */
+  /**
+   * When the windows were last known to be so: Claude Code's last report on
+   * the account, or a later turn on it that changed nothing.
+   */
   fetchedAt: number;
   /**
-   * No session runs on the account, so use from anywhere else goes unseen
-   * and the windows are as of `fetchedAt`.
+   * Nothing on the account has confirmed the windows for
+   * {@link CLAUDE_READING_CURRENT_MS}: they are as of `fetchedAt`.
    */
   stale: boolean;
   subscription: string | null; // subscriptionType
@@ -123,18 +135,6 @@ export interface ClaudeExtraUsage {
   on: boolean;
   /** When extra usage resets, when Claude Code said. */
   resetsAt: string | null;
-}
-
-/**
- * One machine's latest limit reading, as the hub stores it (`usage_limits`)
- * and broadcasts it in a `kind: 'usage'` frame. `fetchedAt` is a `Date` inside
- * the hub and the ISO string it serialises to on the wire.
- */
-export interface UsageLimitsReading {
-  fetchedAt: string | number | Date;
-  machineId: string;
-  openCodeGo: OpenCodeGoLimits | null;
-  payload: ClaudeLimits;
 }
 
 /**
@@ -212,17 +212,49 @@ export interface UsageSpend {
 }
 
 /**
- * What `/api/usage/limits` returns: every machine's latest readings. A
- * machine's Claude limits are those of the account it runs Claude Code on by
- * default (its `~/.claude` login), else of the first account signed in there.
+ * One machine's line in a `kind: 'usage'` frame's `limits`, a BRIDGE (hub
+ * scripts/wire-compat.ts) for TestFlight builds that read limits per
+ * machine: its OpenCode Go plan, and the limits of the first Claude account
+ * signed in there. Nothing on this build reads it: Claude's limits are each
+ * account's ({@link AccountLimits}), Go's each machine's ({@link MachineGoLimits}).
+ */
+export interface UsageLimitsReading {
+  fetchedAt: string | number | Date;
+  machineId: string;
+  openCodeGo: OpenCodeGoLimits | null;
+  payload: ClaudeLimits;
+}
+
+/** One Claude account's own limits, named by its account. */
+export interface AccountLimits {
+  accountId: string;
+  limits: ClaudeLimits;
+}
+
+/** One machine's OpenCode Go plan, read with that machine's Go key. */
+export interface MachineGoLimits {
+  hostname: string;
+  machineId: string;
+  plan: OpenCodeGoLimits;
+}
+
+/**
+ * What `/api/usage/limits` returns: each Claude account's own limits, and
+ * each machine's OpenCode Go plan. Claude's limits are an account's, never a
+ * machine's: a machine signed in to several accounts has no one reading.
+ * `machines` is a BRIDGE (hub scripts/wire-compat.ts) for TestFlight builds
+ * that read limits per machine (Claude's there the first account signed in
+ * on it); nothing on this build reads it.
  */
 export interface UsageLimitsResponse {
+  claude: AccountLimits[];
   machines: {
     hostname: string;
     limits: ClaudeLimits;
     machineId: string;
     openCodeGo: OpenCodeGoLimits | null;
   }[];
+  openCodeGo: MachineGoLimits[];
 }
 
 /**

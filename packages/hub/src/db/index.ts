@@ -1900,14 +1900,6 @@ export interface DbShape {
   readonly ruleStatesFor: (ruleId: string) => RuleState[];
   /** Per-rule totals for the list, aggregated in SQL rather than per row. */
   readonly ruleStats: () => RuleStats[];
-  /**
-   * The listed Claude sessions that are running, as the accounts read them:
-   * two columns, so asking which accounts a session runs on reads no row whole.
-   */
-  readonly runningClaudeSessions: () => {
-    accountId: string | null;
-    machineId: string;
-  }[];
   readonly runningDelegateCounts: () => Map<string, number>;
   /** The listed sessions of one harness that are running. */
   readonly runningInstancesOf: (harness: HarnessKind) => PublicInstanceRow[];
@@ -8562,21 +8554,6 @@ const make = async (path: string): Promise<DbShape> => {
       }
       return counts;
     },
-    runningClaudeSessions: () =>
-      db
-        .select({
-          accountId: instances.accountId,
-          machineId: instances.machineId,
-        })
-        .from(instances)
-        .where(
-          and(
-            listedInstances(),
-            eq(instances.status, "running"),
-            eq(instances.harness, "claude")
-          )
-        )
-        .all(),
     liveWorkItems: () =>
       db
         .select()

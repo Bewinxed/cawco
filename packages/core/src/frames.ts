@@ -36,7 +36,12 @@ import {
   type TailnetOrigin,
 } from "./tailnet-https";
 import type { ThreadMessage, ThreadSummary } from "./threads";
-import type { UsageLimitsReading, UsageSpend } from "./usage";
+import type {
+  AccountLimits,
+  MachineGoLimits,
+  UsageLimitsReading,
+  UsageSpend,
+} from "./usage";
 
 export interface FleetMcpFrame {
   kind: "fleet_mcp";
@@ -479,9 +484,12 @@ export interface PermissionSettledFrame {
 }
 
 export interface UsageFrame {
-  /** Hub-originated: every machine's latest limits and the fleet's spend. */
+  /** Hub-originated: every Claude account's own limits, every machine's Go plan, and the fleet's spend. */
+  claude: AccountLimits[];
   kind: "usage";
+  /** BRIDGE (hub scripts/wire-compat.ts): limits per machine, for TestFlight builds that read them so. */
   limits: UsageLimitsReading[];
+  openCodeGo: MachineGoLimits[];
   spend: UsageSpend;
 }
 

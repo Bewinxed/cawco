@@ -17,9 +17,10 @@ import {
   type AccountBench,
   type AccountForecast,
   type AccountHue,
-  accountName,
+  accountNames,
   type CarrySpan,
   CLAUDE_PROVIDER,
+  CLAUDE_READING_CURRENT_MS,
   type InstanceRow,
   type LimitWindow,
   type ProviderForecast,
@@ -32,12 +33,6 @@ const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 /** How far the carry answer looks ahead: one 5-hour window. */
 export const HORIZON_MS = 5 * HOUR_MS;
-/**
- * An account with no session on it is only seen when one runs; past this its
- * reading is called out of date (the at-a-glance "seen 1h ago").
- */
-const STALE_MS = HOUR_MS;
-
 /** A word in a sentence: plain, emphasised, or an account's name led by its dot. */
 export type Part =
   | string
@@ -96,9 +91,15 @@ export interface RingAccount {
   org: string | null;
   /** Percent left where its reserve sits, once the reserve is reached. */
   reserveLeft: number | null;
-  /** When it last reported; null: never. */
+  /** When its reading was last known to stand; null: never. */
   seenAt: number | null;
   sessions: InstanceRow[];
+  /**
+   * Its reading is out of date, whatever its state: nothing on it has
+   * confirmed it for {@link CLAUDE_READING_CURRENT_MS}, so it is as of
+   * {@link seenAt}. An account at its limit says so too.
+   */
+  stale: boolean;
   state: RingState;
   w5: RingWindow | null;
   week: RingWindow | null;
@@ -145,12 +146,16 @@ export function shownHues(
   });
 }
 
-/** What accounts/AccountName reads of a ring: its nickname, else its email. */
+/**
+ * What accounts/AccountName reads of a ring: its nickname over its email,
+ * else its name, which names its organization when another account signs in
+ * as the same email ({@link accountNames}).
+ */
 export const nameFields = (
-  r: Pick<RingAccount, "email" | "id" | "nick">
+  r: Pick<RingAccount, "email" | "id" | "name" | "nick">
 ): Pick<Account, "email" | "id" | "label"> => ({
   id: r.id,
-  email: r.email,
+  email: r.nick ? r.email : r.name,
   label: r.nick,
 });
 
@@ -293,6 +298,7 @@ function stateOf(
 /** An account as its rings draw it, before the carry answer is known. */
 function accountRing(
   account: Account,
+  name: string,
   forecast: AccountForecast | undefined,
   bench: AccountBench[],
   rows: InstanceRow[],
@@ -327,12 +333,11 @@ function accountRing(
     weekAll !== undefined &&
     weekAll.utilization >= account.reservePct;
   const seenAt = forecast?.lastSeenAt ?? null;
-  const stale =
-    live.length === 0 && seenAt !== null && now - seenAt >= STALE_MS;
+  const stale = seenAt !== null && now - seenAt >= CLAUDE_READING_CURRENT_MS;
   const state = stateOf(limitOn, stale, reserved);
   return {
     id: account.id,
-    name: accountName(account),
+    name,
     nick: account.label,
     email: account.email,
     org:
@@ -356,6 +361,7 @@ function accountRing(
     neverBackup: account.neverBackup,
     seenAt,
     sessions: live,
+    stale,
     state,
     carryFrom: null,
     carryUntil: null,
@@ -421,9 +427,11 @@ export function claudeRings(input: {
   const own = input.accounts
     .filter((account) => account.provider === forecast.provider)
     .sort((a, b) => a.order - b.order);
+  const names = accountNames(own);
   const rings = own.map((account) =>
     accountRing(
       account,
+      names.get(account.id) ?? account.id,
       forecast.accounts.find((one) => one.accountId === account.id),
       input.bench,
       input.instances,
@@ -482,9 +490,7 @@ export function claudeRings(input: {
     backAt: backSpan?.from ?? null,
     delegate,
     delegateWhy: delegateReason(input.routing, delegate, byId),
-    stale:
-      chain.map((id) => byId.get(id)).find((ring) => ring?.state === "stale") ??
-      null,
+    stale: chain.map((id) => byId.get(id)).find((ring) => ring?.stale) ?? null,
   };
 }
 
@@ -550,6 +556,7 @@ export function openCodeRing(
     neverBackup: false,
     seenAt: reading.fetchedAt,
     sessions: live,
+    stale: Boolean(reading.stale),
     state,
     carryFrom: null,
     carryUntil: null,
@@ -803,7 +810,7 @@ export function dialTip(
   return [
     line("5-hour", r.limitOn === "5h", r.w5?.left, !stopsOnWeek),
     line("Week", r.limitOn === "week", r.week?.left, stopsOnWeek),
-    r.state === "stale" ? estimateOf(r, now) : null,
+    r.stale ? estimateOf(r, now) : null,
   ]
     .filter((one) => one !== null)
     .join("\n");
@@ -1010,7 +1017,12 @@ export function tileSentence(
   const after = (rest: Part[]): Part[] =>
     running.length > 0 ? [...running, " ", ...rest] : rest;
   if (r.state === "limit") {
-    return ["At its limit. Back in ", fig(until(r.backAt, now)), "."];
+    return [
+      "At its limit. Back in ",
+      fig(until(r.backAt, now)),
+      ".",
+      ...lastReported(r, now),
+    ];
   }
   if (r.state === "stale" && r.seenAt !== null) {
     return [
@@ -1192,7 +1204,12 @@ export function leadSentence(c: ClaudeRings, now: number): Part[] {
 
 export function openCodeSentence(o: RingAccount, now: number): Part[] {
   if (o.state === "limit") {
-    return ["At its limit. Back in ", fig(until(o.backAt, now)), "."];
+    return [
+      "At its limit. Back in ",
+      fig(until(o.backAt, now)),
+      ".",
+      ...lastReported(o, now),
+    ];
   }
   if (o.state === "stale" && o.seenAt !== null) {
     return [
@@ -1205,6 +1222,12 @@ export function openCodeSentence(o: RingAccount, now: number): Part[] {
     ? ["Runs out in ", fig(fmt(o.bindOut - now)), "."]
     : ["Nothing stops you in the next 5 hours."];
 }
+
+/** An out-of-date reading's age, after an at-limit sentence: " Last reported 16h 02m ago." */
+const lastReported = (r: RingAccount, now: number): Part[] =>
+  r.stale && r.seenAt !== null
+    ? [" Last reported ", fig(fmt(now - r.seenAt)), " ago."]
+    : [];
 
 /** One line of the key: glyph | label | value | reset. */
 export interface KeyRow {

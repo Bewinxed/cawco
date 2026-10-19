@@ -382,14 +382,16 @@ import {
   type AccountProber,
   accountOfIdentity,
   claudeCredentialRefused,
+  confirmReading,
   keepProbe,
   machineAccount,
-  machineReadings,
   noteProviderReading,
   noteRateLimit,
   reconcileAccounts,
   sessionLimitsReader,
   uncompared,
+  usageFrameLimits,
+  usageLimits,
   withOrgIdFrom,
 } from "./accounts";
 import { actionRoutes, createActions } from "./actions";
@@ -4399,7 +4401,7 @@ export const createServer = (
       machineId,
       payload: {
         kind: "usage",
-        limits: machineReadings(db),
+        ...usageFrameLimits(db),
         spend: spendNow(),
       },
     });
@@ -21040,22 +21042,50 @@ export const createServer = (
     );
   };
 
+  /**
+   * When each account's confirmed reading was last said to every screen.
+   * Each screen reckons a reading stale on its own clock from the time it
+   * was told, so a confirmation is said once this long has passed since the
+   * last one said, or a busy account whose percent holds would read stale.
+   */
+  const confirmationSaid = new Map<string, number>();
+  const CONFIRMATION_SAID_MS = 10 * 60_000;
   /** A claimed turn's tokens, on the account the session runs on. */
   const recordTurnUsage = (
-    session: Parameters<typeof turnUsageOf>[0],
+    session: Parameters<typeof turnUsageOf>[0] & {
+      harness: string;
+      machineId: string;
+    },
     result: NeutralResultMessage,
     keepAlive: boolean
   ) => {
     if (!result.uuid) {
       return;
     }
+    const at = result.timestamp ? Date.parse(result.timestamp) : Date.now();
     const turn = turnUsageOf(
       session,
       { ...result, uuid: result.uuid },
       keepAlive,
-      result.timestamp ? Date.parse(result.timestamp) : Date.now()
+      at
     );
     db.turnUsage.put(session.id, turn.rows, turn.seen);
+    // A Claude turn that reached the model and said nothing of its account's
+    // limits left them where they stood: its Claude Code reports every move.
+    const reached = turn.rows.some(
+      (row) => row.inputTokens + row.outputTokens > 0
+    );
+    const { accountId } = session;
+    if (
+      session.harness === "claude" &&
+      accountId &&
+      reached &&
+      confirmReading(db, accountId, session.machineId, at) &&
+      at - (confirmationSaid.get(accountId) ?? 0) >= CONFIRMATION_SAID_MS
+    ) {
+      confirmationSaid.set(accountId, at);
+      publishUsage(session.machineId);
+    }
   };
   const pruneTurnUsage = () => {
     const gone = db.turnUsage.prune();
@@ -27315,14 +27345,7 @@ export const createServer = (
       // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
       // The heavy data lives behind these reads; the socket only carries the small
       // limits frame, so the dashboard pulls aggregates when it needs them.
-      .get("/api/usage/limits", (): UsageLimitsResponse => ({
-        machines: machineReadings(db).map((row) => ({
-          machineId: row.machineId,
-          hostname: row.hostname,
-          limits: row.payload,
-          openCodeGo: row.openCodeGo,
-        })),
-      }))
+      .get("/api/usage/limits", (): UsageLimitsResponse => usageLimits(db))
       .get("/api/usage/spend", (): UsageSpend => spendNow())
       .get(
         "/api/usage/limits/history",

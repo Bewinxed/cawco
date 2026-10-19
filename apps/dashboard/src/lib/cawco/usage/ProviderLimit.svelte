@@ -4,22 +4,51 @@
    * as the usage popover reads it: the limit's name, a 4px bar filled with
    * what is left (LimitBar `reads="left"`, its pace tick where an even pace
    * would leave you now), and "62% left", its figure in the figure face.
-   * Resting on the bar says the pace in plain words.
+   * Resting on the bar says the pace in plain words; on an out-of-date
+   * reading, how old it is instead.
    */
   import type { Meter } from "../usage";
   import LimitBar from "./LimitBar.svelte";
+  import { fmt } from "./rings";
 
-  let { label, meter }: { label: string; meter: Meter } = $props();
+  /**
+   * What resting on the bar says: the pace, or an out-of-date reading's age
+   * in the dial tooltip's words (rings.ts `estimateOf`).
+   */
+  const PACE_WORDS = {
+    left: (share: number) => `${share}% left`,
+    even: (share: number, even: number) =>
+      `${share}% left · an even pace would leave ${even}% by now`,
+    lastReading: (share: number, age: number) =>
+      `${share}% left · last reading ${fmt(age)} ago`,
+  };
+
+  let {
+    label,
+    meter,
+    now,
+    seenAt,
+  }: {
+    label: string;
+    meter: Meter;
+    /** The clock the meter was read against. */
+    now: number;
+    /** When the reading was last known to stand. */
+    seenAt: number;
+  } = $props();
 
   const left = $derived(
     Math.round(100 - Math.min(100, Math.max(0, meter.used)))
   );
   /** The pace, said: where an even pace would leave you by now. */
-  const pace = $derived(
-    meter.elapsed === null || meter.state === "reached"
-      ? `${left}% left`
-      : `${left}% left · an even pace would leave ${Math.round((1 - meter.elapsed) * 100)}% by now`
-  );
+  const pace = $derived.by(() => {
+    if (meter.state === "stale") {
+      return PACE_WORDS.lastReading(left, now - seenAt);
+    }
+    return meter.elapsed === null || meter.state === "reached"
+      ? PACE_WORDS.left(left)
+      : PACE_WORDS.even(left, Math.round((1 - meter.elapsed) * 100));
+  });
 </script>
 
 <div class="limit" data-provider-limit>

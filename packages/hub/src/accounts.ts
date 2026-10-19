@@ -10,11 +10,14 @@ import {
   type AccountSignin,
   accountName,
   CLAUDE_PROVIDER,
+  CLAUDE_READING_CURRENT_MS,
   type ClaudeExtraUsage,
   type ClaudeLimits,
   type ProviderAccountReading,
   type SigninState,
   sameIdentity,
+  type UsageLimitsReading,
+  type UsageLimitsResponse,
 } from "@cawco/core";
 import {
   type ObservedRateLimitInfo,
@@ -372,14 +375,16 @@ const extraUsageOf = (
 /**
  * An account's reading as `ClaudeLimits`. A window whose reset has passed
  * with no newer report reads 0%: it has rolled over, and nothing has been
- * spent in the new one that anyone has heard of. `watched`: a session runs
- * on the account, so Claude Code reports every change and the reading is
- * current however long ago it last moved; otherwise it is stale, since use
- * from anywhere else goes unseen.
+ * spent in the new one that anyone has heard of. The reading is current for
+ * `currentFor` after its time (the last report on the account, or a later
+ * turn there that changed nothing); past that it is stale, as of its time.
+ * `signedIn`: the account is signed in on some machine, so a reading can
+ * still come; one signed in nowhere with none says so.
  */
 export const limitsOf = (
   reading: AccountReading | undefined,
-  watched: boolean,
+  currentFor: number,
+  signedIn: boolean,
   now = Date.now()
 ): ClaudeLimits => {
   const base = {
@@ -388,17 +393,25 @@ export const limitsOf = (
     subscription: reading?.subscription ?? null,
   };
   if (!reading || reading.windows.length === 0) {
-    return {
-      ...base,
-      stale: false,
-      windows: [],
-      error: "no reading yet",
-      errorKind: "no-reading",
-    };
+    return signedIn
+      ? {
+          ...base,
+          stale: false,
+          windows: [],
+          error: "no reading yet",
+          errorKind: "no-reading",
+        }
+      : {
+          ...base,
+          stale: false,
+          windows: [],
+          error: "not signed in",
+          errorKind: "not-signed-in",
+        };
   }
   return {
     ...base,
-    stale: !watched,
+    stale: now - reading.lastSeenAt >= currentFor,
     error: null,
     errorKind: null,
     windows: reading.windows.map((window) =>
@@ -410,8 +423,9 @@ export const limitsOf = (
 };
 
 /**
- * The account that speaks for a machine where a screen shows one Claude
- * reading per machine, out of sign-ins already read: the first account
+ * The account that speaks for a machine where a choice needs one Claude
+ * account there (its default model's catalog, the BRIDGE in
+ * {@link usageLimits}), out of sign-ins already read: the first account
  * signed in there.
  */
 const speakerAmong = (
@@ -448,40 +462,37 @@ interface SessionOnAccount {
   machineId: string;
 }
 
+/** Two of a machine's 5-minute reads: a provider reading younger than this is current. */
+const PROVIDER_CURRENT_MS = 10 * 60_000;
+
 /**
- * The accounts as one read sees them: who speaks for each machine, each
- * account's reading, and which accounts a running Claude session is on.
- * Read once per pass over the sessions, never once per session: a board is
- * thousands of rows, and reading every session again for each of them is what
- * held the hub's one thread for minutes once its first account existed
- * (nightly 2069, 2026-10-08).
+ * The accounts as one read sees them: each account's reading, and where
+ * each is signed in. Read once per pass over the sessions, never once per
+ * session: a board is thousands of rows, and reading every session again for
+ * each of them is what held the hub's one thread for minutes once its first
+ * account existed (nightly 2069, 2026-10-08).
  */
 const accountsView = (db: DbShape) => {
-  const signins = db.accounts.signins();
   const readings = new Map(
     db.accounts.readings().map((reading) => [reading.accountId, reading])
   );
-  /** The account a Claude session runs on; none for one that runs on no CawCo account. */
-  const accountOf = (row: SessionOnAccount): string | undefined =>
-    row.accountId ?? undefined;
-  const watched = new Set(
-    db.runningClaudeSessions().flatMap((row) => {
-      const id = accountOf(row);
-      return id ? [id] : [];
-    })
+  const signedIn = new Set(
+    db.accounts
+      .signins()
+      .filter((one) => one.state === "signed-in")
+      .map((one) => one.accountId)
   );
   const claude = claudeAccounts(db);
-  // Any other provider's windows are read by its machines every 5 minutes,
-  // whatever runs on it: current while the last read is that recent.
-  const current = (accountId: string, now: number): boolean =>
-    watched.has(accountId) ||
-    (!claude.has(accountId) &&
-      now - (readings.get(accountId)?.lastSeenAt ?? 0) < PROVIDER_CURRENT_MS);
   return {
-    accountOf,
-    speakerFor: (machineId: string) => speakerAmong(signins, claude, machineId),
     limits: (accountId: string, now: number): ClaudeLimits =>
-      limitsOf(readings.get(accountId), current(accountId, now), now),
+      limitsOf(
+        readings.get(accountId),
+        // Claude's windows move only on its sessions' reports; any other
+        // provider's are read by its machines every 5 minutes.
+        claude.has(accountId) ? CLAUDE_READING_CURRENT_MS : PROVIDER_CURRENT_MS,
+        signedIn.has(accountId),
+        now
+      ),
   };
 };
 
@@ -494,55 +505,114 @@ export const sessionLimitsReader = (
   now = Date.now()
 ): ((row: SessionOnAccount) => ClaudeLimits | undefined) => {
   const view = accountsView(db);
-  return (row) => {
-    const accountId = view.accountOf(row);
-    return accountId ? view.limits(accountId, now) : undefined;
+  return (row) => (row.accountId ? view.limits(row.accountId, now) : undefined);
+};
+
+/** A machine's Claude line where no Claude account is signed in there (the BRIDGE's). */
+const notSignedIn = (now: number): ClaudeLimits => ({
+  extraUsage: null,
+  fetchedAt: now,
+  stale: false,
+  subscription: null,
+  windows: [],
+  error: "not signed in",
+  errorKind: "not-signed-in",
+});
+
+/**
+ * What the usage screens read (`/api/usage/limits`): each Claude account's
+ * own limits, by account; and each machine's OpenCode Go plan, read with its
+ * own key. `machines` is a BRIDGE (scripts/wire-compat.ts) for TestFlight
+ * builds that read limits per machine, Claude's there the first account
+ * signed in on it ({@link machineAccount}). It goes in the change that
+ * expires those builds; nothing on this build reads it.
+ */
+export const usageLimits = (
+  db: DbShape,
+  now = Date.now()
+): UsageLimitsResponse => {
+  const view = accountsView(db);
+  const goByMachine = new Map(
+    db.listUsageLimits().map((row) => [row.machineId, row.openCodeGo])
+  );
+  const signins = db.accounts.signins();
+  const claude = claudeAccounts(db);
+  return {
+    claude: db.accounts
+      .list()
+      .filter((account) => account.provider === CLAUDE_PROVIDER)
+      .map((account) => ({
+        accountId: account.id,
+        limits: view.limits(account.id, now),
+      })),
+    machines: db.listAgents().flatMap((agent) => {
+      const go = goByMachine.get(agent.machineId) ?? null;
+      const speaker = speakerAmong(signins, claude, agent.machineId);
+      if (!(go || speaker)) {
+        return [];
+      }
+      return [
+        {
+          machineId: agent.machineId,
+          hostname: agent.hostname,
+          limits: speaker ? view.limits(speaker, now) : notSignedIn(now),
+          openCodeGo: go,
+        },
+      ];
+    }),
+    openCodeGo: db.listAgents().flatMap((agent) => {
+      const plan = goByMachine.get(agent.machineId);
+      return plan
+        ? [{ machineId: agent.machineId, hostname: agent.hostname, plan }]
+        : [];
+    }),
+  };
+};
+
+/** The `kind: 'usage'` frame's limits: {@link usageLimits}, its machines in the frame's shape. */
+export const usageFrameLimits = (
+  db: DbShape,
+  now = Date.now()
+): Pick<UsageLimitsResponse, "claude" | "openCodeGo"> & {
+  limits: UsageLimitsReading[];
+} => {
+  const read = usageLimits(db, now);
+  return {
+    claude: read.claude,
+    openCodeGo: read.openCodeGo,
+    limits: read.machines.map((machine) => ({
+      machineId: machine.machineId,
+      payload: machine.limits,
+      openCodeGo: machine.openCodeGo,
+      fetchedAt: new Date(now),
+    })),
   };
 };
 
 /**
- * Every machine's readings in the shape the usage screens read: Claude's from
- * the account that speaks for it ({@link machineAccount}), OpenCode Go's from
- * its own key. A machine with neither has no reading.
+ * A Claude turn on `accountId` ended at `at` on `machineId` with no report
+ * of its limits: Claude Code emits a `rate_limit_event` whenever a window's
+ * rounded percent or reset moves, so the account's windows still stood
+ * then. Taken only from a machine the account is signed in on, as its
+ * reports are (server.ts, `rate_limit_event`). True when the reading's
+ * time moved.
  */
-export const machineReadings = (db: DbShape, now = Date.now()) => {
-  const goByMachine = new Map(
-    db.listUsageLimits().map((row) => [row.machineId, row])
-  );
-  const view = accountsView(db);
-  return db.listAgents().flatMap((agent) => {
-    const go = goByMachine.get(agent.machineId);
-    const accountId = view.speakerFor(agent.machineId);
-    if (!(go || accountId)) {
-      return [];
-    }
-    const payload: ClaudeLimits = accountId
-      ? view.limits(accountId, now)
-      : {
-          extraUsage: null,
-          fetchedAt: now,
-          stale: false,
-          subscription: null,
-          windows: [],
-          error: "not signed in",
-          errorKind: "not-signed-in",
-        };
-    return [
-      {
-        machineId: agent.machineId,
-        hostname: agent.hostname,
-        payload,
-        openCodeGo: go?.openCodeGo ?? null,
-        fetchedAt: new Date(
-          Math.max(payload.fetchedAt, go?.fetchedAt.getTime() ?? 0)
-        ),
-      },
-    ];
-  });
+export const confirmReading = (
+  db: DbShape,
+  accountId: string,
+  machineId: string,
+  at: number
+): boolean => {
+  const signedIn = db.accounts
+    .signins()
+    .some(
+      (one) =>
+        one.accountId === accountId &&
+        one.machineId === machineId &&
+        one.state === "signed-in"
+    );
+  return signedIn && db.accounts.confirmReading(accountId, at) !== undefined;
 };
-
-/** Two of a machine's 5-minute reads: a provider reading younger than this is current. */
-const PROVIDER_CURRENT_MS = 10 * 60_000;
 
 /**
  * An account's windows as one of its machines just read them from the

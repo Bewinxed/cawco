@@ -1168,11 +1168,10 @@ public final class HubConnection {
             default: break
             }
         }
-        let limitRows = readLimits.map { read in read.machines.map { ($0.machineId, $0.limits, $0.openCodeGo) } }
         let hasPending = readPending != nil
         return { [asks, runAsks] hub in
-            if let limitRows {
-                hub.fleet.adopt(limits: limitRows)
+            if let readLimits {
+                hub.fleet.adopt(claude: readLimits.claude, go: readLimits.openCodeGo)
             }
             if let readSpend {
                 hub.fleet.adopt(spend: readSpend)
@@ -1605,7 +1604,7 @@ public final class HubConnection {
             if let requestId { waiters.removeValue(forKey: requestId)?.resume(throwing: ControlError(message: message)) }
         case let .usage(frame):
             // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
-            fleet.adopt(limits: frame.limits.map { ($0.machineId, $0.payload, $0.openCodeGo) })
+            fleet.adopt(claude: frame.claude, go: frame.openCodeGo)
             fleet.adopt(spend: frame.spend)
             // The hub says this when an account's reading, sign-in or catalog moved.
             readAccounts()

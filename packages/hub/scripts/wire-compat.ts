@@ -111,6 +111,18 @@ export interface Bridge {
 }
 export const BRIDGES: Bridge[] = [
   {
+    property: "machines",
+    beside: "claude",
+    until:
+      "limits per machine in `/api/usage/limits` (core UsageLimitsResponse), Claude's the first account signed in there, kept for TestFlight 20261015 to 20261018; every reader since reads each account's own (`claude`) and each machine's Go plan (`openCodeGo`). It goes in the change that expires those builds",
+  },
+  {
+    property: "limits",
+    beside: "claude",
+    until:
+      "limits per machine in the `usage` frame (core UsageLimitsReading), Claude's the first account signed in there, kept for TestFlight 20261015 to 20261018; every reader since reads each account's own (`claude`) and each machine's Go plan (`openCodeGo`). It goes in the change that expires those builds",
+  },
+  {
     property: "host",
     beside: "origin",
     until:

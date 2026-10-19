@@ -51765,9 +51765,15 @@
         ]
       },
       "UsageLimitsResponse": {
-        "description": "What `/api/usage/limits` returns: every machine's latest readings. A\nmachine's Claude limits are those of the account it runs Claude Code on by\ndefault (its `~/.claude` login), else of the first account signed in there.",
+        "description": "What `/api/usage/limits` returns: each Claude account's own limits, and\neach machine's OpenCode Go plan. Claude's limits are an account's, never a\nmachine's: a machine signed in to several accounts has no one reading.\n`machines` is a BRIDGE (hub scripts/wire-compat.ts) for TestFlight builds\nthat read limits per machine (Claude's there the first account signed in\non it); nothing on this build reads it.",
         "type": "object",
         "properties": {
+          "claude": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountLimits"
+            }
+          },
           "machines": {
             "type": "array",
             "items": {
@@ -51792,10 +51798,34 @@
                 "machineId"
               ]
             }
+          },
+          "openCodeGo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineGoLimits"
+            }
           }
         },
         "required": [
-          "machines"
+          "claude",
+          "machines",
+          "openCodeGo"
+        ]
+      },
+      "AccountLimits": {
+        "description": "One Claude account's own limits, named by its account.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/ClaudeLimits"
+          }
+        },
+        "required": [
+          "accountId",
+          "limits"
         ]
       },
       "ClaudeLimits": {
@@ -51811,18 +51841,18 @@
           },
           "errorKind": {
             "$ref": "#/components/schemas/ClaudeLimitsErrorKind",
-            "description": "Why there are no windows, typed: `not-signed-in`, no account on the\nmachine is signed in to Claude; `no-reading`, nothing on the account has\nreported any yet. Null when there are windows."
+            "description": "Why there are no windows, typed: `not-signed-in`, the account is signed\nin on no machine; `no-reading`, nothing on the account has reported any\nyet. Null when there are windows."
           },
           "extraUsage": {
             "description": "Extra usage as the last `rate_limit_event` said; null: it never said.",
             "$ref": "#/components/schemas/ClaudeExtraUsage"
           },
           "fetchedAt": {
-            "description": "When Claude Code last reported on the account.",
+            "description": "When the windows were last known to be so: Claude Code's last report on\nthe account, or a later turn on it that changed nothing.",
             "type": "number"
           },
           "stale": {
-            "description": "No session runs on the account, so use from anywhere else goes unseen\nand the windows are as of `fetchedAt`.",
+            "description": "Nothing on the account has confirmed the windows for\n{@link CLAUDE_READING_CURRENT_MS}: they are as of `fetchedAt`.",
             "type": "boolean"
           },
           "subscription": {
@@ -51907,6 +51937,26 @@
           "error",
           "fetchedAt",
           "windows"
+        ]
+      },
+      "MachineGoLimits": {
+        "description": "One machine's OpenCode Go plan, read with that machine's Go key.",
+        "type": "object",
+        "properties": {
+          "hostname": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/OpenCodeGoLimits"
+          }
+        },
+        "required": [
+          "hostname",
+          "machineId",
+          "plan"
         ]
       },
       "UsageSpend": {
@@ -55718,17 +55768,30 @@
       "UsageFrame": {
         "type": "object",
         "properties": {
+          "claude": {
+            "description": "Hub-originated: every Claude account's own limits, every machine's Go plan, and the fleet's spend.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountLimits"
+            }
+          },
           "kind": {
-            "description": "Hub-originated: every machine's latest limits and the fleet's spend.",
             "type": "string",
             "enum": [
               "usage"
             ]
           },
           "limits": {
+            "description": "BRIDGE (hub scripts/wire-compat.ts): limits per machine, for TestFlight builds that read them so.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/UsageLimitsReading"
+            }
+          },
+          "openCodeGo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineGoLimits"
             }
           },
           "spend": {
@@ -55736,13 +55799,15 @@
           }
         },
         "required": [
+          "claude",
           "kind",
           "limits",
+          "openCodeGo",
           "spend"
         ]
       },
       "UsageLimitsReading": {
-        "description": "One machine's latest limit reading, as the hub stores it (`usage_limits`)\nand broadcasts it in a `kind: 'usage'` frame. `fetchedAt` is a `Date` inside\nthe hub and the ISO string it serialises to on the wire.",
+        "description": "One machine's line in a `kind: 'usage'` frame's `limits`, a BRIDGE (hub\nscripts/wire-compat.ts) for TestFlight builds that read limits per\nmachine: its OpenCode Go plan, and the limits of the first Claude account\nsigned in there. Nothing on this build reads it: Claude's limits are each\naccount's ({@link AccountLimits}), Go's each machine's ({@link MachineGoLimits}).",
         "type": "object",
         "properties": {
           "fetchedAt": {

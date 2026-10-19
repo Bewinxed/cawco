@@ -93,7 +93,6 @@ import type {
   TranscriptPage,
   TranscriptPageBranch,
   TranscriptTail,
-  UsageLimitsReading,
   UsageLimitsResponse,
   UsageSpend,
   WorkflowRun,
@@ -1169,9 +1168,9 @@ const state = $state({
   /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
   tailnetTicked: false,
   /**
-   * Each machine's latest Claude limit reading, by machineId — folded in from
-   * the `kind: 'usage'` frame so the pill updates live rather than polling
-   * (USAGE-SPEC.md §7.1). Empty until a machine has reported.
+   * Each Claude account's own limits, by account id — folded in from the
+   * `kind: 'usage'` frame so the pill updates live rather than polling
+   * (USAGE-SPEC.md §7.1). Empty while there is no Claude account.
    */
   usageLimits: {} as Record<string, ClaudeLimits>,
   /** Each machine's OpenCode Go windows, from the same frame; absent on a machine with no Go key. */
@@ -2343,19 +2342,15 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
 
 /** Replaces both limits maps with the hub's word — a full snapshot, not a patch. */
 function adoptUsageLimits(
-  readings: {
-    machineId: string;
-    limits: ClaudeLimits;
-    openCodeGo: OpenCodeGoLimits | null;
-  }[]
+  readings: Pick<UsageLimitsResponse, "claude" | "openCodeGo">
 ): void {
   const claude: Record<string, ClaudeLimits> = {};
   const openCodeGo: Record<string, OpenCodeGoLimits> = {};
-  for (const reading of readings) {
-    claude[reading.machineId] = reading.limits;
-    if (reading.openCodeGo) {
-      openCodeGo[reading.machineId] = reading.openCodeGo;
-    }
+  for (const one of readings.claude) {
+    claude[one.accountId] = one.limits;
+  }
+  for (const machine of readings.openCodeGo) {
+    openCodeGo[machine.machineId] = machine.plan;
   }
   if (!equal(state.usageLimits, claude)) {
     state.usageLimits = claude;
@@ -2590,14 +2585,6 @@ export async function placementFor(query: {
     : undefined;
 }
 
-/** The `kind: 'usage'` frame's readings, in the shape `/api/usage/limits` serves. */
-const usageLimitReadings = (readings: UsageLimitsReading[]) =>
-  readings.map((reading) => ({
-    machineId: reading.machineId,
-    limits: reading.payload,
-    openCodeGo: reading.openCodeGo,
-  }));
-
 /** Who hears the continuation table each time it moves (see {@link followContinuations}). */
 let continuationFollower: ((table: ContinuationJob[]) => void) | null = null;
 
@@ -2762,7 +2749,7 @@ async function refresh(): Promise<boolean> {
     adoptInstances(rows);
   }
   if (usage) {
-    adoptUsageLimits(usage.machines);
+    adoptUsageLimits(usage);
   }
   if (pending) {
     adoptPending(pending, readFrom);
@@ -3169,7 +3156,7 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "usage") {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
-    adoptUsageLimits(usageLimitReadings(frame.limits));
+    adoptUsageLimits(frame);
     adoptSpend(frame.spend);
     // The hub says this when an account's reading, sign-in or catalog moved.
     readAccounts();
@@ -8557,7 +8544,7 @@ export const cawco = {
   get onlineMachines() {
     return state.machines.filter((machine) => machine.status === "online");
   },
-  /** Every machine's Claude reading, by machineId (every usage surface). */
+  /** Every Claude account's own limits, by account id. */
   get claudeLimits(): Readonly<Record<string, ClaudeLimits>> {
     return state.usageLimits;
   },

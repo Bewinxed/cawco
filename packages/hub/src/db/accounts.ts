@@ -70,6 +70,16 @@ export interface AccountsDb {
     except?: string
   ) => Account | undefined;
   readonly catalogs: () => AccountCatalog[];
+  /**
+   * A turn on the account ended at `at` with no report: Claude Code reports
+   * whenever a window moves, so its windows still stand then. Moves the
+   * reading's time on (never back); nothing for an account with no windows.
+   * The time it held before, when it moved; undefined when nothing moved.
+   */
+  readonly confirmReading: (
+    accountId: string,
+    at: number
+  ) => number | undefined;
   readonly create: (draft: {
     hue?: AccountHue;
     identity?: AccountIdentity;
@@ -106,8 +116,11 @@ export interface AccountsDb {
   readonly putMovedFrom: (instanceIds: string[], machineId: string) => void;
   /**
    * Lays one report over the account's reading: windows replace the ones of
-   * the same kind and scope, the rest are kept. Appends every window that
-   * moved to the history series.
+   * the same kind and scope, the rest are kept, except a kept one whose reset
+   * has passed by `at`, which is over and is dropped. Appends every window
+   * that moved to the history series. The reading's time is `at` only when
+   * the report carries windows: a plan alone (a probe's, a session's start)
+   * says nothing of them.
    */
   readonly putReading: (
     accountId: string,
@@ -195,6 +208,45 @@ const sameIdentityAs = (
 /** A window's identity in a reading: its kind and the model it is scoped to. */
 const windowKey = (w: LimitWindow): string =>
   `${w.kind}\u0000${w.scopeLabel ?? ""}`;
+
+/**
+ * An account's reading row after one report at `at`: what the report names
+ * replaces what was held, the rest kept. Its time is `at` only when the
+ * report carries windows: a plan alone says nothing of them.
+ */
+const readingValues = (
+  previous: typeof accountReadings.$inferSelect | undefined,
+  report: {
+    overage?: AccountOverage | null;
+    subscription?: string | null;
+    windows?: LimitWindow[];
+  },
+  at: number
+) => ({
+  subscription:
+    report.subscription === undefined
+      ? (previous?.subscription ?? null)
+      : report.subscription,
+  overage:
+    report.overage === undefined ? (previous?.overage ?? null) : report.overage,
+  lastSeenAt:
+    report.windows === undefined && previous
+      ? previous.lastSeenAt
+      : new Date(at),
+});
+
+/** The held windows a report at `at` did not name whose reset has passed by then. */
+const overWindows = (
+  held: ReadonlyMap<string, LimitWindow>,
+  reported: readonly LimitWindow[],
+  at: number
+): LimitWindow[] => {
+  const named = new Set(reported.map(windowKey));
+  return [...held].flatMap(([key, w]) => {
+    const reset = w.resetsAt ? Date.parse(w.resetsAt) : Number.NaN;
+    return !named.has(key) && Number.isFinite(reset) && reset <= at ? [w] : [];
+  });
+};
 
 /** A window as its row keeps it; "" is no scope. */
 const toWindow = (
@@ -546,6 +598,27 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           lastSeenAt: row.lastSeenAt.getTime(),
         }));
     },
+    confirmReading: (accountId, at) => {
+      const held = db
+        .select({ accountId: accountWindows.accountId })
+        .from(accountWindows)
+        .where(eq(accountWindows.accountId, accountId))
+        .limit(1)
+        .get();
+      const reading = db
+        .select({ lastSeenAt: accountReadings.lastSeenAt })
+        .from(accountReadings)
+        .where(eq(accountReadings.accountId, accountId))
+        .get();
+      if (!(held && reading) || reading.lastSeenAt.getTime() >= at) {
+        return;
+      }
+      db.update(accountReadings)
+        .set({ lastSeenAt: new Date(at) })
+        .where(eq(accountReadings.accountId, accountId))
+        .run();
+      return reading.lastSeenAt.getTime();
+    },
     putReading: (accountId, report, at = Date.now()) => {
       if (!get(accountId)) {
         return;
@@ -573,17 +646,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
             (report.windows ?? []).map((w) => [windowKey(w), w])
           ).values(),
         ];
-        const values = {
-          subscription:
-            report.subscription === undefined
-              ? (previous?.subscription ?? null)
-              : report.subscription,
-          overage:
-            report.overage === undefined
-              ? (previous?.overage ?? null)
-              : report.overage,
-          lastSeenAt: new Date(at),
-        };
+        const values = readingValues(previous, report, at);
         tx.insert(accountReadings)
           .values({ accountId, ...values })
           .onConflictDoUpdate({
@@ -591,6 +654,21 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
             set: values,
           })
           .run();
+        // A window this report did not name whose reset has passed is over:
+        // what it said is of a window that no longer runs.
+        if (report.windows !== undefined) {
+          for (const w of overWindows(before, reported, at)) {
+            tx.delete(accountWindows)
+              .where(
+                and(
+                  eq(accountWindows.accountId, accountId),
+                  eq(accountWindows.kind, w.kind),
+                  eq(accountWindows.scopeLabel, w.scopeLabel ?? "")
+                )
+              )
+              .run();
+          }
+        }
         // The windows reported replace their own rows, read after the ones
         // this report did not name; every other window stays as it was.
         for (const w of reported) {

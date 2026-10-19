@@ -4,6 +4,7 @@ import {
   type AccountReading,
   type AccountSignin,
   accountName,
+  accountNames,
   clockWords,
   type LimitWindow,
   modelScope,
@@ -251,10 +252,17 @@ class Usage {
   readonly #input: PlacementInput;
   readonly #scope: string | null;
 
+  readonly #names: Map<string, string>;
+
   constructor(input: PlacementInput) {
     this.#input = input;
     this.#scope = modelScope(input.model);
+    this.#names = accountNames(input.accounts);
   }
+
+  /** What the account is called beside the others ({@link accountNames}). */
+  name = (account: Account): string =>
+    this.#names.get(account.id) ?? accountName(account);
 
   #window(id: string, kind: string): LimitWindow | undefined {
     const windows =
@@ -427,7 +435,7 @@ const pinned = (
 ): Choice => {
   const account = candidates.find((one) => one.id === pinnedId);
   if (account) {
-    return { account, why: `${accountName(account)} is pinned.` };
+    return { account, why: `${usage.name(account)} is pinned.` };
   }
   const backup = byOrder(candidates.filter((one) => !one.neverBackup)).find(
     usage.headroom
@@ -435,7 +443,7 @@ const pinned = (
   return backup
     ? {
         account: backup,
-        why: `The pinned account ${pinnedId ? name(pinnedId) : ""} cannot take it here, so fill-first chose ${accountName(backup)}, the first backup with headroom (${usage.said(backup.id)}).`,
+        why: `The pinned account ${pinnedId ? name(pinnedId) : ""} cannot take it here, so fill-first chose ${usage.name(backup)}, the first backup with headroom (${usage.said(backup.id)}).`,
       }
     : undefined;
 };
@@ -446,7 +454,7 @@ const fillFirst = (candidates: Account[], usage: Usage): Choice => {
   return account
     ? {
         account,
-        why: `${accountName(account)} is the first account in order with headroom (${usage.said(account.id)}).`,
+        why: `${usage.name(account)} is the first account in order with headroom (${usage.said(account.id)}).`,
       }
     : undefined;
 };
@@ -459,7 +467,7 @@ const spread = (candidates: Account[], usage: Usage): Choice => {
   return account
     ? {
         account,
-        why: `${accountName(account)} has the lowest use (${usage.said(account.id)}).`,
+        why: `${usage.name(account)} has the lowest use (${usage.said(account.id)}).`,
       }
     : undefined;
 };
@@ -492,7 +500,7 @@ const soonestReset = (
   if (!account) {
     return undefined;
   }
-  const named = accountName(account);
+  const named = usage.name(account);
   if (stays) {
     return {
       account,
@@ -513,7 +521,7 @@ const soonestReset = (
     .slice(0, ranked.indexOf(account))
     .map(
       (one) =>
-        `${accountName(one)} resets sooner but would run out at ${clockWords(usage.runsOut(one.id) ?? 0)} first`
+        `${usage.name(one)} resets sooner but would run out at ${clockWords(usage.runsOut(one.id) ?? 0)} first`
     );
   return {
     account,
@@ -532,7 +540,7 @@ const explicitPick = (
   if (!pick) {
     return { ok: false, refusal: `There is no account ${asked}.` };
   }
-  const pickName = accountName(pick);
+  const pickName = name(pick.id);
   const machine = input.machineName ?? input.machineId;
   if (!signedIn.some((account) => account.id === pick.id)) {
     return {
@@ -628,14 +636,14 @@ const choose = (
     .filter((account) => !candidates.includes(account))
     .map((account) => {
       if (usage.benched(account.id)) {
-        return `${accountName(account)} is benched until its window resets`;
+        return `${usage.name(account)} is benched until its window resets`;
       }
       if (usage.pastReserve(account)) {
-        return `${accountName(account)} is past its ${account.reservePct}% reserve`;
+        return `${usage.name(account)} is past its ${account.reservePct}% reserve`;
       }
       return usage.read(account)
-        ? `${accountName(account)} is at its limit`
-        : `${accountName(account)}'s limits are unread`;
+        ? `${usage.name(account)} is at its limit`
+        : `${usage.name(account)}'s limits are unread`;
     });
   const out = outNote.length > 0 ? ` (${outNote.join("; ")})` : "";
 
@@ -645,7 +653,7 @@ const choose = (
       ok: true,
       accountId: preferred.id,
       strategy: "type",
-      why: `The delegate type prefers ${accountName(preferred)}.${out}`,
+      why: `The delegate type prefers ${usage.name(preferred)}.${out}`,
     };
   }
 
@@ -712,7 +720,7 @@ const noRoomRefusal = (full: Account[], usage: Usage, now: number): string => {
     }
   }
   const wayOn = first
-    ? `${accountName(first.account)} is back ${full.length > 1 ? "first, " : ""}in ${spanWords(first.at - now)} (${clockWords(first.at)}): start it again then, or sign in another account.`
+    ? `${usage.name(first.account)} is back ${full.length > 1 ? "first, " : ""}in ${spanWords(first.at - now)} (${clockWords(first.at)}): start it again then, or sign in another account.`
     : "No reading says when one is back: sign in another account, or start it again once one resets.";
   const groupOf = (account: Account): (typeof NO_ROOM_GROUPS)[number] => {
     if (usage.benched(account.id)) {
@@ -728,8 +736,8 @@ const noRoomRefusal = (full: Account[], usage: Usage, now: number): string => {
       .filter(({ account }) => groupOf(account) === group)
       .map(({ account, at }) =>
         at === undefined
-          ? accountName(account)
-          : `${accountName(account)} until ${clockWords(at)}`
+          ? usage.name(account)
+          : `${usage.name(account)} until ${clockWords(at)}`
       );
     return named.length > 0 ? [`${group}: ${named.join(", ")}.`] : [];
   });
@@ -794,9 +802,10 @@ export const nextFree = (
 
 export const place = (input: PlacementInput): Placement => {
   const byId = new Map(input.accounts.map((account) => [account.id, account]));
+  const names = accountNames(input.accounts);
   const name = (id: string): string => {
     const account = byId.get(id);
-    return account ? accountName(account) : id;
+    return account ? (names.get(account.id) ?? accountName(account)) : id;
   };
   const machine = input.machineName ?? input.machineId;
 
@@ -837,7 +846,7 @@ export const place = (input: PlacementInput): Placement => {
     ];
     return {
       ok: false,
-      refusal: `None of the accounts signed in on ${machine} (${signedIn.map(accountName).join(", ")}) is allowed here: the project or task limits this session to ${limits.map(name).join(", ")}.`,
+      refusal: `None of the accounts signed in on ${machine} (${signedIn.map((account) => name(account.id)).join(", ")}) is allowed here: the project or task limits this session to ${limits.map(name).join(", ")}.`,
     };
   }
   // One account with room: no choice to make. Without room, the refusal.
@@ -847,7 +856,7 @@ export const place = (input: PlacementInput): Placement => {
       ok: true,
       accountId: only.id,
       strategy: "only",
-      why: `${accountName(only)} is the only account this session may run on here.`,
+      why: `${name(only.id)} is the only account this session may run on here.`,
     };
   }
   return choose(input, allowed, name);

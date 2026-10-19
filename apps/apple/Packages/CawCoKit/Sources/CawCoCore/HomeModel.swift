@@ -744,7 +744,7 @@ public final class HomeModel {
     /// whole, and the sign-in that fixes it (UsageMeter.svelte `gap`).
     public func usageGap(_ view: UsageRings) -> Usage.Gap? {
         view.claude == nil && view.openCode == nil && fleet.limitsRead && view.read
-            ? Usage.claudeGap(fleet.claudeLimits, machines: fleet.machines) : nil
+            ? Usage.claudeGap(fleet.claudeLimits) : nil
     }
 
     /// Why there is nothing to draw: a normal state, never a fake 0% (`empty`).

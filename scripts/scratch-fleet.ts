@@ -157,6 +157,16 @@ export interface Reply {
   deny?: { message: string; status: number };
   everyMs: number;
   /**
+   * The account's usage as the answer's headers say it, as Anthropic's do on
+   * a subscription's request (`anthropic-ratelimit-unified-*`): each window's
+   * share used (0–1) and its reset (epoch ms). Claude Code reads them into a
+   * `rate_limit_event` whenever one moves. None: no usage headers.
+   */
+  limits?: {
+    fiveHour: { resetsAt: number; utilization: number };
+    sevenDay: { resetsAt: number; utilization: number };
+  };
+  /**
    * The request is refused at its account's usage limit, as Anthropic
    * refuses a subscription past it (429, `rate_limit_error`, the unified
    * limit headers rejected), until `resetsAt` (epoch ms).
@@ -414,8 +424,35 @@ const textOf = (content: unknown): string => {
 const encoder = new TextEncoder();
 /** The agent's log lines about accounts and sign-ins, for a failed wait to show. */
 const ACCOUNT_LINE = /account|sign|auth|login|credential/i;
-/** An SSE stream of `events`, one every `everyMs`, cancelled when the client goes. */
-const sseStream = (events: string[], everyMs: number) => {
+/** Anthropic's usage headers for a subscription's answer ({@link Reply.limits}). */
+const limitHeaders = (limits: Reply["limits"]): Record<string, string> => {
+  if (!limits) {
+    return {};
+  }
+  const seconds = (ms: number) => String(Math.ceil(ms / 1000));
+  return {
+    "anthropic-ratelimit-unified-status": "allowed",
+    "anthropic-ratelimit-unified-representative-claim": "five_hour",
+    "anthropic-ratelimit-unified-reset": seconds(limits.fiveHour.resetsAt),
+    "anthropic-ratelimit-unified-5h-status": "allowed",
+    "anthropic-ratelimit-unified-5h-utilization": String(
+      limits.fiveHour.utilization
+    ),
+    "anthropic-ratelimit-unified-5h-reset": seconds(limits.fiveHour.resetsAt),
+    "anthropic-ratelimit-unified-7d-status": "allowed",
+    "anthropic-ratelimit-unified-7d-utilization": String(
+      limits.sevenDay.utilization
+    ),
+    "anthropic-ratelimit-unified-7d-reset": seconds(limits.sevenDay.resetsAt),
+  };
+};
+
+/** An SSE stream of `events`, one every `everyMs`, cancelled when the client goes, with `headers` beside its type. */
+const sseStream = (
+  events: string[],
+  everyMs: number,
+  headers: Record<string, string> = {}
+) => {
   let timer: ReturnType<typeof setInterval> | undefined;
   return new Response(
     new ReadableStream({
@@ -441,7 +478,7 @@ const sseStream = (events: string[], everyMs: number) => {
         clearInterval(timer);
       },
     }),
-    { headers: { "content-type": "text/event-stream" } }
+    { headers: { "content-type": "text/event-stream", ...headers } }
   );
 };
 
@@ -1323,16 +1360,19 @@ async function standUp(
         return refused;
       }
       if (body.stream === false && !chat) {
-        return Response.json({
-          id: `msg_${crypto.randomUUID()}`,
-          type: "message",
-          role: "assistant",
-          model: "claude-probe",
-          content: [{ type: "text", text: reply.words.join("") }],
-          stop_reason: "end_turn",
-          stop_sequence: null,
-          usage: { input_tokens: 10, output_tokens: 2 },
-        });
+        return Response.json(
+          {
+            id: `msg_${crypto.randomUUID()}`,
+            type: "message",
+            role: "assistant",
+            model: "claude-probe",
+            content: [{ type: "text", text: reply.words.join("") }],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: { input_tokens: 10, output_tokens: 2 },
+          },
+          { headers: limitHeaders(reply.limits) }
+        );
       }
       return sseStream(
         chat
@@ -1343,7 +1383,8 @@ async function standUp(
               reply.cache,
               reply.usage
             ),
-        reply.everyMs
+        reply.everyMs,
+        chat ? {} : limitHeaders(reply.limits)
       );
     },
   });

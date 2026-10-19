@@ -357,7 +357,7 @@
    */
   const gap = $derived(
     !shown && cawco.usageLimitsRead && usage.read
-      ? claudeGap(cawco.claudeLimits, cawco.machines)
+      ? claudeGap(cawco.claudeLimits)
       : null
   );
 

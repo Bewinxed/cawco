@@ -973,6 +973,40 @@ export const accountName = (
   account: Pick<Account, "email" | "id" | "label">
 ): string => account.label ?? account.email ?? accountsWords.unnamed;
 
+/**
+ * What each of `accounts` is called where it stands beside the others: its
+ * {@link accountName}, and for an account with no nickname whose email
+ * another account of its provider also signs in as (a personal plan and a
+ * Team seat on one email), its organization after it, so each reading says
+ * whose it is: "bewinxed@petralab.ai (Petralab)".
+ */
+export const accountNames = (
+  accounts: readonly Pick<
+    Account,
+    "email" | "id" | "identity" | "label" | "provider"
+  >[]
+): Map<string, string> => {
+  const sharing = (one: (typeof accounts)[number]): boolean =>
+    one.email !== null &&
+    accounts.some(
+      (other) =>
+        other.id !== one.id &&
+        other.provider === one.provider &&
+        other.email?.toLowerCase() === one.email?.toLowerCase()
+    );
+  return new Map(
+    accounts.map((one) => {
+      const org = one.identity?.organization;
+      return [
+        one.id,
+        !one.label && org && sharing(one)
+          ? `${one.email} (${org})`
+          : accountName(one),
+      ];
+    })
+  );
+};
+
 /** An account as a transcript line names it, as it was when the line was written. */
 export interface NamedAccount {
   hue: AccountHue;

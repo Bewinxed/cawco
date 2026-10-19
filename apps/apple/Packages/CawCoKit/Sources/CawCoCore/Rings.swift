@@ -16,7 +16,7 @@ public enum Rings {
     static let hourMs = 60 * minuteMs
     /// How far the carry answer looks ahead: one 5-hour window (`HORIZON_MS`).
     public static let horizonMs = 5 * hourMs
-    /// An account with no session on it past this is out of date (`STALE_MS`).
+    /// A reading nothing has confirmed for this long is out of date (core `CLAUDE_READING_CURRENT_MS`).
     static let staleMs = hourMs
 
     /// core `ACCOUNT_HUES`, in their order.
@@ -72,8 +72,11 @@ public enum Rings {
         public var org: String?
         /// Percent left where its reserve sits, once the reserve is reached.
         public var reserveLeft: Double?
+        /// When its reading was last known to stand; nil: never.
         public var seenAt: Double?
         public var sessions: [InstanceRow]
+        /// Its reading is out of date, whatever its state: an account at its limit says so too.
+        public var stale: Bool
         public var state: State
         public var w5: Window?
         public var week: Window?
@@ -216,8 +219,25 @@ public enum Rings {
         label ?? email ?? "an account not signed in yet"
     }
 
+    /// core `accountNames`: each account's name beside the others, its
+    /// organization after it when another account of its provider signs in as
+    /// the same email (a personal plan and a Team seat on one email).
+    public static func accountNames(_ accounts: [Components.Schemas.Account]) -> [String: String] {
+        Dictionary(accounts.map { one in
+            let sharing = one.email.map { email in
+                accounts.contains { $0.id != one.id && $0.provider == one.provider && $0.email?.lowercased() == email.lowercased() }
+            } ?? false
+            let named = if one.label == nil, let email = one.email, let org = one.identity?.organization, !org.isEmpty, sharing {
+                "\(email) (\(org))"
+            } else {
+                accountName(label: one.label, email: one.email)
+            }
+            return (one.id, named)
+        }, uniquingKeysWith: { first, _ in first })
+    }
+
     /// An account as its rings draw it, before the carry answer is known (`accountRing`).
-    static func accountRing(_ account: Components.Schemas.Account, _ forecast: Components.Schemas.AccountForecast?,
+    static func accountRing(_ account: Components.Schemas.Account, name: String, _ forecast: Components.Schemas.AccountForecast?,
                             bench: [Components.Schemas.AccountBench], rows: [InstanceRow], now: Double) -> Account {
         let windows = forecast?.windows ?? []
         let five = windows.first { $0.kind == "session" }
@@ -235,17 +255,17 @@ public enum Rings {
         let (bind, bindName) = bindOf(bound, limitOn)
         let reserved = account.reservePct.map { pct in weekAll.map { $0.utilization >= pct } ?? false } ?? false
         let seenAt = forecast?.lastSeenAt
-        let stale = live.isEmpty && seenAt.map { now - $0 >= staleMs } == true
+        let stale = seenAt.map { now - $0 >= staleMs } == true
         let state = stateOf(limitOn, stale: stale, reserved: reserved)
         let organization = account.identity?.organization
         return Account(
             backAt: backAt, bind: bind, bindName: bindName, bindOut: bound?.runsOutAt,
             carryFrom: nil, carryUntil: nil, email: account.email, hue: account.hue.rawValue, id: account.id,
-            limitOn: limitOn, month: nil, name: accountName(label: account.label, email: account.email),
+            limitOn: limitOn, month: nil, name: name,
             neverBackup: account.neverBackup, nick: account.label,
             org: account.provider == "anthropic" && organization?.isEmpty == false ? organization : nil,
             reserveLeft: state == .reserve ? account.reservePct.map { 100 - $0 } : nil,
-            seenAt: seenAt, sessions: live, state: state, w5: w5, week: week
+            seenAt: seenAt, sessions: live, stale: stale, state: state, w5: w5, week: week
         )
     }
 
@@ -276,8 +296,9 @@ public enum Rings {
         let own = accounts.filter { $0.provider == forecast.provider }.enumerated()
             .sorted { $0.element.order != $1.element.order ? $0.element.order < $1.element.order : $0.offset < $1.offset }
             .map(\.element)
+        let names = accountNames(own)
         var rings = own.map { account in
-            accountRing(account, forecast.accounts.first { $0.accountId == account.id }, bench: bench, rows: instances, now: now)
+            accountRing(account, name: names[account.id] ?? account.id, forecast.accounts.first { $0.accountId == account.id }, bench: bench, rows: instances, now: now)
         }
         // In the account order, not the carrying order: no account changes colour when the relay moves.
         for (i, hue) in shownHues(rings.map(\.hue)).enumerated() {
@@ -314,7 +335,7 @@ public enum Rings {
             carry: carry,
             delegate: delegate, delegateWhy: delegateReason(routing, to: delegate, byId: byId),
             next: next, nextAt: next != nil && spans.count > 1 ? spans[1].from : nil,
-            stale: chain.compactMap { byId[$0] }.first { $0.state == .stale },
+            stale: chain.compactMap { byId[$0] }.first { $0.stale },
             stopAt: stopAt
         )
     }
@@ -341,7 +362,7 @@ public enum Rings {
             bindOut: outs.min(), carryFrom: nil, carryUntil: nil, email: nil, hue: hue, id: "opencode",
             limitOn: limitOn, month: month, name: "Go plan", neverBackup: false,
             // The plan has no email; it goes by its name.
-            nick: "Go plan", org: nil, reserveLeft: nil, seenAt: fetchedAt, sessions: live, state: state,
+            nick: "Go plan", org: nil, reserveLeft: nil, seenAt: fetchedAt, sessions: live, stale: stale, state: state,
             w5: w5, week: week
         )
     }
@@ -484,7 +505,7 @@ public enum Rings {
         return [
             line("5-hour", r.limitOn == .fiveHour, r.w5?.left, !stopsOnWeek),
             line("Week", r.limitOn == .week, r.week?.left, stopsOnWeek),
-            r.state == .stale ? estimateOf(r, now: now) : nil,
+            r.stale ? estimateOf(r, now: now) : nil,
         ].compactMap(\.self).joined(separator: "\n")
     }
 
@@ -634,7 +655,7 @@ public enum Rings {
         func after(_ rest: [Part]) -> [Part] {
             running.isEmpty ? rest : running + [.text(" ")] + rest
         }
-        if r.state == .limit { return [.text("At its limit. Back in "), .figure(until(r.backAt, now)), .text(".")] }
+        if r.state == .limit { return [.text("At its limit. Back in "), .figure(until(r.backAt, now)), .text(".")] + lastReported(r, now: now) }
         if r.state == .stale, let seenAt = r.seenAt {
             return [.text("Hasn’t reported for "), .figure(fmt(now - seenAt)), .text(", so this may be out of date.")]
         }
@@ -724,9 +745,15 @@ public enum Rings {
         return parts + back
     }
 
+    /// An out-of-date reading's age after an at-limit sentence (`lastReported`).
+    static func lastReported(_ r: Account, now: Double) -> [Part] {
+        guard r.stale, let seenAt = r.seenAt else { return [] }
+        return [.text(" Last reported "), .figure(fmt(now - seenAt)), .text(" ago.")]
+    }
+
     /// `openCodeSentence`.
     public static func openCodeSentence(_ o: Account, now: Double) -> [Part] {
-        if o.state == .limit { return [.text("At its limit. Back in "), .figure(until(o.backAt, now)), .text(".")] }
+        if o.state == .limit { return [.text("At its limit. Back in "), .figure(until(o.backAt, now)), .text(".")] + lastReported(o, now: now) }
         if o.state == .stale, let seenAt = o.seenAt {
             return [.text("Hasn’t reported for "), .figure(fmt(now - seenAt)), .text(", so this may be out of date.")]
         }
@@ -1007,29 +1034,38 @@ public struct UsageRings: Sendable {
 extension Usage {
     /// Why there is no Claude limit to show, and the one action that fixes it (`LimitsGap`).
     public struct Gap: Sendable {
-        public let machineId: String?
         public let reason: String
         public let short: String
         public let signIn: Bool
     }
 
-    /// `claudeGap`.
-    public static func claudeGap(_ readings: [String: Components.Schemas.ClaudeLimits], machines: [MachineRow]) -> Gap {
-        guard let first = readings.sorted(by: { $0.key < $1.key }).first else {
-            return Gap(machineId: nil, reason: "No machine has reported a Claude reading yet.", short: "No limits yet", signIn: false)
+    /// `claudeGap`: from each Claude account's own limits, by account id.
+    public static func claudeGap(_ readings: [String: Components.Schemas.ClaudeLimits]) -> Gap {
+        if readings.values.allSatisfy({ $0.errorKind == .notSignedIn }) {
+            return Gap(reason: "No Claude account is signed in on any machine.", short: "Sign in to see limits", signIn: true)
         }
-        let machine = machines.first { $0.machineId == first.key }
-        let host = machine?.name ?? "a removed machine"
-        if let machine, machine.status != "online" {
-            return Gap(machineId: machine.machineId, reason: "\(host) is offline. Its Claude limits are read again once it's back.",
-                       short: "Machine offline", signIn: false)
-        }
-        if first.value.error == "not signed in" {
-            return Gap(machineId: machine?.machineId, reason: "No Claude account is signed in on \(host).", short: "Sign in to see limits", signIn: true)
-        }
-        return Gap(machineId: machine?.machineId,
-                   reason: "Claude Code hasn't reported the limits of \(host)'s account yet; they appear once a session runs there.",
+        return Gap(reason: "Claude Code hasn't reported any account's limits yet; they appear once a session runs on one.",
                    short: "No limits yet", signIn: false)
+    }
+
+    /// Extra usage as one account's Claude Code last said it; "" when it never said.
+    static func extraUsageWords(_ extra: Components.Schemas.ClaudeExtraUsage?) -> String {
+        guard let extra else { return "" }
+        guard extra.on else { return extra.offReason.map { "off: \($0)" } ?? "off" }
+        return extra.inUse ? "on, in use" : "on"
+    }
+
+    /// `extraUsageLine`: extra usage across the Claude accounts, each its own;
+    /// one phrase when every account that said says the same, else each by name.
+    public static func extraUsageLine(_ readings: [String: Components.Schemas.ClaudeLimits], names: [(id: String, name: String)]) -> String {
+        let said = names.compactMap { one -> (name: String, words: String)? in
+            let words = extraUsageWords(readings[one.id]?.extraUsage)
+            return words.isEmpty ? nil : (one.name, words)
+        }
+        if said.allSatisfy({ $0.words == said.first?.words }) {
+            return said.first?.words ?? ""
+        }
+        return said.map { "\($0.name): \($0.words)" }.joined(separator: "; ")
     }
 
     /// What the list says of a provider with nothing to draw (`noteOf`).

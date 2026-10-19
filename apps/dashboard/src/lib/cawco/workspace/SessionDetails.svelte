@@ -121,8 +121,9 @@
 
   /**
    * This session's provider limit (owner pick h): the window that stops its
-   * provider first — Claude's for a Claude session, OpenCode Go's for an
-   * opencode session on a Go model. Read against a minute clock.
+   * provider first — its own account's for a Claude session (none on a
+   * session that runs on no CawCo account), OpenCode Go's for an opencode
+   * session on a Go model. Read against a minute clock.
    */
   let limitNow = $state(Date.now());
   $effect(() => {
@@ -133,12 +134,15 @@
   });
   const providerLimit = $derived.by(() => {
     if (harness === "claude") {
-      const claude = speakingReading(cawco.claudeLimits)?.reading;
-      return firstToStop(limitRows("Claude", claude, limitNow));
+      const accountId = row?.accountId;
+      const claude = accountId ? cawco.claudeLimits[accountId] : undefined;
+      const limit = firstToStop(limitRows("Claude", claude, limitNow));
+      return limit && claude ? { ...limit, seenAt: claude.fetchedAt } : null;
     }
     if (harness === "opencode" && model?.startsWith("opencode-go/")) {
       const go = speakingReading(cawco.openCodeGoLimits)?.reading;
-      return firstToStop(limitRows("opencode", go, limitNow));
+      const limit = firstToStop(limitRows("opencode", go, limitNow));
+      return limit && go ? { ...limit, seenAt: go.fetchedAt } : null;
     }
     return null;
   });
@@ -752,7 +756,12 @@
       {/if}
     </div>
     {#if providerLimit}
-      <ProviderLimit label={providerLimit.label} meter={providerLimit.meter} />
+      <ProviderLimit
+        label={providerLimit.label}
+        meter={providerLimit.meter}
+        now={limitNow}
+        seenAt={providerLimit.seenAt}
+      />
     {/if}
     {#if session?.mcp}
       <a data-slot="tools" class="tools" href="/config/mcp"
