@@ -47,7 +47,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
+import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const B = "acct-scratch-fleet-b";
 /** Each account's token, as its requests carry it. */
@@ -125,6 +125,8 @@ const HANDOFF_ASK = `${ASK}hand-old`;
 const HANDED = "PROBE-HANDED-after-move";
 /** The person's message to the continued leg's delegate while it is held. */
 const HELD_NOTE = "PROBE-NOTE-held-then-continued";
+/** The person's message to the old session's id once it was continued. */
+const TYPED_AFTER = "PROBE-NOTE-typed-after-move";
 /** Only a continuation from the person's asks opens this way (continuation.ts `asksOpening`). */
 const RESTARTING = "Restarting session ";
 /** A session id as an ask carries it. */
@@ -733,6 +735,85 @@ const continuedLeg = async (
       !!handed?.includes(target.slice(0, 8)) &&
       !turns.some((one) => one.all.includes(HANDED)),
     `answer ${JSON.stringify(handed ?? null)}; ${reached ? "the new session read it" : "the new session never read it"}`
+  );
+  await personAfter(kit, fleet, old, target);
+};
+
+/**
+ * A person writing to the continued session: the hub refuses the send to
+ * its id in the words its page says, "Continued in <the new session's
+ * title>", and the new session never reads it; its page has no composer,
+ * only that line, its title a link to the new session.
+ */
+const personAfter = async (
+  kit: Kit,
+  fleet: KitFleet,
+  old: string,
+  target: string
+): Promise<void> => {
+  const [named] = fleet.query<{
+    derived_title: string | null;
+    title: string | null;
+  }>("SELECT title, derived_title FROM instances WHERE id = ?", target);
+  const title = named?.title || named?.derived_title || target.slice(0, 8);
+  const words = `Continued in ${title}`;
+  await fleet.send(old, `${TYPED_AFTER}: typed on its page`);
+  const typed = await until(
+    "continued: the person's send to the old id settled",
+    () =>
+      fleet.query<{
+        instance_id: string;
+        reason: string | null;
+        state: string;
+      }>(
+        "SELECT instance_id, state, reason FROM sent_messages WHERE body LIKE ?",
+        `%${TYPED_AFTER}%`
+      ),
+    (rows) => rows.some((one) => one.state !== "pending"),
+    20_000
+  ).catch(() =>
+    fleet.query<{ instance_id: string; reason: string | null; state: string }>(
+      "SELECT instance_id, state, reason FROM sent_messages WHERE body LIKE ?",
+      `%${TYPED_AFTER}%`
+    )
+  );
+  await Bun.sleep(5000);
+  const read = newSeen(fleet).some((one) => one.all.includes(TYPED_AFTER));
+  kit.check(
+    `continued: a person's send to the old session is refused with "${words}", and the new session never reads it`,
+    typed.length === 1 &&
+      typed[0]?.instance_id === old &&
+      typed[0]?.state === "failed" &&
+      typed[0]?.reason === words &&
+      !read,
+    `${JSON.stringify(typed)}; the new session read it: ${read}`
+  );
+  const base = await fleet.dashboard();
+  const page = await kit.page("desk");
+  await open(page, `${base}/session/${old}`, '[data-slot="pane"]');
+  const foot = await until(
+    "continued: the old page's line",
+    () =>
+      page.evaluate((next) => {
+        const link = document.querySelector<HTMLAnchorElement>(
+          `a[href="/session/${next}"]`
+        );
+        return {
+          composers: document.querySelectorAll('[data-slot="composer"]').length,
+          line: link?.parentElement?.textContent?.replace(/\s+/g, " ").trim(),
+          link: link?.textContent?.trim(),
+        };
+      }, target),
+    (now) => !!now.link,
+    30_000
+  ).catch(() => undefined);
+  kit.check(
+    `continued: the old session's page has no composer, only "${words}", its title a link to the new session`,
+    !!foot &&
+      foot.composers === 0 &&
+      foot.line?.replace(/\s/g, "") === words.replace(/\s/g, "") &&
+      foot.link === title,
+    JSON.stringify(foot ?? "no link to the new session on the old page")
   );
 };
 

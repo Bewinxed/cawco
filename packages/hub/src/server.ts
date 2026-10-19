@@ -200,6 +200,7 @@ import {
   CUSTODY_HELD,
   clockWords,
   contextFitRefusal,
+  continuedInWords,
   DEFAULT_AT_LIMIT,
   delegateAskText,
   deriveTitleFromFirstMessage,
@@ -4487,6 +4488,17 @@ export const createServer = (
     origin: NeutralOrigin
   ): { gone?: true; reason: string; refusal?: SendRefusal } | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
+    // A person's words to a session a continuation took the work item of
+    // are refused, in the words its page says in its composer's place: they
+    // never go on to the new session unseen ({@link toContinuation}).
+    if (row?.continuedInto && origin.kind === "human") {
+      const [now] = db.getInstancesByIds([continuationNow(row.id)]);
+      return {
+        reason: continuedInWords(
+          now ? sessionName(now) : row.continuedInto.slice(0, 8)
+        ),
+      };
+    }
     if (row?.lastErrorKind === "conversation-gone") {
       return { reason: CLAUDE_CONVERSATION_GONE, gone: true };
     }
@@ -7763,7 +7775,7 @@ export const createServer = (
     asked: Envelope<SendPayload>,
     ahead = false
   ): SentMessageRow | undefined => {
-    const envelope = toContinuation(byIdNow(asked));
+    const envelope = toContinuation(byIdNow(asked), "refused");
     if (!envelope || toCawThread(envelope)) {
       return;
     }
@@ -7806,11 +7818,18 @@ export const createServer = (
    * (core `relaunchOf` refuses it). It goes to the session its work goes on
    * in ({@link continuationNow}), from whoever sent it, as `byIdNow` does
    * for a former id; but the hub's word to its process alone
-   * ({@link aboutItsProcess}) is dropped, as that process is gone. Undefined
-   * when dropped; unchanged for any other session.
+   * ({@link aboutItsProcess}) is dropped, as that process is gone. A
+   * person's words sent now (`person: "refused"`) stay addressed to it, and
+   * {@link inputRefusal} refuses them with where its work went, as its page
+   * says in its composer's place: a person's message is never moved to
+   * another session unseen. Only what was queued for it before the move
+   * (`"carried"`, {@link moveOwedSend}) goes on, the person's too, its row
+   * there saying it was replaced. Undefined when dropped; unchanged for any
+   * other session.
    */
   const toContinuation = (
-    envelope: Envelope<SendPayload>
+    envelope: Envelope<SendPayload>,
+    person: "refused" | "carried"
   ): Envelope<SendPayload> | undefined => {
     const named = envelope.payload.instanceId;
     const now = continuationNow(named);
@@ -7818,6 +7837,9 @@ export const createServer = (
       return envelope;
     }
     const { message } = envelope.payload;
+    if (person === "refused" && message.origin.kind === "human") {
+      return envelope;
+    }
     if (aboutItsProcess(message)) {
       console.info(
         `[continuation] ${named.slice(0, 8)} was continued in ${now.slice(0, 8)}: the hub's ${isKeepAlive(message) ? "keep-alive ping" : `${message.origin.kind === "system" ? message.origin.name : ""} word`} to its process is dropped, as that process never runs again.`
@@ -7848,7 +7870,7 @@ export const createServer = (
       return;
     }
     const envelope = JSON.parse(owed) as Envelope<SendPayload>;
-    const moved = toContinuation(envelope);
+    const moved = toContinuation(envelope, "carried");
     if (!moved) {
       changeSend(send, { state: "cancelled" });
       return;

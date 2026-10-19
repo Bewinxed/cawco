@@ -343,7 +343,8 @@ final class SessionViewController: ObservedViewController {
         transcriptView.configure(transcript)
         let prestart = syncMove()
 
-        composerBinding.writable = canSend && !prestart
+        composerBinding.continuedIn = continuedIn()
+        composerBinding.writable = canSend && !prestart && composerBinding.continuedIn == nil
         let command = sent.flatMap { hub.ledger.commands[$0] }
         let withdrawal = withdrawing.flatMap { hub.ledger.commands[$0] }
         if command?.stage == .submitted || withdrawal?.stage == .submitted || withdrawal?.stage == .accepted {
@@ -361,6 +362,16 @@ final class SessionViewController: ObservedViewController {
         #if DEBUG
         sendForProbe()
         #endif
+    }
+
+    /// The session a continuation took this one's work item on in
+    /// (SessionPane.svelte `continuedTo`): this one never runs again, so its
+    /// composer's place says where the work went, a link to it.
+    private func continuedIn() -> ContinuedIn? {
+        guard let next = hub.fleet.byId[sessionId]?.session?.continuedInto else { return nil }
+        let row = hub.fleet.byId[next]
+        let title = row.map { Naming.sessionTitle(title: $0.title, cwd: $0.cwd, id: $0.id) } ?? String(next.prefix(8))
+        return ContinuedIn(title: title) { [weak self] in self?.onOpenSession(next) }
     }
 
     // MARK: An ask standing alone (SessionPane.svelte `askAlone`)
