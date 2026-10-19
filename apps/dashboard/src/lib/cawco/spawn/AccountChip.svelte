@@ -78,13 +78,10 @@
 >
   {#snippet trigger()}
     {#if shown}
-      <!-- literal: 6px -->
       <span
         data-slot="dot"
-        class="size-(--dot) flex-none rounded-(--round) bg-(--c)"
+        class="size-space-2 flex-none rounded-pill bg-(--c)"
         style:--c={shown.color}
-        style:--dot="6px"
-        style:--round="50%"
       ></span>
     {/if}
     <span data-slot="chip-label" data-account-chip>{label}</span>
@@ -97,16 +94,14 @@
     role="listbox"
     style:--ring-ground="var(--surface-lift)"
   >
-    <!-- literal: 40px; 16px column tracks -->
     <button
       data-slot="option"
       aria-selected={tool.value === null}
-      class="group type-label grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
+      class="group type-label grid min-h-c-row-h w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
-      style:--cols="minmax(0, 1fr) 16px"
-      style:--min-h="40px"
+      style:--cols="minmax(0, 1fr) var(--icon-md)"
       type="button"
     >
       <span class="min-w-0 wrap-anywhere"
@@ -117,30 +112,25 @@
       />
     </button>
     {#each tool.options as option (option.id)}
-      <!-- literal: 40px; 16px column tracks -->
       <button
         data-slot="option"
         aria-selected={tool.value === option.id}
-        class="group grid min-h-(--min-h) w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
+        class="group grid min-h-c-row-h w-full cursor-pointer grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:cursor-default disabled:opacity-60"
         data-account-option={option.id}
         disabled={option.disabled}
         onclick={() => pick(option.id)}
         role="option"
-        style:--cols="16px minmax(0, 1fr) 16px"
-        style:--min-h="40px"
+        style:--cols="var(--icon-md) minmax(0, 1fr) var(--icon-md)"
         type="button"
       >
         {#if option.ring}
           <Rings ring={option.ring} size={16} />
         {:else}
-          <!-- literal: 8px -->
           <span
             data-account-chip-lead
             data-slot="dot"
-            class="mx-space-1 size-(--dot) flex-none rounded-(--round) bg-(--c)"
+            class="size-space-2 flex-none justify-self-center rounded-pill bg-(--c)"
             style:--c={option.color}
-            style:--dot="8px"
-            style:--round="50%"
           ></span>
         {/if}
         <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
