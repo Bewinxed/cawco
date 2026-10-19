@@ -12,11 +12,12 @@
 
 <script lang="ts">
   /**
-   * PROPOSED (project-redesign sheet, placement advisor §2–3): ProjectHead
+   * PROPOSED (project-screens page, placement advisor §2–3): ProjectHead
    * without Spin off, its fault line and its ⋯ row; New session in its
    * place opens the kit's New-session dialog on the project's checkout,
-   * where the spin-off is the dialog's lifetime chip. `look` is the owner's
-   * call the advisor left: outline beside Ask Caw's coral, or coral too.
+   * where the spin-off is the dialog's lifetime chip. New session is
+   * outlined, so Ask Caw stays the head's one coral action (DESIGN.md:
+   * "coral marks the one place you act").
    *
    * The project's head (design §2 Fit, fable-lead-switch.md §3): the
    * project's name, and one line under it. The name wraps at its spaces
@@ -101,7 +102,6 @@
     onask,
     onfilter,
     onstages,
-    look = "outline",
   }: {
     /** Filter the tasks, from the menu on a phone, where the strip has no room for it. */
     onfilter: (anchor: HTMLElement) => void;
@@ -115,8 +115,6 @@
     onask: ((anchor: HTMLElement) => void) | null;
     /** Pick the project's stages, from the menu; null once it has its own. */
     onstages: ((anchor: HTMLElement) => void) | null;
-    /** New session's look: outline beside Ask Caw's coral, or coral too. */
-    look?: "outline" | "coral";
   } = $props();
 
   const narrow = new MediaQuery("(max-width: 639px)");
@@ -405,7 +403,7 @@
       data-new-session-dialog
       label="New session"
       onclick={openNewSession}
-      variant={look === "coral" ? "default" : "outline"}
+      variant="outline"
     />
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
