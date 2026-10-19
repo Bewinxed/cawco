@@ -4,7 +4,7 @@
 
 <script lang="ts">
   import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
-  import { EFFORT_NONE, isEffortLevel } from "@cawco/core";
+  import { accountsWords, EFFORT_NONE, isEffortLevel } from "@cawco/core";
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -185,11 +185,7 @@
       machineConnected(machineId) &&
       cawco.runningInstances.some((item) => item.id === sessionId)
   );
-  const harnessNames: Record<HarnessKind, string> = {
-    claude: "Claude Code",
-    opencode: "OpenCode",
-    pi: "Pi",
-  };
+  const harnessNames: Record<HarnessKind, string> = accountsWords.harnesses;
   /** `~/…/leaf`: the folder name is what tells sessions apart. */
   const shortPath = (path: string) => {
     const parts = path.replace(HOME, "~").split("/");

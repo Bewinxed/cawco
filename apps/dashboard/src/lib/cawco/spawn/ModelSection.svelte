@@ -4,7 +4,7 @@
    * list with the slide-swap on harness change. Codex is shown but disabled
    * ("Coming soon"); the list is the app's catalogue, canonical names only.
    */
-  import { HARNESSES, type HarnessKind } from "@cawco/core";
+  import { accountsWords, HARNESSES, type HarnessKind } from "@cawco/core";
   import { untrack } from "svelte";
   import { crossfade } from "svelte/transition";
   import { autowidth } from "#lib/cawco/motion/autosize.svelte.js";
@@ -78,10 +78,10 @@
   const uid = $props.id();
   type TabId = HarnessKind | "codex";
   const TABS: { id: TabId; name: string; soon?: boolean }[] = [
-    { id: "claude", name: "Claude Code" },
+    { id: "claude", name: accountsWords.harnesses.claude },
     { id: "codex", name: "Codex", soon: true },
-    { id: "opencode", name: "OpenCode" },
-    { id: "pi", name: "Pi" },
+    { id: "opencode", name: accountsWords.harnesses.opencode },
+    { id: "pi", name: accountsWords.harnesses.pi },
   ];
   const VENDOR: Record<string, string> = {
     anthropic: "Anthropic",

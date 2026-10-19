@@ -4,12 +4,12 @@
  * as the app's TranscriptView names it, wherever the transcript stands (the
  * session's pane, a task attempt's).
  */
-const HARNESS_LABEL: Record<string, string> = {
-  claude: "Claude Code",
-  opencode: "opencode",
-  code: "opencode",
-  pi: "pi",
-};
+import { accountsWords, harnessNamed } from "@cawco/core";
 
-export const speakerName = (harness: string | null | undefined): string =>
-  HARNESS_LABEL[harness ?? ""] ?? harness ?? "Agent";
+/** A stored listing's older name for opencode. */
+const ALIASES: Record<string, string> = { code: "opencode" };
+
+export const speakerName = (harness: string | null | undefined): string => {
+  const kind = harnessNamed(ALIASES[harness ?? ""] ?? harness);
+  return kind ? accountsWords.harnesses[kind] : (harness ?? "Agent");
+};
