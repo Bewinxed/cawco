@@ -26,7 +26,8 @@
  *    118 MB), continued at a session's ask, answers within the hub's
  *    bound on a machine read: its machine reads the continuation's inputs
  *    where the transcript lives and answers with them alone. It goes on as
- *    one session, whose transcript reads.
+ *    one session, whose transcript, all 100 MB of it read from the machine,
+ *    reads within that same bound.
  *
  * 5. A session with a command running in the background, continued at a
  *    session's ask: ending its process would lose that command, so the
@@ -601,15 +602,16 @@ const bigTranscript = async (kit: Kit, fleet: KitFleet, lead: string) => {
       (value) => ({ blocks: value.blocks.length }),
       (error: unknown) => ({ error: String(error) })
     );
+  const readIn = Date.now() - reading;
   const loads = (await fleet.logs("hub").catch(() => ""))
     .split("\n")
     .filter((line) => line.includes("[transcripts]"))
     .slice(-4);
   kit.note(`4: the hub's transcript loads: ${JSON.stringify(loads)}`);
   kit.check(
-    "4: it goes on as one session, and that session's transcript, its 100 MB conversation before the line, reads",
-    settled === "started" && "blocks" in page,
-    JSON.stringify({ stage: settled, page, readIn: Date.now() - reading })
+    `4: it goes on as one session, and that session's transcript, its 100 MB conversation before the line, reads within the hub's ${READ_BOUND_MS / 1000} s bound`,
+    settled === "started" && "blocks" in page && readIn < READ_BOUND_MS,
+    JSON.stringify({ stage: settled, page, readIn })
   );
 };
 

@@ -74,15 +74,80 @@ export const rememberCredential = (
   writeStateFileSync(file, JSON.stringify([...values]), { mode: 0o600 });
 };
 
-/** `text` with every credential this agent has held replaced. */
-export const redactText = (text: string): string => {
-  let out = text;
-  for (const value of loaded()) {
-    if (out.includes(value)) {
-      out = out.replaceAll(value, REDACTED);
+/**
+ * The store as one pattern, and its longest value: rebuilt when the store
+ * grows or is read afresh. The store keeps every credential this agent ever
+ * held and only grows, and looking for each in turn cost a 86 MB
+ * transcript read 1.0 s on the agent's loop with 200 of them, 10 s with
+ * 2,000 (measured). As a trie, one pattern finds them all in one pass,
+ * 0.13 s with 200, 0.4 s with 2,000.
+ */
+let matcher:
+  | {
+      longest: number;
+      pattern: RegExp | null;
+      size: number;
+      values: Set<string>;
+    }
+  | undefined;
+
+const matcherOf = (values: Set<string>) => {
+  if (matcher?.values !== values || matcher.size !== values.size) {
+    const held = [...values].filter(Boolean);
+    matcher = {
+      values,
+      size: values.size,
+      longest: held.reduce((most, value) => Math.max(most, value.length), 0),
+      pattern: held.length > 0 ? new RegExp(trieSource(held), "g") : null,
+    };
+  }
+  return matcher;
+};
+
+const escaped = (text: string): string =>
+  text.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&");
+
+/**
+ * A pattern's source that matches each of `values` (none empty), as a trie:
+ * the values that begin alike share that beginning, so at each place in a
+ * text the pattern tries one branch per next character, not every value.
+ * Code units, not code points: the pattern has no `u` flag, so a pair cut
+ * between two branches still matches as the text holds it.
+ */
+const trieSource = (values: string[]): string => {
+  if (values.length === 1) {
+    return escaped(values[0] as string);
+  }
+  let ends = false;
+  const byFirst = new Map<string, string[]>();
+  for (const value of values) {
+    if (!value) {
+      ends = true;
+      continue;
+    }
+    const first = value[0] as string;
+    const rest = byFirst.get(first);
+    if (rest) {
+      rest.push(value.slice(1));
+    } else {
+      byFirst.set(first, [value.slice(1)]);
     }
   }
-  return out;
+  const branches = [...byFirst].map(
+    ([first, rest]) => `${escaped(first)}${trieSource(rest)}`
+  );
+  const body =
+    branches.length === 1
+      ? (branches[0] as string)
+      : `(?:${branches.join("|")})`;
+  // A value that ends here, where longer ones go on: the longer is tried first.
+  return ends ? `(?:${body})?` : body;
+};
+
+/** `text` with every credential this agent has held replaced. */
+export const redactText = (text: string): string => {
+  const { pattern } = matcherOf(loaded());
+  return pattern ? text.replace(pattern, REDACTED) : text;
 };
 
 type DeltaField = "text" | "thinking" | "partial_json";
@@ -180,10 +245,7 @@ const whole = (text: string): OutboundMessage => ({
  * a credential that starts in text already given lies wholly inside it.
  */
 const redactPieces = (source: JsonPieces): JsonPieces => {
-  let longest = 0;
-  for (const value of loaded()) {
-    longest = Math.max(longest, value.length);
-  }
+  const { longest } = matcherOf(loaded());
   const hold = Math.max(0, longest - 1);
   let carry = "";
   let ended = false;
