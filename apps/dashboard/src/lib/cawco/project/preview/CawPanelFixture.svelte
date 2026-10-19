@@ -10,8 +10,8 @@
    * panel's own width).
    */
   import Caw from "#lib/cawco/home/Caw.svelte";
-  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
+  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { BOARD_STARTERS, PROJECT_NAME } from "../../tasks/preview/tidewater";
   import StarterCards from "../StarterCards.svelte";
@@ -31,10 +31,17 @@
   const title = `What’s next for ${PROJECT_NAME}?`;
 </script>
 
-<div class="panel" class:phone data-caw-panel={proposed ? "proposed" : "today"}>
+<div
+  class={["panel", { phone }]}
+  data-caw-panel={proposed ? "proposed" : "today"}
+>
   <div class="hero">
     {#if proposed}
-      <WorkColumnEmpty onpick={() => undefined} starters={BOARD_STARTERS} {title} />
+      <WorkColumnEmpty
+        onpick={() => undefined}
+        starters={BOARD_STARTERS}
+        {title}
+      />
     {:else}
       <EmptyState {title}>
         {#snippet mark()}
@@ -43,7 +50,11 @@
           </div>
         {/snippet}
         {#snippet action()}
-          <StarterCards onpick={() => undefined} rows starters={BOARD_STARTERS} />
+          <StarterCards
+            onpick={() => undefined}
+            rows
+            starters={BOARD_STARTERS}
+          />
         {/snippet}
       </EmptyState>
     {/if}

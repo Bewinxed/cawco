@@ -4,6 +4,8 @@
  * one per state a card or the task pane can be in. Times are relative to
  * the page's load, so "2h ago" reads true whenever it is opened.
  */
+import type { ComponentProps } from "svelte";
+import type ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
 import type {
   ProjectStarter,
   StageKind,
@@ -56,7 +58,10 @@ const starter = (
 /** What the empty board and Caw's panel offer to say to him. */
 export const BOARD_STARTERS: ProjectStarter[] = [
   starter("tasks", "Plan the spring course booking flow with online deposits"),
-  starter("bug", "Find out why the tide table is an hour out after the clocks change"),
+  starter(
+    "bug",
+    "Find out why the tide table is an hour out after the clocks change"
+  ),
   starter("people", "Draft an instructor rota page the team can edit"),
   starter("ideas", "Suggest what to build before the season starts"),
 ];
@@ -87,12 +92,36 @@ export interface SessionFixture {
 }
 
 export const SESSIONS: Record<string, SessionFixture> = {
-  code14: { id: "a1b2c3d4-0014-4000-8000-000000000014", name: "code", place: "/srv/tidewater" },
-  tide16: { id: "a1b2c3d4-0016-4000-8000-000000000016", name: "fix-tide", place: "/srv/tidewater" },
-  rota18a: { id: "a1b2c3d4-0181-4000-8000-000000000181", name: "rota", place: "/srv/tidewater" },
-  rota18b: { id: "a1b2c3d4-0182-4000-8000-000000000182", name: "rota", place: "/srv/tidewater" },
-  cal12: { id: "a1b2c3d4-0012-4000-8000-000000000012", name: "season-calendar", place: "/srv/tidewater" },
-  gift21: { id: "a1b2c3d4-0021-4000-8000-000000000021", name: "vouchers", place: "/srv/tidewater" },
+  code14: {
+    id: "a1b2c3d4-0014-4000-8000-000000000014",
+    name: "code",
+    place: "/srv/tidewater",
+  },
+  tide16: {
+    id: "a1b2c3d4-0016-4000-8000-000000000016",
+    name: "fix-tide",
+    place: "/srv/tidewater",
+  },
+  rota18a: {
+    id: "a1b2c3d4-0181-4000-8000-000000000181",
+    name: "rota",
+    place: "/srv/tidewater",
+  },
+  rota18b: {
+    id: "a1b2c3d4-0182-4000-8000-000000000182",
+    name: "rota",
+    place: "/srv/tidewater",
+  },
+  cal12: {
+    id: "a1b2c3d4-0012-4000-8000-000000000012",
+    name: "season-calendar",
+    place: "/srv/tidewater",
+  },
+  gift21: {
+    id: "a1b2c3d4-0021-4000-8000-000000000021",
+    name: "vouchers",
+    place: "/srv/tidewater",
+  },
 };
 
 /** The fixture's name for a session, by its id. */
@@ -162,8 +191,16 @@ const TIDE_RESULT = {
     "Fixed the DST offset in tide.ts; the table now matches BST from 29 March, and the Admiralty times line up for the whole season.",
   check: ["30 Mar 04:12 row", "tests green"],
   artifacts: [
-    { kind: "file" as const, path: "notes/tide-table.png", name: "tide-table.png" },
-    { kind: "link" as const, url: "https://github.com/tidewater/site/pull/41", name: "PR #41" },
+    {
+      kind: "file" as const,
+      path: "notes/tide-table.png",
+      name: "tide-table.png",
+    },
+    {
+      kind: "link" as const,
+      url: "https://github.com/tidewater/site/pull/41",
+      name: "PR #41",
+    },
   ],
   at: ago(2 * HOUR),
 };
@@ -173,7 +210,8 @@ export const TASKS: TaskSummary[] = [
     attempts: [
       attempt(SESSIONS.cal12, "done", 4 * DAY, 3 * DAY, {
         result: {
-          summary: "The calendar reads the season sheet and lists every course date with its berths.",
+          summary:
+            "The calendar reads the season sheet and lists every course date with its berths.",
           check: ["April and May dates"],
           artifacts: [],
           at: ago(3 * DAY),
@@ -194,17 +232,29 @@ export const TASKS: TaskSummary[] = [
   base("tsk-15", "Show remaining berths on each course date", "ready", {
     labels: ["booking"],
   }),
-  base("tsk-16", "Tide table is an hour out after the clocks change", "review", {
-    attempts: [
-      attempt(SESSIONS.tide16, "done", 3 * HOUR, 2 * HOUR, { result: TIDE_RESULT }),
-    ],
-    labels: ["a11y", "bug"],
-    todos: { done: 4, total: 4 },
-  }),
-  base("tsk-17", "Send a booking confirmation email with the joining notes", "ready", {
-    after: ["tsk-14", "tsk-18"],
-    labels: ["booking", "email"],
-  }),
+  base(
+    "tsk-16",
+    "Tide table is an hour out after the clocks change",
+    "review",
+    {
+      attempts: [
+        attempt(SESSIONS.tide16, "done", 3 * HOUR, 2 * HOUR, {
+          result: TIDE_RESULT,
+        }),
+      ],
+      labels: ["a11y", "bug"],
+      todos: { done: 4, total: 4 },
+    }
+  ),
+  base(
+    "tsk-17",
+    "Send a booking confirmation email with the joining notes",
+    "ready",
+    {
+      after: ["tsk-14", "tsk-18"],
+      labels: ["booking", "email"],
+    }
+  ),
   base("tsk-18", "Instructor rota page", "working", {
     attempts: [
       attempt(SESSIONS.rota18b, "running", 6 * MIN, null),
@@ -367,7 +417,11 @@ export function historyOf(id: string): TaskHistory {
   }
   if (summary.stage === "review" || summary.stage === "done") {
     events.push({
-      actor: { id: summary.attempts[0]?.instanceId ?? null, mover: "session", name: sessionNameOf(summary.attempts[0]?.instanceId ?? "") },
+      actor: {
+        id: summary.attempts[0]?.instanceId ?? null,
+        mover: "session",
+        name: sessionNameOf(summary.attempts[0]?.instanceId ?? ""),
+      },
       at: summary.attempts[0]?.endedAt ?? summary.updatedAt,
       commit: `c-${id}-2`,
       kind: "moved",
@@ -425,4 +479,53 @@ export const TAILS: Record<string, string[]> = {
 /** The tool each live session is running. */
 export const TOOLS: Record<string, string> = {
   "tsk-14": "Edit · src/booking/deposit.ts",
+};
+
+type HeadProps = ComponentProps<typeof ProjectHead>;
+type ProjectRow = HeadProps["project"];
+type Machine = NonNullable<HeadProps["machine"]>;
+
+/** The machine tidewater's checkout is on. */
+export const MACHINE: Machine = {
+  machineId: "m-harbour",
+  hostname: "harbour",
+  os: "linux",
+  status: "online",
+  auth: "unknown",
+  lastSeenAt: NOW,
+  pausedUntil: null,
+  pauseStopped: null,
+};
+
+/** tidewater as the hub lists it: its checkout on harbour, then its folder on the hub. */
+export const PROJECT_ROW: ProjectRow = {
+  id: PROJECT,
+  name: PROJECT_NAME,
+  caw: true,
+  createdAt: new Date(ago(30 * DAY)).toISOString(),
+  lands: "branch",
+  primaryPlaceId: "pl-harbour",
+  remote: "github.com/tidewater/site",
+  review: true,
+  upstreamPosts: null,
+  places: [
+    {
+      id: "pl-harbour",
+      projectId: PROJECT,
+      machineId: MACHINE.machineId,
+      path: "/srv/tidewater",
+      kind: "checkout",
+      isPrimary: true,
+      createdAt: new Date(ago(30 * DAY)).toISOString(),
+    },
+    {
+      id: "pl-hub",
+      projectId: PROJECT,
+      machineId: "hub",
+      path: `projects/${PROJECT}`,
+      kind: "hub",
+      isPrimary: false,
+      createdAt: new Date(ago(30 * DAY)).toISOString(),
+    },
+  ],
 };

@@ -9,7 +9,7 @@
    * starters (`--c-starters-w`) and the tab's 36rem, both from the pane's
    * start edge.
    */
-  import { decisionsWords } from "@cawco/core";
+  import { decisionsWords } from "@cawco/core/words/decisions";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
@@ -32,7 +32,9 @@
 >
   <EmptyState
     line={surface === "board" ? LINE : decisionsWords.emptyCaw}
-    title={surface === "board" ? "Nothing on the board yet" : decisionsWords.empty}
+    title={surface === "board"
+      ? "Nothing on the board yet"
+      : decisionsWords.empty}
   >
     {#snippet mark()}
       <div data-slot="caw-80" class="caw-80">

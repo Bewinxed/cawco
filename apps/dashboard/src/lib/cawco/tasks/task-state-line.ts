@@ -24,8 +24,10 @@ export type StateLine =
 /** A session's name: the fleet's, or what a sheet feeds. */
 export type NameOf = (instanceId: string) => string;
 
+const FULL_STOP = /\.$/;
+const FIRST = /^./;
 const lower = (words: string): string =>
-  words.replace(/\.$/, "").replace(/^./, (c) => c.toLowerCase());
+  words.replace(FULL_STOP, "").replace(FIRST, (c) => c.toLowerCase());
 
 /** Where a session works, as the fleet's index has it; its id while unknown. */
 export const placeOf = (instanceId: string): string =>
@@ -39,28 +41,64 @@ export function stateLineOf(
     nameOf = sessionName,
   }: { asks?: boolean; date?: string | null; nameOf?: NameOf } = {}
 ): StateLine | null {
-  const newest = task.attempts[0];
+  const [newest] = task.attempts;
   if (task.startProblem && !task.liveAttempt) {
-    return { kind: "cant", word: "Couldn't start", rest: lower(task.startProblem) };
+    return {
+      kind: "cant",
+      word: "Couldn't start",
+      rest: lower(task.startProblem),
+    };
   }
   if (newest) {
     const session = newest.instanceId;
     const place = placeOf(session);
     if (asks) {
-      return { kind: "session", session, place, status: "attn", word: "Asks you", rest: null };
+      return {
+        kind: "session",
+        session,
+        place,
+        status: "attn",
+        word: "Asks you",
+        rest: null,
+      };
     }
     if (task.liveAttempt) {
       return isRetry(task)
-        ? { kind: "session", session, place, status: "live", word: "Retrying", rest: `attempt ${task.attempts.length}` }
-        : { kind: "session", session, place, status: "live", word: "Working", rest: nameOf(session) };
+        ? {
+            kind: "session",
+            session,
+            place,
+            status: "live",
+            word: "Retrying",
+            rest: `attempt ${task.attempts.length}`,
+          }
+        : {
+            kind: "session",
+            session,
+            place,
+            status: "live",
+            word: "Working",
+            rest: nameOf(session),
+          };
     }
     if (task.lastAttemptFailed) {
-      return { kind: "session", session, place, status: "fail", word: "Failed", rest: lower(newest.endedHow ?? "") || null };
+      return {
+        kind: "session",
+        session,
+        place,
+        status: "fail",
+        word: "Failed",
+        rest: lower(newest.endedHow ?? "") || null,
+      };
     }
   }
   const waitsOn = task.blockedBy.length > 0 ? task.blockedBy : task.after;
   if (task.kind !== "done" && waitsOn.length > 0) {
-    return { kind: "after", word: `After ${waitsOn[0]}`, rest: waitsOn.length > 1 ? `+${waitsOn.length - 1}` : null };
+    return {
+      kind: "after",
+      word: `After ${waitsOn[0]}`,
+      rest: waitsOn.length > 1 ? `+${waitsOn.length - 1}` : null,
+    };
   }
   if (date) {
     return { kind: "date", word: date, rest: null };

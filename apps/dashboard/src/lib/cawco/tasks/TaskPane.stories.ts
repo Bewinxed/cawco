@@ -8,19 +8,19 @@
  * booking site; PaneRoom gives each the room the page gives it.
  */
 import { movesFrom } from "../project-tasks";
-import TaskPane from "./TaskPane.svelte";
-import TaskPaneOneUnit from "./TaskPaneOneUnit.svelte";
 import PaneRoom from "./preview/PaneRoom.svelte";
 import {
   historyOf,
   PROJECT,
-  sessionNameOf,
   STAGES,
+  sessionNameOf,
   TAILS,
   TASKS,
   TOOLS,
   viewOf,
 } from "./preview/tidewater";
+import TaskPane from "./TaskPane.svelte";
+import TaskPaneOneUnit from "./TaskPaneOneUnit.svelte";
 
 const DESK = { viewport: 440 };
 const PHONE = { viewport: "phone" };

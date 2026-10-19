@@ -6,7 +6,13 @@
    */
   import TaskCard from "../TaskCard.svelte";
   import TaskCardStateLine from "../TaskCardStateLine.svelte";
-  import { CARD_STATES, DATES, kindOf, sessionNameOf, taskOf } from "./tidewater";
+  import {
+    CARD_STATES,
+    DATES,
+    kindOf,
+    sessionNameOf,
+    taskOf,
+  } from "./tidewater";
 
   let { proposed = false }: { proposed?: boolean } = $props();
 </script>
