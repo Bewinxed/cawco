@@ -65,7 +65,7 @@
 </script>
 
 <OfferActs
-  class="rail-hang"
+  class="ms-(--x-hang)"
   data-answer={now?.answer}
   data-design-offer={offer.projectId}
   {problem}

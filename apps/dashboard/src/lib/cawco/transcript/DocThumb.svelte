@@ -97,6 +97,7 @@
       >
         <circle
           class="fill-none stroke-current opacity-25"
+          stroke-width="2.5"
           cx="12"
           cy="12"
           r="9"
@@ -104,6 +105,8 @@
         <circle
           data-slot="arc"
           class="fill-none stroke-current motion-safe:transition-[stroke-dashoffset] motion-safe:dur-control motion-safe:ease-out"
+          stroke-width="2.5"
+          stroke-linecap="round"
           cx="12"
           cy="12"
           r="9"
@@ -113,12 +116,11 @@
       </svg>
     </span>
   {:else}
-    <!-- literal: 24px -->
     <span
       data-slot="glyph"
       aria-hidden="true"
       class="grid place-items-center flex-none text-ink-muted"
-      style:--glyph="24px"><Glyph class="size-(--glyph)" /></span
+      ><Glyph class="size-icon-md m-space-1" /></span
     >
   {/if}
   <span data-slot="text" class="flex flex-col min-w-0">
@@ -150,9 +152,7 @@
   <button
     data-slot="doc"
     aria-label={`Open ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer [&:hover]:bg-surface-hover"
-    style:--doc-h="48px"
-    style:--doc-max="min(100%, 16rem)"
+    class="press-tint inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
     data-share={share}
     onclick={() =>
       lightbox.open({ kind: "text", name, content: props.content, share })}
@@ -165,9 +165,7 @@
   <a
     data-slot="doc"
     aria-label={`Download ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer [&:hover]:bg-surface-hover"
-    style:--doc-h="48px"
-    style:--doc-max="min(100%, 16rem)"
+    class="press-tint inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
     download={name}
     href={file.href}
     title={name}
@@ -178,9 +176,7 @@
   <button
     data-slot="doc"
     aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer [&:hover]:bg-surface-hover"
-    style:--doc-h="48px"
-    style:--doc-max="min(100%, 16rem)"
+    class="press-tint inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
     onclick={() => file?.onretry?.()}
     title={`${name}: ${file.failed}`}
     type="button"
@@ -193,10 +189,8 @@
       data-slot="doc"
       aria-busy="true"
       aria-label={`Uploading ${name}`}
-      class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default [&:hover]:bg-surface-recess"
-      style:--doc-h="48px"
-      style:--doc-max="min(100%, 16rem)"
-      role="status"
+      class="inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default"
+          role="status"
       title={name}
     >
       {@render face()}
@@ -204,20 +198,8 @@
   {:else}
     <span
       data-slot="doc"
-      class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default [&:hover]:bg-surface-recess"
-      style:--doc-h="48px"
-      style:--doc-max="min(100%, 16rem)"
-      title={name}>{@render face()}</span
+      class="inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default"
+          title={name}>{@render face()}</span
     >
   {/if}
 {/if}
-
-<style>
-  /* residual: svg-paint */
-  [data-slot="ring"] circle {
-    stroke-width: 2.5;
-  }
-  [data-slot="arc"] {
-    stroke-linecap: round;
-  }
-</style>

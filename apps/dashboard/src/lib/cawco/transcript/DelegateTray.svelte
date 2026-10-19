@@ -1148,13 +1148,11 @@
 
 {#snippet mark(item: TrayChild, flies: boolean)}
   {@const Sprite = sessionSprite(item.instanceId)}
-  <!-- literal: 17px -->
   <span
     data-slot="mark"
     aria-hidden="true"
-    class="flex-none size-(--mark-size) rounded-xs grid place-items-center bg-mark-overlay bg-(--mark-bg)"
+    class="flex-none size-c-row-mark rounded-xs grid place-items-center bg-mark-overlay bg-(--mark-bg)"
     data-box
-    style:--mark-size="17px"
     style:--mark-bg="var(--mark-{markHue(item.instanceId)})"
     {@attach land(() => (flies ? flightKey(item.instanceId) : undefined))}
     ><Sprite class="size-icon-sm block text-mark-glyph" /></span
@@ -1165,21 +1163,13 @@
      either way. -->
 {#snippet glyph(tone: Tone)}
   {#if tone === "starting"}
-    <Spinner
-      aria-hidden="true"
-      class="size-icon-md block"
-      role="presentation"
-    />
+    <Spinner aria-hidden="true" role="presentation" />
   {:else if tone === "running"}
     <!-- The dot's phase is set from the clock, so every running dot reads
          as one beat. -->
-    <!-- literal: 5px -->
-    <!-- literal: 50% -->
     <span
       data-slot="dot"
-      class="size-(--dot) rounded-(--dot-r) bg-status-live-glyph"
-      style:--dot="5px"
-      style:--dot-r="50%"
+      class="size-space-1 rounded-pill bg-status-live-glyph"
       style:animation-delay="-{Date.now() % 2000}ms"
     ></span>
   {:else if tone === "asked" || tone === "needs"}
@@ -1204,7 +1194,7 @@
     aria-controls={failed ? shelfId : panelId}
     aria-expanded={failed ? shelf === "failed" : openKey === item.id}
     aria-label="{item.title}, {stateWords(chip)}"
-    class="group/chip kit-tray-chip touch-hit flex-initial min-w-c-tray-chip-min max-w-c-tray-chip-max data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink"
+    class="group/chip kit-tray-chip touch-hit flex-initial min-w-c-tray-chip-min max-w-c-tray-chip-max data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink status-failed:before:bg-status-fail-bg status-needs:before:bg-status-attn-bg motion-safe:data-fly:not-data-finished:before:animate-arrive-late motion-reduce:data-fly:animate-arrive data-finished:before:animate-finish"
     data-delegate-tray-tone={tone}
     data-finished={(tone === "done" && (item.endedAt ?? 0) > mountedAt) ||
       undefined}
@@ -1232,7 +1222,7 @@
     <span
       data-chip-words
       aria-hidden="true"
-      class="mark-line min-w-0 flex items-baseline gap-c-pill-gap"
+      class="mark-line min-w-0 flex items-baseline gap-c-pill-gap motion-safe:group-data-fly/chip:animate-arrive-late"
       data-box
     >
       <span
@@ -1271,7 +1261,7 @@
     <span
       data-chip-slot
       aria-hidden="true"
-      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted"
+      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted motion-safe:group-data-fly/chip:animate-arrive-late"
       data-box
     >
       {#key slotOf(tone)}
@@ -1300,6 +1290,7 @@
     class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-border-hairline"
     data-flip
     data-shelf-row={item.id}
+    style:--sacts-start="calc(var(--c-row-mark) + var(--space-2))"
   >
     <div class="mark-line flex items-center gap-space-2 min-w-0">
       {@render mark(item, false)}
@@ -1311,28 +1302,24 @@
         class="flex-none ms-auto text-size-meta text-ink-muted whitespace-nowrap"
         >{failedWhen(item)}</span
       >
-      <!-- literal: 26px -->
-      <!-- literal: -5px -->
       <a
         aria-label="Open {item.title} in its own view"
-        class="touch-hit flex-none size-(--jump) my-(--jump-my) grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
+        class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
         data-box
         href={hrefOf(item)}
         title="Open {item.title} in its own view"
-        style:--jump="26px"
-        style:--jump-my="-5px"
       >
         <IconExternal class="size-icon-sm block" />
       </a>
     </div>
-    <p class="serror">
+    <p
+      class="m-0 ps-(--sacts-start) text-size-meta text-status-fail-ink overflow-clip text-ellipsis whitespace-nowrap"
+    >
       {item.error || "It failed without saying why."}
     </p>
     {#if reason === undefined}
-      <!-- literal: 17px -->
       <div
         class="flex flex-wrap items-center gap-space-2 mt-space-1 ps-(--sacts-start)"
-        style:--sacts-start="calc(17px + var(--space-2))"
         style:--hit-gap-x="var(--space-2)"
       >
         <Button
@@ -1400,7 +1387,6 @@
         />
       </div>
     {:else}
-      <!-- literal: 17px -->
       <form
         data-slot="reason"
         class="flex flex-nowrap items-center gap-space-2 mt-space-1 ps-(--sacts-start)"
@@ -1408,7 +1394,6 @@
           event.preventDefault();
           dismiss(item);
         }}
-        style:--sacts-start="calc(17px + var(--space-2))"
         style:--hit-gap-x="var(--space-2)"
       >
         <Input
@@ -1478,16 +1463,12 @@
         >{span(item.createdAt, item.endedAt ?? minute)}</span
       >
       {#if !item.queued}
-        <!-- literal: 26px -->
-        <!-- literal: -5px -->
         <a
           aria-label="Open {item.title} in its own view"
-          class="touch-hit flex-none size-(--jump) my-(--jump-my) grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
+          class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
           data-box
           href={hrefOf(item)}
           title="Open {item.title} in its own view"
-          style:--jump="26px"
-          style:--jump-my="-5px"
         >
           <IconExternal class="size-icon-sm block" />
         </a>
@@ -1540,8 +1521,6 @@
           {@render chipButton(chip, i)}
         {/each}
         {#if hidden.length}
-          <!-- literal: 224px -->
-          <!-- literal: 52px -->
           <button
             data-needs={hidden.some((chip) => chip.tone === "needs") ||
               undefined}
@@ -1549,7 +1528,7 @@
             aria-controls={shelfId}
             aria-expanded={shelf === "more"}
             aria-label="{hidden.length} more delegates"
-            class="kit-tray-chip touch-hit flex-none min-w-0 max-w-(--chip-max) w-(--more-w) justify-center num data-needs:text-status-attn-ink"
+            class="kit-tray-chip touch-hit flex-none min-w-0 w-c-tray-more-w justify-center num data-needs:text-status-attn-ink data-needs:before:bg-status-attn-bg"
             data-flip="pop"
             data-key="more"
             onclick={(event) => onpress("more", event)}
@@ -1560,8 +1539,6 @@
             onpointerenter={() => onchipenter("more")}
             tabindex={current === shown.length ? 0 : -1}
             type="button"
-            style:--chip-max="224px"
-            style:--more-w="52px"
           >
             +{hidden.length}
           </button>
@@ -1570,7 +1547,6 @@
         {#if lone}
           {@render chipButton(lone, keys.length - 1)}
         {:else if failures.length}
-          <!-- literal: 224px -->
           <button
             data-delegate-tray-failed
             data-slot="end"
@@ -1578,7 +1554,7 @@
             aria-controls={shelfId}
             aria-expanded={shelf === "failed"}
             aria-label="{failures.length} failed delegates"
-            class="kit-tray-chip touch-hit flex-none min-w-0 max-w-(--chip-max) whitespace-nowrap ms-auto text-status-fail-ink"
+            class="kit-tray-chip touch-hit flex-none min-w-0 max-w-c-tray-chip-max whitespace-nowrap ms-auto text-status-fail-ink before:bg-status-fail-bg"
             data-flip="pop"
             data-key="failed"
             onclick={(event) => onpress("failed", event)}
@@ -1589,7 +1565,6 @@
             onpointerenter={() => onchipenter("failed")}
             tabindex={current === keys.length - 1 ? 0 : -1}
             type="button"
-            style:--chip-max="224px"
             bind:offsetWidth={countWidth}
           >
             <span
@@ -1635,7 +1610,7 @@
           >
             <header
               data-slot="shead"
-              class="flex items-center gap-space-2 py-space-2 pr-space-2 pl-space-4 border-b border-b-border-hairline"
+              class="flex items-center gap-space-2 py-space-2 pe-space-2 ps-space-4 border-b border-b-border-hairline"
             >
               <h2
                 class="flex-auto min-w-0 m-0 text-size-label font-medium text-ink-strong"
@@ -1777,16 +1752,12 @@
                    The delegate card's way out to its own view, as the card
                    draws it. -->
               {#if !item.queued}
-                <!-- literal: 26px -->
-                <!-- literal: -5px -->
                 <a
                   aria-label="Open {item.title} in its own view"
-                  class="touch-hit flex-none size-(--jump) my-(--jump-my) grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
+                  class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
                   data-box
                   href={hrefOf(item)}
                   title="Open {item.title} in its own view"
-                  style:--jump="26px"
-                  style:--jump-my="-5px"
                 >
                   <IconExternal class="size-icon-sm block" />
                 </a>
@@ -1809,49 +1780,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: keyframes */
-  /* The mark flew in; the chip's surface and words come in after it. The
-     words and the glyph's slot are named by their own attributes: under
-     `data-fly`, Chrome keys an attribute selector to the attribute's name
-     alone, and `[data-slot="…"]` restyled every `data-slot` in the chip. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-fly]::before,
-    [data-fly] [data-chip-words],
-    [data-fly] [data-chip-slot] {
-      animation: arrive var(--dur-menu) var(--ease-out) var(--dur-control) both;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    [data-fly] {
-      animation: arrive var(--dur-menu) var(--ease-out) both;
-    }
-  }
-  @keyframes arrive {
-    from {
-      opacity: 0;
-    }
-  }
-  /* Finished while watched: one soft pulse of the success tint (after the
-     arrival rules, which it replaces on a chip that flew in). */
-  [data-finished]::before {
-    animation: finish calc(var(--dur-fade) * 2) var(--ease-out);
-  }
-  @keyframes finish {
-    35% {
-      background-color: var(--status-done-bg);
-    }
-  }
-
-  /* residual: pseudo */
-  /* The chip's surface (.kit-tray-chip's ::before) in its state's tint. */
-  button[data-status="needs"]::before,
-  [data-needs]::before {
-    background-color: var(--status-attn-bg);
-  }
-  button[data-status="failed"]::before,
-  [data-slot="end"]::before {
-    background-color: var(--status-fail-bg);
-  }
-</style>

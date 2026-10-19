@@ -322,14 +322,12 @@
      full: a row leaving at the top fades out through the mask as the stack
      lifts. The stack stands on the tail's foot and spills over its top, in
      the flow, so the widest row is the tail's width (the panel sizes to it). -->
-<!-- literal: 24px -->
 <div
   class="flex flex-col justify-end h-(--tail-h) overflow-hidden -mx-space-2 text-ink-strong data-full:mask-(--tail-fade)"
   style:--row="{ROW}px"
   style:--slots={slots}
   style:--tail-h="calc(var(--row) * var(--slots))"
-  style:--fade-run="24px"
-  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--fade-run))"}
+  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--row))"}
   data-full={shown.length >= SLOTS || undefined}
 >
   {#if shown.length}
@@ -422,19 +420,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  /* The line being written, one line tall however the message renders:
-     every element MessageBody renders inside it. Read off the row's own
-     `data-delegate-tail-kind`: a rule over every element under a state
-     restyles the whole subtree wherever that attribute changes, and
-     `data-kind` changes on rows all over the dashboard. */
-  [data-delegate-tail-kind="stream"] [data-slot="text"] :global(*) {
-    display: inline;
-    margin: 0;
-    padding: 0;
-    font-size: inherit;
-    line-height: inherit;
-  }
-</style>
