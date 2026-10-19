@@ -66,6 +66,7 @@ import type { MachineCapabilities } from "../../../packages/core/src/capabilitie
 import {
   type RelayAnswer,
   type RelayStep,
+  STREAM_RELAY_PORTS,
   STREAM_RELAY_WORDS as words,
 } from "../../../packages/core/src/stream-relay";
 import {
@@ -818,8 +819,14 @@ const run = async (kit: Kit): Promise<void> => {
           (one) => one.client === routerLan && one.lease === LEASE_S
         ) &&
         gateway.actions[0] === `AddPortMapping UDP 443 ${LEASE_S}` &&
-        gateway.actions.includes("AddPortMapping UDP 49160 3600") &&
-        gateway.actions.includes("DeletePortMapping UDP 49159") &&
+        // The cap of 10 holds UDP and TCP 443 and the range's first 8: its
+        // ninth refused, its eighth taken back.
+        gateway.actions.includes(
+          `AddPortMapping UDP ${STREAM_RELAY_PORTS.relayRange[0] + 8} ${LEASE_S}`
+        ) &&
+        gateway.actions.includes(
+          `DeletePortMapping UDP ${STREAM_RELAY_PORTS.relayRange[0] + 7}`
+        ) &&
         partialWords?.includes(words.routerPartial("UPnP")) === true &&
         partialWords.includes(
           words.rangeForward(routerLan).split(" ")[0] ?? ""
