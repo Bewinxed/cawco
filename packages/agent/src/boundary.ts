@@ -26,8 +26,8 @@
  * Both run the same runner ({@link RUNNER}), which takes every command of the
  * workspace over a FIFO and runs it inside: one network namespace on Linux,
  * so a dev server one command starts answers the next. Commands go in
- * through one executor, `~/.cawco/workspaces/<id>/exec [--cwd-out FILE]
- * COMMAND` ({@link execScript}), that every harness runs its shell commands
+ * through one executor, `~/.cawco/workspaces/<id>/exec [--session]
+ * [--cwd-out FILE] COMMAND` ({@link execScript}), that every harness runs its shell commands
  * through: claude by a PreToolUse hook that rewrites the command (the
  * workspace's `hook` script, which asks its judge, `boundary-judge.ts`), OpenCode by its
  * plugin's `bash` tool, pi by its bash tool's operations, a workflow's
@@ -71,6 +71,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { accessSync, constants, existsSync } from "node:fs";
 import {
   access,
+  appendFile,
   chmod,
   copyFile,
   lstat,
@@ -161,7 +162,11 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import type { UpstreamRule, UpstreamRules } from "@cawco/core/upstream-guard";
-import { PROTECTED_NAMES, PROTECTED_UNDER } from "@cawco/core/workspace-judge";
+import {
+  type Policy,
+  PROTECTED_NAMES,
+  PROTECTED_UNDER,
+} from "@cawco/core/workspace-judge";
 import {
   isPlace,
   workspaceDenies,
@@ -212,7 +217,7 @@ import {
 
 /** A running boundary, as a harness uses it. */
 export interface Boundary {
-  /** `exec [--cwd-out FILE] COMMAND`: runs COMMAND inside the boundary, in the caller's directory. */
+  /** `exec [--session] [--cwd-out FILE] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}). */
   readonly exec: string;
   /** The PreToolUse hook a claude session runs before each tool call ({@link hookScript}). */
   readonly hook: string;
@@ -277,6 +282,26 @@ const roOf = workspaceReadOnlyDir;
  */
 const generationDir = (id: string, gen: string): string =>
   join(stateDir(id), "boundaries", gen);
+
+/**
+ * The policy a boundary generation started with, as {@link planFor} wrote it
+ * beside its other files: what that boundary grants for its whole life,
+ * whatever the workspace's policy says since ({@link narrowing}).
+ */
+const grantedOf = (id: string, gen: string): string =>
+  join(generationDir(id, gen), "policy.json");
+
+/** The policy generation `gen` of workspace `id` started with ({@link grantedOf}); undefined when none is on record. */
+const grantedPolicy = (id: string, gen: string): Promise<Policy | undefined> =>
+  readRecord<Policy>(grantedOf(id, gen)).catch(() => undefined);
+
+/**
+ * Lines for a workspace's next session command, which its executor shows on
+ * stderr before the command's own output and then removes ({@link
+ * execScript}'s `--session`): what CawCo did to the work without being asked
+ * ({@link replaceNarrowed}). In the state dir, which nothing inside writes.
+ */
+const noticeOf = (id: string): string => join(stateDir(id), "notice");
 
 /** The runner's FIFO, in the part of the state dir a command reads. */
 const fifoOf = (id: string, gen: string): string =>
@@ -350,9 +375,9 @@ export const shellQuote = (value: string): string =>
  */
 const SYSTEM_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
 
-/** `command`, as it runs inside the boundary. */
+/** A session's `command`, as it runs inside the boundary (pi's bash tool): `--session`, so it shows the workspace's notice first. */
 export const boundaryCommand = (boundary: Boundary, command: string): string =>
-  `${shellQuote(boundary.exec)} ${shellQuote(command)}`;
+  `${shellQuote(boundary.exec)} --session ${shellQuote(command)}`;
 
 /** Claude Code's own limit on the boundary hook, in seconds; its default is 600. */
 const HOOK_TIMEOUT_S = 90;
@@ -2042,6 +2067,14 @@ const replaceOlder = async (
   held: Held,
   owed: boolean
 ): Promise<Boundary> => {
+  // Access is never kept past its removal: a boundary that grants what the
+  // workspace's policy no longer does is replaced now, whatever runs in it
+  // or whichever keeper is owed the endpoint, and what ran in it is stopped,
+  // said to the delegate ({@link replaceNarrowed}).
+  const narrowed = await narrowedSince(ref, held);
+  if (narrowed.length > 0) {
+    return replaceNarrowed(client, ref, held, narrowed);
+  }
   if (owed) {
     // The keeper the endpoint names now retires as soon as this build's
     // takes the endpoint: the boundary runs on as it is, armed, and is
@@ -2446,6 +2479,9 @@ const planOf = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
 const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   const { id } = ref;
   const policy = await workspacePolicy(ref);
+  // Kept beside the generation's other files, never hashed into its form:
+  // what it grants, to judge a later policy by ({@link narrowing}).
+  const granted = `${JSON.stringify(policy, null, 2)}\n`;
   const runtime = await bunRuntime(id);
   const exec = execScript(id, {
     exec: join(stateDir(id), "exec"),
@@ -2489,7 +2525,11 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     });
     const file = join(generationDir(id, gen), "boundary.sb");
     return {
-      files: [[file, profile], ...guardFiles(id, gen)],
+      files: [
+        [file, profile],
+        [grantedOf(id, gen), granted],
+        ...guardFiles(id, gen),
+      ],
       form: hash
         .update(profile)
         .update("\0")
@@ -2553,6 +2593,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       [files.runner, RUNNER],
       [files.denies, denies],
       [bwrap, launcher, 0o755],
+      [grantedOf(id, gen), granted],
       ...guardFiles(id, gen),
     ],
     form: hash
@@ -3038,6 +3079,202 @@ const workLeft = async (
  */
 const keptRunning = new Map<string, string>();
 
+/**
+ * How policy `now` narrows `was`, the policy a boundary started with
+ * ({@link grantedOf}), each in words; none when it widens it or leaves it as
+ * it was. Read off the policy's own fields, whatever they are: an entry gone
+ * from an `allow…` list or new in a `deny…` list narrows, and so does any
+ * other field that changed (a flag, a path), whose direction no name says.
+ * With no record, what the boundary grants is not known, so it narrows.
+ */
+const narrowing = (was: Policy | undefined, now: Policy): string[] => {
+  if (!was) {
+    return ["what its boundary started with is not on record"];
+  }
+  const before: Record<string, unknown> = { ...was };
+  const after: Record<string, unknown> = { ...now };
+  const fields = [
+    ...new Set([...Object.keys(before), ...Object.keys(after)]),
+  ].sort();
+  return fields.flatMap((field) => {
+    const old = before[field];
+    const fresh = after[field];
+    if (Array.isArray(old) && Array.isArray(fresh)) {
+      if (field.startsWith("allow")) {
+        return old
+          .filter((entry) => !fresh.includes(entry))
+          .map((entry) => `${String(entry)} left ${field}`);
+      }
+      if (field.startsWith("deny")) {
+        return fresh
+          .filter((entry) => !old.includes(entry))
+          .map((entry) => `${String(entry)} joined ${field}`);
+      }
+    }
+    return JSON.stringify(old) === JSON.stringify(fresh)
+      ? []
+      : [`${field} changed`];
+  });
+};
+
+/** How the workspace's policy as it stands narrows what its boundary `held` started with ({@link narrowing}). */
+const narrowedSince = async (
+  ref: WorkspaceRef,
+  held: Pick<Held, "gen">
+): Promise<string[]> =>
+  narrowing(await grantedPolicy(ref.id, held.gen), await workspacePolicy(ref));
+
+/** One process a boundary's work runs, as the delegate's own commands saw it: its pid there and its command line. */
+interface WorkProcess {
+  readonly command: string;
+  readonly pid: number;
+}
+
+/** How much of a stopped process's command line is said. Ours: a line's worth. */
+const COMMAND_SAID = 160;
+
+const NS_PIDS = /^NSpid:\s+(.+)$/m;
+
+/** Linux: process `pid`'s pid in each pid namespace it is in, outermost first (`/proc/<pid>/status`'s `NSpid`); none once it is gone. */
+const nsPids = async (pid: number): Promise<number[]> =>
+  (
+    NS_PIDS.exec(
+      await readFile(`/proc/${pid}/status`, "utf8").catch(() => "")
+    )?.[1] ?? ""
+  )
+    .trim()
+    .split(WHITESPACE)
+    .filter(Boolean)
+    .map(Number);
+
+/**
+ * What the work of workspace `id`'s generation `boundary` runs now, as
+ * {@link busyOld} counts it: every process by its pid on this machine, and
+ * those the rest descend from (the work's roots), as its commands saw them.
+ * Linux: each pid in the sandbox's own pid namespace; macOS: the processes
+ * carrying that generation's marker, its runner aside.
+ */
+const workIn = async (
+  id: string,
+  boundary: Pick<Held, "gen" | "pid">
+): Promise<{ all: number[]; roots: WorkProcess[] }> => {
+  const seen = await snapshot();
+  let work: Seen[] = [];
+  let level = 0;
+  if (process.platform === "linux") {
+    const place = await readPlace(id, boundary.gen);
+    if (place) {
+      const idle = new Set(place.idle);
+      work = inTree(seen, place.inner).filter((one) => !idle.has(one.pid));
+      level = (await nsPids(place.inner)).length - 1;
+    }
+  } else {
+    const marker = `${BOUNDARY_MARKER}=${boundary.gen}`;
+    work = seen.filter(
+      (one) =>
+        one.pid !== boundary.pid &&
+        one.pid !== process.pid &&
+        one.command.includes(`CAWCO_WORKSPACE=${id}`) &&
+        one.command.includes(marker)
+    );
+  }
+  const pids = new Set(work.map((one) => one.pid));
+  // macOS reads each command with its environment, which is never said.
+  const plain =
+    process.platform === "linux"
+      ? undefined
+      : new Map((await commandLines()).map((line) => [line.pid, line.command]));
+  const roots = await Promise.all(
+    work
+      .filter((one) => !pids.has(one.ppid))
+      .map(async (one) => ({
+        pid: level > 0 ? ((await nsPids(one.pid))[level] ?? one.pid) : one.pid,
+        command: (plain?.get(one.pid) ?? one.command).slice(0, COMMAND_SAID),
+      }))
+  );
+  return { all: [...pids], roots };
+};
+
+/** At most this many reasons for a narrowing are said, then how many more. */
+const REASONS_SAID = 3;
+
+/** The line a delegate's next command shows once what its work ran was stopped as its access narrowed ({@link replaceNarrowed}). */
+const narrowedLine = (
+  narrowed: readonly string[],
+  stopped: readonly WorkProcess[]
+): string => {
+  const more = narrowed.length - REASONS_SAID;
+  const why = `${narrowed.slice(0, REASONS_SAID).join("; ")}${more > 0 ? `; and ${more} more` : ""}`;
+  const one = stopped.length === 1;
+  const each = stopped
+    .map((proc) => `\`${proc.command}\` (pid ${proc.pid})`)
+    .join(", ");
+  return `cawco: this workspace's access was narrowed (${why}), so its boundary was replaced and what still ran in it was stopped: ${each}. Start ${one ? "it" : "them"} again if you still need ${one ? "it" : "them"}.`;
+};
+
+/**
+ * Replaces workspace `ref`'s boundary `held`, whose access the workspace's
+ * policy has narrowed since it started (`narrowed`, {@link narrowing}), now,
+ * as {@link restartIfIdle} does: the gate goes up, `held` and every older
+ * generation still beside it whose access narrowed too are stopped with
+ * everything in them, and a boundary of the policy as it stands starts. What
+ * their work still ran is said, each process by its command and the pid its
+ * commands saw: in the agent's log, and as a line the delegate's next command
+ * shows ({@link noticeOf}), so it can start it again. Nothing it ran is lost
+ * silently, and no access outlives its removal.
+ */
+const replaceNarrowed = async (
+  client: SessiondClient,
+  ref: WorkspaceRef,
+  held: Held,
+  narrowed: readonly string[]
+): Promise<Boundary> => {
+  const gate = gateOf(ref.id);
+  await writeStateFile(gate, String(process.pid));
+  try {
+    const now = await workspacePolicy(ref);
+    const older: Retiring[] = [];
+    for (const old of await readRetiring(ref.id)) {
+      // biome-ignore lint/performance/noAwaitInLoops: one small record read per older generation
+      if (narrowing(await grantedPolicy(ref.id, old.gen), now).length > 0) {
+        older.push(old);
+      }
+    }
+    const stopped: WorkProcess[] = [];
+    for (const boundary of [held, ...older]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, each gone before the next
+      const work = await workIn(ref.id, boundary);
+      stopped.push(...work.roots);
+      const place = await readPlace(ref.id, boundary.gen);
+      await stopBoundary(ref.id, boundary);
+      if (process.platform === "darwin") {
+        // What a macOS runner started outlives it ({@link stopBoundary}).
+        for (const pid of work.all) {
+          signalPid(listedPid(pid), "SIGKILL");
+        }
+      } else if (!(await sandboxesGone(place ? [place.inner] : []))) {
+        throw new Error(
+          `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped`
+        );
+      }
+      await cleanGeneration(ref.id, boundary);
+      await rm(retiringFileOf(ref.id, boundary), { force: true });
+    }
+    forgetStale(ref.id);
+    const fresh = await start(client, ref);
+    const line = narrowedLine(narrowed, stopped);
+    if (stopped.length > 0) {
+      await appendFile(noticeOf(ref.id), `${line}\n`, { mode: 0o600 });
+    }
+    console.info(
+      `[workspace] ${ref.id}: its boundary ${[held, ...older].map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is replaced by ${fresh.pid} now, as its access narrowed: ${stopped.length > 0 ? line : `nothing ran in it (${narrowed.slice(0, REASONS_SAID).join("; ")})`}`
+    );
+    return fresh;
+  } finally {
+    await rm(gate, { force: true });
+  }
+};
+
 /** The socket inodes process `pid` has open, as its `/proc/<pid>/fd` links name them (`socket:[INODE]`); none once it is gone. */
 const socketsOf = async (pid: number): Promise<string[]> => {
   const fds = await readdir(`/proc/${pid}/fd`).catch(() => [] as string[]);
@@ -3312,7 +3549,12 @@ const handOverStale = async (): Promise<void> => {
       }
       // One kept while its work runs ({@link replaceOlder}) is only looked
       // at, not ensured: an ensure is a use, and its quiet time must run.
-      if (keptRunning.has(ref.id) && (await workLeft(ref.id, held))) {
+      // Unless its access narrowed meanwhile: then it is replaced now.
+      if (
+        keptRunning.has(ref.id) &&
+        (await workLeft(ref.id, held)) &&
+        (await narrowedSince(ref, held)).length === 0
+      ) {
         continue;
       }
       await ensureBoundary(ref);
@@ -4305,7 +4547,8 @@ const execScript = (
   const path = `printf 'export PATH=%q\\n' ${shellQuote(helpers)}"$caller_path"`;
   return `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
-# exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
+# exec [--session] [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND
+# ended in; a session's command (--session) shows the workspace's notice first.
 caller_path=$PATH
 PATH=${SYSTEM_PATH}
 export PATH
@@ -4321,8 +4564,16 @@ if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
   exit 126
 fi
 ${linux ? mountCheck(id, held.gen, pid) : ""}
+session=
+if [ "$1" = --session ]; then session=1; shift; fi
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
+# A session's command shows what CawCo did to the work meanwhile, once.
+notice=${shellQuote(noticeOf(id))}
+if [ -n "$session" ] && [ -s "$notice" ] && mv "$notice" "$notice.$$" 2>/dev/null; then
+  cat "$notice.$$" >&2
+  rm -f "$notice.$$"
+fi
 req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"

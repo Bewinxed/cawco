@@ -1442,7 +1442,7 @@ function builtIn(
  * every time).
  */
 const BOUNDED =
-  /^'[^']+' --cwd-out '[^']+' '((?:[^']|'\\'')*)'; __cawco_status=\$\?; /;
+  /^'[^']+' --session --cwd-out '[^']+' '((?:[^']|'\\'')*)'; __cawco_status=\$\?; /;
 
 /**
  * The command a shell call runs, out of the boundary's rewrite once when it

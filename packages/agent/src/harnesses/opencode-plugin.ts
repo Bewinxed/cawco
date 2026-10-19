@@ -333,7 +333,8 @@ const boundedShell = (id, root, directory, bounded, host, permission) => ({
         metadata: { command: input.command, ...(input.description ? { description: input.description } : {}), ...(input.workdir ? { workdir: input.workdir } : {}) },
       });
       const held = boundaryOf(id, root);
-      return runShell(held.exec, [input.command], input, context, directory);
+      // A session's command: it shows the workspace's notice first.
+      return runShell(held.exec, ["--session", input.command], input, context, directory);
     }
     if (!host) throw new Error("cawco: this location has no built-in shell to run a command outside workspace " + id + "'s boundary, so it did not run.");
     // Its words and metadata; not its structured \`output\`, which this tool

@@ -102,7 +102,7 @@ const answer = (text: string): string => {
         return "0\n";
       }
       const ended = quote(join(scratch, `.cwd-${randomUUID()}`));
-      const command = `${quote(exec)} --cwd-out ${ended} ${quote(call.command)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(/bin/cat ${ended})"; fi; /bin/rm -f ${ended}; (exit $__cawco_status)`;
+      const command = `${quote(exec)} --session --cwd-out ${ended} ${quote(call.command)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(/bin/cat ${ended})"; fi; /bin/rm -f ${ended}; (exit $__cawco_status)`;
       return `0\n${JSON.stringify({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
