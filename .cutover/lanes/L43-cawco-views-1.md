@@ -35,6 +35,20 @@ theme: component view-canvas-ease
 }
 ```
 
+## Compiled check
+Compiled with `@tailwindcss/node` 4.3.3 over `@import "apps/dashboard/src/app.css"` plus the block above; emitted, in the output after the app's view-transition rules:
+```
+@layer components {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="view-canvas"][data-settled] .svelte-flow__node {
+      transition: transform var(--dur-panel) var(--ease-in-out), opacity var(--dur-fade) var(--ease-out);
+      @starting-style { opacity: 0; }
+    }
+  }
+}
+```
+Competition: no app.css or component rule writes `transition` or `opacity` on `.svelte-flow__node` (grep over src: only WorkflowNodeCard's `:focus-visible` card rule and WorkflowEditor/WorkflowCanvas queries name the class), and `@xyflow/svelte/dist/style.css` writes neither, so the rule is not outranked by layer, specificity or order. The same build emitted the utilities this lane's markup adds: `.inset-ring`, `.data-open\:inset-ring-border-control:where([data-state="open"]), …:where([data-open]:not([data-open="false"]))`, `.after\:absolute::after`, `.after\:inset-0::after` (both with `content: var(--tw-content)`), `.max-desk\:px-space-3` under `@media (width < 900px)`, `@container routines-ledger (width < 34rem) { .\@max-routines-ledger-34rem\/routines-ledger\:inline { display: inline } }`, `.min-w-space-row`, `.px-\(--starters-inset\)`, `.grid-cols-\(--made-cols\)`. `max-w-c-measure` and `min-h-c-canvas-min-h` were not emitted: their tokens (`--spacing-c-measure`, `--spacing-c-canvas-min-h`) are integration's to add in this tree.
+
 ## Tokens
 token: --c-made-tile-min 18rem — ViewMade.svelte:40, the least width of a made tile in its auto-fill grid; no ladder step is a 288px column
 token: --c-canvas-min-h 280px — ViewCanvas.svelte:205, the Canvas view's least height (the graph needs a floor to be readable); no ladder step is a canvas height
