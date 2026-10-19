@@ -645,7 +645,7 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
       states.join(", ")
     );
     // What the stage keeps and the design map counts after the phone looked: the desk's draw of the same content still stands.
-    const kept = (await (
+    const stageKept = (await (
       await fetch(
         `${stage.base}/__cawco/report?file=${encodeURIComponent("src/Pairing.stories.js")}`
       )
@@ -655,8 +655,8 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
         `${stage.base}/__cawco/components?component=${encodeURIComponent("src/Pairing.svelte")}`
       )
     ).json()) as DesignMap;
-    const card = mapped.components[0];
-    const keptStates = framesOf(kept).map(
+    const [card] = mapped.components;
+    const keptStates = framesOf(stageKept).map(
       (one) => `${one.story}/${one.interaction}:${one.state}`
     );
     kit.check(
