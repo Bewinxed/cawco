@@ -30,6 +30,7 @@
     steps,
     pushes = false,
     lane = 0,
+    lanes = 1,
     trail,
     inFold,
     below,
@@ -42,6 +43,8 @@
     pushes?: boolean;
     /** Lanes: which of the two lanes its tile stands in. */
     lane?: number;
+    /** Lanes: how many lanes run through this row (its gutter's width). */
+    lanes?: number;
     /** More at the trailing edge, before the chevron (Crew first: who is on it). */
     trail?: Snippet;
     /** More inside the fold, after the sub-steps (Crew first: its delegates). */
@@ -77,10 +80,14 @@
 <li
   class="item"
   data-lit={view.lit.id === step.id || undefined}
+  data-after={step.after?.join(" ")}
   data-row={step.id}
   data-flip="box"
   hidden={dismissed}
   style:--lead-in="calc({lane} * (var(--pv-tile, 18px) + var(--space-2)))"
+  style:--lead-w={lanes > 1
+    ? `calc(${lanes} * var(--pv-tile, 18px) + ${lanes - 1} * var(--space-2))`
+    : undefined}
 >
   {#if gone}
     <div class="gone">

@@ -1,9 +1,12 @@
 <script lang="ts">
   /**
    * THE PROGRESS LINE (proposal): how far a delegate's own plan has got,
-   * drawn with the usage strip's LimitBar at its 4px size, no pace tick,
-   * its fill in the delegate's identity hue (The Reserved Hue Rule lets
-   * progress take one) and its track the control edge.
+   * drawn with the usage strip's LimitBar at its 4px size, no pace tick.
+   * Its colour follows The Reserved Hue Rule (DESIGN.md): crimson, spark,
+   * olive and blue mean status only, and progress takes `currentColor`,
+   * so a running, waiting or queued line is ink on the control edge. A
+   * result earns its state pair, as a finished task ring does: done in the
+   * done pair, failed in the fail pair.
    *
    * While the delegate works, the skeleton's sweep crosses the fill: one
    * band of the raised surface at 60% every --dur-loop, by transform only
@@ -12,7 +15,6 @@
    * to full and the band stops; failed, the fill holds where it stopped.
    * With reduced motion no band runs.
    */
-  import { markHue } from "#lib/cawco/mark.js";
   import LimitBar from "#lib/cawco/usage/LimitBar.svelte";
   import type { Delegate } from "./fixtures";
 
@@ -38,7 +40,6 @@
   data-planless={delegate.plan ? undefined : ""}
   data-slot="progress-line"
   data-status={delegate.status}
-  style:--hue="var(--mark-{markHue(delegate.place)})"
   style:--share={share}
 >
   <LimitBar
@@ -62,15 +63,20 @@
     display: block;
     min-inline-size: 0;
   }
-  /* LimitBar's own inks are the meter's; here the fill is the delegate's
-     hue and the track the control edge. */
+  /* LimitBar's own inks are the meter's; here ink on the control edge
+     while it runs, and a result's state pair once it has one. */
   .line :global(.bar[data-reads]) {
-    --fill: var(--hue);
+    --fill: var(--ink-muted);
     --track: var(--border-control);
     block-size: var(--pv-line, 4px);
   }
+  .line[data-status="done"] :global(.bar[data-reads]) {
+    --fill: var(--status-done-ink);
+    --track: var(--status-done-bg);
+  }
   .line[data-status="fail"] :global(.bar[data-reads]) {
-    --fill: color-mix(in oklch, var(--hue) 55%, var(--border-control));
+    --fill: var(--status-fail-ink);
+    --track: var(--status-fail-bg);
   }
   /* The sweep stands over the fill only (the whole track while there is
      no plan), cut to it. */
@@ -101,7 +107,7 @@
     background: linear-gradient(
       90deg,
       transparent 0 35%,
-      var(--hue) 35% 65%,
+      var(--ink-muted) 35% 65%,
       transparent 65% 100%
     );
   }
