@@ -3982,18 +3982,16 @@
               {@const LiveIcon = d.icon}
               <!-- The in-flight tool is a rail row on the same columns as the
                    calls it becomes (app.css `.rail-row`, `.rail-line`): one
-                   line, 26px tall. No colour on the glyph: the tool family's
-                   `text-tool-*` tint governs it, the generic case inheriting
-                   the row's strong ink. -->
-              <!-- literal: 26px -->
+                   line, at the transcript's line height. No colour on the
+                   glyph: the tool family's `text-tool-*` tint governs it, the
+                   generic case inheriting the row's strong ink. -->
               <div
                 data-transcript-rail-row
                 data-slot="livetool"
-                style:--livetool-h="26px"
-                class="min-h-(--livetool-h) text-size-label font-medium text-ink-strong rail-row rail-line"
+                class="min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong rail-row rail-line"
               >
                 <span data-slot="rail-cell" class="rail-cell {d.color}"
-                  ><LiveIcon /></span
+                  ><LiveIcon class="size-icon-md" /></span
                 >
                 <!-- The same anatomy the settled ToolGroup row has: the
                      descriptor's verb, then the mono argument, the verb
@@ -4104,50 +4102,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  /* residual: foreign-dom: virtua's items and container, which this file
-     does not render.
-     A row the list has drawn stays drawn while virtua re-reads its size at
-     a new index (Row's `drawn`): virtua hides such an item for the moment
-     it takes to measure it, and the visibility it inherits restyled the
-     whole row twice. So the drawn row's ITEM takes no hiding of virtua's
-     own: `inherit` outranks virtua's inline `hidden` and leaves the item
-     exactly as visible as the list above it. Never `visible`: a re-declared
-     `visible` paints through every hidden ancestor (the page parked under
-     another spoke, a tab behind another, a deck card, the pen), and the
-     transcript's rows were drawn over Workflows. A row virtua has never
-     measured keeps virtua's hiding.
-     The item is named (`data-item`, virtua's `itemProps`) and marked drawn
-     by its row (Row's `data-drawn`), never asked with `:has()`: as
-     `:has(> [data-row][data-drawn])`, every node put in under a row (each
-     word of a streamed reply, each row virtua mounted) walked up and
-     restyled its item ("Affected by :has()", 8-11 items in each of a busy
-     tab's return tasks, tab-return 1b). */
-  [data-slot="listing"] :global([data-item][data-drawn]) {
-    visibility: inherit !important;
-  }
-  /* virtua writes `pointer-events: none` on its container while it scrolls
-     and takes it off after. pointer-events is inherited, so each write
-     restyled every row under it: the pin scrolls the list on every streamed
-     chunk, and each write cost a style recalculation of the whole
-     transcript (13,000 elements, ~140ms). `inherit` outranks virtua's inline
-     write, so its scrolling never changes the value and the rows are left
-     alone. Never `auto`: a re-declared `auto` let a press through the lock a
-     modal layer (an open menu, a dialog) sets on the body, so a click on a
-     row acted on it instead of only shutting the layer. */
-  [data-slot="listing"] > :global(:first-child) {
-    pointer-events: inherit !important;
-  }
-  /* The catch-up and the way back to the tail: buttons the dock's children
-     (Behind, CatchUp, Latest) draw take the pointer the dock does not. */
-  [data-slot="dock"] :global(button) {
-    pointer-events: auto;
-  }
-  /* The live tool's glyph is the descriptor's own component, which takes no
-     class: it stands at the glyph column's width. */
-  [data-slot="livetool"] [data-slot="rail-cell"] :global(svg) {
-    inline-size: var(--w-glyph);
-    block-size: var(--w-glyph);
-  }
-</style>
