@@ -948,120 +948,6 @@
         }
       }
     },
-    "/api/stream-relay": {
-      "get": {
-        "operationId": "getApiStreamRelay",
-        "responses": {
-          "200": {
-            "description": "getApiStreamRelay 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "machineId": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "hostname": {
-                    "maxLength": 253,
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "machineId"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "postApiStreamRelay",
-        "responses": {
-          "200": {
-            "description": "postApiStreamRelay 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiStreamRelay 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteApiStreamRelay",
-        "responses": {
-          "200": {
-            "description": "deleteApiStreamRelay 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/stream-relay/start": {
-      "post": {
-        "operationId": "postApiStreamRelayStart",
-        "responses": {
-          "200": {
-            "description": "postApiStreamRelayStart 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/stream-relay/stop": {
-      "post": {
-        "operationId": "postApiStreamRelayStop",
-        "responses": {
-          "200": {
-            "description": "postApiStreamRelayStop 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/browsers": {
       "get": {
         "operationId": "getApiBrowsers",
@@ -1293,6 +1179,220 @@
           },
           "422": {
             "description": "postApiBrowsersByKeyStop 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream-relay": {
+      "get": {
+        "operationId": "getApiStreamRelay",
+        "responses": {
+          "200": {
+            "description": "getApiStreamRelay 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream-relay/act": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
+                        "type": "string",
+                        "enum": [
+                          "set-up",
+                          "later",
+                          "skip-name",
+                          "add-name",
+                          "open-ports",
+                          "retry",
+                          "start-again",
+                          "check-again",
+                          "done-for-now",
+                          "start",
+                          "stop",
+                          "remove"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "act"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
+                        "type": "string",
+                        "const": "add-record"
+                      },
+                      "token": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "act",
+                      "token"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
+                        "type": "string",
+                        "const": "pick"
+                      },
+                      "machineId": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "act",
+                      "machineId"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
+                        "type": "string",
+                        "const": "name"
+                      },
+                      "name": {
+                        "maxLength": 253,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "act",
+                      "name"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiStreamRelayAct",
+        "responses": {
+          "200": {
+            "description": "postApiStreamRelayAct 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayAnswer"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiStreamRelayAct 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream-relay/try": {
+      "get": {
+        "operationId": "getApiStreamRelayTry",
+        "responses": {
+          "200": {
+            "description": "getApiStreamRelayTry 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayTry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream-relay/proof": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answered": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "refused": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "seenAs": {
+                    "maxLength": 64,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "answered",
+                  "refused",
+                  "seenAs"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiStreamRelayProof",
+        "responses": {
+          "200": {
+            "description": "postApiStreamRelayProof 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayAnswer"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiStreamRelayProof 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31864,6 +31964,9 @@
             "$ref": "#/components/schemas/RelayFrame"
           },
           {
+            "$ref": "#/components/schemas/RelayJourneyFrame"
+          },
+          {
             "$ref": "#/components/schemas/WorkflowFrame"
           }
         ],
@@ -31919,6 +32022,7 @@
             "command_queue": "#/components/schemas/CommandQueueFrame",
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
             "stream_relay": "#/components/schemas/RelayFrame",
+            "stream_relay.journey": "#/components/schemas/RelayJourneyFrame",
             "workflow": "#/components/schemas/WorkflowFrame"
           }
         }
@@ -33319,221 +33423,6 @@
           "tools"
         ]
       },
-      "StreamRelayAnswer": {
-        "description": "What `GET /api/stream-relay` answers.",
-        "type": "object",
-        "properties": {
-          "candidates": {
-            "description": "Every machine that could run it.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RelayCandidate"
-            }
-          },
-          "relay": {
-            "$ref": "#/components/schemas/StreamRelayView"
-          }
-        },
-        "required": [
-          "candidates"
-        ]
-      },
-      "RelayCandidate": {
-        "description": "A machine that could run the relay: its capability report holds a public address.",
-        "type": "object",
-        "properties": {
-          "address": {
-            "description": "The address the relay would be reached at: the hub's seen address where it is public and differs, else the first global IPv4.",
-            "type": "string"
-          },
-          "addresses": {
-            "description": "Every global unicast address its interfaces hold (capability `public-address`).",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "externalIp": {
-            "description": "coturn's `external-ip`, when the address is not one of its interfaces'.",
-            "type": "string"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "online": {
-            "type": "boolean"
-          },
-          "seen": {
-            "description": "The public address the hub sees its agent connect from, when it differs from its own.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "address",
-          "addresses",
-          "machineId",
-          "name",
-          "online"
-        ]
-      },
-      "StreamRelayView": {
-        "description": "The relay as Settings shows it: the record without its secret.",
-        "type": "object",
-        "properties": {
-          "address": {
-            "type": "string"
-          },
-          "certificateEndsAt": {
-            "description": "The certificate's end (ms epoch), while one stands.",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "checkedAt": {
-            "description": "When the hub last asked each port (ms epoch); null before it has.",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "health": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RelayPortHealth"
-            }
-          },
-          "hostname": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "machineName": {
-            "type": "string"
-          },
-          "ports": {
-            "$ref": "#/components/schemas/RelayPorts"
-          },
-          "progress": {
-            "type": "object",
-            "properties": {
-              "done": {
-                "type": "number"
-              },
-              "total": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "done",
-              "total"
-            ]
-          },
-          "state": {
-            "$ref": "#/components/schemas/StreamRelayState"
-          },
-          "urls": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "why": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "whyCommand": {
-            "description": "The command `why` names as its fix, word for word inside it: shown as code.",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "address",
-          "certificateEndsAt",
-          "checkedAt",
-          "health",
-          "hostname",
-          "machineId",
-          "machineName",
-          "state",
-          "urls",
-          "why",
-          "whyCommand"
-        ]
-      },
-      "RelayPortHealth": {
-        "description": "One port's answer to the hub's STUN binding request.",
-        "type": "object",
-        "properties": {
-          "error": {
-            "description": "Why it did not answer, as the request failed.",
-            "type": "string"
-          },
-          "port": {
-            "$ref": "#/components/schemas/RelayPortName"
-          },
-          "up": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "port",
-          "up"
-        ]
-      },
-      "RelayPortName": {
-        "description": "One port the hub's health check asks, by its chip's words.",
-        "type": "string",
-        "enum": [
-          "tcp 443",
-          "tls",
-          "udp 443"
-        ]
-      },
-      "RelayPorts": {
-        "description": "What the relay's machine has bound: its listener on UDP and TCP 443, and whether a certificate stands for TLS on it.",
-        "type": "object",
-        "properties": {
-          "tcp443": {
-            "type": "boolean"
-          },
-          "tls": {
-            "description": "A certificate stands and TCP 443 is bound: the listener answers TLS.",
-            "type": "boolean"
-          },
-          "udp443": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "tcp443",
-          "tls",
-          "udp443"
-        ]
-      },
-      "StreamRelayState": {
-        "description": "The relay as its machine runs it.",
-        "type": "string",
-        "enum": [
-          "failed",
-          "live",
-          "pulling",
-          "starting",
-          "stopped"
-        ]
-      },
       "StoredBrowser": {
         "description": "One browser as the hub keeps it.",
         "type": "object",
@@ -33755,6 +33644,534 @@
         "required": [
           "key",
           "origin"
+        ]
+      },
+      "RelayAnswer": {
+        "description": "What `GET /api/stream-relay` and every act answer.",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "description": "The domain the asking page reached CawCo through, seen through a proxy\n(a tunnel, Cloudflare): the lead line, the name's suggestion and the\ntake-over's entry name it. Null by IP, the tailnet or a name of the hub's.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "journey": {
+            "$ref": "#/components/schemas/RelayJourneyView"
+          }
+        },
+        "required": [
+          "domain",
+          "journey"
+        ]
+      },
+      "RelayJourneyView": {
+        "description": "The journey as the hub holds it, whole: what `GET /api/stream-relay`\nanswers (with the asking page's {@link RelayAnswer.domain}) and every\n`stream_relay.journey` frame carries, so every place that draws the card\nshows the same ticks.",
+        "type": "object",
+        "properties": {
+          "asks": {
+            "description": "Needs you holds its row: set up, not put away (Later, Done for now), and not yet live and proven from outside.",
+            "type": "boolean"
+          },
+          "candidates": {
+            "description": "How many machines could run it, for the row's meta before a pick.",
+            "type": "number"
+          },
+          "done": {
+            "description": "Live and proven from outside: the row's tick.",
+            "type": "boolean"
+          },
+          "machine": {
+            "description": "The machine picked, or null before a pick.",
+            "$ref": "#/components/schemas/RelayMachine"
+          },
+          "open": {
+            "description": "Someone set it up (the setup card, Settings, a take-over through a domain); false before.",
+            "type": "boolean"
+          },
+          "steps": {
+            "description": "Every step that applies, in order, with where each stands.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelayStep"
+            }
+          },
+          "summary": {
+            "description": "The relay once it has gone live, as Settings shows it; null before.",
+            "$ref": "#/components/schemas/RelaySummary"
+          },
+          "urls": {
+            "description": "The relay's URLs, for this screen's proof; empty while it is not live.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "asks",
+          "candidates",
+          "done",
+          "open",
+          "steps",
+          "urls"
+        ]
+      },
+      "RelayMachine": {
+        "description": "The machine the relay runs on, as step 1 found it.",
+        "type": "object",
+        "properties": {
+          "address": {
+            "description": "Its public address: an interface's, the hub's view of it, or STUN's.",
+            "type": "string"
+          },
+          "lan": {
+            "description": "Behind a router: its address on the router's network, for the forwards.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "lan",
+          "name"
+        ]
+      },
+      "RelayStep": {
+        "description": "One step on the path, by what it is and where it stands. A step that does\nnot apply to this machine is not in the list (the router on a machine with\na public interface, the low ports on a root runtime, the certificate with\nno name).",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "machine"
+                ]
+              },
+              "state": {
+                "description": "`needs`: two or more machines could run it, `choices` the ask; `none`: no machine can.",
+                "enum": [
+                  "done",
+                  "needs",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "choices": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RelayChoice"
+                }
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "name"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "checking",
+                  "done",
+                  "needs",
+                  "skipped",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "name": {
+                "description": "The name suggested, or the one that stands; empty when none is known yet (the field asks for one).",
+                "type": "string"
+              },
+              "askedAt": {
+                "description": "When the hub last asked DNS (ms epoch), while it checks.",
+                "type": "number"
+              },
+              "finding": {
+                "$ref": "#/components/schemas/RelayStepFinding",
+                "description": "What the name check last found while the name stands."
+              },
+              "answers": {
+                "description": "What the name answers instead, for `elsewhere`.",
+                "type": "string"
+              },
+              "tokenWhy": {
+                "description": "Cloudflare refused the token, or the record: its words, the token field open under \"Let CawCo add it\".",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "router"
+                ]
+              },
+              "state": {
+                "description": "`refused`: no UPnP or NAT-PMP answered; `partial`: the router opened\n443 and capped the relay range; `by-hand`: forwarded by hand, proven\nonly by the last step.",
+                "enum": [
+                  "asking",
+                  "by-hand",
+                  "done",
+                  "needs",
+                  "partial",
+                  "refused",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "how": {
+                "$ref": "#/components/schemas/RelayStepHow"
+              },
+              "http": {
+                "description": "TCP 80 is forwarded too: the certificate is issued and renewed over HTTP.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "runtime"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "checking",
+                  "done",
+                  "needs",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "lowest": {
+                "description": "The lowest port the relay will ever bind: 443, or 80 with a certificate over HTTP.",
+                "enum": [
+                  443,
+                  80
+                ],
+                "type": "number"
+              }
+            },
+            "required": [
+              "lowest",
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "certificate"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "done",
+                  "failed",
+                  "running",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "why": {
+                "description": "Its failure, in the error formula's words.",
+                "type": "string"
+              },
+              "endsAt": {
+                "description": "When the certificate ends (ms epoch).",
+                "type": "number"
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "start"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "done",
+                  "failed",
+                  "running",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "progress": {
+                "description": "\"Pulling 3 of 7\", while it runs.",
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              },
+              "command": {
+                "description": "The command `why` names as its fix, word for word inside it.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "prove"
+                ]
+              },
+              "state": {
+                "description": "`inside`: it answered from a screen on the relay's own network only; `checking`: this screen asks now (drawn by the screen itself).",
+                "enum": [
+                  "checking",
+                  "done",
+                  "failed",
+                  "inside",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "device": {
+                "description": "The device that proved it, or failed it.",
+                "type": "string"
+              },
+              "at": {
+                "description": "When (ms epoch).",
+                "type": "number"
+              },
+              "outside": {
+                "description": "The device that failed it was outside the relay's network.",
+                "type": "boolean"
+              },
+              "ports": {
+                "description": "The ports that answered it, \"udp 443, tcp 443, tls\".",
+                "type": "string"
+              },
+              "refused": {
+                "description": "It failed by a refused credential (a 401), not by no answer.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          }
+        ]
+      },
+      "RelayChoice": {
+        "description": "One machine step 1 offers when two or more could run the relay.",
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "address": {
+            "description": "Its public address: an interface's, the hub's view of it, or STUN's.",
+            "type": "string"
+          },
+          "lan": {
+            "description": "Behind a router: its address on the router's network, for the forwards.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "lan",
+          "machineId",
+          "name",
+          "online"
+        ]
+      },
+      "RelaySummary": {
+        "description": "The relay once it has gone live: Settings' summary.",
+        "type": "object",
+        "properties": {
+          "endsAt": {
+            "description": "When the certificate ends (ms epoch), with a name.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "machine": {
+            "$ref": "#/components/schemas/RelayMachine"
+          },
+          "name": {
+            "description": "Its name, or null when the name was skipped.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelayPortChip"
+            }
+          },
+          "progress": {
+            "description": "How far an image pull is, while it pulls.",
+            "type": "string"
+          },
+          "proven": {
+            "description": "Who proved it from outside and when, or null while nobody has.",
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "string"
+              },
+              "at": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "at",
+              "device"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/StreamRelayState"
+          },
+          "why": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "whyCommand": {
+            "description": "The command `why` names as its fix.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "endsAt",
+          "machine",
+          "name",
+          "ports",
+          "state",
+          "why",
+          "whyCommand"
+        ]
+      },
+      "RelayPortChip": {
+        "description": "One port's last STUN answer, as Settings' chips show it.",
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/RelayPortName"
+          },
+          "up": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "up"
+        ]
+      },
+      "RelayPortName": {
+        "description": "One port the hub's health check asks, by its chip's words.",
+        "type": "string",
+        "enum": [
+          "tcp 443",
+          "tls",
+          "udp 443"
+        ]
+      },
+      "StreamRelayState": {
+        "description": "The relay as its machine runs it.",
+        "type": "string",
+        "enum": [
+          "failed",
+          "live",
+          "pulling",
+          "starting",
+          "stopped"
+        ]
+      },
+      "RelayTry": {
+        "description": "A credential for this screen's proof (`GET /api/stream-relay/try`): good for 60 s.",
+        "type": "object",
+        "properties": {
+          "credential": {
+            "type": "string"
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential",
+          "urls",
+          "username"
         ]
       },
       "FolderListing": {
@@ -44823,6 +45240,22 @@
           "media": {
             "$ref": "#/components/schemas/MachineCapabilityMedia",
             "description": "`container-runtime` only: what the runtime forwards to the browser's media port. Short of `udp+tcp`, `reason` says how to get both."
+          },
+          "nat": {
+            "description": "`public-address` only, on a machine with none of its own: the public\naddress its router maps it to, as a STUN binding answered it, and its\naddress on the router's network (core stream-relay.ts `STUN_SERVER`).",
+            "type": "object",
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "lan": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "address",
+              "lan"
+            ]
           },
           "path": {
             "type": "string"
@@ -56541,6 +56974,46 @@
           "state"
         ]
       },
+      "RelayPorts": {
+        "description": "What the relay's machine has bound: its listener on UDP and TCP 443, and whether a certificate stands for TLS on it.",
+        "type": "object",
+        "properties": {
+          "tcp443": {
+            "type": "boolean"
+          },
+          "tls": {
+            "description": "A certificate stands and TCP 443 is bound: the listener answers TLS.",
+            "type": "boolean"
+          },
+          "udp443": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tcp443",
+          "tls",
+          "udp443"
+        ]
+      },
+      "RelayJourneyFrame": {
+        "description": "Hub-originated: the journey changed.",
+        "type": "object",
+        "properties": {
+          "journey": {
+            "$ref": "#/components/schemas/RelayJourneyView"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stream_relay.journey"
+            ]
+          }
+        },
+        "required": [
+          "journey",
+          "kind"
+        ]
+      },
       "WorkflowFrame": {
         "description": "Hub-originated run transition, separate from a harness's session frames.",
         "type": "object",
@@ -57478,6 +57951,21 @@
         "enum": [
           "added",
           "back"
+        ]
+      },
+      "RelayStepFinding": {
+        "type": "string",
+        "enum": [
+          "elsewhere",
+          "proxied",
+          "unresolved"
+        ]
+      },
+      "RelayStepHow": {
+        "type": "string",
+        "enum": [
+          "NAT-PMP",
+          "UPnP"
         ]
       },
       "RoutineMadeEventBy": {

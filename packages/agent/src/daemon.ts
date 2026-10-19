@@ -181,6 +181,8 @@ import {
   stopRelay,
   watchRelay,
 } from "./browser/relay";
+import { proveRelay } from "./browser/relay-reach";
+import { mapRelayPorts } from "./browser/relay-router";
 import {
   browserViewers,
   handBackBrowser,
@@ -188,8 +190,6 @@ import {
   setShieldSink,
   shieldBrowser,
 } from "./browser/shield";
-import { proveRelay } from "./browser/relay-reach";
-import { mapRelayPorts } from "./browser/relay-router";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
