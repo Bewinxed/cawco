@@ -799,9 +799,21 @@ const readReview = (page: Page) =>
           `[data-row="${id}"] > [data-slot="plan-row"] > .pv-lead`
         )?.offsetWidth ?? 0;
       // 8. The head's gap, the working glyph at its breath's floor, titles, times.
-      const figure = body
-        .querySelector('[data-slot="side-card"] .figure')
-        ?.getBoundingClientRect();
+      // The head's words as drawn: the figure's box cut by the first box
+      // over it that clips (SideSurface's name keeps "Plan" and cuts what
+      // trails it where the head is short).
+      const figureEl = body.querySelector('[data-slot="side-card"] .figure');
+      let figure: { right: number } | undefined;
+      if (figureEl) {
+        let right = figureEl.getBoundingClientRect().right;
+        for (let at = figureEl.parentElement; at && at !== body;) {
+          if (getComputedStyle(at).overflowX !== "visible") {
+            right = Math.min(right, at.getBoundingClientRect().right);
+          }
+          at = at.parentElement;
+        }
+        figure = { right };
+      }
       const glyph = body
         .querySelector('[data-slot="side-card"] .task-glyph')
         ?.getBoundingClientRect();
@@ -1747,7 +1759,7 @@ function checkSmall(kit: Kit, name: string, review: Review): void {
   const plan = story("Plan");
   // 8. The head's gap, the working glyph's floor, titles, times.
   kit.check(
-    `${name}: the head's figure and the task's glyph stand ${plan.headGap}px apart, at least 8`,
+    `${name}: the head's words as drawn and the task's glyph stand ${plan.headGap}px apart, at least 8`,
     Number(plan.headGap) >= 8,
     json(plan.headGap)
   );
