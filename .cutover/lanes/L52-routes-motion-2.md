@@ -39,7 +39,7 @@ token: --z-bench-float 1003 — what a bench's strip opens (its portalled card o
 theme: component bench-float
 ```css
 @layer components {
-  body:has([data-head-tint]) [data-bits-floating-content-wrapper] {
+  body:has([data-head-tint]) [data-bits-floating-content-wrapper]:not([data-hang]) {
     z-index: var(--z-bench-float);
   }
 }
@@ -49,10 +49,19 @@ theme: component bench-float
 none (no kit part is restyled in these files)
 
 ## Contracts
-none
+contract: routes/(app)/motion/session-limit/+page.svelte:88 passes size="compact" (L41 LimitBar role)
+(the `--row-paint` style on the Context row is dropped, as L41's LimitBar falls back to that paint; typecheck flags the string until L41 merges)
 
 ## Gaps
 none
+
+## Compiled check
+Compiled with `@tailwindcss/node` 4.3.3 (`compile()` over app.css plus the block below, `build()` over the lane's classes); scratch folder deleted.
+- `.z-\(--z-bench\)` → `z-index: var(--z-bench)`; `.max-w-leaf` → `var(--container-leaf)`; `.max-w-wide` → `var(--container-wide)`; `.max-w-decisions-900px` → `var(--container-decisions-900px)`; `.min-h-space-8` → `var(--space-8)`; `.w-c-panel-w` emitted.
+- `body:has([data-head-tint]) [data-bits-floating-content-wrapper]:not([data-hang])` (components layer, specificity 0,3,1) emitted as written. It competes with app.css:1551 `[data-bits-floating-content-wrapper][data-hang] { z-index: -1 }` (same layer, 0,2,0): the `:not([data-hang])` keeps the two disjoint, so a tab's hang card keeps its own layer under the strip and every other portalled card takes `--z-bench-float`.
+
+## Rendered check
+Vite dev (hub URL unreachable), playwright-core Chromium, ui-observer's observer.browser.js, 1440×900 and 390×844, all eight benches: document scrollWidth equals the viewport everywhere (no horizontal scroll); no `main`, bench root, iframe, card or case has a zero-size box; no console error beyond the unreachable hub and failed hub fetches. usage-relay at 1440: the switch bar is in flow (x 228, y 89, w 1212, h 38). ui-observer's `sibling-padding-differs`/`sibling-gaps-differ`/`near-miss-alignment` readings sit inside the real UsageMeter popover and the real components the benches render (other files), not in bench markup.
 
 ## Design critique (interface-craft, against DESIGN.md)
 Benches only; no new motion or visuals. Every finding is under `fixed:`/`removed:` above. ui-observer: head-tint measured as above; the other seven benches render through the same dev server and were not measured beyond the checks below (no layout or style rule on them changed except the usage-relay bar).

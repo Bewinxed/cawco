@@ -78,17 +78,14 @@
       <div
         class="type-meta flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-md bg-surface-raised p-space-3 text-ink-strong"
       >
-        <div
-          class="flex flex-auto items-center gap-x-space-2 gap-y-space-1"
-          style:--row-paint="var(--surface-raised)"
-        >
+        <div class="flex flex-auto items-center gap-x-space-2 gap-y-space-1">
           <span class="text-ink-muted">Context</span>
           <span class="max-w-c-context-bar-max min-w-c-context-bar-min flex-1">
             <LimitBar
               elapsed={null}
               label="Context"
               reads="used"
-              size={4}
+              size="compact"
               state={fillState(contextUsed)}
               used={contextUsed}
             />
