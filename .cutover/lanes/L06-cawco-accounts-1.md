@@ -1,5 +1,8 @@
 # L06-cawco-accounts-1
 
+Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, interface-craft, ui-observer.
+better-ui rules: nested radius, dots take pill radius, named transition properties, no !important, hover via hover: variant. better-layout rules: min-h over fixed heights, space groups content, container query over viewport query, min-w-0 and wrap-anywhere on long text, sr-only for the hidden step name.
+
 ## Files
 | file | rules moved | residuals 1/2/3/4/5 | literals preserved | breakpoint edges | STOPs |
 |---|---|---|---|---|---|
