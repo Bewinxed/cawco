@@ -345,13 +345,19 @@ const boundNow = async (tls: boolean): Promise<RelayPorts> => {
 /* Containers                                                          */
 /* ------------------------------------------------------------------ */
 
-/** What one container that ran to its end said, its stdout and stderr in order. */
-const logsOf = async (container: Docker.Container): Promise<string> => {
+/**
+ * What a container said, its stdout and stderr in order: its last 60 lines,
+ * or every line since `window.since` (s epoch).
+ */
+export const logsOf = async (
+  container: Docker.Container,
+  window: { tail: number } | { since: number } = { tail: 60 }
+): Promise<string> => {
   const raw = (await container.logs({
     stdout: true,
     stderr: true,
     follow: false,
-    tail: 60,
+    ...window,
   })) as unknown as Buffer;
   // The Engine API's multiplexed stream: an 8-byte header (stream, 0, 0, 0,
   // size as uint32 big-endian) before each frame, while the container has no TTY.

@@ -204,6 +204,245 @@ export const turn = (
     }, TURN_MS);
   });
 
+/** How long {@link relayHops} sends each leg's datagram again, every {@link RESEND_MS}, before it gives up. */
+const HOPS_MS = 8000;
+const RESEND_MS = 400;
+
+/** `ip:port`, as a peer is written in every line. */
+const hostPort = (peer: { ip: string; port: number }): string =>
+  `${bracketed(peer.ip)}:${peer.port}`;
+
+/**
+ * What each hop of one allocation's data path carried, with the address each
+ * end saw the other at. `out` is the way a viewer's check takes to the
+ * browser: coturn's relay socket sends to `address` (a UDP echo on this
+ * machine) and the echo's answer comes back to the client. `in` is the way
+ * the browser's check takes to the viewer: this machine sends to the relayed
+ * address, the client hears it from the peer coturn saw, and its answer to
+ * that peer comes back. A field left out is a hop that carried nothing.
+ */
+export interface RelayHops {
+  error?: string;
+  in: {
+    /** The answer to that peer, back on this machine, from the address it read. */
+    answeredFrom?: string;
+    /** The peer the client heard this machine's datagram from (published: the forwarder). */
+    heardFrom?: string;
+    /** A permission for that peer, when it was not `address`: granted, or coturn's code. */
+    permission?: number | "granted";
+  };
+  out: {
+    /** The echo's answer, as the client heard it: the peer coturn read it from. */
+    answeredBy?: string;
+    /** Where the echo heard coturn's relay socket from. */
+    heardFrom?: string;
+    /** coturn's answer to the permission for `address`. */
+    permission?: number | "granted";
+  };
+  relayed?: string;
+}
+
+/**
+ * Both ways of one allocation's data path through the relay at `url`, with
+ * `user`'s credential, against `address`, this machine's address (the one the
+ * browser's candidates name): each datagram sent again every
+ * {@link RESEND_MS} until it is answered or {@link HOPS_MS} have passed.
+ */
+export const relayHops = (
+  url: string,
+  user: { username: string; credential: string },
+  address: string
+): Promise<RelayHops> =>
+  new Promise((resolve) => {
+    const hops: RelayHops = { out: {}, in: {} };
+    const echo = createSocket("udp4");
+    const sender = createSocket("udp4");
+    const timers: ReturnType<typeof setInterval>[] = [];
+    let client: ReturnType<typeof connect> | undefined;
+    let relayedPeer: { ip: string; port: number } | undefined;
+    let done = false;
+    const finish = () => {
+      if (done) {
+        return;
+      }
+      done = true;
+      for (const timer of timers) {
+        clearInterval(timer);
+      }
+      for (const one of [echo, sender]) {
+        try {
+          one.close();
+        } catch {
+          // already closed
+        }
+      }
+      try {
+        client?.close();
+      } catch {
+        // already closed
+      }
+      resolve(hops);
+    };
+    const settled = () => {
+      if (hops.out.answeredBy && hops.in.answeredFrom) {
+        finish();
+      }
+    };
+    /** `send` now and every RESEND_MS until `answered` holds. */
+    const repeat = (send: () => void, answered: () => boolean) => {
+      send();
+      const timer = setInterval(
+        () => (answered() ? clearInterval(timer) : send()),
+        RESEND_MS
+      );
+      timers.push(timer);
+    };
+    echo.on("message", (data, from) => {
+      if (data.toString() === "out") {
+        hops.out.heardFrom ??= `${bracketed(from.address)}:${from.port}`;
+        echo.send("out-echo", from.port, from.address);
+      }
+    });
+    sender.on("message", (data, from) => {
+      if (data.toString() === "back") {
+        hops.in.answeredFrom ??= `${bracketed(from.address)}:${from.port}`;
+        settled();
+      }
+    });
+    /** The client's answer to the peer it heard this machine's datagram from. */
+    const answerBack = (peer: { ip: string; port: number }) =>
+      repeat(
+        () => client?.send(peer, Buffer.from("back")),
+        () => !!hops.in.answeredFrom
+      );
+    /** Which permission the next answer is for: `address`'s, then the forwarder's. */
+    let asked: "out" | { ip: string; port: number } | undefined;
+    const permitted = (code: number | "granted") => {
+      if (asked === "out") {
+        hops.out.permission = code;
+        if (code !== "granted") {
+          finish();
+          return;
+        }
+        repeat(
+          () =>
+            client?.send(
+              { ip: address, port: echo.address().port },
+              Buffer.from("out")
+            ),
+          () => !!hops.out.answeredBy
+        );
+        repeat(
+          () =>
+            relayedPeer && sender.send("in", relayedPeer.port, relayedPeer.ip),
+          () => !!hops.in.heardFrom
+        );
+      } else if (asked) {
+        hops.in.permission = code;
+        if (code === "granted") {
+          answerBack(asked);
+        }
+      }
+    };
+    /** A datagram coturn delivered to the client, from the peer it read it from. */
+    const heard = (peer: { ip: string; port: number }, data: Uint8Array) => {
+      const text = Buffer.from(data).toString();
+      if (text === "out-echo") {
+        hops.out.answeredBy ??= hostPort(peer);
+        settled();
+        return;
+      }
+      if (text !== "in" || hops.in.heardFrom) {
+        return;
+      }
+      hops.in.heardFrom = hostPort(peer);
+      // Published, coturn hears this machine from the forwarder's address,
+      // which the client has no permission for yet: as a viewer answering the
+      // browser's check, it asks for one.
+      if (peer.ip === address) {
+        answerBack(peer);
+        return;
+      }
+      asked = peer;
+      client?.createPermission({ ip: peer.ip, port: 0 });
+    };
+    echo.bind(0, "0.0.0.0", () =>
+      sender.bind(0, "0.0.0.0", () => {
+        client = connect(
+          url,
+          {
+            username: user.username,
+            password: user.credential,
+            autoRefresh: false,
+          },
+          (error, connected) => {
+            if (error) {
+              hops.error = said(error);
+              finish();
+              return;
+            }
+            connected.on("allocate:success", (msg) => {
+              relayedPeer = msg.getAttribute(0x00_16) as
+                { ip: string; port: number } | undefined;
+              if (!relayedPeer) {
+                finish();
+                return;
+              }
+              hops.relayed = hostPort(relayedPeer);
+              asked = "out";
+              connected.createPermission({ ip: address, port: 0 });
+            });
+            connected.on("allocate:error", (_msg, err) => {
+              hops.error = `allocation refused ${(err as { code?: number } | undefined)?.code}`;
+              finish();
+            });
+            connected.on("create_permission:success", () =>
+              permitted("granted")
+            );
+            connected.on("create_permission:error", (_msg, err) =>
+              permitted((err as { code?: number } | undefined)?.code ?? 0)
+            );
+            connected.on("data", heard);
+            connected.on("error", (err) => {
+              hops.error = said(err);
+              finish();
+            });
+            connected.allocate();
+          }
+        );
+      })
+    );
+    setTimeout(finish, HOPS_MS);
+  });
+
+/** The first hop of {@link relayHops} that carried nothing, in one sentence; undefined when every hop carried. */
+export const brokenHop = (
+  hops: RelayHops,
+  address: string
+): string | undefined => {
+  if (!hops.relayed) {
+    return `no allocation (${hops.error ?? "no answer"})`;
+  }
+  if (hops.out.permission !== "granted") {
+    return `coturn answered the permission for ${address} with ${hops.out.permission ?? "nothing"}`;
+  }
+  if (!hops.out.heardFrom) {
+    return `coturn's relay socket → ${address}: no datagram reached this machine's UDP echo`;
+  }
+  if (!hops.out.answeredBy) {
+    return `${address} → coturn's relay socket: the echo answered ${hops.out.heardFrom}, and nothing came back to the client`;
+  }
+  if (!hops.in.heardFrom) {
+    return `this machine → the relayed address ${hops.relayed}: nothing reached the client`;
+  }
+  if (hops.in.permission !== undefined && hops.in.permission !== "granted") {
+    return `coturn answered the permission for ${hops.in.heardFrom}, the peer it heard this machine from, with ${hops.in.permission}`;
+  }
+  if (!hops.in.answeredFrom) {
+    return `the client's answer to ${hops.in.heardFrom} never came back to this machine`;
+  }
+};
+
 /** A port the OS hands out on `proto` for port 0, released again; `want` asks for that one instead. */
 const bindPort = (
   proto: "tcp" | "udp",

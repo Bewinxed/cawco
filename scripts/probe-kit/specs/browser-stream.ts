@@ -18,8 +18,17 @@
  *   neko's default, Google's), and it gives viewers none of its own;
  * - that credential allocates on coturn;
  * - the viewer connects; its selected pair is host/host on the LAN;
+ * - coturn carries a datagram both ways, the hops a relayed pair takes: its
+ *   relay socket to a UDP echo on this machine's address (neko's candidates
+ *   name it) and back to the client, and this machine to the relayed address
+ *   and the client's answer back, each line naming the address each end saw;
  * - the same viewer with `iceTransportPolicy: "relay"` connects through
- *   coturn over UDP;
+ *   coturn over UDP. Failed, it prints what decides the hop: the viewer's
+ *   getStats() (its candidates, neko's, every pair with its checks each way
+ *   and their answers, its ICE and DTLS states), coturn's lines for its
+ *   sessions (this spec's coturn runs `--verbose`: each permission granted
+ *   or refused, each session's peer traffic at its end) and neko's ICE lines,
+ *   and names the hop in the failure line;
  * - the daemon is told the view count as a socket opens (1) and closes (0);
  * - local host (`DOCKER_HOST=unix:///nonexistent`): the `/cdp` view of a
  *   take-over carries frames whose header reads 1280x800, and a tap sent up
@@ -83,10 +92,36 @@ const HTTP_SCHEME = /^http/;
 
 const PRIVATE_V4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
 
+/** A failed view's ICE as the viewer had it when it gave up: its getStats() and the events before. */
+interface IceEvidence {
+  /** Each `type address:port protocol` (a relay one with its TURN URL), the viewer's own and neko's. */
+  candidates: { local: string[]; remote: string[] };
+  /** `icecandidateerror` events: a TURN server's refusal of the allocation. */
+  errors: string[];
+  /** Every candidate pair: its state, and the checks each way with their answers. */
+  pairs: {
+    local: string;
+    nominated: boolean;
+    /** Checks neko sent the viewer, and the viewer's answers to them. */
+    received: number;
+    receivedAnswered: number;
+    remote: string;
+    /** Checks the viewer sent, and neko's answers to them. */
+    sent: number;
+    sentAnswered: number;
+    state: string;
+  }[];
+  /** The ICE and connection states, in the order they came. */
+  states: string[];
+  transport?: { dtls?: string; ice?: string };
+}
+
 /** What a view read: neko's words, the offer's ICE servers, and the pair it connected on. */
 interface ViewRead {
   closed?: string;
   error?: string;
+  /** Read when the view failed. */
+  ice?: IceEvidence;
   iceservers?: { urls: string[]; username?: string; credential?: string }[];
   pair?: {
     local: {
@@ -131,11 +166,51 @@ const view = (args: {
       ws.close();
       resolve(read);
     };
-    const timer = setTimeout(
-      () =>
-        done(`not connected within 45 s (${pc?.connectionState ?? "no peer"})`),
-      45_000
-    );
+    const states: string[] = [];
+    const errors: string[] = [];
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page with its view, so it calls nothing outside it.
+    const evidenceOf = async (peer: RTCPeerConnection) => {
+      const stats = await peer.getStats();
+      const named = new Map<string, string>();
+      const evidence: IceEvidence = {
+        candidates: { local: [], remote: [] },
+        pairs: [],
+        states,
+        errors,
+      };
+      for (const one of stats.values()) {
+        if (one.type === "local-candidate" || one.type === "remote-candidate") {
+          const said = `${one.candidateType} ${one.address || "?"}:${one.port} ${one.protocol}${one.url ? ` from ${one.url}` : ""}`;
+          named.set(one.id, said);
+          evidence.candidates[
+            one.type === "local-candidate" ? "local" : "remote"
+          ].push(said);
+        } else if (one.type === "transport") {
+          evidence.transport = { ice: one.iceState, dtls: one.dtlsState };
+        }
+      }
+      for (const one of stats.values()) {
+        if (one.type === "candidate-pair") {
+          evidence.pairs.push({
+            local: named.get(one.localCandidateId) ?? one.localCandidateId,
+            remote: named.get(one.remoteCandidateId) ?? one.remoteCandidateId,
+            state: one.state,
+            nominated: !!one.nominated,
+            sent: one.requestsSent ?? 0,
+            sentAnswered: one.responsesReceived ?? 0,
+            received: one.requestsReceived ?? 0,
+            receivedAnswered: one.responsesSent ?? 0,
+          });
+        }
+      }
+      return evidence;
+    };
+    const timer = setTimeout(async () => {
+      if (pc) {
+        read.ice = await evidenceOf(pc).catch(() => undefined);
+      }
+      done(`not connected within 45 s (${pc?.connectionState ?? "no peer"})`);
+    }, 45_000);
     const send = (event: string, payload: unknown) =>
       ws.send(JSON.stringify({ event, payload }));
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page with its view, so it calls nothing outside it.
@@ -210,14 +285,22 @@ const view = (args: {
             send("signal/candidate", found.candidate.toJSON());
           }
         };
+        peer.oniceconnectionstatechange = () =>
+          states.push(`ice ${peer.iceConnectionState}`);
+        peer.onicecandidateerror = (refused) =>
+          errors.push(
+            `${refused.url}: ${refused.errorCode} ${refused.errorText}`
+          );
         peer.onconnectionstatechange = async () => {
+          states.push(`connection ${peer.connectionState}`);
           if (peer.connectionState === "connected") {
             read.pair = await selected(peer);
             clearTimeout(timer);
             done();
           } else if (peer.connectionState === "failed") {
             clearTimeout(timer);
-            done("ICE failed");
+            read.ice = await evidenceOf(peer).catch(() => undefined);
+            done(`connection failed (ice ${peer.iceConnectionState})`);
           }
         };
         await peer.setRemoteDescription({
@@ -401,6 +484,7 @@ const run = async (kit: Kit): Promise<void> => {
   try {
     await legs(kit, {
       address,
+      coturn,
       docker: runtime.docker,
       realHome,
       runtime: runtime.endpoint,
@@ -471,6 +555,9 @@ const startCoturn = async (
           )
           .map(onPort(standIn)),
         `--allowed-peer-ip=${address}`,
+        // Each request's answer, each permission, and each session's peer
+        // traffic at its end ("peer usage"), read when the relay-only leg fails.
+        "--verbose",
       ],
       ...(runtime.ownNetwork
         ? { HostConfig: { NetworkMode: "host" } }
@@ -520,8 +607,13 @@ const startCoturn = async (
   await coturn.container.remove({ force: true }).catch(() => undefined);
 };
 
+/** A container on the runtime. */
+type Container = ReturnType<Runtime["docker"]["getContainer"]>;
+
 interface At {
   address: string;
+  /** This spec's coturn. */
+  coturn: Container;
   docker: Runtime["docker"];
   realHome: string;
   runtime: string;
@@ -541,7 +633,7 @@ const legs = async (kit: Kit, at: At): Promise<void> => {
 };
 
 const legsWith = async (kit: Kit, at: At, stun: string): Promise<void> => {
-  const { address, docker, secret, standIn, where } = at;
+  const { address, coturn, docker, secret, standIn, where } = at;
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   const browsersPath =
     process.env.PLAYWRIGHT_BROWSERS_PATH ??
@@ -575,6 +667,7 @@ const legsWith = async (kit: Kit, at: At, stun: string): Promise<void> => {
     page,
     ws,
     address,
+    coturn,
     docker,
     secret,
     standIn,
@@ -656,6 +749,7 @@ const containerLeg = async (
   kit: Kit,
   leg: Leg & {
     address: string;
+    coturn: Container;
     docker: Runtime["docker"];
     secret: string;
     standIn: number;
@@ -741,7 +835,18 @@ const containerLeg = async (
       direct.pair.remote.address === address,
     JSON.stringify(direct)
   );
-  await relayPair(kit, leg, `${ws}${base}/api/ws`);
+  const { readBrowser } =
+    await import("../../../packages/agent/src/browser/state");
+  await relayHopsLeg(kit, leg, {
+    username,
+    credential: server?.credential ?? "",
+  });
+  await relayPair(
+    kit,
+    leg,
+    `${ws}${base}/api/ws`,
+    (await readBrowser(boxed.key))?.container?.id
+  );
 
   await countLeg(kit, leg, boxed.key, `${ws}${base}/api/ws`);
   await post(fleet, `/api/browsers/${encodeURIComponent(boxed.key)}/stop`, {
@@ -805,12 +910,154 @@ const allocates = async (
   );
 };
 
-/** The viewer connected through this spec's coturn alone. */
+/**
+ * Each hop a relayed pair's packets take, carried by coturn alone, with the
+ * address each end saw: coturn's relay socket to this machine's address (the
+ * way the viewer's checks reach neko, whose candidates name that address) and
+ * back, then this machine to the relayed address (the way neko's checks reach
+ * the viewer) and back. Published, both cross the VM's network and its
+ * forwarder, which the direct leg never needs.
+ */
+const relayHopsLeg = async (
+  kit: Kit,
+  { address, standIn, where }: Relayed,
+  user: { username: string; credential: string }
+): Promise<void> => {
+  const { relayHops, brokenHop } = await import("./browser-relay");
+  const hops = await relayHops(
+    `turn:${address}:${standIn}?transport=udp`,
+    user,
+    address
+  );
+  const broken = brokenHop(hops, address);
+  kit.check(
+    `the relay carries a datagram both ways: coturn's relay socket → ${address} heard from ${hops.out.heardFrom ?? "nothing"}, answered by ${hops.out.answeredBy ?? "nothing"}; this machine → the relayed ${hops.relayed ?? "nothing"} heard from ${hops.in.heardFrom ?? "nothing"}, answered from ${hops.in.answeredFrom ?? "nothing"}${broken ? `; broke at ${broken}` : ""}${where}`,
+    broken === undefined,
+    JSON.stringify(hops)
+  );
+};
+
+/** coturn's session ids in `line`: `(session 001000000000000001)`. */
+const SESSION = /session (\d+)/g;
+/** What this spec reads of neko's log: its ICE, its peer connection, its media path. */
+const NEKO_ICE =
+  /\bice\b|candidate|pair|connection state|webrtc|dtls|turn|stun/i;
+/** How many of each container's lines a failure prints. */
+const LINES = 60;
+
+/**
+ * coturn's lines since `since` for every session of `username`: its requests
+ * and their answers (a refused permission reads `error 403: Forbidden IP`),
+ * each permission, and each session's traffic with its client and its peers
+ * at its end (`peer usage: … rp=<received> … sp=<sent>`), read once the
+ * viewer's close has ended them (Chromium releases its allocation as it
+ * closes) or 5 s have passed.
+ */
+const coturnSaid = async (
+  coturn: Container,
+  since: number,
+  username: string
+): Promise<string[]> => {
+  const { logsOf } = await import("../../../packages/agent/src/browser/relay");
+  const read = async () => {
+    const lines = (await logsOf(coturn, { since })).split("\n");
+    const sessions = new Set(
+      lines
+        .filter((line) => line.includes(`<${username}>`))
+        .flatMap((line) => [...line.matchAll(SESSION)].map((one) => one[1]))
+    );
+    return lines.filter(
+      (line) =>
+        line.includes(username) ||
+        [...line.matchAll(SESSION)].some((one) => sessions.has(one[1] ?? ""))
+    );
+  };
+  return await until(
+    "coturn reports the viewer's sessions' peer traffic",
+    read,
+    (lines) => lines.some((line) => line.includes("peer usage")),
+    5000
+  ).catch(() => read());
+};
+
+/** neko's lines since `since` about ICE and its peer connections, or the one viewer `session`. */
+const nekoSaid = async (
+  docker: Runtime["docker"],
+  neko: string | undefined,
+  since: number,
+  session: string | undefined
+): Promise<string[]> => {
+  if (!neko) {
+    return ["neko's container is not on the browser's record"];
+  }
+  const { logsOf } = await import("../../../packages/agent/src/browser/relay");
+  return (await logsOf(docker.getContainer(neko), { since }))
+    .split("\n")
+    .filter(
+      (line) => (!!session && line.includes(session)) || NEKO_ICE.test(line)
+    );
+};
+
+/**
+ * Which hop a failed relay-only view broke at, read from the viewer's pairs
+ * and coturn's answers, in one sentence.
+ */
+const iceVerdict = (
+  ice: IceEvidence | undefined,
+  coturn: string[],
+  address: string
+): string => {
+  if (!ice) {
+    return "the viewer's getStats() was not read";
+  }
+  const relayLocal = ice.candidates.local.some((one) =>
+    one.startsWith("relay")
+  );
+  if (!relayLocal) {
+    return `the viewer gathered no relay candidate (${ice.errors.join("; ") || "no candidate error"})`;
+  }
+  const refused = coturn.filter((line) => line.includes("error 403"));
+  const granted = coturn.some(
+    (line) =>
+      line.includes("CREATE_PERMISSION processed, success") ||
+      line.includes("CHANNEL_BIND processed, success")
+  );
+  if (!granted) {
+    return `coturn granted the viewer no permission${refused.length ? `, and refused: ${refused.join(" | ")}` : ""}`;
+  }
+  const toNeko = ice.pairs.filter((pair) => pair.remote.includes(address));
+  const checked = ice.pairs.some((pair) => pair.sent > 0);
+  const heard = ice.pairs.some(
+    (pair) => pair.sentAnswered > 0 || pair.received > 0
+  );
+  if (!checked) {
+    return "no check left the viewer";
+  }
+  if (!heard) {
+    return `the viewer's checks left through coturn (to ${toNeko.map((pair) => pair.remote).join(", ") || "no candidate of neko's"}) and nothing of neko's came back: coturn's peer usage says whether it sent them on (sp) and heard neko (rp)`;
+  }
+  const succeeded = ice.pairs.filter((pair) => pair.state === "succeeded");
+  if (succeeded.length === 0) {
+    return "neko's packets reached the viewer and no pair succeeded both ways";
+  }
+  return `a pair succeeded (${succeeded.map((pair) => `${pair.local} ↔ ${pair.remote}${pair.nominated ? " nominated" : ""}`).join(", ")}), ice ${ice.transport?.ice}, dtls ${ice.transport?.dtls}`;
+};
+
+/** The viewer connected through this spec's coturn alone; failed, the evidence printed and the hop it broke at named. */
 const relayPair = async (
   kit: Kit,
-  { page, address, standIn, where }: Leg & Relayed,
-  url: string
+  {
+    page,
+    address,
+    coturn,
+    docker,
+    standIn,
+    where,
+  }: Leg & Relayed & { coturn: Container; docker: Runtime["docker"] },
+  url: string,
+  neko: string | undefined
 ): Promise<void> => {
+  const since = Math.floor(Date.now() / 1000) - 1;
   const relayed = await page.evaluate(view, {
     url,
     policy: "relay" as const,
@@ -824,13 +1071,42 @@ const relayPair = async (
   // (candidate.is_prflx() && !relay_protocol.empty())`), the type it reads
   // when neko's mapped address for the relayed one matches none it knows.
   const turnUrl = `turn:${address}:${standIn}?transport=udp`;
-  kit.check(
-    `the same viewer with iceTransportPolicy relay: selected pair ${relayed.pair?.local.type} relayProtocol ${relayed.pair?.local.relayProtocol} via ${relayed.pair?.local.url}${where}`,
+  const ok =
     (relayed.pair?.local.type === "relay" ||
       relayed.pair?.local.type === "prflx") &&
-      relayed.pair.local.relayProtocol === "udp" &&
-      relayed.pair.local.url === turnUrl,
-    JSON.stringify(relayed)
+    relayed.pair.local.relayProtocol === "udp" &&
+    relayed.pair.local.url === turnUrl;
+  if (ok) {
+    kit.check(
+      `the same viewer with iceTransportPolicy relay: selected pair ${relayed.pair?.local.type} relayProtocol ${relayed.pair?.local.relayProtocol} via ${relayed.pair?.local.url}${where}`,
+      true,
+      JSON.stringify(relayed)
+    );
+    return;
+  }
+  const username = relayed.iceservers?.[0]?.username ?? "";
+  const turnLines = await coturnSaid(coturn, since, username);
+  const nekoLines = await nekoSaid(docker, neko, since, relayed.session);
+  const { ice } = relayed;
+  for (const line of [
+    `viewer's states: ${ice?.states.join(" → ") || "none"}`,
+    `viewer's candidates: ${ice?.candidates.local.join(", ") || "none"}`,
+    `neko's candidates, as the viewer has them: ${ice?.candidates.remote.join(", ") || "none"}`,
+    ...(ice?.errors.map((one) => `viewer's candidate error: ${one}`) ?? []),
+    ...(ice?.pairs.map(
+      (pair) =>
+        `pair ${pair.local} ↔ ${pair.remote}: ${pair.state}${pair.nominated ? " nominated" : ""}, the viewer's checks ${pair.sent} (answered ${pair.sentAnswered}), neko's checks ${pair.received} (answered ${pair.receivedAnswered})`
+    ) ?? []),
+    `viewer's transport: ice ${ice?.transport?.ice}, dtls ${ice?.transport?.dtls}`,
+    ...turnLines.slice(-LINES).map((text) => `coturn: ${text.trim()}`),
+    ...nekoLines.slice(-LINES).map((text) => `neko: ${text.trim()}`),
+  ]) {
+    kit.note(`relay-only view: ${line}`);
+  }
+  kit.check(
+    `the same viewer with iceTransportPolicy relay: selected pair ${relayed.pair?.local.type} relayProtocol ${relayed.pair?.local.relayProtocol} via ${relayed.pair?.local.url}; ${relayed.error ?? "no error"}; broke at ${iceVerdict(ice, turnLines, address)}${where}`,
+    false,
+    JSON.stringify({ ...relayed, coturn: turnLines, neko: nekoLines })
   );
 };
 
