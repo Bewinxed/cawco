@@ -355,7 +355,7 @@
 {#snippet plot(chart: Chart, live: boolean)}
   <div class="flex flex-col gap-space-1">
     <div
-      class="flex h-(--c-usage-plot) items-end gap-space-row border-b border-b-border-hairline"
+      class="flex h-c-usage-plot items-end gap-space-row border-b border-b-border-hairline"
     >
       {#each chart.points as point (point.at)}
         {#if !live}

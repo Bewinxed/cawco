@@ -32,11 +32,11 @@ theme: utility hatched
 ```
 
 ## Tokens
-token: --c-usage-plot 96px — History's chart plot height (two bars charts on the Usage page); a real component dimension, no ladder step (space-8 is 32). Used as `h-(--c-usage-plot)` (apps/dashboard/src/lib/cawco/usage/History.svelte:358).
-token: --c-limit-bar 64px — ProviderLimit's bar track width in the session details strip; a real component dimension, no ladder step. Used as `w-(--c-limit-bar)` (apps/dashboard/src/lib/cawco/usage/ProviderLimit.svelte:60).
+token: --c-usage-plot 96px — History's chart plot height (two bars charts on the Usage page); a real component dimension, no ladder step (space-8 is 32). Used as `h-c-usage-plot` (apps/dashboard/src/lib/cawco/usage/History.svelte:358).
+token: --c-limit-bar 64px — ProviderLimit's bar track width in the session details strip; a real component dimension, no ladder step. Used as `w-c-limit-bar` (apps/dashboard/src/lib/cawco/usage/ProviderLimit.svelte:60).
 token: --c-usage-tile-min 15.5rem — the minimum width of a Limits tile (its double dial, figure and sentence); a real component dimension. Read by theme utility grid-cols-usage-tiles.
 token: --c-stat-tile-min 9.5rem — the minimum width of a project spend stat tile in its auto-fit row; a real component dimension. Read by theme utility grid-cols-stat-tiles.
-token: --measure-short 60ch — short running text measure (the Limits lead sentence, apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:233); the same value and role as other lanes' lines, deduplicated at integration.
+token: --c-measure-short 60ch — already merged at integration (renames.md); the Limits lead sentence uses `max-w-c-measure-short` (apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:233), no new token.
 
 ## Removed
 removed: apps/dashboard/src/lib/cawco/usage/LimitBar.svelte:84 `translate-x-(--tick-nudge)` of -1px — a magic offset centring the 2px pace tick on its place; `-translate-x-1/2` centres it by its own width.

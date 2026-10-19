@@ -230,7 +230,7 @@
         </p>
         <p
           data-slot="sentence"
-          class="type-body max-w-(--measure-short) text-ink-row"
+          class="type-body max-w-c-measure-short text-ink-row"
           data-lead
         >
           <Words parts={lead.say} />
