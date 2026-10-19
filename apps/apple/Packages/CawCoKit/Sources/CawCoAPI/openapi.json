@@ -39051,6 +39051,10 @@
             "description": "When its newest message was added, ms epoch.",
             "type": "number"
           },
+          "notes": {
+            "description": "The project's one standing notes thread, \"Make a note\": every message\nin it is a note kept in AGENTS.md, never words to Caw. Conversation\nreaders (Caw's panel, the starters) leave it out.",
+            "type": "boolean"
+          },
           "projectId": {
             "type": "string"
           },
@@ -39068,6 +39072,7 @@
         "required": [
           "id",
           "lastAt",
+          "notes",
           "projectId",
           "setup",
           "status",

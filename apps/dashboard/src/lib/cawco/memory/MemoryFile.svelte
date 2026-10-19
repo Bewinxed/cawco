@@ -172,7 +172,7 @@
   const conflicts = $derived.by(() => {
     const groups = new Map<number, MemoryFactView[]>();
     for (const fact of facts?.facts ?? []) {
-      if (fact.section === "conflict" && fact.conflictGroup !== null) {
+      if (fact.section === "conflict") {
         groups.set(fact.conflictGroup, [
           ...(groups.get(fact.conflictGroup) ?? []),
           fact,

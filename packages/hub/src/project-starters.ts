@@ -290,11 +290,15 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       agents,
       knowledge,
       tasks: starterTasks,
-      threads: db.projectThreads(projectId).map((thread) => ({
-        id: thread.id,
-        title: thread.title,
-        last: thread.last,
-      })),
+      // Conversations alone: the standing notes thread holds the person's notes, never a thing to pick up.
+      threads: db
+        .projectThreads(projectId)
+        .filter((thread) => !thread.notes)
+        .map((thread) => ({
+          id: thread.id,
+          title: thread.title,
+          last: thread.last,
+        })),
       branch: repo?.branch ?? null,
       commits: repo?.commits ?? [],
       designDeclined: db.designOffers.of(projectId)?.answer === "dismissed",

@@ -193,15 +193,23 @@ export interface MemorySourceNote {
 }
 
 /** One fact line of an open file. */
-export interface MemoryFactView {
-  /** Within `## Conflict`: the lines that disagree with each other share it. */
-  conflictGroup: number | null;
+export type MemoryFactView = MemoryFactWords &
+  (
+    | {
+        /** Within `## Conflict`: the lines that disagree with each other share it. */
+        conflictGroup: number;
+        section: "conflict";
+      }
+    | { conflictGroup: null; section: "current" | "formerly" }
+  );
+
+/** What every fact line of an open file says, whatever its section. */
+interface MemoryFactWords {
   from: MemorySourceNote[];
   key: string;
   line: number;
   replacedBy: string | null;
   ruling: string | null;
-  section: "current" | "formerly" | "conflict";
   since: string;
   text: string;
   until: string | null;

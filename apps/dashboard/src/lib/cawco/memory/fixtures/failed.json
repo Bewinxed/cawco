@@ -346,8 +346,9 @@
       ],
       "facts": [
         {
-          "line": 3,
           "section": "current",
+          "conflictGroup": null,
+          "line": 3,
           "text": "The iOS build runs on the Mac in the fleet",
           "key": "3b24ce9305a7a6de",
           "since": "2026-09-30",
@@ -355,7 +356,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20260930-090000-d0e1f2",
@@ -368,8 +368,9 @@
           "uses": []
         },
         {
-          "line": 4,
           "section": "current",
+          "conflictGroup": null,
+          "line": 4,
           "text": "Maestro flows need a Mac workspace with the simulator booted",
           "key": "44bda307ffee8e5a",
           "since": "2026-09-30",
@@ -377,7 +378,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20260930-090000-d0e1f2",
@@ -413,8 +413,9 @@
       "unreadable": [],
       "facts": [
         {
-          "line": 5,
           "section": "current",
+          "conflictGroup": null,
+          "line": 5,
           "text": "Deploys went out with make deploy",
           "key": "958f3c65fd75e279",
           "since": "2026-05-01",
@@ -422,7 +423,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20260901-090000-e1f2a3",
@@ -435,8 +435,9 @@
           "uses": []
         },
         {
-          "line": 6,
           "section": "current",
+          "conflictGroup": null,
+          "line": 6,
           "text": "The staging database reset every night",
           "key": "2deea9734c11cc22",
           "since": "2026-05-01",
@@ -444,7 +445,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20260901-090000-e1f2a3",
@@ -457,8 +457,9 @@
           "uses": []
         },
         {
-          "line": 7,
           "section": "current",
+          "conflictGroup": null,
+          "line": 7,
           "text": "The changelog lived in CHANGES.md",
           "key": "59c219545b7242fb",
           "since": "2026-05-01",
@@ -466,7 +467,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20260901-090000-e1f2a3",
@@ -502,8 +502,9 @@
       "unreadable": [],
       "facts": [
         {
-          "line": 3,
           "section": "current",
+          "conflictGroup": null,
+          "line": 3,
           "text": "A workspace writes only its own clone, $TMPDIR and the package cache",
           "key": "414a88763fef83cb",
           "since": "2026-10-09",
@@ -511,7 +512,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20261009-090000-c9d0e1",
@@ -560,8 +560,9 @@
           ]
         },
         {
-          "line": 4,
           "section": "current",
+          "conflictGroup": null,
+          "line": 4,
           "text": "No namespace starts inside a workspace boundary",
           "key": "a6300b9ca1755c08",
           "since": "2026-10-09",
@@ -569,7 +570,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20261009-090000-c9d0e1",
@@ -598,8 +598,9 @@
           ]
         },
         {
-          "line": 5,
           "section": "current",
+          "conflictGroup": null,
+          "line": 5,
           "text": "Public hosts are reachable; the owner's machines are not",
           "key": "e5825361520effe8",
           "since": "2026-10-09",
@@ -607,7 +608,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20261009-090000-c9d0e1",
@@ -643,8 +643,9 @@
       "unreadable": [],
       "facts": [
         {
-          "line": 3,
           "section": "current",
+          "conflictGroup": null,
+          "line": 3,
           "text": "Caw's thread is where a project's work starts",
           "key": "1839e7e2a8dd56d3",
           "since": "2026-09-05",
@@ -652,7 +653,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20260901-090000-e1f2a3",
@@ -703,8 +703,9 @@
       ],
       "facts": [
         {
-          "line": 3,
           "section": "current",
+          "conflictGroup": null,
+          "line": 3,
           "text": "Preview ports are picked outside the kernel's ephemeral range",
           "key": "3af68ed6bcf3917d",
           "since": "2026-10-19",
@@ -712,7 +713,6 @@
           "ruling": "2026-10-19",
           "why": "a bind refused for its address said so",
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [],
           "uses": [
             {
@@ -773,8 +773,9 @@
           ]
         },
         {
-          "line": 5,
           "section": "current",
+          "conflictGroup": null,
+          "line": 5,
           "text": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone",
           "key": "503742499b43d7db",
           "since": "2026-10-17",
@@ -782,7 +783,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20261017-100000-a7b8c9",
@@ -843,8 +843,9 @@
           ]
         },
         {
-          "line": 6,
           "section": "current",
+          "conflictGroup": null,
+          "line": 6,
           "text": "The scratch hub listens on 127.0.0.1 only",
           "key": "9d6c995313d0da8a",
           "since": "2026-10-03",
@@ -852,7 +853,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20261003-090000-d4e5f6",
@@ -891,8 +891,9 @@
           ]
         },
         {
-          "line": 7,
           "section": "current",
+          "conflictGroup": null,
+          "line": 7,
           "text": "Releases are cut from main every Tuesday",
           "key": "5162ef9a553d6cae",
           "since": "2026-10-03",
@@ -900,7 +901,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20261003-090000-d4e5f6",
@@ -924,8 +924,9 @@
           ]
         },
         {
-          "line": 12,
           "section": "conflict",
+          "conflictGroup": 1,
+          "line": 12,
           "text": "Previews bind on the hub's address only",
           "key": "ec8d50eb17669e87",
           "since": "2026-10-03",
@@ -933,7 +934,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": 1,
           "from": [
             {
               "id": "n-20261003-090000-d4e5f6",
@@ -946,8 +946,9 @@
           "uses": []
         },
         {
-          "line": 13,
           "section": "conflict",
+          "conflictGroup": 1,
+          "line": 13,
           "text": "Previews bind on the machine's tailnet address",
           "key": "20911092d15e5788",
           "since": "2026-10-11",
@@ -955,7 +956,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": 1,
           "from": [
             {
               "id": "n-20261011-090000-e5f6a7",
@@ -975,8 +975,9 @@
           "uses": []
         },
         {
-          "line": 17,
           "section": "formerly",
+          "conflictGroup": null,
+          "line": 17,
           "text": "The scratch hub's ports came from the ephemeral range",
           "key": "7d9174bbbb1b47ee",
           "since": "2026-10-02",
@@ -984,7 +985,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": "n-20261019-100000-a1b2c3",
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20261003-090000-d4e5f6",
@@ -1020,8 +1020,9 @@
       "unreadable": [],
       "facts": [
         {
-          "line": 3,
           "section": "current",
+          "conflictGroup": null,
+          "line": 3,
           "text": "Push answers carry no content",
           "key": "c284e6c945d397c3",
           "since": "2026-09-05",
@@ -1029,7 +1030,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20260901-090000-e1f2a3",
@@ -1065,8 +1065,9 @@
       "unreadable": [],
       "facts": [
         {
-          "line": 3,
           "section": "current",
+          "conflictGroup": null,
+          "line": 3,
           "text": "A fold never rewords a fact line",
           "key": "d87817cd13372a1c",
           "since": "2026-10-18",
@@ -1074,7 +1075,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20260901-090000-e1f2a3",
@@ -1126,8 +1126,9 @@
       "unreadable": [],
       "facts": [
         {
-          "line": 3,
           "section": "current",
+          "conflictGroup": null,
+          "line": 3,
           "text": "The memory curator runs daily at 06:00 in the hub's zone",
           "key": "ffc142401bd87680",
           "since": "2026-08-01",
@@ -1135,7 +1136,6 @@
           "ruling": null,
           "why": null,
           "replacedBy": null,
-          "conflictGroup": null,
           "from": [
             {
               "id": "n-20260901-090000-e1f2a3",

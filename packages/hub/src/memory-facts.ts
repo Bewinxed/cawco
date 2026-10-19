@@ -68,10 +68,19 @@ const FIELD_SPLIT = /\s*,\s*/;
 
 export type FactSection = "current" | "conflict" | "formerly";
 
-/** One fact line as its file says it. */
-export interface FactLine {
-  /** Within `## Conflict`: the group of lines that disagree with each other. */
-  conflictGroup: number | null;
+/** One fact line as its file says it: a Conflict line always in its group. */
+export type FactLine = FactLineWords &
+  (
+    | {
+        /** Within `## Conflict`: the group of lines that disagree with each other. */
+        conflictGroup: number;
+        section: "conflict";
+      }
+    | { conflictGroup: null; section: "current" | "formerly" }
+  );
+
+/** What every fact line says, whatever its section. */
+interface FactLineWords {
   from: string[];
   /** The hash of its words: what a brief's use is kept under (db `fact_uses`). */
   key: string;
@@ -82,7 +91,6 @@ export interface FactLine {
   replacedBy: string | null;
   /** The person's own word: its date; the line rests on no note (`from` is empty). */
   ruling: string | null;
-  section: FactSection;
   /** When it became true: a ruling's date for a ruling. */
   since: string;
   /** The fact's words, without its parenthesis. */
@@ -371,17 +379,19 @@ const readLine = (
   }
   read.group += section === "conflict" && !read.grouped ? 1 : 0;
   read.grouped = section === "conflict";
-  const fact: FactLine = {
+  const words = {
     path: read.path,
     line: index + 1,
     raw,
     text: line.text,
     key: factKey(line.text),
-    section,
-    conflictGroup: section === "conflict" ? read.group : null,
     why: null,
     ...line.fields,
   };
+  const fact: FactLine =
+    section === "conflict"
+      ? { ...words, section, conflictGroup: read.group }
+      : { ...words, section, conflictGroup: null };
   read.facts.push(fact);
   read.ungrounded = fact;
 };

@@ -84,6 +84,12 @@ export interface ThreadSummary {
   id: string;
   /** When its newest message was added, ms epoch. */
   lastAt: number;
+  /**
+   * The project's one standing notes thread, "Make a note": every message
+   * in it is a note kept in AGENTS.md, never words to Caw. Conversation
+   * readers (Caw's panel, the starters) leave it out.
+   */
+  notes: boolean;
   projectId: string;
   /**
    * The project's Setup thread: the one New project opens with your prompt,

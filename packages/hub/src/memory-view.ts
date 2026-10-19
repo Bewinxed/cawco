@@ -396,8 +396,10 @@ export const memoryFile = (
           why: bad.why,
         })),
     facts: parsed.facts.map((fact) => ({
+      ...(fact.section === "conflict"
+        ? { section: fact.section, conflictGroup: fact.conflictGroup }
+        : { section: fact.section, conflictGroup: null }),
       line: fact.line,
-      section: fact.section,
       text: fact.text,
       key: fact.key,
       since: fact.since,
@@ -405,7 +407,6 @@ export const memoryFile = (
       ruling: fact.ruling,
       why: fact.why,
       replacedBy: fact.replacedBy,
-      conflictGroup: fact.conflictGroup,
       from: fact.from.map((id) => sourceOf(src, id)),
       uses: src.briefs
         .filter((use) => use.path === path && use.key === fact.key)

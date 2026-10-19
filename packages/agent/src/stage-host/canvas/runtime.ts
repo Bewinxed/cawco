@@ -183,9 +183,30 @@ export interface Section {
   standIns: HTMLElement[];
 }
 
-/** Whether an animation ends: `finish()` throws on one that loops for ever. */
-const finite = (one: Animation): boolean =>
+/**
+ * Whether `finish()` can end an animation. MDN (Animation: finish()):
+ * "InvalidState: The player's playback rate is 0 or the animation's playback
+ * rate is greater than 0 and the end time of the animation is infinity".
+ */
+const finishable = (one: Animation): boolean =>
+  one.playbackRate !== 0 &&
   Number.isFinite(Number(one.effect?.getComputedTiming().endTime ?? 0));
+
+/**
+ * Every animation brought to rest: a finite one at its end; a loop (a
+ * spinner, a breathing glyph) or one standing still paused at its start, so
+ * a frame reads, and is captured, the same on every run.
+ */
+const bringToRest = (animations: Animation[]): void => {
+  for (const one of animations) {
+    if (finishable(one)) {
+      one.finish();
+    } else {
+      one.pause();
+      one.currentTime = 0;
+    }
+  }
+};
 
 const frameTick = () =>
   new Promise<void>((done) =>
@@ -1143,20 +1164,13 @@ export function boot(options: BootOptions): void {
         await frameTick();
         const fired = body.getAnimations({ subtree: true });
         const animations = fired.map((one) => readAnimation(one, t0));
-        // A loop (a spinner, a breathing glyph) has no end to finish at: it runs on.
-        for (const one of fired.filter(finite)) {
-          one.finish();
-        }
+        bringToRest(fired);
         const changed = deltaOf(before, snapshot(body), root);
         for (const state of FORCED[interaction]) {
           body.classList.remove(allClass(state));
         }
         await frameTick();
-        for (const one of body
-          .getAnimations({ subtree: true })
-          .filter(finite)) {
-          one.finish();
-        }
+        bringToRest(body.getAnimations({ subtree: true }));
         result.delta.set(interaction, { animations, changed });
       }
     } finally {

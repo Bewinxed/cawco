@@ -1881,13 +1881,42 @@ export const createMemory = ({
   /** Open proposals, by id: the project each is in. */
   const open = new Map<string, string>();
 
-  /** A curator run asked for a fold or a reshape (the Memory view): the kind its proposal is stamped with. */
-  const askedKind = (instanceId: string): "fold" | "reshape" | undefined => {
-    const ask = curator().asked(instanceId);
-    if (!ask) {
+  /**
+   * What a curator run's proposal is, by the rule its brief asked it by
+   * (`curatorBrief`), scheduled or asked from the Memory view: a fold when
+   * it rewrites one fact file past MEMORY_FILE_CHARS (or the one asked
+   * for), a reshape when it changes several while the files are past
+   * RESHAPE_ABOVE (or one was asked). A proposal citing notes is a sort.
+   */
+  const curatorKind = async (
+    projectId: string,
+    instanceId: string,
+    paths: string[],
+    notes: string[]
+  ): Promise<"fold" | "reshape" | undefined> => {
+    if (notes.length > 0) {
       return;
     }
-    return "fold" in ask ? "fold" : "reshape";
+    const ask = curator().asked(instanceId);
+    const factFiles = (await knowledgeOf(projectId))
+      .filter((file) => isFactFile(file.path))
+      .map((file) => parseFactFile(file.path, file.content));
+    const changed = paths.filter((path) => isFactFile(path));
+    const foldAsked = ask && "fold" in ask ? ask.fold : null;
+    const [only] = changed;
+    const folds = factFiles.some(
+      (file) =>
+        file.path === only &&
+        !isProse(file) &&
+        (file.content.length > MEMORY_FILE_CHARS || file.path === foldAsked)
+    );
+    if (changed.length === 1 && folds) {
+      return "fold";
+    }
+    const reshape =
+      factFiles.length > RESHAPE_ABOVE ||
+      (ask !== undefined && "reshape" in ask);
+    return reshape && changed.length > 1 ? "reshape" : undefined;
   };
 
   const projectOf = (projectId: string): ProjectRow =>
@@ -2895,7 +2924,9 @@ export const createMemory = ({
     const [head] = (await folderHistory(projectId, "", 1)).commits;
     const at = new Date();
     const threadId = curatorRun ? undefined : threadOf(actor);
-    const kind = curatorRun ? askedKind(actor.id) : undefined;
+    const kind = curatorRun
+      ? await curatorKind(projectId, actor.id, paths, notes)
+      : undefined;
     const proposal: Proposal = {
       id: idAt("p", at),
       projectId,

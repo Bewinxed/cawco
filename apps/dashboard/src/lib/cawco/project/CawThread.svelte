@@ -57,17 +57,20 @@
   // --- the thread on show -----------------------------------------------------
 
   const threads = $derived(threadsOf(projectId));
+  /** The newest conversation: the standing notes thread is the person's notes, never what the panel opens on. */
+  const newestOf = (list: { id: string; notes: boolean }[]) =>
+    list.find((thread) => !thread.notes)?.id ?? null;
   /**
    * The thread on show: the newest when the panel opens; null, a new one.
    * `fresh`: New thread was chosen, so a newest arriving later does not
    * take its place.
    */
   let threadId = $state<string | null>(
-    untrack(() => threadsOf(projectId)[0]?.id ?? null)
+    untrack(() => newestOf(threadsOf(projectId)))
   );
   let fresh = $state(false);
   $effect(() => {
-    const newest = threads[0]?.id;
+    const newest = newestOf(threads);
     if (newest && threadId === null && !fresh) {
       threadId = newest;
     }

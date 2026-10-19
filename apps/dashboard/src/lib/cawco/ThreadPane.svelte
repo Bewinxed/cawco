@@ -23,7 +23,12 @@
    * composer. He stands there instead of on the composer; your first words
    * send him from the hero to his seat on it.
    */
-  import type { CawView, PermissionResult, ThreadMessage } from "@cawco/core";
+  import {
+    type CawView,
+    memoryViewWords,
+    type PermissionResult,
+    type ThreadMessage,
+  } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -684,7 +689,10 @@
   const binding: ComposerBinding = {
     draft,
     agentName: "Caw",
-    placeholder: "Message Caw…",
+    // The standing notes thread takes notes alone (caw.ts `say`).
+    get placeholder() {
+      return thread?.notes ? memoryViewWords.addPlaceholder : "Message Caw…";
+    },
     commands: [],
     mentionsFrom: null,
     suggest: { candidates: [] },

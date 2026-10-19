@@ -49,6 +49,10 @@
  *    opener.
  * 8b. The Needs-you chip counts per tab: on Memory the proposals, on Board
  *    the tasks alone, and pressing it on Board never empties the board.
+ * 9a. In the notes thread every message is a note: words with no prefix
+ *    reach AGENTS.md and wake no one; the starters never name the thread;
+ *    Caw's panel in a project whose only thread is the notes thread opens
+ *    on his hero, not on the notes.
  * 10. Curate inbox runs the curator routine: Jev's sort proposes the lasting
  *    note and archives the rest, and their rows leave on the hub's word
  *    while the proposal lands under its note; every animation the view ran
@@ -92,7 +96,13 @@ import type {
 import { briefWhole } from "../../../packages/hub/src/memory";
 import { THRESHOLDS } from "../../../packages/hub/src/memory-view";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type JevAsked, type JevCall, jevMock, jevOn } from "../jev-mock";
+import {
+  type JevAsked,
+  type JevCall,
+  type JevMock,
+  jevMock,
+  jevOn,
+} from "../jev-mock";
 import {
   type Kit,
   type KitFleet,
@@ -160,6 +170,10 @@ const TOKENS = {
 };
 const FIELD_NOTE = "PROBE-MEMORY-VIEW notes from the field reach AGENTS.md.";
 const SECOND_NOTE = "PROBE-MEMORY-VIEW a second note joins the newest thread.";
+const PLAIN_NOTE =
+  "PROBE-MEMORY-VIEW plain words in the notes thread are a note.";
+/** The starters' pace the spec sets (`standIns.startersPace`): quiet, then the gap between asks. */
+const STARTERS_PACE = { quiet: 1500, gap: 5000 };
 
 // --- the stage --------------------------------------------------------------------
 
@@ -865,6 +879,8 @@ interface Probe {
 async function standUp(kit: Kit, jevUrl: string): Promise<Probe> {
   const fleet = await kit.fleet(respond);
   fleet.standIns.typesafeUrl = jevUrl;
+  // The starters asked of Jev at a probe's pace (design-flow's): a read past the gap asks again.
+  fleet.standIns.startersPace = STARTERS_PACE;
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -1268,6 +1284,113 @@ async function noteLeg(kit: Kit, probe: Probe, page: Page): Promise<void> {
       after === threadsBefore + 1 &&
       notesThreads === 1,
     `threads ${threadsBefore} → ${after}; "${NOTES_THREAD}" threads: ${notesThreads}`
+  );
+}
+
+/** The project's standing notes thread, by the hub's own list. */
+const notesThreadOf = async (
+  probe: Probe,
+  projectId = probe.projectId
+): Promise<{ id: string; notes: boolean; status: string } | undefined> =>
+  (
+    (
+      await probe.fleet.api<
+        Record<string, { id: string; notes: boolean; status: string }[]>
+      >("/api/threads")
+    )[projectId] ?? []
+  ).find((thread) => thread.notes);
+
+/** Leg 9a: the notes thread holds notes alone, and no conversation reader takes it for one. */
+async function notesThreadLeg(
+  kit: Kit,
+  probe: Probe,
+  dashboard: string,
+  jev: JevMock
+): Promise<void> {
+  const thread = await notesThreadOf(probe);
+  const leads = () =>
+    probe.fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM instances WHERE role = 'lead'"
+    )[0]?.n ?? 0;
+  const before = leads();
+  const said = thread
+    ? await probe.post<unknown>(`/threads/${thread.id}/messages`, {
+        body: PLAIN_NOTE,
+      })
+    : { status: 0 };
+  const agents = await until(
+    "AGENTS.md to hold the plain note",
+    () => probe.read("AGENTS.md"),
+    (words) => words.includes(`- ${PLAIN_NOTE}`),
+    20_000
+  ).catch(() => "");
+  const after = await notesThreadOf(probe);
+  kit.check(
+    "words with no prefix in the notes thread are a note: AGENTS.md holds them, no Caw session starts and the thread is not working",
+    said.status === 200 &&
+      agents.includes(`- ${PLAIN_NOTE}`) &&
+      leads() === before &&
+      after?.status !== "working",
+    `send ${said.status}; Caw sessions ${before} → ${leads()}; thread ${after?.status}`
+  );
+  // Jev asked for the project's starters with the notes thread standing: a read past the gap asks again.
+  const since = Date.now();
+  const call = await until(
+    "a starters ask of Jev with the notes thread standing",
+    async () => {
+      await probe.get("/stages");
+      return jev.starterCalls("cockpit").find((one) => one.at > since);
+    },
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  const asked = call ? JSON.stringify(call.questions) : "";
+  const threadAsks = call
+    ? Object.values(call.questions).filter((one) =>
+        JSON.stringify(one).includes("where we left off")
+      ).length
+    : 0;
+  kit.check(
+    "no starter Jev is asked over names the notes thread",
+    call !== undefined && !asked.includes(NOTES_THREAD),
+    call
+      ? `${Object.keys(call.questions).length} questions, ${threadAsks} on a thread; names "${NOTES_THREAD}": ${asked.includes(NOTES_THREAD)}`
+      : "no starters ask came"
+  );
+  // A project whose only thread is the notes thread: his panel opens on its own (an empty board) on his hero.
+  mkdirSync(join(probe.fleet.workdir, "notes-only"), { recursive: true });
+  const { id: other } = await probe.fleet.api<{ id: string }>("/api/projects", {
+    name: "notes-only",
+    machineId: MACHINE,
+    cwd: join(probe.fleet.workdir, "notes-only"),
+  });
+  await probe.fleet.api(`/api/projects/${other}/threads`, {
+    body: "Make a note: a project whose only thread is its notes.",
+  });
+  const page = await kit.page("desk");
+  await page.goto(`${dashboard}/project/${other}`);
+  const panel = await until(
+    "Caw's panel on the notes-only project",
+    () =>
+      page.evaluate(() => {
+        const well = document.querySelector('[data-slot="well"]');
+        return well
+          ? {
+              hero: !!well.querySelector("[data-thread-hero]"),
+              notes: (well.textContent ?? "").includes(
+                "a project whose only thread"
+              ),
+            }
+          : null;
+      }),
+    Boolean,
+    30_000
+  ).catch(() => null);
+  await page.close();
+  kit.check(
+    "Caw's panel in a project whose only thread is the notes thread opens on his hero, not the notes",
+    panel?.hero === true && !panel.notes,
+    JSON.stringify(panel)
   );
 }
 
@@ -1802,6 +1925,7 @@ async function fleetLegs(kit: Kit): Promise<void> {
     await archiveLeg(kit, probe, page);
     await askLeg(kit, page);
     await noteLeg(kit, probe, page);
+    await notesThreadLeg(kit, probe, dashboard, jev);
     await curateLeg(kit, probe, page);
     await reconnectLeg(kit, probe, page);
     await page.close();

@@ -950,6 +950,7 @@ export const createCaw = ({
       title: thread.title,
       lastAt: thread.updatedAt.getTime(),
       setup: thread.setup,
+      notes: thread.notes,
       status: statusOf(thread.id),
     };
   };
@@ -2556,8 +2557,10 @@ export const createCaw = ({
     ): Promise<ThreadSaid> {
       return await once(projectId, threadId, id, async () => {
         const body = bodyOf(raw);
-        threadIn(projectId, threadId);
-        if (MAKE_A_NOTE.test(body)) {
+        const into = threadIn(projectId, threadId);
+        // In the standing notes thread every message is a note: kept in
+        // AGENTS.md, waking no one, prefix or not.
+        if (into.notes || MAKE_A_NOTE.test(body)) {
           const sha = await noteInAgents(projectId, body);
           const added = db.addThreadMessage({
             threadId,
@@ -3294,7 +3297,12 @@ export const createCaw = ({
           },
           async ({ thread, body, tasks, files }) => {
             const projectId = mine();
-            threadIn(projectId, thread);
+            if (threadIn(projectId, thread).notes) {
+              refuse(
+                409,
+                `Thread ${thread} is “${NOTES_THREAD}”, the person's notes: it holds their notes alone and takes no reply. Answer in another of their threads.`
+              );
+            }
             const named = files?.length
               ? await folderFiles(projectId, files)
               : [];

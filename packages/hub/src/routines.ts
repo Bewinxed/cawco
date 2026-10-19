@@ -2232,10 +2232,6 @@ export const createRoutines = ({
     return routine ? viewOf(routine) : undefined;
   };
 
-  /**
-   * The inbox passed its mark (memory.ts): the curator runs now, unless it
-   * is off, a run of it goes, or its last run began within the hour.
-   */
   /** What the curator run a session works is asked for beyond its inbox (a fold, a reshape), read off its slot; undefined for any other session. */
   const curatorAsked = (instanceId: string): CuratorAsk | undefined => {
     const run = store
@@ -2248,6 +2244,10 @@ export const createRoutines = ({
     return run ? curatorAskOf(run.slot) : undefined;
   };
 
+  /**
+   * The inbox passed its mark (memory.ts): the curator runs now, unless it
+   * is off, a run of it goes, or its last run began within the hour.
+   */
   const inboxPassed = (projectId: string): void => {
     const routine = curatorOf(projectId);
     if (!routine?.enabled) {
