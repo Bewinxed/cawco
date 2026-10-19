@@ -12,7 +12,7 @@
  * for a `/motion/` bench (a built dashboard 404s them), on the dev server
  * against the same tape ("dev").
  */
-import type { Page, WebSocketRoute } from "playwright-core";
+import type { Locator, Page, WebSocketRoute } from "playwright-core";
 import { COMPOSER_FIELD } from "../kit";
 import {
   DELEGATE_TITLE,
@@ -46,6 +46,12 @@ export interface State {
    * and played on its own (hub-tape.ts `variants`).
    */
   hub?: Variant;
+  /**
+   * What the walk's own setting writes into the page, not the dashboard: a
+   * capture paints it over (Playwright's `mask`), so the picture holds what
+   * the dashboard draws alone. Its styles are still read (style-snapshot).
+   */
+  mask?: (page: Page) => Locator[];
   name: string;
   /**
    * What is read: a selector, the largest visible match when several match
@@ -751,9 +757,13 @@ const caughtUp = async (page: Page, scene: Scene) => {
   await page.getByText(CATCHING_UP).first().waitFor();
 };
 
+/** A socket's address as the page prints it (HubBand's `<code>`). */
+const SOCKET_URL = /^wss?:\/\//;
 const BENCHES: [string, string][] = [
+  ["button-pending", "/motion/button-pending"],
   ["caw", "/motion/caw"],
   ["caw-notices", "/motion/caw-notices?fixture=full"],
+  ["chosen-hover", "/motion/chosen-hover"],
   ["delegate-tray", "/motion/delegate-tray"],
   ["echo", "/motion/echo"],
   ["folder-proof", "/motion/folder-proof?at=1&work=working"],
@@ -961,6 +971,9 @@ export const SURFACES: Surface[] = [
     route: () => "/",
     states: [
       { name: "rest", root: "body" },
+      // The fleet not read yet: the home's first line says so (StatusLine),
+      // the hub's answer held back on its tape (scene.ts `HOLDS`).
+      { name: "reading", hub: "reading", root: "body" },
       {
         name: "machines",
         widths: ["desk"],
@@ -1015,6 +1028,10 @@ export const SURFACES: Surface[] = [
         name: "connecting",
         hub: "silent",
         root: "body",
+        // The band names the page's own address (client.svelte.ts
+        // `hubSocketUrl`: `location.host`), the walk's server on a port of
+        // its run, so two runs printed two pictures.
+        mask: (page) => [page.locator("code", { hasText: SOCKET_URL })],
       },
     ],
   },

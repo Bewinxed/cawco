@@ -17,13 +17,15 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import pixelmatch from "pixelmatch";
-import type { Page } from "playwright-core";
+import type { Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import type { Kit } from "./kit";
 
 export interface DiffOptions {
   /** The page region, css px; the viewport when left out. */
   clip?: { height: number; width: number; x: number; y: number };
+  /** What the capture paints over: what the walk's setting writes, not the page (catalogue `mask`). */
+  mask?: Locator[];
   /** Pixels allowed to differ (pixelmatch's count). */
   maxDiffPixels?: number;
   /** pixelmatch's per-pixel threshold, 0 to 1. */
@@ -46,6 +48,7 @@ export async function diff(
     clip: options.clip,
     animations: "allow",
     caret: "hide",
+    ...(options.mask ? { mask: options.mask, maskColor: "#ff00ff" } : {}),
   });
   const baseline = join(kit.baselines, `${name}.png`);
   const capture = join(kit.out, `${name}.png`);
