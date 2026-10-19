@@ -603,6 +603,7 @@ export interface CawDeps {
     | "projectThreads"
     | "putLeadTurn"
     | "setProjectCaw"
+    | "setSetupThread"
     | "spendOnCap"
     | "thread"
     | "threadMessages"
@@ -3431,6 +3432,11 @@ export const createCaw = ({
             threadIn(projectId, thread);
             const stages = await folderCall(() => stagesOf(projectId));
             const template = await folderCall(() => templateOf(projectId));
+            // Awaited above: the thread again, in the step that marks it.
+            threadIn(projectId, thread);
+            // Setup runs here now: the thread is a Setup thread, so its
+            // reply naming the files he wrote offers "Open the board".
+            upsert(db.setSetupThread(thread));
             return {
               content: [
                 {

@@ -2052,6 +2052,12 @@ export interface DbShape {
   /** The fleet's session limits, whole: a field absent is no limit. */
   readonly setSessionLimits: (limits: SessionLimits) => void;
   /**
+   * Makes a thread its project's Setup thread (`setup`), as the person's ask
+   * for Setup in it does (caw.ts `project_setup`): its row as it now is,
+   * undefined when no thread has the id.
+   */
+  readonly setSetupThread: (id: string) => ThreadRow | undefined;
+  /**
    * Switches a stored skill on or off, its source and files as they are: no
    * fetch. Undefined when there is no such skill.
    */
@@ -7134,6 +7140,13 @@ const make = async (path: string): Promise<DbShape> => {
     setProjectCap: (id, change) => {
       db.update(projects).set(change).where(eq(projects.id, id)).run();
     },
+    setSetupThread: (id) =>
+      db
+        .update(projectThreads)
+        .set({ setup: true })
+        .where(eq(projectThreads.id, id))
+        .returning()
+        .get(),
     setSpendOnCap: (onCap) => {
       db.insert(spendSettings)
         .values({ id: "spend", onCap })

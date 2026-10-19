@@ -21,7 +21,9 @@
  *   "setup", the `stages` card and the `place` card he was asked to change.
  * - P: his `setup` page stands (kind page, does pick) with its stages and
  *   place cards: the cards the thread shows beside it.
- * - R: his reply lands in chat, and no thread was opened for it.
+ * - R: his reply lands in chat, no thread was opened for it, and chat is
+ *   now a Setup thread (`setup`), so his reply naming files offers "Open
+ *   the board" there as in the first one.
  *
  * On origin/main, which has no project_setup, every S fails ("not offered").
  *
@@ -388,14 +390,16 @@ const askOn = async (
   ).catch(() => reads.cawAnswers(chat));
   const after = await reads.threads();
   kit.check(
-    `R ${harness}: Caw's reply lands in chat, and no thread was opened for the ask`,
+    `R ${harness}: Caw's reply lands in chat, no thread was opened for the ask, and chat is now a Setup thread`,
     reply
       .slice(replies)
       .some((row) => row.body.startsWith("PROBE-SETUP-REPLY")) &&
-      after.length === before.length,
+      after.length === before.length &&
+      after.find((one) => one.id === chat)?.setup === true,
     JSON.stringify({
       replies: reply.slice(replies).map((row) => row.body.slice(0, 80)),
       threads: [before.length, after.length],
+      chat: after.find((one) => one.id === chat),
     })
   );
   leg = undefined;

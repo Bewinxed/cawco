@@ -4148,7 +4148,7 @@ export const projectThreads = sqliteTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     /** The first message's opening words. */
     title: text("title").notNull(),
-    /** The project's Setup thread, opened when New project made it (caw.ts `setup`). */
+    /** A Setup thread of the project: opened when New project made it (caw.ts `setup`), or one the person asked Caw for Setup in (`project_setup`). */
     setup: integer("setup", { mode: "boolean" }).notNull().default(false),
     createdAt: timestamp("created_at").notNull(),
     /** When its newest message was added. */
