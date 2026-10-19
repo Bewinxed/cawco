@@ -4290,6 +4290,19 @@
         }
       }
     },
+    "c-work-column-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 720,
+        "unit": "px"
+      },
+      "$description": "The Work Column Rule: empty and starter content stands in the column the composer stands in, at most 720px and centred in a wider area, every line on its start edge; in a narrower area the column is the area's own width, from its start edge.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "min(720px, 100%)"
+        }
+      }
+    },
     "c-suggest-chip": {
       "$type": "dimension",
       "$value": {
