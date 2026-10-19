@@ -180,7 +180,7 @@ const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
 /** PreviewController's `preview page …` and `preview head …` lines. */
 const PAGE_LINE = /^preview page view=(\S+) selected=(\S+) count=(\d+)(.*)$/;
 const HEAD_LINE =
-  /^preview head comment=(.+)@(-?\d+),(-?\d+) mode=(interact|comment|draw) draw=(none|-?\d+,-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) send=(.+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
+  /^preview head comment=(.+)@(-?\d+),(-?\d+) form=(segments|pick) mode=(interact|comment|draw) draw=(none|-?\d+,-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) send=(.+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
 /** Pins.swift's `preview card …` line: the open pin's number, where its controls stand, whether it wears the live dot. */
 const CARD_LINE =
   /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) delete=(?:none|-?\d+,-?\d+) writing=(?:true|false) asking=(?:true|false) problem=(.*)$/;
@@ -269,13 +269,17 @@ interface Frame {
 /**
  * The header as the app logs it before each page post: what toggles
  * Comment and its centre ("Comment" at Comment's segment, or while
- * commenting "Interact" at Interact's, the way out), the mode, Draw's
+ * commenting "Interact" at Interact's, the way out; on a head too narrow
+ * for the segments, the mode's pick), the mode's form, the mode, Draw's
  * centre, the open pins' count and Comments' centre, Send picks' words and
  * centre, Reload's, the grabber's, the web view's frame.
  */
 interface Head {
+  /** Comment's segment (or Interact's while commenting), or with `form` "pick" the mode's pick. */
   comment: Point;
   draw?: Point;
+  /** The mode as its three segments, or where they have no room as its pick (the chosen glyph opening the three). */
+  form: "segments" | "pick";
   grabber?: Point;
   mode: "interact" | "comment" | "draw";
   open: number;
@@ -294,20 +298,21 @@ const headOf = (line: string): Head | undefined => {
   return {
     words: m[1],
     comment: { x: Number(m[2]), y: Number(m[3]) },
-    mode: m[4] as Head["mode"],
-    draw: pointOf(m[5]),
-    open: Number(m[6]),
-    pins: pointOf(m[7]),
-    sendWords: m[8],
-    send: pointOf(m[9]),
-    reload: { x: Number(m[10]), y: Number(m[11]) },
+    form: m[4] as Head["form"],
+    mode: m[5] as Head["mode"],
+    draw: pointOf(m[6]),
+    open: Number(m[7]),
+    pins: pointOf(m[8]),
+    sendWords: m[9],
+    send: pointOf(m[10]),
+    reload: { x: Number(m[11]), y: Number(m[12]) },
     grabber:
-      m[12] === undefined ? undefined : { x: Number(m[12]), y: Number(m[13]) },
+      m[13] === undefined ? undefined : { x: Number(m[13]), y: Number(m[14]) },
     web: {
-      x: Number(m[14]),
-      y: Number(m[15]),
-      width: Number(m[16]),
-      height: Number(m[17]),
+      x: Number(m[15]),
+      y: Number(m[16]),
+      width: Number(m[17]),
+      height: Number(m[18]),
     },
   };
 };
@@ -583,6 +588,33 @@ xcrun simctl install ${udid} "${app}"`);
     );
     return touches.touch(point);
   };
+  /**
+   * The mode switched as the header says: a tap on the segment it names, or
+   * where the head is too narrow for the segments (the web's rule: every
+   * control at its narrowest before the mode widens), a tap on the mode's
+   * pick and then on its menu's entry. A first tap that only took a card
+   * away opens no menu: the pick is tapped once more.
+   */
+  const toggle = async (now: Head, what: string) => {
+    if (now.form === "segments") {
+      await tap(now.comment, what);
+      return;
+    }
+    const entry = async () => {
+      await pause(800);
+      return touches.find(now.words);
+    };
+    await tap(now.comment, `the mode's pick, for ${what}`);
+    let at = await entry();
+    if (!at) {
+      await tap(now.comment, `the mode's pick again, for ${what}`);
+      at = await entry();
+    }
+    if (!at) {
+      throw new Error(`the mode's pick opened no "${now.words}" entry`);
+    }
+    await tap(at, `${what}, the pick's entry`);
+  };
   /** One finger from `from` to `to` over `seconds`, the runner's `POST /swipeV2`. */
   const drag = (
     from: Point,
@@ -723,7 +755,7 @@ xcrun simctl install ${udid} "${app}"`);
     `head says "${head.words}", mode ${head.mode}, Comments ${head.pins ? "shown" : "hidden"} with ${head.open} open`
   );
   mark = seen.length;
-  await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
+  await toggle(head, `Comment ("${head.words}", from the newest header)`);
   const on = await lineAfter(
     "Comment on",
     mark,
@@ -779,7 +811,7 @@ xcrun simctl install ${udid} "${app}"`);
     lineAfter(what, from, (l) => l.startsWith("preview card dismissed "));
   head = await headNow("the header with pin 1's card open");
   mark = seen.length;
-  await tap(head.comment, `Interact ("${head.words}"), outside the empty card`);
+  await toggle(head, `Interact ("${head.words}"), outside the empty card`);
   const dismissedEmpty = await dismissedAfter("the empty card dismissed", mark);
   // The same tap is Interact's own: the mode ends with it.
   const endedEmpty = await lineAfter(
@@ -803,7 +835,7 @@ xcrun simctl install ${udid} "${app}"`);
   );
   head = await headNow("the header with Comment off again");
   mark = seen.length;
-  await tap(head.comment, `Comment ("${head.words}"), on again`);
+  await toggle(head, `Comment ("${head.words}"), on again`);
   const onAgain = await lineAfter(
     "Comment on again",
     mark,
@@ -832,8 +864,8 @@ xcrun simctl install ${udid} "${app}"`);
   await pause(800);
   head = await headNow("the header with words in pin 1's card");
   mark = seen.length;
-  await tap(
-    head.comment,
+  await toggle(
+    head,
     `Interact ("${head.words}"), outside the card with words in it`
   );
   const dismissedKept = await dismissedAfter(
@@ -1181,7 +1213,7 @@ xcrun simctl install ${udid} "${app}"`);
   if (head.words !== "Interact") {
     // 6b's tap on Interact ended the mode: Comment goes on again for its Interact.
     mark = seen.length;
-    await tap(head.comment, `Comment ("${head.words}"), on for Interact`);
+    await toggle(head, `Comment ("${head.words}"), on for Interact`);
     await lineAfter(
       "Comment on for Interact",
       mark,
@@ -1196,7 +1228,7 @@ xcrun simctl install ${udid} "${app}"`);
     ).catch(() => headLast() as Head);
   }
   mark = seen.length;
-  await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
+  await toggle(head, `Comment ("${head.words}", from the newest header)`);
   const off = await lineAfter(
     "Comment off",
     mark,
@@ -1224,7 +1256,7 @@ xcrun simctl install ${udid} "${app}"`);
 
   // ── 10. Reload with Comment on: the mode stands; Interact leaves it ──
   mark = seen.length;
-  await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
+  await toggle(head, `Comment ("${head.words}", from the newest header)`);
   await lineAfter("Comment on again", mark, (l) => l === "preview comment on");
   head = await headNow("the header before Reload");
   mark = seen.length;
@@ -1242,7 +1274,7 @@ xcrun simctl install ${udid} "${app}"`);
   head = await headNow("the header after Reload");
   const stood = head.mode === "comment" && head.words === "Interact";
   mark = seen.length;
-  await tap(head.comment, `Interact ("${head.words}", from the newest header)`);
+  await toggle(head, `Interact ("${head.words}", from the newest header)`);
   await lineAfter("Comment off", mark, (l) => l === "preview comment off");
   head = await headNow("the header after Interact");
   page = await pageNow("the page after Interact");

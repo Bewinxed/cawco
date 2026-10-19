@@ -2415,17 +2415,19 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     /// The header as the probe reads it: what toggles Comment and its centre
     /// ("Comment" at Comment's segment, or while commenting "Interact" at
-    /// Interact's, the way out), the mode, Draw's centre, the open pins and
-    /// Comments' centre, Send's words and centre, Reload's, the grabber's,
-    /// and the web view's frame.
+    /// Interact's, the way out; where the segments have no room, the mode's
+    /// pick, whose menu holds that entry), the mode's form, the mode, Draw's
+    /// centre, the open pins and Comments' centre, Send's words and centre,
+    /// Reload's, the grabber's, and the web view's frame.
     private func headLine() -> String {
         let centre = PreviewProbe.centre
         let words = mode == .comment ? "Interact" : "Comment"
-        let toggle = segmentCentre(mode == .comment ? 0 : 1)
+        let picked = slots[.mode]?.isHidden != false && slots[.modePick]?.isHidden == false
+        let toggle = picked ? centre(modePick) : segmentCentre(mode == .comment ? 0 : 1)
         let sendWords = sendButton.accessibilityLabel ?? "?"
         let grab = grabArea.isHidden ? "none" : centre(grabber)
         let page = web.convert(web.bounds, to: nil)
-        return "preview head comment=\(words)@\(toggle) mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(openPins)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
+        return "preview head comment=\(words)@\(toggle) form=\(picked ? "pick" : "segments") mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(openPins)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
     }
 
     /// The centre of the mode's segment at `index` in the window: the segmented's width in three.

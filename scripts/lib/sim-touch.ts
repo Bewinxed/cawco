@@ -35,6 +35,14 @@ export interface Point {
   y: number;
 }
 
+/** One element of the runner's read of the screen (Maestro's `hierarchy`). */
+interface Node {
+  attributes?: Record<string, string>;
+  children?: Node[];
+}
+/** A read element's frame as Maestro writes it, `[x1,y1][x2,y2]` in points. */
+const BOUNDS = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/;
+
 /** Runs `script` in bash; its stdout, or throws with its stderr. */
 async function sh(script: string): Promise<string> {
   const child = Bun.spawn(["bash", "-c", `set -euo pipefail\n${script}`], {
@@ -64,8 +72,8 @@ export function simTouch(udid: string, app = "dev.cawco.app") {
   free.stop(true);
   let started = false;
 
-  /** The foreground app's name as the runner reads it; the first read starts the runner. */
-  const front = async (): Promise<string> => {
+  /** What stands on the screen as the runner reads it; the first read starts the runner. */
+  const hierarchy = async (): Promise<Node> => {
     const text = await sh(
       `${MAESTRO} --device ${udid} --driver-host-port ${port} hierarchy --no-reinstall-driver`
     ).catch((error: unknown) => {
@@ -75,12 +83,35 @@ export function simTouch(udid: string, app = "dev.cawco.app") {
       throw new Error(`Maestro's read of the screen failed: ${words}`);
     });
     started = true;
-    const whole = JSON.parse(
+    return JSON.parse(
       text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
-    ) as { children?: { attributes?: Record<string, string> }[] };
-    return (
-      whole.children?.[0]?.attributes?.accessibilityText || "nothing named"
-    );
+    ) as Node;
+  };
+
+  /** The foreground app's name as the runner reads it. */
+  const front = async (): Promise<string> =>
+    (await hierarchy()).children?.[0]?.attributes?.accessibilityText ||
+    "nothing named";
+
+  /**
+   * The centre, in points, of the frontmost element whose accessibility text
+   * is `text` (the last in the runner's read, as an open menu's entries are),
+   * or undefined where none stands.
+   */
+  const find = async (text: string): Promise<Point | undefined> => {
+    let found: Point | undefined;
+    const walk = (node: Node) => {
+      const bounds = BOUNDS.exec(node.attributes?.bounds ?? "");
+      if (node.attributes?.accessibilityText === text && bounds) {
+        const [x1, y1, x2, y2] = bounds.slice(1).map(Number);
+        found = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+      }
+      for (const child of node.children ?? []) {
+        walk(child);
+      }
+    };
+    walk(await hierarchy());
+    return found;
   };
 
   /** One of the runner's routes, once it runs. */
@@ -95,6 +126,7 @@ export function simTouch(udid: string, app = "dev.cawco.app") {
 
   return {
     front,
+    find,
     /** One finger's tap, the runner's `POST /touch` (where every `tapOn` of Maestro's ends). */
     touch: (at: Point) =>
       runner("touch", { x: Math.round(at.x), y: Math.round(at.y) }),
