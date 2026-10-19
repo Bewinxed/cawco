@@ -2149,10 +2149,12 @@ export const createMemory = ({
     if (!key) {
       offLines(projectId, paired);
     }
+    // By the note's id: settleInbox hands back a copy of each note Jev
+    // marks lasting, not the object the pair holds.
     const sortOf = (asked: Note, line: FactLine) =>
       jev?.sorts.get(
         paired.pairs.find(
-          (pair) => pair.note === asked && pair.fact === line
+          (pair) => pair.note.id === asked.id && pair.fact === line
         ) as Pair
       );
     const kept = await settleInbox(projectId, sorted, jev?.verdicts);
