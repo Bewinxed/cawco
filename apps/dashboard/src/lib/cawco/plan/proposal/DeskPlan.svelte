@@ -42,7 +42,7 @@
   <SideSurface label="Plan" onclose={() => undefined} recessed={false}>
     {#snippet titleControl()}
       <span class="head mark-line">
-        <span class="title">Plan</span>
+        <span class="title" data-slot="name-lead">Plan</span>
         <span class="progress" data-slot="progress" data-box
           ><TaskRing done={got.done} total={got.total} /></span
         >
@@ -100,13 +100,10 @@
     white-space: nowrap;
   }
   /* The head's names in one size, on one line (the head recipe's label
-     role): "Plan", the task's title, its stage. */
-  /* The head's title group keeps its words' width (SideSurface lets it
-     shrink to nothing, and "1 of 6" ran under the badge); the task's badge
-     stands a step clear of it and gives way by truncating its title. */
-  .desk :global(.side-head .identity) {
-    min-inline-size: max-content;
-  }
+     role): "Plan", the task's title, its stage. "Plan" is the name's lead
+     (`name-lead`), the width SideSurface keeps; the ring and its figure
+     are cut where the head is short. The task's badge stands a step clear
+     of it and gives way by truncating its title. */
   .task {
     flex: 0 1 auto;
     min-inline-size: 0;

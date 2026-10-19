@@ -818,7 +818,18 @@ const readReview = (page: Page) =>
               (run) =>
                 (run.effect as KeyframeEffect | null)?.getKeyframes() ?? []
             )
-            .map((frame) => Number(frame.opacity ?? 1))
+            .map((frame) => {
+              // The shared breath's floor is a token (`var(--breath-floor)`):
+              // its value where the glyph stands, this scheme's.
+              const said = String(frame.opacity ?? 1);
+              // biome-ignore lint/performance/useTopLevelRegex: it runs in the page's own scope, once per frame
+              const token = said.match(/var\((--[\w-]+)\)/)?.[1];
+              return Number(
+                token
+                  ? getComputedStyle(doing).getPropertyValue(token).trim()
+                  : said
+              );
+            })
         );
         const ink = pv.rgba(getComputedStyle(doing).color);
         const under = pv.ground(doing.parentElement);

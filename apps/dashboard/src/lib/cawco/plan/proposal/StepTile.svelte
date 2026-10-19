@@ -58,8 +58,9 @@
 
 {#snippet glyph()}
   {#key state}
+    <!-- Live work breathes on the one rule (app.css .breathe). -->
     <span
-      class="glyph"
+      class={["glyph", state === "doing" && "breathe"]}
       data-glyph={state}
       in:swapIn
       out:fade={{ duration: 120 }}
@@ -150,12 +151,6 @@
   .tile[data-state="doing"] .glyph {
     color: var(--status-live-glyph);
   }
-  /* Live work breathes (DESIGN.md): the Working glyph to 45% on --breath. */
-  @media (prefers-reduced-motion: no-preference) {
-    .tile[data-state="doing"] .glyph {
-      animation: pv-breath var(--breath) var(--ease-in-out) infinite;
-    }
-  }
   .tile[data-state="you"] .glyph {
     color: var(--status-attn-glyph);
   }
@@ -170,13 +165,5 @@
   }
   .tile[data-state="failed"] .glyph {
     color: var(--status-fail-glyph);
-  }
-  /* The breath's lowest point keeps a status glyph's 3:1 on the tile: at
-     45% (the Working glyph's own breath on a session row) the pale blue
-     glyph fell to about 2:1 here and read as disabled. */
-  @keyframes pv-breath {
-    50% {
-      opacity: 0.72;
-    }
   }
 </style>
