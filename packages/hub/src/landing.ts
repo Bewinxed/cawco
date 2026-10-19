@@ -44,8 +44,8 @@
  * runs every other.
  *
  * A work item that lands `branch` or `pr` goes to a branch of its own
- * instead ({@link pushBranch}): HEAD as it is, replacing only what the hub
- * read there a moment before; for `pr` the hub then has the workspace's
+ * instead ({@link pushBranch}): HEAD as it is, replacing only the commit
+ * the hub itself last pushed there; for `pr` the hub then has the workspace's
  * machine open the pull or merge request through its origin's forge adapter
  * (work-items.ts `pullRequestFor`, agent forges/).
  */
@@ -58,13 +58,14 @@ import { CommandStopped, WouldWait } from "./machine-pause";
  * said, and `cause` when the state after it names one, never git's words.
  * `race` is a push that was still behind the branch after every try, the
  * branch on origin having moved on from what each push was rebased onto (or,
- * for a leased push, from what its lease named), read after it; `cut-off`, a
+ * read after it; `taken`, a branch of the item's own that someone other than
+ * the hub moved, so the hub left it (its detail names both commits); `cut-off`, a
  * push the workspace's boundary stopped before it answered ({@link CUT_OFF}),
  * the branch read once after it and not holding the commit. Any other
  * refusal (the remote turning the login down among them) is git's words alone.
  */
 export interface Refusal {
-  cause?: "race" | "cut-off";
+  cause?: "race" | "taken" | "cut-off";
   detail: string;
   kind: "refused";
   /**
@@ -650,15 +651,57 @@ async function attempt<F>(
  */
 export async function branchPushCheck(
   run: LandingDeps<unknown>["run"],
-  branch: string
+  branch: string,
+  last: string | undefined
 ): Promise<Refusal | undefined> {
   const remote = await run("git remote get-url origin", LOCAL_MS);
   if (remote.exitCode !== 0 || !remote.stdout.trim()) {
     return;
   }
-  const checked = await pushCheck(run, `refs/heads/${branch}`);
-  return checked?.kind === "moved" ? checked.refusal : checked;
+  const ref = `refs/heads/${branch}`;
+  const checked = await pushCheck(run, ref);
+  if (checked) {
+    return checked.kind === "moved" ? checked.refusal : checked;
+  }
+  const there = await tipOf(run, ref);
+  if (typeof there !== "string") {
+    return there;
+  }
+  const head = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
+  return there === head ? undefined : taken(branch, there, last, "push check");
 }
+
+/** origin's `ref` as `git ls-remote` reads it now: its sha, "" while it is missing. */
+async function tipOf(
+  run: LandingDeps<unknown>["run"],
+  ref: string
+): Promise<string | Refusal> {
+  const there = await run(`git ls-remote origin ${quote(ref)}`, NETWORK_MS);
+  return there.exitCode === 0
+    ? (there.stdout.trim().split(SPACE)[0] ?? "")
+    : refusal("fetch", there);
+}
+
+/**
+ * A branch of an item's own that origin holds at `there`, refused when that
+ * is neither missing nor `last`, the commit the hub last pushed there:
+ * someone else moved it, and their work is never replaced. Nothing, when
+ * the hub may replace it.
+ */
+const taken = (
+  branch: string,
+  there: string,
+  last: string | undefined,
+  step: Refusal["step"]
+): Refusal | undefined =>
+  there === "" || there === last
+    ? undefined
+    : {
+        kind: "refused",
+        step,
+        cause: "taken",
+        detail: `origin's ${branch} is at ${there.slice(0, 9)}, ${last ? `not at ${last.slice(0, 9)}, the commit the hub last pushed there` : "and the hub has never pushed there"}: someone else moved it, so the hub left it as it is.`,
+      };
 
 /** What pushing a workspace's HEAD to a branch of its own came to. */
 export type BranchOutcome =
@@ -694,9 +737,11 @@ async function ready(
 /**
  * Pushes the workspace's HEAD to `branch` on origin: its commits as they
  * are, not rebased. Nothing ahead of `base` is nothing to push. The push
- * replaces the branch only if it still holds what `git ls-remote` read just
- * before (or is still missing), so work someone else pushed there is never
- * lost; a push that lost that race is tried once more from the read.
+ * replaces the branch only while it is missing or at `last`, the commit the
+ * hub last pushed there (an earlier round of the item, rebased since, or an
+ * earlier attempt at its task), leased on that commit; a branch someone else
+ * moved is refused naming both commits ({@link taken}), and their work is
+ * never lost.
  */
 export function pushBranch(
   base: string,
@@ -704,7 +749,7 @@ export function pushBranch(
   deps: Pick<
     LandingDeps<unknown>,
     "queue" | "repo" | "run" | "skip" | "stopped" | "turn"
-  >
+  > & { last: string | undefined }
 ): Promise<BranchOutcome> {
   return untilStopped(pushOwnBranch(base, branch, deps));
 }
@@ -743,7 +788,7 @@ async function pushOwnBranch(
       if (deps.stopped?.()) {
         return { kind: "stopped" };
       }
-      const refused = await leasedPush(run, `refs/heads/${branch}`, sha, 1);
+      const refused = await leasedPush(run, branch, sha, deps.last);
       return refused && !(await holds(run, `refs/heads/${branch}`, sha, false))
         ? refused
         : { kind: "pushed", sha };
@@ -755,23 +800,31 @@ async function pushOwnBranch(
 const SPACE = /\s+/;
 
 /**
- * HEAD (`sha`) pushed to `ref`, replacing it only if it still holds what
- * `git ls-remote` read just before (or is still missing); once more from a
- * fresh read when someone pushed in between. A push cut off is not tried
- * again ({@link CUT_OFF}): the caller reads the branch once. Answers why it
- * was refused, or nothing when it was pushed.
+ * HEAD (`sha`) pushed to `branch`, replacing it only while it is missing or
+ * at `last` ({@link taken}), leased on what `git ls-remote` read just before
+ * so a push someone makes in between is never replaced either. Not tried
+ * again: a branch that moved is someone else's work, and a push cut off
+ * ({@link CUT_OFF}) leaves the caller to read the branch once. Answers why
+ * it was refused, or nothing when it was pushed.
  */
 async function leasedPush(
   run: LandingDeps<unknown>["run"],
-  ref: string,
+  branch: string,
   sha: string,
-  n: number
+  last: string | undefined
 ): Promise<Refusal | undefined> {
-  const there = await run(`git ls-remote origin ${quote(ref)}`, NETWORK_MS);
-  if (there.exitCode !== 0) {
-    return refusal("fetch", there);
+  const ref = `refs/heads/${branch}`;
+  const held = await tipOf(run, ref);
+  if (typeof held !== "string") {
+    return held;
   }
-  const held = there.stdout.trim().split(SPACE)[0] ?? "";
+  if (held === sha) {
+    return;
+  }
+  const before = taken(branch, held, last, "push");
+  if (before) {
+    return before;
+  }
   const pushed = await run(
     `git push --force-with-lease=${quote(`${ref}:${held}`)} origin ${quote(`HEAD:${ref}`)}`,
     NETWORK_MS,
@@ -786,20 +839,9 @@ async function leasedPush(
   }
   // Lost to someone who pushed in between when the ref no longer holds what
   // the lease named; holding it still, the push was refused otherwise.
-  const again = await run(`git ls-remote origin ${quote(ref)}`, NETWORK_MS);
-  if (
-    again.exitCode !== 0 ||
-    (again.stdout.trim().split(SPACE)[0] ?? "") === held
-  ) {
+  const again = await tipOf(run, ref);
+  if (typeof again !== "string" || again === held || again === sha) {
     return refusal("push", pushed);
   }
-  return n < ATTEMPTS
-    ? await leasedPush(run, ref, sha, n + 1)
-    : {
-        kind: "refused",
-        step: "push",
-        detail: detailOf(pushed),
-        cause: "race",
-        tries: n,
-      };
+  return taken(branch, again, held || last, "push") ?? refusal("push", pushed);
 }

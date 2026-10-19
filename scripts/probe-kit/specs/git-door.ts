@@ -23,6 +23,16 @@
  * (m) a dry run of a push that is not a fast-forward is refused with git's
  *     reason; (n) with `--force` it is ok, and main is still unchanged;
  * (o) the real push of HEAD to main lands, once;
+ * (t) an item's own branch, pushed as the hub pushes it (hub landing.ts
+ *     `pushBranch`), takes its first round; (u) reopened, its next round
+ *     rebased onto a moved main replaces it, leased on the first (the door
+ *     carries git's `option cas` to the host's `--force-with-lease`; before
+ *     2026-10-19 it answered `unsupported` and the remote refused the push
+ *     as non-fast-forward); (v) after someone else pushed there, the next
+ *     round is refused, by the push check and by the push, in words naming
+ *     their commit and the hub's last, and their commit stays; (w) git's
+ *     lease reaches the door: a stale one git refuses itself, and a held
+ *     one is sent as `option cas`, answered ok, and lands;
  * (c) a push to someone/else.git is refused in the guard's words, and that
  *     repository takes no push; (p) its dry run is refused the same way;
  * (d) a push from another repository whose origin is the same URL is
@@ -158,27 +168,24 @@ const spec: Spec = {
     await writeRule("off");
     await openGitDoor(ref);
     const door = gitDoorEnv(id, clone);
-    /** git as a guarded workspace's command runs it: the door's helper first on PATH, its config words, its ssh. */
+    /** A guarded workspace's command environment: the door's helper first on PATH, its config words, its ssh. */
+    const doorEnv = (extra: Record<string, string> = {}) => ({
+      ...process.env,
+      ...door,
+      PATH: `${gitHelperDirOf(id)}:${process.env.PATH}`,
+      GIT_CONFIG_PARAMETERS: [
+        door.CAWCO_GIT_PARAMETERS,
+        guardedPushParameters(),
+      ].join(" "),
+      GIT_TERMINAL_PROMPT: "0",
+      ...extra,
+    });
+    /** git as a guarded workspace's command runs it. */
     const inside = (
       cwd: string,
       args: string[],
       extra: Record<string, string> = {}
-    ) =>
-      Bun.$`git ${args}`
-        .cwd(cwd)
-        .env({
-          ...process.env,
-          ...door,
-          PATH: `${gitHelperDirOf(id)}:${process.env.PATH}`,
-          GIT_CONFIG_PARAMETERS: [
-            door.CAWCO_GIT_PARAMETERS,
-            guardedPushParameters(),
-          ].join(" "),
-          GIT_TERMINAL_PROMPT: "0",
-          ...extra,
-        })
-        .quiet()
-        .nothrow();
+    ) => Bun.$`git ${args}`.cwd(cwd).env(doorEnv(extra)).quiet().nothrow();
     /** git's own trace of what it sends its remote helper and what it reads back (transport-helper.c). */
     const TRACED = { GIT_TRANSPORT_HELPER_DEBUG: "1" };
     const said = (run: { stderr: Buffer; stdout: Buffer }) =>
@@ -288,6 +295,116 @@ const spec: Spec = {
       );
     };
 
+    /**
+     * (t) to (w): an item's own branch across rounds, pushed as the hub
+     * pushes it (hub landing.ts `branchPushCheck` before the gate, then
+     * `pushBranch`), every command run in the clone with the door's
+     * environment, as the hub's are in a workspace. `last` is the commit the
+     * hub last pushed there (work-items.ts `lastBranchPush`).
+     */
+    const branchLegs = async (): Promise<void> => {
+      const { branchPushCheck, landingQueue, pushBranch } =
+        await import("../../../packages/hub/src/landing");
+      const run = async (cmd: string) => {
+        const ran = await Bun.$`sh -c ${cmd}`
+          .cwd(clone)
+          .env(doorEnv())
+          .quiet()
+          .nothrow();
+        return {
+          exitCode: ran.exitCode,
+          stdout: ran.stdout.toString(),
+          stderr: ran.stderr.toString(),
+        };
+      };
+      const queue = landingQueue();
+      const BRANCH = "cawco/probe-round";
+      /** One round: HEAD a new commit on origin's main as it is now, checked, then pushed. */
+      const round = async (name: string, last: string | undefined) => {
+        await inside(clone, ["fetch", "origin"]);
+        const sha = (
+          await Bun.$`git -C ${clone} ${IDENTITY} commit-tree -p refs/remotes/origin/main -m ${name} HEAD^{tree}`.text()
+        ).trim();
+        await Bun.$`git -C ${clone} checkout -q --detach ${sha}`.quiet();
+        const checked = await branchPushCheck(run, BRANCH, last);
+        const pushed = await pushBranch("main", BRANCH, { last, queue, run });
+        return { sha, checked, pushed };
+      };
+      const moveMain = async (name: string) =>
+        await Bun.$`git -C ${seed} pull -q ${originUrl} main && git -C ${seed} ${IDENTITY} commit -q --allow-empty -m ${name} && git -C ${seed} push -q ${originUrl} main`.quiet();
+      try {
+        const one = await round("round 1", undefined);
+        check(
+          "(t) an item's first round lands on its own branch through the door",
+          one.checked === undefined &&
+            one.pushed.kind === "pushed" &&
+            (await tip(ORIGIN, BRANCH)) === one.sha,
+          `check ${JSON.stringify(one.checked)}; push ${JSON.stringify(one.pushed)}; branch ${await tip(ORIGIN, BRANCH)}`
+        );
+
+        // Reopened: main moved on, and its next round is rebased onto it.
+        await moveMain("main moves");
+        const two = await round("round 2", one.sha);
+        check(
+          "(u) its next round, rebased onto a moved main, lands: the branch takes it, leased on round 1",
+          two.checked === undefined &&
+            two.pushed.kind === "pushed" &&
+            (await tip(ORIGIN, BRANCH)) === two.sha,
+          `check ${JSON.stringify(two.checked)}; push ${JSON.stringify(two.pushed)}; branch ${await tip(ORIGIN, BRANCH)} (round 2 ${two.sha})`
+        );
+
+        // Someone else pushes to the branch.
+        await Bun.$`git -C ${seed} fetch -q ${originUrl} refs/heads/${BRANCH}`.quiet();
+        const theirs = (
+          await Bun.$`git -C ${seed} ${IDENTITY} commit-tree -p FETCH_HEAD -m theirs FETCH_HEAD^{tree}`.text()
+        ).trim();
+        await Bun.$`git -C ${seed} push -q ${originUrl} ${theirs}:refs/heads/${BRANCH}`.quiet();
+        const three = await round("round 3", two.sha);
+        const named = (words: string | undefined) =>
+          words?.includes(`is at ${theirs.slice(0, 9)}`) === true &&
+          words.includes(`not at ${two.sha.slice(0, 9)}`);
+        check(
+          "(v) a round after someone else moved the branch is refused before the gate and at the push, in words naming both commits, and their commit stays",
+          three.checked?.cause === "taken" &&
+            named(three.checked.detail) &&
+            three.pushed.kind === "refused" &&
+            three.pushed.cause === "taken" &&
+            named(three.pushed.detail) &&
+            (await tip(ORIGIN, BRANCH)) === theirs,
+          `check ${JSON.stringify(three.checked)}; push ${JSON.stringify(three.pushed)}; branch ${await tip(ORIGIN, BRANCH)} (theirs ${theirs})`
+        );
+        /** HEAD to the branch through the door, leased on `on`. */
+        const leased = (on: string) =>
+          inside(
+            clone,
+            [
+              "push",
+              `--force-with-lease=refs/heads/${BRANCH}:${on}`,
+              "origin",
+              `HEAD:refs/heads/${BRANCH}`,
+            ],
+            TRACED
+          );
+        const stale = await leased(two.sha);
+        const stays = await tip(ORIGIN, BRANCH);
+        const holding = await leased(theirs);
+        check(
+          "(w) git's lease reaches the door: leased on round 2 while the branch is at theirs, git refuses it as stale and it stays; leased on theirs, git sends `option cas`, the door answers ok, and the branch takes HEAD",
+          stale.exitCode !== 0 &&
+            said(stale).includes("stale info") &&
+            stays === theirs &&
+            holding.exitCode === 0 &&
+            optionsSent(holding).includes(
+              `-> option cas refs/heads/${BRANCH}:${theirs} | <- ok`
+            ) &&
+            (await tip(ORIGIN, BRANCH)) === three.sha,
+          `stale: exit ${stale.exitCode}, branch ${stays}, ${said(stale)} | on theirs: exit ${holding.exitCode}; options ${optionsSent(holding)}; branch ${await tip(ORIGIN, BRANCH)} (round 3 ${three.sha}); ${said(holding)}`
+        );
+      } finally {
+        await Bun.$`git -C ${clone} checkout -q main`.quiet();
+      }
+    };
+
     try {
       // (a)
       await Bun.$`git -C ${seed} ${IDENTITY} commit -q --allow-empty -m second && git -C ${seed} push -q ${originUrl} main`.quiet();
@@ -319,6 +436,7 @@ const spec: Spec = {
       );
 
       await originLegs();
+      await branchLegs();
 
       // (c)
       const pushedElse = await inside(clone, [

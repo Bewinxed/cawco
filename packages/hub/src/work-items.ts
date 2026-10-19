@@ -1772,7 +1772,9 @@ const refusedLine = (
     read: "reading the workspace's git",
   };
   let said = `${step[refusal.step]} on ${machine} failed`;
-  if (refusal.cause === "race") {
+  if (refusal.cause === "taken") {
+    said = `${target} on origin was moved by someone other than the hub, so it was not replaced`;
+  } else if (refusal.cause === "race") {
     said = `${target} moved on origin before each of the hub's ${refusal.tries} pushes, so every one was turned down as behind it`;
   } else if (refusal.cause === "cut-off") {
     said = `${step.push} was cut off, and ${target} does not hold the commits`;
@@ -5990,6 +5992,33 @@ export const createWorkItems = ({
   };
 
   /**
+   * The commit the hub last pushed to `item`'s own branch
+   * ({@link landingBranch}): the newest branch landing of every attempt at
+   * its task in its project, the item's own earlier rounds among them, or of
+   * the item alone when it is no task's. Undefined: the hub never pushed there.
+   */
+  const lastBranchPush = (item: WorkItemRow): string | undefined => {
+    const now = db.workItem(item.id) ?? item;
+    const sharing =
+      now.projectId && now.taskId
+        ? db
+            .projectAttempts(now.projectId)
+            .filter((attempt) => attempt.taskId === now.taskId)
+        : [now];
+    let last: WorkLanding | undefined;
+    for (const { landed } of sharing) {
+      if (
+        landed &&
+        landed.onto === null &&
+        (!last || (landed.at ?? 0) > (last.at ?? 0))
+      ) {
+        last = landed;
+      }
+    }
+    return last?.sha;
+  };
+
+  /**
    * Lands an item that lands `branch` or `pr`: its commits pushed as they are
    * to `cawco/<task or item>`, and for `pr`, a pull request against the base
    * branch opened, or the open one found. gh turning the pull request down
@@ -6005,6 +6034,7 @@ export const createWorkItems = ({
     const { base } = workspace;
     const branch = landingBranch(item);
     const pushed = await pushBranch(base, branch, {
+      last: lastBranchPush(item),
       run: runIn(workspace, item),
       turn: turnOf(item),
       queue: landings,
@@ -6026,7 +6056,11 @@ export const createWorkItems = ({
       );
     }
     const at = `${branch} at ${pushed.sha.slice(0, 9)}`;
-    const landed: WorkLanding = { sha: pushed.sha, onto: null };
+    const landed: WorkLanding = {
+      sha: pushed.sha,
+      onto: null,
+      at: Date.now(),
+    };
     if (item.lands !== "pr") {
       return {
         kind: "done",
@@ -6601,7 +6635,11 @@ export const createWorkItems = ({
       return;
     }
     const branch = landingBranch(item);
-    const refused = await branchPushCheck(runIn(workspace, item), branch);
+    const refused = await branchPushCheck(
+      runIn(workspace, item),
+      branch,
+      lastBranchPush(item)
+    );
     return refused
       ? {
           kind: "refused",

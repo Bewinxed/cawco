@@ -1404,6 +1404,13 @@ export type WorkItemState =
 
 /** What a work item's landing put where ({@link workItems} `landed`). */
 export interface WorkLanding {
+  /**
+   * When it was pushed (ms), for a push to a branch of its own: the newest
+   * is the commit the hub's next push there leases on (work-items.ts
+   * `lastBranchPush`). Unset on landings on the base, and on branch pushes
+   * before 2026-10-19.
+   */
+  at?: number;
   /** The base commit its commits were rebased onto; null for a push to a branch of its own. */
   onto: string | null;
   sha: string;

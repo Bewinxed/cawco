@@ -167,6 +167,13 @@ const CONNECT = /^(stateless-)?connect /;
 const DRY_RUN = "option dry-run true";
 /** `option dry-run true|false`, either way. */
 const DRY_RUN_OPTION = /^option dry-run (true|false)$/;
+/**
+ * git's lease for the push that follows (gitremote-helpers(7), "option cas
+ * {name}:{value}": "Request the helper to perform a force-with-lease push"),
+ * the value C-quoted when it needs quoting (transport-helper.c
+ * `set_helper_option`).
+ */
+const CAS_OPTION = /^option cas (.+)$/;
 const FORCED = /^\+/;
 
 /** A push command's refspec (`push [+]<src>:<dst>`), its source and destination. */
@@ -529,6 +536,18 @@ const holdPush = async (
   return oneLine(raised.text);
 };
 
+/** A C-quoted option value as git wrote it (`"…"`, quote.c `quote_c_style`), plain; a bare one as it is. */
+const unquoted = (value: string): string => {
+  if (!value.startsWith('"')) {
+    return value;
+  }
+  try {
+    return JSON.parse(value) as string;
+  } catch {
+    return value;
+  }
+};
+
 /** A reason on one line, as git's helper protocol carries it. */
 const oneLine = (text: string): string => text.replace(/\s*\n\s*/g, " ");
 
@@ -745,14 +764,16 @@ const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
  * (`ok <dst>`, or `error <dst> <why>`). A push batch under `dryRun` (git's
  * `option dry-run true`) is judged as the real one is and answered the same
  * way, and changes nothing: no large file sent, no ref written, nothing
- * held for the person.
+ * held for the person. `leases` are the batch's `option cas` values, each
+ * the push's `--force-with-lease=<ref>:<sha>`.
  */
 interface HelperBackend {
   readonly fetch: (names: readonly string[]) => Promise<void>;
   readonly list: (forPush: boolean) => Promise<readonly string[]>;
   readonly push: (
     lines: readonly string[],
-    dryRun: boolean
+    dryRun: boolean,
+    leases: readonly string[]
   ) => Promise<readonly string[]>;
 }
 
@@ -852,7 +873,7 @@ const hostBackend = (
       );
     }
   },
-  push: async (lines, dryRun) => {
+  push: async (lines, dryRun, leases) => {
     if (rule.kind === "hold") {
       const said = await holdPush(ref, url, rule.repo, lines, dryRun);
       return lines.map((line) => `error ${refspecOf(line).dst} ${said}`);
@@ -875,7 +896,14 @@ const hostBackend = (
     }
     const pushed = await runHostGit(
       ref,
-      ["push", "--porcelain", ...(dryRun ? ["--dry-run"] : []), url, ...specs],
+      [
+        "push",
+        "--porcelain",
+        ...(dryRun ? ["--dry-run"] : []),
+        ...leases.map((lease) => `--force-with-lease=${lease}`),
+        url,
+        ...specs,
+      ],
       env
     );
     return pushAnswers(lines, pushed);
@@ -917,23 +945,41 @@ const pushAnswers = (
  *
  * `option <name> <value>` is answered "a single line containing one of ok
  * (option successfully set), unsupported (option not recognized) or error
- * <msg>". The door honours `dry-run` alone ("If true, pretend the operation
+ * <msg>". The door honours `dry-run` ("If true, pretend the operation
  * completed successfully, but don't actually change any repository data"),
  * kept for the push batches that follow; git's `git push --dry-run` refuses
  * outright without it ("helper %s does not support dry-run", git's
- * transport-helper.c). Every other option (`progress` and `verbosity`, sent
- * on every connection, `followtags`, `atomic`, `push-option`, …) is
- * `unsupported`, and git decides whether it carries on without it.
+ * transport-helper.c). It honours `cas` ({@link CAS_OPTION}), each lease
+ * given to the push that follows as the host's `--force-with-lease`: git
+ * sends a leased ref's push line without `+` and carries on when the helper
+ * answers `unsupported`, so before 2026-10-19 the door pushed it as a plain
+ * push and the remote refused every leased replace as non-fast-forward (a
+ * branch landing's next round, hub landing.ts `leasedPush`). Every other
+ * option (`progress` and `verbosity`, sent on every connection,
+ * `followtags`, `atomic`, `push-option`, …) is `unsupported`, and git
+ * decides whether it carries on without it.
  */
-/** The door's answer to git's `option <name> <value>` ({@link serveHelper}), and the dry run it sets; unset, unchanged. */
-const answerOption = (line: string): { dryRun?: boolean; reply: string } => {
+/** The options a connection's git set that its push batches read: `dry-run` as last set, the `cas` leases since the last batch. */
+interface HelperOptions {
+  dryRun: boolean;
+  leases: string[];
+}
+
+/** The door's answer to git's `option <name> <value>` ({@link serveHelper}), kept in `options`. */
+const answerOption = (line: string, options: HelperOptions): string => {
   const dry = DRY_RUN_OPTION.exec(line);
   if (dry) {
-    return { reply: "ok", dryRun: dry[1] === "true" };
+    options.dryRun = dry[1] === "true";
+    return "ok";
+  }
+  const cas = CAS_OPTION.exec(line)?.[1];
+  if (cas) {
+    options.leases.push(unquoted(cas));
+    return "ok";
   }
   return line.startsWith("option dry-run ")
-    ? { reply: "error dry-run is true or false" }
-    : { reply: "unsupported" };
+    ? "error dry-run is true or false"
+    : "unsupported";
 };
 
 const serveHelper = (
@@ -947,8 +993,7 @@ const serveHelper = (
   let batch: string[] = [];
   let chain = Promise.resolve();
   let ended = false;
-  /** git's `option dry-run`, as it last set it. */
-  let dryRun = false;
+  const options: HelperOptions = { dryRun: false, leases: [] };
   const finish = async (): Promise<void> => {
     if (ended) {
       return;
@@ -961,9 +1006,7 @@ const serveHelper = (
     if (line === "capabilities") {
       socket.write("fetch\npush\noption\n\n");
     } else if (line.startsWith("option ")) {
-      const option = answerOption(line);
-      dryRun = option.dryRun ?? dryRun;
-      socket.write(`${option.reply}\n`);
+      socket.write(`${answerOption(line, options)}\n`);
     } else if (line === "list" || line === "list for-push") {
       const refs = await backend.list(line === "list for-push");
       socket.write(`${refs.map((each) => `${each}\n`).join("")}\n`);
@@ -976,7 +1019,11 @@ const serveHelper = (
         await backend.fetch(lines.map((each) => each.split(" ")[2] ?? ""));
         socket.write("\n");
       } else {
-        const results = await backend.push(lines, dryRun);
+        const results = await backend.push(
+          lines,
+          options.dryRun,
+          options.leases.splice(0)
+        );
         socket.write(`${results.map((each) => `${each}\n`).join("")}\n`);
       }
     } else if (line === "") {
