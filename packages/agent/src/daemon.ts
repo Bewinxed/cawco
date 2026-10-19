@@ -3244,6 +3244,16 @@ export const startDaemon = (rediscover = false) =>
       );
       return Promise.resolve(true);
     });
+    // The records' watch and tick end with the daemon's scope, and one that
+    // is still starting as it ends is stopped the moment it is ready.
+    let stopBrowsers: (() => void) | undefined;
+    let browsersEnded = false;
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        browsersEnded = true;
+        stopBrowsers?.();
+      })
+    );
     yield* Effect.forkScoped(
       Effect.promise(() =>
         // The take-overs held before a restart are held again first (their
@@ -3255,8 +3265,15 @@ export const startDaemon = (rediscover = false) =>
             console.warn(`[browser] take-overs not restored: ${String(error)}`)
           )
           .then(() => watchBrowsers())
-          .catch((error: unknown) =>
-            console.warn(`[browser] not watched: ${String(error)}`)
+          .then(
+            (stop) => {
+              stopBrowsers = stop;
+              if (browsersEnded) {
+                stop();
+              }
+            },
+            (error: unknown) =>
+              console.warn(`[browser] not watched: ${String(error)}`)
           )
       )
     );

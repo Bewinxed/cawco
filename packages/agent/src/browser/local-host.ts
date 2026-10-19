@@ -1,7 +1,8 @@
 /**
  * The local host: a browser as a headless Chromium on a machine with no
- * container runtime yet, one process per key with its profile in the
- * browser's own dir under the agent's data dir. Started in a process group
+ * container runtime yet, one process per key with its profile in its own
+ * dir under the agent's data dir (state.ts `chromiumDir`), apart from the
+ * records the daemon watches. Started in a process group
  * of its own, so it outlives the terminal or agent that started it, and
  * recorded by its identity, so a later process signals only it. Chrome never
  * saves or fills passwords, addresses or cards here: the profile's
@@ -27,7 +28,7 @@ import { resolveBin, toolEnv } from "../tools";
 import {
   type BrowserHost,
   type BrowserRecord,
-  browserDir,
+  chromiumDir,
   httpAnswers,
   type Progress,
   portsOf,
@@ -124,7 +125,7 @@ const merged = (base: Json, over: Json): Json =>
 
 /** The local browser's profile dir. */
 export const profileDir = (record: BrowserRecord): string =>
-  join(browserDir(record.key), "profile");
+  join(chromiumDir(record.key), "profile");
 
 /** Writes the profile's private preferences, into what Chromium kept there before. */
 const writePreferences = async (profile: string): Promise<void> => {
@@ -142,7 +143,7 @@ const writePreferences = async (profile: string): Promise<void> => {
 
 /** Where the local browser's Chromium writes its output. */
 const logFile = (record: BrowserRecord): string =>
-  join(browserDir(record.key), "chromium.log");
+  join(chromiumDir(record.key), "chromium.log");
 
 /** The first line of its output that says what went wrong, else its last. */
 const lastWords = async (record: BrowserRecord): Promise<string> => {
@@ -288,6 +289,6 @@ export class LocalHost implements BrowserHost {
 
   async remove(record: BrowserRecord): Promise<void> {
     await this.stop(record);
-    await rm(profileDir(record), { recursive: true, force: true });
+    await rm(chromiumDir(record.key), { recursive: true, force: true });
   }
 }

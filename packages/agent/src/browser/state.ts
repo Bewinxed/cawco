@@ -2,12 +2,19 @@
  * Where the machine keeps its browsers, and the one shape both hosts speak.
  *
  * Each browser has a dir of its own under `<data>/browsers/<slug>/`: its
- * record (`record.json`, written whole by core's state-file), its lock
+ * record (`record.json`, written whole by core's state-file) and its lock
  * (`lock`, held by whoever starts, stops or removes it: the daemon, or
- * `cawco browser` in a terminal), and on the local host its profile. The
- * record is the truth both read: the daemon's frames, its idle-down and the
- * CLI act on the same file, so neither needs the other running. A record
- * holds neko's passwords, so the dirs are 0700 and the record 0600.
+ * `cawco browser` in a terminal). The record is the truth both read: the
+ * daemon's frames, its idle-down and the CLI act on the same file, so
+ * neither needs the other running. A record holds neko's passwords, so the
+ * dirs are 0700 and the record 0600.
+ *
+ * On the local host, Chromium's own files (its profile and its output) are
+ * under `<data>/chromium/<slug>/` ({@link chromiumDir}), outside the dir the
+ * daemon watches for records (browsers.ts `watchBrowsers`): a running
+ * Chromium writes its profile many times a second, and on macOS a watch
+ * of a dir is an FSEvents stream over everything beneath it, so each of
+ * those writes would be queued by fseventsd for the daemon and handed to it.
  */
 import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -162,6 +169,10 @@ export const keptBrowserOwner = async (
 export const browserDir = (key: BrowserKey): string =>
   join(browsersDir(), browserSlug(key));
 
+/** One local browser's Chromium files: its profile and its output, beside no record. */
+export const chromiumDir = (key: BrowserKey): string =>
+  join(cawcoDataDir(), "chromium", browserSlug(key));
+
 const recordFile = (key: BrowserKey): string =>
   join(browserDir(key), "record.json");
 
@@ -190,9 +201,14 @@ export const writeBrowser = async (record: BrowserRecord): Promise<void> => {
   );
 };
 
-/** Deletes `key`'s dir: its record, its lock and its local profile. */
-export const forgetBrowser = (key: BrowserKey): Promise<void> =>
-  rm(browserDir(key), { recursive: true, force: true });
+/** Deletes `key`'s dirs: its record, its lock, and its local Chromium's profile and output. */
+export const forgetBrowser = async (key: BrowserKey): Promise<void> => {
+  await Promise.all(
+    [browserDir(key), chromiumDir(key)].map((dir) =>
+      rm(dir, { recursive: true, force: true })
+    )
+  );
+};
 
 /** Every browser this machine keeps a record of. */
 export const allBrowsers = async (): Promise<BrowserRecord[]> => {
