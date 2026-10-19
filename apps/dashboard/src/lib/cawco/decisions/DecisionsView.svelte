@@ -111,12 +111,13 @@
    * (`decisionsGraphed`), so the tiles' skeleton stands where the tiles
    * will (The Claim Of Nothing Rule).
    */
+  const row = $derived(cawco.projects.find((one) => one.id === projectId));
   const underSeg = $derived(
-    !page &&
-      (list
-        ? list.graph
-        : (cawco.projects.find((one) => one.id === projectId)
-            ?.decisionsGraphed ?? false))
+    !page && (list ? list.graph : (row?.decisionsGraphed ?? false))
+  );
+  /** A tile's skeleton for each page the list will hold, as the project's row counts them. */
+  const readingTiles = $derived(
+    Array.from({ length: row?.decisionPages ?? 0 }, (_, i) => i)
   );
 
   // --- the swap ------------------------------------------------------------------------
@@ -337,8 +338,9 @@
               {/each}
             </div>
           {:else}
-            <!-- Tiles at a tile's size in the grid's own columns while the
-                 list is read; the list takes their place in one cross-fade. -->
+            <!-- A tile at a tile's size for each page the project's row
+                 counts, in the grid's own columns, while the list is read;
+                 the list takes their place in one cross-fade. -->
             <div
               aria-busy="true"
               aria-label="Reading decision pages"
@@ -347,7 +349,7 @@
               role="status"
               out:crossOut
             >
-              {#each [0, 1, 2, 3] as slot (slot)}
+              {#each readingTiles as slot (slot)}
                 <Skeleton class="tile-reading" />
               {/each}
             </div>

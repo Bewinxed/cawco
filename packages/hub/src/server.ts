@@ -26458,16 +26458,21 @@ export const createServer = (
       // Each row spread into a fresh object, not the named `ProjectRow`: the
       // native app's client types a project by this route's own schema
       // (`GetApiProjects200Payload`), which a named row would rename.
-      // `decisionsGraphed`: its decisions form a graph (decisions.ts
-      // `graphed`), so the Decisions tab's skeleton stands under the List |
-      // Graph segment's room before the tab reads them.
+      // `decisionsGraphed` and `decisionPages`: whether its decisions form a
+      // graph and how many pages its list holds (decisions.ts `shape`), so
+      // the Decisions tab's skeleton stands where its list will before the
+      // tab reads them.
       .get("/api/projects", () =>
         Promise.all(
-          db.listProjects().map(async (project) => ({
-            ...projectOut(project),
-            cap: caps.capOf(project),
-            decisionsGraphed: await decisions.graphed(project.id),
-          }))
+          db.listProjects().map(async (project) => {
+            const shape = await decisions.shape(project.id);
+            return {
+              ...projectOut(project),
+              cap: caps.capOf(project),
+              decisionPages: shape.pages,
+              decisionsGraphed: shape.graphed,
+            };
+          })
         )
       )
       // One repository is one project: a folder whose remote a project

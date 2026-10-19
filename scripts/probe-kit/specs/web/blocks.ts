@@ -57,6 +57,41 @@ interface Arrangement {
   pages: Record<string, { block: string; hidden: boolean; width: string }[]>;
 }
 
+/**
+ * The page read and still: the Routines page's skeleton (ViewRoutines,
+ * BlockPage `reading`) gone, its read's blocks in its place, every run
+ * landed. A page opens on its skeleton, so what is measured is the read.
+ */
+async function settled(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => !document.querySelector("[data-routines-reading]")
+  );
+  await settle(page);
+}
+
+/** Each element still standing as `block`, by what holds it: a failed wait's detail. */
+const standing = (page: Page, block: string) =>
+  page.evaluate((id) => {
+    const held = [...document.querySelectorAll(`[data-block='${id}']`)].map(
+      (el) => {
+        const at: string[] = [];
+        for (
+          let up = el.parentElement;
+          up && at.length < 6;
+          up = up.parentElement
+        ) {
+          const marks = [...up.attributes]
+            .filter((a) => a.name.startsWith("data-"))
+            .map((a) => a.name)
+            .join(",");
+          at.push(`${up.tagName.toLowerCase()}[${marks}]${up.style.position}`);
+        }
+        return at.join(" < ");
+      }
+    );
+    return JSON.stringify(held);
+  }, block);
+
 /** The blocks a page shows, in order: each one's id, span and box. */
 const blocksOf = (page: Page) =>
   page.evaluate(() => {
@@ -127,7 +162,7 @@ async function columns(kit: Kit, page: Page, phone: Page, url: string) {
   ];
   for (const [width, count, spans] of want) {
     await page.setViewportSize({ width, height: 1000 });
-    await settle(page);
+    await settled(page);
     const read = await blocksOf(page);
     kit.check(
       `columns ${width}: the Routines page's grid holds ${count} column${count > 1 ? "s" : ""}, its blocks taking ${spans}`,
@@ -142,7 +177,7 @@ async function columns(kit: Kit, page: Page, phone: Page, url: string) {
     url,
     '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
   );
-  await settle(phone);
+  await settled(phone);
   const read = await blocksOf(phone);
   kit.check(
     "columns 390: one column, the three blocks stacked in order at the column's width",
@@ -154,7 +189,7 @@ async function columns(kit: Kit, page: Page, phone: Page, url: string) {
     JSON.stringify(read)
   );
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await settle(page);
+  await settled(page);
 }
 
 async function throughHub(
@@ -170,7 +205,7 @@ async function throughHub(
     url,
     '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
   );
-  await settle(other);
+  await settled(other);
   await pick(page, "Approved actions", "Move up");
   await page.waitForFunction(
     () =>
@@ -182,7 +217,7 @@ async function throughHub(
         .map((b) => (b as HTMLElement).dataset.block)
         .join(",") === "routines,actions,sources"
   );
-  await settle(page);
+  await settled(page);
   kit.check(
     "hub: Move up on Approved actions is the hub's record of the Routines page",
     (await hubPage(base, projectId, "routines")) ===
@@ -213,7 +248,7 @@ async function throughHub(
   await page.waitForSelector(
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-wide][data-block='routines']"
   );
-  await settle(page);
+  await settled(page);
   const widened = await other
     .waitForSelector(
       ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-wide][data-block='routines'][data-span='4']",
@@ -234,7 +269,7 @@ async function throughHub(
   await page.waitForSelector(
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-wide][data-block='routines']"
   );
-  await settle(page);
+  await settled(page);
   const after = await blocksOf(page);
   kit.check(
     "reload: the moved and widened arrangement survives a reload",
@@ -287,7 +322,7 @@ async function motion(kit: Kit, page: Page) {
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
   );
   await clock.release();
-  await settle(page);
+  await settled(page);
   const now = (await blocksOf(page)).blocks.find((b) => b.id === "sources");
   const [start, middle, end] = moved;
   kit.check(
@@ -319,7 +354,7 @@ async function motion(kit: Kit, page: Page) {
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-block='sources']"
   );
   await wideClock.release();
-  await settle(page);
+  await settled(page);
   const wide = (await blocksOf(page)).blocks.find((b) => b.id === "sources");
   kit.check(
     "motion: Wide tweens the block's width from its old (0%) through between (50%) to the row's (100%)",
@@ -336,7 +371,7 @@ async function motion(kit: Kit, page: Page) {
   await page.waitForSelector(
     ":is([data-slot=\"block\"], [data-field-separator-block], [data-switch-block])[data-narrow][data-block='sources']"
   );
-  await settle(page);
+  await settled(page);
 }
 
 /** Drags `from`'s head by the mouse onto `to`'s top edge; reads mid-drag what is drawn. */
@@ -416,7 +451,7 @@ async function deskDrag(kit: Kit, page: Page, base: string, projectId: string) {
     null,
     { timeout: 10_000 }
   );
-  await settle(page);
+  await settled(page);
   const after = await orderOf(page);
   kit.check(
     "desk drag: mid-drag the source stands as its slot and the drop indicator is on the target's top edge",
@@ -445,7 +480,7 @@ async function phoneDrag(
     url,
     '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
   );
-  await settle(phone);
+  await settled(phone);
   const head = await phone.evaluate(() => {
     const el = document.querySelector<HTMLElement>(
       ':is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block=\'actions\'] [data-slot="block-head"]'
@@ -483,7 +518,7 @@ async function phoneDrag(
     null,
     { timeout: 10_000 }
   );
-  await settle(phone);
+  await settled(phone);
   kit.check(
     "phone 390: a drag from the head onto the first block's top moves Approved actions first, as the hub records",
     (await orderOf(phone)).startsWith("actions,") &&
@@ -547,7 +582,7 @@ async function tabAndBlock(
   projectId: string
 ) {
   await openView(page, base, hub, projectId);
-  await settle(page);
+  await settled(page);
   const strip = await stripOf(page);
   await page.getByRole("button", { name: "More for Spend" }).click();
   await page.getByRole("menuitem", { name: "Place on a page" }).click();
@@ -555,7 +590,7 @@ async function tabAndBlock(
   await page.waitForSelector(
     `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
   );
-  await settle(page);
+  await settled(page);
   const placed = {
     view: new URL(page.url()).searchParams.get("view"),
     strip: await stripOf(page),
@@ -584,14 +619,20 @@ async function tabAndBlock(
     await orderOf(other)
   );
   await pick(page, "Spend", "Show as a tab");
-  await page.waitForFunction(
-    (block) =>
-      !document.querySelector(
-        `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
-      ),
-    `view:${VIEW}`
-  );
-  await settle(page);
+  await page
+    .waitForFunction(
+      (block) =>
+        !document.querySelector(
+          `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
+        ),
+      `view:${VIEW}`
+    )
+    .catch(async (error: unknown) => {
+      throw new Error(
+        `${String(error)}; still standing: ${await standing(page, `view:${VIEW}`)}`
+      );
+    });
+  await settled(page);
   const back = {
     strip: await stripOf(page),
     hub: await hubPage(hub, projectId, "routines"),
@@ -611,7 +652,7 @@ async function tabAndBlock(
   await page.waitForSelector(
     `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='view:${VIEW}']`
   );
-  await settle(page);
+  await settled(page);
   const board = await page.evaluate(() => {
     const pane = document.querySelector<HTMLElement>('[data-slot="pane"]');
     const block = document.querySelector<HTMLElement>(
@@ -662,13 +703,19 @@ async function tabAndBlock(
     JSON.stringify(board)
   );
   await pick(page, "Spend", "Show as a tab");
-  await page.waitForFunction(
-    (block) =>
-      !document.querySelector(
-        `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
-      ),
-    `view:${VIEW}`
-  );
+  await page
+    .waitForFunction(
+      (block) =>
+        !document.querySelector(
+          `:is([data-slot="block"], [data-field-separator-block], [data-switch-block])[data-block='${block}']`
+        ),
+      `view:${VIEW}`
+    )
+    .catch(async (error: unknown) => {
+      throw new Error(
+        `${String(error)}; still standing: ${await standing(page, `view:${VIEW}`)}`
+      );
+    });
 }
 
 const spec: Spec = {
@@ -716,7 +763,7 @@ const spec: Spec = {
       url,
       '[data-slot="blocks"] > :is([data-slot="block"], [data-field-separator-block], [data-switch-block])'
     );
-    await settle(page);
+    await settled(page);
     kit.check(
       "first read: an arrangement never written is the page's own blocks in their order, and the hub holds none",
       (await orderOf(page)) === "routines,sources,actions" &&

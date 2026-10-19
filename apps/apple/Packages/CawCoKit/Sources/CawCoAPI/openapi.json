@@ -29453,6 +29453,9 @@
             "cap": {
               "$ref": "#/components/schemas/ProjectCap"
             },
+            "decisionPages": {
+              "type": "number"
+            },
             "decisionsGraphed": {
               "type": "boolean"
             },
@@ -29620,6 +29623,7 @@
             "cawHarness",
             "cawModel",
             "createdAt",
+            "decisionPages",
             "decisionsGraphed",
             "dispatch",
             "id",

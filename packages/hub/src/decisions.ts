@@ -567,13 +567,20 @@ const formsGraph = (
   cards: readonly { after: string[]; section: string | null }[]
 ) => cards.some((card) => card.after.length > 0 || card.section !== null);
 
+/** A project's decisions as its row tells them: whether they form a graph, and how many pages the list holds. */
+export interface DecisionsShape {
+  graphed: boolean;
+  pages: number;
+}
+
 export const createDecisions = (deps: DecisionsDeps) => {
   /**
-   * Whether each project's decisions formed a graph when last listed: what
-   * its row says before the Decisions tab reads them (`decisionsGraphed`),
-   * so the tab's skeleton stands where its list will.
+   * Each project's decisions as last listed, their shape alone: whether they
+   * form a graph and how many pages the list holds. What its row says before
+   * the Decisions tab reads them (`decisionsGraphed`, `decisionPages`), so
+   * the tab's skeleton stands where its list will.
    */
-  const graphedBy = new Map<string, boolean>();
+  const shapeBy = new Map<string, DecisionsShape>();
 
   const known = (projectId: string) => {
     if (!deps.projectExists(projectId)) {
@@ -718,8 +725,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
    * ("Caw&Co foundations", nightly 3944), is no decision: it is not listed,
    * read, sent on, or a session's open question.
    */
-  const decisionPage = (read: DecisionPageRead, page: ReadPage): boolean =>
-    page.cards.length > 0 || read.record !== null;
+  const decisionPage = (page: ReadPage, record: unknown): boolean =>
+    page.cards.length > 0 || record !== null;
 
   /** A record with each card's tasks as the task list has them now. */
   const withTasks = (
@@ -754,7 +761,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
           await deps.tasks(projectId)
         )
       : undefined;
-    if (!(one && decisionPage(one.read, one.page))) {
+    if (!(one && decisionPage(one.page, one.read.record))) {
       throw new DecisionRefusal(
         404,
         `This project has no decision page ${name}.`
@@ -840,7 +847,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
             artifact,
             tasks
           );
-          if (!decisionPage(read, page)) {
+          if (!decisionPage(page, read.record)) {
             continue;
           }
           graph ||= formsGraph(page.cards);
@@ -853,43 +860,44 @@ export const createDecisions = (deps: DecisionsDeps) => {
         }
       }
       pages.sort((a, b) => b.updatedAt - a.updatedAt);
-      graphedBy.set(projectId, graph);
+      shapeBy.set(projectId, { graphed: graph, pages: pages.length });
       return { pages, graph, problems };
     },
 
     /**
-     * Whether the project's decisions form a graph, as its last list said;
-     * else read now from its pages' cards alone (no tasks, no records), by
-     * the list's own rule. A page that does not read counts for nothing, as
-     * in the list.
+     * The project's decisions' shape, as its last list said; else read now
+     * from its pages' cards and records alone (no tasks), by the list's own
+     * rules (`formsGraph`, `decisionPage`). A page that does not read counts
+     * for nothing, as in the list.
      */
-    async graphed(projectId: string): Promise<boolean> {
-      const kept = graphedBy.get(projectId);
-      if (kept !== undefined) {
+    async shape(projectId: string): Promise<DecisionsShape> {
+      const kept = shapeBy.get(projectId);
+      if (kept) {
         return kept;
       }
       if (!deps.projectExists(projectId)) {
-        return false;
+        return { graphed: false, pages: 0 };
       }
-      let graph = false;
+      const shape: DecisionsShape = { graphed: false, pages: 0 };
       for (const { name, artifact } of await pageNames(projectId)) {
         try {
-          // biome-ignore lint/performance/noAwaitInLoops: one page's program at a time, and the first graph ends it
-          graph = formsGraph((await pageOf(projectId, name, artifact)).cards);
+          // biome-ignore lint/performance/noAwaitInLoops: one page's program and record at a time keeps the folder's reads small
+          const page = await pageOf(projectId, name, artifact);
+          if (decisionPage(page, await readRecord(projectId, name))) {
+            shape.pages += 1;
+            shape.graphed ||= formsGraph(page.cards);
+          }
         } catch {
-          continue;
-        }
-        if (graph) {
-          break;
+          // A page that does not read is not in the list either.
         }
       }
-      graphedBy.set(projectId, graph);
-      return graph;
+      shapeBy.set(projectId, shape);
+      return shape;
     },
 
     /** Its decisions changed: the next row reads them again. */
     forget(projectId: string): void {
-      graphedBy.delete(projectId);
+      shapeBy.delete(projectId);
     },
 
     /** One page: its summary, its record (each card's tasks as filed now) and its last send. */
@@ -921,7 +929,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
         if (
           read.writer?.instanceId === instanceId &&
           read.state !== "decided" &&
-          decisionPage(read, page)
+          decisionPage(page, read.record)
         ) {
           pages.push({ read, cards: page.cards });
         }

@@ -44,10 +44,13 @@ export class ProjectDecisions {
       if (ticket === this.#reads && projectId === this.#project()) {
         this.list = list;
         this.problem = null;
-        // The hub's newest word on its graph: the project's row says it on.
+        // The hub's newest word on the list's shape: the project's row says it on.
         const row = cawco.projects.find((one) => one.id === projectId);
         if (row && row.decisionsGraphed !== list.graph) {
           row.decisionsGraphed = list.graph;
+        }
+        if (row && row.decisionPages !== list.pages.length) {
+          row.decisionPages = list.pages.length;
         }
       }
     } catch (error) {

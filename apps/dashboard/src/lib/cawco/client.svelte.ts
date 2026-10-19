@@ -287,7 +287,13 @@ export interface ProjectRow {
   caw: boolean;
   createdAt: string;
   /**
-   * Its decisions form a graph (hub decisions.ts `graphed`): the Decisions
+   * How many pages its Decisions list holds (hub decisions.ts `shape`): the
+   * tiles its skeleton stands before the tab reads them. A list read
+   * answers it anew (ProjectDecisions).
+   */
+  decisionPages: number;
+  /**
+   * Its decisions form a graph (hub decisions.ts `shape`): the Decisions
    * tab's list stands under the List | Graph segment's room, its skeleton
    * too, before the tab reads them. A list read answers it anew
    * (ProjectDecisions).
