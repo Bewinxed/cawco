@@ -183,7 +183,12 @@
   data-settling={settlingNow || undefined}
   {@attach watched && morph()}
 >
-  <!-- Each arm is the container its wave is measured against. -->
+  <!-- Each arm is the container its wave is measured against. `--run` is how
+       much of the path the arm shows, along the curve: the wave is 1.087px
+       long for each pixel it crosses, so the dash is 1.08 of the column's
+       width less the cap's room, and the line ends on a round cap just
+       inside the column (`wave-dash`). -->
+
   <!-- Mirrored, so both arms run outward from the word. -->
   <span
     style:--arm-clip="inset(0 calc(var(--chev) * var(--room)) 0 0)"

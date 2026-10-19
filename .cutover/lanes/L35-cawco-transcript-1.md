@@ -323,11 +323,14 @@ fixed: CompactionDivider.svelte:300 the failure line's rail is `border-s-2 borde
 fixed: Delegate.svelte:429 head floors are the tokens `min-h-c-mark` and `coarse:min-h-c-row-h` (26px/44px literals before)
 
 ## Gaps
-gap: Subagent.svelte:(head) its `[data-bhead]` carries no flex/floor/typography utilities, so Delegate keeps `delegate-nested-head`; once it does, delete that component — DESIGN.md Components: one head recipe
+gap: Subagent.svelte:84 its `[data-bhead]` carries no flex/floor/typography utilities, so Delegate keeps `delegate-nested-head`; once it does, delete that component — DESIGN.md Components: one head recipe
 gap: MentionField.svelte:751 its chip sizes are literals (6px/15px/22px) mirrored by Composer for the autosize twin; both read the three `--c-mention-chip-*` tokens after integration
 gap: lift.svelte.ts and grown.ts build elements with class names (`lift-copy`, `grown-halo`, `grown-drop`); their looks are theme components until those scripts put utilities on them
-gap: Composer.svelte:3368 / 3378 / 3392 descendant variants `[&_[data-slot=…]]`, `[&_[data-keep]]` and `[&>[data-editor]]` reach the kit's Command parts, the Keep-it Button and MentionField's root; they belong to kit variants (Command menu `composer`, MentionField `class` slots)
-gap: AttachmentChips.svelte:53 hand-rolled chips (picture + name + remove) are the kit Badge/Chip recipe; no straight variant exists
+gap: components/ui/command/command-item.svelte, command-list.svelte, command-group.svelte (needs a `menu="composer"` variant) — Composer.svelte:3399 styles those parts through `[&_[data-slot=command-…]]:` descendant variants
+gap: components/ui/button/button.svelte (needs a `reveal="coarse"` variant) — Composer.svelte:3266 reaches the Keep-it Button through `[&_[data-keep]]:`
+gap: find/MentionField.svelte (its root needs `min-h`/`max-h`/`text`/`py` through its own props) — Composer.svelte:3468 sets them through `[&>[data-editor]]:`
+gap: components/ui (no Chip/Badge variant for picture + name + remove) — AttachmentChips.svelte:112 hand-rolls the chip
+note: AttachmentChips.svelte:53 `coarse:p-space-3 coarse:-m-space-2` is not a cancelled offset: the row is a scroller (`overflow-y-auto`) and clips the remove buttons' touch areas, so on a finger it takes one ladder step of padding into an equal margin; layout-neutral by construction
 
 ## Design Critique (interface-craft, from markup against DESIGN.md)
 - Hierarchy: dividers read as hairline + one meta-role line; unchanged, the flex arms keep the word centred when the arms are equal (`flex-1` on a zero basis).
