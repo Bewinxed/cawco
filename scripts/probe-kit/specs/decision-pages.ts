@@ -62,7 +62,14 @@ import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import {
+  type Kit,
+  type KitFleet,
+  open,
+  pressIn,
+  type Spec,
+  settle,
+} from "../kit";
 
 const PANE =
   ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
@@ -233,9 +240,9 @@ const inCard = (frame: Frame, selector: string | undefined, id: string) =>
   );
 
 /** A card folded by a pick opened again with Change, so its media can be reached. */
-const unfold = async (page: Page, frame: Frame, id: string) => {
+const unfold = async (_page: Page, frame: Frame, id: string) => {
   if ((await foldOf(frame, id)).decided) {
-    await tapIn(page, frame, `#decision-${id} .dp-change`);
+    await pressIn(frame, `#decision-${id} .dp-change >> nth=0`);
   }
 };
 
@@ -393,18 +400,6 @@ const diagramInk = (frame: Frame) =>
       text: label ? getComputedStyle(label).fill : "",
     };
   });
-
-/** A tap at the middle of `selector` in the frame, by the page's mouse. */
-const tapIn = async (page: Page, frame: Frame, selector: string) => {
-  const target = frame.locator(selector).first();
-  await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
-  if (!box) {
-    throw new Error(`${selector} has no box in the frame`);
-  }
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  return box;
-};
 
 /** The pane's mode by its head's segment (V, C, D), once the page has heard it. */
 const mode = async (page: Page, frame: Frame, key: "V" | "C" | "D") => {
@@ -748,7 +743,7 @@ const loopRound = async (
 const marks = async (on: On, frame: Frame) => {
   const { desk, kit } = on;
   await mode(desk, frame, "V");
-  await tapIn(desk, frame, '[data-option="astro"]');
+  await pressIn(frame, '[data-option="astro"] >> nth=0');
   const picked = await until(
     "the pick on the hub",
     on.read,
@@ -783,7 +778,7 @@ const marks = async (on: On, frame: Frame) => {
   );
 
   await mode(desk, frame, "C");
-  await tapIn(desk, frame, "#decision-stack h2");
+  await pressIn(frame, "#decision-stack h2 >> nth=0");
   const pinned = await until(
     "pin 1 in the doc",
     () => docOf(frame),
@@ -852,7 +847,7 @@ const marks = async (on: On, frame: Frame) => {
 const embedLeg = async (on: On, frame: Frame) => {
   const { desk, kit } = on;
   await mode(desk, frame, "V");
-  await tapIn(desk, frame, "#decision-host .dp-optmedia iframe");
+  await pressIn(frame.frameLocator(EMBED).first(), ":root");
   const heard = await until(
     "the embed heard the click",
     () =>
@@ -1085,7 +1080,7 @@ const commentInEmbed = async (on: On, frame: Frame) => {
     kit.check("(h) the edge option's embed is on the page", false, "no box");
     return;
   }
-  await desk.mouse.click(box.x + 12, box.y + box.height / 2);
+  await pressIn(frame.frameLocator(EMBED).first(), ".box >> nth=0");
   const pinned = await until(
     "a pin inside the embed in the doc",
     () => docOf(frame),
@@ -1173,7 +1168,7 @@ const insertAhead = async (on: On, first: string) => {
       (await inCard(after, inkAfter?.anchor?.selector, "host")),
     JSON.stringify({ pin: pinAfter?.anchor, ink: inkAfter?.anchor })
   );
-  await tapIn(desk, after, '[data-option="hub"]');
+  await pressIn(after, '[data-option="hub"] >> nth=0');
   const hostPick = await until(
     "the second pick on the hub",
     on.read,
@@ -1372,7 +1367,7 @@ const htmlPage = async (on: On) => {
     const now = await frameAt(desk, FRAME);
     if (now && (await countIn(now, '[data-cawco-choice="mode"]')) > 0) {
       try {
-        await tapIn(desk, now, '[data-option="soft"]');
+        await pressIn(now, '[data-option="soft"] >> nth=0');
         await now.locator('input[name="budget"]').fill("60");
       } catch {
         // The frame went mid-try: the next try finds the one that stayed.
@@ -1435,7 +1430,7 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
   ).catch(() => null);
   // The page's media are still loading in: the tap waits for the layout to stand still.
   await settle(shown, 800);
-  await tapIn(shown, frame, "#decision-stack .dp-change");
+  await pressIn(frame, "#decision-stack .dp-change >> nth=0");
   const opened = await until(
     `${theme}: the stack card open again`,
     () => foldOf(frame, "stack"),
@@ -1461,7 +1456,7 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
     !!before && JSON.stringify(after) === JSON.stringify(before),
     JSON.stringify({ before, after })
   );
-  await tapIn(shown, frame, "#decision-stack .dp-change");
+  await pressIn(frame, "#decision-stack .dp-change >> nth=0");
   const again = await until(
     `${theme}: the stack card folded by Done`,
     () => foldOf(frame, "stack"),
@@ -1710,7 +1705,7 @@ const openAsCanvas = async (on: On) => {
     .locator("#decision-stack figure.diagram button.open")
     .first()
     .evaluate((button) => button.scrollIntoView({ block: "start" }));
-  await tapIn(desk, back, "#decision-stack figure.diagram button.open");
+  await pressIn(back, "#decision-stack figure.diagram button.open >> nth=0");
   const opened = await until(
     "the diagram's canvas",
     () =>
@@ -1908,7 +1903,7 @@ const openToDraw = async (on: On) => {
     .locator('iframe[src*="/__cawco/canvas/"]')
     .getAttribute("src")
     .then((src) => src?.split("/")[3] ?? "");
-  await tapIn(desk, frame, OPEN);
+  await pressIn(frame, `${OPEN} >> nth=0`);
   const shown = await until(
     "the canvas at the front of the panel",
     () => fleet.api<{ shown: boolean }>(`/api/artifacts/${canvasId}`),
