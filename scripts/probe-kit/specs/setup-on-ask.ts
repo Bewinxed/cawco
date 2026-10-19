@@ -8,19 +8,23 @@
  *
  * - First words open its Setup thread (as they always have); then a second
  *   thread, "chat", is a plain conversation Caw answers.
- * - Then, on Claude Code, OpenCode and pi in turn (Caw moved to each), the
- *   person writes in chat: "can you set this project up again? I moved the
- *   checkout". The mock stands in for Caw's understanding of the ask: it
- *   calls project_setup with chat's id and `change: ["place"]`, then follows
- *   the steps it answers: artifact_create of the `setup` decision page, and
- *   thread_reply in chat.
+ * - Then, on each harness Caw runs on (core `CAW_DENIED_TOOLS`: Claude Code
+ *   and OpenCode; pi cannot put his calls to the hub's gate, so Caw does not
+ *   run there) in turn, Caw moved to it, the person writes in chat: "can you
+ *   set this project up again? I moved the checkout". The mock stands in for
+ *   Caw's understanding of the ask: it calls project_setup with chat's id
+ *   and `change: ["place"]`, then follows the steps it answers: the setup
+ *   page as HTML in his folder (folder_write of decisions/setup/page.html,
+ *   its stage names as fields and its place picked with cawco.pickPlace),
+ *   artifact_create of it, and thread_reply in chat.
  *
  * Each leg asserts:
  * - S: project_setup is offered to that harness's Caw, and its answer, the
  *   steps that reach him, is Setup's for chat: the decision page named
  *   "setup", the `stages` card and the `place` card he was asked to change.
- * - P: his `setup` page stands (kind page, does pick) with its stages and
- *   place cards: the cards the thread shows beside it.
+ * - P: his `setup` page stands (kind page, does pick), built from
+ *   decisions/setup/page.html in the project's folder, whose stage fields
+ *   and place pick are there: the page the thread shows beside it.
  * - R: his reply lands in chat, no thread was opened for it, and chat is
  *   now a Setup thread (`setup`), so his reply naming files offers "Open
  *   the board" there as in the first one.
@@ -36,8 +40,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  HARNESSES,
-  type Harness,
+  CAW_DENIED_TOOLS,
+  type CawHarness,
+} from "../../../packages/core/src/delegate-types";
+import {
   MACHINE,
   MODEL,
   type Reply,
@@ -54,14 +60,31 @@ const STEPS = "Setup: the person asked you to set the project";
 /** OpenCode's Code Mode tool, which runs MCP tools from a script. */
 const CODE_MODE = "execute";
 
-/** The setup page the mock's Caw shows: a stages card and a place card, in the interview's shape. */
-const SETUP_PROGRAM = `root = Decisions("Pick how this project is set up", [stages, place])
-stages = Decision("stages", "Which stages does the board use?", [kept, lean], "The board reads its columns from them.")
-kept = Option("kept", "Keep these stages", "To do, active, review, done.", true, [], "Every task waits for a look before done.")
-lean = Option("lean", "Drop review", "To do, active, done.", false, [], "Nothing is looked at before done.")
-place = Decision("place", "Where does its work happen now?", [moved, same], "You moved the checkout.")
-moved = Option("moved", "The new folder", "Work goes where the code now is.", true, [], "The old folder stays listed until you remove it.")
-same = Option("same", "Where it was", "Nothing moves.", false, [], "Work keeps going to the old folder.")`;
+/** Where Setup's steps have Caw write the setup page, in the project's folder. */
+const PAGE_FILE = "decisions/setup/page.html";
+
+/** The harnesses Caw runs on: the ones whose every shell and edit call the hub's gate decides. */
+const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as CawHarness[];
+
+/**
+ * The setup page the mock's Caw writes, from the kit as the steps say: the
+ * stage names as fields the person edits, and a button that picks the
+ * place with cawco.pickPlace.
+ */
+const SETUP_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Set up</title><style>{{KIT_CSS}}</style></head>
+<body><main class="dp">
+<header class="dp-hero"><div><h1>Pick how this project is set up</h1></div></header>
+<article class="dp-card" id="stages"><header><h2>Its stages</h2></header>
+<label>To do<input name="stage-todo" value="To do"></label>
+<label>Active<input name="stage-active" value="Active"></label>
+<label>Done<input name="stage-done" value="Done"></label>
+</article>
+<article class="dp-card" id="place"><header><h2>Where its work happens</h2></header>
+<button class="dp-opt" type="button" data-probe="place">Pick the machine and folder</button>
+</article></main><script>{{KIT_JS}}</script>
+<script>document.querySelector('[data-probe="place"]').addEventListener("click", () => cawco.pickPlace());</script></body></html>`;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const call = (name: string, input: object): Reply => ({
@@ -76,7 +99,7 @@ interface Leg {
   called: string[];
   /** Tools a harness did not offer, by the short name. */
   missing: string[];
-  phase: "idle" | "setup" | "page" | "reply" | "done";
+  phase: "idle" | "setup" | "write" | "create" | "reply" | "done";
   /** Short names Claude Code's ToolSearch was asked for. */
   searched: Set<string>;
   /** The steps project_setup answered, as the request after it carried them. */
@@ -122,10 +145,7 @@ const invoke = (
       max_results: 1,
     });
   }
-  if (
-    request.toolNames.includes(CODE_MODE) &&
-    request.body.includes(`cawco_${short}`)
-  ) {
+  if (request.toolNames.includes(CODE_MODE)) {
     now.called.push(short);
     now.phase = next;
     return call(CODE_MODE, {
@@ -164,9 +184,9 @@ const caw = (request: Seen): Reply => {
         now,
         "project_setup",
         { thread: chat, change: ["place"] },
-        "page"
+        "write"
       );
-    case "page": {
+    case "write": {
       // The steps project_setup answered ride in every request after it,
       // as a tool result: Anthropic's user message or a chat tool message.
       const at = request.body.indexOf(STEPS);
@@ -176,17 +196,24 @@ const caw = (request: Seen): Reply => {
       return invoke(
         request,
         now,
+        "folder_write",
+        { path: PAGE_FILE, content: SETUP_PAGE },
+        "create"
+      );
+    }
+    case "create":
+      return invoke(
+        request,
+        now,
         "artifact_create",
         {
           kind: "page",
           name: "setup",
           does: "pick",
           ask: "Pick how this project is set up",
-          program: SETUP_PROGRAM,
         },
         "reply"
       );
-    }
     case "reply":
       return invoke(
         request,
@@ -286,7 +313,7 @@ const run = async (kit: Kit) => {
     JSON.stringify({ first: first.thread, chat: opened.thread })
   );
 
-  for (const harness of HARNESSES) {
+  for (const harness of CAW_HARNESSES) {
     await askOn(kit, fleet, project.id, harness, {
       cawAnswers,
       leadOf,
@@ -299,7 +326,7 @@ const askOn = async (
   kit: Kit,
   fleet: KitFleet,
   projectId: string,
-  harness: Harness,
+  harness: CawHarness,
   reads: {
     cawAnswers: (threadId: string) => { body: string }[];
     leadOf: () => string | undefined;
@@ -363,20 +390,25 @@ const askOn = async (
         .catch(() => [])
     : [];
   const page = pages.find((one) => one.name === "setup");
-  const detail = page
-    ? JSON.stringify(
-        await fleet
-          .api(`/api/instances/${lead}/artifacts/${page.id}`)
-          .catch((error: Error) => error.message)
-      )
-    : "";
+  const written = await fleet
+    .api<{ content: string }>(
+      `/api/projects/${projectId}/folder/file?path=${encodeURIComponent(PAGE_FILE)}`
+    )
+    .then(
+      (file) => file.content,
+      (error: Error) => error.message
+    );
   kit.check(
-    `P ${harness}: Caw's setup page stands with its stages and place cards`,
+    `P ${harness}: Caw's setup page stands, built from ${PAGE_FILE} with its stage fields and its place pick`,
     page?.kind === "page" &&
       page.does === "pick" &&
-      detail.includes("stages") &&
-      detail.includes("place"),
-    JSON.stringify({ page, detail: detail.slice(0, 400) })
+      written.includes('name="stage-todo"') &&
+      written.includes("cawco.pickPlace()"),
+    JSON.stringify({
+      called: now.called,
+      page,
+      written: written.slice(0, 200),
+    })
   );
 
   const reply = await until(
