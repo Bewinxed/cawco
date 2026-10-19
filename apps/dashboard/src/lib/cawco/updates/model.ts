@@ -9,6 +9,7 @@ import {
   holdPhrases,
   type KeptProcess,
   RESTART_WAIT_CAP_MS,
+  type RetiringKeeper,
 } from "@cawco/core/binary-updates";
 
 /** The part of a machine row these functions read. */
@@ -174,21 +175,27 @@ const processWords = ({ command, pid }: KeptProcess): string => {
 const heldBy = (kept: readonly KeptProcess[]): string =>
   `${kept.length === 1 ? "a process" : `${kept.length} processes`} CawCo didn't start (${kept.map(processWords).join("; ")})`;
 
+/** One earlier build still running, in words: what keeps it, that it isn't answering, or the sessions left on it. */
+function retiringWords(keeper: RetiringKeeper): string {
+  const v = displayVersion(keeper.version);
+  if (keeper.kept) {
+    return `${v} is still running: ${heldBy(keeper.kept)} ${keeper.kept.length === 1 ? "runs" : "run"} inside it, and CawCo doesn't end ${keeper.kept.length === 1 ? "a process" : "processes"} it didn't start. ${v} ends once ${keeper.kept.length === 1 ? "that process ends" : "they end"}.`;
+  }
+  if (keeper.notAnswering) {
+    return `${v} isn't answering.${keeper.sessions > 0 ? ` It had ${plural(keeper.sessions, "session")} running when it last answered.` : ""} CawCo leaves it as it is until it answers again.`;
+  }
+  return `${plural(keeper.sessions, "session")} still running on ${v}`;
+}
+
 /**
  * A hand-over still under way, in words: `3 sessions still running on
- * 3 sessions left on nightly 2229`, or, for a keeper whose unit holds a
- * process CawCo didn't start, what keeps it and what lets it go. Empty when
- * no earlier keeper holds anything. Nothing waits on it: new sessions start
- * on the current build.
+ * nightly 2229`, or, for a keeper whose unit holds a process CawCo didn't
+ * start, what keeps it and what lets it go, or, for one that gave no answer,
+ * that it isn't answering. Empty when no earlier keeper holds anything.
+ * Nothing waits on it: new sessions start on the current build.
  */
 const handingOver = (u: BinaryUpdateState): string =>
-  (u.retiringKeepers ?? [])
-    .map((keeper) =>
-      keeper.kept
-        ? `${displayVersion(keeper.version)} is still running: ${heldBy(keeper.kept)} ${keeper.kept.length === 1 ? "runs" : "run"} inside it, and CawCo doesn't end ${keeper.kept.length === 1 ? "a process" : "processes"} it didn't start. ${displayVersion(keeper.version)} ends once ${keeper.kept.length === 1 ? "that process ends" : "they end"}.`
-        : `${plural(keeper.sessions, "session")} still running on ${displayVersion(keeper.version)}`
-    )
-    .join(" · ");
+  (u.retiringKeepers ?? []).map(retiringWords).join(" · ");
 
 /**
  * What a ready build waits for, in words: the work in flight its restart
@@ -216,7 +223,7 @@ export function cellFor(
 const keptCell = (kept: readonly KeptProcess[]): Cell => ({
   ...EMPTY(13),
   fail: true,
-  text: `No session can start on this machine: the process that keeps its sessions running stopped answering. CawCo can't restart it while ${heldBy(kept)}, which it didn't start, ${kept.length === 1 ? "runs" : "run"} inside it. Handoff: end ${kept.length === 1 ? "that process" : "them"}. The restart follows, and sessions start again.`,
+  text: `No session can start on this machine: the process that keeps its sessions running stopped answering. CawCo can't restart it while ${heldBy(kept)} ${kept.length === 1 ? "runs" : "run"} inside it. Handoff: end ${kept.length === 1 ? "that process" : "them"}. The restart follows, and sessions start again.`,
 });
 
 /** Rows 3 to 12: the cell by the update's phase. */

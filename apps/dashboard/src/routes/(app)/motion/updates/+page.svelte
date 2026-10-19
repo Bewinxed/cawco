@@ -183,6 +183,15 @@
         retiringKeepers: [{ version: NIGHTLY, sessions: 0, kept: CONMON }],
       }),
     }),
+    machine("r12-silent", "nixbox", "linux", {
+      binaryUpdate: update({
+        phase: "none",
+        installedVersion: "1.4.2",
+        retiringKeepers: [
+          { version: "1.4.1", sessions: 3, notAnswering: true },
+        ],
+      }),
+    }),
     machine("r13", "nixbox", "linux", {
       binaryUpdate: update({
         phase: "none",
