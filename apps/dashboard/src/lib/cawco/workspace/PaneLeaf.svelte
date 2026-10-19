@@ -320,7 +320,7 @@
         unstarted = null;
         const glide = track
           .querySelector<HTMLElement>(
-            `:scope > .pane[data-pane="${CSS.escape(id)}"]`
+            `:scope > [data-slot="pane"][data-pane="${CSS.escape(id)}"]`
           )
           ?.animate(
             [

@@ -53,7 +53,7 @@ const readKept = (page: Page, pane: string, words: string): Promise<Kept[]> =>
     ([id, said]) => {
       // A's slot in its group (PaneLeaf), where PaneHost docks its pane.
       const inA = (el: Element | null): boolean =>
-        !!el?.closest(`[data-pane="${CSS.escape(id)}"]`);
+        !!el?.closest(`[data-slot="pane"][data-pane="${CSS.escape(id)}"]`);
       const nodes = new Set<Element>();
       for (const who of document.querySelectorAll("h2[data-slot='who']")) {
         if (inA(who)) {
@@ -145,7 +145,7 @@ async function leg(
   );
   kit.note(`${way}: A's nodes kept: ${kept.length}; ${lines.join(" | ")}`);
   const named = await page
-    .locator(`[data-pane="${UNKNOWN}"] .kit-empty-title`)
+    .locator(`[data-slot="pane"][data-pane="${UNKNOWN}"] .kit-empty-title`)
     .allTextContents();
   kit.check(
     `${way}: a named state stands in the unknown id's pane`,
@@ -202,7 +202,7 @@ const spec: Spec = {
     const base = await fleet.dashboard();
     const page = await kit.page("desk");
     await page.setViewportSize(VIEWPORT);
-    const rowsOfA = `[data-pane="${a}"] h2[data-slot="who"]`;
+    const rowsOfA = `[data-slot="pane"][data-pane="${a}"] h2[data-slot="who"]`;
     await open(page, `${base}/session/${a}`, rowsOfA, 120_000);
     kit.check(
       "A's rows are drawn before the unknown id",

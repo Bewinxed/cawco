@@ -126,6 +126,8 @@ const LANDED_MS = 1500;
  * slower machine still has room. The parent's call (tab-return, 2026-10-19).
  */
 const REACH_TASK_MS = 12;
+/** Transcript's `ROW_ESTIMATE`: virtua's size for a row it has not measured, px. */
+const ROW_ESTIMATE = 21;
 /** A press this soon after the reach comes while the warm pane's rows are still staged (Transcript `parkRows`). */
 const PRESS_IN_STAGING_MS = 40;
 /** An interaction's length in `inputsOf`'s line. */
@@ -141,6 +143,8 @@ interface Back {
   elsewhere: string;
   /** Every task of `HEAVY_MS` or more from the reach on: when after the press, what it ran, its CPU and what it restyled. */
   heavy: string;
+  /** A busy return: its list's heights at the landing (`heightsOf`). */
+  heights?: string;
   /** What each pane held as the pointer came onto the tab (two-pane-perf's `census`). */
   held: string;
   /** The press's interaction, Event Timing's longest entry. */
@@ -914,6 +918,128 @@ function shownLine(
   return `${settled.inline} elements with an inline content-visibility, ${settled.computed} computing it hidden; ${settled.rows} rows in view, ${settled.blank} of them with no box on their first text; ${settled.kept} rows measured before the reach still mounted, ${settled.moved} of them a different height now${moved}`;
 }
 
+/** A busy return once its window is over: where it landed (`landingOf`) and its list's heights (`heightsOf`). */
+async function busyAfter(
+  page: Page,
+  pane: string,
+  file: string
+): Promise<{ heights: string; landing: string }> {
+  const landing = await landingOf(page, pane);
+  return { landing, heights: await heightsOf(page, pane, file) };
+}
+
+/** A return's whole line, as its note says it. */
+function noteOf(back: Back, turns: number): string {
+  const page = back.page ? `${pageLine(back.page)} | ` : "";
+  const landed = back.landing
+    ? `landed: ${back.landing} | heights at the landing: ${back.heights} | `
+    : "";
+  const warm = Number.isNaN(back.warmTask)
+    ? "not traced"
+    : `${back.warmTask.toFixed(1)}ms`;
+  return `${back.scene}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${page}${landed}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${warm}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`;
+}
+
+/**
+ * Pane `pane`'s list at the landing: its height (virtua's total, the
+ * container's), every mounted row's box by key (in view or not, measured or
+ * not: virtua's `visibility: hidden` on an item it has not measured), and
+ * the last size virtua's observer was told of each of the pane's rows
+ * (`watchSizes`). Written whole to `file`; said as a line.
+ */
+async function heightsOf(
+  page: Page,
+  pane: string,
+  file: string
+): Promise<string> {
+  const read = await page.evaluate(
+    ([id, scroller]) => {
+      const box = document.querySelector<HTMLElement>(
+        `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+      );
+      const view = box?.querySelector<HTMLElement>(scroller);
+      const container = box?.querySelector<HTMLElement>('[data-slot="listing"]')
+        ?.firstElementChild as HTMLElement | null | undefined;
+      if (!(view && container)) {
+        return null;
+      }
+      const port = view.getBoundingClientRect();
+      const mounted = [...container.children].map((item) => {
+        const rect = item.getBoundingClientRect();
+        return {
+          key:
+            item.querySelector<HTMLElement>(":scope > [data-row]")?.dataset
+              .row ?? "?",
+          h: rect.height,
+          unmeasured: (item as HTMLElement).style.visibility === "hidden",
+          inView: rect.bottom > port.top && rect.top < port.bottom,
+        };
+      });
+      const told: Record<string, number> = {};
+      for (const one of (
+        window as unknown as {
+          __sizes?: { key: string; pane: string; px: number }[];
+        }
+      ).__sizes ?? []) {
+        if (one.pane === id) {
+          told[one.key] = one.px;
+        }
+      }
+      return {
+        total: Number.parseFloat(container.style.height),
+        mounted,
+        told,
+      };
+    },
+    [pane, SCROLLER] as const
+  );
+  if (!read) {
+    return "no list";
+  }
+  await writeFile(file, `${JSON.stringify(read, null, 2)}\n`);
+  const sizes = Object.values(read.told);
+  const sum = sizes.reduce((all, one) => all + one, 0);
+  const rest = read.total - sum;
+  const inView = read.mounted
+    .filter((one) => one.inView)
+    .map((one) => `${one.key.slice(0, 20)} ${one.h}`)
+    .join(", ");
+  return `list ${read.total}px; virtua was told the sizes of ${sizes.length} rows of this pane (any it has since let go of included), ${sum.toFixed(2)}px in all, ${rest.toFixed(2)}px of the list left over (${(rest / ROW_ESTIMATE).toFixed(2)} rows at the ${ROW_ESTIMATE}px estimate); ${read.mounted.length} mounted, ${read.mounted.filter((one) => one.unmeasured).length} of them never measured; in view by key: ${inView}; whole in ${file}`;
+}
+
+/**
+ * From inside pane `pane`'s transcript (its list), what the bare
+ * `[data-pane]` lookup finds against PaneLeaf's slot: a side split's own
+ * panes (paneforge) carry an empty `data-pane`.
+ */
+async function checkPaneLookup(
+  kit: Kit,
+  page: Page,
+  pane: string
+): Promise<void> {
+  const found = await page.evaluate((id) => {
+    const listing = document.querySelector(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"] [data-slot="listing"]`
+    );
+    const say = (el: Element | null | undefined) =>
+      el
+        ? `${el.tagName.toLowerCase()} data-slot="${el.getAttribute("data-slot") ?? ""}" data-pane="${el.getAttribute("data-pane")}"`
+        : "nothing";
+    return {
+      bare: say(listing?.closest("[data-pane]")),
+      slot: say(listing?.closest('[data-slot="pane"][data-pane]')),
+      slotPane:
+        listing?.closest<HTMLElement>('[data-slot="pane"][data-pane]')?.dataset
+          .pane ?? null,
+    };
+  }, pane);
+  kit.check(
+    `from inside the busy transcript, PaneLeaf's slot is found by [data-slot="pane"][data-pane]`,
+    found.slotPane === pane,
+    `[data-pane] finds ${found.bare}; [data-slot="pane"][data-pane] finds ${found.slot}`
+  );
+}
+
 /**
  * The reach task among the tasks before the press: the longer of the one
  * that warms the pane (holding the `two-pane:warm:0` mark `markWarm` makes,
@@ -1433,21 +1559,27 @@ const run = async (kit: Kit) => {
       throw new Error(`tab-return: ${name} read nothing`);
     }
     // Its turns held, nothing moves the busy transcript after its window.
-    const landing = kind === "busy" ? await landingOf(page, to) : undefined;
+    const after =
+      kind === "busy"
+        ? await busyAfter(
+            page,
+            to,
+            join(kit.out, `heights-${name.slice(0, 2)}.json`)
+          )
+        : {};
     const back: Back = {
       scene: name,
       kind,
       psi,
       ...got.read,
       ...(got.page ? { page: got.page } : {}),
-      ...(landing ? { landing } : {}),
+      ...after,
     };
     backs.push(back);
-    kit.note(
-      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}${back.landing ? `landed: ${back.landing} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${Number.isNaN(back.warmTask) ? "not traced" : `${back.warmTask.toFixed(1)}ms`}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
-    );
+    kit.note(noteOf(back, turns));
   };
   await leg(isolated, `1a: busy, back after ${SHORT_MS / 1000}s`, busy, "busy");
+  await checkPaneLookup(kit, isolated.page, busy);
   await leg(
     isolated,
     `1c: busy, back after ${SHORT_MS / 1000}s, pressed ${PRESS_IN_STAGING_MS}ms after the reach, its rows still staged`,
@@ -1463,79 +1595,88 @@ const run = async (kit: Kit) => {
     "busy",
     BACKLOG_MS
   );
-  await leg(
-    isolated,
-    `2a: preview, back after ${SHORT_MS / 1000}s (kept, held)`,
-    previewed,
-    "kept"
-  );
-  await leg(isolated, "2b: preview, back past the bound", previewed, "past");
-  await isolated.page.close();
-  // Scene 2 again with the preview's page on the dashboard's own thread:
-  // every WebKit, and Chromium where it does not isolate the preview's site.
-  const shared = await desk(
-    [front, previewed, ...lights],
-    front,
-    "one-process"
-  );
-  const browser = shared.page.context().browser();
-  const frameSrc = await shared.page
-    .locator(
-      `[data-slot="pane"][data-pane="${previewed}"] iframe[title="Preview"]`
-    )
-    .first()
-    .getAttribute("src");
-  const origin = frameSrc ? new URL(frameSrc).origin : "";
-  const cdp = browser ? await browser.newBrowserCDPSession() : null;
-  const { targetInfos } = cdp
-    ? ((await cdp.send("Target.getTargets")) as {
-        targetInfos: { type: string; url: string }[];
-      })
-    : { targetInfos: [] };
-  await cdp?.detach();
-  const ownProcess = targetInfos.filter(
-    (one) => one.type === "iframe" && one.url.startsWith(origin)
-  ).length;
-  kit.check(
-    "2c, 2d, 2e: the preview's page runs in the dashboard's process (no out-of-process frame on its origin)",
-    !!origin && ownProcess === 0,
-    `origin ${origin || "none"}, ${ownProcess} out-of-process frames on it`
-  );
-  await leg(
-    shared,
-    `2c: preview in the dashboard's process, back after ${SHORT_MS / 1000}s (kept, held)`,
-    previewed,
-    "kept"
-  );
-  await leg(
-    shared,
-    `2e: preview in the dashboard's process, hidden ${HELD_MS / 1000}s, held`,
-    previewed,
-    "kept",
-    HELD_MS
-  );
-  await leg(
-    shared,
-    "2d: preview in the dashboard's process, back past the bound",
-    previewed,
-    "past"
-  );
-  await shared.page.close();
-  // The kept returns on WebKit, which runs every frame on the dashboard's thread.
-  const webkit = await desk([front, previewed, ...lights], front, "webkit");
-  await leg(
-    webkit,
-    `2c (WebKit): preview, back after ${SHORT_MS / 1000}s (kept, held)`,
-    previewed,
-    "kept"
-  );
-  await leg(
-    webkit,
-    `2e (WebKit): preview, hidden ${HELD_MS / 1000}s, held`,
-    previewed,
-    "kept",
-    HELD_MS
-  );
+  /** Scene 2, every engine: the preview's returns. */
+  const previewLegs = async () => {
+    await leg(
+      isolated,
+      `2a: preview, back after ${SHORT_MS / 1000}s (kept, held)`,
+      previewed,
+      "kept"
+    );
+    await leg(isolated, "2b: preview, back past the bound", previewed, "past");
+    await isolated.page.close();
+    // Scene 2 again with the preview's page on the dashboard's own thread:
+    // every WebKit, and Chromium where it does not isolate the preview's site.
+    const shared = await desk(
+      [front, previewed, ...lights],
+      front,
+      "one-process"
+    );
+    const browser = shared.page.context().browser();
+    const frameSrc = await shared.page
+      .locator(
+        `[data-slot="pane"][data-pane="${previewed}"] iframe[title="Preview"]`
+      )
+      .first()
+      .getAttribute("src");
+    const origin = frameSrc ? new URL(frameSrc).origin : "";
+    const cdp = browser ? await browser.newBrowserCDPSession() : null;
+    const { targetInfos } = cdp
+      ? ((await cdp.send("Target.getTargets")) as {
+          targetInfos: { type: string; url: string }[];
+        })
+      : { targetInfos: [] };
+    await cdp?.detach();
+    const ownProcess = targetInfos.filter(
+      (one) => one.type === "iframe" && one.url.startsWith(origin)
+    ).length;
+    kit.check(
+      "2c, 2d, 2e: the preview's page runs in the dashboard's process (no out-of-process frame on its origin)",
+      !!origin && ownProcess === 0,
+      `origin ${origin || "none"}, ${ownProcess} out-of-process frames on it`
+    );
+    await leg(
+      shared,
+      `2c: preview in the dashboard's process, back after ${SHORT_MS / 1000}s (kept, held)`,
+      previewed,
+      "kept"
+    );
+    await leg(
+      shared,
+      `2e: preview in the dashboard's process, hidden ${HELD_MS / 1000}s, held`,
+      previewed,
+      "kept",
+      HELD_MS
+    );
+    await leg(
+      shared,
+      "2d: preview in the dashboard's process, back past the bound",
+      previewed,
+      "past"
+    );
+    await shared.page.close();
+    // The kept returns on WebKit, which runs every frame on the dashboard's thread.
+    const webkit = await desk([front, previewed, ...lights], front, "webkit");
+    await leg(
+      webkit,
+      `2c (WebKit): preview, back after ${SHORT_MS / 1000}s (kept, held)`,
+      previewed,
+      "kept"
+    );
+    await leg(
+      webkit,
+      `2e (WebKit): preview, hidden ${HELD_MS / 1000}s, held`,
+      previewed,
+      "kept",
+      HELD_MS
+    );
+  };
+  // TAB_RETURN_LEGS=busy: scene 1 alone, its busy returns.
+  if (process.env.TAB_RETURN_LEGS === "busy") {
+    await isolated.page.close();
+  } else {
+    await previewLegs();
+  }
   await writeFile(
     join(kit.out, "numbers.json"),
     `${JSON.stringify(backs, null, 2)}\n`

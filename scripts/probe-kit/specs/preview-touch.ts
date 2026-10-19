@@ -372,7 +372,7 @@ const probe = async (kit: Kit) => {
 const layoutOf = (page: Page, id: string) =>
   page.evaluate((paneId) => {
     const pane = document.querySelector<HTMLElement>(
-      `[data-pane="${CSS.escape(paneId)}"]`
+      `[data-slot="pane"][data-pane="${CSS.escape(paneId)}"]`
     );
     const shown = (root: ParentNode | null, selector: string) =>
       [...(root?.querySelectorAll<HTMLElement>(selector) ?? [])].some((el) =>

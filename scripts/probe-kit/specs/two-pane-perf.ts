@@ -1533,7 +1533,7 @@ async function measure(
     const rowsOf = (target: Node, added: Node[]): string | null => {
       const pane =
         target instanceof Element && target.closest('[data-slot="listing"]')
-          ? target.closest<HTMLElement>("[data-pane]")
+          ? target.closest<HTMLElement>('[data-slot="pane"][data-pane]')
           : null;
       const tops = added.flatMap((node) =>
         node instanceof HTMLElement && node.style.top
@@ -1558,7 +1558,7 @@ async function measure(
     const paneOf = (node: Node | null): string => {
       const pane =
         node instanceof Element
-          ? node.closest<HTMLElement>("[data-pane]")
+          ? node.closest<HTMLElement>('[data-slot="pane"][data-pane]')
           : null;
       if (!pane) {
         return "outside a pane";
@@ -1724,8 +1724,14 @@ async function measure(
             const clip = (value: string | null) => (value ?? "").slice(0, 80);
             const ours: string[] = [];
             const regions: [string, string][] = [
-              ["[data-pane]:not([data-pane-hidden])", "a pane drawn"],
-              ["[data-pane][data-pane-hidden]", "a pane put away"],
+              [
+                '[data-slot="pane"][data-pane]:not([data-pane-hidden])',
+                "a pane drawn",
+              ],
+              [
+                '[data-slot="pane"][data-pane][data-pane-hidden]',
+                "a pane put away",
+              ],
               ['[data-slot="dock"]', "the composer"],
               ["[data-session-tabs], [data-session-tab]", "the tabs"],
             ];
