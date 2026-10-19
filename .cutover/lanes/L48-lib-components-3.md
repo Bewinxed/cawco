@@ -39,7 +39,7 @@ token: --c-wf-node-w 260px — a workflow graph node card's width (WorkflowNodeC
 token: --c-wf-code-min-h 320px — the workflow program well's floor so the editor never collapses (WorkflowProgram); a real component dimension
 token: --c-wf-scroll-max-h 30dvh — the cap of an inline scroll region on a workflow page: the problems list and the run log (WorkflowProgram, WorkflowRunView); a viewport share, no ladder step
 token: --c-dialog-max-h 90dvh — a dialog's height cap before its body scrolls (WorkflowLaunch); a viewport share, no ladder step
-token: --c-prose-measure 72ch — the running-text measure (DESIGN.md Typography, Body: "Running text measures 60 to 72ch"); used by the run's inputs list and its question card (WorkflowRunView)
+(the 72ch reading measure is the merged `c-measure`, written `max-w-c-measure` in WorkflowRunView:285 and :337; no `token:` line)
 token: --c-pointer-floor 24px — already logged by L00-kit-sheets.md (the 24 Pointer Rule); WorkflowNodeCard reads it for the port column's hit width
 
 ## Kit swaps

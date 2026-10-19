@@ -95,7 +95,7 @@
 <article
   data-slot="node-card"
   data-workflow-node-card-selected={selected || undefined}
-  class="w-(--c-wf-node-w) rounded-md border border-border-hairline bg-surface-raised text-size-body font-normal text-ink-strong shadow-tile outline-(length:--focus-ring-width) outline-solid outline-transparent outline-offset-(--focus-ring-inset) transition-[outline-color] dur-control ease-out data-is-selected:outline-brand-solid node-focus-visible:outline-focus-ring"
+  class="w-c-wf-node-w rounded-md border border-border-hairline bg-surface-raised text-size-body font-normal text-ink-strong shadow-tile outline-(length:--focus-ring-width) outline-solid outline-transparent outline-offset-(--focus-ring-inset) transition-[outline-color] dur-control ease-out data-is-selected:outline-brand-solid node-focus-visible:outline-focus-ring"
   data-is-selected={selected || undefined}
   data-map={node.kind === "map" || undefined}
 >

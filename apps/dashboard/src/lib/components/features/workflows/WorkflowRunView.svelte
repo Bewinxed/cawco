@@ -282,7 +282,7 @@
                 <dd
                   data-workflow-run-view-code={typeof value !== "string" ||
                     undefined}
-                  class="m-0 max-w-(--c-prose-measure) wrap-anywhere text-ink-strong data-is-code:font-(family-name:--font-mono) data-is-code:liga-none"
+                  class="m-0 max-w-c-measure wrap-anywhere text-ink-strong data-is-code:font-(family-name:--font-mono) data-is-code:liga-none"
                   data-is-code={typeof value !== "string" || undefined}
                 >
                   {shown(value)}
@@ -334,7 +334,7 @@
       <!-- The question folds open; answered, the picked option pends until
            the hub moves the run on, and then the block folds away. -->
       <div
-        class="max-w-(--c-prose-measure)"
+        class="max-w-c-measure"
         in:unfold
         out:unfold
       >
@@ -478,7 +478,7 @@
         <!-- A line arrives the house way (motion/rows), and the log keeps
              the newest in view only while the reader is at its end. -->
         <ol
-          class="m-0 grid max-h-(--c-wf-scroll-max-h) list-none content-box-start gap-space-2 overflow-y-auto px-0 pt-space-2 pb-0"
+          class="m-0 grid max-h-c-wf-scroll-max-h list-none content-box-start gap-space-2 overflow-y-auto px-0 pt-space-2 pb-0"
           {@attach reflow()}
           {@attach followTail()}
         >
