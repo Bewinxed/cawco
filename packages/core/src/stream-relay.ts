@@ -718,7 +718,7 @@ export const STREAM_RELAY_WORDS = {
   pulling: (done: number, total: number) => `Pulling ${done} of ${total}`,
   startDone: (machine: string, named: boolean) =>
     `Live on ${machine} · ${portsWords(named)}`,
-  startAgain: "Start again",
+  startAgain: "Start the stream relay again",
   stoppedStep:
     "The relay is stopped, so streams through it don't connect. Start it again to carry them.",
   /** The hub's word while the relay's machine is away: the steps wait for it. */
@@ -732,13 +732,13 @@ export const STREAM_RELAY_WORDS = {
   proveFailedInside: (machine: string) =>
     `No relay answer reached this screen within 8 s. This screen is on ${machine}'s own network, and many routers don't answer their own public address from inside. Open this from a phone off Wi‑Fi; it ticks here when that proves it.`,
   proveFailedOutside: (machine: string) =>
-    `No relay answer reached this screen within 8 s from outside. The ports aren't reaching ${machine}: check the router's forwards, then press Check again.`,
+    `No relay answer reached this screen within 8 s from outside. The ports aren't reaching ${machine}: check the router's forwards, then check the stream relay again.`,
   proveRefused:
-    "The relay answered this screen and refused its credential (401), so it holds another secret than the hub's. Start it again to give it the hub's, then Check again.",
+    "The relay answered this screen and refused its credential (401), so it holds another secret than the hub's. Start the stream relay again to give it the hub's, then check it again.",
   proveDone: (device: string, at: number, ports: string) =>
     `Works from outside · ${device}, ${relayWhen(at)} (${ports})`,
   doneForNow: "Done for now",
-  checkAgain: "Check again",
+  checkAgain: "Check the stream relay again",
 
   /** Step state words for a screen reader, before a step's label. */
   stepDone: "Done:",
@@ -751,7 +751,7 @@ export const STREAM_RELAY_WORDS = {
   entryShort: (domain: string) =>
     `The stream didn't connect: this screen reaches CawCo through ${domain}, which carries pages, not streams.`,
   setUp: "Set up the stream relay",
-  later: "Later",
+  later: "Set up the stream relay later",
   /** Needs you's meta line under the row: the machine it runs on, or how many could before a pick. */
   rowMeta: (machine: string | null, candidates: number) => {
     if (machine) {

@@ -243,7 +243,7 @@ const journeyLeg = async (
   leg: (typeof LEGS)[number]
 ) => {
   const page = await look(kit, base, leg, journeying, "[data-relay-journey]");
-  const read = await page.evaluate(() => {
+  const read = await page.evaluate((laterWords) => {
     const steps = [
       ...document.querySelectorAll(
         "[data-stream-relay] [data-relay-journey] li[data-step]"
@@ -280,7 +280,7 @@ const journeyLeg = async (
           ...document.querySelectorAll<HTMLElement>(
             "[data-stream-relay] [data-relay-journey] button"
           ),
-        ].find((button) => button.textContent?.trim() === "Later");
+        ].find((button) => button.textContent?.trim() === laterWords);
         const card = document
           .querySelector("[data-stream-relay] [data-relay-journey]")
           ?.getBoundingClientRect();
@@ -301,10 +301,10 @@ const journeyLeg = async (
         };
       })(),
     };
-  });
+  }, words.later);
   const scroll = await sideways(page);
   kit.check(
-    `${leg.name} the journey standing on the name: steps ${read.steps.join(", ")}, the name open with its finding, Let CawCo add it and Skip the name, and Later, its ink on the card's edge (${read.later?.ink}px off, its box hanging ${read.later?.hang}px past it); the page scrolls nothing sideways`,
+    `${leg.name} the journey standing on the name: steps ${read.steps.join(", ")}, the name open with its finding, Let CawCo add it and Skip the name, and ${words.later}, its ink on the card's edge (${read.later?.ink}px off, its box hanging ${read.later?.hang}px past it); the page scrolls nothing sideways`,
     read.steps.join() ===
       "machine,name,router,runtime,certificate,start,prove" &&
       read.open === "name" &&

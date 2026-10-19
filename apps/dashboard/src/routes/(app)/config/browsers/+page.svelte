@@ -28,7 +28,7 @@
   let problem = $state<string | null>(null);
   onMount(() => {
     readRelayJourney().catch((error: unknown) => {
-      problem = `Could not read the stream relay — ${failureWords(error)}`;
+      problem = `The stream relay couldn't be read. ${failureWords(error)} Nothing was changed. Reload the page to try again.`;
     });
   });
 
