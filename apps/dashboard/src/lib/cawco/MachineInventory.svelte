@@ -101,10 +101,7 @@
     icon={IconLaptop}
     label={words.onEachMachine}
   />
-  <p
-    data-slot="note"
-    class="max-w-c-measure type-meta text-ink-muted"
-  >
+  <p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
     {words.inventoryNote}
   </p>
 
@@ -112,17 +109,11 @@
        drops for a moment says "Offline" in the same place, so nothing under
        the list moves. It opens only while it is up; open, it can still close. -->
   {#if machines.length === 0}
-    <p
-      data-slot="note"
-      class="max-w-c-measure type-meta text-ink-muted"
-    >
+    <p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
       <AddMachineLink>{words.noMachines}</AddMachineLink>{words.noMachinesAfter}
     </p>
   {:else}
-    <ul
-      data-slot="machines"
-      class="-mx-space-2 flex flex-col gap-space-row"
-    >
+    <ul data-slot="machines" class="-mx-space-2 flex flex-col gap-space-row">
       {#each machines as machine (machine.machineId)}
         {@const inspection = found[machine.machineId]}
         {@const rows =
@@ -182,9 +173,7 @@
                 {kind === "mcp" ? words.noMcpAtAll : words.noSkillsAtAll}
               </p>
             {:else}
-              <ul
-                class="mx-space-2 mb-space-2 flex flex-col gap-space-row"
-              >
+              <ul class="mx-space-2 mb-space-2 flex flex-col gap-space-row">
                 {#each rows as row ("path" in row ? row.path : `${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
                   <li
@@ -195,9 +184,7 @@
                       data-slot="text"
                       class="flex min-w-0 grow basis-c-inventory-text-basis flex-col gap-space-row"
                     >
-                      <span
-                        class="flex flex-wrap items-center gap-space-2"
-                      >
+                      <span class="flex flex-wrap items-center gap-space-2">
                         <span
                           data-slot="name"
                           class="font-(family-name:--font-mono) text-size-meta text-ink-strong"

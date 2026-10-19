@@ -25,7 +25,8 @@
       variant: {
         default:
           "border-transparent bg-[image:var(--action-surface)] bg-[var(--action-solid)] text-[var(--on-action)] hover:bg-[image:var(--action-surface-hover)] hover:bg-[var(--action-hover)]",
-        outline: "aria-expanded:not-aria-current-page:bg-[var(--surface-hover)]",
+        outline:
+          "aria-expanded:not-aria-current-page:bg-[var(--surface-hover)]",
         secondary:
           "border-[var(--border-hairline)] bg-[var(--surface-recess)] hover:bg-[var(--surface-hover)]",
         ghost:

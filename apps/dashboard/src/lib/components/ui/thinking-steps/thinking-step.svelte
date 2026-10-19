@@ -137,7 +137,10 @@
       {#if description && markdown}
         <!-- Markdown keeps the plain description's type, and a step is
              exactly as tall as its text. -->
-        <div data-slot="md" class="markdown-plain wrap-anywhere whitespace-normal">
+        <div
+          data-slot="md"
+          class="markdown-plain wrap-anywhere whitespace-normal"
+        >
           <Markdown
             {fades}
             source={description}

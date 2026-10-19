@@ -97,9 +97,7 @@
   >
     <Table.Header>
       <Table.Row variant="band">
-        <Table.Head
-          class="h-c-toolbar-ctl w-(--lead-w)"
-          variant="caps"
+        <Table.Head class="h-c-toolbar-ctl w-(--lead-w)" variant="caps"
           ><span class="sr-only">{words.columnService}</span></Table.Head
         >
         <Table.Head class="h-c-toolbar-ctl" variant="caps"
@@ -148,7 +146,11 @@
               title="{action.service} · {action.tool}">{action.reason}</span
             >
             {#if from}
-              <span data-slot="from" class="block truncate type-meta text-ink-muted">{words.from(from)}</span>
+              <span
+                data-slot="from"
+                class="block truncate type-meta text-ink-muted"
+                >{words.from(from)}</span
+              >
             {/if}
           </Table.Cell>
           <Table.Cell

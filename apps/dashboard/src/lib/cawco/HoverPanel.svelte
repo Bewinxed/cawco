@@ -212,7 +212,8 @@
          watches this box) does not resize what it is watching. -->
     <div
       class="relative grid w-max max-w-(--cell-max) max-h-(--cell-room) overflow-y-auto overscroll-contain p-space-3"
-      style:--cell-max="calc(min(var(--hover-panel-max), var(--span, var(--hover-panel-max))) - 2px)"
+      style:--cell-max="calc(min(var(--hover-panel-max), var(--span,
+      var(--hover-panel-max))) - 2px)"
       style:--cell-room="var(--room, var(--c-hover-panel-room))"
     >
       {#key key}
@@ -230,4 +231,3 @@
     </div>
   </div>
 {/if}
-

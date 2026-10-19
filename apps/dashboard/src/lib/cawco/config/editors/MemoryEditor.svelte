@@ -723,18 +723,12 @@
   {#if !scoped(savedScope)}
     <EditorSection hue={HUE} icon={IconLaptop} label={words.perMachine}>
       {#if machines.length === 0}
-        <p
-          data-slot="note"
-          class="type-meta max-w-c-measure text-ink-muted"
-        >
+        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
           <AddMachineLink>{words.noMachines}</AddMachineLink>{words.landsFirst}
         </p>
       {:else}
         {#if applied.length > 0}
-          <p
-            data-slot="note"
-            class="type-meta max-w-c-measure text-ink-muted"
-          >
+          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
             {words.inSyncOn(applied.length)}
             {#if asleep.length > 0}
               {words.offlineSync(

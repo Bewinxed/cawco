@@ -197,8 +197,7 @@
         {#if proposed}
           <pre
             data-slot="args"
-            class="max-h-c-task-args-max-h m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere"
-            >{action.args}</pre>
+            class="max-h-c-task-args-max-h m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere">{action.args}</pre>
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
         <div

@@ -275,9 +275,7 @@
 	     inline code (`codespan`) keeps it, because it is prose, not a
 	     listing. -->
     {#snippet code({ token })}
-      <div
-        class="not-prose my-3"
-      >
+      <div class="not-prose my-3">
         <OutputBlock language={token.lang} text={token.text} />
       </div>
     {/snippet}

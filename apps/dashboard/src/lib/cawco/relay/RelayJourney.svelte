@@ -335,8 +335,7 @@
     text.match(/\([^)]*\)|\S+/g) ?? [text];
 
   /** A step's note: meta, muted; a failure's in the fail ink. */
-  const NOTE =
-    "min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere";
+  const NOTE = "min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere";
   const FAIL =
     "min-w-0 text-meta text-status-fail-ink text-pretty wrap-anywhere";
   /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line, at every width. */
@@ -400,7 +399,10 @@
   <div class="min-w-0 @max-field-group:hidden" data-box>
     <CopyBox {label} {text} wrap />
   </div>
-  <div class="hidden min-w-0 flex-col gap-space-2 @max-field-group:flex" data-box>
+  <div
+    class="hidden min-w-0 flex-col gap-space-2 @max-field-group:flex"
+    data-box
+  >
     <!-- The box keeps its edge and padding; the clamp is on the words
          inside it, so a third line is cut at the words' edge, never shown
          in the box's padding. -->
@@ -412,9 +414,7 @@
         >{#each unitsOf(text) as unit, index (index)}{#if index > 0}{" "}{/if}<span
             class={[
               "inline-block max-w-full",
-              unit.startsWith("(")
-                ? "whitespace-nowrap"
-                : "wrap-anywhere",
+              unit.startsWith("(") ? "whitespace-nowrap" : "wrap-anywhere",
             ]}
             data-unit>{unit}</span
           >{/each}</span
@@ -469,8 +469,7 @@
     data-relay-choice={choice.machineId}
   >
     <div class="flex min-w-0 flex-col gap-space-1">
-      <span
-        class="min-w-0 text-label text-ink-strong wrap-anywhere"
+      <span class="min-w-0 text-label text-ink-strong wrap-anywhere"
         >{choice.name}</span
       >
       <p class="min-w-0 text-meta text-ink-muted wrap-anywhere">
@@ -774,7 +773,9 @@
       style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
     >
       {#if lead}
-        <p class="text-body text-ink-strong text-pretty @max-field-group:hidden">
+        <p
+          class="text-body text-ink-strong text-pretty @max-field-group:hidden"
+        >
           {domain ? words.leadDomain(domain) : words.leadPlain}
         </p>
         <p
@@ -889,9 +890,7 @@
       class="{UNDER_TITLE} items-start gap-space-3"
       style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
     >
-      <p
-        class="text-body text-ink-strong text-pretty wrap-anywhere"
-      >
+      <p class="text-body text-ink-strong text-pretty wrap-anywhere">
         {domain ? words.leadDomain(domain) : words.leadPlain}
       </p>
       <Button
@@ -917,9 +916,7 @@
       class="{UNDER_TITLE} items-start gap-space-2"
       style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
     >
-      <p
-        class="text-body text-ink-strong text-pretty wrap-anywhere"
-      >
+      <p class="text-body text-ink-strong text-pretty wrap-anywhere">
         {words.doneRow(summary.name ?? summary.machine.address)}
       </p>
       {#if row}
@@ -1049,8 +1046,8 @@
         <p class="col-span-full {FAIL}" data-relay-why>
           {#if summary.whyCommand && summary.why.includes(summary.whyCommand)}
             {@const at = summary.why.indexOf(summary.whyCommand)}
-            {summary.why.slice(0, at)}<code
-              class="font-mono text-ink-strong">{summary.whyCommand}</code
+            {summary.why.slice(0, at)}<code class="font-mono text-ink-strong"
+              >{summary.whyCommand}</code
             >{summary.why.slice(at + summary.whyCommand.length)}
           {:else}
             {summary.why}

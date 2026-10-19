@@ -55,10 +55,7 @@
   {#snippet trigger()}
     {@const Icon = current.icon}
     {#key current.name}
-      <span
-        data-slot="swap"
-        class="ns-in inline-flex items-center gap-space-2"
-      >
+      <span data-slot="swap" class="ns-in inline-flex items-center gap-space-2">
         <Icon class="size-icon-md flex-none" style={`color:${current.hue}`} />
         <span data-slot="chip-label">{current.name}</span>
       </span>

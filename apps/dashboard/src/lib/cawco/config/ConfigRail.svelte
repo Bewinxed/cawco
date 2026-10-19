@@ -124,9 +124,17 @@
                      A read count stands only above 0 (DESIGN.md, The Earned
                      Count Rule). -->
                 {#if count === null}
-                  <span data-slot="count" class="flex-none min-w-c-rail-count-min text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">—</span>
+                  <span
+                    data-slot="count"
+                    class="flex-none min-w-c-rail-count-min text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink"
+                    >—</span
+                  >
                 {:else if count > 0}
-                  <span data-slot="count" class="flex-none min-w-c-rail-count-min text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">{count}</span>
+                  <span
+                    data-slot="count"
+                    class="flex-none min-w-c-rail-count-min text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink"
+                    >{count}</span
+                  >
                 {/if}
               {/if}
             </a>
@@ -136,4 +144,3 @@
     </div>
   {/each}
 </nav>
-

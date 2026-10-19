@@ -106,4 +106,3 @@
     </button>
   {/snippet}
 </Tip>
-

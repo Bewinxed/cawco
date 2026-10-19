@@ -51,9 +51,7 @@
     motion="press"
   >
     <span class="text-ink-muted">{label}</span>
-    <span
-      data-slot="num"
-      class="min-w-0 truncate num"
+    <span data-slot="num" class="min-w-0 truncate num"
       ><MorphText text={chosen} /></span
     >
     <IconChevronDown class="size-icon-md flex-none text-ink-muted" />

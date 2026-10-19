@@ -194,12 +194,9 @@
           <span
             class="flex items-center gap-space-2 min-h-c-artifact-row-h px-space-2 py-0"
           >
-            <span
-              class="kit-skeleton size-c-pin flex-none rounded-pill"
-            ></span>
+            <span class="kit-skeleton size-c-pin flex-none rounded-pill"></span>
             <span class="flex flex-1 min-w-0 flex-col gap-space-1">
-              <span
-                class="kit-skeleton block w-3/5 h-(--text-label) rounded-xs"
+              <span class="kit-skeleton block w-3/5 h-(--text-label) rounded-xs"
               ></span>
               <span
                 class="kit-skeleton block w-17/20 h-(--text-meta) rounded-xs"

@@ -133,4 +133,3 @@
     captioned(board, limits) ? 1 : 0
   )}px"
 ></div>
-

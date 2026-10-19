@@ -551,8 +551,8 @@
        its reason: its place and the peers move down one row. -->
   {@const lined = Boolean(
     item.kind === "ask" &&
-      ((item.request.presentation.command && !item.request.presentation.post) ||
-        item.request.browserAsk)
+    ((item.request.presentation.command && !item.request.presentation.post) ||
+      item.request.browserAsk)
   )}
   <!-- The session's mark leading on the title's line; the title and its wait;
        what it wants, two lines at most; then the kind and where; a
@@ -570,7 +570,8 @@
     data-stale={held || undefined}
     style:--peek-glyph="var(--c-peek-glyph)"
     style:--peek-ink={"calc((var(--c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"}
-    style:--peek-room="calc(var(--c-btn-h-xs) - var(--peek-ink) + var(--space-2))"
+    style:--peek-room="calc(var(--c-btn-h-xs) - var(--peek-ink) +
+    var(--space-2))"
     style:--row-cols="auto minmax(0, 1fr) auto"
   >
     <!-- The whole row opens it; the panel closes. A choice opens nothing:
@@ -680,8 +681,10 @@
               class="touch-hit pointer-hit focus-inset grid size-c-btn-h-xs cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
               onclick={peekAsk}
               {onkeydown}
-              style:--peek-hit-end="calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--peek-ink))"
-              style:--peek-hit-start="calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--peek-ink))"
+              style:--peek-hit-end="calc((var(--c-btn-h-xs) - var(--c-btn-h-lg))
+              / 2 + var(--peek-ink))"
+              style:--peek-hit-start="calc((var(--c-btn-h-xs) -
+              var(--c-btn-h-lg)) / 2 - var(--peek-ink))"
               style:--peek-press="scale(var(--press-scale))"
               type="button"
             >

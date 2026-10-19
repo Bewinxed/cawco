@@ -9,9 +9,7 @@
   let { trail }: { trail?: Snippet } = $props();
 </script>
 
-<div
-  class="flex min-h-c-btn-h-sm items-center justify-between gap-space-2"
->
+<div class="flex min-h-c-btn-h-sm items-center justify-between gap-space-2">
   <span
     aria-live="polite"
     class="mark-line flex items-center gap-space-2 type-meta text-ink-muted"

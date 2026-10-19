@@ -7,8 +7,7 @@
     variants: {
       variant: {
         default: "bg-transparent",
-        outline:
-          "border border-border-control bg-transparent [--hit-edge:1px]",
+        outline: "border border-border-control bg-transparent [--hit-edge:1px]",
       },
       size: {
         default:

@@ -104,8 +104,10 @@
         data-slot="more"
         class="flex justify-end ps-(--text-column) pe-space-3 coarse:pb-space-1"
         data-flip
-        style:--hang="calc(-1 * (1px + 1.5 * var(--spacing) + var(--icon-sm) * 4.25 / 24))"
-        style:--text-column="calc(var(--space-3) + var(--c-row-lead) + var(--space-3))"
+        style:--hang="calc(-1 * (1px + 1.5 * var(--spacing) + var(--icon-sm) *
+        4.25 / 24))"
+        style:--text-column="calc(var(--space-3) + var(--c-row-lead) +
+        var(--space-3))"
       >
         <!-- Open, it says so in its words and its flipped chevron, not in the
              kit ghost's expanded fill, which would stand hung past the

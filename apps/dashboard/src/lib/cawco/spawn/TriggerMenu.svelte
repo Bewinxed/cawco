@@ -53,10 +53,8 @@
       tabindex="-1"
       type="button"
     >
-      <span
-        data-slot="tile"
-        class="ns-tile size-c-mark"
-        style:color={item.hue}><Icon class="size-icon-md" /></span
+      <span data-slot="tile" class="ns-tile size-c-mark" style:color={item.hue}
+        ><Icon class="size-icon-md" /></span
       >
       <span
         data-slot="trigger-menu-label"

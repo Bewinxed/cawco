@@ -166,9 +166,7 @@ You are a <role>, working in one repository at a time.
 
   <EditorSection hue={HUE} icon={IconDocument} label="Definition">
     {#snippet right()}
-      <span
-        data-slot="num"
-        class="num type-meta max-w-c-measure text-ink-muted"
+      <span data-slot="num" class="num type-meta max-w-c-measure text-ink-muted"
         >{claims.join(" · ")}</span
       >
     {/snippet}

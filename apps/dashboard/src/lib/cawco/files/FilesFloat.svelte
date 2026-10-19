@@ -167,7 +167,8 @@
     style:--float-top="{place.top}px"
     style:--float-right="{place.right}px"
     style:--float-w="{place.width}px"
-    style:--float-h="min(var(--c-caw-panel-h), calc(100dvh - var(--float-top) - var(--space-3)))"
+    style:--float-h="min(var(--c-caw-panel-h), calc(100dvh - var(--float-top) -
+    var(--space-3)))"
     {@attach afterFiles}
   >
     <RegionBoundary region="preview">

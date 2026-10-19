@@ -33,7 +33,8 @@
           declaration outranks;
           https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier */
       look: {
-        "new-session": "ns-theme m-0 outline-off motion-reduce:transition-none!",
+        "new-session":
+          "ns-theme m-0 outline-off motion-reduce:transition-none!",
       },
     },
   });

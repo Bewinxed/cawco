@@ -30,10 +30,7 @@
   } = $props();
 </script>
 
-<div
-  data-slot="field-field"
-  class="flex flex-col gap-space-2 min-w-0"
->
+<div data-slot="field-field" class="flex flex-col gap-space-2 min-w-0">
   <label data-field-label class="type-meta text-ink-muted" for={id}
     >{label}</label
   >

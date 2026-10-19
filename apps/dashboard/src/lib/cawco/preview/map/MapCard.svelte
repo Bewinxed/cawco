@@ -7,13 +7,13 @@
   export interface MapCardData {
     /** The one the map draws live. */
     chosen: boolean;
+    /** Utilities for the card's root, where the surface it stands in sizes it. */
+    class?: string;
     /** Its canvas page's address, drawn live while chosen; null while the pane's own page has not loaded. */
     live: string | null;
     node: CanvasMapNode;
     onchoose: (file: string) => void;
     role: MapRole;
-    /** Utilities for the card's root, where the surface it stands in sizes it. */
-    class?: string;
   }
 </script>
 
@@ -63,7 +63,7 @@
 <div
   data-slot="map-card"
   class={cn(
-    "relative grid gap-space-2 w-c-map-node-w p-space-2 rounded-lg bg-surface-raised shadow-tile data-chosen:inset-ring-1 data-chosen:inset-ring-brand-solid",
+    "relative grid w-c-map-node-w gap-space-2 rounded-lg bg-surface-raised p-space-2 shadow-tile data-chosen:inset-ring-1 data-chosen:inset-ring-brand-solid",
     className
   )}
   data-chosen={chosen || undefined}

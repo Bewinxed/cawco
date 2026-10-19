@@ -238,8 +238,7 @@
     bind:ref={list}
   >
     {#if line && lineDropped}
-      <DropdownMenu.Label data-slot="menu-line"
-        class="wrap-anywhere"
+      <DropdownMenu.Label data-slot="menu-line" class="wrap-anywhere"
         >{line}</DropdownMenu.Label
       >
     {/if}

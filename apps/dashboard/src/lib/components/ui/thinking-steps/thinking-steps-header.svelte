@@ -32,8 +32,7 @@
   <span
     aria-hidden="true"
     class="grid flex-none motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/header:rotate-90 group-disabled/header:invisible"
-    data-box
-    ><IconChevronRight class="size-icon-sm" /></span
+    data-box><IconChevronRight class="size-icon-sm" /></span
   >
   {@render after?.()}
 </Collapsible.Trigger>

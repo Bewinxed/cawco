@@ -133,8 +133,7 @@
     <span data-slot="find-peek-label" class="text-ink-subtle">delegates</span>
     <span data-slot="value" class="min-w-0 text-ink-row"
       ><span data-slot="num" class="num">{conversation.children.count}</span
-      >{#if conversation.children.needsYou > 0}<span class="px-space-1"
-          >·</span
+      >{#if conversation.children.needsYou > 0}<span class="px-space-1">·</span
         ><span class="text-status-attn-ink font-medium"
           ><span data-slot="num" class="num"
             >{conversation.children.needsYou}</span

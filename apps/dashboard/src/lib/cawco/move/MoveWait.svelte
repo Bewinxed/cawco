@@ -436,7 +436,11 @@
   </div>
 
   {#if columnShown}
-    <div data-slot="column" class="grid gap-space-3 w-full max-w-c-move-wait-col-w" in:crossIn>
+    <div
+      data-slot="column"
+      class="grid gap-space-3 w-full max-w-c-move-wait-col-w"
+      in:crossIn
+    >
       <ThinkingSteps>
         {#each rows as row, index (row.step)}
           <div
@@ -482,7 +486,8 @@
                 {@const file = job.lfsFile}
                 <div
                   class="grid grid-cols-(--file-cols) items-center gap-space-2"
-                  style:--file-cols="minmax(0, 1fr) var(--c-move-wait-file-bar-w) auto"
+                  style:--file-cols="minmax(0, 1fr)
+                  var(--c-move-wait-file-bar-w) auto"
                   in:unfold
                   out:unfold
                 >

@@ -211,7 +211,9 @@
           class="flex flex-col max-h-c-choice-list-max-h overflow-y-auto"
           transition:unfold
         >
-          <span data-slot="note" class="type-meta text-ink-muted">{words.severalSkills}</span>
+          <span data-slot="note" class="type-meta text-ink-muted"
+            >{words.severalSkills}</span
+          >
           {#each choices as choice (choice)}
             <button
               data-slot="choice"

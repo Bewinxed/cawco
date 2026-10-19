@@ -226,11 +226,8 @@
       </div>
     {/each}
   </div>
-  <p
-    class="mark-line type-meta flex items-center gap-space-2 text-ink-muted"
-  >
+  <p class="mark-line type-meta flex items-center gap-space-2 text-ink-muted">
     <IconSubagent class="size-icon-md" />
     <span>{words.forks}</span>
   </p>
 </div>
-

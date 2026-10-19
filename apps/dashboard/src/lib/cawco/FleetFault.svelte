@@ -256,9 +256,7 @@
     class="mark-line flex flex-wrap items-center gap-space-2"
   >
     <IconWarningTriangle class="size-icon-md shrink-0" />
-    <span
-      data-slot="title"
-      class="text-size-label font-medium"
+    <span data-slot="title" class="text-size-label font-medium"
       >{copy.title}</span
     >
     <!-- Where, never left implicit: the whole point of the investigation this
@@ -319,30 +317,23 @@
       <p
         class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
       >
-        <span
-          class="text-size-meta font-normal opacity-80"
+        <span class="text-size-meta font-normal opacity-80"
           >{SCOPE_NOUN[group.scope]}
           {group.faults.length === 1 ? "" : "s"}:</span
         >
         {#each shown as fault (fault.scope + fault.key)}
-          <code
-            class="font-mono text-size-meta wrap-anywhere"
+          <code class="font-mono text-size-meta wrap-anywhere"
             >{faultLabel(fault)}</code
           >
         {/each}
         {#if extra > 0}
-          <span
-            data-slot="more"
-            class="text-size-meta font-normal opacity-80"
+          <span data-slot="more" class="text-size-meta font-normal opacity-80"
             >and {extra} more</span
           >
         {/if}
       </p>
 
-      <p
-        data-slot="why"
-        class="max-w-c-measure text-size-body font-normal"
-      >
+      <p data-slot="why" class="max-w-c-measure text-size-body font-normal">
         {copy.why}
       </p>
 
@@ -395,7 +386,8 @@
       {#if group.faults[0]?.detail}
         {#if group.cause === "unknown"}
           <pre
-            class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group.faults[0].detail}</pre>
+            class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group
+              .faults[0].detail}</pre>
         {:else}
           <button
             aria-expanded={disclosureOpen}
@@ -418,8 +410,8 @@
             {#each shown as fault (fault.scope + fault.key)}
               {#if fault.detail}
                 <pre
-                  class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span class="block text-ink-muted"
-                    >{faultLabel(fault)}</span
+                  class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span
+                    class="block text-ink-muted">{faultLabel(fault)}</span
                   >{fault.detail}</pre>
               {/if}
             {/each}
@@ -444,8 +436,7 @@
             size="xs"
             variant="outline"
           />
-          <span
-            class="text-size-meta font-normal opacity-80"
+          <span class="text-size-meta font-normal opacity-80"
             >{online
               ? actionHint
               : "It syncs on its own the moment it comes back."}</span
@@ -463,15 +454,12 @@
             size="xs"
             variant="outline"
           />
-          <span
-            class="text-size-meta font-normal opacity-80"
-            >{actionHint}</span
+          <span class="text-size-meta font-normal opacity-80">{actionHint}</span
           >
         {:else if copy.action === "settle" && group.scope === "skills"}
           {#each shown as fault (fault.key)}
             {#if group.faults.length > 1}
-              <code
-                class="font-mono text-size-meta wrap-anywhere"
+              <code class="font-mono text-size-meta wrap-anywhere"
                 >{fault.key}</code
               >
             {/if}
@@ -496,8 +484,7 @@
               variant="outline"
             />
           {/each}
-          <span
-            class="text-size-meta font-normal opacity-80"
+          <span class="text-size-meta font-normal opacity-80"
             >Adopt this machine’s copy into the fleet, or overwrite it with the
             fleet’s.</span
           >
@@ -505,8 +492,7 @@
           <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
             >Compare the two copies</Button
           >
-          <span
-            class="text-size-meta font-normal opacity-80"
+          <span class="text-size-meta font-normal opacity-80"
             >Adopt this machine’s copy into the fleet, or overwrite it with the
             fleet’s.</span
           >

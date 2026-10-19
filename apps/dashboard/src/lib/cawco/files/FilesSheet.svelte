@@ -118,7 +118,8 @@
          what it holds ends where the screen does. -->
     <div
       class="flex min-h-0 flex-auto flex-col pb-(--snap-drop)"
-      style:--snap-drop="calc((1 - {typeof snap === 'number' ? snap : 1}) * 100dvh)"
+      style:--snap-drop="calc((1 - {typeof snap === 'number' ? snap : 1}) *
+      100dvh)"
     >
       {#if instanceId}
         {#key instanceId}

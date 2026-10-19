@@ -898,9 +898,16 @@ async function toastFade({ kit, fleet, page, base }: On) {
       const el = document.querySelector(at);
       return (
         el?.getAnimations().map((run) => ({
-          props: (run.effect as KeyframeEffect)
-            .getKeyframes()
-            .map((frame) => Object.keys(frame).filter((key) => !["offset", "easing", "composite", "computedOffset"].includes(key)).join("+")),
+          props: (run.effect as KeyframeEffect).getKeyframes().map((frame) =>
+            Object.keys(frame)
+              .filter(
+                (key) =>
+                  !["offset", "easing", "composite", "computedOffset"].includes(
+                    key
+                  )
+              )
+              .join("+")
+          ),
         })) ?? null
       );
     }, toast);
@@ -924,7 +931,10 @@ async function toastFade({ kit, fleet, page, base }: On) {
       await clock.seek(fraction);
       opacity.push(
         await page.evaluate(
-          (at) => Number(getComputedStyle(document.querySelector(at) as Element).opacity),
+          (at) =>
+            Number(
+              getComputedStyle(document.querySelector(at) as Element).opacity
+            ),
           toast
         )
       );

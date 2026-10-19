@@ -1121,8 +1121,7 @@
     "ff-tabs-list",
     "in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:relative in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:isolate in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:z-[var(--z,var(--z-rest,1))] in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:-ms-(--overlap)",
     "in-variant-folder:[&>.kit-ghost]:hidden",
-    scrollable &&
-      "scrollable kit-edge-fade [&>[data-slot=ff-tab]]:shrink-0",
+    scrollable && "scrollable kit-edge-fade [&>[data-slot=ff-tab]]:shrink-0",
     className
   )}
   data-overflows={overflows ? "" : undefined}

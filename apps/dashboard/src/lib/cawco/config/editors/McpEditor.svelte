@@ -325,10 +325,7 @@
           in:crossIn
           out:crossOut
         >
-          <p
-            data-slot="note"
-            class="type-meta max-w-c-measure text-ink-muted"
-          >
+          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
             {HOW.bunx}
           </p>
           <Field id="mcp-package" label={words.package}>
@@ -364,10 +361,7 @@
           in:crossIn
           out:crossOut
         >
-          <p
-            data-slot="note"
-            class="type-meta max-w-c-measure text-ink-muted"
-          >
+          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
             {HOW.command}
           </p>
           <Field id="mcp-command" label={words.command}>
@@ -398,10 +392,7 @@
           in:crossIn
           out:crossOut
         >
-          <p
-            data-slot="note"
-            class="type-meta max-w-c-measure text-ink-muted"
-          >
+          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
             {HOW.remote}
           </p>
           <Field id="mcp-url" label={words.url}>
@@ -439,10 +430,7 @@
         icon={IconKey}
         label={mode === "remote" ? words.headers : words.environment}
       >
-        <p
-          data-slot="note"
-          class="type-meta max-w-c-measure text-ink-muted"
-        >
+        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
           <Coded text={words.expanded} />
         </p>
         <div

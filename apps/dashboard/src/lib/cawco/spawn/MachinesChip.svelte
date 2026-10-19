@@ -140,7 +140,9 @@
       </button>
     {/each}
     {#if machines.length === 0}
-      <div class="ns-in px-space-2 py-space-4 text-center type-meta text-ink-subtle">
+      <div
+        class="ns-in px-space-2 py-space-4 text-center type-meta text-ink-subtle"
+      >
         No machines have checked in.
       </div>
     {/if}
@@ -157,10 +159,8 @@
       style="--delay:140ms"
       type="button"
     >
-      <span
-        data-slot="tile"
-        class="ns-tile size-c-mark"
-        data-variant="dashed"><Add class="size-icon-md" /></span
+      <span data-slot="tile" class="ns-tile size-c-mark" data-variant="dashed"
+        ><Add class="size-icon-md" /></span
       >
       <span class="type-label">Connect a machine…</span>
     </button>

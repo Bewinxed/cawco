@@ -866,19 +866,13 @@
   {#if id}
     <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
       {#if machines.length === 0}
-        <p
-          data-slot="note"
-          class="type-meta max-w-c-measure text-ink-muted"
-        >
+        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
           <AddMachineLink>No machines yet</AddMachineLink>
           — this lands on the first one that registers.
         </p>
       {:else}
         {#if applied.length > 0}
-          <p
-            data-slot="note"
-            class="type-meta max-w-c-measure text-ink-muted"
-          >
+          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
             In sync on
             {applied.length}
             machine{applied.length === 1 ? "" : "s"}.

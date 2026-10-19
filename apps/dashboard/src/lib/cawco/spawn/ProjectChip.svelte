@@ -207,10 +207,8 @@
         style={`--delay:${index * 35}ms`}
         type="button"
       >
-        <span
-          data-slot="tile"
-          class="ns-tile size-c-mark"
-          style:color={row.hue}><Files class="size-icon-md" /></span
+        <span data-slot="tile" class="ns-tile size-c-mark" style:color={row.hue}
+          ><Files class="size-icon-md" /></span
         >
         <span data-slot="text" class="min-w-0 flex-1">
           <span data-slot="name" class="type-label block">{row.name}</span>
@@ -240,10 +238,8 @@
       style:--delay={`${projects.length * 35}ms`}
       type="button"
     >
-      <span
-        data-slot="tile"
-        class="ns-tile size-c-mark"
-        data-variant="dashed"><Add class="size-icon-md" /></span
+      <span data-slot="tile" class="ns-tile size-c-mark" data-variant="dashed"
+        ><Add class="size-icon-md" /></span
       >
       <span data-slot="name" class="type-label block">New project…</span>
     </button>

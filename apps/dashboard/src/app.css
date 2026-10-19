@@ -33,7 +33,6 @@
 /* The plugin's rules, minus the four that restyled a whole reply per block. */
 @config "../typography.config.ts";
 
-
 /* The screen's bottom inset, on the boxes that stand on the screen's bottom
    (data-safe-bottom), and nowhere else: not inherited, so the keyboard's
    toggle (html[data-keyboard], base layer) restyles those boxes and not the
@@ -3486,8 +3485,7 @@
 }
 @utility rim-strength {
   opacity: calc(
-    var(--rim-rest, 0) + (var(--rim-full, 0) - var(--rim-rest, 0)) *
-    var(--pick)
+    var(--rim-rest, 0) + (var(--rim-full, 0) - var(--rim-rest, 0)) * var(--pick)
   );
 }
 @utility rim-glow {

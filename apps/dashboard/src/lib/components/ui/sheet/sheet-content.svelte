@@ -99,13 +99,13 @@
        element's data-slot and data-side. -->
   <SheetPrimitive.Content
     class={cn(
-      "fixed z-50 flex flex-col bg-surface-raised bg-clip-padding text-ink-strong text-label shadow-drawer side-bottom:inset-x-0 side-top:inset-x-0 side-left:inset-y-0 side-right:inset-y-0 side-top:top-0 side-right:right-0 side-bottom:bottom-0 side-left:left-0 side-bottom:h-auto side-left:h-full side-right:h-full side-top:h-auto side-left:w-3/4 side-right:w-3/4 side-left:phone:max-w-96 side-right:phone:max-w-96 side-bottom:border-t side-left:border-r side-top:border-b side-right:border-l",
+      "fixed side-bottom:inset-x-0 side-top:inset-x-0 side-left:inset-y-0 side-right:inset-y-0 side-top:top-0 side-right:right-0 side-bottom:bottom-0 side-left:left-0 z-50 flex side-bottom:h-auto side-left:h-full side-right:h-full side-top:h-auto side-left:w-3/4 side-right:w-3/4 side-left:phone:max-w-96 side-right:phone:max-w-96 flex-col side-bottom:border-t side-left:border-r side-top:border-b side-right:border-l bg-surface-raised bg-clip-padding text-ink-strong text-label shadow-drawer",
       /* It travels its whole size from the edge it belongs to (`--sheet-away`),
          over --dur-panel on the drawer curve, and leaves the same way over
          --dur-exit; the entrance holds no end (no fill), since a drag writes
          the sheet's transform inline once it has landed. Asked for less
          motion, it fades in place. */
-      "motion-safe:state-open:animate-sheet-in motion-safe:state-closed:animate-sheet-out motion-reduce:state-open:animate-sheet-fade-in motion-reduce:state-closed:animate-sheet-fade-out",
+      "motion-safe:state-closed:animate-sheet-out motion-safe:state-open:animate-sheet-in motion-reduce:state-closed:animate-sheet-fade-out motion-reduce:state-open:animate-sheet-fade-in",
       sheetContentVariants({ pad }),
       className
     )}

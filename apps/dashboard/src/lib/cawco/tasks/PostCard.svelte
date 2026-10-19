@@ -74,7 +74,10 @@
       </TabsList>
     </Tabs>
   {/if}
-  <ol aria-label={parts.length > 1 ? words.thread : words.post} class="m-0 flex list-none flex-col gap-space-2 p-0">
+  <ol
+    aria-label={parts.length > 1 ? words.thread : words.post}
+    class="m-0 flex list-none flex-col gap-space-2 p-0"
+  >
     {#each parts as text, index (index)}
       {@const length = postLength(text)}
       <li
@@ -82,7 +85,8 @@
         class="relative flex flex-col gap-space-2 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-tile group-data-compact:px-space-3 group-data-compact:py-space-2 group-data-compact:shadow-none not-first:before:absolute not-first:before:start-(--joint-x) not-first:before:bottom-full not-first:before:h-(--joint-reach) not-first:before:w-space-row not-first:before:bg-border-control"
         data-part={index}
         style:--joint-reach="calc(var(--space-2) + 1px)"
-        style:--joint-x="calc(var(--space-4) + var(--c-mark) / 2 - var(--space-row) / 2)"
+        style:--joint-x="calc(var(--space-4) + var(--c-mark) / 2 -
+        var(--space-row) / 2)"
       >
         <div
           data-slot="who"
@@ -127,7 +131,9 @@
       {#if post.community}
         <div class="flex flex-col gap-space-row">
           <dt class="type-meta text-ink-muted">{words.community}</dt>
-          <dd data-slot="name" class="m-0 type-label text-ink-strong">{post.community}</dd>
+          <dd data-slot="name" class="m-0 type-label text-ink-strong">
+            {post.community}
+          </dd>
         </div>
       {/if}
       {#if media.length > 0}
@@ -166,7 +172,9 @@
           <dd
             data-slot="sentence"
             class="m-0 type-body text-pretty text-ink-strong"
-          >{post.media.plan}</dd>
+          >
+            {post.media.plan}
+          </dd>
         </div>
       {/if}
     </dl>

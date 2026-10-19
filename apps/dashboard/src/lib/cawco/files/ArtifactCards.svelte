@@ -151,7 +151,8 @@
   class="relative grid auto-rows-line grid-flow-dense grid-cols-(--lane-tracks) items-box-start gap-x-space-2 px-(--gutter) pb-space-6"
   data-files-cards
   style:--card-min="var(--c-artifact-card-min)"
-  style:--gutter="calc((var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2) - var(--space-1))"
+  style:--gutter="calc((var(--c-row-inset) - (var(--c-row-lead) -
+  var(--icon-md)) / 2) - var(--space-1))"
   style:--lane-tracks="repeat({count}, minmax(0, 1fr))"
   {@attach highlight({
     rows: "[data-files-card]",
@@ -217,12 +218,17 @@
           <Glyph aria-hidden="true" class="size-icon-lg text-ink-subtle" />
         {/if}
       </span>
-      <span class="mark-line flex min-w-0 items-center gap-space-1 px-space-row">
+      <span
+        class="mark-line flex min-w-0 items-center gap-space-1 px-space-row"
+      >
         <Glyph
           aria-hidden="true"
           class="size-icon-md flex-none text-ink-muted"
         />
-        <span class="type-label min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap">{artifact.name}</span>
+        <span
+          class="type-label min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap"
+          >{artifact.name}</span
+        >
       </span>
       <!-- Its words apart by the gap, never by spaces a flex row would drop. -->
       <span

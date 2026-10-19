@@ -51,9 +51,8 @@
         >{/each}</code
     >
   {:else}
-    <code
-      class="min-w-0 flex-1 truncate text-meta text-ink-strong"
-      title={text}>{text}</code
+    <code class="min-w-0 flex-1 truncate text-meta text-ink-strong" title={text}
+      >{text}</code
     >
   {/if}
   <Button
@@ -64,7 +63,11 @@
     type="button"
     variant="outline"
   >
-    <Documents aria-hidden="true" class="size-icon-sm text-ink-muted" data-box />
+    <Documents
+      aria-hidden="true"
+      class="size-icon-sm text-ink-muted"
+      data-box
+    />
     <span aria-live="polite">{said}</span>
   </Button>
 </div>

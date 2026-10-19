@@ -11,6 +11,6 @@
   );
 </script>
 
-{#each runs as run, at (at)}{#if run.code}<span class="font-(family-name:--font-mono)"
-      >{run.words}</span
+{#each runs as run, at (at)}{#if run.code}<span
+      class="font-(family-name:--font-mono)">{run.words}</span
     >{:else}{run.words}{/if}{/each}

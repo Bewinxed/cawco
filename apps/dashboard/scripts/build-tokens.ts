@@ -188,12 +188,14 @@ const ANIMATIONS: Record<string, string> = {
     "ns-in var(--dur-pop) var(--ease-out) var(--delay, 0ms) backwards",
   "animate-ns-card-in": "ns-panel var(--dur-panel) var(--ease-out) backwards",
   "animate-ns-card-out": "ns-panel-out var(--dur-exit) var(--ease-out) both",
-  "animate-ns-scrim-in": "kit-fade-in var(--dur-panel) var(--ease-out) backwards",
+  "animate-ns-scrim-in":
+    "kit-fade-in var(--dur-panel) var(--ease-out) backwards",
   "animate-ns-scrim-out": "kit-fade-out var(--dur-exit) var(--ease-out) both",
 };
 /** The keyframes the house's animations name that app.css does not keep. */
 const KEYFRAMES: Record<string, string> = {
-  "check-draw": "from {\n  stroke-dashoffset: 1;\n}\nto {\n  stroke-dashoffset: 0;\n}",
+  "check-draw":
+    "from {\n  stroke-dashoffset: 1;\n}\nto {\n  stroke-dashoffset: 0;\n}",
   "thinking-word":
     "0% {\n  opacity: 0;\n  transform: translateY(80%);\n}\n1.5%,\n25% {\n  opacity: 1;\n  transform: translateY(0);\n}\n26%,\n100% {\n  opacity: 0;\n  transform: translateY(-80%);\n}",
   "thinking-circle":

@@ -59,10 +59,7 @@
   {#if failed}
     <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>
   {:else if versions.length === 0}
-    <p
-      data-slot="note"
-      class="max-w-c-measure type-meta text-ink-muted"
-    >
+    <p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
       Nothing has been saved over yet.
     </p>
   {:else}
@@ -80,7 +77,8 @@
             >
               {new Date(version.createdAt).toLocaleString()}
               · from {sourceLabel(version.source)}
-              · <span class="font-(family-name:--font-mono)"
+              ·
+              <span class="font-(family-name:--font-mono)"
                 >{version.hash.slice(0, 7)}</span
               >
             </span>

@@ -14,4 +14,3 @@
   class="inline-flex size-icon-md flex-none text-inherit *:size-full"
   data-harness-logo={harness}><Mark /></span
 >
-

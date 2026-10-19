@@ -128,31 +128,34 @@
     // added node is searched, not only matched. A toast is marked
     // `data-removed` as it starts to leave, and unmarked if it is kept after
     // all.
+    /** A toast's `data-removed` set (it leaves) or cleared (kept after all). */
+    const flagged = (toast: HTMLElement, was: string | null) => {
+      if (toast.dataset.removed === "true") {
+        leave(toast);
+      } else if (was === "true") {
+        fade(toast, 0, 1, "--dur-panel");
+      }
+    };
+    /** Every toast an added node brings, the node itself included. */
+    const arrived = (node: Node) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+      if (node.dataset.sonnerToast !== undefined) {
+        enter(node);
+      }
+      for (const toast of node.querySelectorAll<HTMLElement>(
+        "[data-sonner-toast]"
+      )) {
+        enter(toast);
+      }
+    };
     const arrivals = new MutationObserver((changes) => {
       for (const change of changes) {
-        if (
-          change.type === "attributes" &&
-          change.target instanceof HTMLElement
-        ) {
-          if (change.target.dataset.removed === "true") {
-            leave(change.target);
-          } else if (change.oldValue === "true") {
-            fade(change.target, 0, 1, "--dur-panel");
-          }
-          continue;
-        }
-        for (const node of change.addedNodes) {
-          if (!(node instanceof HTMLElement)) {
-            continue;
-          }
-          if (node.dataset.sonnerToast !== undefined) {
-            enter(node);
-          }
-          for (const toast of node.querySelectorAll<HTMLElement>(
-            "[data-sonner-toast]"
-          )) {
-            enter(toast);
-          }
+        if (change.type !== "attributes") {
+          change.addedNodes.forEach(arrived);
+        } else if (change.target instanceof HTMLElement) {
+          flagged(change.target, change.oldValue);
         }
       }
     });

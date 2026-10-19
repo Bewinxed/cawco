@@ -2085,8 +2085,7 @@
     type="button"
   >
     <PendingContent icon={IconSend} pending={sending} />
-    <span data-slot="send-label" class="in-form-compact:hidden"
-      >Send picks</span
+    <span data-slot="send-label" class="in-form-compact:hidden">Send picks</span
     >
   </button>
 {/snippet}
@@ -2300,9 +2299,7 @@
   >
     <IconChat /><span class="in-form-compact:hidden">Comments</span>
     {#if openCount > 0}
-      <span data-slot="count" class="min-w-c-count-digit"
-        >{openCount}</span
-      >
+      <span data-slot="count" class="min-w-c-count-digit">{openCount}</span>
     {/if}
     {#if !pinsShown}
       <!-- ⇧C hid the pins: said where the person looks for them. -->
@@ -2312,8 +2309,8 @@
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
-    <IconChat /><span>Comments</span>{#if openCount > 0}<span class="ms-auto text-ink-muted num"
-        >{openCount}</span
+    <IconChat /><span>Comments</span>{#if openCount > 0}<span
+        class="ms-auto text-ink-muted num">{openCount}</span
       >{/if}
   </DropdownMenu.Item>
 {/snippet}

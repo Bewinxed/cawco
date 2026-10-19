@@ -674,7 +674,8 @@
       aria-label={label}
       class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none max-desk:coarse:after:start-auto max-desk:coarse:after:end-0 max-desk:coarse:after:top-(--caw-hit-top) max-desk:coarse:after:bottom-auto max-desk:coarse:after:size-c-btn-h-lg"
       data-needs-caw
-      style:--caw-hit-top="calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)"
+      style:--caw-hit-top="calc((var(--c-bar-caw-glass-phone) -
+      var(--c-btn-h-lg)) / 2)"
       type="button"
     >
       <!-- His head: his face and the clip playing over it in one cell,

@@ -109,10 +109,8 @@
       style={`--delay:${i * 35}ms`}
       type="button"
     >
-      <span
-        data-slot="tile"
-        class="ns-tile size-c-mark"
-        style:color={row.hue}><Icon class="size-icon-md" /></span
+      <span data-slot="tile" class="ns-tile size-c-mark" style:color={row.hue}
+        ><Icon class="size-icon-md" /></span
       >
       <span data-slot="text" class="min-w-0 flex-1">
         <span data-slot="name" class="type-label block">{row.name}</span>
