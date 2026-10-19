@@ -4,31 +4,31 @@
  * pressed "Open the ports": UDP and TCP 443 (and TCP 80 for a certificate
  * over HTTP), then the UDP relay range port by port. A router whose table
  * caps the range keeps the listener mapped and the range is a forward by
- * hand. Each lease is renewed before it ends; `relay.remove` unmaps them.
+ * hand. `relay.remove` takes every mapping back.
  *
  * Asked in turn, the first that answers maps:
- * 1. UPnP, IGD v2 then v1, found by SSDP and asked over SOAP by
- *    {@link upnpGateway}: `AddAnyPortMapping` on `WANIPConnection:2`,
- *    `AddPortMapping` on `WANIPConnection:1` or `WANPPPConnection:1`.
- *    miniupnpd, most home routers' UPnP, advertises v1 by default ("My
- *    solution is to default to IGD v1", github.com/miniupnp/miniupnp/issues/277),
- *    and `@achingbrain/nat-port-mapper` 4.0.5, its newest, finds and maps v2
- *    alone, its every UPnP call failing under Bun besides (its `device.run`
- *    hands the map's `protocol: 'udp'` to `fetch`, which Bun refuses:
- *    "fetch: 'protocol' must be "http2", "h2", "http3", "h3", "http1.1", or
- *    "h1"");
- * 2. NAT-PMP at the default route's gateway, with nat-port-mapper ("Port
- *    mapping with UPnP and NAT-PMP", npmjs.com/package/@achingbrain/nat-port-mapper),
- *    whose NAT-PMP is a UDP socket of its own.
+ * 1. UPnP, with `@runonflux/nat-upnp` ("UPnP port mapping client for Node.js
+ *    with IGD v1/v2 support", github.com/RunOnFlux/nat-upnp): the gateway
+ *    SSDP finds, its WAN connection service (IGD v2's before v1's), each port
+ *    by `AddPortMapping`, asked again for a permanent lease where the router
+ *    takes only those (725, OnlyPermanentLeasesSupported);
+ * 2. NAT-PMP at the default route's gateway (`default-gateway`), with
+ *    `@achingbrain/nat-port-mapper`'s NAT-PMP client. Its UPnP is not used:
+ *    under Bun its every UPnP call fails (its `device.run` hands `protocol:
+ *    'udp'` to `fetch`, which Bun refuses: "fetch: 'protocol' must be
+ *    "http2", "h2", "http3", "h3", "http1.1", or "h1"").
  *
- * A scratch fleet names its stand-in gateway's descriptor URL
- * (`CAWCO_UPNP_GATEWAY`): then that gateway alone is asked, by the version
- * its descriptor names, never one SSDP finds and never NAT-PMP, so no
- * request reaches a real router.
+ * What neither library does is ours, each part saying why where it stands:
+ * the leases' renewal ({@link holding}), a fresh NAT-PMP client past an
+ * unanswered request ({@link natPmpClient}), and the relay's own ports, the
+ * range taken back when the router caps it ({@link mapRange}).
+ *
+ * A scratch fleet names its stand-in gateways (`CAWCO_UPNP_GATEWAY`, a
+ * descriptor URL; `CAWCO_NAT_PMP_GATEWAY`, an address): then only those are
+ * asked, never SSDP and never the default route, so no request reaches a
+ * real router.
  */
-import { createSocket } from "node:dgram";
-import { readFile } from "node:fs/promises";
-import { pmpNat } from "@achingbrain/nat-port-mapper";
+import { type MapPortOptions, pmpNat } from "@achingbrain/nat-port-mapper";
 import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import {
@@ -39,6 +39,8 @@ import {
   STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
 } from "@cawco/core/stream-relay";
+import { Client } from "@runonflux/nat-upnp";
+import { gateway4async } from "default-gateway";
 
 /** How long a gateway has to be found, and each mapping to be answered. */
 const FIND_MS = 5000;
@@ -48,33 +50,21 @@ const DESCRIPTION = "CawCo stream relay";
 /** A lease asked for, in seconds, and renewed a minute before it ends. */
 const LEASE_S = 3600;
 const RENEW_BEFORE_MS = 60_000;
-/** UPnP IGD's own words for its device and connection services. */
-const IGD_V1 = "urn:schemas-upnp-org:device:InternetGatewayDevice:1";
-const IGD_V2 = "urn:schemas-upnp-org:device:InternetGatewayDevice:2";
-const CONNECTIONS = [
-  "urn:schemas-upnp-org:service:WANIPConnection:2",
-  "urn:schemas-upnp-org:service:WANIPConnection:1",
-  "urn:schemas-upnp-org:service:WANPPPConnection:1",
-];
-/** The routing table's fields, an SSDP answer's location, and the descriptor's and SOAP answers' parts. */
-const FIELDS = /\s+/;
-const BYTE = /../g;
-const LOCATION = /^location:\s*(\S+)/im;
-const DEVICE_TYPE = /<deviceType>\s*([^<]+?)\s*<\/deviceType>/;
-const SERVICE = /<service>[\s\S]*?<\/service>/g;
-const SERVICE_TYPE = /<serviceType>\s*([^<]+?)\s*<\/serviceType>/;
-const CONTROL_URL = /<controlURL>\s*([^<]+?)\s*<\/controlURL>/;
-const ERROR_CODE = /<errorCode>\s*(\d+)/;
-const ERROR_WORDS = /<errorDescription>\s*([^<]+)/;
-const RESERVED_PORT = /<NewReservedPort>\s*(\d+)/;
-/** UPnP IGD v1's fault for a router that takes only permanent leases (WANIPConnection:1, error 725). */
-const ONLY_PERMANENT = 725;
 
-/** A router's port mapper, whatever protocol it answers: one port mapped to itself, and every mapping taken back. */
+type Protocol = "udp" | "tcp";
+
+/** One protocol's client for one router: a port mapped to itself on the relay's machine, one taken back, and the client closed. */
+interface PortClient {
+  close: () => Promise<void>;
+  map: (port: number, protocol: Protocol) => Promise<boolean>;
+  unmap: (port: number, protocol: Protocol) => Promise<void>;
+}
+
+/** The relay's mappings on one router: made, taken back, and every one taken back on `stop`. */
 interface PortGateway {
-  map: (port: number, lan: string, protocol: "udp" | "tcp") => Promise<boolean>;
+  map: (port: number, protocol: Protocol) => Promise<boolean>;
   stop: () => Promise<void>;
-  unmap: (port: number, protocol: "udp" | "tcp") => Promise<void>;
+  unmap: (port: number, protocol: Protocol) => Promise<void>;
 }
 
 /** `read` given `ms` to answer (core bounded.ts `readWithin`); unanswered, it throws saying what went unanswered. */
@@ -96,323 +86,244 @@ let mapped: { gateway: PortGateway; how: RelayMapHow } | null = null;
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-/* ------------------------------------------------------------------ */
-/* NAT-PMP, with nat-port-mapper                                        */
-/* ------------------------------------------------------------------ */
-
-type LibraryGateway = ReturnType<typeof pmpNat>;
-
-/** nat-port-mapper's NAT-PMP gateway as a {@link PortGateway}: its external port must be the one asked. */
-const fromLibrary = (gateway: LibraryGateway): PortGateway => ({
-  map: async (port, lan, protocol) => {
-    try {
-      const mapping = await within(
-        MAP_MS,
-        `NAT-PMP ${protocol} ${port}`,
-        (signal) =>
-          gateway.map(port, lan, {
-            protocol,
-            externalPort: port,
-            description: DESCRIPTION,
-            signal,
-          })
-      );
-      if (mapping.externalPort !== port) {
-        await gateway.unmap(port).catch(() => undefined);
-        return false;
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  },
-  unmap: async (port) => {
-    await gateway.unmap(port).catch(() => undefined);
-  },
-  stop: async () => {
-    await gateway.stop().catch(() => undefined);
-  },
-});
-
-/** The default route's gateway, from the kernel's routing table (Linux): `/proc/net/route`'s gateway is little-endian hex. */
-const defaultGateway = async (): Promise<string | undefined> => {
-  const table = await readFile("/proc/net/route", "utf8").catch(() => "");
-  for (const line of table.split("\n").slice(1)) {
-    const [, destination, gateway] = line.trim().split(FIELDS);
-    if (destination === "00000000" && gateway && gateway !== "00000000") {
-      const bytes = gateway.match(BYTE)?.map((hex) => Number.parseInt(hex, 16));
-      return bytes ? bytes.reverse().join(".") : undefined;
-    }
-  }
-};
-
-/* ------------------------------------------------------------------ */
-/* UPnP IGD v2 and v1                                                   */
-/* ------------------------------------------------------------------ */
-
-/** The descriptor URLs that answer an SSDP search for `target` within {@link FIND_MS}. */
-const ssdpSearch = (target: string): Promise<string[]> =>
-  new Promise((resolve) => {
-    const socket = createSocket("udp4");
-    const found = new Set<string>();
-    const done = () => {
-      try {
-        socket.close();
-      } catch {
-        // already closed
-      }
-      resolve([...found]);
-    };
-    socket.on("message", (message) => {
-      const location = LOCATION.exec(message.toString())?.[1];
-      if (location) {
-        found.add(location);
-      }
-    });
-    socket.on("error", done);
-    socket.bind(0, () => {
-      const search = [
-        "M-SEARCH * HTTP/1.1",
-        "HOST: 239.255.255.250:1900",
-        'MAN: "ssdp:discover"',
-        "MX: 2",
-        `ST: ${target}`,
-        "",
-        "",
-      ].join("\r\n");
-      socket.send(search, 1900, "239.255.255.250");
-    });
-    setTimeout(done, FIND_MS).unref();
-  });
-
-/** A descriptor's device type and its WAN connection service (the first of {@link CONNECTIONS} it lists), its control URL made whole. */
-const describe = async (
-  location: string
-): Promise<{ device: string; service?: string; control?: string }> => {
-  const xml = await within(
-    FIND_MS,
-    `the gateway's descriptor at ${location}`,
-    async (signal) => (await fetch(location, { signal })).text()
-  );
-  const device = DEVICE_TYPE.exec(xml)?.[1] ?? "";
-  for (const block of xml.match(SERVICE) ?? []) {
-    const service = SERVICE_TYPE.exec(block)?.[1];
-    const control = CONTROL_URL.exec(block)?.[1];
-    if (service && control && CONNECTIONS.includes(service)) {
-      return {
-        device,
-        service,
-        control: new URL(control, location).toString(),
-      };
-    }
-  }
-  return { device };
-};
-
-/** One SOAP action on an IGD v1 connection service: answered, or its UPnP error code (and words). */
-const soap = async (
-  control: string,
-  service: string,
-  action: string,
-  args: [string, string | number][]
-): Promise<
-  { ok: true; body: string } | { ok: false; code: number; said: string }
-> => {
-  const body = `<?xml version="1.0"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-<s:Body><u:${action} xmlns:u="${service}">${args.map(([name, value]) => `<${name}>${value}</${name}>`).join("")}</u:${action}></s:Body>
-</s:Envelope>`;
-  try {
-    const response = await within(
-      MAP_MS,
-      `${action} at ${control}`,
-      async (signal) => {
-        const sent = await fetch(control, {
-          method: "POST",
-          headers: {
-            "content-type": 'text/xml; charset="utf-8"',
-            soapaction: `"${service}#${action}"`,
-          },
-          body,
-          signal,
-        });
-        return { ok: sent.ok, status: sent.status, text: await sent.text() };
-      }
-    );
-    const { text } = response;
-    if (response.ok) {
-      return { ok: true, body: text };
-    }
-    return {
-      ok: false,
-      code: Number(ERROR_CODE.exec(text)?.[1] ?? response.status),
-      said: ERROR_WORDS.exec(text)?.[1] ?? `HTTP ${response.status}`,
-    };
-  } catch (error) {
-    return { ok: false, code: -1, said: said(error) };
-  }
+const keyOf = (port: number, protocol: Protocol) => `${protocol}:${port}`;
+const portOf = (key: string): [number, Protocol] => {
+  const [protocol, port] = key.split(":") as [Protocol, string];
+  return [Number(port), protocol];
 };
 
 /**
- * A UPnP gateway's WAN connection service: on IGD v2 (WANIPConnection:2) each
- * port by `AddAnyPortMapping`, the port it reserved checked to be the one
- * asked; on v1 by `AddPortMapping`. A lease of {@link LEASE_S}, renewed a
- * minute before it ends, or on v1 a permanent one where the router takes
- * only those.
+ * The mappings `client` makes, held: each asked again a minute before its
+ * lease ends, and every one taken back on `stop`. Ours because neither
+ * library renews one here: nat-upnp has no renewal, and nat-port-mapper's
+ * (`autoRefresh`) sends its own unmap's delete again without end (904 times
+ * in a second against the stand-in) and keys its timers by port alone, so
+ * UDP and TCP 443 share one.
  */
-const upnpGateway = (service: string, control: string): PortGateway => {
-  const v2 = service.endsWith(":2");
-  const leases = new Map<string, ReturnType<typeof setTimeout> | null>();
-  const add = async (
-    port: number,
-    lan: string,
-    protocol: "udp" | "tcp",
-    lease: number
-  ) =>
-    soap(control, service, v2 ? "AddAnyPortMapping" : "AddPortMapping", [
-      ["NewRemoteHost", ""],
-      ["NewExternalPort", port],
-      ["NewProtocol", protocol.toUpperCase()],
-      ["NewInternalPort", port],
-      ["NewInternalClient", lan],
-      ["NewEnabled", 1],
-      ["NewPortMappingDescription", DESCRIPTION],
-      ["NewLeaseDuration", lease],
-    ]);
-  const map = async (
-    port: number,
-    lan: string,
-    protocol: "udp" | "tcp"
-  ): Promise<boolean> => {
-    const key = `${protocol}:${port}`;
-    let answer = await add(port, lan, protocol, LEASE_S);
-    let lease = LEASE_S;
-    if (!(answer.ok || v2) && answer.code === ONLY_PERMANENT) {
-      answer = await add(port, lan, protocol, 0);
-      lease = 0;
-    }
-    if (!answer.ok) {
-      return false;
-    }
-    // IGD v2 may reserve another port when the one asked is taken: the
-    // relay needs its own, so that one is given back.
-    const reserved = RESERVED_PORT.exec(answer.body)?.[1];
-    if (v2 && Number(reserved) !== port) {
-      if (reserved) {
-        await soap(control, service, "DeletePortMapping", [
-          ["NewRemoteHost", ""],
-          ["NewExternalPort", reserved],
-          ["NewProtocol", protocol.toUpperCase()],
-        ]);
+const holding = (client: PortClient): PortGateway => {
+  const held = new Set<string>();
+  let renewal: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  const renewAll = async () => {
+    for (const key of [...held]) {
+      if (held.has(key) && !stopped) {
+        // biome-ignore lint/performance/noAwaitInLoops: a router's table takes one mapping at a time.
+        await client.map(...portOf(key));
       }
-      return false;
     }
-    const renew =
-      lease > 0
-        ? setTimeout(
-            () => {
-              map(port, lan, protocol).catch(() => undefined);
-            },
-            lease * 1000 - RENEW_BEFORE_MS
-          )
-        : null;
-    renew?.unref();
-    const before = leases.get(key);
-    if (before) {
-      clearTimeout(before);
+    if (!stopped) {
+      schedule();
     }
-    leases.set(key, renew);
-    return true;
   };
-  const unmap = async (port: number, protocol: "udp" | "tcp") => {
-    const key = `${protocol}:${port}`;
-    const renew = leases.get(key);
-    if (renew) {
-      clearTimeout(renew);
-    }
-    leases.delete(key);
-    await soap(control, service, "DeletePortMapping", [
-      ["NewRemoteHost", ""],
-      ["NewExternalPort", port],
-      ["NewProtocol", protocol.toUpperCase()],
-    ]);
+  const schedule = () => {
+    renewal = setTimeout(
+      () => {
+        renewAll().catch(() => undefined);
+      },
+      LEASE_S * 1000 - RENEW_BEFORE_MS
+    );
+    renewal.unref();
+  };
+  const unmap = async (port: number, protocol: Protocol) => {
+    held.delete(keyOf(port, protocol));
+    await client.unmap(port, protocol);
   };
   return {
-    map,
+    map: async (port, protocol) => {
+      const ok = await client.map(port, protocol);
+      if (ok) {
+        held.add(keyOf(port, protocol));
+        if (!renewal) {
+          schedule();
+        }
+      }
+      return ok;
+    },
     unmap,
     stop: async () => {
-      for (const key of [...leases.keys()]) {
-        const [protocol, port] = key.split(":") as ["udp" | "tcp", string];
+      stopped = true;
+      clearTimeout(renewal);
+      for (const key of [...held]) {
         // biome-ignore lint/performance/noAwaitInLoops: a router's table takes one change at a time.
-        await unmap(Number(port), protocol);
+        await unmap(...portOf(key));
       }
+      await client.close();
     },
   };
 };
 
-/** The UPnP gateway at `location`, when its descriptor names an IGD and a WAN connection service. */
-const upnpAt = async (location: string): Promise<PortGateway | undefined> => {
-  const found = await describe(location);
-  return (found.device === IGD_V1 || found.device === IGD_V2) &&
-    found.service &&
-    found.control
-    ? upnpGateway(found.service, found.control)
-    : undefined;
-};
-
-/* ------------------------------------------------------------------ */
-/* The ways a router is asked, in turn                                  */
-/* ------------------------------------------------------------------ */
-
-type Way = [RelayMapHow, string, () => Promise<PortGateway | undefined>];
-
-/** The stand-in's descriptor named: that gateway alone. */
-const standInWays = (location: string): Way[] => [
-  ["UPnP", "UPnP", () => upnpAt(location)],
-];
-
-/** A real router: UPnP, IGD v2 then v1, found by SSDP; then NAT-PMP at the default route's gateway. */
-const routerWays = (): Way[] => [
-  [
-    "UPnP",
-    "UPnP",
-    async () => {
-      for (const target of [IGD_V2, IGD_V1]) {
-        for (const location of await ssdpSearch(target)) {
-          // biome-ignore lint/performance/noAwaitInLoops: the first gateway that names a WAN connection is the one.
-          const gateway = await upnpAt(location).catch(() => undefined);
-          if (gateway) {
-            return gateway;
-          }
-        }
+/**
+ * nat-upnp's client for the gateway described at `url`, or the one SSDP
+ * finds (kept between calls, `cacheGateway`, or each call searches again),
+ * every mapping to `lan`: none when no gateway describes itself within
+ * {@link FIND_MS}.
+ */
+const upnpClient = async (
+  lan: string,
+  url: string | undefined
+): Promise<PortClient | undefined> => {
+  const client = new Client(
+    url
+      ? { url, localAddress: lan }
+      : { localAddress: lan, timeout: FIND_MS, cacheGateway: true }
+  );
+  const device = await within(FIND_MS, "the UPnP gateway", async (signal) =>
+    (await client.getGateway({ signal })).getDevice()
+  ).catch((error: unknown) => {
+    client.close();
+    throw error;
+  });
+  if (!device) {
+    client.close();
+    return;
+  }
+  return {
+    map: async (port, protocol) => {
+      try {
+        await within(MAP_MS, `UPnP ${protocol} ${port}`, (signal) =>
+          client.createMapping({
+            public: port,
+            private: { port, host: lan },
+            protocol,
+            description: DESCRIPTION,
+            ttl: LEASE_S,
+            signal,
+          })
+        );
+        return true;
+      } catch {
+        return false;
       }
     },
-  ],
-  [
-    "NAT-PMP",
-    "NAT-PMP",
-    async () => {
-      const at = await defaultGateway();
-      return at
-        ? fromLibrary(pmpNat(at, { description: DESCRIPTION }))
-        : undefined;
+    unmap: async (port, protocol) => {
+      await within(MAP_MS, `UPnP ${protocol} ${port} taken back`, (signal) =>
+        client.removeMapping({ public: port, protocol, signal })
+      ).catch(() => undefined);
     },
-  ],
-];
+    close: () => Promise.resolve(client.close()),
+  };
+};
+
+/**
+ * nat-port-mapper's NAT-PMP client for the gateway at `at`, every mapping
+ * from this machine (NAT-PMP maps the asking address) to its own port: none
+ * when the gateway doesn't answer for its external address within
+ * {@link FIND_MS}. Its refresh is off ({@link holding} renews), so its `ttl`
+ * reaches only the request's lifetime field, which is seconds (RFC 6886
+ * §3.3), though its types say ms. It sends each request once and holds its
+ * queue behind one unanswered, so an unanswered request closes it and opens
+ * a fresh one.
+ */
+const natPmpClient = async (
+  at: string,
+  lan: string
+): Promise<PortClient | undefined> => {
+  const open = () =>
+    pmpNat(at, { description: DESCRIPTION, autoRefresh: false });
+  let nat = open();
+  const ask = async <T>(
+    what: string,
+    ms: number,
+    read: (signal: AbortSignal) => Promise<T>
+  ): Promise<T> => {
+    const answer = await readWithin(ms, read);
+    if (answer.kind === "unanswered") {
+      await nat.stop().catch(() => undefined);
+      nat = open();
+      throw new Error(`${what}: no answer within ${ms} ms`);
+    }
+    return answer.value;
+  };
+  let found: string;
+  try {
+    found = await ask("the NAT-PMP gateway", FIND_MS, (signal) =>
+      nat.externalIp({ signal })
+    );
+  } catch (error) {
+    await nat.stop().catch(() => undefined);
+    throw error;
+  }
+  if (!found) {
+    await nat.stop().catch(() => undefined);
+    return;
+  }
+  const unmap = async (port: number, protocol: Protocol) => {
+    // Its unmap is its map at lifetime 0 with these options spread in: the
+    // protocol (its own default is TCP), and its refresh off, which on sends
+    // the delete again without end.
+    const off: MapPortOptions = { protocol, autoRefresh: false };
+    await ask(`NAT-PMP ${protocol} ${port} taken back`, MAP_MS, (signal) =>
+      nat.unmap(port, { ...off, signal })
+    ).catch(() => undefined);
+  };
+  return {
+    map: async (port, protocol) => {
+      try {
+        const mapping = await ask(
+          `NAT-PMP ${protocol} ${port}`,
+          MAP_MS,
+          (signal) =>
+            nat.map(port, lan, {
+              protocol,
+              externalPort: port,
+              ttl: LEASE_S,
+              autoRefresh: false,
+              description: DESCRIPTION,
+              signal,
+            })
+        );
+        if (mapping.externalPort === port) {
+          return true;
+        }
+        // Another port given in its place: the relay needs its own, so that one goes back.
+        await unmap(port, protocol);
+        return false;
+      } catch {
+        return false;
+      }
+    },
+    unmap,
+    close: async () => {
+      await nat.stop().catch(() => undefined);
+    },
+  };
+};
+
+type Way = [RelayMapHow, () => Promise<PortClient | undefined>];
+
+/** The stand-ins named: those alone. A real router: UPnP by SSDP, then NAT-PMP at the default route's gateway. */
+const waysFor = (lan: string): Way[] => {
+  const upnp = readEnv(CAWCO_ENV.upnpGateway);
+  const natPmp = readEnv(CAWCO_ENV.natPmpGateway);
+  if (upnp || natPmp) {
+    const named: Way[] = [];
+    if (upnp) {
+      named.push(["UPnP", () => upnpClient(lan, upnp)]);
+    }
+    if (natPmp) {
+      named.push(["NAT-PMP", () => natPmpClient(natPmp, lan)]);
+    }
+    return named;
+  }
+  return [
+    ["UPnP", () => upnpClient(lan, undefined)],
+    ["NAT-PMP", async () => natPmpClient((await gateway4async()).gateway, lan)],
+  ];
+};
 
 /** The listener (and port 80 with `http`): every mapping answered, or none kept. */
 const mapListener = async (
   gateway: PortGateway,
-  args: RelayMapArgs
+  http: boolean
 ): Promise<boolean> => {
-  const wanted: [number, "udp" | "tcp"][] = [
+  const wanted: [number, Protocol][] = [
     [STREAM_RELAY_PORT, "udp"],
     [STREAM_RELAY_PORT, "tcp"],
-    ...(args.http ? [[RELAY_HTTP_PORT, "tcp"] as [number, "tcp"]] : []),
+    ...(http ? [[RELAY_HTTP_PORT, "tcp"] as [number, "tcp"]] : []),
   ];
   for (const [port, protocol] of wanted) {
     // biome-ignore lint/performance/noAwaitInLoops: a router's table takes one mapping at a time.
-    if (!(await gateway.map(port, args.lan, protocol))) {
+    if (!(await gateway.map(port, protocol))) {
       await gateway.stop();
       return false;
     }
@@ -421,15 +332,12 @@ const mapListener = async (
 };
 
 /** The relay range, port by port: all mapped, or the ones mapped taken back (the range is then a forward by hand). */
-const mapRange = async (
-  gateway: PortGateway,
-  lan: string
-): Promise<boolean> => {
+const mapRange = async (gateway: PortGateway): Promise<boolean> => {
   const [first, last] = STREAM_RELAY_PORTS.relayRange;
   const done: number[] = [];
   for (let port = first; port <= last; port += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: a router's table takes one mapping at a time.
-    if (!(await gateway.map(port, lan, "udp"))) {
+    if (!(await gateway.map(port, "udp"))) {
       for (const one of done) {
         // biome-ignore lint/performance/noAwaitInLoops: taken back in turn, as they were made.
         await gateway.unmap(one, "udp");
@@ -450,31 +358,29 @@ export const mapRelayPorts = async (
   args: RelayMapArgs
 ): Promise<RelayMapped> => {
   await unmapRelayPorts();
-  const named = readEnv(CAWCO_ENV.upnpGateway);
   const tried: string[] = [];
-  for (const [how, label, find] of named ? standInWays(named) : routerWays()) {
+  for (const [how, find] of waysFor(args.lan)) {
     // biome-ignore lint/performance/noAwaitInLoops: each way only once the one before did not answer.
-    const gateway = await find().catch((error: unknown) => {
-      tried.push(`${label}: ${said(error)}`);
+    const client = await find().catch((error: unknown) => {
+      tried.push(`${how}: ${said(error)}`);
       return null;
     });
-    if (gateway === null) {
+    if (client === null) {
       continue;
     }
-    if (!gateway) {
-      tried.push(`${label}: no gateway answered`);
+    if (!client) {
+      tried.push(`${how}: no gateway answered`);
       continue;
     }
-    if (!(await mapListener(gateway, args))) {
-      tried.push(
-        `${label}: the router refused UDP and TCP ${STREAM_RELAY_PORT}`
-      );
+    const gateway = holding(client);
+    if (!(await mapListener(gateway, args.http))) {
+      tried.push(`${how}: the router refused UDP and TCP ${STREAM_RELAY_PORT}`);
       continue;
     }
     mapped = { gateway, how };
-    const range = await mapRange(gateway, args.lan);
+    const range = await mapRange(gateway);
     console.info(
-      `[relay] the router opened UDP and TCP ${STREAM_RELAY_PORT}${args.http ? ` and TCP ${RELAY_HTTP_PORT}` : ""} to ${args.lan} by ${label}${range ? ", and the relay range" : "; it capped the relay range"}`
+      `[relay] the router opened UDP and TCP ${STREAM_RELAY_PORT}${args.http ? ` and TCP ${RELAY_HTTP_PORT}` : ""} to ${args.lan} by ${how}${range ? ", and the relay range" : "; it capped the relay range"}`
     );
     return { how, listener: true, range };
   }
@@ -482,7 +388,7 @@ export const mapRelayPorts = async (
   return { how: null, listener: false, range: false, why: tried.join("; ") };
 };
 
-/** Every mapping the relay asked for taken back, and the leases' renewals with them. */
+/** Every mapping the relay asked for taken back, and the leases' renewal with them. */
 export const unmapRelayPorts = async (): Promise<void> => {
   const was = mapped;
   mapped = null;

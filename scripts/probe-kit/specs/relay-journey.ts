@@ -9,8 +9,10 @@
  *   hub by `CAWCO_RELAY_DNS`;
  * - Cloudflare's API and its IPv4 ranges, named by `CAWCO_CLOUDFLARE_API` and
  *   `CAWCO_CLOUDFLARE_IPS`;
- * - a UPnP gateway (IGD v1, then v2) whose table the spec reads, named to the
- *   agent by `CAWCO_UPNP_GATEWAY`, so neither SSDP nor NAT-PMP is asked;
+ * - the router's port mappers (router-stand-ins.ts), each table read by the
+ *   spec: a UPnP gateway (IGD v1, then v2) named to the agent by
+ *   `CAWCO_UPNP_GATEWAY`, and a NAT-PMP gateway by `CAWCO_NAT_PMP_GATEWAY`,
+ *   so neither SSDP nor the default route's gateway is asked;
  * - the browser's `RTCPeerConnection`, scripted per leg, so the page's proof
  *   reaches no relay;
  * - every page request through a domain, as Cloudflare's tunnel forwards it
@@ -30,7 +32,10 @@
  *    proxied, points elsewhere), Cloudflare refusing a token, then adding the
  *    record DNS only and ticking;
  * 3. the router: an IGD v1 router capping the range (443 mapped, the range a
- *    forward by hand), one refusing (the forwards), an IGD v2 one mapping all;
+ *    forward by hand), one refusing on UPnP and NAT-PMP (the forwards), one
+ *    with NAT-PMP alone mapping all, an IGD v1 one taking only permanent
+ *    leases, and an IGD v2 one mapping all, each taking back what the one
+ *    before held;
  * 4–6. no container runtime under the scratch agent (its `DOCKER_HOST` names a
  *    socket that isn't there, on every machine): the low ports not drawn,
  *    the certificate failing with that sentence and Retry, the name skipped
@@ -67,6 +72,7 @@ import {
 import { applySetupPicks } from "../../../packages/hub/src/setup";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import { natPmpStandIn, upnpGatewayStandIn } from "../router-stand-ins";
 
 const DOMAIN = "outpost.cawco-probe.dev";
 const ZONE = "cawco-probe.dev";
@@ -85,6 +91,8 @@ const CLOUDFLARE_ANSWER = "104.16.1.1";
 const ELSEWHERE = "203.0.113.9";
 /** How long a name check has to answer: the hub asks every 30 s. */
 const NAME_MS = 45_000;
+/** The lease the agent asks each mapping for, in seconds (relay-router.ts). */
+const LEASE_S = 3600;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -240,8 +248,6 @@ const cloudflareStandIn = () => {
   return { server, records, asked, base: `http://127.0.0.1:${server.port}` };
 };
 
-/** A SOAPAction header's action: `"urn:…:WANIPConnection:2#AddAnyPortMapping"`. */
-const SOAP_ACTION = /#(\w+)"?$/;
 /** An address a router's network hands out. */
 const PRIVATE_V4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
 /** Caw's head, by what it says of Needs you. */
@@ -250,112 +256,6 @@ const NEEDS_HEAD = /^Needs you, \d+|^All caught up/;
 const NO_RUNTIME =
   /could not start on .+: it runs in a container, and this machine has no container runtime/;
 
-/** One mapping in the stand-in gateway's table. */
-interface Mapping {
-  client: string;
-  lease: number;
-  port: number;
-  protocol: string;
-}
-
-/** A UPnP gateway: IGD v1 or v2 by `mode.version`, refusing every mapping, or every one past `mode.cap`. */
-const gatewayStandIn = () => {
-  const mode = {
-    version: 1 as 1 | 2,
-    refuse: false as boolean,
-    cap: null as number | null,
-  };
-  const table = new Map<string, Mapping>();
-  const actions: string[] = [];
-  const envelope = (inner: string) =>
-    `<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>${inner}</s:Body></s:Envelope>`;
-  const xml = (text: string, status = 200) =>
-    new Response(text, {
-      status,
-      headers: { "content-type": 'text/xml; charset="utf-8"' },
-    });
-  const fault = (code: number, said: string) =>
-    xml(
-      envelope(
-        `<s:Fault><faultcode>s:Client</faultcode><faultstring>UPnPError</faultstring><detail><UPnPError xmlns="urn:schemas-upnp-org:control-1-0"><errorCode>${code}</errorCode><errorDescription>${said}</errorDescription></UPnPError></detail></s:Fault>`
-      ),
-      500
-    );
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stand-in router answering each SOAP action its control URL is asked, as a router does.
-    fetch: async (request) => {
-      const url = new URL(request.url);
-      const v = mode.version;
-      const service = `urn:schemas-upnp-org:service:WANIPConnection:${v}`;
-      if (url.pathname === "/rootDesc.xml") {
-        return xml(
-          `<?xml version="1.0"?><root xmlns="urn:schemas-upnp-org:device-1-0"><specVersion><major>1</major><minor>0</minor></specVersion><device><deviceType>urn:schemas-upnp-org:device:InternetGatewayDevice:${v}</deviceType><friendlyName>probe gateway</friendlyName><UDN>uuid:probe-igd-${v}</UDN><deviceList><device><deviceType>urn:schemas-upnp-org:device:WANDevice:${v}</deviceType><UDN>uuid:probe-wan</UDN><deviceList><device><deviceType>urn:schemas-upnp-org:device:WANConnectionDevice:${v}</deviceType><UDN>uuid:probe-conn</UDN><serviceList><service><serviceType>${service}</serviceType><serviceId>urn:upnp-org:serviceId:WANIPConn1</serviceId><controlURL>/ctl</controlURL><eventSubURL>/evt</eventSubURL><SCPDURL>/scpd.xml</SCPDURL></service></serviceList></device></deviceList></device></deviceList></device></root>`
-        );
-      }
-      if (url.pathname !== "/ctl") {
-        return new Response("", { status: 404 });
-      }
-      const action =
-        SOAP_ACTION.exec(request.headers.get("soapaction") ?? "")?.[1] ?? "";
-      const body = await request.text();
-      const arg = (name: string) =>
-        new RegExp(`<${name}>([^<]*)</${name}>`).exec(body)?.[1] ?? "";
-      actions.push(
-        `${action} ${arg("NewProtocol")} ${arg("NewExternalPort")}`.trim()
-      );
-      if (action === "GetExternalIPAddress") {
-        return xml(
-          envelope(
-            `<u:GetExternalIPAddressResponse xmlns:u="${service}"><NewExternalIPAddress>${PUBLIC}</NewExternalIPAddress></u:GetExternalIPAddressResponse>`
-          )
-        );
-      }
-      if (action === "AddPortMapping" || action === "AddAnyPortMapping") {
-        const key = `${arg("NewProtocol").toLowerCase()}:${arg("NewExternalPort")}`;
-        if (mode.refuse) {
-          return fault(718, "ConflictInMappingEntry");
-        }
-        if (mode.cap !== null && !table.has(key) && table.size >= mode.cap) {
-          return fault(728, "NoPortMapsAvailable");
-        }
-        table.set(key, {
-          protocol: arg("NewProtocol").toLowerCase(),
-          port: Number(arg("NewExternalPort")),
-          client: arg("NewInternalClient"),
-          lease: Number(arg("NewLeaseDuration")),
-        });
-        return xml(
-          envelope(
-            action === "AddAnyPortMapping"
-              ? `<u:AddAnyPortMappingResponse xmlns:u="${service}"><NewReservedPort>${arg("NewExternalPort")}</NewReservedPort></u:AddAnyPortMappingResponse>`
-              : `<u:AddPortMappingResponse xmlns:u="${service}"></u:AddPortMappingResponse>`
-          )
-        );
-      }
-      if (action === "DeletePortMapping") {
-        const protocol = arg("NewProtocol").toLowerCase();
-        for (const one of protocol ? [protocol] : ["udp", "tcp"]) {
-          table.delete(`${one}:${arg("NewExternalPort")}`);
-        }
-        return xml(
-          envelope(
-            `<u:DeletePortMappingResponse xmlns:u="${service}"></u:DeletePortMappingResponse>`
-          )
-        );
-      }
-      return fault(401, "Invalid Action");
-    },
-  });
-  return {
-    server,
-    mode,
-    table,
-    actions,
-    descriptor: `http://127.0.0.1:${server.port}/rootDesc.xml`,
-  };
-};
 
 /**
  * The browser's `RTCPeerConnection`, scripted by localStorage's `relay-fake`
@@ -634,7 +534,8 @@ const run = async (kit: Kit): Promise<void> => {
   const names = new Map<string, string[]>();
   const dns = await dnsStandIn(names);
   const cloudflare = cloudflareStandIn();
-  const gateway = gatewayStandIn();
+  const gateway = upnpGatewayStandIn(PUBLIC);
+  const natPmp = await natPmpStandIn(PUBLIC);
   try {
     const fleet = await kit.fleet(respond);
     fleet.launch("sessiond");
@@ -648,6 +549,7 @@ const run = async (kit: Kit): Promise<void> => {
     fleet.launch("agent", [], {
       CAWCO_STUN_SERVER: `stun:127.0.0.1:${stun.port}`,
       CAWCO_UPNP_GATEWAY: gateway.descriptor,
+      CAWCO_NAT_PMP_GATEWAY: "127.0.0.1",
       // No container runtime on any machine: set, `DOCKER_HOST` is the one
       // socket the agent tries (runtime.ts `findRuntime`), and none answers
       // at this path. So no certbot or coturn ever runs here against Let's
@@ -874,7 +776,7 @@ const run = async (kit: Kit): Promise<void> => {
       JSON.stringify({ calls: cloudflare.asked })
     );
 
-    // 3 · The router: v1 capping the range, then refusing, then v2 mapping all.
+    // 3 · The router: v1 capping the range, refusing on UPnP and NAT-PMP, NAT-PMP alone, v1 taking only permanent leases, then v2 mapping all.
     gateway.mode.version = 1;
     gateway.mode.cap = 10;
     const routerAsk = await stepSays(page, "router", words.routerAsk);
@@ -896,27 +798,78 @@ const run = async (kit: Kit): Promise<void> => {
       routerAsk?.includes(words.routerAsk) === true &&
         stepOf(partial, "router")?.how === "UPnP" &&
         listener.join() === "tcp:443,udp:443" &&
-        [...gateway.table.values()].every((one) => one.client === routerLan) &&
-        gateway.actions.some((one) => one.startsWith("AddPortMapping")) &&
+        [...gateway.table.values()].every(
+          (one) => one.client === routerLan && one.lease === LEASE_S
+        ) &&
+        gateway.actions[0] === `AddPortMapping UDP 443 ${LEASE_S}` &&
+        gateway.actions.includes("AddPortMapping UDP 49160 3600") &&
+        gateway.actions.includes("DeletePortMapping UDP 49159") &&
         partialWords?.includes(words.routerPartial("UPnP")) === true &&
         partialWords.includes(
           words.rangeForward(routerLan).split(" ")[0] ?? ""
         ),
-      JSON.stringify({ partialWords, table: listener })
+      JSON.stringify({ partialWords, table: listener, actions: gateway.actions.slice(0, 3) })
     );
     gateway.mode.refuse = true;
+    natPmp.mode.refuse = true;
     await act(fleet, { act: "open-ports" });
     const refused = await journeyOf(fleet);
     const refusedWords = await stepSays(page, "router", words.routerRefused);
     kit.check(
-      `3 · a router refusing every mapping: the forwards to make by hand, "${words.forwards(routerLan, false)}"`,
+      `3 · a router refusing every mapping on UPnP and NAT-PMP alike (the ports held before taken back, ${gateway.table.size} left): the forwards to make by hand, "${words.forwards(routerLan, false)}"`,
       stepOf(refused, "router")?.state === "refused" &&
         gateway.table.size === 0 &&
+        natPmp.table.size === 0 &&
+        natPmp.asked.includes(`map UDP 443 ${LEASE_S}`) &&
         refusedWords?.includes(words.routerRefused) === true,
       String(refusedWords)
     );
     gateway.mode.refuse = false;
     gateway.mode.cap = null;
+    gateway.mode.off = true;
+    natPmp.mode.refuse = false;
+    natPmp.asked.length = 0;
+    await act(fleet, { act: "open-ports" });
+    const byNatPmp = await journeyOf(fleet);
+    const natPmpWords = await stepSays(
+      page,
+      "router",
+      words.routerDone("NAT-PMP")
+    );
+    const natPmpUdp = [...natPmp.table.values()].filter(
+      (one) => one.protocol === "udp"
+    ).length;
+    kit.check(
+      `3 · a router with UPnP off and NAT-PMP on: NAT-PMP mapped UDP and TCP 443 and all ${natPmpUdp - 1} ports of the range, each leased ${LEASE_S} s (asked first ${JSON.stringify(natPmp.asked.slice(0, 3))}); the step ticks "${words.routerDone("NAT-PMP")}"`,
+      stepOf(byNatPmp, "router")?.state === "done" &&
+        stepOf(byNatPmp, "router")?.how === "NAT-PMP" &&
+        natPmp.table.has("tcp:443") &&
+        natPmpUdp === 250 &&
+        [...natPmp.table.values()].every((one) => one.lease === LEASE_S) &&
+        gateway.table.size === 0 &&
+        natPmpWords?.includes(words.routerDone("NAT-PMP")) === true,
+      JSON.stringify({ size: natPmp.table.size, why: stepOf(byNatPmp, "router") })
+    );
+    gateway.mode.off = false;
+    gateway.mode.permanentOnly = true;
+    gateway.actions.length = 0;
+    await act(fleet, { act: "open-ports" });
+    const permanent = await journeyOf(fleet);
+    const leases = [
+      ...new Set([...gateway.table.values()].map((one) => one.lease)),
+    ];
+    kit.check(
+      `3 · an IGD v1 router taking only permanent leases: NAT-PMP's ${natPmpUdp + 1} mappings taken back first (${natPmp.table.size} left), then each port asked again for a permanent lease on its 725 (${gateway.actions.slice(0, 2).join(", ")}), all ${gateway.table.size} held with lease ${leases.join()}`,
+      stepOf(permanent, "router")?.state === "done" &&
+        stepOf(permanent, "router")?.how === "UPnP" &&
+        natPmp.table.size === 0 &&
+        gateway.table.size === 251 &&
+        leases.join() === "0" &&
+        gateway.actions[0] === `AddPortMapping UDP 443 ${LEASE_S}` &&
+        gateway.actions[1] === "AddPortMapping UDP 443 0",
+      JSON.stringify({ size: gateway.table.size, leases })
+    );
+    gateway.mode.permanentOnly = false;
     gateway.mode.version = 2;
     gateway.actions.length = 0;
     await act(fleet, { act: "open-ports" });
@@ -924,13 +877,21 @@ const run = async (kit: Kit): Promise<void> => {
     const udp = [...gateway.table.values()].filter(
       (one) => one.protocol === "udp"
     ).length;
+    const takenBack = gateway.actions.filter((one) =>
+      one.startsWith("DeletePortMapping ")
+    ).length;
+    const adds = gateway.actions.filter((one) => one.startsWith("Add"));
     kit.check(
-      `3 · an IGD v2 router: AddAnyPortMapping for UDP and TCP 443 and all ${udp - 1} ports of the range; the step ticks "${words.routerDone("UPnP")}"`,
+      `3 · an IGD v2 router: the permanent ones taken back (${takenBack} deletes), then AddPortMapping, so each port is the relay's own and not one AddAnyPortMapping picks, for UDP and TCP 443 and all ${udp - 1} ports of the range, leased ${LEASE_S} s; the step ticks "${words.routerDone("UPnP")}"`,
       stepOf(mapped, "router")?.state === "done" &&
         gateway.table.has("tcp:443") &&
         udp === 250 &&
-        gateway.actions.every((one) => !one.startsWith("AddPortMapping")) &&
-        gateway.actions.some((one) => one.startsWith("AddAnyPortMapping")),
+        takenBack === 251 &&
+        adds.length === 251 &&
+        adds.every(
+          (one) =>
+            one.startsWith("AddPortMapping ") && one.endsWith(` ${LEASE_S}`)
+        ),
       JSON.stringify({
         size: gateway.table.size,
         first: gateway.actions.slice(0, 3),
@@ -1135,6 +1096,7 @@ const run = async (kit: Kit): Promise<void> => {
     dns.socket.close();
     cloudflare.server.stop(true);
     gateway.server.stop(true);
+    natPmp.socket.close();
   }
 };
 
