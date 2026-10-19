@@ -113,7 +113,12 @@
   function updateOf(machine: Machine) {
     const phase =
       machine.status === "online" ? machine.binaryUpdate?.phase : undefined;
-    if (!(updates.policy && phase && MOVING.has(phase))) {
+    // A keeper kept from its restart stops every session start here, whatever the update's phase.
+    if (!(
+      updates.policy &&
+      phase &&
+      (MOVING.has(phase) || machine.binaryUpdate?.sessiondKept)
+    )) {
       return null;
     }
     return cellFor(machine, updates.policy);
