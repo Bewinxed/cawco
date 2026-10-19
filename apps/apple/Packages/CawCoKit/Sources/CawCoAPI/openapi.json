@@ -53606,6 +53606,21 @@
             "description": "The session that asked, by the name the board gives it (\"Caw\" for a project's lead).",
             "type": "string"
           },
+          "bound": {
+            "description": "What approving covers, and what it does not widen, under the Approve and\nDeny row (WORDS.md, Permission): \"Approving covers this one command. It\ndoes not widen what Caw may run later.\"",
+            "type": "string"
+          },
+          "caution": {
+            "description": "A fact to read before approving, in the serious register: \"Age unknown: the source carries no dates.\"",
+            "type": "string"
+          },
+          "changed": {
+            "description": "Each setting a write moves, before and after, in the order the write names them.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionSetting"
+            }
+          },
           "changes": {
             "description": "The changes the call makes, each drawn as a diff. Empty when it changes no text.",
             "type": "array",
@@ -53617,31 +53632,95 @@
             "description": "The shell command a shell call runs, whole and out of a boundary's\nrewrite: shown under the summary on every surface, one line until\nopened. Absent for any other call.",
             "type": "string"
           },
+          "consequences": {
+            "description": "What a removal does after it lands (\"After this:\"), one row each. Empty for anything else.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionConsequence"
+            }
+          },
+          "count": {
+            "description": "The count line as words and badges: \"4 settings change: ‹command›,\n‹args›; nothing else · loads in ‹every session›\". `detail` is the same\nline as plain words.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CountPart"
+            }
+          },
           "detail": {
-            "description": "The line under the summary: how much changes and where (\"3 lines changed in Working style\").",
+            "description": "The count line as plain words, for a surface that sets no badges (the push, the peek).",
             "type": "string"
           },
           "fields": {
-            "description": "The rest of the input worth reading, secrets hidden. What the summary and the diffs already say is left out.",
+            "description": "The rest of the input worth reading, secrets hidden. What the lines above and the diffs already say is left out.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PermissionField"
             }
           },
+          "irreversible": {
+            "description": "True when nothing brings it back once approved.",
+            "type": "boolean"
+          },
           "project": {
-            "description": "The project the asker works in, by name; absent for a session in none. The card's head reads \"Caw · cockpit\".",
+            "description": "The project the asker works in, by name; absent for a session in none.",
             "type": "string"
           },
+          "projectId": {
+            "description": "That project's id, for its link.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why the session asks, in its own words: an admin write's `reason`, a\nshell call's `description`. Absent when the call gives none.",
+            "type": "string"
+          },
+          "sections": {
+            "description": "The markdown sections a text change touches, in order.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "subject": {
+            "$ref": "#/components/schemas/PermissionSubject",
+            "description": "The grant line in parts."
+          },
           "summary": {
-            "description": "What will happen and why, in one line: \"Change the fleet's CLAUDE.md\";\nfor a shell call, the session's own reason for it (\"Check whether the\ntwo commits are on origin/main\"), its command under it in `command`.",
+            "description": "The grant line as one string: the subject's parts joined (\"Change MCP server mobbin-web\").",
             "type": "string"
           }
         },
         "required": [
           "asker",
+          "bound",
+          "changed",
           "changes",
+          "consequences",
+          "count",
           "fields",
+          "irreversible",
+          "sections",
+          "subject",
           "summary"
+        ]
+      },
+      "PermissionSetting": {
+        "description": "One setting a write moves: what it held (absent for one it adds) and what it will hold.",
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "description": "What it holds now; \"nothing\" when it is empty; absent when the setting is new.",
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "after",
+          "key"
         ]
       },
       "PermissionChange": {
@@ -53677,6 +53756,65 @@
           "removed"
         ]
       },
+      "PermissionConsequence": {
+        "description": "What a removal does after it lands, one sentence each.",
+        "type": "object",
+        "properties": {
+          "glyph": {
+            "$ref": "#/components/schemas/PermissionConsequenceGlyph",
+            "description": "Which mark leads the row (each surface draws its own glyph for it)."
+          },
+          "href": {
+            "description": "A page that shows what the sentence names.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "glyph",
+          "text"
+        ]
+      },
+      "CountPart": {
+        "description": "One run of the count line: words, a fact set as a badge, or the joint\nbetween two badges (a comma a surface may draw as a gap).",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "badge": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "badge"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sep": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sep"
+            ]
+          }
+        ]
+      },
       "PermissionField": {
         "description": "One input field, as shown: its value written out, secrets already hidden.",
         "type": "object",
@@ -53691,6 +53829,90 @@
         "required": [
           "key",
           "value"
+        ]
+      },
+      "PermissionSubject": {
+        "description": "The grant line in parts, so a surface can set its target as a link:\n\"Change\" \"MCP server\" [mobbin-web] \"\", or \"Install\" \"skill\" [better-ui]\n\"from\" [github.com/interfaces/skills]. `summary` is these joined.",
+        "type": "object",
+        "properties": {
+          "family": {
+            "$ref": "#/components/schemas/ToolKindId",
+            "description": "The tool family whose glyph and hue lead the line (tool-presentation.ts `ToolKindId`)."
+          },
+          "kind": {
+            "description": "What kind of thing it acts on: \"MCP server\", \"skill\", \"the fleet's\".",
+            "type": "string"
+          },
+          "tail": {
+            "description": "Words after the target, and a second thing named there: \"from\" [a source], \"(http://…)\".",
+            "type": "object",
+            "properties": {
+              "target": {
+                "$ref": "#/components/schemas/PermissionTarget",
+                "description": "A thing an ask names that the person can go and look at: a setting's\npage on the dashboard (`/config/mcp/mobbin-web`), a repository on GitHub.\nWithout `href` it is words only (a file in a checkout, which no page\nshows)."
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          "target": {
+            "$ref": "#/components/schemas/PermissionTarget",
+            "description": "The thing itself."
+          },
+          "verb": {
+            "description": "What it does, capitalised: \"Change\", \"Remove\", \"Run a command\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "verb"
+        ]
+      },
+      "ToolKindId": {
+        "type": "string",
+        "enum": [
+          "bash",
+          "edit",
+          "glob",
+          "grep",
+          "js",
+          "mcp",
+          "memory",
+          "message",
+          "navigate",
+          "notebook",
+          "other",
+          "preview",
+          "question",
+          "read",
+          "screen",
+          "skill",
+          "task",
+          "todo",
+          "toolsearch",
+          "web",
+          "write"
+        ]
+      },
+      "PermissionTarget": {
+        "description": "A thing an ask names that the person can go and look at: a setting's\npage on the dashboard (`/config/mcp/mobbin-web`), a repository on GitHub.\nWithout `href` it is words only (a file in a checkout, which no page\nshows).",
+        "type": "object",
+        "properties": {
+          "href": {
+            "description": "A dashboard path (`/config/...`) or an `https://` address.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
         ]
       },
       "PermissionUpdate": {
@@ -56145,6 +56367,18 @@
           "react",
           "svelte",
           "vue"
+        ]
+      },
+      "PermissionConsequenceGlyph": {
+        "type": "string",
+        "enum": [
+          "lines",
+          "loads",
+          "named",
+          "permanent",
+          "projects",
+          "settings",
+          "trash"
         ]
       },
       "PermissionSettledFrameOutcome": {

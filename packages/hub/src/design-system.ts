@@ -1259,7 +1259,8 @@ export const createDesignSystem = (deps: {
       input: { files: row.preview, why: row.why, project },
       designProposal: row.id,
       projectId: row.projectId,
-      proposer: `Design system · ${project}`,
+      // Its project is the ask's (`projectId`): the card's head names it.
+      proposer: "Design system",
       raisedAt: row.createdAt.getTime(),
       originInstanceId: row.instanceId,
       ...(row.toolUseId ? { toolUseId: row.toolUseId } : {}),

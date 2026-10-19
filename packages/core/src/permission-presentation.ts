@@ -14,6 +14,7 @@
 import { type MemoryScope, scopeWords } from "./fleet";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
+import type { ToolKindId } from "./tool-presentation";
 import { UPSTREAM_POST_TOOL } from "./upstream-post";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
@@ -36,9 +37,79 @@ export interface PermissionField {
   value: string;
 }
 
+/**
+ * A thing an ask names that the person can go and look at: a setting's
+ * page on the dashboard (`/config/mcp/mobbin-web`), a repository on GitHub.
+ * Without `href` it is words only (a file in a checkout, which no page
+ * shows).
+ */
+export interface PermissionTarget {
+  /** A dashboard path (`/config/...`) or an `https://` address. */
+  href?: string;
+  name: string;
+}
+
+/**
+ * The grant line in parts, so a surface can set its target as a link:
+ * "Change" "MCP server" [mobbin-web] "", or "Install" "skill" [better-ui]
+ * "from" [github.com/interfaces/skills]. `summary` is these joined.
+ */
+export interface PermissionSubject {
+  /** The tool family whose glyph and hue lead the line (tool-presentation.ts `ToolKindId`). */
+  family: ToolKindId;
+  /** What kind of thing it acts on: "MCP server", "skill", "the fleet's". */
+  kind?: string;
+  /** Words after the target, and a second thing named there: "from" [a source], "(http://…)". */
+  tail?: { target?: PermissionTarget; text: string };
+  /** The thing itself. */
+  target?: PermissionTarget;
+  /** What it does, capitalised: "Change", "Remove", "Run a command". */
+  verb: string;
+}
+
+/** One setting a write moves: what it held (absent for one it adds) and what it will hold. */
+export interface PermissionSetting {
+  after: string;
+  /** What it holds now; "nothing" when it is empty; absent when the setting is new. */
+  before?: string;
+  key: string;
+}
+
+/**
+ * One run of the count line: words, a fact set as a badge, or the joint
+ * between two badges (a comma a surface may draw as a gap).
+ */
+export type CountPart = { text: string } | { badge: string } | { sep: string };
+
+/** What a removal does after it lands, one sentence each. */
+export interface PermissionConsequence {
+  /** Which mark leads the row (each surface draws its own glyph for it). */
+  glyph:
+    | "loads"
+    | "named"
+    | "settings"
+    | "lines"
+    | "projects"
+    | "trash"
+    | "permanent";
+  /** A page that shows what the sentence names. */
+  href?: string;
+  text: string;
+}
+
 export interface PermissionPresentation {
   /** The session that asked, by the name the board gives it ("Caw" for a project's lead). */
   asker: string;
+  /**
+   * What approving covers, and what it does not widen, under the Approve and
+   * Deny row (WORDS.md, Permission): "Approving covers this one command. It
+   * does not widen what Caw may run later."
+   */
+  bound: string;
+  /** A fact to read before approving, in the serious register: "Age unknown: the source carries no dates." */
+  caution?: string;
+  /** Each setting a write moves, before and after, in the order the write names them. */
+  changed: PermissionSetting[];
   /** The changes the call makes, each drawn as a diff. Empty when it changes no text. */
   changes: PermissionChange[];
   /**
@@ -47,25 +118,65 @@ export interface PermissionPresentation {
    * opened. Absent for any other call.
    */
   command?: string;
-  /** The line under the summary: how much changes and where ("3 lines changed in Working style"). */
-  detail?: string;
-  /** The rest of the input worth reading, secrets hidden. What the summary and the diffs already say is left out. */
-  fields: PermissionField[];
-  /** The project the asker works in, by name; absent for a session in none. The card's head reads "Caw · cockpit". */
-  project?: string;
+  /** What a removal does after it lands ("After this:"), one row each. Empty for anything else. */
+  consequences: PermissionConsequence[];
   /**
-   * What will happen and why, in one line: "Change the fleet's CLAUDE.md";
-   * for a shell call, the session's own reason for it ("Check whether the
-   * two commits are on origin/main"), its command under it in `command`.
+   * The count line as words and badges: "4 settings change: ‹command›,
+   * ‹args›; nothing else · loads in ‹every session›". `detail` is the same
+   * line as plain words.
    */
+  count: CountPart[];
+  /** The count line as plain words, for a surface that sets no badges (the push, the peek). */
+  detail?: string;
+  /** The rest of the input worth reading, secrets hidden. What the lines above and the diffs already say is left out. */
+  fields: PermissionField[];
+  /** True when nothing brings it back once approved. */
+  irreversible: boolean;
+  /** The project the asker works in, by name; absent for a session in none. */
+  project?: string;
+  /** That project's id, for its link. */
+  projectId?: string;
+  /**
+   * Why the session asks, in its own words: an admin write's `reason`, a
+   * shell call's `description`. Absent when the call gives none.
+   */
+  reason?: string;
+  /** The markdown sections a text change touches, in order. */
+  sections: string[];
+  /** The grant line in parts. */
+  subject: PermissionSubject;
+  /** The grant line as one string: the subject's parts joined ("Change MCP server mobbin-web"). */
   summary: string;
 }
 
-/** Who asks and where, as an ask's head names them: "Caw · cockpit". */
+/** Who asks and where, as one line for a surface with no chips: "Caw · cockpit". */
 export const askerLine = (presentation: PermissionPresentation): string =>
   presentation.project
     ? `${presentation.asker} · ${presentation.project}`
     : presentation.asker;
+
+/** A subject's parts as one line: what `summary` holds. */
+export const subjectWords = (subject: PermissionSubject): string =>
+  [
+    subject.verb,
+    subject.kind,
+    subject.target?.name,
+    subject.tail?.text,
+    subject.tail?.target?.name,
+  ]
+    .filter((part) => !!part)
+    .join(" ");
+
+/** A count line as plain words: a badge by its words, a joint as written. */
+export const countWords = (count: CountPart[]): string =>
+  count
+    .map((part) => {
+      if ("badge" in part) {
+        return part.badge;
+      }
+      return "sep" in part ? part.sep : part.text;
+    })
+    .join("");
 
 /** The settings groups an admin write names things in. */
 export type AdminGroup =
@@ -110,8 +221,12 @@ export interface PresentationContext {
   ) => Record<string, unknown> | undefined;
   /** The fleet's current text: the CLAUDE.md for `null`, else the memory document at that path. Undefined when there is none. */
   memory: (path: string | null) => string | undefined;
+  /** The delegate types whose `skills` or `connections` name this one, by name: what a removal leaves them without. */
+  namedBy: (field: "skills" | "connections", name: string) => string[];
   /** The asking session's project, by name; undefined when it is in none. */
   project?: string;
+  /** That project's id. */
+  projectId?: string;
   /** A project's name by its id; undefined when the hub keeps no such project. */
   projectName: (id: string) => string | undefined;
   /** An install's or a link's source, read when it was proposed; undefined for any other call. */
@@ -162,11 +277,11 @@ export function lineStat(before: string, after: string): LineStat {
 const plural = (count: number, word: string): string =>
   `${count} ${word}${count === 1 ? "" : "s"}`;
 
-/** "3 lines changed in Working style": how much a text change moves, and where. */
-function statWords(stat: LineStat): string {
+/** "3 lines changed in ‹Working style›": how much a text change moves, and where. */
+function statParts(stat: LineStat): CountPart[] {
   const { added, removed, sections } = stat;
   if (added === 0 && removed === 0) {
-    return "No lines change";
+    return [{ text: "No lines change" }];
   }
   let amount: string;
   if (removed === 0) {
@@ -176,12 +291,18 @@ function statWords(stat: LineStat): string {
   } else {
     amount = `${plural(Math.max(added, removed), "line")} changed`;
   }
-  if (sections.length === 1) {
-    return `${amount} in ${sections[0]}`;
+  const [only] = sections;
+  if (sections.length === 1 && only) {
+    return [{ text: `${amount} in ` }, { badge: only }];
   }
-  return sections.length > 1
-    ? `${amount} across ${plural(sections.length, "section")}`
-    : amount;
+  return [
+    {
+      text:
+        sections.length > 1
+          ? `${amount} across ${plural(sections.length, "section")}`
+          : amount,
+    },
+  ];
 }
 
 const changeOf = (
@@ -214,14 +335,14 @@ const hunkOf = (
   path: string,
   before: string,
   after: string
-): { change: PermissionChange; detail: string } => {
+): { change: PermissionChange; count: CountPart[]; sections: string[] } => {
   const { change, stat } = changeOf(path, before, after);
   const a = linesOf(before);
   const b = linesOf(after);
   const { head, tail } = commonEnds(a, b);
   const from = Math.max(0, head - HUNK_CONTEXT);
   const keep = Math.max(0, tail - HUNK_CONTEXT);
-  const words = statWords(stat);
+  const words = statParts(stat);
   return {
     change: {
       ...change,
@@ -229,10 +350,16 @@ const hunkOf = (
       before: a.slice(from, a.length - keep).join(""),
       after: b.slice(from, b.length - keep).join(""),
     },
-    detail:
+    count:
       stat.added + stat.removed === 0
         ? words
-        : `${words} (+${stat.added} −${stat.removed}), shown from line ${from + 1} of ${b.length}`,
+        : [
+            ...words,
+            {
+              text: ` (+${stat.added} −${stat.removed}), shown from line ${from + 1} of ${b.length}`,
+            },
+          ],
+    sections: stat.sections,
   };
 };
 
@@ -255,6 +382,8 @@ const SECRET_VALUE = [
 const KEYS_ONLY = new Set(["env", "headers", "environment"]);
 
 export const HIDDEN = "(hidden)";
+/** An empty setting, in a word the reader knows (WORDS.md, Precise). */
+const NOTHING = "nothing";
 
 const looksSecret = (value: string): boolean =>
   SECRET_VALUE.some((pattern) => pattern.test(value.trim()));
@@ -295,7 +424,7 @@ const shown = (key: string, value: unknown): string => {
     !Array.isArray(value)
   ) {
     const keys = Object.keys(value);
-    return keys.length > 0 ? `${keys.join(", ")} (values hidden)` : "(none)";
+    return keys.length > 0 ? `${keys.join(", ")} (values hidden)` : NOTHING;
   }
   return written(redact(key, value));
 };
@@ -352,13 +481,120 @@ export function toolDisplayName(toolName: string): string {
   return `${server}: ${humanize(mcp[2])}`;
 }
 
-type Presented = Omit<PermissionPresentation, "asker">;
+/** What one tool's presenter says; {@link presentPermission} fills the rest in. */
+interface Presented {
+  caution?: string;
+  changed?: PermissionSetting[];
+  changes?: PermissionChange[];
+  command?: string;
+  consequences?: PermissionConsequence[];
+  count?: CountPart[];
+  fields?: PermissionField[];
+  reason?: string;
+  sections?: string[];
+  subject: PermissionSubject;
+}
 
-const only = (summary: string, fields: PermissionField[] = []): Presented => ({
-  summary,
-  changes: [],
-  fields,
-});
+const only = (
+  subject: PermissionSubject,
+  fields: PermissionField[] = []
+): Presented => ({ subject, fields });
+
+/** A grant line that is one run of words, with nothing in it to go to. */
+const plainSubject = (
+  verb: string,
+  family: ToolKindId = "other"
+): PermissionSubject => ({ verb, family });
+
+const PATH_SEGMENTS = /\/+/;
+const encodePath = (path: string) =>
+  path.split(PATH_SEGMENTS).map(encodeURIComponent).join("/");
+
+/** Where the dashboard shows each thing an ask names (apps/dashboard routes/(app)). */
+export const askHref = {
+  connections: "/config/connections",
+  delegateType: (name: string) =>
+    `/config/delegate-types/${encodeURIComponent(name)}`,
+  delegateTypes: "/config/delegate-types",
+  hook: (id: string) => `/config/hooks/${encodeURIComponent(id)}`,
+  mcp: (name: string) => `/config/mcp/${encodeURIComponent(name)}`,
+  memory: (path: string | null) =>
+    path === null ? "/config/memory" : `/config/memory/${encodePath(path)}`,
+  previews: "/config/previews",
+  project: (id: string) => `/project/${encodeURIComponent(id)}`,
+  rule: (id: string) => `/config/rules/${encodeURIComponent(id)}`,
+  session: (id: string) => `/session/${encodeURIComponent(id)}`,
+  /** Skills, plugins and marketplaces share one page. */
+  skills: "/config/skills",
+} as const;
+
+const GITHUB_SOURCE =
+  /^(?:github:|(?:https?:\/\/)?(?:www\.)?github\.com\/)([\w.-]+\/[\w.-]+)/i;
+const WEB_ADDRESS = /^https?:\/\/\S+$/i;
+const GIT_SUFFIX = /\.git$/;
+
+/** A source's page: a GitHub repository at github.com, any other web address as itself. */
+const sourceHref = (source: string): string | undefined => {
+  const repo = GITHUB_SOURCE.exec(source)?.[1];
+  if (repo) {
+    return `https://github.com/${repo.replace(GIT_SUFFIX, "")}`;
+  }
+  return WEB_ADDRESS.test(source) ? source : undefined;
+};
+
+/** The last row of an undoable removal (hub db/trash.ts keeps it for `UNDO_MS`). */
+const TRASH_ROW: PermissionConsequence = {
+  glyph: "trash",
+  text: "Undo stays open for a minute after approving. After that, this cannot be undone.",
+};
+
+/** Where it loaded before a removal, as one row: "No session loads it after this. Every session did." */
+const unloaded = (projectId: unknown, context: PresentationContext) => {
+  const was = loadsIn(projectId, context);
+  return {
+    glyph: "loads",
+    text: `No session loads it after this. ${was.charAt(0).toUpperCase()}${was.slice(1)} did.`,
+  } satisfies PermissionConsequence;
+};
+
+/** The delegate types a removed skill or connection leaves without it, as one row, when there are any. */
+const namedByRow = (
+  field: "skills" | "connections",
+  name: string,
+  context: PresentationContext
+): PermissionConsequence[] => {
+  const types = context.namedBy(field, name);
+  if (types.length === 0) {
+    return [];
+  }
+  return [
+    {
+      glyph: "named",
+      text: `Named by ${plural(types.length, "delegate type")}: ${types.join(", ")}.`,
+      href:
+        types.length === 1 && types[0]
+          ? askHref.delegateType(types[0])
+          : askHref.delegateTypes,
+    },
+  ];
+};
+
+/** "loads in ‹…›" for a document write that sets its scope; left out, the scope stays, and nothing is said. */
+const scopeParts = (
+  scope: unknown,
+  context: PresentationContext
+): CountPart[] =>
+  typeof scope === "object" && scope !== null
+    ? [
+        { text: "loads in " },
+        {
+          badge: scopeWords(
+            scope as MemoryScope,
+            (id) => context.projectName(id) ?? `project ${id}`
+          ),
+        },
+      ]
+    : [];
 
 /**
  * `admin_memory_write`: the fleet's CLAUDE.md and its linked documents, with
@@ -371,63 +607,70 @@ function memoryWrite(
 ): Presented {
   const path = text(input.path);
   const content = typeof input.content === "string" ? input.content : "";
+  const doc = (verb: string): PermissionSubject => ({
+    verb,
+    family: "memory",
+    target: path
+      ? { name: path, href: askHref.memory(path) }
+      : { name: "(no path)" },
+  });
   switch (input.action) {
     case "set": {
       const now = context.memory(null);
-      const { change: made, detail } = hunkOf("CLAUDE.md", now ?? "", content);
+      const made = hunkOf("CLAUDE.md", now ?? "", content);
       return {
-        summary:
-          now === undefined
-            ? "Create the fleet's CLAUDE.md"
-            : "Change the fleet's CLAUDE.md",
-        detail,
-        changes: [made],
-        fields: [{ key: "loads in", value: "every session" }],
+        subject: {
+          verb: now === undefined ? "Create" : "Change",
+          kind: "the fleet's",
+          family: "memory",
+          target: { name: "CLAUDE.md", href: askHref.memory(null) },
+        },
+        count: counted(made.count, [
+          { text: "loads in " },
+          { badge: "every session" },
+        ]),
+        sections: made.sections,
+        changes: [made.change],
       };
     }
     case "set_doc": {
-      const name = path ?? "(no path)";
       const now = path ? context.memory(path) : undefined;
-      const { change: made, detail } = hunkOf(name, now ?? "", content);
-      const scope = input.scope as MemoryScope | undefined;
+      const made = hunkOf(path ?? "(no path)", now ?? "", content);
       return {
-        summary: now === undefined ? `Create ${name}` : `Change ${name}`,
-        detail,
-        changes: [made],
-        // Named only when the write sets it; left out, the scope stays.
-        fields:
-          typeof scope === "object" && scope !== null
-            ? [
-                {
-                  key: "loaded into",
-                  value: scopeWords(
-                    scope,
-                    (id) => context.projectName(id) ?? `project ${id}`
-                  ),
-                },
-              ]
-            : [],
+        subject: doc(now === undefined ? "Create" : "Change"),
+        count: counted(made.count, scopeParts(input.scope, context)),
+        sections: made.sections,
+        changes: [made.change],
       };
     }
     case "remove_doc": {
-      const name = path ?? "(no path)";
       const now = path ? context.memory(path) : undefined;
       if (now === undefined) {
-        return only(`Remove ${name}`, [
-          { key: "note", value: "The fleet keeps no document at this path." },
-        ]);
+        return {
+          subject: doc("Remove"),
+          count: said("The fleet keeps no document at this path"),
+        };
       }
-      const { change: made, detail } = hunkOf(name, now, "");
+      const made = hunkOf(path ?? "(no path)", now, "");
       return {
-        summary: `Remove ${name}`,
-        detail,
-        changes: [made],
-        fields: [],
+        subject: doc("Remove"),
+        consequences: [
+          {
+            glyph: "lines",
+            text: `Its ${plural(made.change.removed, "line")} ${made.change.removed === 1 ? "goes" : "go"} with it, shown below.`,
+          },
+          TRASH_ROW,
+        ],
+        sections: made.sections,
+        changes: [made.change],
       };
     }
     default:
       return only(
-        `Change the fleet's memory (${String(input.action)})`,
+        plainSubject(
+          `Change the fleet's memory (${String(input.action)})`,
+          "memory"
+        ),
         fieldsOf(input)
       );
   }
@@ -474,39 +717,37 @@ const agoWords = (iso: string): string => {
 };
 
 /**
- * An install's source as the card shows it: how old, how many use it, and
- * where, unless the summary already names it (`named`).
+ * An install's source as the card shows it: how old and how many use it, as
+ * badges on the count line; that nothing is known of its age, as a caution;
+ * and where, unless the grant line already names it (`named`).
  */
-function sourceFields(
+function sourceFacts(
   source: SourceFacts | undefined,
   named = false
-): PermissionField[] {
+): { caution?: string; count: CountPart[]; fields: PermissionField[] } {
   if (!source) {
-    return [];
+    return { count: [], fields: [] };
   }
   const npm = source.weeklyDownloads !== undefined;
-  const fields: PermissionField[] = named
-    ? []
-    : [{ key: "from", value: source.at }];
-  if (source.unknown) {
-    fields.push({ key: "age", value: `Unknown: ${source.unknown}` });
-  }
+  const badges: string[] = [];
   if (source.since) {
-    fields.push({
-      key: "age",
-      value: `${npm ? "First published" : "Created"} ${DAY.format(new Date(source.since))}, ${agoWords(source.since)}`,
-    });
+    badges.push(
+      `${npm ? "first published" : "created"} ${DAY.format(new Date(source.since))}, ${agoWords(source.since)}`
+    );
   }
   if (source.stars !== undefined) {
-    fields.push({ key: "stars", value: COUNT.format(source.stars) });
+    badges.push(`${COUNT.format(source.stars)} stars`);
   }
   if (source.weeklyDownloads !== undefined) {
-    fields.push({
-      key: "downloads",
-      value: `${COUNT.format(source.weeklyDownloads)} last week`,
-    });
+    badges.push(`${COUNT.format(source.weeklyDownloads)} downloads last week`);
   }
-  return fields;
+  return {
+    ...(source.unknown ? { caution: `Age unknown: ${source.unknown}` } : {}),
+    count: badges.flatMap((badge, at): CountPart[] =>
+      at === 0 ? [{ badge }] : [{ sep: ", " }, { badge }]
+    ),
+    fields: named ? [] : [{ key: "from", value: source.at }],
+  };
 }
 
 // ── before → after ───────────────────────────────────────────────────────
@@ -523,19 +764,42 @@ const loadsIn = (projectId: unknown, context: PresentationContext) =>
     ? `sessions in ${context.projectName(projectId) ?? projectId}`
     : "every session";
 
-/** "Loads in": where it loads after the write, and where it loaded before when that moves. */
-const loadsInField = (
+/** "loads in ‹every session›": where it loads after the write, and where it loaded before when that moves. */
+const loadsInParts = (
   before: unknown,
   after: unknown,
   context: PresentationContext
-): PermissionField => {
+): CountPart[] => {
   const now = loadsIn(after, context);
   const was = loadsIn(before, context);
-  return {
-    key: "loads in",
-    value: now === was ? now : `${now} (was: ${was})`,
-  };
+  return now === was
+    ? [{ text: "loads in " }, { badge: now }]
+    : [
+        { text: "loads in " },
+        { badge: now },
+        { text: ", was " },
+        { badge: was },
+      ];
 };
+
+/** A count line's runs, each after the last with " · " between them, the first capitalised. */
+const counted = (...runs: CountPart[][]): CountPart[] =>
+  runs
+    .filter((run) => run.length > 0)
+    .flatMap((run, at) => {
+      if (at > 0) {
+        return [{ text: " · " }, ...run];
+      }
+      const [first, ...rest] = run;
+      return first && "text" in first
+        ? [
+            {
+              text: `${first.text.charAt(0).toUpperCase()}${first.text.slice(1)}`,
+            },
+            ...rest,
+          ]
+        : run;
+    });
 
 /** A setting's field as a person reads it: a project binding as its scope, a flag as on or off, a list joined, secrets hidden. */
 const settingWords = (
@@ -550,11 +814,11 @@ const settingWords = (
     return value === false ? "off" : "on";
   }
   if (value === undefined || value === null || value === "") {
-    return "(none)";
+    return NOTHING;
   }
   if (Array.isArray(value)) {
     if (value.length === 0) {
-      return "(none)";
+      return NOTHING;
     }
     return value
       .map((one) => {
@@ -576,15 +840,15 @@ const same = (a: unknown, b: unknown) =>
 
 /**
  * What a write changes, against what the fleet keeps now: each field of
- * `after` that differs, as "before → after" with names resolved; with
- * nothing kept yet, each field it sets. A field `after` leaves undefined
+ * `after` that differs, before and after, names resolved; with nothing kept
+ * yet, each field it sets, with no before. A field `after` leaves undefined
  * keeps its value and is not shown; one it sets null is cleared.
  */
 function changedFields(
   before: Record<string, unknown> | undefined,
   after: Record<string, unknown>,
   context: PresentationContext
-): PermissionField[] {
+): PermissionSetting[] {
   return Object.entries(after).flatMap(([key, value]) => {
     if (value === undefined) {
       return [];
@@ -592,7 +856,7 @@ function changedFields(
     if (!before) {
       return value === null || value === "" || same(value, [])
         ? []
-        : [{ key: fieldName(key), value: settingWords(key, value, context) }];
+        : [{ key: fieldName(key), after: settingWords(key, value, context) }];
     }
     const was = before[key];
     if (same(was, value)) {
@@ -600,12 +864,11 @@ function changedFields(
     }
     const from = settingWords(key, was, context);
     const to = settingWords(key, value, context);
+    // Hidden values (an env's, a header's) moved under the same keys.
     return [
-      {
-        key: fieldName(key),
-        // Hidden values (an env's, a header's) moved under the same keys.
-        value: from === to ? `${to}, its values change` : `${from} → ${to}`,
-      },
+      from === to
+        ? { key: fieldName(key), after: `${to}, its values change` }
+        : { key: fieldName(key), before: from, after: to },
     ];
   });
 }
@@ -621,11 +884,24 @@ const replacing = (
     )
   );
 
-/** The line under a change's summary: which settings move, or that none does. */
-const changeDetail = (fields: PermissionField[]): string =>
-  fields.length === 0
-    ? "Nothing changes: the fleet already keeps it this way."
-    : `Changes ${fields.map((field) => field.key).join(", ")}; nothing else.`;
+/** The count line's first run: how many settings move and which, or that none does. */
+const changeCount = (changed: PermissionSetting[]): CountPart[] =>
+  changed.length === 0
+    ? [{ text: "nothing changes: the fleet already keeps it this way" }]
+    : [
+        {
+          text: `${plural(changed.length, "setting")} ${changed.length === 1 ? "changes" : "change"}: `,
+        },
+        ...changed.flatMap((setting, at): CountPart[] =>
+          at === 0
+            ? [{ badge: setting.key }]
+            : [{ sep: ", " }, { badge: setting.key }]
+        ),
+        { text: "; nothing else" },
+      ];
+
+/** A count line of one sentence. */
+const said = (words: string): CountPart[] => [{ text: words }];
 
 /** The setting kept now, as a record, or undefined. */
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -649,17 +925,35 @@ function skillsWrite(
   const before = context.current("skills", name);
   const projectId =
     input.projectId === undefined ? before?.projectId : input.projectId;
+  const skill = (verb: string): PermissionSubject => ({
+    verb,
+    kind: "skill",
+    family: "skill",
+    target: { name, href: askHref.skills },
+  });
   switch (input.action) {
     case "install": {
       const source = text(input.source) ?? "(no source)";
-      // The summary names the source.
-      const facts = sourceFields(context.source, true);
+      const from = sourceHref(source);
+      const subject = (verb: string): PermissionSubject => ({
+        ...skill(verb),
+        tail: {
+          text: "from",
+          target: { name: source, ...(from ? { href: from } : {}) },
+        },
+      });
+      // The grant line names the source.
+      const facts = sourceFacts(context.source, true);
       if (!before) {
-        return only(`Install skill ${name} from ${source}`, [
-          { key: "scope", value: bindingWords(projectId, context) },
-          loadsInField(projectId, projectId, context),
-          ...facts,
-        ]);
+        return {
+          subject: subject("Install"),
+          count: counted(
+            facts.count,
+            loadsInParts(projectId, projectId, context)
+          ),
+          ...(facts.caution ? { caution: facts.caution } : {}),
+          fields: [{ key: "scope", value: bindingWords(projectId, context) }],
+        };
       }
       const changed = changedFields(
         before,
@@ -667,14 +961,14 @@ function skillsWrite(
         context
       );
       return {
-        summary: `Reinstall skill ${name} from ${source}`,
-        detail: changeDetail(changed),
-        changes: [],
-        fields: [
-          ...changed,
-          loadsInField(before.projectId, projectId, context),
-          ...facts,
-        ],
+        subject: subject("Reinstall"),
+        changed,
+        count: counted(
+          changeCount(changed),
+          facts.count,
+          loadsInParts(before.projectId, projectId, context)
+        ),
+        ...(facts.caution ? { caution: facts.caution } : {}),
       };
     }
     case "enable":
@@ -685,23 +979,27 @@ function skillsWrite(
         context
       );
       return {
-        summary: `${input.action === "enable" ? "Enable" : "Disable"} skill ${name}`,
-        detail: before
-          ? changeDetail(changed)
-          : "The fleet keeps no skill of this name.",
-        changes: [],
-        fields: [...changed, loadsInField(projectId, projectId, context)],
+        subject: skill(input.action === "enable" ? "Enable" : "Disable"),
+        changed,
+        count: counted(
+          before
+            ? changeCount(changed)
+            : said("the fleet keeps no skill of this name"),
+          loadsInParts(projectId, projectId, context)
+        ),
       };
     }
     case "remove":
-      return only(`Remove skill ${name}`, [
-        {
-          key: "loads in",
-          value: `no session (was: ${loadsIn(before?.projectId, context)})`,
-        },
-      ]);
+      return {
+        subject: skill("Remove"),
+        consequences: [
+          unloaded(before?.projectId, context),
+          ...namedByRow("skills", name, context),
+          TRASH_ROW,
+        ],
+      };
     default:
-      return only(`Change skill ${name}`, fieldsOf(input));
+      return only(skill("Change"), fieldsOf(input));
   }
 }
 
@@ -711,13 +1009,29 @@ function mcpServersWrite(
 ): Presented {
   const name = text(input.name) ?? "(unnamed)";
   const before = context.current("mcp_servers", name);
+  const server = (verb: string): PermissionSubject => ({
+    verb,
+    kind: "MCP server",
+    family: "mcp",
+    target: { name, href: askHref.mcp(name) },
+  });
   if (input.action === "remove") {
-    return only(`Remove MCP server ${name}`, [
-      {
-        key: "loads in",
-        value: `no session (was: ${loadsIn(before?.projectId, context)})`,
-      },
-    ]);
+    const keys = Object.keys(record(before?.config) ?? {});
+    return {
+      subject: server("Remove"),
+      consequences: [
+        unloaded(before?.projectId, context),
+        ...(keys.length > 0
+          ? [
+              {
+                glyph: "settings",
+                text: `Its settings (${keys.join(", ")}) go with it.`,
+              } satisfies PermissionConsequence,
+            ]
+          : []),
+        TRASH_ROW,
+      ],
+    };
   }
   const config = record(input.config) ?? {};
   // As the hub stores a put: `enabled` left out is on, `projectId` left out
@@ -732,12 +1046,18 @@ function mcpServersWrite(
     // The summary carries where it answers; the command line is repeated
     // whole only when the summary had to cut it.
     const whole = target !== undefined && !target.endsWith("…");
-    return only(`Add MCP server ${name}${target ? ` (${target})` : ""}`, [
-      ...fieldsOf(config, whole ? ["url", "command", "args"] : ["url"]),
-      { key: "scope", value: bindingWords(projectId, context) },
-      ...(enabled === false ? [{ key: "enabled", value: "off" }] : []),
-      loadsInField(projectId, projectId, context),
-    ]);
+    return {
+      subject: {
+        ...server("Add"),
+        ...(target ? { tail: { text: `(${target})` } } : {}),
+      },
+      count: counted(loadsInParts(projectId, projectId, context)),
+      fields: [
+        ...fieldsOf(config, whole ? ["url", "command", "args"] : ["url"]),
+        { key: "scope", value: bindingWords(projectId, context) },
+        ...(enabled === false ? [{ key: "enabled", value: "off" }] : []),
+      ],
+    };
   }
   const keptConfig = record(before.config);
   const changed = [
@@ -749,10 +1069,12 @@ function mcpServersWrite(
     ),
   ];
   return {
-    summary: `Change MCP server ${name}`,
-    detail: changeDetail(changed),
-    changes: [],
-    fields: [...changed, loadsInField(before.projectId, projectId, context)],
+    subject: server("Change"),
+    changed,
+    count: counted(
+      changeCount(changed),
+      loadsInParts(before.projectId, projectId, context)
+    ),
   };
 }
 
@@ -764,28 +1086,39 @@ function hooksWrite(
   const before = id ? context.current("hooks", id) : undefined;
   const name = text(input.name) ?? text(before?.name) ?? id ?? "(unnamed)";
   const event = text(input.event);
+  const hook = (verb: string): PermissionSubject => ({
+    verb,
+    kind: "hook",
+    family: "other",
+    target: { name, ...(id ? { href: askHref.hook(id) } : {}) },
+  });
   switch (input.action) {
     case "create":
       return only(
-        `Add hook ${name}${event ? ` on ${event}` : ""}`,
-        fieldsOf(input, ["action", "id", "name", "event"])
+        { ...hook("Add"), ...(event ? { tail: { text: `on ${event}` } } : {}) },
+        fieldsOf(input, ["action", "id", "name", "event", "reason"])
       );
     case "update": {
       // The hub lays the given fields over the stored hook.
       const changed = changedFields(before, given(input, ["id"]), context);
       return {
-        summary: `Change hook ${name}`,
-        detail: before
-          ? changeDetail(changed)
-          : "The fleet keeps no hook of this id.",
-        changes: [],
-        fields: changed,
+        subject: hook("Change"),
+        changed,
+        count: before
+          ? counted(changeCount(changed))
+          : said("The fleet keeps no hook of this id"),
       };
     }
     case "remove":
-      return only(`Remove hook ${name}`);
+      return {
+        subject: hook("Remove"),
+        consequences: [
+          { glyph: "loads", text: "No session runs it after this." },
+          TRASH_ROW,
+        ],
+      };
     default:
-      return only(`Change hook ${name}`, fieldsOf(input));
+      return only(hook("Change"), fieldsOf(input));
   }
 }
 
@@ -797,28 +1130,47 @@ function rulesWrite(
   const before = id ? context.current("rules", id) : undefined;
   const name = text(input.name) ?? text(before?.name) ?? id ?? "(unnamed)";
   const pattern = text(input.pattern);
+  const rule = (verb: string): PermissionSubject => ({
+    verb,
+    kind: "rule",
+    family: "other",
+    target: { name, ...(id ? { href: askHref.rule(id) } : {}) },
+  });
   switch (input.action) {
     case "create":
       return only(
-        `Add rule ${name}${pattern ? ` (watches “${cut(pattern, 60)}”)` : ""}`,
-        fieldsOf(input, ["action", "name"])
+        {
+          ...rule("Add"),
+          ...(pattern
+            ? { tail: { text: `(watches “${cut(pattern, 60)}”)` } }
+            : {}),
+        },
+        fieldsOf(input, ["action", "name", "reason"])
       );
     case "update": {
       // The tool lays the given fields over the stored rule.
       const changed = changedFields(before, given(input, ["id"]), context);
       return {
-        summary: `Change rule ${name}`,
-        detail: before
-          ? changeDetail(changed)
-          : "The fleet keeps no rule of this id.",
-        changes: [],
-        fields: changed,
+        subject: rule("Change"),
+        changed,
+        count: before
+          ? counted(changeCount(changed))
+          : said("The fleet keeps no rule of this id"),
       };
     }
     case "remove":
-      return only(`Remove rule ${name}`);
+      return {
+        subject: rule("Remove"),
+        consequences: [
+          {
+            glyph: "loads",
+            text: "It stops at once, for every session it watched.",
+          },
+          TRASH_ROW,
+        ],
+      };
     default:
-      return only(`Change rule ${name}`, fieldsOf(input));
+      return only(rule("Change"), fieldsOf(input));
   }
 }
 
@@ -829,25 +1181,55 @@ function pluginsWrite(
   const id = text(input.id) ?? "(no id)";
   const name = text(input.name) ?? "(unnamed)";
   const before = text(input.id) ? context.current("plugins", id) : undefined;
+  const plugin = (verb: string): PermissionSubject => ({
+    verb,
+    kind: "plugin",
+    family: "skill",
+    target: { name: id, href: askHref.skills },
+  });
+  const marketplace = (verb: string, called: string): PermissionSubject => {
+    const href = sourceHref(called);
+    return {
+      verb,
+      kind: "marketplace",
+      family: "skill",
+      target: { name: called, href: href ?? askHref.skills },
+    };
+  };
   switch (input.action) {
-    case "link":
-      return only(`Link marketplace ${text(input.source) ?? "(no source)"}`, [
-        {
-          key: "loads in",
-          value: "nothing yet: a plugin from it loads once installed",
-        },
-        ...sourceFields(context.source),
-      ]);
+    case "link": {
+      const facts = sourceFacts(context.source);
+      return {
+        subject: marketplace("Link", text(input.source) ?? "(no source)"),
+        count: counted(
+          facts.count,
+          said("loads nothing yet: a plugin from it loads once installed")
+        ),
+        ...(facts.caution ? { caution: facts.caution } : {}),
+        fields: facts.fields,
+      };
+    }
     case "unlink":
-      return only(`Unlink marketplace ${name}`);
-    case "install":
-      return only(before ? `Reinstall plugin ${id}` : `Install plugin ${id}`, [
-        ...(before?.enabled === false
-          ? [{ key: "enabled", value: "off → on" }]
-          : []),
-        { key: "loads in", value: loadsIn(before?.projectId, context) },
-        ...sourceFields(context.source),
-      ]);
+      return {
+        subject: marketplace("Unlink", name),
+        consequences: [TRASH_ROW],
+      };
+    case "install": {
+      const facts = sourceFacts(context.source);
+      return {
+        subject: plugin(before ? "Reinstall" : "Install"),
+        changed:
+          before?.enabled === false
+            ? [{ key: "enabled", before: "off", after: "on" }]
+            : [],
+        count: counted(facts.count, [
+          { text: "loads in " },
+          { badge: loadsIn(before?.projectId, context) },
+        ]),
+        ...(facts.caution ? { caution: facts.caution } : {}),
+        fields: facts.fields,
+      };
+    }
     case "enable":
     case "disable": {
       const changed = changedFields(
@@ -856,23 +1238,31 @@ function pluginsWrite(
         context
       );
       return {
-        summary: `${input.action === "enable" ? "Enable" : "Disable"} plugin ${id}`,
-        detail: before
-          ? changeDetail(changed)
-          : "The fleet keeps no plugin of this id.",
-        changes: [],
-        fields: [
-          ...changed,
-          { key: "loads in", value: loadsIn(before?.projectId, context) },
-        ],
+        subject: plugin(input.action === "enable" ? "Enable" : "Disable"),
+        changed,
+        count: counted(
+          before
+            ? changeCount(changed)
+            : said("the fleet keeps no plugin of this id"),
+          [
+            { text: "loads in " },
+            { badge: loadsIn(before?.projectId, context) },
+          ]
+        ),
       };
     }
     case "refresh":
-      return only(`Refresh plugin ${id} from its marketplace`);
+      return only({
+        ...plugin("Refresh"),
+        tail: { text: "from its marketplace" },
+      });
     case "remove":
-      return only(`Remove plugin ${id}`);
+      return {
+        subject: plugin("Remove"),
+        consequences: [unloaded(before?.projectId, context), TRASH_ROW],
+      };
     default:
-      return only(`Change plugin ${id}`, fieldsOf(input));
+      return only(plugin("Change"), fieldsOf(input));
   }
 }
 
@@ -881,8 +1271,20 @@ function delegateTypesWrite(
   context: PresentationContext
 ): Presented {
   const name = text(input.name) ?? "(unnamed)";
+  const type = (verb: string): PermissionSubject => ({
+    verb,
+    kind: "delegate type",
+    family: "task",
+    target: { name, href: askHref.delegateType(name) },
+  });
   if (input.action === "delete") {
-    return only(`Remove delegate type ${name}`);
+    return {
+      subject: type("Remove"),
+      consequences: [
+        { glyph: "named", text: "No delegate starts as it after this." },
+        TRASH_ROW,
+      ],
+    };
   }
   const before = context.current("delegate_types", name);
   if (!before) {
@@ -890,7 +1292,11 @@ function delegateTypesWrite(
       .filter(Boolean)
       .join(" · ");
     return only(
-      `Add delegate type ${name}${route ? ` (${route})` : ""}`,
+      {
+        ...type("Add"),
+        target: { name, href: askHref.delegateTypes },
+        ...(route ? { tail: { text: `(${route})` } } : {}),
+      },
       fieldsOf(input, ["action", "name", "harness", "model", "effort"])
     );
   }
@@ -903,10 +1309,9 @@ function delegateTypesWrite(
   );
   const changed = changedFields(kept, after, context);
   return {
-    summary: `Change delegate type ${name}`,
-    detail: changeDetail(changed),
-    changes: [],
-    fields: changed,
+    subject: type("Change"),
+    changed,
+    count: counted(changeCount(changed)),
   };
 }
 
@@ -930,16 +1335,34 @@ function connectionsWrite(
 ): Presented {
   const name = text(input.name) ?? "(unnamed)";
   const before = context.current("connections", name);
+  const connection = (verb: string): PermissionSubject => ({
+    verb,
+    kind: "connection",
+    family: "web",
+    target: { name, href: askHref.connections },
+  });
   switch (input.action) {
-    case "create":
-      return only(
-        `Add connection ${name}${text(input.service) ? ` (${text(input.service)}${text(input.account) ? ` as ${text(input.account)}` : ""})` : ""}`,
-        changedFields(
+    case "create": {
+      const service = text(input.service);
+      const account = text(input.account);
+      return {
+        subject: {
+          ...connection("Add"),
+          ...(service
+            ? {
+                tail: {
+                  text: `(${service}${account ? ` as ${account}` : ""})`,
+                },
+              }
+            : {}),
+        },
+        changed: changedFields(
           undefined,
           given(input, ["name", "service", "account"]),
           context
-        )
-      );
+        ),
+      };
+    }
     case "update": {
       const changed = changedFields(
         before,
@@ -947,25 +1370,34 @@ function connectionsWrite(
         context
       );
       return {
-        summary: `Change connection ${name}`,
-        detail: before
-          ? changeDetail(changed)
-          : "The hub keeps no connection of this name.",
-        changes: [],
-        fields: changed,
+        subject: connection("Change"),
+        changed,
+        count: before
+          ? counted(changeCount(changed))
+          : said("The hub keeps no connection of this name"),
       };
     }
     case "sign_in":
-      return only(`Sign connection ${name} in`);
-    case "remove":
-      return only(`Remove connection ${name}`, [
-        {
-          key: "used by",
-          value: `no session (was: ${settingWords("projects", before?.projects, context)})`,
-        },
-      ]);
+      return only({ ...connection("Sign"), tail: { text: "in" } });
+    case "remove": {
+      const projects = Array.isArray(before?.projects) ? before.projects : [];
+      return {
+        subject: connection("Remove"),
+        consequences: [
+          {
+            glyph: "projects",
+            text:
+              projects.length === 0
+                ? "No project uses it now."
+                : `${settingWords("projects", projects, context)} ${projects.length === 1 ? "loses" : "lose"} it.`,
+          },
+          ...namedByRow("connections", name, context),
+          TRASH_ROW,
+        ],
+      };
+    }
     default:
-      return only(`Change connection ${name}`, fieldsOf(input));
+      return only(connection("Change"), fieldsOf(input));
   }
 }
 
@@ -980,16 +1412,23 @@ function previewsWrite(
     context
   );
   return {
-    summary: "Change how previews are reached",
-    detail: changeDetail(changed),
-    changes: [],
-    fields: [...changed, { key: "affects", value: "every session's previews" }],
+    subject: {
+      verb: "Change",
+      family: "preview",
+      target: { name: "how previews are reached", href: askHref.previews },
+    },
+    changed,
+    count: counted(changeCount(changed), [
+      { text: "affects " },
+      { badge: "every session's previews" },
+    ]),
   };
 }
 
 /**
- * An admin write as its card reads it: the session's `reason` first, as
- * "why", then what changes and what it affects, as each group says them.
+ * An admin write as its card reads it: the session's `reason` as the line
+ * under the grant, then what changes and what it affects, as each group
+ * says them.
  */
 function adminWrite(
   group: string,
@@ -1000,13 +1439,11 @@ function adminWrite(
   if (!presented) {
     return;
   }
-  const why = text(input.reason);
+  const reason = text(input.reason)?.trim();
   return {
     ...presented,
-    fields: [
-      ...(why ? [{ key: "why", value: why }] : []),
-      ...presented.fields.filter((field) => field.key !== "reason"),
-    ],
+    ...(reason ? { reason } : {}),
+    fields: (presented.fields ?? []).filter((field) => field.key !== "reason"),
   };
 }
 
@@ -1071,35 +1508,45 @@ function memoryProposal(input: Record<string, unknown>): Presented {
   const made = files.map((file) =>
     changeOf(file.path, file.before, file.content)
   );
-  const stat = made.reduce(
-    (sum, each) => ({
-      added: sum.added + each.stat.added,
-      removed: sum.removed + each.stat.removed,
-      sections: [],
-    }),
-    { added: 0, removed: 0, sections: [] } as LineStat
-  );
+  const stat = totalOf(made);
   const notes = Array.isArray(input.notes)
     ? input.notes.filter((note): note is string => typeof note === "string")
     : [];
   const [first] = files;
-  let summary = `Change ${plural(files.length, "memory file")}`;
-  if (files.length === 1 && first) {
-    summary =
-      first.before === "" ? `Add ${first.path}` : `Change ${first.path}`;
-  }
+  const subject: PermissionSubject =
+    files.length === 1 && first
+      ? {
+          verb: first.before === "" ? "Add" : "Change",
+          family: "memory",
+          target: { name: first.path },
+        }
+      : {
+          verb: "Change",
+          kind: plural(files.length, "memory file"),
+          family: "memory",
+        };
+  const reason = text(input.why)?.trim();
   return {
-    summary,
-    detail: statWords(stat),
+    subject,
+    ...(reason ? { reason } : {}),
+    count: statParts(stat),
+    sections: stat.sections,
     changes: made.map((each) => each.change),
     fields: [
-      ...fieldsOf(input, ["files", "notes", "project"]),
+      ...fieldsOf(input, ["files", "notes", "project", "why"]),
       ...(notes.length > 0
         ? [{ key: "from notes", value: notes.join(", ") }]
         : []),
     ],
   };
 }
+
+/** Several files' line stats as one: lines summed, sections each once in order. */
+const totalOf = (made: { stat: LineStat }[]): LineStat => ({
+  added: made.reduce((sum, each) => sum + each.stat.added, 0),
+  removed: made.reduce((sum, each) => sum + each.stat.removed, 0),
+  sections: [...new Set(made.flatMap((each) => each.stat.sections))],
+});
 
 /**
  * The name an agent's change to a project's design system is parked under
@@ -1128,22 +1575,22 @@ function designProposal(input: Record<string, unknown>): Presented {
   const made = files.map((file) =>
     changeOf(file.path, file.before, file.after)
   );
-  const stat = made.reduce(
-    (sum, each) => ({
-      added: sum.added + each.stat.added,
-      removed: sum.removed + each.stat.removed,
-      sections: [],
-    }),
-    { added: 0, removed: 0, sections: [] } as LineStat
-  );
+  const stat = totalOf(made);
+  const [first] = files;
   return {
-    summary:
-      files.length === 1
-        ? `Change ${files[0]?.path}`
-        : `Change ${plural(files.length, "design system file")}`,
-    detail: statWords(stat),
+    subject:
+      files.length === 1 && first
+        ? { verb: "Change", family: "edit", target: { name: first.path } }
+        : {
+            verb: "Change",
+            kind: plural(files.length, "design system file"),
+            family: "edit",
+          },
+    ...(text(input.why)?.trim() ? { reason: text(input.why)?.trim() } : {}),
+    count: statParts(stat),
+    sections: stat.sections,
     changes: made.map((each) => each.change),
-    fields: fieldsOf(input, ["files", "project"]),
+    fields: fieldsOf(input, ["files", "project", "why"]),
   };
 }
 
@@ -1166,10 +1613,15 @@ function upstreamPost(input: Record<string, unknown>): Presented {
   const title = typeof input.title === "string" ? input.title : undefined;
   const body = typeof input.body === "string" ? input.body : undefined;
   const command = text(input.command);
+  const href = sourceHref(`github.com/${repo}`);
   return {
-    summary: `Post ${withArticle(kind)} on ${repo}`,
-    ...(account ? { detail: `As ${account} on GitHub` } : {}),
-    changes: [],
+    subject: {
+      verb: "Post",
+      kind: `${withArticle(kind)} on`,
+      family: "web",
+      target: { name: repo, ...(href ? { href } : {}) },
+    },
+    ...(account ? { count: said(`As ${account} on GitHub`) } : {}),
     ...(command ? { command } : {}),
     fields: [
       ...(title === undefined ? [] : [{ key: "title", value: title }]),
@@ -1298,11 +1750,11 @@ function projectSettings(input: Record<string, unknown>): Presented {
       "Linking sets the repository GitHub events and pull requests use; no file in the project changes.";
   }
   return {
-    summary:
+    subject: plainSubject(
       changes.map(projectSettingWords).join(" · ") ||
-      "Change this project's settings",
-    ...(detail ? { detail } : {}),
-    changes: [],
+        "Change this project's settings"
+    ),
+    ...(detail ? { count: said(detail) } : {}),
     fields: fieldsOf(input, ["changes", "ask", "project"]),
   };
 }
@@ -1349,11 +1801,23 @@ function editChanges(
   });
 }
 
-const replaced = (changes: PermissionChange[]): string => {
+const replaced = (changes: PermissionChange[]): CountPart[] => {
   const added = changes.reduce((sum, each) => sum + each.added, 0);
   const removed = changes.reduce((sum, each) => sum + each.removed, 0);
-  return statWords({ added, removed, sections: [] });
+  return statParts({ added, removed, sections: [] });
 };
+
+/** A grant line on one thing named in words: a file, a pattern, a page. */
+const on = (
+  verb: string,
+  name: string,
+  family: ToolKindId,
+  href?: string
+): PermissionSubject => ({
+  verb,
+  family,
+  target: { name, ...(href ? { href } : {}) },
+});
 
 /** The harnesses' own tools, by their lower-cased name. */
 function builtIn(
@@ -1365,11 +1829,10 @@ function builtIn(
   switch (name) {
     case "edit":
     case "multiedit": {
-      const file = path ?? "a file";
       const changes = path ? editChanges(path, input) : [];
       return {
-        summary: `Edit ${file}`,
-        ...(changes.length > 0 ? { detail: replaced(changes) } : {}),
+        subject: on("Edit", path ?? "a file", "edit"),
+        ...(changes.length > 0 ? { count: replaced(changes) } : {}),
         changes,
         fields: fieldsOf(input, [...FILE_KEYS, ...EDIT_KEYS]),
       };
@@ -1379,51 +1842,82 @@ function builtIn(
       const content = typeof input.content === "string" ? input.content : "";
       const made = changeOf(file, "", content).change;
       return {
-        summary: `Write ${file}`,
-        detail: `${plural(made.added, "line")} written; whatever the file held is replaced`,
+        subject: on("Write", file, "write"),
+        count: said(
+          `${plural(made.added, "line")} written; whatever the file held is replaced`
+        ),
         changes: [made],
         fields: fieldsOf(input, [...FILE_KEYS, "content"]),
       };
     }
     case "read":
-      return only(`Read ${path ?? "a file"}`, fieldsOf(input, FILE_KEYS));
+      return only(
+        on("Read", path ?? "a file", "read"),
+        fieldsOf(input, FILE_KEYS)
+      );
     case "notebookedit":
       return only(
-        `Edit notebook ${text(input.notebook_path) ?? path ?? "(no path)"}`,
+        {
+          ...on(
+            "Edit",
+            text(input.notebook_path) ?? path ?? "(no path)",
+            "notebook"
+          ),
+          kind: "notebook",
+        },
         fieldsOf(input, ["notebook_path", ...FILE_KEYS])
       );
     // Claude Code's and pi's `bash`; OpenCode 2.0's `shell`.
     case "bash":
     case "shell":
       return shellCall(input);
-    case "webfetch":
+    case "webfetch": {
+      const url = text(input.url);
       return only(
-        `Fetch ${text(input.url) ?? "a web page"}`,
+        on(
+          "Fetch",
+          url ?? "a web page",
+          "web",
+          url && WEB_ADDRESS.test(url) ? url : undefined
+        ),
         fieldsOf(input, ["url"])
       );
+    }
     case "websearch":
       return only(
-        `Search the web for “${text(input.query) ?? ""}”`,
+        plainSubject(`Search the web for “${text(input.query) ?? ""}”`, "web"),
         fieldsOf(input, ["query"])
       );
     case "glob":
       return only(
-        `Find files matching ${text(input.pattern) ?? "(no pattern)"}`,
+        plainSubject(
+          `Find files matching ${text(input.pattern) ?? "(no pattern)"}`,
+          "glob"
+        ),
         fieldsOf(input, ["pattern"])
       );
     case "grep":
       return only(
-        `Search files for ${text(input.pattern) ?? "(no pattern)"}`,
+        plainSubject(
+          `Search files for ${text(input.pattern) ?? "(no pattern)"}`,
+          "grep"
+        ),
         fieldsOf(input, ["pattern"])
       );
     case "task":
     case "agent":
       return only(
-        `Start a subagent: ${text(input.description) ?? "(no description)"}`,
+        plainSubject(
+          `Start a subagent: ${text(input.description) ?? "(no description)"}`,
+          "task"
+        ),
         fieldsOf(input, ["description"])
       );
     case "exitplanmode":
-      return only("Leave plan mode and start on the plan", fieldsOf(input));
+      return only(
+        plainSubject("Leave plan mode and start on the plan"),
+        fieldsOf(input)
+      );
     default:
       return undefined;
   }
@@ -1450,17 +1944,18 @@ export const unboundedCommand = (command: string): string => {
 };
 
 /**
- * A shell call, presented: the session's own reason for it as the summary
- * ("Run a command" when it gave none), and the command whole, out of a
- * boundary's rewrite, as `command`. Every surface draws `command` under the
- * summary, the peek and Caw's panel too, since what runs is what the
- * person approves.
+ * A shell call, presented: "Run a command" as the grant line, the session's
+ * own reason for it (`description`) as the reason, and the command whole,
+ * out of a boundary's rewrite, as `command`. Every surface draws `command`
+ * under the grant line, the peek and Caw's panel too, since what runs is
+ * what the person approves.
  */
 const shellCall = (input: Record<string, unknown>): Presented => {
   const whole = commandOf(input);
+  const reason = text(input.description)?.trim();
   return {
-    summary: text(input.description)?.trim() ?? "Run a command",
-    changes: [],
+    subject: plainSubject("Run a command", "bash"),
+    ...(reason ? { reason } : {}),
     ...(whole?.trim() ? { command: whole } : {}),
     fields: fieldsOf(input, ["command", "description"]),
   };
@@ -1481,39 +1976,93 @@ export function presentPermission(
   input: Record<string, unknown>,
   context: PresentationContext
 ): PermissionPresentation {
-  const who = {
-    asker: context.asker,
-    ...(context.project ? { project: context.project } : {}),
-  };
   const questions = questionsOf(toolName, input);
   if (questions) {
-    return {
-      ...who,
-      summary: questions.map((question) => question.question).join(" · "),
-      changes: [],
-      fields: [],
-    };
-  }
-  if (
-    toolName === MEMORY_PROPOSAL_TOOL ||
-    toolName === DELEGATE_TYPE_PROPOSAL_TOOL
-  ) {
-    return { ...who, ...memoryProposal(input) };
-  }
-  if (toolName === DESIGN_PROPOSAL_TOOL) {
-    return { ...who, ...designProposal(input) };
-  }
-  if (toolName === PROJECT_SETTINGS_TOOL) {
-    return { ...who, ...projectSettings(input) };
-  }
-  if (toolName === UPSTREAM_POST_TOOL) {
-    return { ...who, ...upstreamPost(input) };
+    return assembled(
+      context,
+      plainSubject(
+        questions.map((question) => question.question).join(" · "),
+        "question"
+      ),
+      ""
+    );
   }
   const admin = CAWCO_ADMIN_WRITE.exec(toolName);
-  // An MCP tool is never a harness's own, whatever it is called.
-  const presented =
-    (admin ? adminWrite(admin[1], input, context) : undefined) ??
-    (MCP_NAME.test(toolName) ? undefined : builtIn(toolName, input)) ??
-    only(toolDisplayName(toolName), fieldsOf(input));
-  return { ...who, ...presented };
+  const administered = admin ? adminWrite(admin[1], input, context) : undefined;
+  const asker = askerWords(context.asker);
+  let presented: Presented;
+  let bound: string;
+  if (
+    toolName === MEMORY_PROPOSAL_TOOL ||
+    toolName === DELEGATE_TYPE_PROPOSAL_TOOL ||
+    toolName === DESIGN_PROPOSAL_TOOL
+  ) {
+    presented =
+      toolName === DESIGN_PROPOSAL_TOOL
+        ? designProposal(input)
+        : memoryProposal(input);
+    bound = "Approving writes the change shown and nothing else.";
+  } else if (toolName === UPSTREAM_POST_TOOL) {
+    presented = upstreamPost(input);
+    const account = text(input.account);
+    bound = account
+      ? `Approving posts this once, as ${account}.`
+      : "Approving posts this once.";
+  } else if (toolName === PROJECT_SETTINGS_TOOL || administered) {
+    presented = administered ?? projectSettings(input);
+    bound = `Approving makes this one change. It does not let ${asker} change settings without asking.`;
+  } else {
+    // An MCP tool is never a harness's own, whatever it is called.
+    const own = MCP_NAME.test(toolName) ? undefined : builtIn(toolName, input);
+    presented =
+      own ?? only(plainSubject(toolDisplayName(toolName)), fieldsOf(input));
+    bound = boundOf(toolName.toLowerCase(), asker);
+  }
+  return assembled(context, presented.subject, bound, presented);
+}
+
+/** The asker as the bound line names it: its own name while short, else "this session". */
+const askerWords = (asker: string): string =>
+  asker.length > ASKER_CAP ? "this session" : asker;
+const ASKER_CAP = 24;
+
+/** What approving a harness's own call covers (WORDS.md, Permission / approval). */
+const boundOf = (tool: string, asker: string): string => {
+  if (tool === "bash" || tool === "shell") {
+    return `Approving covers this one command. It does not widen what ${asker} may run later.`;
+  }
+  if (["edit", "multiedit", "write", "notebookedit"].includes(tool)) {
+    return "Approving covers this one edit.";
+  }
+  return `Approving covers this one call. It does not widen what ${asker} may do later.`;
+};
+
+/** A presenter's words with every field a surface reads filled in. */
+function assembled(
+  context: PresentationContext,
+  subject: PermissionSubject,
+  bound: string,
+  presented: Partial<Presented> = {}
+): PermissionPresentation {
+  const count = presented.count ?? [];
+  const consequences = presented.consequences ?? [];
+  return {
+    asker: context.asker,
+    ...(context.project ? { project: context.project } : {}),
+    ...(context.projectId ? { projectId: context.projectId } : {}),
+    subject,
+    summary: subjectWords(subject),
+    ...(presented.reason ? { reason: presented.reason } : {}),
+    count,
+    ...(count.length > 0 ? { detail: countWords(count) } : {}),
+    changed: presented.changed ?? [],
+    sections: presented.sections ?? [],
+    changes: presented.changes ?? [],
+    ...(presented.command ? { command: presented.command } : {}),
+    consequences,
+    irreversible: consequences.some((row) => row.glyph === "permanent"),
+    ...(presented.caution ? { caution: presented.caution } : {}),
+    fields: presented.fields ?? [],
+    bound,
+  };
 }

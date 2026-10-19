@@ -230,9 +230,15 @@ import type { Tasks } from "./tasks";
  * engine's own enum. About 233 tokens more than memory_recall's for the
  * worker, the delegate and the lead (worker 26,810, delegate 9,189, lead
  * 17,766 measured). Raised deliberately, by that, for each.
+ * 2026-10-19, after it: every `admin_*_write`'s `reason` required, as its
+ * description always said and the approval card now reads it under the
+ * grant line (approval card, report 1 finding 1). Its description is
+ * shorter than it was, but each write's schema now lists it as required:
+ * 34 tokens for the worker (26,844 measured), the only role listed them.
+ * Raised deliberately, by that.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 26_820,
+  worker: 26_850,
   delegate: 9200,
   lead: 17_780,
   overseer: 770,

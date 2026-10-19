@@ -174,6 +174,18 @@ export interface Section {
   probes: Map<string, Probe>;
 }
 
+/**
+ * An animation a forced state fired, put at its end so the next state reads
+ * from rest. One that never ends (a spinner's loop) has no end to put it
+ * at: `finish()` throws on it ("Cannot finish Animation with an infinite
+ * target effect end"), so it is left running.
+ */
+const settleRun = (run: Animation): void => {
+  if (Number.isFinite(run.effect?.getComputedTiming().endTime ?? 0)) {
+    run.finish();
+  }
+};
+
 const frameTick = () =>
   new Promise<void>((done) =>
     requestAnimationFrame(() => requestAnimationFrame(() => done()))
@@ -1024,7 +1036,7 @@ export function boot(options: BootOptions): void {
         const fired = body.getAnimations({ subtree: true });
         const animations = fired.map((one) => readAnimation(one, t0));
         for (const one of fired) {
-          one.finish();
+          settleRun(one);
         }
         const changed = deltaOf(before, snapshot(body), root);
         for (const state of FORCED[interaction]) {
@@ -1032,7 +1044,7 @@ export function boot(options: BootOptions): void {
         }
         await frameTick();
         for (const one of body.getAnimations({ subtree: true })) {
-          one.finish();
+          settleRun(one);
         }
         result.delta.set(interaction, { animations, changed });
       }

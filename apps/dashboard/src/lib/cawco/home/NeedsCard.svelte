@@ -80,8 +80,6 @@
     answerFor,
     cawco,
     decideAction,
-    type PermissionAnswer,
-    permissionAnswer,
     submitCommand,
   } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
@@ -89,6 +87,10 @@
   import CopyBox from "../join/CopyBox.svelte";
   import { conversationHref } from "../links";
   import OsMark from "../OsMark.svelte";
+  import {
+    type PermissionAnswer,
+    permissionAnswer,
+  } from "../permission-answer";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
   import { capLine } from "../usage";

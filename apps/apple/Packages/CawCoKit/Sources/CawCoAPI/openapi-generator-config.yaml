@@ -113,6 +113,7 @@ typeOverrides:
     OnCap: OpenEnums.OnCap
     PageAnchorFramework: OpenEnums.PageAnchorFramework
     PageAnchorScheme: OpenEnums.PageAnchorScheme
+    PermissionConsequenceGlyph: OpenEnums.PermissionConsequenceGlyph
     PermissionMode: OpenEnums.PermissionMode
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
@@ -168,6 +169,7 @@ typeOverrides:
     TaskHistoryState: OpenEnums.TaskHistoryState
     ThreadEntryBy: OpenEnums.ThreadEntryBy
     ThreadStatus: OpenEnums.ThreadStatus
+    ToolKindId: OpenEnums.ToolKindId
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState
     Tracker: OpenEnums.Tracker

@@ -12,7 +12,7 @@
    * viewport is a phone's, so the panel's own phone rules apply. Every
    * switch is in the URL, so a script opens any state directly.
    */
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel, presentPermission } from "@cawco/core";
   import type { BinaryUpdateState } from "@cawco/core/binary-updates";
   import type { MovedLogin } from "#lib/cawco/accounts/model.svelte.js";
   import { barGlass, glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
@@ -231,12 +231,13 @@
         heard: 0,
         input: over.input,
         instanceId: over.key,
-        presentation: {
+        presentation: presentPermission(over.toolName, over.input, {
           asker: over.title,
-          changes: [],
-          fields: [],
-          summary: over.summary,
-        },
+          current: () => undefined,
+          memory: () => undefined,
+          namedBy: () => [],
+          projectName: () => undefined,
+        }),
         raisedAt,
         requestId: `r-${over.key}`,
         toolName: over.toolName,

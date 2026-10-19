@@ -65,6 +65,8 @@
     "./mount-table": "./src/mount-table.ts",
     "./safe-git": "./src/safe-git.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
+    "./permission-presentation": "./src/permission-presentation.ts",
+    "./line-diff": "./src/line-diff.ts",
     "./session-env": "./src/session-env.ts",
     ".": {
       "types": "./src/index.ts",
