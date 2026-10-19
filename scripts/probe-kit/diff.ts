@@ -17,13 +17,15 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import pixelmatch from "pixelmatch";
-import type { Page } from "playwright-core";
+import type { Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import type { Kit } from "./kit";
 
 export interface DiffOptions {
   /** The page region, css px; the viewport when left out. */
   clip?: { height: number; width: number; x: number; y: number };
+  /** What the capture paints over: what the walk's setting writes, not the page (catalogue `mask`). */
+  mask?: Locator[];
   /** Pixels allowed to differ (pixelmatch's count). */
   maxDiffPixels?: number;
   /** pixelmatch's per-pixel threshold, 0 to 1. */
@@ -33,18 +35,20 @@ export interface DiffOptions {
 /**
  * Captures `name` and holds it to its baseline: a PASS or FAIL line, or a
  * note where none is approved yet. Captured with the page's animations as
- * they stand (a seeked frame stays seeked) and the caret hidden.
+ * they stand (a seeked frame stays seeked) and the caret hidden. Says
+ * whether the capture differs from its baseline.
  */
 export async function diff(
   kit: Kit,
   page: Page,
   name: string,
   options: DiffOptions = {}
-): Promise<void> {
+): Promise<boolean> {
   const shot = await page.screenshot({
     clip: options.clip,
     animations: "allow",
     caret: "hide",
+    ...(options.mask ? { mask: options.mask, maskColor: "#ff00ff" } : {}),
   });
   const baseline = join(kit.baselines, `${name}.png`);
   const capture = join(kit.out, `${name}.png`);
@@ -54,13 +58,13 @@ export async function diff(
     await mkdir(dirname(baseline), { recursive: true });
     await writeFile(baseline, shot);
     kit.note(`${name}: baseline approved (${baseline})`);
-    return;
+    return false;
   }
   if (!existsSync(baseline)) {
     kit.note(
       `${name}: no approved baseline; capture for the owner's review at ${capture}`
     );
-    return;
+    return false;
   }
   const want = PNG.sync.read(await readFile(baseline));
   const got = PNG.sync.read(shot);
@@ -71,7 +75,7 @@ export async function diff(
       false,
       `size ${got.width}×${got.height}, baseline ${want.width}×${want.height}; capture ${capture}`
     );
-    return;
+    return true;
   }
   const out = new PNG({ width: got.width, height: got.height });
   const differing = pixelmatch(
@@ -85,7 +89,7 @@ export async function diff(
   const allowed = options.maxDiffPixels ?? 0;
   if (differing <= allowed) {
     kit.check(`${name} matches its baseline`, true, `${differing} px differ`);
-    return;
+    return false;
   }
   const box = changedBox(out, 8);
   const cut = new PNG({ width: box.width, height: box.height });
@@ -99,6 +103,7 @@ export async function diff(
     false,
     `${differing} px differ (allowed ${allowed}); the region that changed: ${crop}`
   );
+  return true;
 }
 
 /**
