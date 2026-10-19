@@ -75,18 +75,16 @@
       {#each table.getRowModel().rows as row (row.id)}
         <Table.Row data-view-table-row class="relative">
           {#each row.getAllCells() as cell, i (cell.id)}
-            <!-- literal: 9rem -->
             <Table.Cell
               class="h-c-btn-h-lg {i === 0
-                ? 'min-w-(--first-min) whitespace-normal'
+                ? 'min-w-c-view-lead-min whitespace-normal'
                 : ''}"
-              style="--first-min: 9rem"
               variant={i === 0 ? "view-lead" : "view"}
             >
               {#if i === 0}
                 <a
                   data-slot="cell-link"
-                  class="type-label text-ink-row no-underline"
+                  class="type-label text-ink-row no-underline after:absolute after:inset-0"
                   href={view.hrefOf(row.original.id)}
                   onclick={(event) => open(event, row.original.id)}
                   >{String(cell.getValue())}</a
@@ -101,12 +99,3 @@
     </Table.Body>
   </Table.Root>
 </div>
-
-<style>
-  /* residual: pseudo */
-  [data-slot="cell-link"]::after {
-    position: absolute;
-    inset: 0;
-    content: "";
-  }
-</style>
