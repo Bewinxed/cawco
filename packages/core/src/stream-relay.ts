@@ -140,7 +140,7 @@ export interface RelayCertified {
 /** Hub → daemon: stop the relay and remove its container; its certificate is kept, so a start again reuses it. */
 export const RELAY_STOP = "relay.stop";
 
-/** Hub → daemon: the relay gone from the machine: its container, then its certificate volume, then its router mappings (Remove relay, or the relay moved elsewhere). */
+/** Hub → daemon: the relay gone from the machine: its container, then its certificate volume (Remove relay, or the relay moved elsewhere). */
 export const RELAY_REMOVE = "relay.remove";
 
 /** Hub → daemon: renew the relay's certificate when its issuer says it is due, and restart coturn on a new one. Carries {@link RelayCertifyArgs}' token when it was issued by DNS. */
@@ -191,30 +191,6 @@ export interface RelayRuntimeRead {
   /** The runtime has a setting the relay depends on (a rootless engine on Linux, or any VM's): the journey's runtime step applies. */
   stepApplies: boolean;
 }
-
-/**
- * Hub → daemon: ask the machine's router to open the relay's ports to it
- * (UPnP, then NAT-PMP), and keep the leases renewed until `relay.remove`.
- * Answers {@link RelayMapped}.
- */
-export const RELAY_MAP = "relay.map";
-export interface RelayMapArgs {
-  /** TCP 80 too: the certificate is issued and renewed over HTTP. */
-  http: boolean;
-  /** The machine's address on the router's network, the forwards' target. */
-  lan: string;
-}
-export interface RelayMapped {
-  /** How the router answered: UPnP or NAT-PMP; null when neither did. */
-  how: RelayMapHow | null;
-  /** UDP and TCP 443 (and TCP 80 with `http`) mapped. */
-  listener: boolean;
-  /** The whole UDP relay range mapped; false when the router capped its table. */
-  range: boolean;
-  /** Why nothing was mapped, in the router's or the library's words. */
-  why?: string;
-}
-export type RelayMapHow = "UPnP" | "NAT-PMP";
 
 /**
  * Hub → daemon: from a fleet machine on another network than the relay's,
@@ -328,20 +304,8 @@ export type RelayStep =
     }
   | {
       step: "router";
-      /**
-       * `refused`: no UPnP or NAT-PMP answered; `partial`: the router opened
-       * 443 and capped the relay range; `by-hand`: forwarded by hand, proven
-       * only by the last step.
-       */
-      state:
-        | "waiting"
-        | "needs"
-        | "asking"
-        | "refused"
-        | "partial"
-        | "by-hand"
-        | "done";
-      how?: RelayMapHow;
+      /** `needs`: the forwards to make, until a proof from outside answers; `done` once one has. */
+      state: "needs" | "done";
       /** TCP 80 is forwarded too: the certificate is issued and renewed over HTTP. */
       http?: boolean;
     }
@@ -426,7 +390,6 @@ export type RelayAct =
         | "later"
         | "skip-name"
         | "add-name"
-        | "open-ports"
         | "retry"
         | "start-again"
         | "check-again"
@@ -456,6 +419,12 @@ export interface RelayJourneyView {
   machine: RelayMachine | null;
   /** Someone set it up (the setup card, Settings, a take-over through a domain); false before. */
   open: boolean;
+  /**
+   * Its place in the hub's order of views: a page keeps none older than the
+   * one it holds, since an act's answer can arrive after a frame computed
+   * later.
+   */
+  revision: number;
   /** Every step that applies, in order, with where each stands. */
   steps: RelayStep[];
   /** The relay once it has gone live, as Settings shows it; null before. */
@@ -725,29 +694,17 @@ export const STREAM_RELAY_WORDS = {
   recordRefused: (name: string, said: string) =>
     `Cloudflare did not add ${name} (${said}). Add the record above by hand, or paste a token that can edit its zone.`,
 
-  router: "Open the ports on the router",
-  routerAsk:
-    "CawCo asks the router to open the stream relay's ports (UPnP or NAT-PMP). If it refuses, the ports to forward show here.",
-  openPorts: "Open the ports",
-  openingPorts: "Asking the router…",
-  routerRefused:
-    "Your router didn't answer UPnP or NAT-PMP. Forward these on it, then come back; the last step proves they're open.",
-  routerPartial: (how: RelayMapHow) =>
-    `The router opened UDP and TCP 443 (${how}) but not UDP ${RELAY_RANGE_WORDS}. Forward that range on the router by hand; the last step proves it.`,
+  router: "Forward the ports on the router",
+  routerNote:
+    "Forward these on your router. The last step proves they're open from outside.",
   forwards: forwardsOf,
-  rangeForward: (lan: string) => `UDP ${RELAY_RANGE_WORDS} → ${lan}`,
   forwardsLabel: "The forwards to make",
   copyRecord: "Copy record",
   copyForwards: "Copy forwards",
   copyCommand: "Copy command",
   copied: "Copied",
   copyFailed: "Copy failed",
-  routerDone: (how: RelayMapHow | undefined) =>
-    how
-      ? `Ports open on the router (${how})`
-      : "Ports open on the router (by hand, proven from outside)",
-  routerByHand: (proveAt: number) =>
-    `Forwarded by hand · proven in step ${proveAt}`,
+  routerDone: "Ports forwarded on the router · proven from outside",
 
   /** The runtime step's label while it stands: what the runtime must let the relay do. */
   runtime: (step: RuntimeStep) => {

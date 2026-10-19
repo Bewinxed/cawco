@@ -137,7 +137,6 @@ typeOverrides:
     RelayRuntimeNeedKind: OpenEnums.RelayRuntimeNeedKind
     RelayState: OpenEnums.RelayState
     RelayStepFinding: OpenEnums.RelayStepFinding
-    RelayStepHow: OpenEnums.RelayStepHow
     RelayStepNetwork: OpenEnums.RelayStepNetwork
     RestartHoldReason: OpenEnums.RestartHoldReason
     RoutineMadeEventBy: OpenEnums.RoutineMadeEventBy

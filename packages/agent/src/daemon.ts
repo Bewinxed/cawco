@@ -122,7 +122,6 @@ import {
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   RELAY_CERTIFY,
-  RELAY_MAP,
   RELAY_PROVE,
   RELAY_REMOVE,
   RELAY_RENEW,
@@ -130,7 +129,6 @@ import {
   RELAY_START,
   RELAY_STOP,
   type RelayCertifyArgs,
-  type RelayMapArgs,
   type RelayStartArgs,
 } from "@cawco/core/stream-relay";
 import { readUpstreamRule } from "@cawco/core/upstream-guard";
@@ -187,7 +185,6 @@ import {
   watchRelay,
 } from "./browser/relay";
 import { proveRelay } from "./browser/relay-reach";
-import { mapRelayPorts } from "./browser/relay-router";
 import {
   browserViewers,
   handBackBrowser,
@@ -333,19 +330,6 @@ const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
     throw new Error("relay.certify takes a hostname and, for DNS, a token.");
   }
   return given as RelayCertifyArgs;
-};
-
-/** A `relay.map`'s address on the router's network, or a refusal saying what came. */
-const relayMapOf = (args: unknown): RelayMapArgs => {
-  const given = args as Partial<RelayMapArgs> | null;
-  if (!(
-    given &&
-    typeof given.lan === "string" &&
-    typeof given.http === "boolean"
-  )) {
-    throw new Error("relay.map takes the machine's router address and http.");
-  }
-  return given as RelayMapArgs;
 };
 
 /** The key a `browser.stop` or `browser.remove` names (`{ key }`), or a refusal saying what came. */
@@ -3284,7 +3268,7 @@ export const startDaemon = (rediscover = false) =>
       );
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
-    // runtime read, the router asked, and a binding from here through it.
+    // runtime read, and a binding from here through it.
     supervisor.registerDaemonFunction(RELAY_CERTIFY, (args) =>
       certifyRelay(relayCertifyOf(args))
     );
@@ -3292,9 +3276,6 @@ export const startDaemon = (rediscover = false) =>
       const lowest = (args as { lowest?: unknown } | null)?.lowest;
       return relayRuntimeRead(typeof lowest === "number" ? lowest : 443);
     });
-    supervisor.registerDaemonFunction(RELAY_MAP, (args) =>
-      mapRelayPorts(relayMapOf(args))
-    );
     supervisor.registerDaemonFunction(RELAY_PROVE, (args) => {
       const urls = (args as { urls?: unknown } | null)?.urls;
       return proveRelay(

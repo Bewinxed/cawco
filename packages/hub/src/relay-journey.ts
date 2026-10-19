@@ -15,9 +15,8 @@
  * 2. a name (optional): checked with `dns.resolve4` every 30 s while it
  *    stands; "Let CawCo add it" makes the record at Cloudflare with the
  *    person's token; Skip leaves the relay plain on 443;
- * 3. the router (behind one): asked to open the ports on the person's press
- *    (agent relay-router.ts); a refusal shows the forwards, ticked only by an
- *    outside proof;
+ * 3. the router (behind one): the forwards to make, shown from the pick and
+ *    ticked only by an outside proof; nothing waits on it;
  * 4. the low ports (a rootless runtime): read every 2 s while it stands;
  * 5. the certificate (with a name): by DNS with the token, else over HTTP;
  * 6. the start: the relay set up on all of it (stream-relay.ts);
@@ -38,7 +37,6 @@ import {
   type NameFinding,
   portNameOf,
   RELAY_DNS_NAME,
-  RELAY_MAP,
   RELAY_PROVE,
   RELAY_RUNTIME,
   type RelayAct,
@@ -47,7 +45,6 @@ import {
   type RelayChoice,
   type RelayJourneyView,
   type RelayMachine,
-  type RelayMapped,
   type RelayProofReport,
   type RelayRuntimeRead,
   type RelayStep,
@@ -86,8 +83,6 @@ const TICK_MS = 2000;
 const NAME_MS = 30_000;
 /** How long a proof's credential is good. */
 const TRY_MS = 60_000;
-/** How long the router has to open every port: the listener, then the range port by port. */
-const MAP_MS = 180_000;
 /** How long a low-ports read, and a fleet machine's proof, may take. */
 const READ_MS = 8000;
 /** How often a fleet machine on another network is asked to prove the relay, until one has. */
@@ -121,7 +116,7 @@ export interface RelayJourney {
   act: (act: RelayAct, asker: RelayAsker) => Promise<void>;
   /** Something the journey reads changed (the relay's record, a machine's report): looked at again now. */
   changed: () => void;
-  /** The machine connected: a router mapping it held is asked for again (its leases lived in its agent). */
+  /** The machine connected: looked at again now. */
   connected: (machineId: string) => void;
   proof: (report: RelayProofReport, asker: RelayAsker) => void;
   /** The person's Cloudflare token, for a renewal by DNS. */
@@ -240,28 +235,13 @@ const nameStepOf = (
   };
 };
 
-/** The router, behind one: its tick by hand comes only from an outside proof. */
-const routerStepOf = (facts: StepFacts, asking: boolean): StepOf<"router"> => {
-  const { journey, http, outside, relayNow } = facts;
-  const how = journey.routerHow ? { how: journey.routerHow } : {};
-  const forwards = http ? { http } : {};
-  if (journey.router === "mapped") {
-    return { step: "router", state: "done", ...how };
-  }
-  if (journey.router === null) {
-    return { step: "router", state: asking ? "asking" : "needs", ...forwards };
-  }
+/** The router, behind one: the forwards to make, ticked only by an outside proof. */
+const routerStepOf = (facts: StepFacts): StepOf<"router"> => {
+  const { http, outside } = facts;
   if (outside.length > 0) {
-    return {
-      step: "router",
-      state: "done",
-      ...(journey.router === "partial" ? how : {}),
-    };
+    return { step: "router", state: "done" };
   }
-  if (relayNow?.state === "live") {
-    return { step: "router", state: "by-hand" };
-  }
-  return { step: "router", state: journey.router, ...how, ...forwards };
+  return { step: "router", state: "needs", ...(http ? { http } : {}) };
 };
 
 /**
@@ -298,9 +278,9 @@ const runtimeStepOf = (
 /** Which of the certificate and the start may begin: each once every step before it stands. */
 const gatesOf = (
   facts: StepFacts,
-  stands: { name: boolean; router: boolean; runtime: boolean }
+  stands: { name: boolean; runtime: boolean }
 ): { certDone: boolean; eligibleCert: boolean; eligibleStart: boolean } => {
-  const { journey, machine, named, http } = facts;
+  const { journey, machine, named } = facts;
   const certDone =
     named &&
     journey.certificateName === facts.name &&
@@ -308,8 +288,8 @@ const gatesOf = (
   const before = !!machine && stands.name && stands.runtime;
   return {
     certDone,
-    eligibleCert: before && named && (!http || stands.router) && !certDone,
-    eligibleStart: before && stands.router && (!named || certDone),
+    eligibleCert: before && named && !certDone,
+    eligibleStart: before && (!named || certDone),
   };
 };
 
@@ -431,7 +411,6 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   let nameAsking = false;
   /** Cloudflare's refusal of the token or the record, in its words. */
   let tokenWhy: string | undefined;
-  let routerAsking = false;
   let runtimeRead: RuntimeRead | null = null;
   let runtimeAsking = false;
   let certifying = false;
@@ -441,6 +420,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   let fleetProving = false;
   let fleetProvedAt = 0;
   let published = "";
+  let revision = 0;
   let refreshing = false;
   /** Remove relay is under way: nothing begins by itself until the journey is gone with it. */
   let removing = false;
@@ -530,15 +510,11 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     };
     const nameStep = nameStepOf(facts, nameCheck, tokenWhy);
     const nameDone = nameStep.state === "done" || nameStep.state === "skipped";
-    const routerStep = machine?.lan ? routerStepOf(facts, routerAsking) : null;
-    const routerOk = !(
-      routerStep?.state === "needs" || routerStep?.state === "asking"
-    );
+    const routerStep = machine?.lan ? routerStepOf(facts) : null;
     const runtimeStep = machine ? runtimeStepOf(facts, runtimeRead) : null;
     const runtimeOk = !runtimeStep || runtimeStep.state === "done";
     const { eligibleCert, eligibleStart } = gatesOf(facts, {
       name: nameDone,
-      router: routerOk,
       runtime: runtimeOk,
     });
     const startStep = startStepOf(
@@ -609,7 +585,8 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     };
   };
 
-  const view = (): RelayJourneyView => {
+  /** The journey as it stands, before its place in the order of views. */
+  const viewNow = (): Omit<RelayJourneyView, "revision"> => {
     const journey = db.journey();
     const stored = relay.read();
     const urls =
@@ -642,13 +619,24 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     };
   };
 
-  const publish = (): void => {
-    const now = view();
+  /**
+   * The journey now, with its revision: each view that differs from the last
+   * is sent to every dashboard and takes the next revision, from the clock
+   * so a restarted hub's run on past the ones a page holds.
+   */
+  const view = (): RelayJourneyView => {
+    const now = viewNow();
     const text = JSON.stringify(now);
     if (text !== published) {
       published = text;
-      deps.publish(now);
+      revision = Math.max(revision + 1, Date.now());
+      deps.publish({ ...now, revision });
     }
+    return { ...now, revision };
+  };
+
+  const publish = (): void => {
+    view();
   };
 
   /* -------------------------------------------------------------- */
@@ -936,58 +924,10 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       machineId: candidate.machineId,
       address: candidate.address,
       lan: candidate.lan,
-      router: null,
-      routerHow: null,
       lowPorts: false,
     });
     runtimeRead = null;
     nameCheck = null;
-  };
-
-  const openPorts = async (journey: StoredJourney): Promise<void> => {
-    const { machineId, lan } = journey;
-    if (!(machineId && lan)) {
-      throw new RelayRefusal(
-        409,
-        "The stream relay's machine is not behind a router."
-      );
-    }
-    routerAsking = true;
-    publish();
-    try {
-      const read = await call(
-        machineId,
-        RELAY_MAP,
-        [
-          {
-            lan,
-            http: journey.nameState !== "skipped" && !journey.cloudflareToken,
-          },
-        ],
-        MAP_MS
-      );
-      if (read.kind === "unanswered") {
-        throw new RelayRefusal(
-          503,
-          STREAM_RELAY_WORDS.machineAway(machineName(machineId))
-        );
-      }
-      if (!read.value.ok) {
-        throw new RelayRefusal(
-          409,
-          read.value.error ?? "The router was not asked."
-        );
-      }
-      const mapped = read.value.result as RelayMapped;
-      let router: StoredJourney["router"] = "refused";
-      if (mapped.listener) {
-        router = mapped.range ? "mapped" : "partial";
-      }
-      db.journeyUpdate({ router, routerHow: mapped.how });
-    } finally {
-      routerAsking = false;
-      publish();
-    }
   };
 
   /** Let CawCo add it: the token checked, the zone found, the record made DNS only; the token kept sealed once it reaches the zone. */
@@ -1109,7 +1049,6 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       nameCheck = null;
     },
     "add-record": (journey, one) => addTheRecord(journey, one.token.trim()),
-    "open-ports": (journey) => openPorts(journey),
     retry: () => {
       db.journeyUpdate({ certificateWhy: null });
     },
@@ -1180,21 +1119,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     view,
     token: () => db.journey()?.cloudflareToken ?? null,
     changed: tick,
-    connected: (machineId) => {
-      const journey = db.journey();
-      if (
-        journey?.machineId === machineId &&
-        journey.router &&
-        journey.router !== "refused"
-      ) {
-        openPorts(journey).catch((error: unknown) =>
-          console.warn(
-            `[relay-journey] the router was not asked again: ${said(error)}`
-          )
-        );
-      }
-      tick();
-    },
+    connected: () => tick(),
     act: async (one, asker) => {
       try {
         await actOn(one, asker);
@@ -1311,7 +1236,6 @@ const ACT_BODY = t.Union([
           "later",
           "skip-name",
           "add-name",
-          "open-ports",
           "retry",
           "start-again",
           "check-again",

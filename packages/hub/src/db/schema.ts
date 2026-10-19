@@ -3852,9 +3852,6 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
     .default("open"),
   /** Sealed: the person's Cloudflare API token (Zone · DNS · Edit), for the record and the certificate's DNS challenge. */
   cloudflareToken: sealedText("cloudflare_token"),
-  /** What the router answered "Open the ports" with; null before it was asked. */
-  router: text("router").$type<"mapped" | "partial" | "refused">(),
-  routerHow: text("router_how").$type<"UPnP" | "NAT-PMP">(),
   /** The machine's runtime may bind the relay's lowest port, as last read. */
   lowPorts: integer("low_ports", { mode: "boolean" }).notNull().default(false),
   /** The name the certificate stands for, and when it ends. */

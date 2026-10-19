@@ -389,33 +389,6 @@ export async function buildBinary(options: {
               loader: "js",
             })
           );
-          // @achingbrain/ssdp (nat-port-mapper's) reads its name and version
-          // through createRequire(import.meta.url), which the bundle leaves to
-          // run time against /$bunfs (oven-sh/bun#36565): fix them at build.
-          build.onLoad(
-            { filter: /@achingbrain\/ssdp\/dist\/src\/ssdp\.js$/ },
-            async ({ path }) => {
-              const source = await Bun.file(path).text();
-              const read =
-                "const { name, version } = req('../../package.json');";
-              if (!source.includes(read)) {
-                throw new Error(
-                  `${path} no longer reads its manifest as expected`
-                );
-              }
-              const { name, version } = JSON.parse(
-                readFileSync(join(dirname(path), "../../package.json"), "utf8")
-              );
-              return {
-                contents: source.replace(
-                  read,
-                  `const { name, version } = ${JSON.stringify({ name, version })};`
-                ),
-                loader: "js",
-                resolveDir: dirname(path),
-              };
-            }
-          );
           build.onResolve({ filter: /^socket-activation$/ }, () => ({
             path: join(ROOT, "scripts/binary/socket-activation.ts"),
           }));

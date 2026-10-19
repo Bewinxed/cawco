@@ -92,12 +92,16 @@ import type { CarrySessionRequest } from "./harness";
  *    setting to change (`need`: a rootless Linux engine's low ports, a VM's
  *    forwarder, a VM's rootless Podman). A page built for 17 would read the
  *    runtime step's words from `lowest` alone, so it reloads first.
+ * 19: the stream relay's router step is the forwards to make: two states,
+ *    `needs` and `done`, and no `how`; the act that asked the router is
+ *    gone. A page built for 18 would offer a press the hub no longer takes,
+ *    so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 18;
+export const WIRE_PROTOCOL = 19;
 
 /**
  * What a session's stream carries: the changes each frame made to its

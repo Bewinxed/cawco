@@ -39,7 +39,7 @@ const path = (
     [
       { step: "machine", state: "done" },
       { step: "name", state: "checking", name, askedAt: Date.now() - 4000 },
-      { step: "router", state: "waiting" },
+      { step: "router", state: "needs" },
       { step: "runtime", state: "checking", lowest: 443 },
       { step: "certificate", state: "waiting" },
       { step: "start", state: "waiting" },
@@ -49,7 +49,7 @@ const path = (
 
 const ticked = {
   name: { step: "name", state: "done", name },
-  router: { step: "router", state: "done", how: "UPnP" },
+  router: { step: "router", state: "done" },
   runtime: { step: "runtime", state: "done", lowest: 443 },
   certificate: { step: "certificate", state: "done", endsAt: ENDS },
   start: { step: "start", state: "done" },
@@ -204,41 +204,17 @@ export const ColimaForwarder = { args: forwarder, parameters: desk };
 /** B · Colima's forwarder, on a phone. */
 export const ColimaForwarderPhone = { args: forwarder, parameters: phone };
 
-const routerAsks = {
+const routerNeeds = {
   steps: path({
     name: ticked.name,
     router: { step: "router", state: "needs" },
     runtime: ticked.runtime,
   }),
 };
-/** B′ · The router step stands: CawCo asks the router only once Open the ports is pressed. */
-export const RouterAsks = { args: routerAsks, parameters: desk };
-/** B′ · The router step, in Caw's panel or on a phone. */
-export const RouterAsksPhone = { args: routerAsks, parameters: phone };
-
-const routerRefused = {
-  steps: path({
-    name: ticked.name,
-    router: { step: "router", state: "refused" },
-    runtime: ticked.runtime,
-  }),
-};
-/** B′ · The router refused: the forwards to make by hand, proven by the last step. */
-export const RouterRefused = { args: routerRefused, parameters: desk };
-/** B′ · The router refused, in Caw's panel or on a phone. */
-export const RouterRefusedPhone = { args: routerRefused, parameters: phone };
-
-const routerPartial = {
-  steps: path({
-    name: ticked.name,
-    router: { step: "router", state: "partial", how: "UPnP" },
-    runtime: ticked.runtime,
-  }),
-};
-/** B′ · The router opened 443 and capped the relay range: the range to forward by hand. */
-export const RouterPartial = { args: routerPartial, parameters: desk };
-/** B′ · The range by hand, on a phone. */
-export const RouterPartialPhone = { args: routerPartial, parameters: phone };
+/** B′ · Behind a router: the forwards to make, from the pick on; the last step proves them. */
+export const RouterNeeds = { args: routerNeeds, parameters: desk };
+/** B′ · The forwards to make, in Caw's panel or on a phone. */
+export const RouterNeedsPhone = { args: routerNeeds, parameters: phone };
 
 const nameSkipped = {
   steps: path({
@@ -359,7 +335,7 @@ export const LongNamesPhone = {
         tokenWhy:
           "Cloudflare has no zone northwind-logistics.co.uk this token can reach. Make one from the Edit zone DNS template for northwind-logistics.co.uk, then paste it again.",
       },
-      router: { step: "router", state: "refused", http: true },
+      router: { step: "router", state: "needs", http: true },
       runtime: { step: "runtime", state: "needs", lowest: 80 },
     }),
   },
