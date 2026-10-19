@@ -40,14 +40,13 @@
 {#snippet row(stage: Pick<Stage, "kind" | "name">)}
   {@const count = counts.get(stage.name) ?? 0}
   <li>
-    <!-- literal: minmax(6rem, 10rem) minmax(4rem, 6rem) 1fr 3rem; 1fr auto -->
     <!-- A narrow row: its name and count over the bar's own line. -->
     <div
       data-slot="row"
       class="group grid min-h-c-btn-h-lg w-full grid-cols-(--row-cols) items-center gap-space-3 rounded-md bg-surface-recess px-space-3 text-start text-ink-strong kind-dropped:text-ink-muted kind-you:bg-brand-wash max-phone:grid-cols-(--row-cols-narrow) max-phone:gap-y-space-1 max-phone:py-space-2 max-phone:grid-areas-(--row-areas)"
       data-kind={stage.kind}
       style:--row-areas={'"name count" "track track"'}
-      style:--row-cols="minmax(6rem, 10rem) minmax(4rem, 6rem) 1fr 3rem"
+      style:--row-cols={"minmax(var(--c-pipeline-name-min), var(--c-pipeline-name-max)) minmax(var(--c-pipeline-kind-min), var(--c-pipeline-kind-max)) 1fr var(--c-pipeline-count-w)"}
       style:--row-cols-narrow="1fr auto"
     >
       <span
@@ -73,18 +72,14 @@
         class="type-code liga-none text-ink-subtle max-phone:hidden"
         >{KIND_LABEL[stage.kind]}</span
       >
-      <!-- literal: 8px -->
       <span
         data-slot="track"
         aria-hidden="true"
-        class="block h-(--track-h) rounded-pill max-phone:row-(--area) max-phone:col-(--area)"
+        class="block h-space-2 rounded-pill max-phone:row-(--area) max-phone:col-(--area)"
         style:--area="track"
-        style:--track-h="8px"
       >
-        <!-- literal: 2px -->
         <span
-          class="block h-full min-w-(--bar-min) rounded-pill bg-border-control motion-safe:transition-[inline-size] motion-safe:dur-pop motion-safe:ease-out group-kind-done:bg-status-done-bg group-kind-dropped:bg-transparent group-kind-dropped:outline-1 group-kind-dropped:outline-dashed group-kind-dropped:outline-border-control group-kind-dropped:-outline-offset-1 group-kind-you:bg-brand-solid"
-          style:--bar-min="2px"
+          class="block h-full min-w-space-row rounded-pill bg-border-control motion-safe:transition-[inline-size] motion-safe:dur-pop motion-safe:ease-out group-kind-done:bg-status-done-bg group-kind-dropped:bg-transparent group-kind-dropped:outline-1 group-kind-dropped:outline-dashed group-kind-dropped:outline-border-control group-kind-dropped:-outline-offset-1 group-kind-you:bg-brand-solid"
           style:inline-size="{(count / most) * 100}%"
         ></span>
       </span>

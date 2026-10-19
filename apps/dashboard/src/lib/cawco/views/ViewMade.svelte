@@ -34,17 +34,17 @@
   );
 </script>
 
-<ul aria-label={madeWords.tab} class="made">
+<ul
+  aria-label={madeWords.tab}
+  class="m-0 grid list-none grid-cols-(--made-cols) items-start gap-space-3 p-0"
+  style:--made-cols={"repeat(auto-fill, minmax(min(100%, var(--c-made-tile-min)), 1fr))"}
+>
   {#each made as task (task.id)}
-    <!-- literal: inset 0 0 0 1px var(--border-hairline); inset 0 0 0 1px var(--border-control) -->
     <li
       data-slot="tile"
-      class="flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 shadow-(--tile-ring) data-open:shadow-(--tile-ring-open)"
+      class="flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 inset-ring inset-ring-border-hairline data-open:inset-ring-border-control"
       data-open={task.id === open || undefined}
-      style:--tile-ring="inset 0 0 0 1px var(--border-hairline)"
-      style:--tile-ring-open="inset 0 0 0 1px var(--border-control)"
     >
-      <!-- literal: auto minmax(0, 1fr) auto -->
       <a
         data-slot="head"
         class="press-tint focus-inset grid min-h-c-btn-h-sm grid-cols-(--head-cols) items-center gap-space-2 rounded-sm px-space-2 text-inherit no-underline hover:bg-surface-hover"

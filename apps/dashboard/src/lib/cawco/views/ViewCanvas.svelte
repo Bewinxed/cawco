@@ -200,13 +200,11 @@
   });
 </script>
 
-<!-- literal: 280px; inset 0 0 0 1px var(--border-hairline) -->
 <section
   aria-label="Task graph"
-  class="relative h-full min-h-(--canvas-min) min-w-0 overflow-hidden rounded-lg bg-surface-recess shadow-(--canvas-ring)"
+  class="relative h-full min-h-c-canvas-min-h min-w-0 overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
   data-settled={eased || undefined}
-  style:--canvas-min="280px"
-  style:--canvas-ring="inset 0 0 0 1px var(--border-hairline)"
+  data-slot="view-canvas"
   bind:clientHeight={canvasHeight}
   bind:clientWidth={canvasWidth}
 >
@@ -275,20 +273,3 @@
     </SvelteFlow>
   {/if}
 </section>
-
-<style>
-  /* residual: foreign-dom */
-  /* Once placed, a card that the layout moves eases to its new place
-     (movement on screen); a card new to the canvas fades in where it lands. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-settled] :global(.svelte-flow__node) {
-      transition:
-        transform var(--dur-panel) var(--ease-in-out),
-        opacity var(--dur-fade) var(--ease-out);
-
-      @starting-style {
-        opacity: 0;
-      }
-    }
-  }
-</style>
