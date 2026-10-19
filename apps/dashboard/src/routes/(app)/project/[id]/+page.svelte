@@ -1924,7 +1924,7 @@
          the bottom sheet). With room for the board beside it: a column of
          its own at the page's end, a conversation's width. -->
     <div
-      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) @min-project-dock:data-caw-open:grid-areas-(--docked-areas-side) @min-project-dock:data-caw-open:grid-cols-(--docked-cols-side) @min-project-dock:data-caw-open:grid-rows-(--docked-rows)"
+      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) project-dock:data-caw-open:grid-areas-(--docked-areas-side) project-dock:data-caw-open:grid-cols-(--docked-cols-side) project-dock:data-caw-open:grid-rows-(--docked-rows)"
       data-caw-open={docked || undefined}
       style:--docked-areas={'"page"'}
       style:--docked-areas-row={'"page" "dock"'}
