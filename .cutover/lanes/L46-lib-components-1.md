@@ -15,7 +15,7 @@ Base: 9ec5a3111. Files: 7 of 7 done.
 | ProviderLogo.svelte | `<style>` → `data-slot="provider-logo"` + `data-ink` + `text-ink-strong`, `theme: component provider-logo` | 0 | 0 | none | none |
 | tool-cards/MemoryBody.svelte | 420px/26px/44px/rotate/line-height literals → tokens and utilities | 0 | 0 | none | none |
 | tool-cards/OutputBlock.svelte | 10px/12px padding → `p-space-3` | 0 | 0 | none | none |
-| tool-cards/ToolProse.svelte | whole `<style>` → `theme: component tool-prose` | 0 | 0 | none | none |
+| tool-cards/ToolProse.svelte | whole `<style>` → Typography modifiers and five `theme: variant prose-*` | 0 | 0 | none | none |
 
 needs variant / needs transition token: none. Kind-5 declarations: none. `<style>` kept: none.
 
@@ -198,56 +198,30 @@ The file's whole `<style>`, no `!important`. It needs the Crepe sheets (the six 
 }
 ```
 
-theme: component tool-prose
-The file's whole `<style>`, in `@layer components`. App.css's `.prose` rules are in a `utilities` layer, which outranks `components`; integration places this sheet where it outranks them (the `overrides` layer), as the unlayered scoped rules did.
+theme: variant prose-root
+ToolProse's look is Typography's own modifiers (`prose-p:`, `prose-ul:`, `prose-ol:`, `prose-blockquote:`, `prose-li:`) plus these five variants on its wrapper, which reach the `.prose` root Markdown renders below it (the wrapper cannot pass a class to it). Each carries the wrapper class plus `.prose`, so it outranks app.css's `.prose` rules in the same `utilities` layer on specificity. No `components` rule and no `overrides` layer.
 ```css
-@layer components {
-  [data-slot="tprose"] .prose {
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-  }
-  /* Every block takes the gap and the first gives it back: `* + *` restyled
-     the whole document per block. */
-  [data-slot="tprose"] .prose > * {
-    margin-top: var(--space-2);
-  }
-  [data-slot="tprose"] .prose > :first-child {
-    margin-top: 0;
-  }
-  [data-slot="tprose"] .prose > :last-child {
-    margin-bottom: 0;
-  }
-  [data-slot="tprose"] :is(p, ul, ol, blockquote) {
-    margin-block: 0;
-  }
-  /* A list holds only items: every one but the first. */
-  [data-slot="tprose"] li:where(:not(:first-child)) {
-    margin-top: var(--space-1);
-  }
-  [data-slot="tprose"] :is(ul, ol) {
-    padding-inline-start: var(--space-5);
-  }
-  [data-slot="tprose"] .prose :is(h1, h2, h3, h4, h5, h6) {
-    font-size: var(--text-label);
-    line-height: var(--leading-ui);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  [data-slot="tprose"] .prose > :is(h1, h2, h3, h4):where(:not(:first-child)) {
-    margin-top: var(--space-4);
-  }
-  /* prose wraps inline code in literal backticks; the code face already marks it. */
-  [data-slot="tprose"] code::before,
-  [data-slot="tprose"] code::after {
-    content: none;
-  }
-  [data-slot="tprose"] code {
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-  }
-}
+@custom-variant prose-root (& .prose);
+```
+
+theme: variant prose-block
+```css
+@custom-variant prose-block (& .prose > *);
+```
+
+theme: variant prose-heading
+```css
+@custom-variant prose-heading (& .prose :is(h1, h2, h3, h4, h5, h6):not(:where([class~="not-prose"], [class~="not-prose"] *)));
+```
+
+theme: variant prose-block-heading
+```css
+@custom-variant prose-block-heading (& .prose > :is(h1, h2, h3, h4):where(:not(:first-child)));
+```
+
+theme: variant prose-item
+```css
+@custom-variant prose-item (& .prose li:where(:not(:first-child)));
 ```
 
 theme: component provider-logo
@@ -290,7 +264,34 @@ fixed: apps/dashboard/src/lib/components/features/tool-cards/OutputBlock.svelte:
 ## Gaps
 
 gap: apps/dashboard/src/app.css (outside this lane) the Crepe sheets are imported unlayered by MarkdownEditor.svelte:24-35; for `crepe-host` to win without `!important` they must be `@import … layer(crepe)` with `crepe` ahead of `components` in `@layer theme, base, components, utilities, overrides;` — DESIGN.md: the app's one cascade order.
-gap: apps/dashboard/src/app.css `.prose` rules sit in a `utilities` layer and outrank any `components` rule; `tool-prose` must land in `overrides` — the same cascade order.
+fixed: apps/dashboard/src/lib/components/features/tool-cards/ToolProse.svelte:18 the rendered markdown's look is Typography's own modifiers and five `prose-*` variants on the wrapper (utilities layer, anchored through `.prose`), not a `components` or `overrides` rule — DESIGN.md: one cascade order.
+removed: apps/dashboard/src/lib/components/features/tool-cards/ToolProse.svelte (old `<style>`) `code::before/::after { content: none }`, `code { font-family; font-size }` — duplicates of PROSE's `prose-code:before:content-none`, `prose-code:text-meta` and the base `code` mono face.
+
+## Compiled check
+
+The five `theme: variant` blocks were added after an `@import` of `apps/dashboard/src/app.css` and compiled with the repo's `@tailwindcss/node` (tailwindcss 4.3.3) `compile()` + `build([...])` over every class in ToolProse.svelte, plus `prose prose-sm` for the plugin's own rules. Emitted (selector → declaration):
+
+```
+.prose-root\:text-size-body .prose { font-size: var(--text-body) }                       (0,2,0)
+.prose-root\:leading-body .prose { line-height: var(--leading-body) }                    (0,2,0)
+.prose-block\:mt-space-2 .prose > * { margin-top: var(--space-2) }                       (0,2,0)
+.prose-block\:first\:mt-0 .prose > *:first-child { margin-top: 0px }                     (0,3,0)
+.prose-block\:last\:mb-0 .prose > *:last-child { margin-bottom: 0px }                    (0,3,0)
+.prose-heading\:font-medium .prose :is(h1, h2, h3, h4, h5, h6):not(:where([class~="not-prose"], [class~="not-prose"] *)) { font-weight: var(--weight-strong) }   (0,2,1)
+.prose-block-heading\:mt-space-4 .prose > :is(h1, h2, h3, h4):where(:not(:first-child)) { margin-top: var(--space-4) }   (0,2,1)
+.prose-item\:mt-space-1 .prose li:where(:not(:first-child)) { margin-top: var(--space-1) }   (0,2,1)
+.prose-p\:my-0 :is(:where(p):not(:where([class~="not-prose"], [class~="not-prose"] *))) { margin-block: 0px }   (0,1,0)
+```
+
+Who wins, in the order the cascade asks (layer, specificity, order):
+- All of it is in `@layer utilities`, the layer app.css's `.prose` rules and the plugin's rules are in, so layer ties and specificity decides.
+- `.prose h1:not(:where(pre, .not-prose) *)` (app.css, emitted at 396 of the sheet) is (0,1,1); `prose-heading:` is (0,2,1). The heading utilities win on specificity, with no `!`.
+- app.css's `.prose { … }` and the plugin's `.prose-sm { font-size; line-height: 1.7142857 }` are (0,1,0); `prose-root:` is (0,2,0) and wins.
+- The plugin's `.prose-sm :where(p|ul|li)` margins are (0,1,0), as are `prose-p:my-0`, `prose-ul:ps-space-5`, `prose-li:my-0`; a tie, so order decides: the modifiers are emitted after the plugin's rules (index 163–165 against the plugin's 119–162), so they win.
+- The plugin's `:where(:is(hr, h2, h3, h4) + :is(p, …)) { margin-top: 0 }` is (0,1,0) under `.prose-sm`; `prose-block:mt-space-2` (0,2,0) beats it, and `prose-block-heading:mt-space-4` (0,2,1) beats the block gap, as the old rules did.
+- No competing app.css rule exists for `.prose > *:first-child`; `prose-block:first:mt-0` (0,3,0) beats the block gap (0,2,0).
+
+No rule loses, so no variant needed changing.
 
 ## Contracts
 
