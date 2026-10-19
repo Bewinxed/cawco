@@ -29,10 +29,10 @@
     carriersOf,
     type Delegate,
     type PlanFixture,
-    progress,
     type Step,
     stackOrder,
   } from "./fixtures";
+  import NeedsYou from "./NeedsYou.svelte";
   import PlanFoot from "./PlanFoot.svelte";
   import PushedPage from "./PushedPage.svelte";
   import StepRow from "./StepRow.svelte";
@@ -87,6 +87,43 @@
       }))
     )
   );
+  /**
+   * Crew first draws only what still gates: an edge from a prerequisite
+   * that has not finished. A finished one no longer holds anything back,
+   * and its line would start at a done step.
+   */
+  const openEdges = $derived(
+    afterEdges.filter((edge) => {
+      const before = steps.find((one) => one.id === edge.from);
+      return before && view.stateOf(before.id, before.state) !== "done";
+    })
+  );
+  /**
+   * Lanes: the rows the second lane runs through, from its first step to
+   * the last step a line from it reaches. Only they keep the two-lane
+   * gutter; every other row gives it back to its words.
+   */
+  const twoLanes = $derived.by(() => {
+    const second = steps
+      .map((step, index) => ({ step, index }))
+      .filter(({ step }) => laneOf(step) === 1);
+    if (second.length === 0) {
+      return { from: -1, to: -1 };
+    }
+    const ids = new Set(second.map(({ step }) => step.id));
+    const reached = steps
+      .map((step, index) => ({ step, index }))
+      .filter(({ step }) => (step.after ?? []).some((id) => ids.has(id)))
+      .map(({ index }) => index);
+    return {
+      from: Math.min(...second.map(({ index }) => index)),
+      to: Math.max(...second.map(({ index }) => index), ...reached),
+    };
+  });
+  const lanesAt = (step: Step): number => {
+    const index = steps.findIndex((one) => one.id === step.id);
+    return index >= twoLanes.from && index <= twoLanes.to ? 2 : 1;
+  };
   const laneEdges = $derived([
     ...afterEdges,
     ...steps.flatMap((step) =>
@@ -99,14 +136,25 @@
     ),
   ]);
 
-  /** Crew first: the stack, working first; the finished fold under it. */
+  /**
+   * Crew first: the stack holds what is on it (needs you, failed, working),
+   * what needs you first; queued and finished delegates fold into a line
+   * each under it, so the stack never grows past what is running.
+   */
   const onIt = $derived(
-    stackOrder(plan.delegates.filter((one) => one.status !== "done"))
+    stackOrder(
+      plan.delegates.filter(
+        (one) => one.status !== "done" && one.status !== "idle"
+      )
+    )
   );
-  const done = $derived(progress(plan));
+  const queued = $derived(
+    plan.delegates.filter((one) => one.status === "idle")
+  );
   const finished = $derived(
     plan.delegates.filter((one) => one.status === "done")
   );
+  const uid = $props.id();
 </script>
 
 {#snippet delegates(list: Delegate[])}
@@ -115,7 +163,37 @@
   {/each}
 {/snippet}
 
+{#snippet foldTrigger(list: Delegate[], word: string)}
+  {#if list.length > 0}
+    <button
+      aria-controls="{word}-{uid}"
+      aria-expanded={view.opened.has(word)}
+      class="finished mark-line"
+      onclick={() => view.toggle(word)}
+      type="button"
+    >
+      <span>{list.length} {word}</span>
+      <span
+        aria-hidden="true"
+        class="chev"
+        data-box
+        data-open={view.opened.has(word) || undefined}
+        ><IconChevronRight /></span
+      >
+    </button>
+  {/if}
+{/snippet}
+
+{#snippet foldBody(list: Delegate[], word: string)}
+  {#if list.length > 0}
+    <Fold id="{word}-{uid}" open={view.opened.has(word)}>
+      <ul class="rows">{@render delegates(list)}</ul>
+    </Fold>
+  {/if}
+{/snippet}
+
 {#snippet ledger()}
+  <NeedsYou delegates={plan.delegates} />
   <ul class="rows" {@attach reflow()} {@attach view.clock.watch}>
     {#each steps as step (step.id)}
       {@const carried = carriersOf(plan, step)}
@@ -137,12 +215,20 @@
 {/snippet}
 
 {#snippet lanes()}
+  <NeedsYou delegates={plan.delegates} />
   <div class="lanes">
     <Connectors edges={laneEdges} mode="lanes" />
     <ul class="rows" {@attach reflow()} {@attach view.clock.watch}>
       {#each steps as step (step.id)}
         {@const carried = carriersOf(plan, step)}
-        <StepRow lane={laneOf(step)} {plan} {pushes} {step} {steps}>
+        <StepRow
+          lane={laneOf(step)}
+          lanes={lanesAt(step)}
+          {plan}
+          {pushes}
+          {step}
+          {steps}
+        >
           {#snippet below()}
             {#if carried.length > 0}
               <ul class="rows on-lane" data-slot="delegates">
@@ -157,11 +243,16 @@
 {/snippet}
 
 {#snippet crew()}
-  <section aria-labelledby="on-it-{variation}" class="group">
-    <h3 class="group-head mark-line" id="on-it-{variation}">
-      <span>On it</span>
-      <span class="num count" data-num>{onIt.length}</span>
-    </h3>
+  <section aria-labelledby="on-it-{uid}" class="group">
+    <!-- The queued delegates wait in the head's own line: what is on it
+         stands in the stack, and the queue opens under it when asked. -->
+    <div class="group-top">
+      <h3 class="group-head mark-line" id="on-it-{uid}">
+        <span>Delegates</span>
+        <span class="num count" data-num>{onIt.length}</span>
+      </h3>
+      {@render foldTrigger(queued, "queued")}
+    </div>
     <ul
       class="rows"
       data-slot="stack"
@@ -170,34 +261,14 @@
     >
       {@render delegates(onIt)}
     </ul>
-    {#if finished.length > 0}
-      <button
-        aria-expanded={view.opened.has("finished")}
-        class="finished mark-line"
-        onclick={() => view.toggle("finished")}
-        type="button"
-      >
-        <span>{finished.length} finished</span>
-        <span
-          aria-hidden="true"
-          class="chev"
-          data-box
-          data-open={view.opened.has("finished") || undefined}
-          ><IconChevronRight /></span
-        >
-      </button>
-      <Fold id="finished-{variation}" open={view.opened.has("finished")}>
-        <ul class="rows">{@render delegates(finished)}</ul>
-      </Fold>
-    {/if}
+    {@render foldBody(queued, "queued")}
+    {@render foldTrigger(finished, "finished")}
+    {@render foldBody(finished, "finished")}
   </section>
-  <section aria-labelledby="todos-{variation}" class="group">
-    <h3 class="group-head mark-line" id="todos-{variation}">
-      <span>To-dos</span>
-      <span class="num count" data-num>{done.done} of {done.total}</span>
-    </h3>
+  <section aria-labelledby="todos-{uid}" class="group">
+    <h3 class="group-head" id="todos-{uid}">To-dos</h3>
     <div class="column">
-      <Connectors edges={afterEdges} mode="column" />
+      <Connectors edges={openEdges} mode="column" />
       <ul class="rows" {@attach reflow()}>
         {#each steps as step (step.id)}
           {@const carried = carriersOf(plan, step)}
@@ -259,14 +330,16 @@
     padding-inline-start: var(--nest-pad, var(--space-5));
   }
 
-  /* Lanes: two 18px lanes and the gap before the words; a step's tile
-     stands in its lane, its delegates under it on the words' column. */
+  /* Lanes: a step's tile stands in its lane; a row the second lane runs
+     through takes the two-lane gutter (StepRow's --lead-w), every other
+     row the one tile's. Its delegates stand on its words' column. */
   .lanes {
     position: relative;
-    --lead-w: calc(var(--pv-tile, 18px) * 2 + var(--space-2));
   }
   .on-lane {
-    padding-inline-start: calc(var(--pv-tile, 18px) * 2 + var(--space-2) * 2);
+    padding-inline-start: calc(
+      var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
+    );
   }
 
   /* Crew first: two groups, each named by a quiet head. */
@@ -280,6 +353,13 @@
       padding-block-start: var(--space-3);
       border-block-start: 1px solid var(--border-hairline);
     }
+  }
+  .group-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-3);
   }
   .group-head {
     display: flex;
@@ -319,6 +399,10 @@
       outline: 2px solid var(--focus-ring);
       outline-offset: 2px;
     }
+  }
+  /* In the stack's head line the queue's trigger needs no tile's indent. */
+  .group-top .finished {
+    padding-inline-start: 0;
   }
   .chev {
     display: grid;

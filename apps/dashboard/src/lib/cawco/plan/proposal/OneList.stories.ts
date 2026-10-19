@@ -21,7 +21,7 @@ export const Plan = {
 };
 
 /** Phone · One list in the sheet: every row a finger's height, steps open in place. */
-export const OnPhone = {
+export const Phone = {
   args: { frame: "phone" },
   parameters: { viewport: "phone" },
 };
