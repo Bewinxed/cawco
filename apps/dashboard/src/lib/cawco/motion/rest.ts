@@ -4,6 +4,10 @@
  * screen) hold still while the tab is hidden or they are scrolled out of
  * view: `data-at-rest` on the root, and `data-offscreen` on an element,
  * pause every animation under them (app.css).
+ *
+ * `data-offscreen` has two writers: {@link restOffscreen} here, on an
+ * element scrolled out of view, and PaneLeaf, on a pane put away
+ * (`.pane-hidden`), whose skipped subtree would otherwise run its loops on.
  */
 
 /** Marks the root while the tab is hidden. Returns the cleanup. */

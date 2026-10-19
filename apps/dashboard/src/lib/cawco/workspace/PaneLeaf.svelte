@@ -252,6 +252,10 @@
   $effect.pre(() => {
     const id = viewId;
     untrack(() => {
+      // Shown, it is no longer reached for (warm.svelte.ts `reached`).
+      if (id) {
+        warm.chosen(id);
+      }
       const from = shownId;
       if (!(from && id) || from === id) {
         return;
@@ -433,9 +437,15 @@
            pane laid out off screen is hidden (`.pane-settling`). Said again
            with `inert`, an inherited style (CSS `interactivity`), every switch
            set and lifted it on two panes, restyling each of their elements. -->
+      <!-- Put away, it is also `data-offscreen` (motion/rest.ts): a skipped
+           subtree still runs its loops, and a skeleton's sweep went on in a
+           pane put away (tab-return, leg 3), so app.css's rest rule holds
+           them still. Set and lifted with `.pane-hidden`, in the one update
+           that already restyles the pane whole. -->
       <div
         data-pane-settling={(!shown && laidOut) || undefined}
         data-pane-hidden={!(shown || laidOut) || undefined}
+        data-offscreen={!(shown || laidOut) || undefined}
         data-slot="pane"
         class="pane"
         data-delta={delta}

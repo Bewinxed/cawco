@@ -204,8 +204,6 @@
    * read (`servedFault`) no longer speaks for it.
    */
   let readAnswered = $state(false);
-  /** The read finished, cleanly, with nothing in it — a transcript with no turns yet. */
-  let empty = $state(false);
   /** Bumped by Retry: the one thing that re-runs the read after it has failed. */
   let attempt = $state(0);
   /**
@@ -309,16 +307,11 @@
       return;
     }
     // Skipped means another read already holds this view; its outcome is the
-    // one that counts, and this one has nothing to say.
+    // one that counts (the store's, `blank`), and this one has nothing to say.
     if (outcome.skipped) {
       return;
     }
     missing = false;
-    // A clean read of nothing is known to be empty, running or stored, and
-    // says so (DESIGN.md, the Claim of Nothing): a session that has not
-    // started yet shows its blank state, never a skeleton waiting for turns.
-    // Its first turn, streamed in, replaces the blank state with the rows.
-    empty = (cawco.session(id)?.messages.length ?? 0) === 0;
   }
 
   // Bring the conversation into being: a stored session reads its transcript
@@ -379,7 +372,6 @@
       // The transcript is in hand, which answers any earlier failed read.
       untrack(() => {
         missing = false;
-        empty = false;
       });
       return;
     }
@@ -548,13 +540,25 @@
   );
 
   /**
-   * The read finished and there is nothing in it: a named state, not a list.
-   * Only once the conversation's start is in hand: a newest page with no
-   * blocks and a page still before it is a transcript being read, and the
-   * list asks for that page (`Transcript`).
+   * A read of the transcript landed and there is nothing in it, running or
+   * stored: a named state, not a list (DESIGN.md, the Claim of Nothing). A
+   * session nothing has been said in yet shows its blank state, never a
+   * skeleton waiting for turns; its first turn, streamed in, replaces it
+   * with the rows. Whoever made the read: the store counts every newest
+   * page it takes (`reads`). A read only this pane's own outcome set left
+   * the skeleton up for good wherever another read landed first (the
+   * surface's reads behind the active tab, SessionSurface `drainHistory`):
+   * that read subscribed the stream, so this pane's `open` read was
+   * answered `skipped` and said nothing (tab-return, leg 3). Only once the
+   * conversation's start is in hand: a newest page with no blocks and a page
+   * still before it is a transcript being read, and the list asks for that
+   * page (`Transcript`).
    */
   const blank = $derived(
-    empty && session?.messages.length === 0 && session.cursor === null
+    !!session &&
+      session.reads > 0 &&
+      session.messages.length === 0 &&
+      session.cursor === null
   );
   /** Nothing to draw yet: the history is still on its way. */
   const waiting = $derived(

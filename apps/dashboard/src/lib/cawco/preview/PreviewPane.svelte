@@ -71,7 +71,7 @@
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import SideSurface from "../side/SideSurface.svelte";
   import { readJson, store, stored, writeJson } from "../storage";
-  import { afterPaint } from "../workspace/warm.svelte";
+  import { afterPaint, warm } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
     type ArtifactDoc,
@@ -487,6 +487,34 @@
         unloaded = false;
       });
     }
+  });
+  /**
+   * Its conversation's tab reached for (warm.svelte.ts `reached`: the
+   * pointer onto it or pressing it, the focus on it), whichever tab of its
+   * group's slot holds it: read off the slot it is docked in (PaneLeaf's
+   * `data-pane`), as a thread's tab shows its lead's preview.
+   */
+  const tabReached = $derived.by(() => {
+    const docked = section
+      ?.closest<HTMLElement>('[data-slot="pane"][data-pane]')
+      ?.getAttribute("data-pane");
+    return !!docked && warm.reached(docked);
+  });
+  /*
+   * Off screen and reached for, the page is let go in the reach's own task,
+   * well before the switch's frame: posted from the switch, its release
+   * raced that frame on WebKit and lost, and the page's first frame came a
+   * frame later, 112-134ms after the press (warm.svelte.ts). Its tab chosen,
+   * the switch's own release is a second one, which the page keeps as a
+   * no-op (the overlay's `holdPage`). The reach over with its tab still off
+   * screen, it is held again.
+   */
+  $effect(() => {
+    if (isCanvas || onScreen) {
+      return;
+    }
+    const message = tabReached ? "cawco:release" : "cawco:hold";
+    untrack(() => post({ type: message }));
   });
   const frames = $derived.by(() => {
     if (unloaded) {
