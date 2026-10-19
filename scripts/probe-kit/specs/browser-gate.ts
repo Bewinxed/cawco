@@ -219,11 +219,38 @@ const mcpAs = async (
     ],
     // npx's cache is the person's, not the fleet's home.
     env: { ...(process.env as Record<string, string>), HOME: realHome },
-    stderr: "ignore",
+    // Kept: a server that exits ("Connection closed") says why only here.
+    stderr: "pipe",
   });
-  const client = new Client({ name: "browser-gate", version: "1" });
-  await client.connect(transport);
-  return client as McpClient;
+  let said = "";
+  (
+    transport as unknown as {
+      stderr: NodeJS.ReadableStream | null;
+    }
+  ).stderr?.on("data", (chunk: Buffer) => {
+    said = `${said}${chunk.toString()}`.slice(-4000);
+  });
+  /** An error with what the server wrote to stderr: the reason it closed. */
+  const withStderr = (error: unknown): Error =>
+    new Error(
+      `chrome-devtools-mcp as ${id}: ${error instanceof Error ? error.message : String(error)}; its stderr: ${said.trim().slice(-1500) || "(nothing)"}`
+    );
+  const client = new Client({
+    name: "browser-gate",
+    version: "1",
+  }) as McpClient & {
+    connect: (transport: unknown) => Promise<void>;
+  };
+  await client.connect(transport).catch((error: unknown) => {
+    throw withStderr(error);
+  });
+  return {
+    callTool: (call) =>
+      client.callTool(call).catch((error: unknown) => {
+        throw withStderr(error);
+      }),
+    close: () => client.close(),
+  };
 };
 
 const called = async (

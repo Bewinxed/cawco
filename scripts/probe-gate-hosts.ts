@@ -221,18 +221,23 @@ const answer = (
 };
 /** The page new_page selected, in its answer as JSON (a line ends at a JSON-escaped newline). */
 const SELECTED_PAGE = /(\d+): [^\\"]*\[selected\]/;
-// A tool's path as the description writes its namespace: callable whether or
-// not the bounded catalog shows that tool.
-const SCREENSHOT_PATH = /(tools\["chrome-devtools"\])\./;
+/** A namespace path as code mode's `execute` description writes it: `tools["x"]` or `tools.x`, nested or not. */
+const TOOLS_PATH = /(tools(?:\[[^\]]+\]|\.[A-Za-z_$][\w$]*)+)/;
+const SCREENSHOT_TOOL = /\.take_screenshot$/;
 const HOLD = /HOLD (\S+)/;
 const PI_LINE = /\[pi\] .* relaunched between turns/;
 const GATE_LINE = /\[opencode\] gate: .* relaunched from gate form/;
 const READ = /READ (\S+)/;
 const SHOT = /SHOT (\S+)/;
 const LONG = /\bLONG\b/;
-/** OpenCode's hint naming the file it saved a cut output to (tool/truncate.ts at 1.18.34), as a tool result's JSON text carries it. */
-const SAVED = /Full output saved to: ([^\s"\\]+)/;
-/** 5000 lines: past OpenCode's 2000-line cut (tool/truncate.ts MAX_LINES), under the bash tool's own 30000 characters. */
+/**
+ * OpenCode's hint naming the file it saved a cut output to, as a tool
+ * result's JSON text carries it. 2.0.29 (the installed binary's ToolOutput:
+ * `maxLines:2000, maxBytes:51200`) writes `[showing lines 1-N of M; full
+ * output saved to <path>]`; 1.18.34 wrote `Full output saved to: <path>`.
+ */
+const SAVED = /full output saved to:? ([^\s"\\\]]+)/i;
+/** 5000 lines: past OpenCode's 2000-line cut, under CawCo's shell's own 30000 characters. */
 const LONG_COMMAND = "seq 1 5000";
 const BOUNDED = /\bBOUNDED\b/;
 /** What the probe's boundary runner sets; OpenCode's own bash never has it. */
@@ -258,6 +263,23 @@ const argsFor = (tool: Tool, values: Record<string, string>) =>
   Object.fromEntries(
     Object.entries(values).filter(([name]) => paramsOf(tool).includes(name))
   );
+/**
+ * The namespace path whose tools hold `take_screenshot`, as `execute`'s
+ * description lists them: the path on the tool's own line, else the last
+ * namespace named above it.
+ */
+const screenshotPathOf = (description: string): string | undefined => {
+  let namespace: string | undefined;
+  for (const line of description.split("\n")) {
+    const named = line.match(TOOLS_PATH)?.[1];
+    if (line.includes("take_screenshot")) {
+      return named?.replace(SCREENSHOT_TOOL, "") ?? namespace;
+    }
+    if (named) {
+      namespace = named;
+    }
+  }
+};
 /** A turn's `BOUNDED`, `LONG` or `READ`, as the tools it offers take it; none for any other. */
 const shellOrReadCall = (
   text: string,
@@ -323,14 +345,12 @@ const mock = Bun.serve({
     const shot = text.match(SHOT)?.[1];
     if (shot) {
       // OpenCode's code mode: MCP tools are reached through one `execute`
-      // tool running a program, its description listing each tool's path
-      // (`tools.<namespace>.<tool>(input)`). The fleet runs chrome-devtools
-      // with page-id routing (its default): a fresh isolated browser's one
-      // page is page 1.
+      // tool running a program, its description listing each server's
+      // namespace and its tools; the path is read from it, never assumed.
       const execute = (body.tools ?? []).find(
         (one) => one.function?.name === "execute"
       )?.function;
-      const path = execute?.description?.match(SCREENSHOT_PATH)?.[1];
+      const path = screenshotPathOf(execute?.description ?? "");
       const key =
         execute?.parameters?.required?.[0] ??
         Object.keys(execute?.parameters?.properties ?? {})[0];
