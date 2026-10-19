@@ -24,11 +24,9 @@
 
 <svelte:head><title>Usage limits | CawCo</title></svelte:head>
 
-<!-- literal: 72rem -->
 <main
-  class="mx-auto max-w-(--measure) px-space-4 py-space-6"
+  class="mx-auto max-w-wide px-space-4 py-space-6"
   data-usage-bench
-  style:--measure="72rem"
 >
   <LimitsBlock />
 </main>

@@ -122,7 +122,7 @@
 {#if !framed}
   <nav
     aria-label="Usage popover bench"
-    class="pointer-events-auto fixed inset-x-space-2 top-space-2 z-60 flex flex-wrap justify-end gap-x-space-4 gap-y-space-2"
+    class="pointer-events-auto relative z-60 flex flex-wrap justify-end gap-x-space-4 gap-y-space-2 p-space-2"
     onpointerdown={(event) => event.stopPropagation()}
   >
     {#each SWITCHES as each (each.key)}
@@ -146,10 +146,8 @@
 {/if}
 
 {#if phoneFrame}
-  <!-- literal: 56px -->
   <div
-    class="grid place-items-center px-space-4 pt-(--pad-top) pb-space-4"
-    style:--pad-top="56px"
+    class="grid place-items-center p-space-4"
   >
     <iframe
       class="rounded-lg border border-border-control bg-surface-recess"
@@ -160,13 +158,7 @@
     ></iframe>
   </div>
 {:else if ownStrip}
-  <!-- literal: 96px, 12px -->
-  <div
-    class="px-(--pad-x) pt-(--pad-top)"
-    data-bench-strip
-    style:--pad-top="96px"
-    style:--pad-x="12px"
-  >
+  <div class="px-space-3" data-bench-strip>
     <UsageMeter variant="home" />
   </div>
 {/if}

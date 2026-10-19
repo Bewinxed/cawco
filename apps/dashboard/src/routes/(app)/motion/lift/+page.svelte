@@ -245,12 +245,10 @@
 
 <main class="grid gap-space-2 p-space-4">
   {#each CASES as one, i (one.name)}
-    <!-- literal: 3rem -->
     <section
-      class="relative flex min-h-(--section-h) flex-col border border-border-hairline data-grid:grid"
+      class="relative flex min-h-space-8 flex-col border border-border-hairline data-grid:grid"
       data-grid={one.grid || undefined}
       data-case={i}
-      style:--section-h="3rem"
     >
       {#key views[i]}
         <div

@@ -242,15 +242,16 @@
 
 <svelte:head><title>Transcript head proof | CawCo</title></svelte:head>
 
-<!-- Over the shell and anything it draws (a hub banner): one group, its
-     strip on the shelf and its panes under it. -->
-<!-- literal: 2147483000 -->
+<!-- Over the shell and anything it draws (a hub banner), under what the strip
+     opens: the session card and a tab's menu are portalled to the body with
+     the kit's own layer (z-50 and up, which bits-ui writes onto their
+     wrapper), so the bench sits one under it. One group, its strip on the
+     shelf and its panes under it. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
-  class="@container/leaf fixed inset-0 z-(--bench-z) flex flex-col bg-surface-shelf pt-space-7 text-ink-strong"
+  class="@container/leaf fixed inset-0 z-(--z-bench) flex flex-col bg-surface-shelf pt-space-7 text-ink-strong"
   data-head-tint
   onclickcapture={benchClick}
-  style:--bench-z="2147483000"
 >
   <PaneTabs {leaf} />
   <!-- The group's panes (PaneLeaf `.stack`, `.pane`, `.pane-hidden`): every
@@ -280,12 +281,3 @@
     {/each}
   </div>
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  /* What the strip opens (the session card, a tab's menu) is portalled to
-     the body and stands over the bench. */
-  :global(body:has([data-head-tint]) [data-bits-floating-content-wrapper]) {
-    z-index: 2147483001 !important;
-  }
-</style>

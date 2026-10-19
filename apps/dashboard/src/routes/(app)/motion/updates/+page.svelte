@@ -337,12 +337,9 @@
 
 <svelte:head><title>Update states · CawCo</title></svelte:head>
 
-<!-- literal: 980px, 380px -->
 <main
-  class="mx-auto grid max-w-(--measure) gap-space-5 p-space-6"
-  style:--measure="980px"
-  style:--notice-cols="repeat(auto-fill, minmax(var(--panel-w), 1fr))"
-  style:--panel-w="380px"
+  class="mx-auto grid max-w-decisions-900px gap-space-5 p-space-6"
+  style:--notice-cols="repeat(auto-fill, minmax(var(--c-panel-w), 1fr))"
 >
   <h1 class="type-title">Channel cards</h1>
   <section
@@ -366,8 +363,12 @@
     <ChannelCards channels={CHANNELS} chosen="stable" current="nightly" />
   </section>
 
-  <h1>Update cell, rows 1 to 13</h1>
-  <section data-slot="updates-page-card" class="card" data-states="table">
+  <h1 class="type-title">Update cell, rows 1 to 13</h1>
+  <section
+    data-slot="updates-page-card"
+    class="rounded-lg bg-surface-raised p-space-5 shadow-tile"
+    data-states="table"
+  >
     <UpdateTable machines={ROWS} policy={OFF} />
   </section>
 
@@ -378,7 +379,7 @@
     data-states="notices"
   >
     {#each NOTICES as notice (notice.kind)}
-      <div class="kit-pop w-(--panel-w)" data-notice={notice.kind}>
+      <div class="kit-pop w-c-panel-w" data-notice={notice.kind}>
         <UpdateCard alone={false} {notice} onaction={noop} ondismiss={noop} />
       </div>
     {/each}
@@ -390,7 +391,7 @@
     class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
     data-states="notice-plain"
   >
-    <div class="kit-pop w-(--panel-w)" data-notice="plain">
+    <div class="kit-pop w-c-panel-w" data-notice="plain">
       <UpdateCard
         alone
         notice={UPDATED_PLAIN}
@@ -405,7 +406,7 @@
   </h1>
   <!-- As the panel has it: the row in a `reflow`, a row under it. -->
   <div
-    class="kit-pop w-(--panel-w)"
+    class="kit-pop w-c-panel-w"
     data-states="notice-reload"
     {@attach reflow()}
   >
@@ -429,7 +430,7 @@
     class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
     data-states="update-card"
   >
-    <div class="kit-pop w-(--panel-w)">
+    <div class="kit-pop w-c-panel-w">
       <UpdateCard alone notice={UPDATED} onaction={noop} ondismiss={noop} />
     </div>
   </div>
