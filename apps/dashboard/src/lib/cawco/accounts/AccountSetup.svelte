@@ -22,6 +22,7 @@
   import {
     type Account,
     type AccountHue,
+    type AccountJoined,
     accountsWords,
     CLAUDE_PROVIDER,
     configureWords,
@@ -196,10 +197,14 @@
   const machines = $derived(choice ? runsOn(choice.harnesses) : []);
   const pastes = new SvelteMap<string, SigninFlow>();
   const devices = new SvelteMap<string, DeviceFlow>();
+  /** The account the hub already had that a key sent here came out as (KeyPanel). */
+  let keyJoined = $state<AccountJoined | null>(null);
   /** The account the hub already had that a sign-in here came out as. */
   const joined = $derived(
-    [...pastes.values(), ...devices.values()].find((flow) => flow.joined)
-      ?.joined ?? null
+    keyJoined ??
+      [...pastes.values(), ...devices.values()].find((flow) => flow.joined)
+        ?.joined ??
+      null
   );
   /** The account being added: the one its sign-in joined, else the one made for it. */
   const accountId = $derived(joined?.accountId ?? createdId);
@@ -305,6 +310,7 @@
       busy = false;
       createdId = null;
       creating = null;
+      keyJoined = null;
       pastes.clear();
       for (const flow of devices.values()) {
         flow.dispose();
@@ -651,7 +657,14 @@
       </div>
     {/if}
     {#if choice?.signin === "api-key"}
-      <KeyPanel account={ensureAccount} {machines} primary={keyFirst} />
+      <KeyPanel
+        account={ensureAccount}
+        {machines}
+        onjoined={(one) => {
+          keyJoined = one;
+        }}
+        primary={keyFirst}
+      />
     {:else}
       <ul data-slot="machines" class="machines">
         {#each machines as machine (machine.machineId)}

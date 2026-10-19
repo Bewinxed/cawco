@@ -120,9 +120,9 @@ public struct SentText: Sendable, Equatable {
 
 /// A transcript read that failed (client.svelte.ts `pageFault`): the machine
 /// holding it is offline (a 503 naming it), this app is not allowed on the
-/// local network the hub is on, or the read failed. `message` is one
-/// sentence of why, without its closing stop (`Wire.reason`), never a body
-/// as the hub sent it.
+/// local network the hub is on, or the read failed. `message` is why, the
+/// first line of the hub's words without its closing stop (`Wire.reason`),
+/// never a body as the hub sent it.
 public struct ReadFault: Sendable, Equatable {
     public enum Reason: Sendable { case offline, localNetwork, failed }
     public let reason: Reason
@@ -665,8 +665,8 @@ public final class SessionsStore {
         }
     }
 
-    /// A refusal as one sentence of why (`Wire.reason`): the hub's words when
-    /// they are one, its status when they are not or could not be read.
+    /// A refusal as why (`Wire.reason`): the hub's words when they are prose,
+    /// its status when they are not or could not be read.
     private nonisolated static func refused(_ body: HTTPBody?, status: Int) async -> ReadFault {
         let data = if let body { try? await Data(collecting: body, upTo: 1_000_000) } else { Data?.none }
         return .failed(Wire.reason(data ?? Data(), status: status))

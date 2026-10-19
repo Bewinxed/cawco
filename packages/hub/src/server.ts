@@ -26638,6 +26638,15 @@ export const createServer = (
         if (!account) {
           return status(404, `There is no account ${params.id}.`);
         }
+        // An id a join removed names the account it became, which is not the
+        // one the screen asking made: removing that is never done by its old
+        // id.
+        if (account.id !== params.id) {
+          return status(
+            409,
+            `That account's sign-in was already ${accountName(account)}, so the two are one account now, and nothing was removed. To remove ${accountName(account)}, remove it in Configure → Accounts.`
+          );
+        }
         const signins = db.accounts
           .signins()
           .filter((one) => one.accountId === account.id);

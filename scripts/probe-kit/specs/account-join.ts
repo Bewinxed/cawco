@@ -22,6 +22,10 @@
  *    sideways scroll in it, the step or the page), two lines or more, and
  *    its mark's middle is within 0.5px of the first line's x-height middle
  *    (The Mark Line Rule).
+ * 5. A key that comes out as a key account the hub already holds: Sign in
+ *    says so, and Add account ends on that account, named, with no 404.
+ *    Removing by an id a join took away is refused (409), and the account
+ *    it joined stays (leg 2).
  * 3. Every Claude account past its reserve, its nickname long: New session
  *    shows placement's refusal as the hub wrote it, over 160 characters.
  *    Main's hub-read turned it into "The hub didn't answer (400)."
@@ -242,35 +246,37 @@ const spec: Spec = {
       said.includes(`${EMAIL} was already one of your accounts`),
       said
     );
-    // Through every step to the end: Name it with a nickname, then each
-    // Continue, the last one Save account.
+    /**
+     * Add account from its Sign in step to its end: Name it given `nickname`,
+     * then each Continue, the last one Save account. Answers the setup's
+     * refusal, if one stopped it.
+     */
+    const throughToEnd = async (
+      on: typeof page,
+      name: string
+    ): Promise<string | null> => {
+      const problem = on.locator(".problem[role=alert]");
+      for (
+        let step = 0;
+        step < 8 && new URL(on.url()).pathname.endsWith("/new");
+        step += 1
+      ) {
+        const field = on.locator("#setup-nickname");
+        // biome-ignore lint/performance/noAwaitInLoops: one step at a time, each after the last landed
+        const naming = (await field.count()) > 0;
+        if (naming && (await field.inputValue()) !== name) {
+          await field.fill(name);
+        }
+        await on.getByRole("button", { name: NEXT_STEP }).last().click();
+        await settle(on, 300);
+        if ((await problem.count()) > 0) {
+          return await problem.innerText();
+        }
+      }
+      return null;
+    };
     const nickname = "Joined by the probe";
-    for (
-      let step = 0;
-      step < 8 && new URL(page.url()).pathname.endsWith("/new");
-      step += 1
-    ) {
-      const field = page.locator("#setup-nickname");
-      // biome-ignore lint/performance/noAwaitInLoops: one step at a time, each after the last landed
-      const naming = (await field.count()) > 0;
-      if (naming && (await field.inputValue()) !== nickname) {
-        await field.fill(nickname);
-      }
-      const go = page
-        .getByRole("button", {
-          name: NEXT_STEP,
-        })
-        .last();
-      await go.click();
-      await settle(page, 300);
-      const problem = page.locator(".problem[role=alert]");
-      if ((await problem.count()) > 0) {
-        break;
-      }
-    }
-    const problem = page.locator(".problem[role=alert]");
-    const refused =
-      (await problem.count()) > 0 ? await problem.innerText() : null;
+    const refused = await throughToEnd(page, nickname);
     const missing = answers.filter(
       (line) => line.includes(" 404 ") || line.includes("There is no account")
     );
@@ -336,6 +342,19 @@ const spec: Spec = {
         afterSame.length === 2 &&
         !afterSame.some((one) => one.id === same.id),
       `answer ${JSON.stringify(same.done)}; accounts ${JSON.stringify(afterSame)}`
+    );
+    const removing = await fetch(`${fleet.base}/api/accounts/${same.id}`, {
+      method: "DELETE",
+    }).then(async (response) => ({
+      status: response.status,
+      text: await response.text(),
+    }));
+    const afterRemoving = await claudeAccounts();
+    check(
+      "2: removing by an id a join took away is refused, and the account it joined stays",
+      removing.status === 409 &&
+        afterRemoving.some((one) => one.id === ACCOUNT),
+      `${removing.status} ${removing.text}; accounts ${afterRemoving.map((one) => one.id).join(", ")}`
     );
 
     // ── 4. A long address wraps, in both lines, at 320 ──────────────────
@@ -413,6 +432,75 @@ const spec: Spec = {
           read.lines >= 2 &&
           read.offBy <= 0.5,
         `${JSON.stringify(read)}; said ${JSON.stringify(shown)}`
+      );
+    }
+
+    // ── 5. A key that lands on a key account the hub already holds ──────
+    const choices = await fleet.api<
+      { kind: string; name: string; provider: string; signin: string }[]
+    >("/api/accounts/providers");
+    const keyed = choices.find((one) => one.signin === "api-key");
+    if (keyed) {
+      const KEY = "sk-probe-account-join-0123456789abcdef";
+      const held = await fleet.api<{ id: string }>("/api/accounts", {
+        provider: keyed.provider,
+        kind: "api_key",
+      });
+      const sent = await fleet.api<{ machines: unknown[] }>(
+        `/api/accounts/${held.id}/key`,
+        { key: KEY, machineIds: [MACHINE] }
+      );
+      kit.note(
+        `5: the key's first account ${held.id}: ${JSON.stringify(sent)}`
+      );
+      const before = answers.length;
+      await open(page, `${base}/config/accounts/new`, "[data-choice]");
+      await page
+        .locator("[data-choice]")
+        .filter({ has: page.locator(".plabel", { hasText: keyed.name }) })
+        .first()
+        .click();
+      await page.getByLabel("API key", { exact: true }).fill(KEY);
+      await page.getByRole("button", { name: "Send key", exact: true }).click();
+      const joinedLine = page.locator(
+        "[data-slot=signed-as] [data-slot=joined]"
+      );
+      const keySaid = await until(
+        "the key's answer",
+        async () =>
+          (await joinedLine.count()) > 0
+            ? await joinedLine.innerText()
+            : undefined,
+        Boolean,
+        60_000
+      ).catch((error: unknown) => String(error));
+      const keyNickname = "The probe's key";
+      const keyRefused = await throughToEnd(page, keyNickname);
+      const keyAccounts = (
+        await fleet.api<{ accounts: AccountRow[] }>("/api/accounts")
+      ).accounts.filter((one) => one.provider === keyed.provider);
+      const keyMissing = answers
+        .slice(before)
+        .filter(
+          (line) =>
+            line.includes(" 404 ") || line.includes("There is no account")
+        );
+      check(
+        `5: a ${keyed.name} key already one of your accounts says so, and Add account ends on that account, named, with no 404`,
+        keySaid.includes("was already one of your accounts") &&
+          new URL(page.url()).pathname === "/config/accounts" &&
+          keyRefused === null &&
+          keyMissing.length === 0 &&
+          keyAccounts.length === 1 &&
+          keyAccounts[0]?.id === held.id &&
+          keyAccounts[0]?.label === keyNickname,
+        `said ${JSON.stringify(keySaid)}; at ${page.url()}; problem ${JSON.stringify(keyRefused)}; ${JSON.stringify(keyMissing)}; accounts ${JSON.stringify(keyAccounts)}`
+      );
+    } else {
+      check(
+        "5: a provider that takes a key, to add",
+        false,
+        JSON.stringify(choices)
       );
     }
 
