@@ -1759,11 +1759,12 @@ export const SURFACES: Surface[] = [
         root: "body",
         widths: ["desk"],
       },
-      // The pane's Comments panel: its pins' list.
+      // The pane's Comments panel: its pins' list. The button's name carries
+      // its open pins' count only above 0 ("Comments" or "Comments, 2 open").
       {
         name: "comments",
         route: (s) => `/session/${s.art}`,
-        act: press(/^Comments, /),
+        act: press(/^Comments\b/),
         root: "body",
         widths: ["desk"],
       },
