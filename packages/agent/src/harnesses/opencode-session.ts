@@ -849,6 +849,11 @@ export class OpencodeSession implements HarnessSession {
     return this.#directory;
   }
 
+  /** The servers that did not connect where the session was moved (a handoff onto a new generation): each said once, as at its start. */
+  mcpUnconnected(unconnected: McpNotConnected[]): Promise<void> {
+    return this.#sayUnconnected(unconnected);
+  }
+
   /** Dispatch custody, not an independent server-idle heuristic. */
   get turnInFlight(): boolean {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: server events and dispatch methods update these fields outside this getter

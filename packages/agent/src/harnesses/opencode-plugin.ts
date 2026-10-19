@@ -16,9 +16,10 @@
  *   included (settled #1: "plugin tool hooks on nested Code Mode calls —
  *   YES, both fire"). A throw refuses the call; assigning `input` replaces
  *   what the tool receives.
- * - `ctx.tool.hook("execute.after")`: each output a workspace session is told
- *   was saved, copied into the session's own folder and named there
- *   (`spilled`), and what each call of a Code Mode program answered, written
+ * - `ctx.tool.hook("execute.after")`: each output of a workspace session's
+ *   call too long to hand the model, cut as OpenCode cuts it with the full
+ *   output saved in the session's own folder (`cutInto`), and what each call
+ *   of a Code Mode program answered, written
  *   onto the program's own result as `metadata.calls` (2.0 keeps each call's
  *   name, input and status on the program, `metadata.toolCalls`, never what
  *   it returned). A program that throws still ends `completed`, with
@@ -124,9 +125,9 @@ const HOST_SHELL_DESCRIPTION =
 export const buildPluginSource =
   (): string => `// CawCo's OpenCode 2.0 plugin, written by the CawCo agent. Do not edit.
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
 
 // This server's password authenticates every request to it: no shell or MCP
 // server it starts inherits it.
@@ -141,8 +142,9 @@ const sessionNames = ${JSON.stringify(SESSION_CAWCO_ENV)};
 const workflowTools = ${JSON.stringify(WORKFLOW_TOOLS)};
 // chrome-devtools-mcp's arguments that pick a browser or a config: the door picks both.
 const browserArg = ${BROWSER_ARG.toString()};
-// Where this server saves a truncated tool output (its own data dir's
-// \`opencode/tool-output\`, observed on 2.0.28).
+// Where this server saves a tool output it cuts (its own data dir's
+// \`opencode/tool-output\`, observed on 2.0.28): every session's, which the
+// judge denies each workspace session.
 const toolOutput = join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "opencode", "tool-output");
 const realOf = (path) => { try { return realpathSync(path); } catch { return path; } };
 const said = (error) => (error instanceof Error ? error.message : String(error));
@@ -217,30 +219,74 @@ const judgeIn = async (id, tool, input, directory) => {
   if (!verdict.ok) throw new Error(verdict.reason);
 };
 
-// The file a call's result says this server saved, in this server's
-// tool-output dir: its metadata names it (\`truncated\`, \`outputPath\`).
-// Its content names the path again for the model, whatever words go with it,
-// and that path is what a copy replaces.
+// OpenCode's own cut of a tool output too long to hand the model, as 2.0.29
+// runs it (ToolOutput \`truncate\`: its default 2000 lines and 51200 bytes,
+// the lines that fit kept, then "[showing lines 1-N of M; full output saved
+// to <file>]"), done here for a workspace session's call so the full output
+// is saved in the session's own folder: the server's tool-output dir holds
+// every session's, by call id alone, and no workspace reads it. OpenCode cuts
+// only after every \`execute.after\` hook has run, and leaves alone a result
+// whose metadata names \`truncated\` ("if(D.metadata?.truncated!==void 0)
+// return D"), so the result this answers is never cut again.
+const OUTPUT_LINES = 2000;
+const OUTPUT_BYTES = 51200;
 const contentOf = (result) => (Array.isArray(result.content) ? result.content : [{ type: "text", text: String(result.content ?? "") }]);
-const savedOutputOf = (result) => {
-  const file = result?.metadata?.outputPath;
-  if (result?.metadata?.truncated !== true || typeof file !== "string" || dirname(file) !== toolOutput) return undefined;
-  return file;
-};
-// The result with the output it saved copied into its session's own folder
-// in workspace \`id\` (the agent's workspaceSpillDir, made as the session
-// spawned), and the copy named in its place: the server's tool-output dir
-// holds every session's, by call id alone, and no workspace reads it; the
-// session's folder is its own, and its boundary reads it, its shell too (a
-// line longer than \`read\` shows is read by the shell). One whose folder is
-// not there (a session CawCo did not launch) is left as it is.
-const spilled = (id, instanceId, result, file) => {
+// The session's own folder in workspace \`id\` (the agent's workspaceSpillDir,
+// made as the session spawned), which its boundary reads, its shell too (a
+// line longer than \`read\` shows is read by the shell); none for a session
+// CawCo did not launch, whose output OpenCode cuts as it always does.
+const spillFolder = (id, instanceId) => {
   const folder = cawcoWorkspaces + "/" + id + "/" + ${JSON.stringify(SPILLS_DIR_NAME)} + "/" + instanceId;
-  if (!existsSync(folder)) return result;
-  const copy = folder + "/" + basename(file);
-  copyFileSync(file, copy);
-  const content = contentOf(result).map((block) => (block?.type === "text" ? { ...block, text: block.text.replaceAll(file, copy) } : block));
-  return { ...result, content, metadata: { ...result.metadata, outputPath: copy } };
+  return existsSync(folder) ? folder : undefined;
+};
+// \`result\` cut as OpenCode cuts it, its full output saved as \`name\` in the
+// folder \`folderOf\` answers (asked only for a result to cut); as it is, its
+// metadata marked, when nothing needs cutting or the session has no folder.
+const cutInto = async (result, name, folderOf) => {
+  if (result?.metadata?.truncated !== undefined) return result;
+  const content = contentOf(result);
+  const text = content.flatMap((block) => (block?.type === "text" ? [block.text] : [])).join("\\n");
+  const lines = text.split("\\n");
+  if (text.endsWith("\\n")) lines.pop();
+  if (lines.length <= OUTPUT_LINES && Buffer.byteLength(text, "utf-8") <= OUTPUT_BYTES) {
+    return { ...result, metadata: { ...result.metadata, truncated: false } };
+  }
+  const folder = await folderOf();
+  if (!folder) return result;
+  const kept = [];
+  let bytes = 0;
+  for (const line of lines.slice(0, OUTPUT_LINES)) {
+    const size = Buffer.byteLength(line, "utf-8") + (kept.length > 0 ? 1 : 0);
+    if (bytes + size > OUTPUT_BYTES) break;
+    kept.push(line);
+    bytes += size;
+  }
+  const file = folder + "/tool_" + name.replace(/[^A-Za-z0-9_-]/g, "_");
+  writeFileSync(file, text);
+  const hint = "[showing " + (kept.length > 0 ? "lines 1-" + kept.length : "0 lines") + " of " + lines.length + "; full output saved to " + file + "]";
+  const cut = [];
+  let left = kept.join("\\n").length;
+  let joined = false;
+  let hinted = false;
+  for (const block of content) {
+    if (block?.type !== "text") {
+      cut.push(block);
+      continue;
+    }
+    if (joined && left > 0) left--;
+    joined = true;
+    if (left >= block.text.length) {
+      cut.push(block);
+      left -= block.text.length;
+      continue;
+    }
+    if (left > 0) cut.push({ ...block, text: block.text.slice(0, left) });
+    if (!hinted) cut.push({ type: "text", text: hint });
+    left = 0;
+    hinted = true;
+  }
+  if (!hinted) cut.push({ type: "text", text: hint });
+  return { ...result, content: cut, metadata: { ...result.metadata, truncated: true, outputPath: file } };
 };
 
 // Each session's CawCo identity, by OpenCode session id, as the agent records
@@ -531,9 +577,10 @@ export default {
 
     await ctx.tool.hook("execute.after", async (event) => {
       if (workspace && bounded(event.sessionID) && event.status === "completed") {
-        const saved = savedOutputOf(event.result);
-        const instanceId = saved ? await instanceOf(event.sessionID) : undefined;
-        if (saved && instanceId) event.result = spilled(workspace, instanceId, event.result, saved);
+        event.result = await cutInto(event.result, event.id, async () => {
+          const instanceId = await instanceOf(event.sessionID);
+          return instanceId ? spillFolder(workspace, instanceId) : undefined;
+        });
       }
       if (event.tool === "shell") {
         const left = shells.findIndex((one) => one.sessionID === event.sessionID && one.command === event.input?.command);

@@ -2080,6 +2080,21 @@ export class OpencodeHarness implements Harness {
         );
       }
       const client = this.#clientForGeneration(target);
+      // The session's location on the target, ready as a spawn's is before
+      // its first prompt: CawCo's plugin loaded there and its MCP servers
+      // done connecting. The target boots it on its first request, and a
+      // prompt before its servers connect loses their tools for that turn
+      // (anomalyco/opencode#54794).
+      await assertPluginLoaded(
+        client,
+        session.directory,
+        this.#lifetimeSignal()
+      );
+      const unconnected = await waitForMcp(
+        client,
+        session.directory,
+        this.#lifetimeSignal()
+      );
       // Both generations read one database: the newest message each sees is
       // the same, or the candidate has not caught up with the incumbent.
       const histories = await Promise.all(
@@ -2134,6 +2149,7 @@ export class OpencodeHarness implements Harness {
       if (this.#sessions.get(session.instanceId) !== session) {
         throw new Error("OpenCode attachment ended during idle migration.");
       }
+      await session.mcpUnconnected(unconnected);
     })().finally(() => this.#migrations.delete(session.instanceId));
     this.#migrations.set(session.instanceId, migrating);
     return migrating;
@@ -4332,8 +4348,9 @@ export class OpencodeHarness implements Harness {
    * OpenCode saves a tool output it cuts in its server's data dir, every
    * session's together ("[showing … of M; full output saved to <file>]",
    * 2.0.29), and its `read` cuts each line at 2000 characters, so the model
-   * reads a long one by the shell. CawCo's plugin copies each into the
-   * session's own folder and names the copy (opencode-plugin.ts `spilled`).
+   * reads a long one by the shell. CawCo's plugin cuts a workspace
+   * session's output itself, saving it whole in the session's own folder
+   * and naming it there (opencode-plugin.ts `cutInto`).
    */
   // biome-ignore lint/suspicious/useAwait: implements Harness.spill's Promise contract
   async spill(

@@ -1732,7 +1732,7 @@ export const boundaryFor = async (
  * its own; never taken away while the workspace lives, as a session's
  * transcript names its saved results for as long as it is resumed.
  */
-const addSpill = async (id: string, dir: string): Promise<void> => {
+export const addSpill = async (id: string, dir: string): Promise<void> => {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const file = workspaceSpillsFile(id);
   const listed = await reported(
