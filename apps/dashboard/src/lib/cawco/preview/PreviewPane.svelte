@@ -77,7 +77,9 @@
     type ArtifactDoc,
     type ArtifactView,
     artifactSyncPath,
+    type DocSync,
     joinArtifact,
+    type ListHold,
     sendArtifact,
   } from "./artifact-doc";
   import CanvasView from "./CanvasView.svelte";
@@ -809,6 +811,31 @@
   let view = $state.raw<ArtifactView | null>(null);
   let doc: ArtifactDoc | null = null;
   const pins = $derived(view?.pins ?? []);
+  /** Whether the pane holds the doc yet: until it does, no count or list reads as none. */
+  let docSync = $state<DocSync>({ state: "reading" });
+  /** The first sync has outlasted `--dur-wait-grace`: the list's skeleton stands in (The Real Wait Rule). */
+  let readingLong = $state(false);
+  $effect(() => {
+    if (docSync.state !== "reading") {
+      readingLong = false;
+      return;
+    }
+    const grace = setTimeout(() => {
+      readingLong = true;
+    }, dur("--dur-wait-grace"));
+    return () => clearTimeout(grace);
+  });
+  /** What the Comments list stands on: quiet inside the grace, then reading, the pins once held, or why they weren't. */
+  const listHold = $derived.by<ListHold>(() => {
+    switch (docSync.state) {
+      case "synced":
+        return "ready";
+      case "failed":
+        return { failed: docSync.why };
+      default:
+        return readingLong ? "reading" : "quiet";
+    }
+  });
   /** The page has picks the session has not heard: the head offers to send them. */
   const unsentPicks = $derived(
     !!view &&
@@ -893,9 +920,16 @@
     line: number | null;
   }) =>
     `${error.file}${error.line ? `:${error.line}` : ""}${error.column ? `:${error.column}` : ""}`;
-  /** The head's Comments count: the panel's Open tab, the pins on the page not resolved (the app's `ArtifactComments.open`). */
+  /**
+   * The head's Comments count: the panel's Open tab, every pin not resolved,
+   * a moved one too, as the hub counts them. Drawn only above 0 (The Earned
+   * Count Rule), and 0 until the doc is held, so a count not read yet is
+   * never drawn.
+   */
   const openCount = $derived(
-    pins.filter((pin) => !(pin.resolvedAt || pin.movedAt)).length
+    docSync.state === "synced"
+      ? pins.filter((pin) => !pin.resolvedAt).length
+      : 0
   );
   /** The well's box: the Comments panel's room under the head. */
   let wellBox = $state({ w: 0, h: 0 });
@@ -942,9 +976,21 @@
     if (!id) {
       return;
     }
-    const joined = joinArtifact(session, id, (next) => {
-      view = next;
-    });
+    docSync = { state: "reading" };
+    const joined = joinArtifact(
+      session,
+      id,
+      (next) => {
+        view = next;
+      },
+      (sync) => {
+        docSync = sync;
+      },
+      // The hub didn't keep a write of the pane's: said where the page's own refusals are.
+      (why) => {
+        failure = { message: why, again: null };
+      }
+    );
     doc = joined;
     view = null;
     return () => {
@@ -2207,9 +2253,11 @@
       <PinList
         focused={focusedPin}
         {live}
+        hold={listHold}
         onclose={() => showList(false)}
         onopen={openCard}
         onplace={placeAgain}
+        onretry={() => doc?.retry()}
         {pins}
         {placing}
       />

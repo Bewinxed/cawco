@@ -18,6 +18,14 @@ export const artifactWords = {
     `Promoted into the project's folder at artifacts/${name}/`,
   notRemoved: (name: string, why: string) => `${name} wasn't removed: ${why}`,
 
+  // ── The Comments list (preview/PinList.svelte; the app's PinListController) ──
+  /** Its skeleton rows, for a screen reader, while the pins are read past the wait's grace. */
+  readingComments: "Reading the comments",
+  /** The pins couldn't be read; `why` is its own sentence (the hub's reason). */
+  commentsNotRead: (why: string) => `The comments couldn't be read. ${why}`,
+  /** A moved pin's last line: what it stood on is gone. */
+  pinElementGone: "Its element is gone from the page",
+
   // ── A sheet's inspector (preview/SheetInspector.svelte) ──
   inspect: "Inspect",
   inspectTitle:

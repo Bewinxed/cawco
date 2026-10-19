@@ -38,6 +38,22 @@ export interface ArtifactView extends ArtifactChoices {
   stage: StageState | null;
 }
 
+/**
+ * Whether the pane holds the hub's doc yet: `reading` until its first sync
+ * lands, `synced` from then on (a later drop keeps the last good view, as
+ * the board does), `failed` when its socket closed before it ever synced,
+ * with the hub's reason as a sentence of its own.
+ */
+export type DocSync =
+  { state: "reading" } | { state: "synced" } | { state: "failed"; why: string };
+
+/**
+ * What the Comments list stands on: `quiet` while the first sync is inside
+ * `--dur-wait-grace` (nothing said), `reading` past it, `ready` once held,
+ * or why it couldn't be read.
+ */
+export type ListHold = "quiet" | "reading" | "ready" | { failed: string };
+
 export interface ArtifactDoc {
   /** The person deletes pin `pin`, and the ink it alone stands on; a sentence when it was not. */
   delete: (pin: string) => string | null;
@@ -46,9 +62,25 @@ export interface ArtifactDoc {
   reply: (pin: string, text: string) => string | null;
   /** The person resolves pin `pin`, or reopens it; a sentence when it was not. */
   resolve: (pin: string, resolved: boolean) => string | null;
+  /** Try again after a failed first sync: a new socket now, reading again. */
+  retry: () => void;
   /** The person dismissed pin `pin`'s card having said nothing in it: the pin is taken back (core `withdrawPin`). */
   withdraw: (pin: string) => void;
 }
+
+/** A sentence's last mark. */
+const ENDS_SENTENCE = /[.!?]$/;
+
+/** Why a socket closed before its first sync, as its own sentence: the hub's reason when it gave one. */
+const closedWhy = (event: CloseEvent | null): string => {
+  const reason = event?.reason.trim();
+  if (reason) {
+    return ENDS_SENTENCE.test(reason) ? reason : `${reason}.`;
+  }
+  return event
+    ? `The hub closed the link (${event.code}).`
+    : "The hub didn't answer.";
+};
 
 const viewOf = (doc: Doc): ArtifactView => {
   const meta = doc.getMap("meta");
@@ -99,27 +131,92 @@ export async function sendArtifact(
   }
 }
 
+/** The hub's close code for an update it would not keep (hub artifacts/sync.ts `REFUSED`). */
+const REFUSED = 4400;
+
+/**
+ * Joins the artifact's doc: `changed` hears every view of it, each sync's
+ * too (an empty doc's first), and `synced` hears whether it is held yet
+ * ({@link DocSync}), starting at `reading`. A write of the pane's the hub
+ * would not keep closes the socket with {@link REFUSED}, which y-websocket
+ * never reopens: the pane starts again from the hub's doc, as the page's
+ * overlay does, and `refused` hears the hub's reason.
+ */
 export function joinArtifact(
   instanceId: string,
   artifactId: string,
-  changed: (view: ArtifactView) => void
+  changed: (view: ArtifactView) => void,
+  synced: (sync: DocSync) => void,
+  refused: (why: string) => void
 ): ArtifactDoc {
-  const doc = new Doc();
-  doc.on("update", () => changed(viewOf(doc)));
   // The hub's `/ws/artifact/<session>/<artifact>`, through the dashboard's
   // own `/ws` relay: never the preview's origin, which is the page's.
-  const provider = new WebsocketProvider(
-    `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/artifact/${encodeURIComponent(instanceId)}`,
-    artifactId,
-    doc,
-    { disableBc: true, resyncInterval: RESYNC_MS }
-  );
+  const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/artifact/${encodeURIComponent(instanceId)}`;
+  let held = false;
+  /** The pane let it go: a rejoin still queued doesn't start. */
+  let gone = false;
+  let doc = new Doc();
+  let provider = join(doc);
+
+  function join(into: Doc): WebsocketProvider {
+    into.on("update", () => changed(viewOf(into)));
+    const joined = new WebsocketProvider(url, artifactId, into, {
+      disableBc: true,
+      resyncInterval: RESYNC_MS,
+    });
+    joined.on("sync", (now: boolean) => {
+      if (!now) {
+        return;
+      }
+      changed(viewOf(into));
+      if (!held) {
+        held = true;
+        synced({ state: "synced" });
+      }
+    });
+    // A close before the first sync is said; our own close (`event` null, a
+    // retry) is not. y-websocket tries again by itself unless the hub's code
+    // says not to (4400-4499), and a sync after this clears it.
+    joined.on("connection-close", (event: CloseEvent | null) => {
+      if (event?.code === REFUSED) {
+        refused(closedWhy(event));
+        // Out of y-websocket's own close handling first, then a doc of the hub's.
+        queueMicrotask(again);
+        return;
+      }
+      if (event && !held) {
+        synced({ state: "failed", why: closedWhy(event) });
+      }
+    });
+    return joined;
+  }
+
+  /** What the pane wrote the hub would not keep: start again from the hub's doc. */
+  function again() {
+    if (gone) {
+      return;
+    }
+    provider.destroy();
+    doc.destroy();
+    doc = new Doc();
+    provider = join(doc);
+  }
+
   return {
     reply: (pin, text) => replyToPin(doc, pin, text),
     resolve: (pin, resolved) => resolvePin(doc, pin, resolved),
     delete: (pin) => deletePin(doc, pin),
+    retry: () => {
+      if (held) {
+        return;
+      }
+      synced({ state: "reading" });
+      provider.disconnect();
+      provider.connect();
+    },
     withdraw: (pin) => withdrawPin(doc, pin),
     destroy: () => {
+      gone = true;
       provider.destroy();
       doc.destroy();
     },

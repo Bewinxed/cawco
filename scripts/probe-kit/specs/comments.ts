@@ -29,8 +29,8 @@
  *    the refusal's sentence.
  * 5. A re-publish that moves and rewords the paragraph re-anchors pin 1 by
  *    its source's file:line; one that renames it and drops its source,
- *    keeping its text, re-anchors it by text; one that removes it puts pin 1
- *    in the moved tray, and Place again with a tap pins it anew.
+ *    keeping its text, re-anchors it by text; one that removes it marks pin 1
+ *    moved in its own row under Open, and Place again with a tap pins it anew.
  * 6. No `selection.md`, `SelectionChip` or `SelectionPopover` is left in
  *    apps/dashboard/src or packages.
  *
@@ -1061,9 +1061,9 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   await tray.waitFor({ timeout: 5000 }).catch(() => undefined);
   const inTray = await tray.count();
   on.kit.check(
-    "5: one that removes it puts pin 1 in the moved tray",
+    "5: one that removes it marks pin 1 moved, its row under Open",
     !!gone.movedAt && inTray === 1,
-    `movedAt ${String(gone.movedAt)}; tray rows ${inTray}`
+    `movedAt ${String(gone.movedAt)}; moved rows ${inTray}`
   );
 
   const commentButton = on.page.locator(
