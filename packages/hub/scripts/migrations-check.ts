@@ -7,7 +7,8 @@
  * updating from that nightly. A table the fixture had rows in must still
  * have rows: a migration that empties one is caught here. Every foreign key
  * the schema declares stands in the migrated database with the same
- * ON DELETE and ON UPDATE ({@link foreignKeyDrift}).
+ * ON DELETE and ON UPDATE ({@link foreignKeyDrift}). The journal's `when`
+ * increases strictly with idx ({@link outOfOrder}).
  */
 import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -132,7 +133,33 @@ const foreignKeyDrift = async (path: string): Promise<string[]> => {
   );
 };
 
+/**
+ * Every entry whose `when` is not after the one before it, as a sentence
+ * naming both. Drizzle's migrator applies only the migrations whose `when`
+ * is after the newest one a database records, so a hub that ran the earlier
+ * entry never runs a later one stamped before it.
+ */
+const outOfOrder = (entries: { tag: string; when: number }[]): string[] =>
+  entries.flatMap((entry, i) => {
+    const prior = entries[i - 1];
+    return prior && entry.when <= prior.when
+      ? [
+          `\`${entry.tag}\`'s when (${entry.when}) is before \`${prior.tag}\`'s (${prior.when}): hubs that ran ${prior.tag.slice(0, 4)} skip it.`,
+        ]
+      : [];
+  });
+
 try {
+  const { entries } = (await Bun.file(
+    join(HUB, "drizzle/meta/_journal.json")
+  ).json()) as { entries: { idx: number; tag: string; when: number }[] };
+  const sorted = entries.toSorted((a, b) => a.idx - b.idx);
+  const disordered = outOfOrder(sorted);
+  if (disordered.length) {
+    throw new Error(
+      `The migration journal's \`when\` must increase with idx:\n${disordered.join("\n")}`
+    );
+  }
   const dbPath = join(scratch, "hub.db");
   mkdirSync(join(scratch, "home"));
   await Bun.write(
@@ -164,11 +191,7 @@ try {
   await answer(`/api/projects/${project}/threads`);
   lifetime.close();
   const after = read(dbPath);
-  const journal = (
-    (await Bun.file(join(HUB, "drizzle/meta/_journal.json")).json()) as {
-      entries: unknown[];
-    }
-  ).entries.length;
+  const journal = entries.length;
   if (after.migrations !== journal) {
     throw new Error(
       `The database records ${after.migrations} migrations; this commit has ${journal}`
