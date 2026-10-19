@@ -517,442 +517,442 @@
     />
   </div>
 {:else}
-<!-- mark-line: a grid whose first row is the mark line; its words take
+  <!-- mark-line: a grid whose first row is the mark line; its words take
      .mark-text, centred on the lead (the rows under it hold other things) -->
-<div
-  data-slot="row"
-  class="row"
-  data-flip
-  data-kind={item.kind}
-  data-peek={peeks || undefined}
-  data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
-  data-stale={held || undefined}
->
-  <!-- The whole row opens it; the panel closes. A choice opens nothing:
+  <div
+    data-slot="row"
+    class="row"
+    data-flip
+    data-kind={item.kind}
+    data-peek={peeks || undefined}
+    data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
+    data-stale={held || undefined}
+  >
+    <!-- The whole row opens it; the panel closes. A choice opens nothing:
        it is answered here. -->
-  {#if href !== undefined}
-    <a
-      data-slot="cover"
-      aria-label="Open {item.title}"
-      class="cover press-tint focus-inset"
-      {href}
-      onclick={onchoose}
-      {onkeydown}><span class="sr-only">Open {item.title}</span></a
-    >
-  {/if}
-  <!-- The session's own mark, as the rail draws it; a run and a budget their glyphs. -->
-  <span data-slot="lead" class="lead">
-    {#if item.kind === "ask" || item.kind === "watch"}
-      <SessionMark
-        caw={cawOf(item.instanceId)}
-        id={item.instanceId}
-        place={item.cwd || item.machineId}
-        status="attn"
-      />
-    {:else if item.kind === "run"}
-      <IconWorkflow aria-hidden="true" />
-    {:else if item.kind === "choice"}
-      <IconShield aria-hidden="true" />
-    {:else if item.kind === "tailnet"}
-      {#if item.done}
-        <IconSuccess aria-hidden="true" class="done" />
-      {:else}
-        <IconTailnetHttps aria-hidden="true" />
-      {/if}
-    {:else if item.kind === "pairing"}
-      <IconLock aria-hidden="true" />
-    {:else if item.kind === "admission"}
-      <IconServer aria-hidden="true" />
-    {:else if item.kind === "task"}
-      {#if item.reason === "failed"}
-        <IconError aria-hidden="true" />
-      {:else}
-        <IconNeedsYou aria-hidden="true" />
-      {/if}
-    {:else if item.kind === "action"}
-      {#if item.action.state === "unknown"}
-        <IconWarningTriangle aria-hidden="true" />
-      {:else if item.action.state === "failed"}
-        <IconError aria-hidden="true" />
-      {:else}
-        <IconSend aria-hidden="true" />
-      {/if}
-    {:else}
-      <IconDollar aria-hidden="true" />
+    {#if href !== undefined}
+      <a
+        data-slot="cover"
+        aria-label="Open {item.title}"
+        class="cover press-tint focus-inset"
+        {href}
+        onclick={onchoose}
+        {onkeydown}><span class="sr-only">Open {item.title}</span></a
+      >
     {/if}
-  </span>
-  <span data-slot="name" class="name mark-text">{item.title}</span>
-  {#if item.raisedAt !== undefined}
-    <span data-slot="wait" class="wait mark-text"
-      >{span(clock.now - item.raisedAt)}</span
-    >
-  {/if}
-  {#if peeks}
-    <!-- Glance → peek → dive: read what led here before answering. -->
-    <span data-slot="end" class="end">
-      <Tip disabled={peekTipOff()} label="Peek">
-        {#snippet children(tip)}
-          <button
-            data-needs-card-peek
-            {...tip}
-            aria-label="Peek {item.title}"
-            class="peek touch-hit pointer-hit focus-inset"
-            onclick={peekAsk}
-            {onkeydown}
-            type="button"
-          >
-            <IconMaximize aria-hidden="true" />
-          </button>
-        {/snippet}
-      </Tip>
+    <!-- The session's own mark, as the rail draws it; a run and a budget their glyphs. -->
+    <span data-slot="lead" class="lead">
+      {#if item.kind === "ask" || item.kind === "watch"}
+        <SessionMark
+          caw={cawOf(item.instanceId)}
+          id={item.instanceId}
+          place={item.cwd || item.machineId}
+          status="attn"
+        />
+      {:else if item.kind === "run"}
+        <IconWorkflow aria-hidden="true" />
+      {:else if item.kind === "choice"}
+        <IconShield aria-hidden="true" />
+      {:else if item.kind === "tailnet"}
+        {#if item.done}
+          <IconSuccess aria-hidden="true" class="done" />
+        {:else}
+          <IconTailnetHttps aria-hidden="true" />
+        {/if}
+      {:else if item.kind === "pairing"}
+        <IconLock aria-hidden="true" />
+      {:else if item.kind === "admission"}
+        <IconServer aria-hidden="true" />
+      {:else if item.kind === "task"}
+        {#if item.reason === "failed"}
+          <IconError aria-hidden="true" />
+        {:else}
+          <IconNeedsYou aria-hidden="true" />
+        {/if}
+      {:else if item.kind === "action"}
+        {#if item.action.state === "unknown"}
+          <IconWarningTriangle aria-hidden="true" />
+        {:else if item.action.state === "failed"}
+          <IconError aria-hidden="true" />
+        {:else}
+          <IconSend aria-hidden="true" />
+        {/if}
+      {:else}
+        <IconDollar aria-hidden="true" />
+      {/if}
     </span>
-  {/if}
-  <span data-slot="want" class="want">{want}</span>
-  {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
-    <!-- What runs, under why: its first line, so Approve here is made on
+    <span data-slot="name" class="name mark-text">{item.title}</span>
+    {#if item.raisedAt !== undefined}
+      <span data-slot="wait" class="wait mark-text"
+        >{span(clock.now - item.raisedAt)}</span
+      >
+    {/if}
+    {#if peeks}
+      <!-- Glance → peek → dive: read what led here before answering. -->
+      <span data-slot="end" class="end">
+        <Tip disabled={peekTipOff()} label="Peek">
+          {#snippet children(tip)}
+            <button
+              data-needs-card-peek
+              {...tip}
+              aria-label="Peek {item.title}"
+              class="peek touch-hit pointer-hit focus-inset"
+              onclick={peekAsk}
+              {onkeydown}
+              type="button"
+            >
+              <IconMaximize aria-hidden="true" />
+            </button>
+          {/snippet}
+        </Tip>
+      </span>
+    {/if}
+    <span data-slot="want" class="want">{want}</span>
+    {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
+      <!-- What runs, under why: its first line, so Approve here is made on
          the command as much as on the card. A held post's target line
          already says where it goes. -->
-    <code class="cmd"
-      >{item.request.presentation.command.trim().split("\n")[0]}</code
-    >
-  {/if}
-  {#if item.kind === "ask" && item.request.browserAsk}
-    <!-- Where the person will be typing, in the line a command stands in:
+      <code class="cmd"
+        >{item.request.presentation.command.trim().split("\n")[0]}</code
+      >
+    {/if}
+    {#if item.kind === "ask" && item.request.browserAsk}
+      <!-- Where the person will be typing, in the line a command stands in:
          the page's origin whole (never cut, as a command's line is: the
          domain is at its end), broken only after its dots. -->
-    <code
-      data-slot="needs-origin"
-      class="cmd [overflow-wrap:break-word]! whitespace-normal!"
-      ><OriginText origin={item.request.browserAsk.origin} /></code
-    >
-  {/if}
-  {#if item.kind === "ask"}
-    <!-- Where it came from: the project first, in its mark and strong ink;
+      <code
+        data-slot="needs-origin"
+        class="cmd [overflow-wrap:break-word]! whitespace-normal!"
+        ><OriginText origin={item.request.browserAsk.origin} /></code
+      >
+    {/if}
+    {#if item.kind === "ask"}
+      <!-- Where it came from: the project first, in its mark and strong ink;
          then what it asks for; then the machine, by its OS mark. -->
-    <span data-where data-slot="meta" class="meta where mark-line">
-      {#if item.project}
-        <span data-slot="project" class="project mark-line" data-box>
-          <IconFolder
-            data-needs-card-mark
-            aria-hidden="true"
-            class="mark"
-            style="color: var(--mark-{item.project.hue})"
-          />
-          <span data-slot="project-name" class="project-name"
-            >{item.project.name}</span
+      <span data-where data-slot="meta" class="meta where mark-line">
+        {#if item.project}
+          <span data-slot="project" class="project mark-line" data-box>
+            <IconFolder
+              data-needs-card-mark
+              aria-hidden="true"
+              class="mark"
+              style="color: var(--mark-{item.project.hue})"
+            />
+            <span data-slot="project-name" class="project-name"
+              >{item.project.name}</span
+            >
+          </span>
+          <span data-slot="dot" aria-hidden="true" class="dot">·</span>
+        {/if}
+        <!-- A held post names the session that asked; its title is the row's. -->
+        {#if item.request.presentation.post && item.request.presentation.asker}
+          <span data-slot="asker" class="asker"
+            >{item.request.presentation.asker}</span
           >
-        </span>
+        {:else}
+          <span>{askKind(item)}</span>
+        {/if}
         <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-      {/if}
-      <!-- A held post names the session that asked; its title is the row's. -->
-      {#if item.request.presentation.post && item.request.presentation.asker}
-        <span data-slot="asker" class="asker"
-          >{item.request.presentation.asker}</span
-        >
-      {:else}
-        <span>{askKind(item)}</span>
-      {/if}
-      <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-      <span data-slot="machine" class="machine mark-line" data-box>
-        <OsMark class="mark" os={item.machine.os} />
-        <span class="machine-name">{item.machine.name}</span>
+        <span data-slot="machine" class="machine mark-line" data-box>
+          <OsMark class="mark" os={item.machine.os} />
+          <span class="machine-name">{item.machine.name}</span>
+        </span>
+        {#if item.stale}
+          <span data-slot="dot" aria-hidden="true" class="dot">·</span>
+          <span>machine offline</span>
+        {/if}
       </span>
-      {#if item.stale}
-        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-        <span>machine offline</span>
-      {/if}
-    </span>
-  {:else if item.kind === "action" && call}
-    <!-- The exact call: when, through which account, the tool, the arguments. -->
-    <dl data-slot="call" class="call">
-      <dt>Runs</dt>
-      <dd>{call.when}</dd>
-      <dt>Through</dt>
-      <dd>{call.through}</dd>
-      <dt>Tool</dt>
-      <dd data-slot="tool" class="tool">{call.tool}</dd>
-    </dl>
-    <!-- A scroller with no focusable child is itself in the tab order
+    {:else if item.kind === "action" && call}
+      <!-- The exact call: when, through which account, the tool, the arguments. -->
+      <dl data-slot="call" class="call">
+        <dt>Runs</dt>
+        <dd>{call.when}</dd>
+        <dt>Through</dt>
+        <dd>{call.through}</dd>
+        <dt>Tool</dt>
+        <dd data-slot="tool" class="tool">{call.tool}</dd>
+      </dl>
+      <!-- A scroller with no focusable child is itself in the tab order
          (keyboard-focusable scrollers), so a keyboard scrolls it too. -->
-    <pre data-slot="args" class="args focus-inset">{call.args}</pre>
-    <span data-where data-slot="meta" class="meta where mark-line">
-      {#if item.project}
-        <span data-slot="project" class="project mark-line" data-box>
-          <IconFolder
-            data-needs-card-mark
-            aria-hidden="true"
-            class="mark"
-            style="color: var(--mark-{item.project.hue})"
-          />
-          <span data-slot="project-name" class="project-name"
-            >{item.project.name}</span
-          >
-        </span>
-        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-      {/if}
-      <span>Approved action</span>
-      {#if item.action.taskId}
-        <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-        <span class="task">{item.action.taskId}</span>
-      {/if}
-    </span>
-  {:else if item.kind === "tailnet"}
-    {#if tailnetTodos.length > 0}
-      <!-- Every step on the path, in order: a step that stands says what to
+      <pre data-slot="args" class="args focus-inset">{call.args}</pre>
+      <span data-where data-slot="meta" class="meta where mark-line">
+        {#if item.project}
+          <span data-slot="project" class="project mark-line" data-box>
+            <IconFolder
+              data-needs-card-mark
+              aria-hidden="true"
+              class="mark"
+              style="color: var(--mark-{item.project.hue})"
+            />
+            <span data-slot="project-name" class="project-name"
+              >{item.project.name}</span
+            >
+          </span>
+          <span data-slot="dot" aria-hidden="true" class="dot">·</span>
+        {/if}
+        <span>Approved action</span>
+        {#if item.action.taskId}
+          <span data-slot="dot" aria-hidden="true" class="dot">·</span>
+          <span class="task">{item.action.taskId}</span>
+        {/if}
+      </span>
+    {:else if item.kind === "tailnet"}
+      {#if tailnetTodos.length > 0}
+        <!-- Every step on the path, in order: a step that stands says what to
            do, where or why, and its control; a step taken is its tick and
            its label. -->
-      <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
-      <ol data-slot="steps" class="steps" role="list">
-        {#each tailnetTodos as one, index (one.todo.step)}
-          <li
-            data-slot="step"
-            class="step mark-line"
-            data-done={one.todo.done || undefined}
-            data-step={one.todo.step}
-          >
-            <span class="mark-cell">
-              <span data-slot="step-mark" class="step-mark">
-                {#if one.todo.done}
-                  <IconSuccess aria-hidden="true" />
-                {:else}
-                  <span
-                    aria-hidden="true"
-                    class="step-number"
-                    data-n={index + 1}
-                  ></span>
-                {/if}
-              </span>
-            </span>
-            <span data-slot="step-label" class="step-label"
-              >{#if one.todo.done}<span class="sr-only"
-                  >{tailnetWords.stepDone}{" "}</span
-                >{/if}{one.label}</span
+        <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
+        <ol data-slot="steps" class="steps" role="list">
+          {#each tailnetTodos as one, index (one.todo.step)}
+            <li
+              data-slot="step"
+              class="step mark-line"
+              data-done={one.todo.done || undefined}
+              data-step={one.todo.step}
             >
-            {#if !one.todo.done}
-              <span data-slot="step-note" class="step-note">{one.note}</span>
-              {#if one.command}
-                <div data-slot="step-command" class="step-control" data-box>
-                  <CopyBox
-                    label={tailnetWords.command}
-                    text={one.command}
-                    wrap
-                  />
-                </div>
-              {:else if one.href}
-                <div data-slot="step-link" class="step-control" data-box>
-                  <Button
-                    href={one.href}
-                    icon={IconExternal}
-                    label={one.link}
-                    rel="noopener"
-                    size="sm"
-                    target="_blank"
-                    variant="secondary"
-                  />
-                </div>
+              <span class="mark-cell">
+                <span data-slot="step-mark" class="step-mark">
+                  {#if one.todo.done}
+                    <IconSuccess aria-hidden="true" />
+                  {:else}
+                    <span
+                      aria-hidden="true"
+                      class="step-number"
+                      data-n={index + 1}
+                    ></span>
+                  {/if}
+                </span>
+              </span>
+              <span data-slot="step-label" class="step-label"
+                >{#if one.todo.done}<span class="sr-only"
+                    >{tailnetWords.stepDone}{" "}</span
+                  >{/if}{one.label}</span
+              >
+              {#if !one.todo.done}
+                <span data-slot="step-note" class="step-note">{one.note}</span>
+                {#if one.command}
+                  <div data-slot="step-command" class="step-control" data-box>
+                    <CopyBox
+                      label={tailnetWords.command}
+                      text={one.command}
+                      wrap
+                    />
+                  </div>
+                {:else if one.href}
+                  <div data-slot="step-link" class="step-control" data-box>
+                    <Button
+                      href={one.href}
+                      icon={IconExternal}
+                      label={one.link}
+                      rel="noopener"
+                      size="sm"
+                      target="_blank"
+                      variant="secondary"
+                    />
+                  </div>
+                {/if}
               {/if}
-            {/if}
-          </li>
-        {/each}
-      </ol>
-    {/if}
-    <span data-slot="meta" class="meta">{meta}</span>
-  {:else if item.kind === "task"}
-    <span data-where data-slot="meta" class="meta where mark-line">
-      {#if item.project}
-        <span data-slot="project" class="project mark-line" data-box>
-          <IconFolder
-            data-needs-card-mark
-            aria-hidden="true"
-            class="mark"
-            style="color: var(--mark-{item.project.hue})"
-          />
-          <span data-slot="project-name" class="project-name"
-            >{item.project.name}</span
-          >
-        </span>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+      <span data-slot="meta" class="meta">{meta}</span>
+    {:else if item.kind === "task"}
+      <span data-where data-slot="meta" class="meta where mark-line">
+        {#if item.project}
+          <span data-slot="project" class="project mark-line" data-box>
+            <IconFolder
+              data-needs-card-mark
+              aria-hidden="true"
+              class="mark"
+              style="color: var(--mark-{item.project.hue})"
+            />
+            <span data-slot="project-name" class="project-name"
+              >{item.project.name}</span
+            >
+          </span>
+          <span data-slot="dot" aria-hidden="true" class="dot">·</span>
+        {/if}
+        <span>Task</span>
         <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-      {/if}
-      <span>Task</span>
-      <span data-slot="dot" aria-hidden="true" class="dot">·</span>
-      <span class="task">{item.taskId}</span>
-    </span>
-  {:else}
-    <span data-slot="meta" class="meta">{meta}</span>
-  {/if}
-  {#if item.kind === "ask" && answerable}
-    <div data-slot="peers" class="peers">
-      {#if answerRefused}
-        <ErrorText
-          class="refusal"
-          message={answerRefused}
-          title="The hub refused that answer"
-        />
-      {/if}
-      <Button
-        data-deny
-        aria-label="Deny {answered}"
-        class="peer deny"
-        disabled={held || (answering && pressed !== "deny")}
-        failed={answerRefused !== null && pressed === "deny"}
-        icon={IconClose}
-        label="Deny"
-        onclick={() => answer("deny")}
-        {onkeydown}
-        pending={answering && pressed === "deny"}
-        pendingLabel="Denying…"
-        size="sm"
-        variant="secondary"
-      />
-      <Button
-        data-approve
-        aria-label="{item.request.browserAsk
-          ? 'Take over'
-          : 'Approve'} {answered}"
-        class="peer approve"
-        disabled={held || (answering && pressed !== "allow")}
-        failed={answerRefused !== null && pressed === "allow"}
-        icon={item.request.browserAsk ? IconInteract : IconTick}
-        label={item.request.browserAsk ? "Take over" : "Approve"}
-        onclick={() => answer("allow")}
-        {onkeydown}
-        pending={answering && pressed === "allow"}
-        pendingLabel={item.request.browserAsk ? "Taking over…" : "Approving…"}
-        size="sm"
-        variant="secondary"
-      />
-    </div>
-  {:else if item.kind === "choice"}
-    <!-- Its three options as the peers: same size, type and fill (The Peer
-         Rule); keeping agents off comes first, as the recommended one, then
-         asking first, then letting them post. -->
-    <div data-slot="peers" class="peers">
-      {#if choiceRefusal}
-        <ErrorText
-          class="refusal"
-          message={choiceRefusal}
-          title="The hub refused that answer"
-        />
-      {/if}
-      {#each UPSTREAM_POSTS as answer (answer)}
-        <Button
-          class="peer"
-          disabled={stale || (choosing !== null && choosing !== answer)}
-          failed={answer === "off" && choiceRefusal !== null}
-          label={upstreamPostsWords(answer)}
-          onclick={() => choose(answer)}
-          pending={choosing === answer}
-          pendingLabel="Saving…"
-          size="sm"
-          variant="secondary"
-        />
-      {/each}
-    </div>
-  {:else if item.kind === "tailnet" && item.done}
-    <!-- Ticked: the https dashboard to open. -->
-    <div data-slot="peers" class="peers">
-      <Button
-        href={item.tailnet.dashboard}
-        icon={IconExternal}
-        label={tailnetWords.openDashboard}
-        rel="noopener"
-        size="sm"
-        target="_blank"
-        variant="secondary"
-      />
-    </div>
-  {:else if item.kind === "pairing" || item.kind === "admission"}
-    {@const who =
-      item.kind === "pairing"
-        ? `${item.title}, code ${item.request.userCode}`
-        : item.title}
-    <div data-slot="peers" class="peers">
-      {#if refusal}
-        <ErrorText
-          class="refusal"
-          message={refusal}
-          title="The hub refused that answer"
-        />
-      {/if}
-      <Button
-        data-deny
-        aria-label="Deny {who}"
-        class="peer deny"
-        disabled={held || admitting === true}
-        icon={IconClose}
-        label="Deny"
-        onclick={() => admitOrDeny(false)}
-        pending={admitting === false}
-        pendingLabel="Denying…"
-        size="sm"
-        variant="secondary"
-      />
-      <Button
-        data-approve
-        aria-label="{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}"
-        class="peer approve"
-        disabled={held || admitting === false}
-        icon={IconTick}
-        label={item.kind === "pairing" ? "Approve" : "Admit"}
-        onclick={() => admitOrDeny(true)}
-        pending={admitting === true}
-        pendingLabel={item.kind === "pairing" ? "Approving…" : "Admitting…"}
-        size="sm"
-        variant="secondary"
-      />
-    </div>
-  {:else if item.kind === "action"}
-    <div data-slot="peers" class="peers">
-      {#if refusal}
-        <ErrorText
-          class="refusal"
-          message={refusal}
-          title="The hub refused that decision"
-        />
-      {/if}
-      {#if approvable}
+        <span class="task">{item.taskId}</span>
+      </span>
+    {:else}
+      <span data-slot="meta" class="meta">{meta}</span>
+    {/if}
+    {#if item.kind === "ask" && answerable}
+      <div data-slot="peers" class="peers">
+        {#if answerRefused}
+          <ErrorText
+            class="refusal"
+            message={answerRefused}
+            title="The hub refused that answer"
+          />
+        {/if}
         <Button
           data-deny
-          aria-label="Deny {item.action.tool} on {item.action.connection}"
+          aria-label="Deny {answered}"
           class="peer deny"
-          disabled={held || deciding}
-          onclick={() => decide("deny")}
+          disabled={held || (answering && pressed !== "deny")}
+          failed={answerRefused !== null && pressed === "deny"}
+          icon={IconClose}
+          label="Deny"
+          onclick={() => answer("deny")}
           {onkeydown}
+          pending={answering && pressed === "deny"}
+          pendingLabel="Denying…"
           size="sm"
           variant="secondary"
-        >
-          <IconClose />
-          <span>Deny</span>
-        </Button>
+        />
         <Button
           data-approve
-          aria-label="Approve {item.action.tool} on {item.action.connection}"
+          aria-label="{item.request.browserAsk
+            ? 'Take over'
+            : 'Approve'} {answered}"
           class="peer approve"
-          disabled={held || deciding}
-          onclick={() => decide("approve")}
+          disabled={held || (answering && pressed !== "allow")}
+          failed={answerRefused !== null && pressed === "allow"}
+          icon={item.request.browserAsk ? IconInteract : IconTick}
+          label={item.request.browserAsk ? "Take over" : "Approve"}
+          onclick={() => answer("allow")}
           {onkeydown}
+          pending={answering && pressed === "allow"}
+          pendingLabel={item.request.browserAsk ? "Taking over…" : "Approving…"}
           size="sm"
           variant="secondary"
-        >
-          <IconTick />
-          <span>Approve</span>
-        </Button>
-      {:else}
+        />
+      </div>
+    {:else if item.kind === "choice"}
+      <!-- Its three options as the peers: same size, type and fill (The Peer
+         Rule); keeping agents off comes first, as the recommended one, then
+         asking first, then letting them post. -->
+      <div data-slot="peers" class="peers">
+        {#if choiceRefusal}
+          <ErrorText
+            class="refusal"
+            message={choiceRefusal}
+            title="The hub refused that answer"
+          />
+        {/if}
+        {#each UPSTREAM_POSTS as answer (answer)}
+          <Button
+            class="peer"
+            disabled={stale || (choosing !== null && choosing !== answer)}
+            failed={answer === "off" && choiceRefusal !== null}
+            label={upstreamPostsWords(answer)}
+            onclick={() => choose(answer)}
+            pending={choosing === answer}
+            pendingLabel="Saving…"
+            size="sm"
+            variant="secondary"
+          />
+        {/each}
+      </div>
+    {:else if item.kind === "tailnet" && item.done}
+      <!-- Ticked: the https dashboard to open. -->
+      <div data-slot="peers" class="peers">
         <Button
-          aria-label="Remove {item.action.tool} on {item.action
-            .connection} from Needs you"
-          disabled={held || deciding}
-          onclick={() => decide("checked")}
+          href={item.tailnet.dashboard}
+          icon={IconExternal}
+          label={tailnetWords.openDashboard}
+          rel="noopener"
+          size="sm"
+          target="_blank"
+          variant="secondary"
+        />
+      </div>
+    {:else if item.kind === "pairing" || item.kind === "admission"}
+      {@const who =
+        item.kind === "pairing"
+          ? `${item.title}, code ${item.request.userCode}`
+          : item.title}
+      <div data-slot="peers" class="peers">
+        {#if refusal}
+          <ErrorText
+            class="refusal"
+            message={refusal}
+            title="The hub refused that answer"
+          />
+        {/if}
+        <Button
+          data-deny
+          aria-label="Deny {who}"
+          class="peer deny"
+          disabled={held || admitting === true}
+          icon={IconClose}
+          label="Deny"
+          onclick={() => admitOrDeny(false)}
+          pending={admitting === false}
+          pendingLabel="Denying…"
           size="sm"
           variant="secondary"
-        >
-          <IconCheck />
-          <span>Remove</span>
-        </Button>
-      {/if}
-    </div>
-  {/if}
-</div>
+        />
+        <Button
+          data-approve
+          aria-label="{item.kind === 'pairing' ? 'Approve' : 'Admit'} {who}"
+          class="peer approve"
+          disabled={held || admitting === false}
+          icon={IconTick}
+          label={item.kind === "pairing" ? "Approve" : "Admit"}
+          onclick={() => admitOrDeny(true)}
+          pending={admitting === true}
+          pendingLabel={item.kind === "pairing" ? "Approving…" : "Admitting…"}
+          size="sm"
+          variant="secondary"
+        />
+      </div>
+    {:else if item.kind === "action"}
+      <div data-slot="peers" class="peers">
+        {#if refusal}
+          <ErrorText
+            class="refusal"
+            message={refusal}
+            title="The hub refused that decision"
+          />
+        {/if}
+        {#if approvable}
+          <Button
+            data-deny
+            aria-label="Deny {item.action.tool} on {item.action.connection}"
+            class="peer deny"
+            disabled={held || deciding}
+            onclick={() => decide("deny")}
+            {onkeydown}
+            size="sm"
+            variant="secondary"
+          >
+            <IconClose />
+            <span>Deny</span>
+          </Button>
+          <Button
+            data-approve
+            aria-label="Approve {item.action.tool} on {item.action.connection}"
+            class="peer approve"
+            disabled={held || deciding}
+            onclick={() => decide("approve")}
+            {onkeydown}
+            size="sm"
+            variant="secondary"
+          >
+            <IconTick />
+            <span>Approve</span>
+          </Button>
+        {:else}
+          <Button
+            aria-label="Remove {item.action.tool} on {item.action
+              .connection} from Needs you"
+            disabled={held || deciding}
+            onclick={() => decide("checked")}
+            size="sm"
+            variant="secondary"
+          >
+            <IconCheck />
+            <span>Remove</span>
+          </Button>
+        {/if}
+      </div>
+    {/if}
+  </div>
 {/if}
 
 <style>
