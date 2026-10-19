@@ -778,6 +778,8 @@ export interface TrayChild {
   machinePaused: string | null;
   /** What the work item waits for to start; null on a started session. */
   queued: WorkItemSummary["queued"];
+  /** Its account's limit stopping the work item's session, in words; null on a started session. */
+  stalled: string | null;
   state: WorkItemSummary["state"];
   title: string;
   /** The delegate's work item; null on a started session. */
@@ -820,6 +822,7 @@ const itemChild = (item: WorkItemSummary): TrayChild => ({
   queued: item.queued,
   checkQueue: item.checkQueue,
   machinePaused: item.machinePaused,
+  stalled: item.stalled,
   work: item,
 });
 
@@ -865,6 +868,7 @@ const sessionChild = (row: InstanceRow): TrayChild => {
     queued: null,
     checkQueue: null,
     machinePaused: null,
+    stalled: null,
     work: null,
   };
 };
