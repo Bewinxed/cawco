@@ -5,7 +5,7 @@ Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:bet
 better-ui rules followed: outer radius = inner + padding (marks stay `rounded-xs`, the dial button `rounded-pill`); transitions name their properties (none added, existing `transition-[…]` lists kept); motion stays behind `motion-safe:` / `motion-reduce:` (the filed-task entrance is `motion-safe:` rise, `motion-reduce:` fade); hover only through the `hover:` variant; no `transition-all`.
 better-layout rules followed: logical properties (`ms-`/`pe-`/`inset-x`); `min-height` not `height` on text boxes (workflow rows `min-h-`, touch floor `min-h-c-btn-h-lg`); full-height panes on `h-dvh` / `min-h-dvh`, not `100vh`; grid tracks `minmax(var(--token), 1fr)`; text beside actions can shrink (`min-w-0` kept); touch floor is the 44px `c-btn-h-lg`.
 
-Files: 8 of 8 done.
+Files: 9 of 9 done (lib/cawco/OpenCodeLogo.svelte joined the list in round 3: no `<style>`; it takes a `class` prop merged with `cn()`).
 
 ## Per-file table
 file · rules moved · residual counts (1/2/3/4/5) · literals removed · breakpoint edges · STOPs
@@ -154,6 +154,8 @@ removed: apps/dashboard/src/lib/cawco/StopTray.svelte:944 `mx-(--pull-x) my-(--p
 removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:969 `--org-gap` and the sibling-selector arbitrary variant on the wall — see the `fixed:` line at :981
 removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:507 `[&_svg]:size-full` on the three Claude mark wrappers (:507, :881, :1040)
 
+removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:591 `[&_svg]:size-full` on the OpenCode mark wrappers (:591, :807) and the note mark wrapper (:1067)
+
 ## Kit swaps
 kit-swap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1109 DrawerTrigger press-tint flex h-c-btn-h-lg … hover:bg-surface-hover … — a bare-row trigger variant ("strip": the whole row is the button, hover/open wash on the ground it stands on)
 kit-swap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1127 PopoverTrigger press-tint flex h-c-btn-h-lg … hover:bg-surface-hover … — the same "strip" trigger variant
@@ -182,9 +184,12 @@ fixed: apps/dashboard/src/lib/cawco/StopTray.svelte:944 the sessions list clips 
 fixed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:981 an org head after the first block spaces itself with `group-not-first/block:mt-space-2` on the head, replacing the sibling selector `[&>[data-slot=block]+[data-slot=block]>h4]:mt-(--org-gap)` — one rule per element
 fixed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:507 the Claude mark wrappers (also :881, :1040) pass `class="size-full"` to ClaudeIcon instead of `[&_svg]:size-full`
 
+fixed: apps/dashboard/src/lib/cawco/OpenCodeLogo.svelte:14 the logo's `<svg>` takes a `class` prop, merged with `cn()` as the kit parts do (the file joined this lane's list) — a class is a style, not a parent's `[&_svg]` selector
+fixed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:591 the OpenCode mark wrapper (also :807, the Go cell's) passes `class="size-full"` to OpenCodeLogo instead of `[&_svg]:size-full`
+fixed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1067 a provider note's mark (ClaudeIcon or OpenCodeLogo, both take a class now) gets `class="size-full"` instead of `[&_svg]:size-full`
+
 ## Gaps
-gap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:590 `[&_svg]:size-full` on the OpenCode mark wrapper (and :806, the Go cell's) — OpenCodeLogo.svelte:8 (`<svg>`) takes no `class`; it should accept one, so the wrapper passes `class="size-full"` as the Claude marks now do (DESIGN.md: a class is a style)
-gap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1066 `[&_svg]:size-full` on a provider note's mark wrapper — the marks come from `notes` (each a different icon component, built where the note is made, UsageMeter.svelte:412 and the other providers' icon modules), so passing `class="size-full"` needs those icon components to take a class: OpenCodeLogo.svelte:8 is one
+(none)
 
 ## Notes
 - UsageMeter.svelte:493 the strip's row is a fixed `c-usage-strip-row` with a clipped wrap row by design (the face comment: opencode's cell wraps onto a second row the strip does not show, rather than Claude's answer being cut); not scar tissue, so no gap.
