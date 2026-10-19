@@ -21,7 +21,7 @@ export const Plan = {
 };
 
 /** Phone · Crew first in the sheet: a delegate or a step opens on a page of its own. */
-export const OnPhone = {
+export const Phone = {
   args: { frame: "phone" },
   parameters: { viewport: "phone" },
 };

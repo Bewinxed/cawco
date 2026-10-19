@@ -16,11 +16,12 @@
    * draws between tiles, in the nesting rail's stroke (1px, `nest-ink`)
    * with the rail's own quarter-turn at each bend, under the tiles. Lanes
    * leaves a tile's foot and arrives at the dependent's top, bending across
-   * a lane; Crew first runs every line straight down the mark column, and a
-   * line that would cross another tile takes the column's inline-start side
-   * instead. A line draws down over 160ms when it first appears (Thinking
-   * steps). Where a step's delegate is working, a band of the live ink
-   * travels its line once per --dur-loop, by transform only.
+   * a lane; Crew first runs a line straight down the mark column, and one
+   * that would cross another tile runs down the gap between the tiles and
+   * the words, inside the card. A line draws down over 160ms when it first
+   * appears (Thinking steps). Where a step's delegate is working, a band of
+   * the live ink travels its line once per --dur-loop, by transform only,
+   * and is drawn only while it moves.
    *
    * Measured off the tiles (`data-tile`) in this layer's parent, again on
    * every frame of a change in it (a fold opening, a row arriving).
@@ -31,17 +32,21 @@
 
   interface Drawn {
     d: string;
+    from: string;
     id: string;
     kind: Edge["kind"];
     /** The run a band travels: its x, top and length. */
     pulse?: { x: number; y: number; length: number };
+    to: string;
   }
 
   const uid = $props.id();
   let svg = $state<SVGSVGElement>();
   let drawn = $state<Drawn[]>([]);
-  const R = 4;
+  const R = 3;
   const BEND = 7;
+  /** Half the gap between the mark column and the words (--space-2). */
+  const GAP = 4;
 
   function measure(): void {
     const host = svg?.parentElement;
@@ -86,6 +91,8 @@
         return [
           {
             id,
+            from: edge.from,
+            to: edge.to,
             kind: edge.kind,
             d: `M ${a.cx} ${a.bottom} V ${turn} Q ${a.cx} ${b.cy} ${a.cx + R} ${b.cy} H ${b.left}`,
             pulse: edge.pulse
@@ -100,17 +107,28 @@
             Math.abs(t.cx - a.cx) < 1 && t.top > a.bottom && t.top < b.top - 1
         );
         if (crosses && mode === "column") {
-          // Round the tiles between, on the column's inline-start side.
-          const x = a.left - BEND;
+          // Past the tiles between, down the gap between the tiles and the
+          // words: inside the card, never through a tile.
+          const x = a.right + GAP;
           return [
             {
               id,
+              from: edge.from,
+              to: edge.to,
               kind: edge.kind,
-              d: `M ${a.left} ${a.cy} H ${x + R} Q ${x} ${a.cy} ${x} ${a.cy + R} V ${b.cy - R} Q ${x} ${b.cy} ${x + R} ${b.cy} H ${b.left}`,
+              d: `M ${a.right} ${a.cy} H ${x - R} Q ${x} ${a.cy} ${x} ${a.cy + R} V ${b.cy - R} Q ${x} ${b.cy} ${x - R} ${b.cy} H ${b.right}`,
             },
           ];
         }
-        return [{ id, kind: edge.kind, d: `M ${a.cx} ${a.bottom} V ${b.top}` }];
+        return [
+          {
+            id,
+            from: edge.from,
+            to: edge.to,
+            kind: edge.kind,
+            d: `M ${a.cx} ${a.bottom} V ${b.top}`,
+          },
+        ];
       }
       // Across a lane: bend just after the source going out, just before
       // the dependent coming back.
@@ -120,6 +138,8 @@
       return [
         {
           id,
+          from: edge.from,
+          to: edge.to,
           kind: edge.kind,
           d: `M ${a.cx} ${a.bottom} V ${y - R} Q ${a.cx} ${y} ${a.cx + dir * R} ${y} H ${b.cx - dir * R} Q ${b.cx} ${y} ${b.cx} ${y + R} V ${b.top}`,
         },
@@ -171,7 +191,14 @@
 
 <svg aria-hidden="true" bind:this={svg} class="wires" data-slot="connectors">
   {#each drawn as wire, index (wire.id)}
-    <path class="wire" d={wire.d} data-kind={wire.kind} pathLength="1" />
+    <path
+      class="wire"
+      d={wire.d}
+      data-from={wire.from}
+      data-kind={wire.kind}
+      data-to={wire.to}
+      pathLength="1"
+    />
     {#if wire.pulse && wire.pulse.length > 0}
       <clipPath id="{uid}-{index}">
         <rect
@@ -230,13 +257,18 @@
     fill: var(--status-live-glyph);
     opacity: 0.5;
   }
+  /* Drawn only while it moves: at rest (no animation, reduced motion, a
+     frame whose runs were stopped) there is no band. */
   .pv-pulse {
-    @media (prefers-reduced-motion: reduce) {
-      display: none;
-    }
+    opacity: 0;
   }
   @keyframes pv-pulse {
+    from {
+      opacity: 1;
+      translate: 0 0;
+    }
     to {
+      opacity: 1;
       translate: 0 var(--len);
     }
   }

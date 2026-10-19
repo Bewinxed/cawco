@@ -21,7 +21,7 @@ export const Plan = {
 };
 
 /** Phone · Lanes in the sheet: a step opens on a page of its own. */
-export const OnPhone = {
+export const Phone = {
   args: { frame: "phone" },
   parameters: { viewport: "phone" },
 };

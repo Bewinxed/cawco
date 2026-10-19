@@ -44,6 +44,9 @@ const DASHBOARD = join(ROOT, "apps", "dashboard");
 const STORIES = "src/lib/cawco/plan/proposal";
 const CAPS = [join(process.env.TMPDIR ?? "/tmp", "caps"), join(ROOT, "caps")];
 
+/** A figure in a head: the to-dos head carries none. */
+const DIGIT = /\d/;
+
 const WAYS = [
   { file: "OneList", label: "One list", variation: "a" },
   { file: "Lanes", label: "Lanes", variation: "b" },
@@ -356,7 +359,24 @@ async function capture(page: Page, name: string, story: string): Promise<void> {
   // The page cut to the frame's box: `go` stood it in the middle of the
   // view, and an element's own picture waits for a stillness a frame in a
   // transformed world never reports.
-  const box = await frame.boundingBox();
+  const box = await page.evaluate((one) => {
+    const el = document.querySelector(one);
+    const label = el?.querySelector(".cawco-frame-label");
+    const a = el?.getBoundingClientRect();
+    const b = label?.getBoundingClientRect() ?? a;
+    if (!(a && b)) {
+      return null;
+    }
+    // The frame with its label, which stands above the frame's own box.
+    const left = Math.min(a.left, b.left);
+    const top = Math.min(a.top, b.top);
+    return {
+      x: left - 4,
+      y: top - 4,
+      width: Math.max(a.right, b.right) - left + 8,
+      height: Math.max(a.bottom, b.bottom) - top + 8,
+    };
+  }, selector);
   const view = page.viewportSize();
   if (!(box && view)) {
     throw new Error(`${story}'s frame has no box to picture`);
@@ -379,6 +399,7 @@ async function capture(page: Page, name: string, story: string): Promise<void> {
 async function commentLive(page: Page): Promise<{
   acks: string[][];
   opened: boolean;
+  thread: string;
 }> {
   const frame = page.locator(FRAME("Plan")).first();
   const words = frame
@@ -412,8 +433,363 @@ async function commentLive(page: Page): Promise<{
         .then((all) => all.map((one) => one.replace(/\s+/g, " ").trim()))
     );
   }
-  return { acks, opened };
+  const thread =
+    (await frame
+      .locator('[data-row="a2"] [data-slot="thread"]')
+      .first()
+      .textContent()) ?? "";
+  return { acks, opened, thread };
 }
+
+/**
+ * Colour and contrast in the page, for the review's reads: a CSS colour as
+ * RGBA (through a canvas, so oklch and color() resolve), WCAG's ratio, a
+ * token resolved where an element stands (its scheme's value), and the
+ * ground an element is drawn on.
+ */
+const HELPERS = () => {
+  const pen = document
+    .createElement("canvas")
+    .getContext("2d", { willReadFrequently: true });
+  const rgba = (css: string): number[] => {
+    if (!pen) {
+      return [0, 0, 0, 0];
+    }
+    pen.clearRect(0, 0, 1, 1);
+    pen.fillStyle = css;
+    pen.fillRect(0, 0, 1, 1);
+    return [...pen.getImageData(0, 0, 1, 1).data];
+  };
+  const lin = (c: number) => {
+    const v = c / 255;
+    return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = (p: number[]) =>
+    0.2126 * lin(p[0] ?? 0) + 0.7152 * lin(p[1] ?? 0) + 0.0722 * lin(p[2] ?? 0);
+  const ratio = (a: number[], b: number[]) => {
+    const x = lum(a);
+    const y = lum(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  };
+  const token = (inside: Element, name: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = `var(${name})`;
+    inside.append(probe);
+    const { color } = getComputedStyle(probe);
+    probe.remove();
+    return rgba(color);
+  };
+  const ground = (el: Element | null) => {
+    for (let at = el; at; at = at.parentElement) {
+      const paint = getComputedStyle(at).backgroundColor;
+      if (paint !== "rgba(0, 0, 0, 0)" && paint !== "transparent") {
+        return rgba(paint);
+      }
+    }
+    return [255, 255, 255, 255];
+  };
+  (window as unknown as { pv: unknown }).pv = { rgba, ratio, token, ground };
+};
+
+interface Pv {
+  ground: (el: Element | null) => number[];
+  ratio: (a: number[], b: number[]) => number;
+  rgba: (css: string) => number[];
+  token: (inside: Element, name: string) => number[];
+}
+
+/** Everything the round-2 review named, read off each rest frame. */
+const readReview = (page: Page) =>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one read of every frame, run in the page's own scope, so it cannot call helpers of the spec's
+  page.evaluate(() => {
+    const { pv } = window as unknown as { pv: Pv };
+    const near = (a: number[], b: number[]) =>
+      a.slice(0, 3).every((v, i) => Math.abs(v - (b[i] ?? 0)) <= 3);
+    const seconds = (words: string) => {
+      // biome-ignore lint/performance/useTopLevelRegex: it runs in the page's own scope, once per frame
+      const m = words.match(/(?:(\d+)m\s*)?(\d+)s/);
+      return m ? Number(m[1] ?? 0) * 60 + Number(m[2]) : -1;
+    };
+    const out: Record<string, Record<string, unknown>> = {};
+    for (const body of document.querySelectorAll<HTMLElement>(
+      '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-body'
+    )) {
+      const frameEl = body.closest<HTMLElement>(".cawco-frame");
+      const story = frameEl?.getAttribute("data-cawco-story") ?? "";
+      if (
+        out[story] ||
+        !frameEl ||
+        getComputedStyle(frameEl).display === "none"
+      ) {
+        continue;
+      }
+      const scroller = body.querySelector<HTMLElement>(
+        '[data-slot="side-card"] .body, [data-slot="phone-screen"] .kit-sheet-scroll'
+      );
+      const view = scroller?.getBoundingClientRect();
+      const inView = (el: Element | null) => {
+        const box = el?.getBoundingClientRect();
+        return !!(
+          box &&
+          view &&
+          box.height > 0 &&
+          box.top >= view.top - 1 &&
+          box.bottom <= view.bottom + 1
+        );
+      };
+      // 1. The answer's words, once in the step.
+      const a2 = body.querySelector('[data-row="a2"]');
+      const replies =
+        (a2?.textContent ?? "").split("closed_days only. I've told").length - 1;
+      // 2. Each progress line's colour against its tokens.
+      const lines = [
+        ...body.querySelectorAll<HTMLElement>('[data-slot="progress-line"]'),
+      ].map((line) => {
+        const status = line.getAttribute("data-status") ?? "";
+        const bar = line.querySelector<HTMLElement>(".bar");
+        const fill = bar?.querySelector<HTMLElement>('[data-slot="fill"]');
+        const result = status === "done" || status === "fail";
+        const wantFill = pv.token(
+          line,
+          result ? `--status-${status}-ink` : "--ink-muted"
+        );
+        const wantTrack = pv.token(
+          line,
+          result ? `--status-${status}-bg` : "--border-control"
+        );
+        const gotFill = pv.rgba(
+          fill ? getComputedStyle(fill).backgroundColor : "transparent"
+        );
+        const gotTrack = pv.rgba(
+          bar ? getComputedStyle(bar).backgroundColor : "transparent"
+        );
+        return {
+          status,
+          ok: near(gotFill, wantFill) && near(gotTrack, wantTrack),
+          gotFill: gotFill.join(","),
+          wantFill: wantFill.join(","),
+        };
+      });
+      // 3. The drawn dependency lines against the plan's own data.
+      const rows = [...body.querySelectorAll<HTMLElement>("li[data-row]")]
+        .filter((li) => li.querySelector(':scope > [data-slot="plan-row"]'))
+        .map((li) => ({
+          id: li.getAttribute("data-row") ?? "",
+          after: (li.getAttribute("data-after") ?? "")
+            .split(" ")
+            .filter(Boolean),
+          state:
+            li
+              .querySelector(':scope > [data-slot="plan-row"]')
+              ?.getAttribute("data-state") ?? "",
+        }));
+      const drawn = [
+        ...body.querySelectorAll<SVGPathElement>(
+          'svg[data-slot="connectors"] path.wire[data-kind="after"]'
+        ),
+      ].map((path) => ({
+        edge: `${path.getAttribute("data-from")}>${path.getAttribute("data-to")}`,
+        length: Math.round(path.getTotalLength()),
+      }));
+      const deps = rows.flatMap((row) =>
+        row.after.map((from) => ({
+          edge: `${from}>${row.id}`,
+          open: rows.find((one) => one.id === from)?.state !== "done",
+        }))
+      );
+      // 4. What is cut: the failure in view, the sheet's foot, gaps, the opened step.
+      const failure = body.querySelector(
+        '[data-needs="a11y-check-44e"], [data-slot="stack"] [data-row="a11y-check-44e"]'
+      );
+      // Everything drawn in the list: rows, the groups' heads, the fold
+      // lines; a gap is the paper between two of them.
+      const shownRows = [
+        ...body.querySelectorAll<HTMLElement>(
+          '[data-slot="plan-row"], [data-slot="plan"] h3, [data-slot="plan"] button.finished, [data-slot="needs-you"] button'
+        ),
+      ]
+        .filter(
+          (row) =>
+            !(
+              row.closest('[data-slot="fold-body"]:not([data-open])') ||
+              row.closest('[data-slot="pushed-page"]')
+            ) && row.getBoundingClientRect().height > 0
+        )
+        .map((row) => row.getBoundingClientRect())
+        .sort((x, y) => x.top - y.top);
+      const zoom = body.getBoundingClientRect().width / (body.offsetWidth || 1);
+      const gaps = shownRows
+        .slice(1)
+        .map((row, i) =>
+          Math.round((row.top - (shownRows[i]?.bottom ?? row.top)) / zoom)
+        );
+      const sheet = body.querySelector<HTMLElement>(".kit-sheet-scroll");
+      const description = body.querySelector(
+        '[data-row="a2"] [data-slot="fold-body"][data-open] [data-slot="description"]'
+      );
+      // 5. The stack's head against what it holds; the to-dos head.
+      const stackHead = body
+        .querySelector('[aria-labelledby^="on-it"] h3')
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim();
+      const stackRows = body.querySelectorAll(
+        '[data-slot="stack"] > [data-delegate]'
+      ).length;
+      const todosHead = body
+        .querySelector('[aria-labelledby^="todos"] h3')
+        ?.textContent?.trim();
+      // 6. Controls.
+      const answer = [...body.querySelectorAll<HTMLElement>(".act button")].map(
+        (button) => {
+          const hit = getComputedStyle(button, "::after");
+          return {
+            height: button.offsetHeight,
+            radius: getComputedStyle(button).borderTopLeftRadius,
+            hit: `${Math.round(Number.parseFloat(hit.width) || 0)}×${Math.round(Number.parseFloat(hit.height) || 0)}`,
+          };
+        }
+      );
+      const toolbar = body.querySelector<HTMLElement>(
+        '[data-row="a2"] [role="toolbar"]'
+      );
+      const tools = [...(toolbar?.querySelectorAll("button") ?? [])].map(
+        (button) => ({
+          top: Math.round(button.offsetTop),
+          height: button.offsetHeight,
+          weight: Number(getComputedStyle(button).fontWeight),
+          ghost: getComputedStyle(button).backgroundColor,
+        })
+      );
+      const comment = body.querySelector<HTMLElement>(
+        '[data-row="a2"] [data-slot="thread"] button[type="submit"]'
+      );
+      // 7. Lanes: pulses only while moving, the gutter given back.
+      const pulses = [...body.querySelectorAll<SVGElement>(".pv-pulse")].map(
+        (el) => ({
+          moving: el.getAnimations().length > 0,
+          opacity: Number(getComputedStyle(el).opacity),
+        })
+      );
+      const lead = (id: string) =>
+        body.querySelector<HTMLElement>(
+          `[data-row="${id}"] > [data-slot="plan-row"] > .pv-lead`
+        )?.offsetWidth ?? 0;
+      // 8. The head's gap, the working glyph at its breath's floor, titles, times.
+      const figure = body
+        .querySelector('[data-slot="side-card"] .figure')
+        ?.getBoundingClientRect();
+      const glyph = body
+        .querySelector('[data-slot="side-card"] .task-glyph')
+        ?.getBoundingClientRect();
+      const doing = body.querySelector<HTMLElement>(
+        '[data-slot="step-tile"][data-state="doing"] .glyph'
+      );
+      let breath = 0;
+      if (doing) {
+        const floor = Math.min(
+          1,
+          ...doing
+            .getAnimations()
+            .flatMap(
+              (run) =>
+                (run.effect as KeyframeEffect | null)?.getKeyframes() ?? []
+            )
+            .map((frame) => Number(frame.opacity ?? 1))
+        );
+        const ink = pv.rgba(getComputedStyle(doing).color);
+        const under = pv.ground(doing.parentElement);
+        const shown = ink.map((v, i) =>
+          i < 3 ? v * floor + (under[i] ?? 0) * (1 - floor) : 255
+        );
+        breath = Math.round(pv.ratio(shown, under) * 100) / 100;
+      }
+      const titles = [
+        ...body.querySelectorAll<HTMLElement>(
+          '[data-delegate] [data-slot="words"] .problem'
+        ),
+      ].map((one) => one.textContent?.trim() ?? "");
+      const named = [
+        ...body.querySelectorAll<HTMLElement>(
+          '[data-delegate] [data-slot="words"]'
+        ),
+      ].filter((words) => {
+        const seen = [...words.childNodes]
+          .filter(
+            (node) =>
+              !(
+                node instanceof HTMLElement &&
+                node.classList.contains("sr-only")
+              )
+          )
+          .map((node) => node.textContent ?? "")
+          .join("")
+          .trim();
+        const name =
+          words
+            .querySelector(".sr-only")
+            ?.textContent?.replace(":", "")
+            .trim() ?? "";
+        // The name prefixed to the title: a title may mention a tool by name.
+        return name.length > 0 && seen.startsWith(name);
+      }).length;
+      const timeOf = (id: string) =>
+        seconds(
+          body.querySelector(
+            `[data-row="${id}"] > [data-slot="plan-row"] [data-slot="time"]`
+          )?.textContent ?? ""
+        );
+      out[story] = {
+        replies,
+        lines,
+        drawn,
+        deps,
+        afterChip:
+          body
+            .querySelector('[data-row="a6"] [data-slot="after"]')
+            ?.textContent?.replace(/\s+/g, " ")
+            .trim() ?? "",
+        failureInView: inView(failure),
+        dependentInView: inView(body.querySelector('[data-row="a6"]')),
+        dependentPast: Math.round(
+          ((body.querySelector('[data-row="a6"]')?.getBoundingClientRect()
+            .bottom ?? 0) -
+            (view?.bottom ?? 0)) /
+            zoom
+        ),
+        sheet: sheet
+          ? {
+              runsOn: sheet.scrollHeight > sheet.clientHeight + 1,
+              mask: getComputedStyle(sheet).maskImage,
+            }
+          : null,
+        maxGap: Math.max(0, ...gaps),
+        descriptionInView: description ? inView(description) : null,
+        stack: { head: stackHead ?? "", rows: stackRows },
+        todosHead: todosHead ?? "",
+        answer,
+        tools,
+        commentPrimary: comment
+          ? getComputedStyle(comment).backgroundImage !== "none"
+          : null,
+        pulses,
+        leads: { a2: lead("a2"), a4: lead("a4"), a7: lead("a7") },
+        headGap:
+          figure && glyph
+            ? Math.round((glyph.left - figure.right) / zoom)
+            : null,
+        breath,
+        titles,
+        named,
+        times: {
+          fable: timeOf("fable-calendar-21c"),
+          datePicker: timeOf("a2"),
+        },
+      };
+    }
+    return out;
+  });
+
+type Review = Record<string, Record<string, unknown>>;
 
 type Way = (typeof WAYS)[number];
 type Stories = Awaited<ReturnType<typeof readStories>>;
@@ -482,12 +858,14 @@ function checkDesk(
   const ack = (story: string, words: string) =>
     (stories[story]?.acks ?? []).some((one) => one.includes(words));
   kit.check(
-    `${name}: edited, commented and answered draw the acknowledgement (seen by this session; sent to Fable; seen by Fable with its reply)`,
+    `${name}: edited, commented and answered draw the acknowledgement (seen by this session; sent to Fable; answered by Fable on the thread)`,
     ack("Edited", "Seen by this session") &&
       ack("Commented", "sent to Fable") &&
       !ack("Commented", "this session heard it") &&
-      ack("Acknowledged", "Seen by Fable · this session heard it") &&
-      ack("Acknowledged", "closed_days only"),
+      ack(
+        "Acknowledged",
+        "Answered by Fable on the thread · this session heard it"
+      ),
     JSON.stringify({
       edited: stories.Edited?.acks,
       commented: stories.Commented?.acks,
@@ -524,7 +902,8 @@ async function checkComment(kit: Kit, name: string, page: Page): Promise<void> {
     live.opened &&
       first.some((one) => one.includes("sent to Fable")) &&
       second.some((one) => one.includes("Seen by Fable")) &&
-      third.some((one) => one.includes("Will do")),
+      third.some((one) => one.includes("Answered by Fable")) &&
+      live.thread.includes("Will do"),
     JSON.stringify(live)
   );
 }
@@ -583,6 +962,241 @@ function checkGeometry(
   }
 }
 
+/** The round-2 review's eight items, each read off the frames. */
+function checkReview(
+  kit: Kit,
+  name: string,
+  way: Way,
+  review: Review,
+  view: "desk" | "phone"
+): void {
+  const json = (value: unknown) => String(JSON.stringify(value)).slice(0, 700);
+  const shown = Object.entries(review);
+  // 2. Colour means state, on every frame shown.
+  const lines = shown.flatMap(([at, one]) =>
+    ((one.lines as { ok: boolean }[] | undefined) ?? []).map((line) => ({
+      at,
+      ...line,
+    }))
+  );
+  kit.check(
+    `${name}: every progress line is ink while it runs and its state pair once done or failed (${lines.length} lines)`,
+    lines.length > 0 && lines.every((line) => line.ok),
+    json(lines.filter((line) => !line.ok))
+  );
+  // 6a. Answer and Retry: button-sm, a finger's 44 under a coarse pointer.
+  const answer = shown.flatMap(
+    ([, one]) =>
+      (one.answer as
+        { height: number; radius: string; hit: string }[] | undefined) ?? []
+  );
+  kit.check(
+    `${name}: Answer and Retry are the 30px button, 10px radius${view === "phone" ? ", with a 44px hit area" : ""} (${answer.map((one) => `${one.height} ${one.radius} ${one.hit}`).join("; ")})`,
+    answer.length > 0 &&
+      answer.every(
+        (one) =>
+          one.height >= 30 &&
+          one.radius === "10px" &&
+          (view === "desk" ||
+            one.hit.split("×").every((side) => Number(side) >= 44))
+      ),
+    json(answer)
+  );
+  if (view === "phone") {
+    return;
+  }
+  checkReply(kit, name, review);
+  checkGraph(kit, name, way, review);
+  checkCuts(kit, name, way, review);
+  checkControls(kit, name, way, review);
+  checkSmall(kit, name, review);
+}
+
+/** 1. The answer once in the step. */
+function checkReply(kit: Kit, name: string, review: Review): void {
+  const story = (one: string) => review[one] ?? {};
+  const json = (value: unknown) => String(JSON.stringify(value)).slice(0, 700);
+  // 1. The answer once in the step.
+  kit.check(
+    `${name}: the answer to the comment stands once in its step (${story("Acknowledged").replies})`,
+    story("Acknowledged").replies === 1,
+    json(story("Acknowledged"))
+  );
+}
+
+/** 3. Drawn lines against the plan's dependency data. */
+function checkGraph(kit: Kit, name: string, way: Way, review: Review): void {
+  const story = (one: string) => review[one] ?? {};
+  const json = (value: unknown) => String(JSON.stringify(value)).slice(0, 700);
+  const plan = story("Plan");
+  // 3. Drawn lines against the plan's dependency data.
+  const deps = plan.deps as { edge: string; open: boolean }[];
+  const drawn = plan.drawn as { edge: string; length: number }[];
+  const drew = new Set(
+    drawn.filter((one) => one.length > 0).map((one) => one.edge)
+  );
+  const wanted = new Set(
+    deps
+      .filter((one) => (way.variation === "c" ? one.open : true))
+      .map((one) => one.edge)
+  );
+  if (way.variation === "a") {
+    kit.check(
+      `${name}: One list draws no lines; the waiting step says what it waits on (${plan.afterChip})`,
+      drawn.length === 0 &&
+        String(plan.afterChip).includes("Date picker") &&
+        String(plan.afterChip).includes("Deposit"),
+      json({ drawn, chip: plan.afterChip })
+    );
+  } else {
+    kit.check(
+      `${name}: every line drawn is a dependency of the plan's, and every ${way.variation === "c" ? "open " : ""}dependency is drawn (${[...drew].join(", ")})`,
+      drew.size === wanted.size &&
+        [...wanted].every((edge) => drew.has(edge)) &&
+        drawn.every((one) => deps.some((dep) => dep.edge === one.edge)),
+      json({ drawn, wanted: [...wanted] })
+    );
+  }
+  if (way.variation === "c") {
+    kit.check(
+      `${name}: the waiting step says what it waits on (${plan.afterChip}), and on the phone it stands in view`,
+      String(plan.afterChip).includes("Date picker") &&
+        String(plan.afterChip).includes("Deposit") &&
+        story("Phone").dependentInView === true,
+      json({
+        chip: plan.afterChip,
+        phone: story("Phone").dependentInView,
+        past: story("Phone").dependentPast,
+      })
+    );
+  }
+}
+
+/** 4, 5. Nothing cut; the stack's head names what it holds. */
+function checkCuts(kit: Kit, name: string, way: Way, review: Review): void {
+  const story = (one: string) => review[one] ?? {};
+  const json = (value: unknown) => String(JSON.stringify(value)).slice(0, 700);
+  const plan = story("Plan");
+  // 4. Nothing cut.
+  kit.check(
+    `${name}: the failed delegate is in view without scrolling, on the desk and the phone`,
+    plan.failureInView === true && story("Phone").failureInView === true,
+    json({ desk: plan.failureInView, phone: story("Phone").failureInView })
+  );
+  const sheet = story("Phone").sheet as {
+    runsOn: boolean;
+    mask: string;
+  } | null;
+  kit.check(
+    `${name}: where the phone's sheet runs on past its foot, it fades there (${sheet?.mask.slice(0, 40)})`,
+    !!sheet && (!sheet.runsOn || sheet.mask !== "none"),
+    json(sheet)
+  );
+  kit.check(
+    `${name}: no blank stretch between rows (largest gap: desk ${plan.maxGap}px, phone ${story("Phone").maxGap}px)`,
+    Number(plan.maxGap) <= 48 && Number(story("Phone").maxGap) <= 48,
+    json({ desk: plan.maxGap, phone: story("Phone").maxGap })
+  );
+  kit.check(
+    `${name}: the commented and answered stories stand on the opened step, its description in view`,
+    story("Commented").descriptionInView === true &&
+      story("Acknowledged").descriptionInView === true,
+    json({
+      commented: story("Commented").descriptionInView,
+      acknowledged: story("Acknowledged").descriptionInView,
+    })
+  );
+  // 5. The stack's head names and counts what it holds.
+  if (way.variation === "c") {
+    const stack = plan.stack as { head: string; rows: number };
+    kit.check(
+      `${name}: the stack's head says what it holds ("${stack.head}" over ${stack.rows} rows), the to-dos head no second count ("${plan.todosHead}")`,
+      stack.head === `Delegates ${stack.rows}` &&
+        !DIGIT.test(String(plan.todosHead)),
+      json({ stack, todos: plan.todosHead })
+    );
+  }
+}
+
+/** 6, 7. The controls; Lanes' pulses and gutter. */
+function checkControls(kit: Kit, name: string, way: Way, review: Review): void {
+  const story = (one: string) => review[one] ?? {};
+  const json = (value: unknown) => String(JSON.stringify(value)).slice(0, 700);
+  const plan = story("Plan");
+  const shown = Object.entries(review);
+  // 6b, 6c. The step's actions: one row of 30px ghost buttons; Comment not the coral.
+  const tools = story("Commented").tools as {
+    top: number;
+    height: number;
+    weight: number;
+    ghost: string;
+  }[];
+  kit.check(
+    `${name}: the step's actions are one row of 30px ghost buttons in the label weight (${tools.map((one) => `${one.top}/${one.height}/${one.weight}`).join(" ")})`,
+    tools.length === 5 &&
+      new Set(tools.map((one) => one.top)).size === 1 &&
+      tools.every(
+        (one) =>
+          one.height >= 30 &&
+          one.weight <= 500 &&
+          one.ghost === "rgba(0, 0, 0, 0)"
+      ),
+    json(tools)
+  );
+  kit.check(
+    `${name}: Comment is an outline button, never the coral primary`,
+    story("Commented").commentPrimary === false,
+    json(story("Commented").commentPrimary)
+  );
+  // 7. Lanes: a pulse only while it moves; the gutter given back.
+  const pulses = shown.flatMap(
+    ([, one]) =>
+      (one.pulses as { moving: boolean; opacity: number }[] | undefined) ?? []
+  );
+  kit.check(
+    `${name}: a pulse is drawn only while it moves (${pulses.filter((one) => one.moving).length} moving, ${pulses.filter((one) => !one.moving).length} still)`,
+    pulses.every((one) => one.moving || one.opacity === 0),
+    json(pulses)
+  );
+  if (way.variation === "b") {
+    const leads = plan.leads as { a2: number; a4: number; a7: number };
+    kit.check(
+      `${name}: the two-lane gutter stands only where the second lane runs (date picker ${leads.a2}px; confirmation email ${leads.a4}px, waiting list ${leads.a7}px)`,
+      leads.a4 === 18 && leads.a7 === 18 && leads.a2 >= leads.a4 * 2,
+      json(leads)
+    );
+  }
+}
+
+/** 8. The head's gap, the working glyph's floor, titles, times. */
+function checkSmall(kit: Kit, name: string, review: Review): void {
+  const story = (one: string) => review[one] ?? {};
+  const json = (value: unknown) => String(JSON.stringify(value)).slice(0, 700);
+  const plan = story("Plan");
+  // 8. The head's gap, the working glyph's floor, titles, times.
+  kit.check(
+    `${name}: the head's figure and the task's glyph stand ${plan.headGap}px apart, at least 8`,
+    Number(plan.headGap) >= 8,
+    json(plan.headGap)
+  );
+  kit.check(
+    `${name}: the working glyph holds ${plan.breath}:1 on its tile at its breath's floor, at least 3`,
+    Number(plan.breath) >= 3,
+    json(plan.breath)
+  );
+  kit.check(
+    `${name}: a delegate's row shows its title alone (${(plan.titles as string[]).join(" | ")})`,
+    plan.named === 0 && (plan.titles as string[]).length > 0,
+    json({ named: plan.named, titles: plan.titles })
+  );
+  const times = plan.times as { fable: number; datePicker: number };
+  kit.check(
+    `${name}: a delegate never runs longer than the step that started it (Fable ${times.fable}s, the date picker ${times.datePicker}s)`,
+    times.fable > 0 && times.datePicker >= times.fable,
+    json(times)
+  );
+}
+
 /** One way's canvas at one width and scheme. */
 async function leg(
   kit: Kit,
@@ -592,7 +1206,7 @@ async function leg(
   way: Way
 ): Promise<void> {
   const name = `${view === "desk" ? 1440 : 390} ${theme} ${way.label}`;
-  const page = await kit.page(view, { init: [BRIDGE], theme });
+  const page = await kit.page(view, { init: [BRIDGE, HELPERS], theme });
   const errors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -615,6 +1229,7 @@ async function leg(
     JSON.stringify(report.page.errors).slice(0, 600)
   );
   checkGeometry(kit, name, way, await readGeometry(page), view === "desk");
+  checkReview(kit, name, way, await readReview(page), view);
   // Each frame drawn in the page's scheme: its color-scheme, and the card's
   // ground dark at night (a channel under 128) and light by day.
   const scheme = await page.evaluate(() => {
@@ -660,13 +1275,22 @@ async function leg(
   if (view === "desk") {
     // The frames alone: the desk card, the phone sheet, and a step opened
     // with its comment answered.
-    await capture(page, `plan-ways-${way.file}-desk-${theme}`, "Plan");
-    await capture(page, `plan-ways-${way.file}-phone-${theme}`, "OnPhone");
-    await capture(
-      page,
-      `plan-ways-${way.file}-answered-${theme}`,
-      "Acknowledged"
-    );
+    for (const [shot, story] of [
+      ["desk", "Plan"],
+      ["phone", "Phone"],
+      ["answered", "Acknowledged"],
+    ] as const) {
+      // A frame that cannot be pictured is a failed check, never the end of the run.
+      const said = await capture(
+        page,
+        `plan-ways-${way.file}-${shot}-${theme}`,
+        story
+      ).then(
+        () => "",
+        (error: unknown) => String(error).slice(0, 300)
+      );
+      kit.check(`${name}: the ${story} frame is captured alone`, !said, said);
+    }
   }
   if (view === "desk" && theme === "light") {
     await checkComment(kit, name, page);

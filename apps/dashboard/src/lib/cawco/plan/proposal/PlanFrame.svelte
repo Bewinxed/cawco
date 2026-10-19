@@ -44,6 +44,10 @@
   } = $props();
 
   const loaded = Date.now();
+  /** A story that opens a step stands its frame scrolled to that step. */
+  const focus = $derived(
+    scenario === "commented" || scenario === "acknowledged" ? "a2" : undefined
+  );
   let beat = $state(0);
   const plan = $derived(live ? livePlan(beat) : still);
 
@@ -67,11 +71,11 @@
   style:--pv-sweep="{sweepSeconds}s"
 >
   {#if frame === "desk"}
-    <DeskPlan {plan}>
+    <DeskPlan {focus} {plan}>
       <PlanBody {loaded} {plan} {scenario} {variation} />
     </DeskPlan>
   {:else}
-    <PhonePlan {plan}>
+    <PhonePlan {focus} {plan}>
       <PlanBody {loaded} phone {plan} {scenario} {variation} />
     </PhonePlan>
   {/if}
