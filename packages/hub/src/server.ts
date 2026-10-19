@@ -16449,7 +16449,24 @@ export const createServer = (
     }
   };
 
-  const sendFleetSync = (machineId: string, agent: HubSocket): void => {
+  /** The harnesses installed on a machine that converge the fleet, as its reports say. */
+  const fleetHarnesses = (machineId: string): string =>
+    (
+      db.listAgents().find((row) => row.machineId === machineId)?.harnesses ??
+      []
+    )
+      .filter((report) => report.installed && report.capabilities.fleet)
+      .map((report) => report.harness)
+      .sort()
+      .join(",");
+  /** Each machine's connection a fleet sync last went out on, by its id ({@link sendFleetSync}). */
+  const fleetSyncedLinks = new Map<string, string>();
+
+  const sendFleetSync = (
+    machineId: string,
+    agent: HubSocket,
+    why: string
+  ): void => {
     // Fleet sync converges each harness's own files. The register's sync goes
     // before the machine's harnesses have reported (they follow on its first
     // beat); only a report with no fleet-capable harness is a machine with
@@ -16467,6 +16484,8 @@ export const createServer = (
 
     // Always sent, a fleet with no rows too: it carries the denied tools, and
     // a machine spawns nothing until it has heard them.
+    console.info(`[fleet] sync → ${machineName(machineId)}: ${why}`);
+    fleetSyncedLinks.set(machineId, agent.id);
     pushFleetConfig(machineId, agent, db.fleetConfig());
   };
 
@@ -16807,7 +16826,7 @@ export const createServer = (
       if (!agent) {
         continue;
       }
-      sendFleetSync(machineId, agent);
+      sendFleetSync(machineId, agent, "the fleet changed");
       publishInstances(machineId);
     }
   };
@@ -17266,7 +17285,7 @@ export const createServer = (
     ) {
       return;
     }
-    sendFleetSync(machineId, agent);
+    sendFleetSync(machineId, agent, "a place changed");
     publishInstances(machineId);
   });
 
@@ -17281,7 +17300,7 @@ export const createServer = (
     for (const { machineId } of db.listAgents()) {
       const agent = registry.agent(machineId);
       if (agent) {
-        sendFleetSync(machineId, agent);
+        sendFleetSync(machineId, agent, "a project folder moved");
       }
     }
   };
@@ -26448,7 +26467,7 @@ export const createServer = (
           if (!agent) {
             return status(404, machineFault(body.machineId, "offline"));
           }
-          sendFleetSync(body.machineId, agent);
+          sendFleetSync(body.machineId, agent, "asked for");
           publishInstances(body.machineId);
           return { ok: true };
         }
@@ -28517,6 +28536,7 @@ export const createServer = (
               // or tools runs here, off the part it reads.
               const reported = peekHarnesses(message.payload);
               if (reported) {
+                const convergingBefore = fleetHarnesses(message.machineId);
                 // A report with no word (Claude's, its dirs unanswered) is
                 // filed with the last word kept of that harness; with none
                 // kept, it is not filed, and the harness reads as not
@@ -28555,7 +28575,26 @@ export const createServer = (
                     unread: claudeReport?.unreadAccounts ?? [],
                   });
                 }
-                sendFleetSync(message.machineId, ws);
+                // A connection no sync has gone out on yet is sent one once
+                // its harnesses are known: the register no longer carries
+                // them (aca170f8f), and a sync's content needs none of them,
+                // so one sent already (a fleet change) is that sync. A later
+                // report (Claude's sign-ins read again and changed, one per
+                // harness on a re-announce) syncs only when it moved which
+                // harnesses here converge the fleet: one installed since,
+                // or gone. Any other is no fleet change, and a sync then
+                // started every fleet server in a location again.
+                if (fleetSyncedLinks.get(message.machineId) !== ws.id) {
+                  sendFleetSync(message.machineId, ws, "its harnesses known");
+                } else if (
+                  fleetHarnesses(message.machineId) !== convergingBefore
+                ) {
+                  sendFleetSync(
+                    message.machineId,
+                    ws,
+                    `the harnesses converging the fleet are now ${fleetHarnesses(message.machineId) || "none"}`
+                  );
+                }
               }
               const tools = peekTools(message.payload);
               if (tools.length > 0) {

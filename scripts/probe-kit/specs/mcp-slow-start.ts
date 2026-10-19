@@ -126,6 +126,7 @@ const run = async (kit: Kit): Promise<void> => {
   };
 
   const logBefore = (await fleet.logs("agent")).length;
+  const hubBefore = (await fleet.logs("hub")).length;
   const put = await fetch(`${fleet.base}/api/fleet/mcp/${SERVER}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -292,6 +293,22 @@ const run = async (kit: Kit): Promise<void> => {
       retiredInMs <= RETIRE_BOUND_MS &&
       (handover.gone as number) < failedAt,
     JSON.stringify({ handover, failedAt })
+  );
+
+  // One fleet change, one sync to the machine: what the hub sent, why, and
+  // what the agent took, from the PUT to rest.
+  const hubSyncs = (await fleet.logs("hub"))
+    .slice(hubBefore)
+    .split("\n")
+    .filter((line) => line.includes("[fleet] sync → "));
+  const agentSyncs = (await fleet.logs("agent"))
+    .slice(logBefore)
+    .split("\n")
+    .filter((line) => line.includes("[fleet] sync from the hub"));
+  kit.check(
+    `the PUT sent the machine one fleet sync (hub ${hubSyncs.length}, agent ${agentSyncs.length})`,
+    hubSyncs.length === 1 && agentSyncs.length === 1,
+    JSON.stringify({ hubSyncs, agentSyncs })
   );
 
   const hubLog = await fleet.logs("hub");

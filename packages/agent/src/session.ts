@@ -5261,9 +5261,13 @@ export class SessionSupervisor {
             "fleet sync skipped: this is not the machine's agent, so machine-wide harness config is left to the agent that is"
           );
         }
-        const report = await this.#fleetTurn(() =>
-          this.#syncFleet(args[0] as MachineFleetConfig, "syncFleet")
-        );
+        const config = args[0] as MachineFleetConfig;
+        const report = await this.#fleetTurn(() => {
+          console.info(
+            `[fleet] sync from the hub: ${config.mcp.length} MCP server(s)`
+          );
+          return this.#syncFleet(config, "syncFleet");
+        });
         this.#healFleetMcp([...this.#sessions.keys()]);
         return report;
       }
