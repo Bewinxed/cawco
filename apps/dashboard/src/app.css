@@ -842,11 +842,20 @@
     }
   }
 
+  /* The Real Wait Rule, once for every skeleton: inside --dur-wait-grace it
+     holds its box unseen (the plain surface at the real size), then fades in
+     over --dur-fade. Opacity only, so it runs without motion too. A skeleton
+     that takes over a wait already under way (a page's read handing on to its
+     frame's) is given what is left of the grace, `--wait-grace-left`
+     (motion/curves `graceLeft`), so it stands where its forerunner stood
+     rather than waiting the grace again. */
   .kit-skeleton {
     position: relative;
     overflow: hidden;
     border-radius: var(--radius-sm);
     background: var(--surface-fill);
+    animation: kit-fade-in var(--dur-fade) var(--ease-out)
+      var(--wait-grace-left, var(--dur-wait-grace)) both;
 
     @media (prefers-reduced-motion: no-preference) {
       &::after {

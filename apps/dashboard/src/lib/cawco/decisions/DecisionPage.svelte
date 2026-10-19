@@ -18,7 +18,11 @@
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    appear,
+    crossIn,
+    crossOut,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import type { StageKind } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
@@ -64,6 +68,8 @@
 
   let read = $state<DecisionPageRead | null>(null);
   let unread = $state<string | null>(null);
+  /** When the page's wait began (it opened): its frame's opening line carries the wait on. */
+  const opened = performance.now();
   const shown = $derived<DecisionPageSummary | DecisionPageRead | undefined>(
     read ?? summary
   );
@@ -253,27 +259,38 @@
       </div>
     </div>
 
+    <!-- The house opening line (the kit's skeleton, unseen for the wait's
+         grace) while the page is read; what it brings takes its place in one
+         cross-fade, a live page through its frame's own opening line. -->
     {#if unread && !read}
-      <p class="problem" role="alert">{words.unread(unread)}</p>
+      <p class="problem" role="alert" in:crossIn>{words.unread(unread)}</p>
     {:else if read?.record}
-      <div class="records">
+      <div class="records" in:crossIn>
         {#each read.record.cards as each (each.id)}
           <RecordCard card={each} {hrefOf} {onopentask} {taskOf} />
         {/each}
       </div>
     {:else if read?.artifactId && read.writer}
-      <PageFrame
-        artifactId={read.artifactId}
-        {card}
-        insetBottom={dockRoom}
-        instanceId={read.writer.instanceId}
-        name={read.name}
-        title={read.title}
-      />
+      <div class="frame-place" data-decision-frame in:crossIn>
+        <PageFrame
+          artifactId={read.artifactId}
+          {card}
+          insetBottom={dockRoom}
+          instanceId={read.writer.instanceId}
+          name={read.name}
+          title={read.title}
+          waitingSince={opened}
+        />
+      </div>
     {:else if read}
-      <p class="problem">{words.gone}</p>
+      <p class="problem" in:crossIn>{words.gone}</p>
     {:else}
-      <div aria-hidden="true" class="opening">
+      <div
+        aria-hidden="true"
+        class="opening"
+        data-decision-opening
+        out:crossOut
+      >
         <span
           data-slot="block"
           class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
@@ -431,8 +448,17 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
+  /* The page's own box, as its frame's opening line stands (PageFrame). */
   .opening {
+    flex: 1 1 auto;
     padding: var(--space-5);
+  }
+  /* The live page's place: the page's box, its frame filling it. */
+  .frame-place {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-block-size: 0;
   }
   .problem {
     margin: 0;

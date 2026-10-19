@@ -143,29 +143,14 @@
   );
 
   /**
-   * The Claim Of Nothing Rule: inside `--dur-wait-grace` a list still read
-   * shows nothing of its own; past it, its skeleton stands, and what the
-   * read brings (the list, or its "nothing" line) takes its place in one
-   * cross-fade (motion/curves `crossIn`, `crossOut`). Started again for each
-   * session Files shows.
+   * The Claim Of Nothing Rule: a list still read stands as its skeleton,
+   * which the kit holds unseen for `--dur-wait-grace` (app.css
+   * `.kit-skeleton`), and what the read brings (the list, or its "nothing"
+   * line) takes its place in one cross-fade (motion/curves `crossIn`,
+   * `crossOut`).
    */
-  let waited = $state(false);
-  $effect(() => {
-    if (!instanceId) {
-      return;
-    }
-    waited = false;
-    const timer = setTimeout(() => {
-      waited = true;
-    }, dur("--dur-wait-grace"));
-    return () => clearTimeout(timer);
-  });
-  const artifactsGhost = $derived(
-    waited && artifacts === null && !artifactsFailed
-  );
-  const attachmentsGhost = $derived(
-    waited && attachments === null && !attachmentsFailed
-  );
+  const artifactsGhost = $derived(artifacts === null && !artifactsFailed);
+  const attachmentsGhost = $derived(attachments === null && !attachmentsFailed);
   /** How many skeleton cards stand for the masonry. */
   const GHOST_CARDS = 6;
 

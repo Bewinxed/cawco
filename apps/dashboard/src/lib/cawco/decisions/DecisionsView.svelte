@@ -16,7 +16,11 @@
   import type { TransitionConfig } from "svelte/transition";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    crossIn,
+    crossOut,
+    motionOk,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
@@ -25,6 +29,7 @@
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import type { ProjectStarter, StageKind } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
+  import { readJson, writeJson } from "#lib/cawco/storage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -100,6 +105,30 @@
   const view = $derived<DecisionsMode>(graphed ? mode : "list");
   const shown = $derived(page ? `page:${page}` : view);
   const empty = $derived(list !== null && pages.length === 0);
+
+  /**
+   * Whether the decisions formed a graph when last read here: while the list
+   * is read again its tiles stand under the List | Graph segment's room, as
+   * they will (The Claim Of Nothing Rule: the box it last drew in, else the
+   * box it draws in). Kept in localStorage through storage.ts.
+   */
+  const GRAPHED = "cawco-decisions-graphed";
+  const wasGraphed = $derived(
+    readJson<Record<string, boolean>>(GRAPHED, {})[projectId] === true
+  );
+  $effect(() => {
+    if (!list) {
+      return;
+    }
+    const kept = readJson<Record<string, boolean>>(GRAPHED, {});
+    if ((kept[projectId] === true) !== graphed) {
+      writeJson(GRAPHED, { ...kept, [projectId]: graphed });
+    }
+  });
+  /** The segment's room above the list: the decisions form a graph, or did when last read. */
+  const underSeg = $derived(
+    !page && (graphed || (list === null && wasGraphed))
+  );
 
   // --- the swap ------------------------------------------------------------------------
 
@@ -208,7 +237,7 @@
   <div class="dswap">
     {#key shown}
       <div
-        class={["dview", graphed && !page && "under-seg"]}
+        class={["dview", underSeg && "under-seg"]}
         out:leave
         style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
       >
@@ -228,14 +257,27 @@
           {#if graphProblem}
             <p class="problem" role="alert">{graphProblem}</p>
           {/if}
+          <!-- The graph's own box while it is read, then the graph in one
+               cross-fade (crossOut, crossIn). -->
           {#if graph}
-            <DecisionGraph
-              {graph}
-              onopen={(name, at) => go({ page: name, card: at })}
-              onplace={place}
-            />
-          {:else}
-            <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+            <div class="graph-place" data-decisions-graph-read in:crossIn>
+              <DecisionGraph
+                {graph}
+                onopen={(name, at) => go({ page: name, card: at })}
+                onplace={place}
+              />
+            </div>
+          {:else if !graphProblem}
+            <div
+              aria-busy="true"
+              aria-label="Reading the decision graph"
+              class="graph-place"
+              data-decisions-reading="graph"
+              role="status"
+              out:crossOut
+            >
+              <Skeleton class="graph-reading" />
+            </div>
           {/if}
         {:else if decisions.problem && !list}
           <div class="state">
@@ -290,10 +332,10 @@
             </EmptyState>
           </div>
         {:else}
-          <!-- A page published while the list is open arrives as rows do
-               (motion/rows); the tiles it moves slide to their places. -->
-          <div data-slot="grid" class="grid" {@attach reflow()}>
-            {#if list}
+          {#if list}
+            <!-- A page published while the list is open arrives as rows do
+                 (motion/rows); the tiles it moves slide to their places. -->
+            <div data-slot="grid" class="grid" in:crossIn {@attach reflow()}>
               {#each pages as each (each.name)}
                 <div class="cell" data-flip>
                   <DecisionTile
@@ -304,12 +346,23 @@
                   />
                 </div>
               {/each}
-            {:else}
+            </div>
+          {:else}
+            <!-- Tiles at a tile's size in the grid's own columns while the
+                 list is read; the list takes their place in one cross-fade. -->
+            <div
+              aria-busy="true"
+              aria-label="Reading decision pages"
+              class="grid"
+              data-decisions-reading="list"
+              role="status"
+              out:crossOut
+            >
               {#each [0, 1, 2, 3] as slot (slot)}
-                <Skeleton class="h-[90px] w-full rounded-[var(--radius-lg)]" />
+                <Skeleton class="tile-reading" />
               {/each}
-            {/if}
-          </div>
+            </div>
+          {/if}
         {/if}
       </div>
     {/key}
@@ -377,6 +430,30 @@
   }
   .cell > :global(.tile) {
     flex: 1 1 auto;
+  }
+  /* A tile's own height (DecisionTile): its padding, the head's row at the
+     pill's height (24px), the figure's line in meta type, the writer's line
+     at its mark's lead slot (TreeMark, 18px) or its meta line if taller, the
+     tile's gap between them. */
+  .grid :global(.tile-reading) {
+    block-size: calc(
+      var(--space-5) * 2 + 24px + var(--space-2) * 2 + 1lh + max(1lh, 18px)
+    );
+    border-radius: var(--radius-lg);
+    font: var(--type-meta);
+  }
+  /* The graph's box (DecisionGraph `.graph`): the pane's height, at least
+     24rem, at the card radius. */
+  .graph-place {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+  .graph-place :global(.graph-reading) {
+    flex: 1 1 auto;
+    min-block-size: 24rem;
+    border-radius: var(--radius-lg);
   }
   .state {
     max-inline-size: 72ch;

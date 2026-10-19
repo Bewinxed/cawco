@@ -13,8 +13,8 @@
    * anew with the next tap on the page: the tabs count every pin the hub
    * holds, each count drawn only above 0 (The Earned Count Rule). Until the
    * pane holds the doc nothing is counted or claimed empty (The Claim Of
-   * Nothing Rule): the list is its plain surface inside `--dur-wait-grace`
-   * (The Real Wait Rule), then skeleton rows at the rows' size, which the
+   * Nothing Rule): skeleton rows at the rows' size, unseen inside
+   * `--dur-wait-grace` (The Real Wait Rule; app.css `.kit-skeleton`), which the
    * first read replaces in one cross-fade; or the read's fault on its line,
    * with Try again (RowFault).
    */
@@ -154,10 +154,9 @@
     </Tabs>
   </div>
   <div class="scroll kit-edge-fade-block">
-    {#if hold === "quiet"}
-      <!-- Inside the wait's grace: its plain surface (The Real Wait Rule). -->
-    {:else if hold === "reading"}
-      <!-- The rows' own size while the pins are read; the read replaces them in one cross-fade. -->
+    {#if hold === "reading"}
+      <!-- The rows' own size while the pins are read, unseen for the wait's
+           grace (the kit's skeleton); the read replaces them in one cross-fade. -->
       <div
         data-slot="pin-list-reading"
         aria-label={words.readingComments}

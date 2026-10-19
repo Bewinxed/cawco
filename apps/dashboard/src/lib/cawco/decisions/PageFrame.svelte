@@ -11,6 +11,11 @@
    */
   import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
   import { untrack } from "svelte";
+  import {
+    crossIn,
+    crossOut,
+    graceLeft,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { enterPage, pageSource } from "#lib/cawco/preview/page-source.js";
   import { theme } from "#lib/theme.svelte.js";
 
@@ -21,6 +26,7 @@
     title,
     card = null,
     insetBottom,
+    waitingSince,
   }: {
     /** The session that published it: its preview origin serves it. */
     instanceId: string;
@@ -31,7 +37,17 @@
     card?: string | null;
     /** What the docked composer covers of the page's foot, px. */
     insetBottom: number;
+    /**
+     * When the wait it carries on began (`performance.now()`): the page's
+     * own read, whose opening line its first one takes over (DecisionPage).
+     */
+    waitingSince?: number;
   } = $props();
+
+  /** When the wait its opening line stands for began: the one handed on, then each address asked anew. */
+  let since = $state(untrack(() => waitingSince) ?? performance.now());
+  /** The first address asked carries the handed wait on; each later one is a wait of its own. */
+  let asked = false;
 
   let frame = $state<HTMLIFrameElement | null>(null);
   let origin = $state<string | null>(null);
@@ -59,6 +75,10 @@
     const session = instanceId;
     const wanted = untrack(() => place);
     let live = true;
+    if (asked) {
+      since = performance.now();
+    }
+    asked = true;
     problem = null;
     src = null;
     connected = false;
@@ -141,8 +161,10 @@
   });
 </script>
 
+<!-- The house opening line (the kit's skeleton, unseen for the wait's
+     grace) while its address is asked, then the page in one cross-fade. -->
 {#if problem}
-  <p class="problem" role="alert">{problem}</p>
+  <p class="problem" role="alert" in:crossIn>{problem}</p>
 {:else if src}
   <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
   <iframe
@@ -151,9 +173,18 @@
     {src}
     title="Decision page: {title}"
     bind:this={frame}
+    in:crossIn
   ></iframe>
 {:else}
-  <div aria-hidden="true" class="opening">
+  <!-- It carries on the page's own wait (DecisionPage): its line stands
+       where that one stood, seen or not, and goes as the frame comes. -->
+  <div
+    aria-hidden="true"
+    class="opening"
+    data-page-frame-opening
+    style:--wait-grace-left={graceLeft(since)}
+    out:crossOut
+  >
     <span
       data-slot="block"
       class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"

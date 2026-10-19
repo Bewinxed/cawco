@@ -22,6 +22,7 @@
    */
   import { type BlockWidth, blocksWords as words } from "@cawco/core";
   import type { Component, Snippet } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -61,6 +62,8 @@
     body,
     resizing,
     drag,
+    reading = false,
+    onbody,
     onmove,
     onwidth,
     onhide,
@@ -94,11 +97,24 @@
     /** Its width is changing: its box tweens to the new one. */
     resizing: boolean;
     drag: BlockDragState;
+    /** Its page's read is out: its head without what it counts or does, nothing to drag. */
+    reading?: boolean;
+    /** Told the height its body stands at, as it changes: what its skeleton stands at next time. */
+    onbody?: (height: number) => void;
     onmove: (step: -1 | 1) => void;
     onwidth: (width: BlockWidth) => void;
     onhide: () => void;
     ontab: () => void;
   } = $props();
+
+  /** Reports the body's height as it settles and changes. */
+  const sized =
+    (tell: (height: number) => void): Attachment<HTMLElement> =>
+    (node) => {
+      const watch = new ResizeObserver(() => tell(node.offsetHeight));
+      watch.observe(node);
+      return () => watch.disconnect();
+    };
 
   const over = $derived(drag.over?.block === id ? drag.over.edge : null);
   const headId = $derived(`block-${page}-${id.replace(":", "-")}`);
@@ -118,82 +134,85 @@
   data-flip
   data-span={span}
   style:grid-column="span {span}"
-  {@attach dropOnBlock(drag, () => ({ block: id, columns, page }))}
+  {@attach !reading && dropOnBlock(drag, () => ({ block: id, columns, page }))}
   {@attach resizing && morph({ width: true })}
 >
   <header
     data-slot="block-head"
-    class="block-head mark-line press-tint"
-    {@attach dragHead(drag, () => ({ block: id, page }))}
+    class={["block-head mark-line", !reading && "press-tint"]}
+    {@attach !reading && dragHead(drag, () => ({ block: id, page }))}
   >
     <span data-slot="glyph" aria-hidden="true" class="glyph" data-box
       ><Glyph /></span
     >
     <h2 data-slot="title" class="title" id={headId}>{title}</h2>
-    {#if meta}
+    {#if meta && !reading}
       <span data-slot="meta" class="meta" data-box>{@render meta()}</span>
     {/if}
-    <span data-slot="tools" class="tools" data-block-tools data-box>
-      {@render action?.()}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger
-          aria-label={words.more(title)}
-          class="{buttonVariants({
-            variant: 'ghost',
-            size: 'icon-sm',
-          })} touch-hit"
-        >
-          <IconMore />
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" class="w-auto min-w-48">
-          <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
-            <IconArrowUp />
-            <span>{words.moveUp}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item disabled={last} onSelect={() => onmove(1)}>
-            <IconArrowDown />
-            <span>{words.moveDown}</span>
-          </DropdownMenu.Item>
-          {#if !wideOnly}
-            <DropdownMenu.Separator />
-            <DropdownMenu.RadioGroup
-              onValueChange={(next) => onwidth(next as BlockWidth)}
-              value={width}
-            >
-              <DropdownMenu.RadioItem value="narrow"
-                >{words.narrow}</DropdownMenu.RadioItem
+    {#if !reading}
+      <span data-slot="tools" class="tools" data-block-tools data-box>
+        {@render action?.()}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger
+            aria-label={words.more(title)}
+            class="{buttonVariants({
+              variant: 'ghost',
+              size: 'icon-sm',
+            })} touch-hit"
+          >
+            <IconMore />
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end" class="w-auto min-w-48">
+            <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
+              <IconArrowUp />
+              <span>{words.moveUp}</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item disabled={last} onSelect={() => onmove(1)}>
+              <IconArrowDown />
+              <span>{words.moveDown}</span>
+            </DropdownMenu.Item>
+            {#if !wideOnly}
+              <DropdownMenu.Separator />
+              <DropdownMenu.RadioGroup
+                onValueChange={(next) => onwidth(next as BlockWidth)}
+                value={width}
               >
-              <DropdownMenu.RadioItem value="wide"
-                >{words.wide}</DropdownMenu.RadioItem
-              >
-            </DropdownMenu.RadioGroup>
-            {#if columns === 1}
-              <p class="aside">{words.widerScreens}</p>
+                <DropdownMenu.RadioItem value="narrow"
+                  >{words.narrow}</DropdownMenu.RadioItem
+                >
+                <DropdownMenu.RadioItem value="wide"
+                  >{words.wide}</DropdownMenu.RadioItem
+                >
+              </DropdownMenu.RadioGroup>
+              {#if columns === 1}
+                <p class="aside">{words.widerScreens}</p>
+              {/if}
             {/if}
-          {/if}
-          {#if hideable || view}
-            <DropdownMenu.Separator />
-          {/if}
-          {#if hideable}
-            <DropdownMenu.Item onSelect={onhide}>
-              <IconEyeClosed />
-              <span>{words.hide}</span>
-            </DropdownMenu.Item>
-          {/if}
-          {#if view}
-            <DropdownMenu.Item onSelect={ontab}>
-              <IconWindow />
-              <span>{words.showAsTab}</span>
-            </DropdownMenu.Item>
-          {/if}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    </span>
+            {#if hideable || view}
+              <DropdownMenu.Separator />
+            {/if}
+            {#if hideable}
+              <DropdownMenu.Item onSelect={onhide}>
+                <IconEyeClosed />
+                <span>{words.hide}</span>
+              </DropdownMenu.Item>
+            {/if}
+            {#if view}
+              <DropdownMenu.Item onSelect={ontab}>
+                <IconWindow />
+                <span>{words.showAsTab}</span>
+              </DropdownMenu.Item>
+            {/if}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      </span>
+    {/if}
   </header>
   <div
     data-card={card || undefined}
     data-slot="block-body"
     class={["block-body", card && "card"]}
+    {@attach onbody && sized(onbody)}
   >
     {@render children()}
   </div>

@@ -24,7 +24,6 @@
   import FindRow from "./FindRow.svelte";
   import type { FindResult } from "./find-client";
   import { rowOf } from "./find-rows";
-  import { GRACE_MS } from "./finder-state.svelte";
   import type { MentionState } from "./mention.svelte";
 
   let {
@@ -45,18 +44,7 @@
   const keyOf = (r: FindResult) => `${r.kind}:${r.id}`;
   const activeKey = $derived(mention.active ? keyOf(mention.active) : null);
 
-  let late = $state(false);
   const waiting = $derived(mention.answer.state === "asking");
-  $effect(() => {
-    if (!waiting) {
-      late = false;
-      return;
-    }
-    const t = setTimeout(() => {
-      late = true;
-    }, GRACE_MS);
-    return () => clearTimeout(t);
-  });
 
   /** Grows from its bottom edge as it fades in; leaves the same way, faster. */
   function grow(
@@ -125,7 +113,8 @@
       {/each}
     {:else if mention.current && mention.answer.state === "ok"}
       <p class="line" data-flip>No sessions for “{mention.words}”</p>
-    {:else if late}
+    {:else if waiting}
+      <!-- Unseen for the wait's grace (the kit's skeleton), then standing. -->
       <Skeleton class="menu-skeleton" />
     {/if}
   </div>

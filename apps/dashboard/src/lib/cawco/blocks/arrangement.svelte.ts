@@ -45,6 +45,11 @@ export class ProjectBlocks {
     this.#kept = kept;
   }
 
+  /** The project whose pages these are. */
+  get projectId(): string {
+    return this.#projectId();
+  }
+
   async read(): Promise<void> {
     const id = this.#projectId();
     this.#reads += 1;

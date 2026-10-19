@@ -13,6 +13,7 @@
     unreachable,
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
+  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -75,7 +76,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "#lib/components/ui/table/index.js";
   import {
@@ -1008,10 +1008,12 @@
   {/if}
 {/snippet}
 
-<!-- Held as a skeleton until the hub's first read. -->
+<!-- Until the hub's first read the page stands as its blocks will, their
+     bodies skeleton rows (BlockPage `reading`); the read takes its place in
+     one cross-fade (crossOut, crossIn). -->
 <div bind:this={place} class="routines-place">
   {#if page === null && problem !== null}
-    <div class="unread">
+    <div class="unread" in:crossIn>
       <EmptyState
         icon={IconClock}
         line={words.unavailableLine(project.name, problem)}
@@ -1023,9 +1025,18 @@
       </EmptyState>
     </div>
   {:else if page === null}
-    <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+    <div
+      aria-busy="true"
+      aria-label="Reading routines"
+      class="routines-view"
+      data-routines-reading
+      role="status"
+      out:crossOut
+    >
+      <BlockPage {blocks} {items} page="routines" reading />
+    </div>
   {:else}
-    <div class="routines-view">
+    <div class="routines-view" data-routines-read in:crossIn>
       <BlockPage {blocks} {items} page="routines" />
     </div>
   {/if}
@@ -1033,6 +1044,7 @@
 
 <style>
   .routines-place {
+    position: relative;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;

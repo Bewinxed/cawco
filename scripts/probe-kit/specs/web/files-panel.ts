@@ -743,8 +743,11 @@ const reviewLegs = async (
   await slow.locator("[data-files-control]").click();
   await slow.locator(".kit-pop.files-pop").waitFor();
   const opened = Date.now();
+  // The skeleton stands from the read's start, unseen inside the grace (the kit's).
   const atOpen = await slow.evaluate(() => ({
-    waits: document.querySelectorAll("[data-files-wait]").length,
+    waits: [
+      ...document.querySelectorAll("[data-files-wait] .kit-skeleton"),
+    ].filter((bone) => bone.checkVisibility({ opacityProperty: true })).length,
     counts: document.querySelectorAll(".files-pop [data-files-head-count]")
       .length,
     none: document.querySelectorAll(".files-pop .files-none").length,

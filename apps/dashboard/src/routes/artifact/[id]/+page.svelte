@@ -8,6 +8,11 @@
   import { findArtifact, showArtifact } from "#lib/cawco/artifact-api.js";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import {
+    crossIn,
+    crossOutWith,
+    graceLeft,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import Overlays from "#lib/cawco/Overlays.svelte";
   import { ArtifactSession } from "#lib/cawco/preview/artifact-session.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
@@ -28,9 +33,12 @@
   const session = new ArtifactSession();
   setPaneFleet(session);
 
+  /** When the wait for this artifact began: the pane's cover carries it on. */
+  let since = $state(performance.now());
   $effect(() => {
     const wanted = id;
     let live = true;
+    since = performance.now();
     found = null;
     problem = null;
     findArtifact(wanted)
@@ -72,6 +80,15 @@
     }
   }
 
+  /**
+   * The opening card leaving: pinned where it stands (crossOut), down to the
+   * tab's foot, the card's whole height, while what arrives fades in over it.
+   */
+  const leave = (node: HTMLElement) =>
+    crossOutWith(node, () => ({
+      bottom: getComputedStyle(node.parentElement ?? node).paddingBlockEnd,
+    }));
+
   /** A phone's toasts drop from the top, as the app's do; a desk keeps the corner. */
   const narrowToasts = new MediaQuery("(max-width: 640px)");
 </script>
@@ -104,25 +121,40 @@
         {/snippet}
       </EmptyState>
     {:else if found && shown === "open"}
-      <PreviewPane instanceId={found.instanceId} ownTab />
+      <div
+        class="arrived"
+        data-artifact-arrived
+        style:--wait-grace-left={graceLeft(since)}
+        in:crossIn
+      >
+        <PreviewPane instanceId={found.instanceId} ownTab />
+      </div>
     {:else if found && shown === "closed"}
       {@const instanceId = found.instanceId}
-      <EmptyState icon={IconEyeClosed} title="This artifact's panel is closed">
-        {#snippet line()}
-          {found?.name} is still in its session. Show it again to open it here and
-          in its session's panel.
-        {/snippet}
-        {#snippet action()}
-          <Button
-            label="Show it again"
-            onclick={() => reopen(instanceId)}
-            pending={reopening}
-            pendingLabel="Showing…"
-          />
-        {/snippet}
-      </EmptyState>
+      <div class="arrived" data-artifact-arrived in:crossIn>
+        <EmptyState
+          icon={IconEyeClosed}
+          title="This artifact's panel is closed"
+        >
+          {#snippet line()}
+            {found?.name} is still in its session. Show it again to open it here and
+            in its session's panel.
+          {/snippet}
+          {#snippet action()}
+            <Button
+              label="Show it again"
+              onclick={() => reopen(instanceId)}
+              pending={reopening}
+              pendingLabel="Showing…"
+            />
+          {/snippet}
+        </EmptyState>
+      </div>
     {:else}
-      <div aria-hidden="true" class="opening">
+      <!-- The panel's card, holding the house opening line (the kit's
+           skeleton, unseen for the wait's grace), until the hub's first
+           frame; what it brings takes its place in one cross-fade. -->
+      <div aria-hidden="true" class="opening" data-artifact-opening out:leave>
         <span
           data-slot="block"
           class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
@@ -143,12 +175,20 @@
      surface, with the gap the card keeps from its column beside a
      conversation. */
   .artifact-tab {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100dvh;
     overflow: hidden;
     padding: var(--space-2);
     background: var(--surface-page);
+  }
+  /* What took the opening card's place, in the card's flex share. */
+  .arrived {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-block-size: 0;
   }
   .opening {
     flex: 1;

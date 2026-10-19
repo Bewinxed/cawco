@@ -9,6 +9,7 @@
   import { findArtifact, showArtifact } from "../../artifact-api";
   import { cawco } from "../../client.svelte";
   import { failureWords as message } from "../../hub-read";
+  import { crossIn, crossOutWith, graceLeft } from "../../motion/curves.svelte";
   import PreviewPane from "../../preview/PreviewPane.svelte";
   import RowFault from "../../RowFault.svelte";
 
@@ -17,8 +18,11 @@
   /** The artifact's session, once its panel shows it. */
   let staged = $state<{ id: string; instanceId: string } | null>(null);
   let problem = $state<string | null>(null);
+  /** When the wait for this artifact began: the pane's cover carries it on. */
+  let since = $state(performance.now());
   $effect(() => {
     const id = artifactId;
+    since = performance.now();
     staged = null;
     problem = null;
     let live = true;
@@ -47,6 +51,9 @@
   const drawn = $derived(
     !!staged && panel?.state === "open" && panel.artifact?.id === staged.id
   );
+  /** The cover leaving: pinned where it stands (crossOut), down to the stage's foot. */
+  const leave = (node: HTMLElement) =>
+    crossOutWith(node, () => ({ bottom: "0" }));
   // Its panel moved on to another artifact: this one is brought back to it.
   $effect(() => {
     const on = staged;
@@ -59,20 +66,49 @@
   });
 </script>
 
-{#if problem}
-  <RowFault reason={problem} />
-{:else if staged && drawn}
-  <PreviewPane inset instanceId={staged.instanceId} />
-{:else}
-  <div data-slot="cover" aria-hidden="true" class="cover">
-    <span
-      data-slot="block"
-      class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
-    ></span>
-  </div>
-{/if}
+<!-- The panel's well holding the house opening line (the kit's skeleton,
+     unseen for the wait's grace) until its panel shows the artifact; what
+     comes takes its place in one cross-fade (crossOut pinned to the stage's
+     foot, crossIn). -->
+<div data-slot="artifact-stage" class="stage">
+  {#if problem}
+    <div class="arrived" in:crossIn><RowFault reason={problem} /></div>
+  {:else if staged && drawn}
+    <div
+      class="arrived"
+      data-artifact-stage-arrived
+      style:--wait-grace-left={graceLeft(since)}
+      in:crossIn
+    >
+      <PreviewPane inset instanceId={staged.instanceId} />
+    </div>
+  {:else}
+    <div
+      data-slot="cover"
+      aria-hidden="true"
+      class="cover"
+      data-artifact-stage-opening
+      out:leave
+    >
+      <span
+        data-slot="block"
+        class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+      ></span>
+    </div>
+  {/if}
+</div>
 
 <style>
+  .stage,
+  .arrived {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+  .stage {
+    position: relative;
+  }
   .cover {
     flex: 1;
     padding: var(--space-5);

@@ -220,7 +220,14 @@ const recorder = () => {
     const state = [
       `tabs=${tabs}`,
       list.querySelector('[data-slot="pin-list-empty"]') ? "empty" : "",
-      list.querySelector('[data-slot="pin-list-reading"]') ? "reading" : "",
+      // Reading once its skeleton is seen: it stands unseen inside the grace (the kit's).
+      [
+        ...list.querySelectorAll(
+          '[data-slot="pin-list-reading"] .kit-skeleton'
+        ),
+      ].some((bone) => bone.checkVisibility({ opacityProperty: true }))
+        ? "reading"
+        : "",
       list.querySelector("[data-pin-row], [data-moved-row]") ? "rows" : "",
     ]
       .filter(Boolean)
@@ -234,6 +241,12 @@ const recorder = () => {
     subtree: true,
     characterData: true,
   });
+  // A skeleton coming into sight changes no node: every frame looks too.
+  const everyFrame = () => {
+    look();
+    requestAnimationFrame(everyFrame);
+  };
+  requestAnimationFrame(everyFrame);
   Object.defineProperty(window, "probeListSeen", {
     value: () => ({ seen, socketAt }),
   });

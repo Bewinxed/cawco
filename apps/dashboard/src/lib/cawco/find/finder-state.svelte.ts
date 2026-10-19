@@ -36,7 +36,7 @@ import {
 
 /** After the last keystroke, how long before every machine is asked (ms). The critique's call, under the 1 s wait grace. */
 export const SETTLE_MS = 250;
-/** How long a wait goes unremarked before skeleton rows stand in (DESIGN.md --dur-wait-grace). */
+/** How long the last names answer stays drawn while the next is asked (DESIGN.md --dur-wait-grace). */
 export const GRACE_MS = 1000;
 
 export type Who = "anyone" | FindBy;

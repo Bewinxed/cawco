@@ -40,8 +40,6 @@
   } = $props();
 
   const MIN_CHARS = 12;
-  /** The shimmer waits this long, so a fast answer never flashes it. */
-  const SHIMMER_AFTER_MS = 150;
 
   /**
    * A chip arrives rising 4px out of 0.96, one after another 30ms apart;
@@ -61,11 +59,11 @@
 
   let ranked = $state<{ id: string; noul: number }[]>([]);
   let failure = $state<string | null>(null);
-  let slow = $state(false);
+  /** An ask is out: its shimmer stands, unseen for the wait's grace (the kit's skeleton). */
+  let asking = $state(false);
   let asked = "";
   let controller: AbortController | undefined;
   let quiet: ReturnType<typeof setTimeout> | undefined;
-  let shimmer: ReturnType<typeof setTimeout> | undefined;
 
   const byId = $derived(new Map(candidates.map((c) => [c.id, c])));
   /**
@@ -100,17 +98,14 @@
   function settle() {
     controller?.abort();
     clearTimeout(quiet);
-    clearTimeout(shimmer);
-    slow = false;
+    asking = false;
   }
 
   async function ask(draft: string) {
     asked = draft;
     controller = new AbortController();
     const { signal } = controller;
-    shimmer = setTimeout(() => {
-      slow = true;
-    }, SHIMMER_AFTER_MS);
+    asking = true;
     try {
       const answer = await askSuggestions({ text: draft, candidates }, signal);
       // A reply to words that are no longer in the composer is not an answer.
@@ -124,8 +119,7 @@
       }
     } finally {
       if (!signal.aborted) {
-        clearTimeout(shimmer);
-        slow = false;
+        asking = false;
       }
     }
   }
@@ -217,7 +211,7 @@
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
        its way, or a failure. Its row is kept whether it is drawn or not
        (app.css `--c-suggest-room`), so coming and going moves nothing. -->
-  {#if shown.length > 0 || slow || failure}
+  {#if shown.length > 0 || asking || failure}
     <fieldset
       class="track"
       out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
@@ -268,11 +262,8 @@
       {#if shown.length > 1}
         <span aria-hidden="true" class="all"><Kbd>⇧ Tab</Kbd> all</span>
       {/if}
-      {#if slow && shown.length === 0}
-        <span
-          aria-hidden="true"
-          class="shimmer"
-          in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
+      {#if asking && shown.length === 0}
+        <span aria-hidden="true" class="shimmer"
           ><Skeleton class="size-full" /></span
         >
       {/if}
@@ -317,6 +308,12 @@
         var(--surface-recess) 55%,
         oklch(from var(--surface-recess) l c h / 0)
       );
+    }
+    /* Only an answer on its way: the row comes with its shimmer, once the
+       wait has outlasted its grace (as the kit's skeleton does). */
+    &:has(.shimmer):not(:has(.chip, .fail)) {
+      animation: kit-fade-in var(--dur-fade) var(--ease-out)
+        var(--dur-wait-grace) both;
     }
   }
 
@@ -430,7 +427,7 @@
     }
   }
 
-  /* A chip's size, held by the kit skeleton only while an ask is slow. */
+  /* A chip's size, held by the kit skeleton while an ask is out. */
   .shimmer {
     display: block;
     inline-size: 9rem;

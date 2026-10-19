@@ -50,11 +50,11 @@ export type DocSync =
   { state: "reading" } | { state: "synced" } | { state: "failed"; why: string };
 
 /**
- * What the Comments list stands on: `quiet` while the first sync is inside
- * `--dur-wait-grace` (nothing said), `reading` past it, `ready` once held,
- * or why it couldn't be read.
+ * What the Comments list stands on: `reading` until the first sync (its
+ * skeleton, unseen inside `--dur-wait-grace`), `ready` once held, or why it
+ * couldn't be read.
  */
-export type ListHold = "quiet" | "reading" | "ready" | { failed: string };
+export type ListHold = "reading" | "ready" | { failed: string };
 
 export interface ArtifactDoc {
   /** The person deletes pin `pin`, and the ink it alone stands on; a sentence when it was not. */

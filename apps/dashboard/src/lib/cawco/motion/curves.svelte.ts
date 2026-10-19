@@ -140,6 +140,15 @@ export const dur = (name: `--dur-${string}`): number => {
   return token.endsWith("ms") ? value : value * 1000;
 };
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
+/**
+ * What is left of `--dur-wait-grace` for a wait that began at `since`
+ * (`performance.now()`), as the value of `--wait-grace-left`: a skeleton
+ * taking over a wait already under way (app.css `.kit-skeleton`) stands
+ * where the one before it stood, seen or not, instead of waiting the grace
+ * again. Past the grace it is negative, so the fade-in is already done.
+ */
+export const graceLeft = (since: number): string =>
+  `calc(var(--dur-wait-grace) - ${Math.round(performance.now() - since)}ms)`;
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));
 /** `--pop-rise` in px: how far a small entrance travels. */

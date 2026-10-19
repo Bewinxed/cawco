@@ -814,19 +814,7 @@
   const pins = $derived(view?.pins ?? []);
   /** Whether the pane holds the doc yet: until it does, no count or list reads as none. */
   let docSync = $state<DocSync>({ state: "reading" });
-  /** The first sync has outlasted `--dur-wait-grace`: the list's skeleton stands in (The Real Wait Rule). */
-  let readingLong = $state(false);
-  $effect(() => {
-    if (docSync.state !== "reading") {
-      readingLong = false;
-      return;
-    }
-    const grace = setTimeout(() => {
-      readingLong = true;
-    }, dur("--dur-wait-grace"));
-    return () => clearTimeout(grace);
-  });
-  /** What the Comments list stands on: quiet inside the grace, then reading, the pins once held, or why they weren't. */
+  /** What the Comments list stands on: reading (its skeleton, unseen for the wait's grace), the pins once held, or why they weren't. */
   const listHold = $derived.by<ListHold>(() => {
     switch (docSync.state) {
       case "synced":
@@ -834,7 +822,7 @@
       case "failed":
         return { failed: docSync.why };
       default:
-        return readingLong ? "reading" : "quiet";
+        return "reading";
     }
   });
   /**
@@ -2939,9 +2927,12 @@
     opacity: 0;
   }
   /* Nothing until the wait has lasted the grace (DESIGN.md's Real Wait
-     Rule): then the skeleton line and what the stage is doing fade up. */
+     Rule): then the skeleton line and what the stage is doing fade up. A
+     wait its host began (the artifact's tab, a task's stage) is carried on,
+     what is left of its grace handed in as `--wait-grace-left`. */
   .cover > * {
-    animation: kit-fade-in 1ms var(--dur-wait-grace) both;
+    animation: kit-fade-in 1ms var(--wait-grace-left, var(--dur-wait-grace))
+      both;
 
     @media (prefers-reduced-motion: no-preference) {
       animation-duration: var(--dur-fade);

@@ -62,21 +62,34 @@
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconChevronDown, IconEye, IconLayers } from "#lib/icons.js";
   import type { ProjectBlocks } from "./arrangement.svelte";
   import Block from "./Block.svelte";
   import { BlockDragState, watchDrops } from "./block-dnd.svelte";
+  import { keepBody, keptBody } from "./kept-bodies";
 
   let {
     page,
     blocks,
     items,
+    reading = false,
   }: {
     page: BlockPage;
     blocks: ProjectBlocks;
     /** Every block this page can draw, by id: its own, and the views placed on it. */
     items: Record<string, BlockItem>;
+    /**
+     * The page's data is still being read (The Claim Of Nothing Rule): every
+     * block stands where and as wide as it will, its head without what it
+     * counts or does, its body skeleton rows at the height it last stood at
+     * here (kept-bodies.ts), else a ledger's band and three rows.
+     */
+    reading?: boolean;
   } = $props();
+
+  /** The skeleton rows a block's body holds while its page is read. */
+  const READING_ROWS = [0, 1, 2];
 
   const places = $derived(blocks.placesOf(page));
   const shown = $derived(places.filter((place) => !place.hidden));
@@ -250,8 +263,12 @@
         void blocks.unplace(item.view);
       }
     }}
+    onbody={reading
+      ? undefined
+      : (height) => keepBody(blocks.projectId, page, place.block, height)}
     onwidth={(width) => setWidth(place, width)}
     {page}
+    {reading}
     resizing={resizing === place.block}
     span={spanOf(place)}
     title={item.title}
@@ -259,13 +276,38 @@
     width={place.width}
     wideOnly={item.wideOnly ?? false}
   >
-    {@render item.content(place.block)}
+    {#if reading}
+      {@render readingBody(keptBody(blocks.projectId, page, place.block))}
+    {:else}
+      {@render item.content(place.block)}
+    {/if}
   </Block>
+{/snippet}
+
+<!-- At the height the body last stood at here, else the band and three rows. -->
+{#snippet readingBody(kept: number | null)}
+  <div
+    data-slot="block-reading"
+    class="reading"
+    style:block-size={kept === null ? undefined : `${kept}px`}
+  >
+    <div class="reading-band"><Skeleton class="reading-line" /></div>
+    {#each READING_ROWS as row (row)}
+      <div class="reading-row">
+        <span class="reading-name"><Skeleton class="reading-line" /></span>
+        <span class="reading-sub"><Skeleton class="reading-line" /></span>
+      </div>
+    {/each}
+  </div>
 {/snippet}
 
 {#if lone}
   {@const only = places[0]?.block ?? ""}
-  {@render items[only]?.content(only)}
+  {#if reading}
+    {@render readingBody(keptBody(blocks.projectId, page, only))}
+  {:else}
+    {@render items[only]?.content(only)}
+  {/if}
 {:else}
   <div
     data-slot="block-page"
@@ -281,10 +323,11 @@
       style:--block-fill={fill === null ? undefined : `${fill}px`}
       style:--columns={columns}
       {@attach reflow()}
-      {@attach watchDrops(
-        () => ({ order: places.map((place) => place.block), page }),
-        (block, to) => blocks.move(page, block, to)
-      )}
+      {@attach !reading &&
+        watchDrops(
+          () => ({ order: places.map((place) => place.block), page }),
+          (block, to) => blocks.move(page, block, to)
+        )}
     >
       {#each shown as place, index (place.block)}
         {@const item = items[place.block]}
@@ -308,7 +351,7 @@
         {/if}
       {/each}
     </div>
-    {#if hidden.length > 0 || refused}
+    {#if !reading && (hidden.length > 0 || refused)}
       <div class="page-end">
         {#if refused}
           <p data-slot="refused" class="refused" role="status">{refused}</p>
@@ -388,5 +431,63 @@
     padding: var(--space-3);
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+
+  /* A block's body while its page is read, at the height it last stood at
+     here, else a ledger's: its band (--c-toolbar-ctl), then rows as the
+     ledgers' rows stand (ViewRoutines `tr.row > td`): --space-2 above and
+     below a name's line in label type over its line in meta type, at least
+     --c-btn-h-lg, a hairline between. Each line holds a skeleton bar where
+     its words start; nothing else is drawn, so inside the wait's grace the
+     card is its plain surface. */
+  .reading {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    overflow: hidden;
+  }
+  .reading-band,
+  .reading-row {
+    display: flex;
+    flex: none;
+    padding-inline: calc(var(--c-row-lead) + var(--space-3) * 2) var(--space-3);
+  }
+  .reading-band {
+    align-items: center;
+    block-size: var(--c-toolbar-ctl);
+  }
+  .reading-row {
+    flex-direction: column;
+    justify-content: center;
+    min-block-size: var(--c-btn-h-lg);
+    padding-block: var(--space-2);
+
+    & + & {
+      border-block-start: 1px solid transparent;
+    }
+  }
+  .reading-name,
+  .reading-sub {
+    display: flex;
+    align-items: center;
+    block-size: 1lh;
+  }
+  .reading-name {
+    font: var(--type-label);
+  }
+  .reading-sub {
+    font: var(--type-meta);
+  }
+  .reading :global(.reading-line) {
+    inline-size: 40%;
+    block-size: 1ex;
+    border-radius: var(--radius-hair);
+  }
+  .reading-sub :global(.reading-line) {
+    inline-size: 60%;
+  }
+  .reading-band :global(.reading-line) {
+    inline-size: 20%;
+    font: var(--type-label);
   }
 </style>
