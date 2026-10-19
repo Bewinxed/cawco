@@ -842,35 +842,31 @@
     }
   }
 
-  /* The Real Wait Rule, once for every skeleton: inside --dur-wait-grace it
-     holds its box unseen (the plain surface at the real size), then fades in
-     over --dur-fade. Opacity only, so it runs without motion too. A skeleton
-     that takes over a wait already under way (a page's read handing on to its
-     frame's) is given what is left of the grace, `--wait-grace-left`
-     (motion/curves `graceLeft`), so it stands where its forerunner stood
-     rather than waiting the grace again. */
+  /* The Real Wait Rule, once for every skeleton: inside --dur-wait-grace a
+     bar holds its box unseen (the plain surface at the real size), then fades
+     up over --dur-fade and pulses, 1 → --skeleton-pulse-min → 1 over
+     --dur-loop on --ease-crossfade, for as long as the read lasts
+     (transitions-dev Skeleton loader and reveal). The pulse waits out the
+     fade-up, so the two never write the bar's opacity at once; the fade-up
+     fills backwards only, so the pulse is the one writing it after. Both sit
+     on the bars, never on a skeleton's layer, whose opacity and filter are
+     the reveal's (motion/curves `revealOut`). With less motion a bar is held
+     unseen through the grace by a hold of no length, and then nothing moves.
+     A skeleton that takes over a wait already under way (a page's read
+     handing on to its frame's) is given what is left of the grace,
+     `--wait-grace-left` (motion/curves `graceLeft`), so it stands where its
+     forerunner stood rather than waiting the grace again. */
   .kit-skeleton {
-    position: relative;
-    overflow: hidden;
+    --grace: var(--wait-grace-left, var(--dur-wait-grace));
     border-radius: var(--radius-sm);
     background: var(--surface-fill);
-    animation: kit-fade-in var(--dur-fade) var(--ease-out)
-      var(--wait-grace-left, var(--dur-wait-grace)) both;
+    animation: kit-fade-in 0s var(--grace) backwards;
 
     @media (prefers-reduced-motion: no-preference) {
-      &::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        translate: -100% 0;
-        background: linear-gradient(
-          90deg,
-          transparent 0 30%,
-          var(--skeleton-sheen) 50%,
-          transparent 70% 100%
-        );
-        animation: kit-skeleton-sweep var(--dur-loop) linear infinite;
-      }
+      animation:
+        kit-fade-in var(--dur-fade) var(--ease-out) var(--grace) backwards,
+        kit-skeleton-pulse var(--dur-loop) var(--ease-crossfade)
+          calc(var(--grace) + var(--dur-fade)) infinite;
     }
   }
 
@@ -2417,9 +2413,9 @@
     transform: translateY(6px);
   }
 }
-@keyframes kit-skeleton-sweep {
-  to {
-    translate: 100% 0;
+@keyframes kit-skeleton-pulse {
+  50% {
+    opacity: var(--skeleton-pulse-min);
   }
 }
 @keyframes kit-fade-in {

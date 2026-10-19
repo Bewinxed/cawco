@@ -28,7 +28,13 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
-  import { crossIn, crossOut, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+    revealIn,
+    revealOut,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -275,6 +281,12 @@
 
   let shown = $state(false);
   const waiting = $derived(messages === null && !readProblem);
+  /**
+   * The skeleton, over the thread still on its way and over rows not yet
+   * drawn. It arrives with crossIn and hands its place to the rows in the
+   * reveal (the markup's comment at the veil says how; DESIGN.md, The Claim
+   * Of Nothing Rule).
+   */
   const veiled = $derived(waiting || (!shown && (messages?.length ?? 0) > 0));
   // Hidden while veiled, the pane is still laid out, so its transcript can
   // measure and draw before its tab is chosen (dock.svelte.ts `settling`).
@@ -929,12 +941,14 @@
 
 {#snippet slide()}
   <div data-slot="room" class="transcript-slide">
+    <!-- What the read brings takes the skeleton's place in the reveal
+         (revealIn): why it could not be read, the hero, or the rows. -->
     {#if readProblem}
-      <p class="problem" role="alert" in:crossIn>
+      <p class="problem" role="alert" in:revealIn>
         The thread could not be read: {readProblem}
       </p>
     {:else if hero}
-      <div class="hero" data-thread-hero in:crossIn>
+      <div class="hero" data-thread-hero in:revealIn>
         <EmptyState
           line={view && !view.on
             ? "Caw is off, so he acts only when you write to him."
@@ -981,15 +995,17 @@
       </div>
       <HeadFade />
     {/if}
-    <!-- The skeleton stands in for rows still on their way and goes the
-         moment they are drawn: its rows are not where the real ones fall, so
-         fading it over them reads as a second, stale transcript. -->
+    <!-- The skeleton stands in for rows still on their way, at their own
+         geometry (TranscriptSkeleton), over the rows laid out under it. It
+         arrives with crossIn; once the rows are drawn it leaves in the
+         reveal (revealOut) as they come in where they stand (Transcript
+         `revealsWhen`), on one clock, the rows unmoved. -->
     {#if writable && !docked}
       <FootFade solid={foot.stack ? fadeSolid : undefined} />
     {/if}
     {#if veiled}
-      <div class="veil" in:crossIn>
-        <TranscriptSkeleton />
+      <div class="veil" in:crossIn out:revealOut>
+        <TranscriptSkeleton session={viewId} />
       </div>
     {/if}
   </div>

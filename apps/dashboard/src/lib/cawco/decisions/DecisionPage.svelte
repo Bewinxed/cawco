@@ -20,8 +20,8 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     appear,
-    crossIn,
-    crossOut,
+    revealIn,
+    revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import type { StageKind } from "#lib/cawco/project-tasks.js";
@@ -260,18 +260,19 @@
     </div>
 
     <!-- The house opening line (the kit's skeleton, unseen for the wait's
-         grace) while the page is read; what it brings takes its place in one
-         cross-fade, a live page through its frame's own opening line. -->
+         grace) while the page is read; what it brings takes its place in the
+         reveal (revealOut, revealIn), a live page through its frame's own
+         opening line. -->
     {#if unread && !read}
-      <p class="problem" role="alert" in:crossIn>{words.unread(unread)}</p>
+      <p class="problem" role="alert" in:revealIn>{words.unread(unread)}</p>
     {:else if read?.record}
-      <div class="records" in:crossIn>
+      <div class="records" in:revealIn>
         {#each read.record.cards as each (each.id)}
           <RecordCard card={each} {hrefOf} {onopentask} {taskOf} />
         {/each}
       </div>
     {:else if read?.artifactId && read.writer}
-      <div class="frame-place" data-decision-frame in:crossIn>
+      <div class="frame-place" data-decision-frame in:revealIn>
         <PageFrame
           artifactId={read.artifactId}
           {card}
@@ -283,13 +284,13 @@
         />
       </div>
     {:else if read}
-      <p class="problem" in:crossIn>{words.gone}</p>
+      <p class="problem" in:revealIn>{words.gone}</p>
     {:else}
       <div
         aria-hidden="true"
         class="opening"
         data-decision-opening
-        out:crossOut
+        out:revealOut
       >
         <span
           data-slot="block"

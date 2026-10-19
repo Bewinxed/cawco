@@ -75,6 +75,8 @@ export const easeOut = bezier(0.23, 1, 0.32, 1);
 export const easeInOut = bezier(0.77, 0, 0.175, 1);
 /** `--ease-drawer`: popovers, drawers, pages. */
 export const easeDrawer = bezier(0.32, 0.72, 0, 1);
+/** `--ease-crossfade` (CSS ease-in-out): a skeleton's reveal, and two states trading places. */
+export const easeCrossfade = bezier(0.42, 0, 0.58, 1);
 
 /**
  * A motion token as the stylesheet defines it (app.css), so JS motion and
@@ -104,6 +106,8 @@ const TOKENS = [
   "--dur-ghost",
   "--dur-stagger",
   "--dur-cascade",
+  "--dur-skeleton-reveal",
+  "--skeleton-reveal-blur",
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",
@@ -159,8 +163,9 @@ const graceLeft = (waited: number): string =>
  *
  * A CSS animation's delay counts from when its style first resolves, which
  * a busy page (a cold load hydrating) puts off past the reckoning: so a frame
- * on, each fade under it that took this delay is started at the reckoning
- * instead, and begins at `since` + the grace however late its style came.
+ * on, each fade-up under it that took this delay, and the pulse that follows
+ * it, is started at the reckoning instead, and begins at `since` + the grace
+ * however late its style came.
  */
 export const carriesWait =
   (since: number | null): Attachment<HTMLElement> =>
@@ -172,12 +177,18 @@ export const carriesWait =
     const waited = Math.round(reckoned - since);
     node.style.setProperty("--wait-grace-left", graceLeft(waited));
     const left = dur("--dur-wait-grace") - waited;
+    /** The delay each of a bar's two runs took from this wait (app.css `.kit-skeleton`). */
+    const delays: Record<string, number> = {
+      "kit-fade-in": left,
+      "kit-skeleton-pulse": left + dur("--dur-fade"),
+    };
     const frame = requestAnimationFrame(() => {
       for (const run of node.getAnimations({ subtree: true })) {
+        const delay =
+          run instanceof CSSAnimation ? delays[run.animationName] : undefined;
         if (
-          run instanceof CSSAnimation &&
-          run.animationName === "kit-fade-in" &&
-          Math.abs(Number(run.effect?.getTiming().delay) - left) < 1
+          delay !== undefined &&
+          Math.abs(Number(run.effect?.getTiming().delay) - delay) < 1
         ) {
           run.startTime = reckoned;
         }
@@ -380,6 +391,121 @@ export function crossIn(_node: Element) {
     css: (t: number) => `opacity: ${t}`,
   };
 }
+
+/**
+ * THE REVEAL: a skeleton handing its place to what the read brought — the
+ * list, its "nothing" line, the empty state, a fault line. The two cross-fade
+ * with a matching cross-blur, on one clock: the skeleton fades out and blurs
+ * to --skeleton-reveal-blur as the content fades in and un-blurs from it, over
+ * --dur-skeleton-reveal on --ease-crossfade (transitions-dev Skeleton loader
+ * and reveal, its tuning: 400ms, ease-in-out, 2px). The skeleton is taken out
+ * of the flow as it starts, pinned where it stands as crossOut's is, so the
+ * two stack in one slot and nothing moves. With less motion there is none:
+ * its duration is 0, so no animation exists. Only a skeleton's swaps take it;
+ * every other view swap is {@link crossIn} and {@link crossOut}.
+ */
+function reveal(): TransitionConfig {
+  const blur = numberOf("--skeleton-reveal-blur");
+  return {
+    duration: motionOk.current ? dur("--dur-skeleton-reveal") : 0,
+    easing: easeCrossfade,
+    css: (t: number) =>
+      `opacity: ${t}; filter: blur(${Number(((1 - t) * blur).toFixed(3))}px)`,
+  };
+}
+
+/** The content side of {@link reveal}: what the read brought, coming in. */
+export function revealIn(_node: Element): TransitionConfig {
+  return reveal();
+}
+
+/**
+ * The skeleton side of {@link reveal}, on a skeleton's layer, never on a bar
+ * (a bar's opacity is its pulse's, app.css `.kit-skeleton`). A layer leaving
+ * where nothing is rendered goes at once, as {@link crossOut} does.
+ */
+export function revealOut(node: HTMLElement): TransitionConfig {
+  return revealOutWith(node);
+}
+
+/**
+ * {@link revealOut} with more of the lift, read with it (a height it is held
+ * at), as {@link crossOutWith} is to crossOut. Never a directive itself.
+ */
+export function revealOutWith(
+  node: HTMLElement,
+  more?: () => Record<string, string>
+): TransitionConfig {
+  if (!node.checkVisibility()) {
+    return { duration: 0 };
+  }
+  const config = reveal();
+  return config.duration ? lifting(node, pinned(node, more), config) : config;
+}
+
+/** A transition's `css` answer as a keyframe for `element.animate()`. */
+const keyframeOf = (css: string): Keyframe =>
+  Object.fromEntries(
+    css
+      .split(";")
+      .map((part) => part.split(":").map((side) => side.trim()))
+      .filter(([prop, value]) => prop && value)
+      .map(([prop, value]) => [
+        prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()),
+        value,
+      ])
+  );
+
+/**
+ * {@link revealIn} for content laid out before it is drawn, so no mount
+ * carries it in: the transcript's rows, measured and landed under their
+ * skeleton before they are shown (Transcript `shown`). Played on what it is
+ * attached to as `drawn` first answers true, the way Svelte plays an intro
+ * (svelte/src/internal/client/dom/elements/transitions.js `animate`): its
+ * first style held from a microtask of the task that drew it, the fade itself
+ * started from that hold's end, a frame on. The skeleton's {@link revealOut},
+ * started from the same flush, is started the same way, so the two begin on
+ * one frame: one clock. The same spec as revealIn, so the same keyframes.
+ */
+export const revealsWhen =
+  (drawn: () => boolean): Attachment<HTMLElement> =>
+  (node) => {
+    if (!drawn()) {
+      return;
+    }
+    const { duration = 0, easing = (t: number) => t, css } = reveal();
+    if (!(duration && css)) {
+      return;
+    }
+    let run: Animation | null = null;
+    let ended = false;
+    queueMicrotask(() => {
+      if (ended) {
+        return;
+      }
+      const first = keyframeOf(css(0, 1));
+      const hold = node.animate([first, first], { duration: 0, fill: "forwards" });
+      run = hold;
+      hold.onfinish = () => {
+        hold.cancel();
+        if (ended) {
+          return;
+        }
+        const steps = Math.ceil(duration / (1000 / 60));
+        const frames = Array.from({ length: steps + 1 }, (_, i) => {
+          const t = easing(i / steps);
+          return keyframeOf(css(t, 1 - t));
+        });
+        const fade = node.animate(frames, { duration, fill: "forwards" });
+        run = fade;
+        fade.onfinish = () => fade.cancel();
+      };
+    });
+    return () => {
+      ended = true;
+      run?.cancel();
+    };
+  };
 
 /**
  * A view leaving where nothing is rendered (an ancestor skips its content:

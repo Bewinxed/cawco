@@ -54,7 +54,12 @@
   import { excerptParts } from "../find/find-rows";
   import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
-  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
+  import {
+    crossIn,
+    dur,
+    revealIn,
+    revealOut,
+  } from "../motion/curves.svelte";
   import RowFault from "../RowFault.svelte";
   import ArtifactCards from "./ArtifactCards.svelte";
   import {
@@ -146,11 +151,33 @@
    * The Claim Of Nothing Rule: a list still read stands as its skeleton,
    * which the kit holds unseen for `--dur-wait-grace` (app.css
    * `.kit-skeleton`), and what the read brings (the list, or its "nothing"
-   * line) takes its place in one cross-fade (motion/curves `crossIn`,
-   * `crossOut`).
+   * line, or why it could not be read) takes its place in the reveal
+   * (motion/curves `revealOut`, `revealIn`).
    */
   const artifactsGhost = $derived(artifacts === null && !artifactsFailed);
   const attachmentsGhost = $derived(attachments === null && !attachmentsFailed);
+  /**
+   * Whether each region's read has answered since its skeleton last stood:
+   * the answer takes the skeleton's place in the reveal, and what a search
+   * brings after takes the last answer's in a plain cross-fade, as any view
+   * handing its place to another does (`crossIn`).
+   */
+  const answered = { artifacts: false, attachments: false };
+  $effect.pre(() => {
+    if (artifacts === null) {
+      answered.artifacts = false;
+    }
+    if (attachments === null) {
+      answered.attachments = false;
+    }
+  });
+  const arriving = (region: keyof typeof answered, node: Element) => {
+    const first = !answered[region];
+    answered[region] = true;
+    return first ? revealIn(node) : crossIn(node);
+  };
+  const artifactsIn = (node: Element) => arriving("artifacts", node);
+  const attachmentsIn = (node: Element) => arriving("attachments", node);
   /** How many skeleton cards stand for the masonry. */
   const GHOST_CARDS = 6;
 
@@ -375,8 +402,9 @@
 
 <div class="files">
   {#if nothing}
-    <!-- What the skeleton stood in for, in one cross-fade (crossIn). -->
-    <div class="files-empty-place" in:crossIn>
+    <!-- What the skeletons stood in for, in the reveal (revealOut,
+         revealIn): both reads answered nothing. -->
+    <div class="files-empty-place" in:revealIn>
       <EmptyState
         class="files-empty"
         data-files-empty
@@ -396,7 +424,7 @@
       </EmptyState>
     </div>
   {:else}
-    <div class="files-main" out:crossOut>
+    <div class="files-main" out:revealOut>
       <!-- The finder's own field (FindField), as Jump's. -->
       <div class="files-search" data-files-search>
         <FindField
@@ -523,107 +551,103 @@
 {/snippet}
 
 {#snippet artifactsBody()}
-  {#if artifactsFailed}
-    <RowFault
-      again={() => readArtifacts(instanceId)}
-      data-files-failed
-      details={artifactsFailed}
-      reason="Couldn't read this session's artifacts"
-    />
-  {:else if asked && searchFault}
-    <RowFault
-      again={searchAgain}
-      data-files-search-failed
-      details={searchFault}
-      reason="Couldn't search this session's artifacts"
-    />
-  {:else}
-    <!-- The region's one place: its skeleton, then what the read brought,
-         one handing its place to the next (crossIn, crossOut). -->
-    <div class="files-body">
-      {#if artifacts === null}
-        {#if artifactsGhost}
-          <div
-            aria-busy="true"
-            aria-label="Reading artifacts"
-            class="files-scroll files-wait"
-            data-files-wait="artifacts"
-            role="status"
-            out:crossOut
-          >
-            <ArtifactCards cards={[]} ghosts={GHOST_CARDS} {onpick} />
-          </div>
-        {/if}
-      {:else if artifacts.length === 0}
-        <div class="files-none files-none-ask" in:crossIn>
-          <span>Nothing made yet</span>
-          <Button
-            data-files-ask
-            label={askLabel}
-            onclick={onask}
-            size="xs"
-            variant="ghost"
-          />
-        </div>
-      {:else if shownHits && cards.length === 0}
-        <p class="files-none" data-files-none in:crossIn>
-          No artifacts match “{shownHits.q}”
-        </p>
-      {:else}
-        <div
-          aria-busy={searching || undefined}
-          class="files-scroll kit-edge-fade-block"
-          data-files-scroll
-          id="{uid}-artifacts-scroll"
-          in:crossIn
-          {@attach measured("artifacts", "[data-files-card]")}
-        >
-          <ArtifactCards {cards} {chosen} {onpick} />
-        </div>
-        {@render moreSign("artifacts")}
-      {/if}
-    </div>
-  {/if}
+  <!-- The region's one place: its skeleton, then what the read brought (the
+       cards, the "nothing" line, or why it could not be read) in the reveal
+       (revealOut, revealIn); what a search brings after takes the last
+       answer's place in a plain cross-fade (`artifactsIn`). One chain, so
+       the skeleton's leave is the chain's own and plays whatever follows. -->
+  <div class="files-body">
+    {#if artifactsFailed}
+      <div data-slot="files-fault" in:revealIn>
+        <RowFault
+          again={() => readArtifacts(instanceId)}
+          data-files-failed
+          details={artifactsFailed}
+          reason="Couldn't read this session's artifacts"
+        />
+      </div>
+    {:else if asked && searchFault}
+      <RowFault
+        again={searchAgain}
+        data-files-search-failed
+        details={searchFault}
+        reason="Couldn't search this session's artifacts"
+      />
+    {:else if artifacts === null}
+      <div
+        aria-busy="true"
+        aria-label="Reading artifacts"
+        class="files-scroll files-wait"
+        data-files-wait="artifacts"
+        role="status"
+        out:revealOut
+      >
+        <ArtifactCards cards={[]} ghosts={GHOST_CARDS} {onpick} />
+      </div>
+    {:else if artifacts.length === 0}
+      <div class="files-none files-none-ask" in:artifactsIn>
+        <span>Nothing made yet</span>
+        <Button
+          data-files-ask
+          label={askLabel}
+          onclick={onask}
+          size="xs"
+          variant="ghost"
+        />
+      </div>
+    {:else if shownHits && cards.length === 0}
+      <p class="files-none" data-files-none in:artifactsIn>
+        No artifacts match “{shownHits.q}”
+      </p>
+    {:else}
+      <div
+        aria-busy={searching || undefined}
+        class="files-scroll kit-edge-fade-block"
+        data-files-scroll
+        id="{uid}-artifacts-scroll"
+        in:artifactsIn
+        {@attach measured("artifacts", "[data-files-card]")}
+      >
+        <ArtifactCards {cards} {chosen} {onpick} />
+      </div>
+      {@render moreSign("artifacts")}
+    {/if}
+  </div>
 {/snippet}
 
 {#snippet attachmentsBody()}
-  {#if attachmentsFailed}
-    <RowFault
-      again={() => readAttachments(instanceId)}
-      data-files-failed
-      details={attachmentsFailed}
-      reason="Couldn't read this session's attachments"
-    />
-  {:else}
-    <div class="files-body">
-      {#if attachments === null}
-        {#if attachmentsGhost}
-          <div
-            aria-busy="true"
-            aria-label="Reading attachments"
-            class="files-scroll files-wait"
-            data-files-wait="attachments"
-            role="status"
-            out:crossOut
-          >
-            {#each [0.46, 0.34] as share (share)}
-              <div class="files-ghost-row">
-                <span class="lead" data-box
-                  ><Skeleton class="ghost-glyph" /></span
-                >
-                <Skeleton
-                  class="ghost-name"
-                  style="inline-size: {share * 100}%"
-                />
-                <Skeleton class="ghost-age" />
-              </div>
-            {/each}
+  <!-- As the artifacts' region (`artifactsBody`). -->
+  <div class="files-body">
+    {#if attachmentsFailed}
+      <div data-slot="files-fault" in:revealIn>
+        <RowFault
+          again={() => readAttachments(instanceId)}
+          data-files-failed
+          details={attachmentsFailed}
+          reason="Couldn't read this session's attachments"
+        />
+      </div>
+    {:else if attachments === null}
+      <div
+        aria-busy="true"
+        aria-label="Reading attachments"
+        class="files-scroll files-wait"
+        data-files-wait="attachments"
+        role="status"
+        out:revealOut
+      >
+        {#each [0.46, 0.34] as share (share)}
+          <div class="files-ghost-row">
+            <span class="lead" data-box><Skeleton class="ghost-glyph" /></span>
+            <Skeleton class="ghost-name" style="inline-size: {share * 100}%" />
+            <Skeleton class="ghost-age" />
           </div>
-        {/if}
-      {:else if attachments.length === 0}
-        <!-- The Empty Starts Work Rule's by-hand way: a person sends
-             attachments, so the composer's own Attach is offered. -->
-        <div class="files-none files-none-ask" in:crossIn>
+        {/each}
+      </div>
+    {:else if attachments.length === 0}
+      <!-- The Empty Starts Work Rule's by-hand way: a person sends
+           attachments, so the composer's own Attach is offered. -->
+      <div class="files-none files-none-ask" in:attachmentsIn>
           <span>Nothing attached yet</span>
           <Button
             data-files-attach
@@ -634,7 +658,7 @@
           />
         </div>
       {:else if attachmentHits.length === 0}
-        <p class="files-none" data-files-none in:crossIn>
+        <p class="files-none" data-files-none in:attachmentsIn>
           No attachments match “{asked}”
         </p>
       {:else}
@@ -642,7 +666,7 @@
           class="files-scroll kit-edge-fade-block"
           data-files-scroll
           id="{uid}-attachments-scroll"
-          in:crossIn
+          in:attachmentsIn
           {@attach measured("attachments", "[data-files-row]")}
         >
           <ul
@@ -697,8 +721,7 @@
         </div>
         {@render moreSign("attachments")}
       {/if}
-    </div>
-  {/if}
+  </div>
 {/snippet}
 
 {#snippet attachmentFace(file: AttachmentRow)}
@@ -836,7 +859,7 @@
     }
   }
   /* A region's one place: its skeleton, its read, and the "N more" sign
-     over its foot. `position: relative` pins the view leaving (crossOut). */
+     over its foot. `position: relative` pins the view leaving (revealOut, crossOut's pin). */
   .files-body {
     position: relative;
     display: flex;

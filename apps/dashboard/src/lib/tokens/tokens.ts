@@ -410,7 +410,8 @@ export type TokenSize =
   | "motion.deck-step"
   | "motion.ride-fade"
   | "motion.pop-rise"
-  | "motion.fold-blur";
+  | "motion.fold-blur"
+  | "motion.skeleton-reveal-blur";
 
 export type TokenFont =
   | "font.font-wordmark"

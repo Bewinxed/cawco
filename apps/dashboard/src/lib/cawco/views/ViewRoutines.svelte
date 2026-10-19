@@ -13,7 +13,7 @@
     unreachable,
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { revealIn, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -1010,10 +1010,10 @@
 
 <!-- Until the hub's first read the page stands as its blocks will, their
      bodies skeleton rows (BlockPage `reading`); the read takes its place in
-     one cross-fade (crossOut, crossIn). -->
+     the reveal (revealOut, revealIn). -->
 <div bind:this={place} class="routines-place">
   {#if page === null && problem !== null}
-    <div class="unread" in:crossIn>
+    <div class="unread" in:revealIn>
       <EmptyState
         icon={IconClock}
         line={words.unavailableLine(project.name, problem)}
@@ -1031,12 +1031,12 @@
       class="routines-view"
       data-routines-reading
       role="status"
-      out:crossOut
+      out:revealOut
     >
       <BlockPage {blocks} {items} kept page="routines" reading />
     </div>
   {:else}
-    <div class="routines-view" data-routines-read in:crossIn>
+    <div class="routines-view" data-routines-read in:revealIn>
       <BlockPage {blocks} {items} kept page="routines" />
     </div>
   {/if}

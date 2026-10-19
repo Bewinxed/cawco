@@ -779,7 +779,7 @@ public enum Motion {
     public static let easeOut = TimingCurve(x1: 0.23, y1: 1, x2: 0.32, y2: 1)
     public static let easeInOut = TimingCurve(x1: 0.77, y1: 0, x2: 0.175, y2: 1)
     public static let easeDrawer = TimingCurve(x1: 0.32, y1: 0.72, x2: 0, y2: 1)
-    /// Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
+    /// Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its Skeleton loader and reveal: a skeleton's pulse and its reveal (dur-skeleton-reveal) run on it too. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
     public static let easeCrossfade = TimingCurve(x1: 0.42, y1: 0, x2: 0.58, y2: 1)
     /// A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap.
     public static let easeArrive = TimingCurve(x1: 0.2, y1: 0, x2: 0, y2: 1)
@@ -844,6 +844,9 @@ public enum Motion {
     /// A disclosure growing open (collapsible-content); it folds shut over dur-exit.
     /// In seconds.
     public static let durReveal: TimeInterval = 0.24
+    /// A skeleton handing its place to what the read brought (motion/curves `revealIn`, `revealOut`): one cross-fade with a matching cross-blur (skeleton-reveal-blur) on ease-crossfade, the skeleton out as the content comes in. transitions-dev Skeleton loader and reveal, its tuning (400ms, ease-in-out, 2px).
+    /// In seconds.
+    public static let durSkeletonReveal: TimeInterval = 0.4
     /// How long a done state stays up.
     /// In seconds.
     public static let durHold: TimeInterval = 1.2
@@ -884,4 +887,8 @@ public enum Motion {
     public static let popRise: Double = 8
     /// How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr.
     public static let foldBlur: Double = 2
+    /// How soft the two sides of a skeleton's reveal are at their far ends (dur-skeleton-reveal): the skeleton blurs to it as it fades out, the content un-blurs from it as it fades in. transitions-dev Skeleton loader and reveal.
+    public static let skeletonRevealBlur: Double = 2
+    /// The opacity a skeleton's bars pulse down to half a loop in (app.css `kit-skeleton-pulse`, dur-loop on ease-crossfade), for as long as the read lasts. transitions-dev Skeleton loader and reveal.
+    public static let skeletonPulseMin: Double = 0.5
 }

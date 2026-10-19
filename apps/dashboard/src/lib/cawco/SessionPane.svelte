@@ -20,9 +20,12 @@
    */
   import { type Snippet, untrack } from "svelte";
   import {
+    carriesWait,
     crossIn,
     crossOut,
     crossOutWith,
+    revealIn,
+    revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -632,12 +635,41 @@
   let shown = $state(false);
 
   /**
-   * The placeholder, as a function of what stands in the area: over the
-   * history still on its way, and over a transcript not yet drawn. It goes
-   * at once as the rows are drawn, never faded over them (the markup's
-   * comment at the veil says why; DESIGN.md, The Claim Of Nothing Rule).
+   * The skeleton, as a function of what stands in the area: over the history
+   * still on its way, and over a transcript not yet drawn. It arrives with
+   * crossIn and hands its place to the rows in the reveal (the markup's
+   * comment at the veil says how; DESIGN.md, The Claim Of Nothing Rule).
    */
   const veiled = $derived(!(prestart || namedState) && (waiting || !shown));
+  /**
+   * When this pane began to wait, if it stood as the bare skeleton first (no
+   * session in the store yet): the veil that follows it carries that wait on
+   * (`carriesWait`), never waiting the grace again. A veil after the rows
+   * were once drawn is a wait of its own.
+   */
+  const bareSince = untrack(() => (session ? null : performance.now()));
+  let drawnOnce = $state(false);
+  $effect(() => {
+    if (shown) {
+      drawnOnce = true;
+    }
+  });
+  /**
+   * Whether the skeleton has stood since a named state last arrived: a state
+   * the read brings takes the skeleton's place in the reveal; one taking
+   * another state's place (a fault giving way to the blank page) cross-fades.
+   */
+  let skeletonStood = untrack(() => veiled);
+  $effect.pre(() => {
+    if (veiled) {
+      skeletonStood = true;
+    }
+  });
+  function stateIn(node: Element) {
+    const stood = skeletonStood;
+    skeletonStood = false;
+    return stood ? revealIn(node) : crossIn(node);
+  }
   // Hidden while veiled, the pane is still laid out, so its transcript can
   // measure and draw before its tab is chosen (dock.svelte.ts `settling`).
   settleWhile(
@@ -1210,15 +1242,15 @@
           <!-- A named state, not an empty pane: what happened, in one line,
                    and the one thing that can be done about it. -->
           {#if fault}
-            <div class="state" in:crossIn out:leave>
+            <div class="state" in:stateIn out:leave>
               {@render faultState(fault)}
             </div>
           {:else if unaddressable}
-            <div class="state" in:crossIn out:leave>
+            <div class="state" in:stateIn out:leave>
               {@render missingState()}
             </div>
           {:else if blank}
-            <div class="state" in:crossIn out:leave>
+            <div class="state" in:stateIn out:leave>
               <EmptyState
                 class={STATEFUL}
                 icon={IconChat}
@@ -1244,15 +1276,22 @@
             </div>
             <HeadFade />
           {/if}
-          <!-- The skeleton stands in for rows still on their way and goes the
-               moment they are drawn: its rows are not where the real ones fall, so
-               fading it over them reads as a second, stale transcript. -->
+          <!-- The skeleton stands in for rows still on their way, at their
+               own geometry (TranscriptSkeleton), over the rows laid out under
+               it. It arrives with crossIn; once the rows are drawn it leaves
+               in the reveal (revealOut) as they come in where they stand
+               (Transcript `revealsWhen`), on one clock, the rows unmoved. -->
           {#if writable && browser}
             <FootFade />
           {/if}
           {#if veiled}
-            <div class="veil" in:crossIn>
-              <TranscriptSkeleton />
+            <div
+              class="veil"
+              {@attach carriesWait(drawnOnce ? null : bareSince)}
+              in:crossIn
+              out:revealOut
+            >
+              <TranscriptSkeleton session={viewId} />
             </div>
           {/if}
         </div>
@@ -1300,9 +1339,10 @@
   {:else if unaddressable}
     <div class="state">{@render missingState()}</div>
   {:else}
-    <!-- No session in the store yet: the same placeholder the transcript
-         area shows, so the two loading moments look like one. -->
-    <TranscriptSkeleton />
+    <!-- No session in the store yet: the same skeleton the transcript area
+         shows, so the two loading moments look like one, and the veil after
+         it carries its wait on (`bareSince`). -->
+    <TranscriptSkeleton session={viewId} />
   {/if}
   <!-- The move's wait: the whole pane until the session starts, then over
        its transcript until that has drawn, fading from over it (design
@@ -1403,9 +1443,10 @@
     flex: 1 1 auto;
     min-height: 0;
   }
-  /* The placeholder, laid over the transcript until its rows are drawn:
-     opaque, so fading it is the cross-fade, and above the transcript's own
-     sticky notes, below the composer. */
+  /* The skeleton, laid over the transcript until its rows are drawn, on the
+     transcript's own surface, and above the transcript's own sticky notes,
+     below the composer. It stands in the area's whole box, the transcript's
+     (TranscriptSkeleton mirrors `.tr`). */
   /* A move's wait, over everything the pane holds, opaque: fading it is the
      cross-fade to the transcript under it. */
   .move-layer {

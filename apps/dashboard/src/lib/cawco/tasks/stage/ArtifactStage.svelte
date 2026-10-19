@@ -9,7 +9,7 @@
   import { findArtifact, showArtifact } from "../../artifact-api";
   import { cawco } from "../../client.svelte";
   import { failureWords as message } from "../../hub-read";
-  import { crossIn, crossOutWith } from "../../motion/curves.svelte";
+  import { revealIn, revealOutWith } from "../../motion/curves.svelte";
   import PreviewPane from "../../preview/PreviewPane.svelte";
   import RowFault from "../../RowFault.svelte";
 
@@ -51,9 +51,9 @@
   const drawn = $derived(
     !!staged && panel?.state === "open" && panel.artifact?.id === staged.id
   );
-  /** The cover leaving: pinned where it stands (crossOut), down to the stage's foot. */
+  /** The cover leaving: pinned where it stands (revealOut), down to the stage's foot. */
   const leave = (node: HTMLElement) =>
-    crossOutWith(node, () => ({ bottom: "0" }));
+    revealOutWith(node, () => ({ bottom: "0" }));
   // Its panel moved on to another artifact: this one is brought back to it.
   $effect(() => {
     const on = staged;
@@ -68,13 +68,13 @@
 
 <!-- The panel's well holding the house opening line (the kit's skeleton,
      unseen for the wait's grace) until its panel shows the artifact; what
-     comes takes its place in one cross-fade (crossOut pinned to the stage's
-     foot, crossIn). -->
+     comes takes its place in the reveal (revealOut pinned to the stage's
+     foot, revealIn). -->
 <div data-slot="artifact-stage" class="stage">
   {#if problem}
-    <div class="arrived" in:crossIn><RowFault reason={problem} /></div>
+    <div class="arrived" in:revealIn><RowFault reason={problem} /></div>
   {:else if staged && drawn}
-    <div class="arrived" data-artifact-stage-arrived in:crossIn>
+    <div class="arrived" data-artifact-stage-arrived in:revealIn>
       <PreviewPane inset instanceId={staged.instanceId} waitingSince={since} />
     </div>
   {:else}

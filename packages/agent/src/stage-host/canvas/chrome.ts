@@ -212,17 +212,16 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 .cawco-section-status { grid-column: 2; grid-row: 1; align-self: baseline; margin: 0; font: var(--type-meta); color: var(--ink-muted); }
 .cawco-stand-in { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
 .cawco-stand-in > .cawco-frame-words { padding: var(--space-row) var(--space-1); }
-/* The skeleton recipe: a surface-fill block at the frame's size, one raised band crossing it each loop, still without motion. */
-.cawco-stand-in-body { position: relative; overflow: hidden; inline-size: var(--c-canvas-skeleton-w); max-inline-size: 100vw; block-size: var(--c-canvas-skeleton-h);
+/* The skeleton recipe: a surface-fill block at the frame's size, pulsing 1 -> --skeleton-pulse-min -> 1 over --dur-loop once the
+   wait has lasted the grace and the section's fade-up (transitions-dev Skeleton loader and reveal), still without motion. */
+.cawco-stand-in-body { inline-size: var(--c-canvas-skeleton-w); max-inline-size: 100vw; block-size: var(--c-canvas-skeleton-h);
   border-radius: var(--radius-sm); background: var(--surface-fill); }
 @media (prefers-reduced-motion: no-preference) {
   .cawco-waiting { animation-duration: var(--dur-fade); animation-timing-function: var(--ease-out); }
-  .cawco-stand-in-body::after { content: ""; position: absolute; inset: 0; translate: -100% 0;
-    background: linear-gradient(90deg, transparent 0 30%, var(--skeleton-sheen) 50%, transparent 70% 100%);
-    animation: cawco-sweep var(--dur-loop) linear infinite; }
+  .cawco-stand-in-body { animation: cawco-pulse var(--dur-loop) var(--ease-crossfade) calc(var(--dur-wait-grace) + var(--dur-fade)) infinite; }
 }
 @keyframes cawco-wait { from { opacity: 0; } }
-@keyframes cawco-sweep { to { translate: 100% 0; } }
+@keyframes cawco-pulse { 50% { opacity: var(--skeleton-pulse-min); } }
 /* A section whose module didn't load says so where its frames would stand: the error formula's line, then Show details. */
 .cawco-section-failed { display: grid; gap: var(--space-2); inline-size: 0; min-inline-size: max(100%, var(--c-canvas-skeleton-w)); }
 .cawco-section-failed-line { margin: 0; font: var(--type-body); color: var(--status-fail-ink); text-wrap: pretty; }

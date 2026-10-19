@@ -8,7 +8,7 @@
   import { findArtifact, showArtifact } from "#lib/cawco/artifact-api.js";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { crossIn, crossOutWith } from "#lib/cawco/motion/curves.svelte.js";
+  import { revealIn, revealOutWith } from "#lib/cawco/motion/curves.svelte.js";
   import Overlays from "#lib/cawco/Overlays.svelte";
   import { ArtifactSession } from "#lib/cawco/preview/artifact-session.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
@@ -77,11 +77,11 @@
   }
 
   /**
-   * The opening card leaving: pinned where it stands (crossOut), down to the
-   * tab's foot, the card's whole height, while what arrives fades in over it.
+   * The opening card leaving: pinned where it stands (revealOut), down to the
+   * tab's foot, the card's whole height, while what arrives comes in over it.
    */
   const leave = (node: HTMLElement) =>
-    crossOutWith(node, () => ({
+    revealOutWith(node, () => ({
       bottom: getComputedStyle(node.parentElement ?? node).paddingBlockEnd,
     }));
 
@@ -98,26 +98,30 @@
 <Overlays>
   <div data-slot="artifact-tab" class="artifact-tab">
     {#if session.refused}
-      <EmptyState icon={IconAlert} title="This artifact didn't open">
-        {#snippet line()}
-          {session.refused}
-        {/snippet}
-        {#snippet action()}
-          <Button href="/session" label="Back to the fleet" variant="outline" />
-        {/snippet}
-      </EmptyState>
+      <div class="arrived" in:revealIn>
+        <EmptyState icon={IconAlert} title="This artifact didn't open">
+          {#snippet line()}
+            {session.refused}
+          {/snippet}
+          {#snippet action()}
+            <Button href="/session" label="Back to the fleet" variant="outline" />
+          {/snippet}
+        </EmptyState>
+      </div>
     {:else if problem}
-      <EmptyState icon={IconAlert} title="This artifact didn't open">
-        {#snippet line()}
-          {problem}
-          Open it again from its session's panel.
-        {/snippet}
-        {#snippet action()}
-          <Button href="/session" label="Back to the fleet" variant="outline" />
-        {/snippet}
-      </EmptyState>
+      <div class="arrived" in:revealIn>
+        <EmptyState icon={IconAlert} title="This artifact didn't open">
+          {#snippet line()}
+            {problem}
+            Open it again from its session's panel.
+          {/snippet}
+          {#snippet action()}
+            <Button href="/session" label="Back to the fleet" variant="outline" />
+          {/snippet}
+        </EmptyState>
+      </div>
     {:else if found && shown === "open"}
-      <div class="arrived" data-artifact-arrived in:crossIn>
+      <div class="arrived" data-artifact-arrived in:revealIn>
         <PreviewPane
           instanceId={found.instanceId}
           ownTab
@@ -126,7 +130,7 @@
       </div>
     {:else if found && shown === "closed"}
       {@const instanceId = found.instanceId}
-      <div class="arrived" data-artifact-arrived in:crossIn>
+      <div class="arrived" data-artifact-arrived in:revealIn>
         <EmptyState
           icon={IconEyeClosed}
           title="This artifact's panel is closed"
@@ -148,7 +152,8 @@
     {:else}
       <!-- The panel's card, holding the house opening line (the kit's
            skeleton, unseen for the wait's grace), until the hub's first
-           frame; what it brings takes its place in one cross-fade. -->
+           frame; what it brings takes its place in the reveal (revealOut,
+           revealIn). -->
       <div aria-hidden="true" class="opening" data-artifact-opening out:leave>
         <span
           data-slot="block"

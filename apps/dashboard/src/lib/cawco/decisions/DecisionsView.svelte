@@ -18,9 +18,9 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     carriesWait,
-    crossIn,
-    crossOut,
     motionOk,
+    revealIn,
+    revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
@@ -136,7 +136,7 @@
   const waitFrom = untrack(() => waitingSince) ?? performance.now();
   /** Caw's empty state arriving: one cross-fade, unless Caw lands into it by his flight, which is its arrival. */
   const cawArrives = (node: Element, flying: boolean): TransitionConfig =>
-    flying ? { duration: 0 } : crossIn(node);
+    flying ? { duration: 0 } : revealIn(node);
 
   // --- the swap ------------------------------------------------------------------------
 
@@ -268,12 +268,12 @@
             />
           {:else if view === "graph"}
             {#if graphProblem}
-              <p class="problem" role="alert">{graphProblem}</p>
+              <p class="problem" role="alert" in:revealIn>{graphProblem}</p>
             {/if}
-            <!-- The graph's own box while it is read, then the graph in one
-               cross-fade (crossOut, crossIn). -->
+            <!-- The graph's own box while it is read, then the graph, or why
+               it could not be read, in the reveal (revealOut, revealIn). -->
             {#if graph}
-              <div class="graph-place" data-decisions-graph-read in:crossIn>
+              <div class="graph-place" data-decisions-graph-read in:revealIn>
                 <DecisionGraph
                   {graph}
                   onopen={(name, at) => go({ page: name, card: at })}
@@ -287,7 +287,7 @@
                 class="graph-place"
                 data-decisions-reading="graph"
                 role="status"
-                out:crossOut
+                out:revealOut
               >
                 <Skeleton
                   class="graph-reading"
@@ -295,8 +295,12 @@
                 />
               </div>
             {/if}
+            <!-- The list's tiles while it is read, then what the read brought
+               in the reveal (revealOut, revealIn): the list, the empty state
+               or why it could not be read. One chain, so the tiles' leave is
+               this chain's own and plays whichever branch takes their place. -->
           {:else if decisions.problem && !list}
-            <div class="state" in:crossIn>
+            <div class="state" in:revealIn>
               <EmptyState
                 icon={IconDecisions}
                 line={words.unavailableLine(projectName, decisions.problem)}
@@ -340,7 +344,7 @@
               </EmptyState>
             </div>
           {:else if empty}
-            <div class="state" in:crossIn>
+            <div class="state" in:revealIn>
               <EmptyState
                 icon={IconDecisions}
                 line={words.emptySession}
@@ -354,42 +358,39 @@
                 {/snippet}
               </EmptyState>
             </div>
-          {:else}
-            {#if list}
-              <!-- A page published while the list is open arrives as rows do
-                 (motion/rows); the tiles it moves slide to their places. -->
-              <div data-slot="grid" class="grid" in:crossIn {@attach reflow()}>
-                {#each pages as each (each.name)}
-                  <div class="cell" data-flip>
-                    <DecisionTile
-                      href={hrefOf({ page: each.name, card: null })}
-                      {now}
-                      onopen={open}
-                      page={each}
-                    />
-                  </div>
-                {/each}
-              </div>
-            {:else}
-              <!-- A tile at a tile's size for each page the hub measured, in
-                 the grid's own columns, while the list is read; the list
-                 takes their place in one cross-fade. -->
-              <div
-                aria-busy="true"
-                aria-label={words.reading}
-                class="grid"
-                data-decisions-reading="list"
-                role="status"
-                out:crossOut
-              >
-                {#each readingTiles as slot (slot)}
-                  <Skeleton
-                    class="tile-reading"
-                    {@attach carriesWait(waitFrom)}
+          {:else if list}
+            <!-- A page published while the list is open arrives as rows do
+               (motion/rows); the tiles it moves slide to their places. -->
+            <div data-slot="grid" class="grid" in:revealIn {@attach reflow()}>
+              {#each pages as each (each.name)}
+                <div class="cell" data-flip>
+                  <DecisionTile
+                    href={hrefOf({ page: each.name, card: null })}
+                    {now}
+                    onopen={open}
+                    page={each}
                   />
-                {/each}
-              </div>
-            {/if}
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <!-- A tile at a tile's size for each page the hub measured, in
+               the grid's own columns, while the list is read. -->
+            <div
+              aria-busy="true"
+              aria-label={words.reading}
+              class="grid"
+              data-decisions-reading="list"
+              role="status"
+              out:revealOut
+            >
+              {#each readingTiles as slot (slot)}
+                <Skeleton
+                  class="tile-reading"
+                  {@attach carriesWait(waitFrom)}
+                />
+              {/each}
+            </div>
           {/if}
         </div>
       {/if}

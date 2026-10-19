@@ -4996,7 +4996,7 @@
     "ease-crossfade": {
       "$type": "cubicBezier",
       "$value": [0.42, 0, 0.58, 1],
-      "$description": "Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching."
+      "$description": "Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps and its Skeleton loader and reveal: a skeleton's pulse and its reveal (dur-skeleton-reveal) run on it too. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching."
     },
     "ease-arrive": {
       "$type": "cubicBezier",
@@ -5173,6 +5173,14 @@
       },
       "$description": "A disclosure growing open (collapsible-content); it folds shut over dur-exit."
     },
+    "dur-skeleton-reveal": {
+      "$type": "duration",
+      "$value": {
+        "value": 400,
+        "unit": "ms"
+      },
+      "$description": "A skeleton handing its place to what the read brought (motion/curves `revealIn`, `revealOut`): one cross-fade with a matching cross-blur (skeleton-reveal-blur) on ease-crossfade, the skeleton out as the content comes in. transitions-dev Skeleton loader and reveal, its tuning (400ms, ease-in-out, 2px)."
+    },
     "dur-hold": {
       "$type": "duration",
       "$value": {
@@ -5291,6 +5299,19 @@
         "unit": "px"
       },
       "$description": "How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr."
+    },
+    "skeleton-reveal-blur": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "How soft the two sides of a skeleton's reveal are at their far ends (dur-skeleton-reveal): the skeleton blurs to it as it fades out, the content un-blurs from it as it fades in. transitions-dev Skeleton loader and reveal."
+    },
+    "skeleton-pulse-min": {
+      "$type": "number",
+      "$value": 0.5,
+      "$description": "The opacity a skeleton's bars pulse down to half a loop in (app.css `kit-skeleton-pulse`, dur-loop on ease-crossfade), for as long as the read lasts. transitions-dev Skeleton loader and reveal."
     },
     "transition-control": {
       "$type": "transition",

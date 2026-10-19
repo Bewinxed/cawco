@@ -13,8 +13,8 @@
   import { untrack } from "svelte";
   import {
     carriesWait,
-    crossIn,
-    crossOut,
+    revealIn,
+    revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { enterPage, pageSource } from "#lib/cawco/preview/page-source.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -162,9 +162,10 @@
 </script>
 
 <!-- The house opening line (the kit's skeleton, unseen for the wait's
-     grace) while its address is asked, then the page in one cross-fade. -->
+     grace) while its address is asked, then the page, or why it could not
+     be opened, in the reveal (revealOut, revealIn). -->
 {#if problem}
-  <p class="problem" role="alert" in:crossIn>{problem}</p>
+  <p class="problem" role="alert" in:revealIn>{problem}</p>
 {:else if src}
   <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
   <iframe
@@ -173,7 +174,7 @@
     {src}
     title="Decision page: {title}"
     bind:this={frame}
-    in:crossIn
+    in:revealIn
   ></iframe>
 {:else}
   <!-- It carries on the page's own wait (DecisionPage): its line stands
@@ -183,7 +184,7 @@
     class="opening"
     data-page-frame-opening
     {@attach carriesWait(since)}
-    out:crossOut
+    out:revealOut
   >
     <span
       data-slot="block"

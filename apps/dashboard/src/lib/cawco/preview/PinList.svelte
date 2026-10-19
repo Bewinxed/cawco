@@ -28,7 +28,7 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { IconClose } from "#lib/icons.js";
-  import { crossIn, crossOut } from "../motion/curves.svelte";
+  import { revealIn, revealOut } from "../motion/curves.svelte";
   import type { ListHold } from "./artifact-doc";
   import LiveDot from "./LiveDot.svelte";
   import PinDisc from "./PinDisc.svelte";
@@ -156,13 +156,15 @@
   <div class="scroll kit-edge-fade-block">
     {#if hold === "reading"}
       <!-- The rows' own size while the pins are read, unseen for the wait's
-           grace (the kit's skeleton); the read replaces them in one cross-fade. -->
+           grace (the kit's skeleton); what the read brings, the rows or why
+           they could not be read, takes their place in the reveal
+           (revealOut, revealIn). -->
       <div
         data-slot="pin-list-reading"
         aria-label={words.readingComments}
         class="rows"
         role="status"
-        out:crossOut
+        out:revealOut
       >
         {#each [0, 1, 2] as skeleton (skeleton)}
           <span class="skeleton-row">
@@ -175,13 +177,15 @@
         {/each}
       </div>
     {:else if failed !== null}
-      <RowFault
-        data-pin-list-failed
-        again={onretry}
-        reason={words.commentsNotRead(failed)}
-      />
+      <div data-slot="pin-list-fault" in:revealIn>
+        <RowFault
+          data-pin-list-failed
+          again={onretry}
+          reason={words.commentsNotRead(failed)}
+        />
+      </div>
     {:else}
-      <div data-slot="pin-list-read" in:crossIn>
+      <div data-slot="pin-list-read" in:revealIn>
         {#if shown.length > 0}
           <ul class="rows">
             {#each shown as pin (pin.id)}

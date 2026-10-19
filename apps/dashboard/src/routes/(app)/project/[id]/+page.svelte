@@ -73,10 +73,11 @@
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import {
     carriesWait,
-    crossIn,
     crossOut,
     dur,
     motionOk,
+    revealIn,
+    revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
@@ -2103,7 +2104,8 @@
   >
     {#if reading}
       <!-- The board at its real layout, its columns standing empty: the
-             next project's read cross-fades in over it. -->
+           next project's read takes its place in the reveal (revealOut,
+           revealIn). -->
       <!-- Past the wait's grace already (its timer): the skeleton carries
            that wait on, seen at once, never waiting the grace again. -->
       <div
@@ -2111,7 +2113,7 @@
         class="board-skeleton"
         data-board-reading
         {@attach carriesWait(readingFrom)}
-        out:crossOut
+        out:revealOut
       >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
           <div class="skeleton-column">
@@ -2122,20 +2124,26 @@
         {/each}
       </div>
     {:else}
-      <div data-slot="swap" class="swap" in:crossIn>
-        {#key shown}
-          <div
-            class="current"
-            style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
-            out:leave
-          >
-            {#if shown === "awaiting"}
-              <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
-            {:else}
-              {@render pane(shown)}
-            {/if}
+      <div data-slot="swap" class="swap" in:revealIn>
+        {#if shown === "awaiting"}
+          <!-- The view the URL names, still read: its skeleton's layer, which
+               the view takes the place of in the reveal. -->
+          <div class="current" data-view-reading out:revealOut>
+            <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
           </div>
-        {/key}
+        {:else}
+          <div data-slot="view-arrival" class="arrival" in:revealIn>
+            {#key shown}
+              <div
+                class="current"
+                style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
+                out:leave
+              >
+                {@render pane(shown)}
+              </div>
+            {/key}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -2370,7 +2378,10 @@
       grid-auto-columns: calc(100% - var(--space-8));
     }
   }
-  .current {
+  /* What a view stands in (`.current`), and the arrival that takes a view's
+     skeleton's place in the reveal around it: the swap's own column. */
+  .current,
+  .arrival {
     display: flex;
     flex-direction: column;
     min-block-size: 0;
@@ -2381,7 +2392,7 @@
       [data-view="decisions-page"],
       [data-view="decisions-graph"]
     )
-    :is(.swap, .current) {
+    :is(.swap, .current, .arrival) {
     flex: 1 1 auto;
   }
   .pane:is([data-view="canvas"], [data-view="decisions-graph"]) {

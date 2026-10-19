@@ -51,10 +51,18 @@
     reconnectingNow,
     type SessionState,
   } from "../client.svelte";
-  import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
+  import {
+    crossIn,
+    dur,
+    ease,
+    motionOk,
+    revealsWhen,
+    rise,
+  } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
   import { readJson, writeJson } from "../storage";
+  import { type KeptBox, keepView } from "./kept-view";
   import { isThreadTab } from "../thread-tabs";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import { warm } from "../workspace/warm.svelte";
@@ -2259,8 +2267,100 @@
   // A reload tears the page down without destroying anything.
   $effect(() => {
     addEventListener("pagehide", saveLanding);
-    return () => removeEventListener("pagehide", saveLanding);
+    addEventListener("pagehide", keepShown);
+    return () => {
+      removeEventListener("pagehide", saveLanding);
+      removeEventListener("pagehide", keepShown);
+    };
   });
+
+  /** What on a row is a mark, not words: the speaker's tile and a tool's glyph cell. */
+  const MARKS = '[data-slot="dot"], [data-slot="rail-cell"], [data-rail-cell]';
+  const SEEN = { opacityProperty: true, visibilityProperty: true } as const;
+  const hundredths = (px: number): number => Math.round(px * 100) / 100;
+
+  /**
+   * Keep what the transcript shows, for the skeleton that stands in for it
+   * while a reload reads it again (kept-view.ts): every run of words on a
+   * line and every mark in view, from the transcript's own box, so its bars
+   * fall where the lines it lands on fall. The page is read for it, so only
+   * as the page goes: never in a task that hides a pane, which
+   * `saveLanding` reads nothing in.
+   */
+  function keepShown(): void {
+    const node = scroller;
+    const container = listing?.firstElementChild;
+    if (!(shown && node && container)) {
+      return;
+    }
+    const box = node.getBoundingClientRect();
+    if (box.width === 0 || box.height === 0) {
+      return;
+    }
+    const rtl = getComputedStyle(node).direction === "rtl";
+    const inView = (r: DOMRect): boolean =>
+      r.width > 0 && r.height > 0 && r.bottom > box.top && r.top < box.bottom;
+    const start = (r: DOMRect): number =>
+      hundredths(rtl ? box.right - r.right : r.left - box.left);
+    const lines: KeptBox[] = [];
+    const marks: KeptBox[] = [];
+    const range = document.createRange();
+    for (const item of container.children) {
+      if (!inView(item.getBoundingClientRect())) {
+        continue;
+      }
+      for (const mark of item.querySelectorAll(MARKS)) {
+        const r = mark.getBoundingClientRect();
+        if (inView(r) && mark.checkVisibility(SEEN)) {
+          marks.push([
+            start(r),
+            hundredths(r.top - box.top),
+            hundredths(r.width),
+            hundredths(r.height),
+          ]);
+        }
+      }
+      const walk = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+      for (let text = walk.nextNode(); text; text = walk.nextNode()) {
+        const words = text.parentElement;
+        if (
+          !(text.textContent?.trim() && words?.checkVisibility(SEEN)) ||
+          words.closest(".sr-only")
+        ) {
+          continue;
+        }
+        const size = Number.parseFloat(getComputedStyle(words).fontSize);
+        range.selectNodeContents(text);
+        for (const r of range.getClientRects()) {
+          if (!inView(r)) {
+            continue;
+          }
+          const x = start(r);
+          const y = hundredths(r.top - box.top);
+          const last = lines.at(-1);
+          // Words going on along the same line in the same type (a link, a
+          // word in bold) are the same run.
+          if (
+            last &&
+            last[1] === y &&
+            last[3] === size &&
+            x >= last[0] &&
+            x - (last[0] + last[2]) < size
+          ) {
+            last[2] = hundredths(x + r.width - last[0]);
+          } else {
+            lines.push([x, y, hundredths(r.width), size]);
+          }
+        }
+      }
+    }
+    keepView(session.instanceId, {
+      width: hundredths(box.width),
+      height: hundredths(box.height),
+      lines,
+      marks,
+    });
+  }
 
   /** The row the reader's place is at, while it is being returned to: its index, or -1. */
   function anchorIndex(): number {
@@ -3838,7 +3938,10 @@
     {/if}
   </div>
 
-  <!-- The list's own box: what the pin reads virtua's container off. -->
+  <!-- The list's own box: what the pin reads virtua's container off. Drawn,
+       its rows come in where they stand as the pane's skeleton leaves over
+       them: the reveal's content side (motion/curves `revealsWhen`), on the
+       clock the skeleton's revealOut starts on. -->
   <div
     data-transcript-shown={shown || undefined}
     data-slot="listing"
@@ -3847,6 +3950,7 @@
     style:padding-top={spare ? `${spare}px` : undefined}
     class:shown
     {@attach wholeHeight}
+    {@attach revealsWhen(() => shown)}
   >
     <Virtualizer
       bufferSize={buffer}
