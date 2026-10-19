@@ -12,11 +12,9 @@
   let { label, children }: { label: string; children: Snippet } = $props();
 </script>
 
-<!-- literal: -8px -->
 <ul
   aria-label={label}
-  class="flex list-none flex-col gap-space-row p-0 my-0 mx-(--bleed)"
-  style:--bleed="-8px"
+  class="flex list-none flex-col gap-space-row p-0 my-0 -mx-space-2"
   {@attach highlight({ rows: '[data-slot="row"]' })}
   {@attach reflow()}
 >

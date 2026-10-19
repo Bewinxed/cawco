@@ -99,29 +99,21 @@
 
 <li
   data-slot="item"
-  class="flex min-w-0 flex-col gap-space-1 rounded-sm"
+  class="flex min-w-0 flex-col gap-space-1 rounded-sm data-flash:animate-row-flash"
   data-flash={flash || undefined}
   data-flip
   data-row-name={name}
 >
-  <!-- literal: 44px, 56px, 10px, 8px, 6px -->
   <div
     data-slot="row"
-    class="group/row relative flex min-h-(--row-h) items-center gap-(--row-gap) rounded-sm px-(--row-px) py-(--row-py) transition-control data-two:min-h-(--row-h-two) has-data-link:cursor-pointer has-link-active:bg-surface-fill light:has-link-active:bg-surface-fill-strong light:has-link-active:inks-strong max-phone:flex-wrap"
+    class="group/row relative flex min-h-c-row-h items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-(--c-row-h-two) has-data-link:cursor-pointer has-link-active:bg-surface-fill light:has-link-active:bg-surface-fill-strong light:has-link-active:inks-strong max-phone:flex-wrap"
     data-off={enabled === false || undefined}
     data-two={meta !== undefined || undefined}
-    style:--row-gap="10px"
-    style:--row-h="44px"
-    style:--row-h-two="56px"
-    style:--row-px="8px"
-    style:--row-py="6px"
   >
-    <!-- literal: 26px -->
     <span
       data-slot="tile"
-      class="inline-flex size-(--tile) flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-tile"
+      class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-tile"
       data-share={href ? `icon:${href}` : undefined}
-      style:--tile="26px"
       style:color={hue}
       {@attach land(() => {
         const key = href ?? share;
@@ -134,23 +126,19 @@
         <Icon />
       {/if}
     </span>
-    <!-- literal: 1px, calc(100% - 36px) -->
     <span
       data-slot="text"
-      class="flex min-w-0 flex-auto flex-col gap-(--text-gap) transition-opacity dur-panel ease-out group-data-off/row:opacity-55 max-phone:basis-(--text-basis)"
-      style:--text-basis="calc(100% - 36px)"
-      style:--text-gap="1px"
+      class="flex min-w-0 flex-auto flex-col gap-space-row transition-opacity dur-panel ease-out group-data-off/row:opacity-55 max-phone:basis-(--text-basis)"
+      style:--text-basis="calc(100% - var(--c-mark) - var(--space-3))"
     >
-      <!-- literal: 8px -->
       <span
         data-slot="name"
-        class="flex min-w-0 items-center gap-(--name-gap) type-label text-ink-strong"
+        class="flex min-w-0 items-center gap-space-2 type-label text-ink-strong"
         data-mono={mono || undefined}
-        style:--name-gap="8px"
       >
         {#if href}
           <a
-            class="truncate text-inherit no-underline outline-off in-data-mono:font-(family-name:--font-mono)"
+            class="truncate text-inherit no-underline outline-off in-data-mono:font-(family-name:--font-mono) after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-(length:--focus-ring-width) focus-visible:after:outline-focus-ring focus-visible:after:outline-offset-(--focus-ring-inset)"
             data-link
             data-share="title:{href}"
             {href}
@@ -179,13 +167,10 @@
     </span>
     <!-- A 30px ⋯ and a 32px switch: on a coarse pointer the gap opens to 14px,
          so each touch area reaches 44px before meeting its neighbour's. -->
-    <!-- literal: 8px, 14px, 36px -->
     <span
       data-slot="controls"
-      class="relative z-1 flex flex-none items-center gap-(--hit-gap-x) coarse:hit-gap-coarse-(--hit-gap-wide) max-phone:ml-(--controls-ml)"
-      style:--controls-ml="36px"
-      style:--hit-gap-wide="14px"
-      style:--hit-gap-x="var(--hit-gap-coarse, 8px)"
+      class="relative z-1 flex flex-none items-center gap-space-2 hit-gap-x-(--space-2) coarse:gap-space-4 coarse:hit-gap-x-(--space-4) max-phone:ms-(--controls-ms)"
+      style:--controls-ms="calc(var(--c-mark) + var(--space-3))"
     >
       {#if rollout}
         {@render rollout()}
@@ -208,22 +193,17 @@
     </span>
   </div>
   {#if below || note}
-    <!-- literal: 6px, 8px, 44px -->
     <div
-      class="flex min-w-0 flex-col gap-(--below-gap) pt-0 pr-(--below-px) pb-(--below-gap) pl-(--below-pl) empty:hidden max-phone:pl-(--below-px)"
-      style:--below-gap="6px"
-      style:--below-pl="44px"
-      style:--below-px="8px"
+      class="flex min-w-0 flex-col gap-space-2 pt-0 pe-space-2 pb-space-2 ps-(--below-ps) empty:hidden max-phone:ps-space-2"
+      style:--below-ps="calc(var(--space-2) + var(--c-mark) + var(--space-3))"
     >
       {#if note}
-        <!-- literal: 6px -->
         <p
           data-slot="note"
-          class="mark-line flex items-start gap-(--below-gap) type-meta wrap-anywhere text-ink-muted tone-fail:text-status-fail-ink"
+          class="mark-line flex items-start gap-space-2 type-meta wrap-anywhere text-ink-muted tone-fail:text-status-fail-ink"
           data-flip
           data-tone={note.tone}
           role={note.tone === "fail" ? "alert" : "status"}
-          style:--below-gap="6px"
         >
           <span class="mark-cell">
             {#if note.tone === "busy"}
@@ -241,43 +221,3 @@
     </div>
   {/if}
 </li>
-
-<style>
-  /* residual: keyframes */
-  [data-flash] {
-    animation: row-flash calc(var(--dur-fade) * 3) var(--ease-out) both;
-  }
-  @keyframes row-flash {
-    from {
-      opacity: 0.35;
-    }
-  }
-  /* residual: foreign-dom */
-  /* The icon tile holds a snippet's or a component's svg, which takes no class. */
-  [data-slot="tile"] :global(svg) {
-    width: var(--icon-md);
-    height: var(--icon-md);
-    flex: none;
-  }
-  /* A control that rests clear in the row stands on the row's ghost, by day
-     the hover step itself: its own hover is the step past it. The kit's
-     ghost button (RowMenu's trigger), whose ink is already the strong one. */
-  @media (hover: hover) {
-    [data-slot="controls"] :global([data-ghost]:hover:not(:disabled)) {
-      background: light-dark(var(--surface-fill-strong), var(--surface-hover));
-    }
-  }
-  /* residual: pseudo */
-  /* The whole row is the link's hit area; the controls sit above it, and
-     the focus ring is drawn round that area rather than round the words. */
-  [data-link]::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-  }
-  [data-link]:focus-visible::after {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-</style>

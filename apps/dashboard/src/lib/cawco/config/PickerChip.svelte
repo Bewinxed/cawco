@@ -47,14 +47,13 @@
   <Popover.Trigger
     data-picker-chip
     aria-label="{label}: {chosen}"
-    class="inline-flex items-center gap-(--chip-gap) max-w-full h-(--chip-h) px-(--chip-pad) border border-border-control rounded-md bg-surface-raised type-label text-ink-strong transition-control [&:hover]:bg-surface-hover motion-safe:active:transform-(--tpress) mark-line"
+    class="inline-flex items-center gap-space-2 max-w-full h-c-btn-h-sm px-space-3 border border-border-control rounded-md bg-surface-raised type-label text-ink-strong transition-control hover:bg-surface-hover motion-safe:active:scale-(--press-scale) mark-line"
     motion="press"
-    style="--chip-gap: 6px; --chip-h: 32px; --chip-pad: 10px; --tpress: scale(var(--press-scale))"
   >
     <span class="text-ink-muted">{label}</span>
     <span
       data-slot="num"
-      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap num"
+      class="min-w-0 truncate num"
       ><MorphText text={chosen} /></span
     >
     <IconChevronDown class="size-icon-md flex-none text-ink-muted" />
@@ -68,15 +67,11 @@
   >
     <!-- The kit's ghost and pill: the pill is the choice, and a pick takes
          the ghost's place under the pointer while the popover closes. -->
-    <!-- literal: 8px, 10px -->
     <div
       aria-label={label}
       aria-multiselectable={picked ? true : undefined}
       class="flex flex-col"
       role="listbox"
-      style:--opt-gap="8px"
-      style:--opt-pad="10px"
-      style:--group-pt="8px"
       {@attach highlight({
         rows: '[data-slot="item"]',
         selected: '[aria-selected="true"]',
@@ -86,14 +81,14 @@
         {#if option.group && option.group !== options[index - 1]?.group}
           <span
             data-slot="group"
-            class="pt-(--group-pt) px-(--opt-pad) pb-space-1 type-meta text-ink-muted"
+            class="pt-space-2 px-space-3 pb-space-1 type-meta text-ink-muted"
             >{option.group}</span
           >
         {/if}
         <button
           data-slot="item"
           aria-selected={isChosen(option.value)}
-          class="kit-item flex items-center gap-(--opt-gap) w-full px-(--opt-pad) text-left type-label text-ink-strong focus-inset"
+          class="kit-item flex items-center gap-space-2 w-full px-space-3 text-start type-label text-ink-strong focus-inset"
           onclick={() => {
             onpick(option.value);
             // One of several stays open for the next.
@@ -104,7 +99,7 @@
         >
           <span
             data-slot="picker-chip-label"
-            class="flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+            class="flex-1 min-w-0 truncate"
             >{option.label}</span
           >
           {#if isChosen(option.value)}
