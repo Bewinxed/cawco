@@ -7,7 +7,7 @@
  */
 import { Database } from "bun:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { type DamagedHubRecord, damagedHubRecordWords } from "@cawco/core";
 import {
   assetBase,
@@ -18,6 +18,7 @@ import {
   type SignedRelease,
 } from "@cawco/core/binary-distribution";
 import {
+  hubReleasesDir,
   readInstallation,
   readRunningManifest,
   versionDirectory,
@@ -132,7 +133,9 @@ const loadPolicy = (
 };
 
 export function createBinaryUpdates(options: Options) {
-  const root = join(dirname(options.dbPath), "binary-releases");
+  // The one derivation of it (core binary-installation.ts), which the update
+  // helper's prune trims to the builds this machine keeps.
+  const root = hubReleasesDir();
   const policyPath = join(root, "policy.json");
   let held = loadPolicy(policyPath);
   let current: { at: number; release: LocatedRelease } | undefined;

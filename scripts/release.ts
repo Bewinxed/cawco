@@ -1262,6 +1262,20 @@ const build = async (current: Request): Promise<void> => {
       const publishing = performance.now();
       await publishRelease(published, manifest);
       logStep("publish", publishing);
+      // Published: the proof cache keeps this tree's stage 2 builds alone, and
+      // its image store sheds its dangling images (proof-cache-prune.sh).
+      await run(
+        [
+          "bash",
+          "scripts/binary/proof-cache-prune.sh",
+          await run(
+            ["git", "rev-parse", `${current.commit}^{tree}`],
+            checkout,
+            true
+          ),
+        ],
+        checkout
+      );
     }
     logStep(`build of ${current.commit.slice(0, 12)}, in all`, building);
   } catch (error) {

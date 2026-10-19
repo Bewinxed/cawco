@@ -866,6 +866,7 @@ keeper_link() { as_user "$1" readlink /home/cawco/.local/share/cawco/binary/keep
 current_link() { as_user "$1" readlink /home/cawco/.local/share/cawco/binary/current; }
 has_file() { as_user "$1" test -e "/home/cawco/.local/share/cawco/binary/$2"; }
 has_version() { as_user "$1" test -d "/home/cawco/.local/share/cawco/binary/versions/$2"; }
+install_order() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/binary/install-order.json 2> /dev/null || true' | json "d => d.join(' ')"; }
 custody_of() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.custody?.state"; }
 apply_log_count() { as_user "$hubc" sh -c "grep -c '$1' /home/cawco/.local/share/cawco/binary/apply.log || true"; }
 # The machine has an IPv6 loopback (`::1` on lo), as the installer judges before it names [::1] in the dashboard socket.
@@ -891,7 +892,7 @@ export -f diagnose as_user put_executable user_exec proof_runner run_script need
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
-  end_all_sessions keeper_dropin keeper_link current_link has_file has_version custody_of apply_log_count \
+  end_all_sessions keeper_dropin keeper_link current_link has_file has_version install_order custody_of apply_log_count \
   has_ipv6_loopback started_at_most_twice stub_when_staged settled
 
 # ---------------------------------------------------------------- a rig's machines
@@ -1680,8 +1681,8 @@ handover_on_joined_machine() {
   update_outcomes_start "$joinerc" "$jid" handover-1
   on_exit update_sends_stop
   # The new build reaches the hub's machine. While the helper decides its trial, the build it would restore is still on
-  # disk; once the build is confirmed the trial is gone, the keeper has been handed over to it, and nothing runs or
-  # names the build before, so it is pruned.
+  # disk; once the build is confirmed the trial is gone, the keeper has been handed over to it, and the build before
+  # stays as one of the three installed builds the machine keeps (the install order names both).
   use_feed next
   learn
   install_now_request "$hid" > /dev/null
@@ -1689,7 +1690,8 @@ handover_on_joined_machine() {
   has_version "$hubc" "$old"
   wait_until 400 '[[ "$(build_version $hid)" == $NEXT && "$(phase $hid)" == installed ]] && ! has_file "$hubc" trial.json'
   wait_until 120 '[[ "$(keeper_link "$hubc")" == "versions/$NEXT" && "$(current_endpoint "$hubc")" == "$(endpoint_of $NEXT)" ]]'
-  wait_until 120 '! has_version "$hubc" '"$old"
+  wait_until 120 '[[ "$(install_order "$hubc")" == *"'"$old"' $NEXT" ]]'
+  has_version "$hubc" "$old"
   # The joined machine looks at what its hub offers now, and installs it with its sessions running.
   learn
   wait_until 120 '[[ "$(field $jid availableVersion)" == $NEXT ]]'
