@@ -1150,12 +1150,17 @@ const legs = async (
     .click();
   const fresh = await project("Tracker bound in the dashboard");
   await open(desk, `${base}/project/${fresh}`, "[data-place-line]");
-  // A new project opens on Caw: his panel stands over its empty board and
-  // its head (CawFloat), and Escape puts it away, as a person does before
-  // opening the details.
-  const caw = desk.locator(".caw-float-pop");
+  // A new project opens on Caw: his panel docks beside its empty board and
+  // its head (CawFloat's `[data-caw-dock]`), and a press on his seat puts it
+  // away, as a person does before opening the details. (Escape puts it away
+  // only from inside it, where the caret lands once his composer is drawn.)
+  const caw = desk.locator("[data-caw-dock]");
   await caw.waitFor({ state: "visible" });
-  await desk.keyboard.press("Escape");
+  await desk
+    .locator('[data-slot="caw-seat"][aria-expanded="true"]')
+    .filter({ visible: true })
+    .first()
+    .click();
   await caw.waitFor({ state: "detached" });
   await desk.locator("[data-place-line]").click();
   await desk.waitForSelector('[data-detail="tracker"]');
