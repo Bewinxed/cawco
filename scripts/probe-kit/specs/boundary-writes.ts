@@ -8,11 +8,15 @@
  * host, outside every boundary.
  *
  * One delegate, in a clone of this repository at the commit under test, runs
- * one command in its boundary, then the boundary is closed:
+ * one command in its boundary, then holds its turn on a long `sleep` there
+ * (so no quiet turn fails its item and retires its workspace while the spec
+ * looks), and the spec closes the boundary:
  *
  * - a write to `~/.cache/cawco-orchestrator/probe-x`, under the read-denied
- *   home dir, fails with "Read-only file system" naming a path under
- *   `~/.cache` (on origin/main before the patch it succeeded into a tmpfs);
+ *   home dir, by Node's fs under bun (whose error names the path, where
+ *   Ubuntu's uutils `mkdir` says only "mkdir: Read-only file system"), fails
+ *   with EROFS naming the target or a dir on its way to it, at or under
+ *   `~/.cache` (before the fix it succeeded into the sandbox's memory);
  * - a write to `$TMPDIR` and one to the clone succeed, and both files are on
  *   the host's disk after the boundary's process is gone;
  * - `bun install --frozen-lockfile` in the clone finishes;
@@ -39,15 +43,23 @@ const CLONE_FILE = "probe-clone.txt";
 const COMMIT_SUBJECT = "Probe commit inside the boundary";
 /** Under the home dir, outside every path the boundary lets a command write. */
 const HOME_TARGET = ".cache/cawco-orchestrator/probe-x";
+/** Node's fs error for a write refused as read-only, and the path it names. */
+const EROFS_PATH = /EROFS: read-only file system, \w+ '([^']+)'/;
 
 /** `marker` spelled apart in a command, so only the command's output carries it whole. */
 const apart = (marker: string): string =>
   `"${marker.slice(0, 3)}""${marker.slice(3)}"`;
 
+/**
+ * The home write: its dir made and the file written by Node's fs, whose error
+ * names the path it could not make ("EROFS: read-only file system, mkdir
+ * '<path>'"), then its message on stderr.
+ */
+const HOME_WRITE = `const fs = require("node:fs"); const path = require("node:path"); const target = process.argv[1]; try { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, "probe\\n"); } catch (error) { console.error(error.message); process.exit(1); }`;
+
 /** The delegate's one command: each write, the install and the commit, each followed by its exit. */
 const COMMAND = [
-  `target="$HOME/${HOME_TARGET}"`,
-  `{ mkdir -p "\${target%/*}" && echo probe > "$target"; } 2> "$TMPDIR/home.err"; echo ${apart("HOME-WRITE:")}$?; cat "$TMPDIR/home.err"`,
+  `bun -e '${HOME_WRITE}' "$HOME/${HOME_TARGET}" 2> "$TMPDIR/home.err"; echo ${apart("HOME-WRITE:")}$?; cat "$TMPDIR/home.err"`,
   `echo kept > "$TMPDIR/${SCRATCH_FILE}"; echo ${apart("SCRATCH-WRITE:")}$? ${apart("SCRATCH-AT:")}"$TMPDIR"`,
   `echo kept > ${CLONE_FILE}; echo ${apart("CLONE-WRITE:")}$?`,
   `bun install --frozen-lockfile > "$TMPDIR/install.log" 2>&1; echo ${apart("INSTALLED:")}$?; tail -n 3 "$TMPDIR/install.log"`,
@@ -78,7 +90,23 @@ const respond = (request: Seen): Reply => {
       },
     };
   }
-  return text("Done.");
+  // Its turn held in the boundary until the spec has closed it and read the
+  // disk: a "Done." would end it, and the third quiet turn in a row fails the
+  // item (hub work-items.ts `QUIET_TURNS`), which can close the boundary
+  // before the spec looks. Held again after the close, in the boundary the
+  // next command starts.
+  return {
+    everyMs: 5,
+    words: [],
+    tool: {
+      name: "Bash",
+      input: {
+        command: "sleep 3600",
+        description: "Hold the turn",
+        timeout: 600_000,
+      },
+    },
+  };
 };
 
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
@@ -190,13 +218,19 @@ const run = async (kit: Kit) => {
     said.indexOf("HOME-WRITE:"),
     said.indexOf("SCRATCH-WRITE:")
   );
+  // The path the error names: the target or a dir on its way, at or under
+  // ~/.cache (the first one the recursive mkdir could not make).
+  const target = join(home, HOME_TARGET);
+  const named = EROFS_PATH.exec(homeErr)?.[1];
+  const onTheWay =
+    named !== undefined &&
+    (target === named || target.startsWith(`${named}/`)) &&
+    (named === join(home, ".cache") ||
+      named.startsWith(`${join(home, ".cache")}/`));
   kit.check(
-    `a write to ~/${HOME_TARGET} fails with "Read-only file system" naming a path under ~/.cache`,
-    homeExit !== undefined &&
-      homeExit !== "0" &&
-      homeErr.includes("Read-only file system") &&
-      homeErr.includes(join(home, ".cache")),
-    homeErr.trim() || "unread"
+    `a write to ~/${HOME_TARGET} fails with EROFS naming the target or a dir on its way, at or under ~/.cache`,
+    homeExit !== undefined && homeExit !== "0" && onTheWay,
+    `${homeErr.trim() || "unread"} (named: ${named ?? "no path"})`
   );
   kit.check(
     `nothing of ~/${HOME_TARGET} is on the host`,
