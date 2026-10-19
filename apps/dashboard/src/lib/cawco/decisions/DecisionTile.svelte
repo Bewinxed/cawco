@@ -45,7 +45,7 @@
 
 <a
   data-slot="tile"
-  class="press-tint flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-raised p-space-5 text-ink-strong no-underline shadow-tile"
+  class="press-tint flex flex-auto min-w-0 flex-col gap-space-2 rounded-lg bg-surface-raised p-space-5 text-ink-strong no-underline shadow-tile"
   data-page={page.name}
   {href}
   onclick={(event) => {
@@ -61,11 +61,10 @@
     onopen(page.name, event.currentTarget);
   }}
 >
-  <!-- literal: 24px (the pill's height; every tile's title row stands at it) -->
+  <!-- Every tile's title row stands at the pill's height, a pill or none. -->
   <span
     data-slot="head"
-    class="flex min-h-(--head-min-h) min-w-0 items-center justify-between gap-space-3"
-    style:--head-min-h="24px"
+    class="flex min-h-c-pill-h min-w-0 items-center justify-between gap-space-3"
   >
     <span
       data-slot="title"

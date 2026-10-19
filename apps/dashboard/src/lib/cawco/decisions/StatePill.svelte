@@ -21,14 +21,10 @@
   } = $props();
 </script>
 
-<!-- literal: 24px, 10px, 0.3em (padding: 0 10px is padding-inline 10px) -->
 <span
   data-slot="state-pill"
-  class="type-label inline-flex max-w-full flex-none items-center gap-(--pill-gap) h-(--pill-h) px-(--pill-pad) rounded-pill whitespace-nowrap transition-[background-color,color] dur-panel ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink"
+  class="type-label inline-flex h-c-pill-h max-w-full flex-none items-center gap-c-pill-gap rounded-pill px-space-3 whitespace-nowrap transition-[background-color,color] dur-panel ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink"
   data-tone={tone}
-  style:--pill-gap="0.3em"
-  style:--pill-h="24px"
-  style:--pill-pad="10px"
   {title}
 >
   {word}
