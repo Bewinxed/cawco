@@ -69,11 +69,9 @@
     aria-hidden="true"
     class="flex-1 p-space-5 border border-border-well rounded-sm bg-surface-recess"
   >
-    <!-- literal: 42% -->
     <span
       data-slot="block"
-      style:--block-w="42%"
-      class="kit-skeleton block h-space-3 w-(--block-w) rounded-xs"
+      class="kit-skeleton block h-space-3 w-2/5 rounded-xs"
     ></span>
   </div>
 {/if}

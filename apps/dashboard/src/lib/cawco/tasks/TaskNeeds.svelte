@@ -195,11 +195,10 @@
           {/if}
         </p>
         {#if proposed}
-          <!-- literal: 12rem -->
           <pre
             data-slot="args"
-            class="max-h-(--args-max) m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere"
-            style:--args-max="12rem">{action.args}</pre>
+            class="max-h-(--c-task-args-max-h) m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere"
+            >{action.args}</pre>
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
         <div

@@ -89,13 +89,13 @@
   ]);
   /** Each column's width, its head's and its cells' alike; the title takes the rest. */
   const COL_W: Record<string, string> = {
-    pick: "calc(1rem + 2 * var(--space-3))",
-    id: "6.5rem",
-    stage: "12rem",
-    labels: "14rem",
-    todos: "6rem",
-    created: "7rem",
-    updated: "7rem",
+    pick: "calc(var(--icon-md) + 2 * var(--space-3))",
+    id: "var(--c-task-col-id-w)",
+    stage: "var(--c-task-col-stage-w)",
+    labels: "var(--c-task-col-labels-w)",
+    todos: "var(--c-task-col-todos-w)",
+    created: "var(--c-task-col-time-w)",
+    updated: "var(--c-task-col-time-w)",
   };
   /** A column the ledger holds in its own order. */
   const fixed = { enableSorting: false } as const;
@@ -215,21 +215,18 @@
   }
 </script>
 
-<!-- literal: auto auto 1fr auto; auto auto auto 1fr auto; 1 / span 2 -->
 <div
   data-slot="ledger"
   class="group/ledger @container overflow-hidden rounded-lg bg-surface-raised shadow-tile"
   data-pickable={onpick ? "" : undefined}
-  style:--cell-gap="0"
   style:--row-cols="auto auto 1fr auto"
   style:--row-cols-pick="auto auto auto 1fr auto"
-  style:--pick-row="1 / span 2"
 >
   <Table.Root
     data-tasks
-    class="border-separate table-fixed max-phone:block"
+    class="max-phone:block"
     ghostRows="tbody tr"
-    spacing="gap"
+    layout="ledger"
   >
     <Table.Header class="max-phone:hidden">
       {#each table.getHeaderGroups() as group (group.id)}
@@ -239,21 +236,19 @@
             {@const sorted = column.getIsSorted()}
             {@const sort = ariaSort(sorted)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <!-- literal: calc(1rem + 2 * var(--space-3)), 6.5rem, 12rem, 14rem, 6rem, 7rem -->
             <Table.Head
               aria-sort={sort}
               class={[
                 column.id === "created" &&
-                  "w-(--col-w) h-c-toolbar-ctl text-end @max-decisions-900px:hidden",
-                column.id === "updated" &&
-                  "w-(--col-w) h-c-toolbar-ctl text-end",
+                  "w-(--col-w) text-end @max-decisions-900px:hidden",
+                column.id === "updated" && "w-(--col-w) text-end",
                 column.id !== "created" &&
                   column.id !== "updated" &&
-                  "w-(--col-w) h-c-toolbar-ctl",
+                  "w-(--col-w)",
               ]}
               data-task-table-col={column.id}
               scope="col"
-              variant="caps"
+              variant="band"
               style="--col-w: {COL_W[column.id] ?? ''}"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: the tag above -->
@@ -317,7 +312,7 @@
                 ? "w-(--col-w) h-c-btn-h-lg text-end @max-decisions-900px:hidden max-phone:@max-decisions-900px:hidden max-phone:w-auto max-phone:h-auto"
                 : [
                     cell.column.id === "pick" &&
-                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-(--pick-row) max-phone:col-start-1",
+                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-start-1 max-phone:row-span-2 max-phone:col-start-1",
                     cell.column.id === "title" &&
                       "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
                     cell.column.id === "labels" &&
@@ -353,7 +348,7 @@
               {:else if cell.column.id === "title"}
                 <a
                   data-slot="title"
-                  class="flex items-baseline gap-space-2 min-w-0 text-inherit no-underline focus-inset"
+                  class="flex items-baseline gap-space-2 min-w-0 text-inherit no-underline after:absolute after:inset-0 focus-inset"
                   href={hrefOf(task.id)}
                   onclick={(event) => open(event, task.id)}
                 >
@@ -416,12 +411,3 @@
     </Table.Body>
   </Table.Root>
 </div>
-
-<style>
-  /* residual: pseudo */
-  [data-slot="title"]::after {
-    position: absolute;
-    inset: 0;
-    content: "";
-  }
-</style>
