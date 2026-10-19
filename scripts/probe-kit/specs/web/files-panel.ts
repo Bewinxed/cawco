@@ -1317,14 +1317,16 @@ const roundThree = async (
       })
     );
     kit.check(
-      `24 (${view}): each region's scroller, its scrollbar and Show's touch area stand inside the region (nothing clips them)`,
+      // Playwright's headless Chromium hides scrollbars (--hide-scrollbars), so
+      // a scrollbar takes no width here: its place is the scroller's own
+      // trailing edge, read against the region's.
+      `24 (${view}): each region's scroller (where its scrollbar draws) and Show's touch area stand inside the region (nothing clips them)`,
       inside.length === 2 &&
         inside.every(
           (one) =>
             one.scrollerRight <= one.regionRight + 0.5 &&
             (one.showRight === null || one.showRight <= one.regionRight + 0.5)
-        ) &&
-        (view !== "desk" || inside.every((one) => one.scrollbar > 0)),
+        ),
       JSON.stringify(inside)
     );
     await page.close();
@@ -1474,7 +1476,9 @@ const roundThree = async (
   await narrowing
     .locator("[data-files-float][data-state='open']")
     .waitFor({ timeout: 30_000 });
-  await narrowing.setViewportSize({ width: 1000, height: 900 });
+  // Still a desk (900px and up), but Files' card leaves the float under
+  // the panel's 320px least width beside the rail (about 270px at 920).
+  await narrowing.setViewportSize({ width: 920, height: 900 });
   await narrowing.waitForTimeout(1200);
   const narrowed = await narrowing.evaluate(() => ({
     float: !!document.querySelector("[data-files-float]"),
