@@ -13,6 +13,10 @@
    *   (`recessed={false}`).
    * A pane passes its own content and controls; the frame is this one.
    *
+   * A pane that gives its controls as `items` has them stand by the head's
+   * priority rule (head.ts): the name keeps its width up to 120px, Close
+   * stands last, and what doesn't fit goes in head order into one More.
+   *
    * Expanded over the whole split, the card meets its edges: no inset,
    * corner or shadow, and the well's sides go, so a page is drawn at the
    * split's full width. The head keeps its place, so the control just
@@ -22,8 +26,16 @@
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
-  import { IconClose, IconMaximize, IconMinimize } from "#lib/icons.js";
+  // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import {
+    IconClose,
+    IconMaximize,
+    IconMinimize,
+    IconMore,
+  } from "#lib/icons.js";
   import { sideExpand } from "./expand";
+  import { HEAD_PRIORITY, type HeadItem, NAME_KEEPS, standing } from "./head";
 
   let {
     label,
@@ -32,6 +44,7 @@
     titleControl,
     subtitle,
     actions,
+    items,
     onclose,
     closing = false,
     closeFailed = false,
@@ -52,6 +65,8 @@
     subtitle?: string;
     /** The pane's own controls, before Close. */
     actions?: Snippet;
+    /** The pane's own controls, before Expand and Close, standing by the head's priority rule (head.ts). */
+    items?: HeadItem[];
     onclose: () => void | Promise<void>;
     closing?: boolean;
     closeFailed?: boolean;
@@ -66,7 +81,168 @@
   /** The split's Expand, on a desk; none in a sheet or the artifact's own tab. */
   const expand = sideExpand();
   const expanded = $derived(!!expand?.expanded);
+
+  /** The pane's controls and Expand, in head order. */
+  const all = $derived<HeadItem[]>(
+    items
+      ? [
+          ...items,
+          ...(expand?.available
+            ? [
+                {
+                  key: "expand",
+                  priority: HEAD_PRIORITY.expand,
+                  bar: expandBar,
+                  menu: expandMenu,
+                },
+              ]
+            : []),
+        ]
+      : []
+  );
+  let head = $state<HTMLElement>();
+  let identity = $state<HTMLElement>();
+  /** The controls standing in the head; null until the head is measured: all of them. */
+  let shown = $state<Set<string> | null>(null);
+  /** The name's own width, up to {@link NAME_KEEPS}: it gives up no more of it to the controls. */
+  let nameKeeps = $state(0);
+  /** Each control's width as last drawn in the head: what a control in More would take back. */
+  const widths = new Map<string, number>();
+  const stands = (key: string) => shown === null || shown.has(key);
+  const more = $derived(all.filter((one) => !stands(one.key)));
+  const moreCount = $derived(
+    more.reduce((sum, one) => sum + (one.count ?? 0), 0)
+  );
+
+  /** How far a box's text runs past it (a truncated name's): its own width is that much more. */
+  const runsPast = (el: Element): number =>
+    Math.max(
+      0,
+      ...[el, ...el.querySelectorAll("*")].map(
+        (one) => one.scrollWidth - one.clientWidth
+      )
+    );
+
+  /** The head's room inside its padding, and its gap. */
+  function roomOf(el: HTMLElement): { gap: number; room: number } {
+    const style = getComputedStyle(el);
+    const px = (value: string) => Number.parseFloat(value) || 0;
+    return {
+      gap: px(style.columnGap),
+      room:
+        el.clientWidth -
+        px(style.paddingInlineStart) -
+        px(style.paddingInlineEnd),
+    };
+  }
+
+  /** What always stands (the switch, Close), and More, as drawn; each control's width kept while it stands. */
+  function drawnWidths(el: HTMLElement, name: HTMLElement) {
+    const kept: number[] = [];
+    let moreWidth = 0;
+    for (const child of el.children) {
+      const one = child as HTMLElement;
+      const { width } = one.getBoundingClientRect();
+      const item = one.dataset.headItem;
+      if (item && !one.hidden) {
+        widths.set(item, width);
+      } else if (one.dataset.slot === "more") {
+        moreWidth = width;
+      } else if (!item && one !== name) {
+        kept.push(width);
+      }
+    }
+    return { kept, moreWidth };
+  }
+
+  /** The name's own width with its inset, up to {@link NAME_KEEPS}. */
+  function nameWidth(name: HTMLElement): number {
+    const lead = name.firstElementChild;
+    const pad =
+      Number.parseFloat(getComputedStyle(name).paddingInlineStart) || 0;
+    const own = lead
+      ? lead.getBoundingClientRect().width + runsPast(lead) + pad
+      : 0;
+    return Math.ceil(Math.min(own, NAME_KEEPS + pad));
+  }
+
+  /** Which controls stand, from the head's room and what each was drawn at. */
+  function fit(): void {
+    if (!(head && identity && all.length > 0)) {
+      return;
+    }
+    const { gap, room } = roomOf(head);
+    const { kept, moreWidth } = drawnWidths(head, identity);
+    nameKeeps = nameWidth(identity);
+    // More is Close's recipe, its glyph alone, until it stands to be read.
+    const next = standing(
+      room,
+      gap,
+      [...kept, nameKeeps],
+      moreWidth || (kept.at(-1) ?? 0),
+      all.map((one) => ({
+        key: one.key,
+        priority: one.priority,
+        width: widths.get(one.key) ?? 0,
+      }))
+    );
+    const was = shown;
+    if (
+      !was ||
+      next.size !== was.size ||
+      [...next].some((key) => !was.has(key))
+    ) {
+      shown = next;
+    }
+  }
+
+  // The head, the name and every control re-fit as any of them changes size.
+  $effect(() => {
+    const el = head;
+    if (!(el && all.length > 0)) {
+      return;
+    }
+    const seen = new ResizeObserver(() => fit());
+    seen.observe(el);
+    for (const child of el.querySelectorAll(
+      ":scope > [data-head-item], :scope > .identity > *"
+    )) {
+      seen.observe(child);
+    }
+    return () => seen.disconnect();
+  });
 </script>
+
+{#snippet expandBar()}
+  {#if expand}
+    <button
+      aria-keyshortcuts={expanded ? "Escape" : undefined}
+      aria-label={expanded ? expand.backLabel : "Expand"}
+      class="touch-hit"
+      onclick={() => expand.toggle()}
+      title={expanded ? `${expand.backLabel} (Esc)` : "Expand"}
+      type="button"
+    >
+      {#if expanded}
+        <IconMinimize />
+      {:else}
+        <IconMaximize />
+      {/if}
+    </button>
+  {/if}
+{/snippet}
+
+{#snippet expandMenu()}
+  {#if expand}
+    <DropdownMenu.Item onSelect={() => expand.toggle()}>
+      {#if expanded}
+        <IconMinimize /><span>{expand.backLabel}</span>
+      {:else}
+        <IconMaximize /><span>Expand</span>
+      {/if}
+    </DropdownMenu.Item>
+  {/if}
+{/snippet}
 
 <section
   data-side-surface-class={className}
@@ -80,11 +256,21 @@
 >
   <!-- mark-line: its icons are controls at the head's end, each its own
        button, not marks set beside the title -->
-  <header data-slot="side-head" class="side-head">
+  <header
+    data-slot="side-head"
+    class="side-head"
+    class:fitted={all.length > 0}
+    bind:this={head}
+  >
     {#if switcher}
       {@render switcher()}
     {/if}
-    <div class="identity" class:controlled={!!titleControl}>
+    <div
+      style:min-inline-size={all.length > 0 ? `${nameKeeps}px` : undefined}
+      class="identity"
+      class:controlled={!!titleControl}
+      bind:this={identity}
+    >
       {#if titleControl}
         {@render titleControl()}
       {:else if title}
@@ -95,7 +281,37 @@
       {/if}
     </div>
     {@render actions?.()}
-    {#if expand?.available}
+    {#each all as one (one.key)}
+      <div data-head-item={one.key} class="head-item" hidden={!stands(one.key)}>
+        {@render one.bar()}
+      </div>
+    {/each}
+    {#if more.length > 0}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          data-slot="more"
+          aria-label={moreCount > 0
+            ? `More, ${moreCount} open comments`
+            : "More"}
+          class="more mark-line"
+          title="More"
+        >
+          <IconMore />
+          {#if moreCount > 0}
+            <span class="more-count">{moreCount}</span>
+          {/if}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="w-56">
+          {#each more as one, at (one.key)}
+            {#if at > 0 && (one.group || more[at - 1]?.group)}
+              <DropdownMenu.Separator />
+            {/if}
+            {@render one.menu()}
+          {/each}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {/if}
+    {#if !items && expand?.available}
       <button
         aria-keyshortcuts={expanded ? "Escape" : undefined}
         aria-label={expanded ? expand.backLabel : "Expand"}
@@ -155,6 +371,26 @@
     gap: var(--space-1);
     height: 44px;
     flex-shrink: 0;
+  }
+  /* A head whose controls stand by priority (head.ts): each control keeps
+     its own width, and under a finger the controls open to the 44px pitch
+     their touch areas need (The 44 Touch Rule), so fewer stand and the rest
+     go to More. */
+  .head-item:not([hidden]) {
+    display: flex;
+    flex: none;
+  }
+  @media (pointer: coarse) {
+    .side-head.fitted {
+      --hit-gap-x: var(--space-4);
+      gap: var(--space-4);
+    }
+  }
+  /* More says the open comments it holds, as Comments does. */
+  .more-count {
+    min-width: 1ch;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
   }
   /* The header's first thing, the switch or the title, stands on the
      well's edge, with or without the switch. After the switch, a gap. */

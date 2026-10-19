@@ -24,6 +24,8 @@
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
+  // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     TabItem,
@@ -66,6 +68,7 @@
   import { watchInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
   import { sideExpand } from "../side/expand";
+  import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import SideSurface from "../side/SideSurface.svelte";
   import { readJson, store, stored, writeJson } from "../storage";
   import { afterPaint } from "../workspace/warm.svelte";
@@ -78,6 +81,7 @@
     sendArtifact,
   } from "./artifact-doc";
   import CanvasView from "./CanvasView.svelte";
+  import { CanvasViewState } from "./canvas-view.svelte";
   import { loadedPanes } from "./loaded.svelte";
   import PinCard from "./PinCard.svelte";
   import PinList from "./PinList.svelte";
@@ -427,8 +431,9 @@
   }
   let displayPath = $state("");
   /**
-   * A page is served at the root of its own address: the head names the
-   * artifact, with no path under it.
+   * A page is served at the root of its own address, and a component
+   * canvas at the stage's canvas address: the head names the artifact, with
+   * no path under it (DESIGN.md's head is the name and its controls).
    */
   const page = $derived(!!source && "page" in source);
   const artifact = $derived(preview?.artifact);
@@ -1754,6 +1759,102 @@
       closing = false;
     }
   }
+  /** A component canvas's view, one for its head button and More's submenu alike; each load of the page takes the view kept for this session. */
+  const canvasView = $derived(
+    isSheet ? new CanvasViewState(instanceId, post) : null
+  );
+  $effect(() => {
+    const held = canvasView;
+    if (connected && held) {
+      untrack(() => held.send(held.chosen));
+    }
+  });
+
+  /** Reload: a canvas's stage frame from its address, any other page by a new frame. */
+  function reloadPage() {
+    if (isCanvas && stage?.frame) {
+      stage.frame.src = stage.src;
+    } else {
+      reload += 1;
+    }
+  }
+
+  /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
+  const headItems = $derived.by(() => {
+    const all: HeadItem[] = [];
+    if (artifact && unsentPicks) {
+      all.push({
+        key: "send",
+        priority: HEAD_PRIORITY.send,
+        bar: sendBar,
+        menu: sendMenu,
+      });
+    }
+    if (!(ownTab || linkSession)) {
+      all.push({
+        key: "create",
+        priority: HEAD_PRIORITY.create,
+        bar: createBar,
+        menu: createMenu,
+      });
+    }
+    if (canUndock) {
+      all.push({
+        key: "undock",
+        priority: HEAD_PRIORITY.undock,
+        bar: undockBar,
+        menu: undockMenu,
+      });
+    }
+    if (artifact && !ownTab) {
+      all.push({
+        key: "open",
+        priority: HEAD_PRIORITY.open,
+        bar: openBar,
+        menu: openMenu,
+      });
+    }
+    if (canvasView) {
+      all.push({
+        key: "view",
+        priority: HEAD_PRIORITY.view,
+        bar: viewBar,
+        menu: viewMenu,
+        group: true,
+      });
+    }
+    if (inspector) {
+      all.push({
+        key: "inspect",
+        priority: HEAD_PRIORITY.inspect,
+        bar: inspectBar,
+        menu: inspectMenu,
+      });
+    }
+    if (!isCanvas) {
+      all.push({
+        key: "mode",
+        priority: HEAD_PRIORITY.mode,
+        bar: modeBar,
+        menu: modeMenu,
+        group: true,
+      });
+      all.push({
+        key: "comments",
+        priority: HEAD_PRIORITY.comments,
+        bar: commentsBar,
+        menu: commentsMenu,
+        count: openCount,
+      });
+    }
+    all.push({
+      key: "reload",
+      priority: HEAD_PRIORITY.reload,
+      bar: reloadBar,
+      menu: reloadMenu,
+    });
+    return all;
+  });
 </script>
 
 <svelte:window
@@ -1764,49 +1865,75 @@
   onmessage={receive}
 />
 
-{#snippet controls()}
-  {#if artifact && unsentPicks}
-    <!-- The page's picks the session has not heard; pins and ink go by themselves. -->
-    <button
-      data-slot="send"
-      aria-busy={sending || undefined}
-      aria-disabled={sending || undefined}
-      class="send touch-hit"
-      onclick={whileIdle(() => sending, sendPicks)}
-      title="Send the page's picks to the session"
-      type="button"
-    >
-      <PendingContent icon={IconSend} pending={sending} />
-      <span data-slot="send-label" class="send-label">Send picks</span>
-    </button>
-  {/if}
-  {#if !(ownTab || linkSession)}
-    <button
-      aria-busy={making || undefined}
-      aria-disabled={making || undefined}
-      aria-label="New canvas"
-      class="touch-hit"
-      onclick={whileIdle(() => making, newCanvas)}
-      title="New canvas"
-      type="button"
-    >
-      <PendingContent icon={IconPlus} pending={making} />
-    </button>
-  {/if}
-  {#if canUndock}
-    <button
-      data-slot="other"
-      aria-label="Undock"
-      class="other touch-hit"
-      disabled={!stage}
-      onclick={() => giveBack(false)}
-      title="Undock"
-      type="button"
-    >
-      <IconUndock />
-    </button>
-  {/if}
-  {#if artifact && !ownTab}
+<!-- The head's controls, each as the head draws it and as More's entries
+     (SideSurface `items`, by the head's priority rule). -->
+{#snippet sendBar()}
+  <!-- The page's picks the session has not heard; pins and ink go by themselves. -->
+  <button
+    data-slot="send"
+    aria-busy={sending || undefined}
+    aria-disabled={sending || undefined}
+    class="send touch-hit"
+    onclick={whileIdle(() => sending, sendPicks)}
+    title="Send the page's picks to the session"
+    type="button"
+  >
+    <PendingContent icon={IconSend} pending={sending} />
+    <span data-slot="send-label" class="send-label">Send picks</span>
+  </button>
+{/snippet}
+{#snippet sendMenu()}
+  <DropdownMenu.Item
+    disabled={sending}
+    onSelect={whileIdle(() => sending, sendPicks)}
+  >
+    <IconSend /><span>Send picks</span>
+  </DropdownMenu.Item>
+{/snippet}
+
+{#snippet createBar()}
+  <button
+    aria-busy={making || undefined}
+    aria-disabled={making || undefined}
+    aria-label="New canvas"
+    class="touch-hit"
+    onclick={whileIdle(() => making, newCanvas)}
+    title="New canvas"
+    type="button"
+  >
+    <PendingContent icon={IconPlus} pending={making} />
+  </button>
+{/snippet}
+{#snippet createMenu()}
+  <DropdownMenu.Item
+    disabled={making}
+    onSelect={whileIdle(() => making, newCanvas)}
+  >
+    <IconPlus /><span>New canvas</span>
+  </DropdownMenu.Item>
+{/snippet}
+
+{#snippet undockBar()}
+  <button
+    data-slot="other"
+    aria-label="Undock"
+    class="other touch-hit"
+    disabled={!stage}
+    onclick={() => giveBack(false)}
+    title="Undock"
+    type="button"
+  >
+    <IconUndock />
+  </button>
+{/snippet}
+{#snippet undockMenu()}
+  <DropdownMenu.Item disabled={!stage} onSelect={() => giveBack(false)}>
+    <IconUndock /><span>Undock</span>
+  </DropdownMenu.Item>
+{/snippet}
+
+{#snippet openBar()}
+  {#if artifact}
     <!-- The same artifact, its doc and its tools, in a tab of its own. -->
     <a
       data-slot="other"
@@ -1818,95 +1945,162 @@
       title="Open in new tab"><IconExternal /></a
     >
   {/if}
-  {#if isSheet}
+{/snippet}
+{#snippet openMenu()}
+  {#if artifact}
+    <DropdownMenu.Item>
+      {#snippet child({ props })}
+        <a
+          {...props}
+          class={[props.class, "mark-line"]}
+          href={`/artifact/${encodeURIComponent(artifact.id)}`}
+          rel="noopener"
+          target="_blank"><IconExternal /><span>Open in new tab</span></a
+        >
+      {/snippet}
+    </DropdownMenu.Item>
+  {/if}
+{/snippet}
+
+{#snippet viewBar()}
+  {#if canvasView}
     <!-- A component canvas's view: its frames' scheme, widths, motion and zoom. -->
-    <CanvasView {instanceId} {post} ready={connected} />
+    <CanvasView view={canvasView} />
   {/if}
-  {#if inspector}
-    <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
-    <button
-      aria-label={artifactWords.inspect}
-      aria-pressed={inspectOpen}
-      class="inspect touch-hit"
-      onclick={() => showInspector(!inspectOpen)}
-      title={artifactWords.inspectTitle}
-      type="button"
+{/snippet}
+{#snippet viewMenu()}
+  {#if canvasView}
+    <CanvasView as="sub" view={canvasView} />
+  {/if}
+{/snippet}
+
+{#snippet inspectBar()}
+  <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
+  <button
+    aria-label={artifactWords.inspect}
+    aria-pressed={inspectOpen}
+    class="inspect touch-hit"
+    onclick={() => showInspector(!inspectOpen)}
+    title={artifactWords.inspectTitle}
+    type="button"
+  >
+    <IconTuning />
+  </button>
+{/snippet}
+{#snippet inspectMenu()}
+  <DropdownMenu.CheckboxItem
+    checked={inspectOpen}
+    onCheckedChange={(open) => showInspector(open)}
+    >{artifactWords.inspect}</DropdownMenu.CheckboxItem
+  >
+{/snippet}
+
+{#snippet modeBar()}
+  <!-- The mode: Interact, Comment, Draw (V, C, D; Esc back to Interact),
+       the kit's segmented control, its indicator on the chosen one. -->
+  <div class="modes">
+    <Tabs
+      onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
+      size="compact"
+      value={mode}
+      values={["interact", "comment", "draw"]}
     >
-      <IconTuning />
-    </button>
-  {/if}
-  {#if !isCanvas}
-    <!-- The mode: Interact, Comment, Draw (V, C, D; Esc back to Interact),
-         the kit's segmented control, its indicator on the chosen one. -->
-    <div class="modes">
-      <Tabs
-        onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
-        size="compact"
-        value={mode}
-        values={["interact", "comment", "draw"]}
+      <TabsList aria-label="Preview mode">
+        <TabItem
+          aria-keyshortcuts="V"
+          icon={IconInteract}
+          label="Interact"
+          title="Interact (V): the page gets every click"
+          value="interact"
+        />
+        <TabItem
+          aria-keyshortcuts="C"
+          icon={IconComment}
+          label="Comment"
+          title="Comment (C): a click pins a comment"
+          value="comment"
+        />
+        <TabItem
+          aria-keyshortcuts="D"
+          icon={IconPen}
+          label="Draw"
+          title="Draw (D): drag to draw on the page"
+          value="draw"
+        />
+      </TabsList>
+    </Tabs>
+  </div>
+{/snippet}
+{#snippet modeMenu()}
+  <DropdownMenu.Group>
+    <DropdownMenu.GroupHeading>Mode</DropdownMenu.GroupHeading>
+    <DropdownMenu.RadioGroup
+      onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
+      value={mode}
+    >
+      <DropdownMenu.RadioItem value="interact"
+        ><IconInteract /><span>Interact</span><DropdownMenu.Shortcut
+          >V</DropdownMenu.Shortcut
+        ></DropdownMenu.RadioItem
       >
-        <TabsList aria-label="Preview mode">
-          <TabItem
-            aria-keyshortcuts="V"
-            icon={IconInteract}
-            label="Interact"
-            title="Interact (V): the page gets every click"
-            value="interact"
-          />
-          <TabItem
-            aria-keyshortcuts="C"
-            icon={IconComment}
-            label="Comment"
-            title="Comment (C): a click pins a comment"
-            value="comment"
-          />
-          <TabItem
-            aria-keyshortcuts="D"
-            icon={IconPen}
-            label="Draw"
-            title="Draw (D): drag to draw on the page"
-            value="draw"
-          />
-        </TabsList>
-      </Tabs>
-    </div>
-    <!-- The Comments panel, floating over the page's top-right; the count is the open pins'. -->
-    <button
-      data-slot="comments"
-      aria-expanded={listOpen}
-      aria-haspopup="dialog"
-      aria-label={`Comments, ${openCount} open${pinsShown ? "" : ", pins hidden"}`}
-      class="comments mark-line touch-hit"
-      onclick={() => showList(!listOpen)}
-      title={pinsShown
-        ? "Comments (⇧C hides the pins)"
-        : "Comments (⇧C shows the pins)"}
-      type="button"
-    >
-      <IconChat /><span class="comments-label">Comments</span>
-      <span data-slot="count" class="count">{openCount}</span>
-      {#if !pinsShown}
-        <!-- ⇧C hid the pins: said where the person looks for them. -->
-        <IconEyeClosed class="pins-hidden" />
-      {/if}
-    </button>
-  {/if}
+      <DropdownMenu.RadioItem value="comment"
+        ><IconComment /><span>Comment</span><DropdownMenu.Shortcut
+          >C</DropdownMenu.Shortcut
+        ></DropdownMenu.RadioItem
+      >
+      <DropdownMenu.RadioItem value="draw"
+        ><IconPen /><span>Draw</span><DropdownMenu.Shortcut
+          >D</DropdownMenu.Shortcut
+        ></DropdownMenu.RadioItem
+      >
+    </DropdownMenu.RadioGroup>
+  </DropdownMenu.Group>
+{/snippet}
+
+{#snippet commentsBar()}
+  <!-- The Comments panel, floating over the page's top-right; the count is the open pins'. -->
+  <button
+    data-slot="comments"
+    aria-expanded={listOpen}
+    aria-haspopup="dialog"
+    aria-label={`Comments, ${openCount} open${pinsShown ? "" : ", pins hidden"}`}
+    class="comments mark-line touch-hit"
+    onclick={() => showList(!listOpen)}
+    title={pinsShown
+      ? "Comments (⇧C hides the pins)"
+      : "Comments (⇧C shows the pins)"}
+    type="button"
+  >
+    <IconChat /><span class="comments-label">Comments</span>
+    <span data-slot="count" class="count">{openCount}</span>
+    {#if !pinsShown}
+      <!-- ⇧C hid the pins: said where the person looks for them. -->
+      <IconEyeClosed class="pins-hidden" />
+    {/if}
+  </button>
+{/snippet}
+{#snippet commentsMenu()}
+  <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
+    <IconChat /><span>Comments</span><span class="menu-count">{openCount}</span>
+  </DropdownMenu.Item>
+{/snippet}
+
+{#snippet reloadBar()}
   <button
     data-slot="other"
     aria-label="Reload"
     class="other touch-hit"
-    onclick={() => {
-      if (isCanvas && stage?.frame) {
-        stage.frame.src = stage.src;
-      } else {
-        reload += 1;
-      }
-    }}
+    onclick={reloadPage}
     title="Reload"
     type="button"
   >
     <IconRefresh />
   </button>
+{/snippet}
+{#snippet reloadMenu()}
+  <DropdownMenu.Item onSelect={reloadPage}>
+    <IconRefresh /><span>Reload</span>
+  </DropdownMenu.Item>
 {/snippet}
 
 <!-- The card beside the conversation (SideSurface): the switch, the
@@ -1974,15 +2168,17 @@
   </section>
 {:else}
   <SideSurface
-    actions={controls}
     class={["preview-pane", mode !== "interact" && !isCanvas && `mode-${mode}`]
       .filter(Boolean)
       .join(" ")}
     closeFailed={failure?.again === "close"}
     {closing}
+    items={headItems}
     label="Preview"
     onclose={ownTab ? backToSession : close}
-    subtitle={page ? "" : displayPath || (source ? previewPlace(source) : "")}
+    subtitle={page || isSheet
+      ? ""
+      : displayPath || (source ? previewPlace(source) : "")}
     {switcher}
     titleControl={artifact ? artifactTitle : undefined}
     bind:section
@@ -2520,10 +2716,18 @@
       font-weight: var(--weight-body);
     }
   }
-  /* A narrow pane keeps Comments' glyph and count, and lets its word go. */
+  /* A narrow pane keeps Send picks' and Comments' glyphs (and the count),
+     and lets their words go. */
   @container (max-width: 639px) {
-    .comments-label {
+    .comments-label,
+    .send-label {
       display: none;
     }
+  }
+  /* Comments in More says its open count at the entry's end. */
+  .menu-count {
+    margin-inline-start: auto;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
   }
 </style>

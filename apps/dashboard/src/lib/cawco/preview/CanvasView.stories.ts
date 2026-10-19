@@ -1,9 +1,10 @@
 import CanvasView from "./CanvasView.svelte";
+import { CanvasViewState } from "./canvas-view.svelte";
 
 export default {
   title: "Preview/Canvas view",
   component: CanvasView,
-  args: { instanceId: "probe", post: () => undefined, ready: false },
+  args: { view: new CanvasViewState("probe", () => undefined) },
 };
 
 /** The canvas view's control in the panel's head, at rest. */

@@ -59,6 +59,8 @@ declare global {
 export interface ChromeOptions {
   applyDials: (values: Record<string, unknown>) => void;
   canvas: HTMLElement;
+  /** The house faces' `@font-face` rules, set in the page: a shadow root's own are not heard. */
+  faces: string;
   go: (key: string) => void;
   playVisible: (
     file: string,
@@ -80,88 +82,138 @@ export interface ChromeOptions {
 const PHONE_MAX = 640;
 const SWIPE_PX = 48;
 
+/** Solar's glyphs the chrome draws (24px grid): the linear chevrons and the duotone sort-vertical (DESIGN.md, Icons). */
+const GLYPHS = {
+  back: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 5L9 12L15 19"/>',
+  ahead:
+    '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5L15 12L9 19"/>',
+  sort: '<g fill="currentColor"><path d="M20 10.875C20.3013 10.875 20.5733 10.6948 20.6907 10.4173C20.8081 10.1399 20.7482 9.81916 20.5384 9.60289L16.5384 5.47789C16.3972 5.33222 16.2029 5.25 16 5.25C15.7971 5.25 15.6029 5.33222 15.4616 5.47789L11.4616 9.60289C11.2519 9.81916 11.1919 10.1399 11.3093 10.4173C11.4268 10.6948 11.6988 10.875 12 10.875H15.25V18C15.25 18.4142 15.5858 18.75 16 18.75C16.4142 18.75 16.75 18.4142 16.75 18L16.75 10.875H20Z"/><path d="M12 13.125C12.3013 13.125 12.5733 13.3052 12.6907 13.5827C12.8081 13.8601 12.7482 14.1808 12.5384 14.3971L8.53844 18.5221C8.39719 18.6678 8.20293 18.75 8.00002 18.75C7.79711 18.75 7.60285 18.6678 7.46159 18.5221L3.46159 14.3971C3.25188 14.1808 3.19192 13.8601 3.30934 13.5827C3.42676 13.3052 3.69877 13.125 4.00002 13.125H7.25002L7.25002 6C7.25002 5.58579 7.5858 5.25 8.00002 5.25C8.41423 5.25 8.75002 5.58579 8.75002 6L8.75002 13.125L12 13.125Z" opacity=".5"/></g>',
+};
+
+/** One of {@link GLYPHS}, 16px, hidden from the reader: its control's words name it. */
+function glyph(name: keyof typeof GLYPHS): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = GLYPHS[name];
+  return svg;
+}
+
 const CHROME_CSS = `
 :host { all: initial; position: fixed; inset: 0; pointer-events: none; z-index: 2147483000; color-scheme: inherit;
-  font: var(--type-body); color: var(--text-strong); }
+  font: var(--type-body); color: var(--ink-strong); }
 * { box-sizing: border-box; }
 button { font: inherit; color: inherit; }
-.band { pointer-events: auto; position: absolute; inset-inline: 0; top: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-3); background: var(--surface-raised);
-  border-block-end: 1px solid var(--border-hairline); box-shadow: var(--shadow-xs); }
-.name { font: var(--type-label); color: var(--text-strong); min-width: 0; overflow-wrap: anywhere; }
-.about { grid-column: 1; font: var(--type-meta); color: var(--text-muted); min-width: 0; overflow-wrap: anywhere; }
-.crumb { grid-column: 1; font: var(--type-meta); color: var(--text-muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.crumb b { font-weight: 500; color: var(--text-strong); }
+svg { inline-size: 16px; block-size: 16px; flex: none; }
+/* The band and, on a phone, the strip under it: one raised head in flow, so
+   the strip stands under the band, and one edge at its foot, the well's. */
+.head { pointer-events: auto; position: absolute; inset-inline: 0; inset-block-start: 0; display: flex; flex-direction: column;
+  background: var(--surface-raised); border-block-end: 1px solid var(--border-well); box-shadow: var(--shadow-xs); }
+.band { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-3); }
+.name { font: var(--type-label); color: var(--ink-strong); min-width: 0; overflow-wrap: anywhere; }
+.about { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); min-width: 0; overflow-wrap: anywhere; text-wrap: pretty; }
+.crumb { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crumb b { font-weight: var(--weight-strong); color: var(--ink-strong); }
 .tools { grid-column: 2; grid-row: 1 / span 3; display: flex; align-items: start; gap: var(--space-1); }
-.ghost { all: unset; box-sizing: border-box; font: var(--type-label); color: var(--text-strong); height: 30px; padding: 0 var(--space-2);
-  border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer;
-  transition: background-color var(--dur-control) var(--ease-out); }
-@media (hover: hover) { .ghost:hover { background: var(--surface-hover); } }
-.ghost[aria-pressed="true"] { background: var(--surface-fill); }
-.ghost:focus-visible, .row:focus-visible, .chip:focus-visible, select:focus-visible { outline: var(--focus-ring-width, 2px) solid var(--focus-ring); outline-offset: 2px; }
+.ghost { all: unset; box-sizing: border-box; position: relative; font: var(--type-label); color: var(--ink-strong); block-size: 30px;
+  padding: 0 var(--space-2); border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; }
+@media (hover: hover) { .ghost:not([aria-pressed="true"]):hover { background: var(--surface-hover); } }
+/* Pressed is the kit Toggle's on step, never the hover's. */
+.ghost[aria-pressed="true"] { background: var(--surface-pressed); }
+.ghost:focus-visible, .chip:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 .outline { pointer-events: auto; position: absolute; inset-block: var(--band, 88px) var(--foot, 32px); inset-inline-end: 0;
   inline-size: min(280px, 80vw); overflow: auto; overscroll-behavior: contain; background: var(--surface-raised);
-  border-inline-start: 1px solid var(--border-hairline); padding: var(--space-2) 0; }
+  border-inline-start: 1px solid var(--border-well); padding: var(--space-2) 0; }
 .outline[hidden] { display: none; }
-.outline h3 { margin: var(--space-2) var(--space-3) var(--space-1); font: var(--type-caps, var(--type-meta)); color: var(--text-muted); }
+.outline h3 { margin: var(--space-2) var(--space-3) var(--space-1); font: var(--type-caps); color: var(--ink-muted); }
 .row { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: var(--space-2); align-items: center;
-  inline-size: 100%; min-block-size: 32px; padding: var(--space-1) var(--space-3); cursor: pointer; font: var(--type-meta); color: var(--text-strong); }
+  inline-size: 100%; min-block-size: 32px; padding: var(--space-1) var(--space-3); cursor: pointer; font: var(--type-meta); color: var(--ink-strong); }
 .row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.row small { font: var(--type-meta); color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.row[aria-current="true"] { background: var(--surface-fill); box-shadow: inset 2px 0 0 var(--coral-9); }
-@media (hover: hover) { .row:hover { background: var(--surface-hover); } }
-.foot { pointer-events: auto; position: absolute; inset-inline: 0; bottom: 0; padding: var(--space-1) var(--space-3);
-  font: var(--type-meta); color: var(--text-muted); background: var(--surface-raised); border-block-start: 1px solid var(--border-hairline);
+.row small { font: var(--type-meta); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+/* The frame in view: the selected pair, never the hover's fill. */
+.row[aria-current="true"], .row[aria-current="true"] small { background: var(--selected-bg); color: var(--selected-ink); }
+@media (hover: hover) { .row:not([aria-current="true"]):hover { background: var(--surface-hover); } }
+/* A row stands flush in a scroller: its ring is inset. */
+.row:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.foot { pointer-events: auto; position: absolute; inset-inline: 0; inset-block-end: 0; padding: var(--space-1) var(--space-3);
+  font: var(--type-meta); color: var(--ink-muted); background: var(--surface-raised); border-block-start: 1px solid var(--border-well);
   font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.strip { pointer-events: auto; position: absolute; inset-inline: 0; display: none; gap: var(--space-2); align-items: center;
-  padding: var(--space-2) var(--space-3); background: var(--surface-raised); border-block-end: 1px solid var(--border-hairline); flex-wrap: wrap; }
+.strip { display: none; gap: var(--space-2); align-items: center; flex-wrap: wrap; padding: 0 var(--space-3) var(--space-2); }
 :host([data-phone]) .strip { display: flex; }
 :host([data-phone]) .outline { inset-inline: 0; inline-size: auto; }
-select { font: var(--type-label); color: var(--text-strong); background: var(--surface-recess); border: 1px solid var(--border-control);
-  border-radius: var(--radius-sm); min-block-size: 44px; padding: 0 var(--space-2); max-inline-size: 60vw; }
-.chips { display: flex; gap: var(--space-1); }
-.chip { all: unset; box-sizing: border-box; font: var(--type-label); min-block-size: 44px; padding: 0 var(--space-3); border-radius: var(--radius-pill);
-  display: inline-flex; align-items: center; background: var(--surface-recess); cursor: pointer; }
-.chip[aria-pressed="true"] { background: var(--surface-fill-strong, var(--surface-fill)); box-shadow: inset 0 0 0 1px var(--border-contrast); }
-.steps { pointer-events: auto; position: absolute; inset-inline: 0; bottom: var(--foot, 32px); display: none; justify-content: space-between;
-  padding: var(--space-2) var(--space-3); }
+/* The story picker: the input recipe as a select trigger (DESIGN.md, Inputs and fields), its sort-vertical glyph at the end. */
+.pick { position: relative; display: inline-flex; align-items: center; min-inline-size: 0; max-inline-size: 60vw; }
+.pick select { appearance: none; font: var(--type-body); color: var(--ink-strong); background: var(--surface-raised);
+  border: 1px solid var(--border-button-outline); border-radius: var(--radius-md); box-shadow: var(--shadow-xs); block-size: 36px;
+  min-inline-size: 0; max-inline-size: 100%; padding-block: 0; padding-inline: var(--space-3) calc(var(--space-2) * 2 + 16px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.pick select:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.pick svg { position: absolute; inset-inline-end: var(--space-2); pointer-events: none; color: var(--ink-muted); }
+/* The state chips: the option chip, 30px at the item radius; the chosen one takes the coral edge on its recess. */
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.chip { all: unset; box-sizing: border-box; position: relative; font: var(--type-label); color: var(--ink-strong); block-size: 30px;
+  padding: 0 var(--space-3); border-radius: var(--radius-sm); display: inline-flex; align-items: center; background: var(--surface-recess);
+  cursor: pointer; }
+.chip[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--brand-solid); }
+.steps { pointer-events: auto; position: absolute; inset-inline: 0; inset-block-end: var(--foot, 32px); display: none;
+  justify-content: space-between; padding: var(--space-2) var(--space-3); }
 :host([data-phone]) .steps { display: flex; }
-.steps .ghost { min-block-size: 44px; background: var(--surface-raised); box-shadow: var(--shadow-xs); }
-@media (prefers-reduced-motion: reduce) { .ghost { transition: none; } }
+.steps .ghost { block-size: 44px; background: var(--surface-raised); box-shadow: var(--shadow-xs); }
+/* The 44 Touch Rule: under a finger every control reaches 44px through its ::after, its drawn size kept. */
+@media (pointer: coarse) {
+  .ghost::after, .chip::after { content: ""; position: absolute;
+    inset-block: min(0px, calc((100% - 44px) / 2)); inset-inline: min(0px, calc((100% - 44px) / 2)); }
+  .chips { gap: var(--space-2); }
+  .pick select { block-size: 44px; font-size: 16px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ghost, .chip, .row { transition: background-color var(--dur-control) var(--ease-out), box-shadow var(--dur-control) var(--ease-out); }
+}
 `;
 
 /** Light-DOM chrome: frames, labels, section heads, edges and the docks, on classes no project writes. */
 export const PAGE_CSS = `
-html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100%; overflow: hidden; }
-.cawco-canvas { position: fixed; inset: 0; overflow: hidden; touch-action: none; }
+html.cawco-canvas-page { color-scheme: light dark; }
+html.cawco-canvas-page[data-theme="light"] { color-scheme: light; }
+html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
+/* The page is the well the frames stand in (surface-well): the frame recesses, each frame's own page reads raised on it. */
+html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100%; overflow: hidden; background: var(--surface-well); }
+.cawco-canvas { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: var(--surface-well); }
 .cawco-world { position: absolute; inset-block-start: 0; inset-inline-start: 0; transform-origin: 0 0; display: flex; flex-direction: column;
   gap: var(--space-8); padding-block-end: 160px; will-change: transform; }
 .cawco-section { display: flex; flex-direction: column; gap: var(--space-3); min-block-size: 120px; }
 .cawco-section[data-cawco-asleep] .cawco-grid { display: none; }
-.cawco-section-head { font: var(--type-title); color: var(--text-strong); padding-block-end: var(--space-1); border-block-end: 1px solid var(--border-hairline); }
-.cawco-section-head[data-cawco-failed] { color: var(--error-11); }
+/* A section's head: the sheet's title in the title role when it has one, its file in code. */
+.cawco-section-head { display: grid; gap: var(--space-1); padding-block-end: var(--space-1); border-block-end: 1px solid var(--border-well); }
+.cawco-section-title { font: var(--type-title); color: var(--ink-strong); text-wrap: balance; }
+.cawco-section-file { font: var(--type-code); font-variant-ligatures: none; color: var(--ink-muted); overflow-wrap: anywhere; }
+.cawco-section-head[data-cawco-failed] .cawco-section-file { color: var(--status-fail-ink); }
 .cawco-grid { display: grid; grid-auto-columns: max-content; gap: var(--space-6) var(--space-6); align-items: start; justify-content: start; }
-.cawco-colhead { font: var(--type-meta); color: var(--text-muted); text-transform: none; }
-.cawco-frame { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); min-inline-size: 0; position: relative; }
+.cawco-colhead { font: var(--type-meta); color: var(--ink-muted); text-transform: none; }
+/* The gap clears the selected ring (2px at a 2px offset) of the label above and the status below. */
+.cawco-frame { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); min-inline-size: 0; position: relative; }
 .cawco-frame-label { all: unset; box-sizing: border-box; display: grid; gap: 2px; max-inline-size: 360px; cursor: grab; border-radius: var(--radius-xs);
   padding: 2px var(--space-1); }
-.cawco-frame-label:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.cawco-frame-words { font: var(--type-label); color: var(--text-strong); overflow-wrap: anywhere; }
-.cawco-frame-small { font: var(--type-meta); color: var(--text-muted); overflow-wrap: anywhere; }
-.cawco-frame-label[data-cawco-unnamed] .cawco-frame-words { color: var(--text-muted); font-style: italic; }
-.cawco-frame-label[data-cawco-picked] { box-shadow: inset 0 0 0 2px var(--coral-9); }
-.cawco-frame[data-cawco-selected] > .cawco-frame-body { outline: 1px dashed var(--focus-ring); outline-offset: 8px; }
+.cawco-frame-label:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.cawco-frame-words { font: var(--type-label); color: var(--ink-strong); overflow-wrap: anywhere; }
+.cawco-frame-small { font: var(--type-meta); color: var(--ink-muted); overflow-wrap: anywhere; }
+.cawco-frame-label[data-cawco-unnamed] .cawco-frame-words { font: var(--type-meta); color: var(--ink-muted); }
+.cawco-frame-label[data-cawco-picked] { box-shadow: inset 0 0 0 1px var(--brand-solid); }
+/* The frame in view is said by its label row, in the selected pair. */
+.cawco-frame[data-cawco-current] > .cawco-frame-label { background: var(--selected-bg); }
+.cawco-frame[data-cawco-current] > .cawco-frame-label :is(.cawco-frame-words, .cawco-frame-small) { color: var(--selected-ink); }
+/* The inspector's story: one solid ring round its frames. */
+.cawco-frame[data-cawco-selected] > .cawco-frame-body { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 .cawco-frame[data-cawco-edited] .cawco-frame-small::after { content: " · edited"; }
-.cawco-frame[data-cawco-current] > .cawco-frame-body { outline: 2px solid var(--coral-9); outline-offset: 6px; }
 .cawco-frame-body { position: relative; min-inline-size: 24px; min-block-size: 16px; }
-.cawco-frame-status { font: var(--type-meta); color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.cawco-frame-status[data-state="failed"] { color: var(--error-11); }
+.cawco-frame-status { font: var(--type-meta); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.cawco-frame-status[data-state="failed"] { color: var(--status-fail-ink); }
 .cawco-edges { position: absolute; inset: 0; inline-size: 1px; block-size: 1px; overflow: visible; pointer-events: none; z-index: 1; }
 .cawco-edge { fill: none; stroke: var(--text-muted); stroke-width: 1.5; }
 .cawco-edge-move { stroke: var(--coral-9); stroke-width: 2; pointer-events: stroke; cursor: pointer; }
 .cawco-edge-group { stroke-dasharray: 3 4; }
 .cawco-edges marker path { fill: context-stroke; }
-.cawco-edge-label { font: var(--type-meta); fill: var(--text-muted); paint-order: stroke; stroke: var(--surface-page); stroke-width: 4px; }
+.cawco-edge-label { font: var(--type-meta); fill: var(--ink-muted); paint-order: stroke; stroke: var(--surface-well); stroke-width: 4px; }
 .cawco-edge-label[data-cawco-move] { pointer-events: auto; cursor: pointer; fill: var(--coral-11); }
 .cawco-rig { position: fixed; inset-inline-start: -20000px; inset-block-start: 0; visibility: visible; pointer-events: none; }
 .cawco-dock-dials { position: fixed; inset-inline-end: var(--space-3); inset-block-start: var(--band, 96px); z-index: 2147483001; inline-size: 280px; }
@@ -221,6 +273,7 @@ export class Chrome {
   readonly #o: ChromeOptions;
   readonly #root: ShadowRoot;
   readonly #host: HTMLElement;
+  readonly #head: HTMLElement;
   readonly #band: HTMLElement;
   readonly #crumb: HTMLElement;
   readonly #outline: HTMLElement;
@@ -241,7 +294,7 @@ export class Chrome {
     this.#o = options;
     const page = document.createElement("style");
     page.dataset.cawcoCanvas = "";
-    page.textContent = `${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${PAGE_CSS}`;
+    page.textContent = `${options.faces}\n${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${PAGE_CSS}`;
     document.head.append(page);
     this.#host = document.createElement("div");
     this.#host.id = "cawco-chrome";
@@ -265,6 +318,10 @@ export class Chrome {
     const outlineButton = this.#button("Outline", () => {
       this.#outline.hidden = !this.#outline.hidden;
       outlineButton.setAttribute("aria-pressed", String(!this.#outline.hidden));
+      // The frame in view is marked while the outline stands open.
+      if (this.#current) {
+        this.current(this.#current);
+      }
     });
     outlineButton.setAttribute("aria-pressed", "false");
     outlineButton.title = "Outline: every section and frame (J and K step)";
@@ -273,6 +330,9 @@ export class Chrome {
     this.#band.append(name, tools, about, this.#crumb);
     this.#strip = document.createElement("div");
     this.#strip.className = "strip";
+    this.#head = document.createElement("div");
+    this.#head.className = "head";
+    this.#head.append(this.#band, this.#strip);
     this.#outline = document.createElement("nav");
     this.#outline.className = "outline";
     this.#outline.setAttribute("aria-label", "Outline");
@@ -283,12 +343,13 @@ export class Chrome {
     this.#steps.className = "steps";
     this.#root.append(
       style,
-      this.#band,
-      this.#strip,
+      this.#head,
       this.#outline,
       this.#steps,
       this.#foot
     );
+    // The head grows as the strip's chips wrap and the about line runs on: what stands under it follows.
+    new ResizeObserver(() => this.#measure()).observe(this.#head);
     window.addEventListener("keydown", (event) => this.#key(event));
     this.#swipes();
   }
@@ -307,12 +368,19 @@ export class Chrome {
     return this.#flags.phone;
   }
 
-  /** The band's height: where the world starts below it. */
+  /** The head's height, the band's and on a phone the strip's under it: where the world starts below it. */
   top(): number {
-    return (
-      (this.#band.getBoundingClientRect().height || 72) +
-      (this.#flags.phone ? this.#strip.getBoundingClientRect().height : 0)
-    );
+    return this.#head.getBoundingClientRect().height || 72;
+  }
+
+  /** The head's and the foot's heights, for what stands between them (the outline, the docks). */
+  #measure(): void {
+    const band = this.top();
+    const foot = this.#foot.getBoundingClientRect().height || 32;
+    for (const el of [this.#host, document.documentElement]) {
+      el.style.setProperty("--band", `${band}px`);
+      el.style.setProperty("--foot", `${foot}px`);
+    }
   }
 
   /** A duration token's milliseconds, from the chrome's own tokens. */
@@ -337,10 +405,14 @@ export class Chrome {
           key: frame.key,
           section,
           words: frame.story.label ?? frame.story.name,
-          small:
-            frame.column.interaction === "rest"
+          small: [
+            frame.story.label && frame.story.label !== frame.story.name
               ? frame.story.name
-              : `${frame.story.name} · ${frame.column.interaction}`,
+              : "",
+            frame.column.interaction === "rest" ? "" : frame.column.interaction,
+          ]
+            .filter(Boolean)
+            .join(" · "),
         }))
     );
   }
@@ -382,6 +454,10 @@ export class Chrome {
     if (this.#flags.phone && !this.#current && first) {
       this.#o.go(first.key);
       return;
+    }
+    // The rows are new: the frame in view marks its own again.
+    if (this.#current) {
+      this.current(this.#current);
     }
     this.where();
   }
@@ -447,6 +523,10 @@ export class Chrome {
       frame?.story.label ?? frame?.story.name ?? "",
       frame?.column.interaction ?? "",
     ];
+    // A frame drawn in a scheme of its own, not the page's, says which.
+    if (frame && frame.column.scheme !== "page") {
+      parts.push(frame.column.scheme);
+    }
     parts.forEach((part, at) => {
       if (at > 0) {
         this.#crumb.append(" › ");
@@ -558,14 +638,9 @@ export class Chrome {
       "data-cawco-phone",
       this.#flags.phone
     );
-    const band = this.top();
-    const foot = this.#foot.getBoundingClientRect().height || 32;
-    for (const el of [this.#host, document.documentElement]) {
-      el.style.setProperty("--band", `${band}px`);
-      el.style.setProperty("--foot", `${foot}px`);
-    }
+    this.#phoneStrip();
+    this.#measure();
     if (this.#flags.phone) {
-      this.#phoneStrip();
       const first = this.#current ?? this.#frames()[0]?.key;
       if (first) {
         this.#o.go(first);
@@ -607,6 +682,9 @@ export class Chrome {
     pick.addEventListener("change", () =>
       this.#show(shown.section, pick.value, frame?.column.interaction ?? "rest")
     );
+    const picker = document.createElement("span");
+    picker.className = "pick";
+    picker.append(pick, glyph("sort"));
     const chips = document.createElement("div");
     chips.className = "chips";
     chips.setAttribute("role", "group");
@@ -628,18 +706,22 @@ export class Chrome {
       );
       chips.append(chip);
     }
-    this.#strip.append(pick, chips);
+    this.#strip.append(picker, chips);
     this.#steps.replaceChildren();
     const at = stories.indexOf(frame?.story.name ?? "");
     const back = stories[at - 1];
     const ahead = stories[at + 1];
     if (back) {
-      this.#steps.append(this.#button(`◀ ${back}`, () => this.#step(-1)));
+      const button = this.#button(back, () => this.#step(-1));
+      button.prepend(glyph("back"));
+      this.#steps.append(button);
     } else {
       this.#steps.append(document.createElement("span"));
     }
     if (ahead) {
-      this.#steps.append(this.#button(`${ahead} ▶`, () => this.#step(1)));
+      const button = this.#button(ahead, () => this.#step(1));
+      button.append(glyph("ahead"));
+      this.#steps.append(button);
     }
   }
 

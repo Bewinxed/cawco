@@ -83,6 +83,8 @@ export interface SectionModule {
 
 export interface BootOptions {
   adapter: Adapter;
+  /** The house faces' `@font-face` rules (Figtree, JetBrains Mono), their files served beside the canvas. */
+  faces: string;
   /** How to load each section's module, by its states file. */
   load: (file: string) => Promise<SectionModule>;
   /** The toolchain root, absolute: dev paths are made relative to it. */
@@ -196,6 +198,26 @@ function viewOf(params: URLSearchParams): View {
     all: params.get("all") === "1",
   };
 }
+
+/** A section's head: the sheet's title in the title role when it has one, over its file in code. */
+const headOf = (
+  head: HTMLElement,
+  file: string,
+  title?: string | null
+): void => {
+  const lines: HTMLElement[] = [];
+  if (title) {
+    const named = document.createElement("span");
+    named.className = "cawco-section-title";
+    named.textContent = title;
+    lines.push(named);
+  }
+  const path = document.createElement("code");
+  path.className = "cawco-section-file";
+  path.textContent = file;
+  lines.push(path);
+  head.replaceChildren(...lines);
+};
 
 const specOf = (params: URLSearchParams): CanvasSpec => {
   try {
@@ -405,7 +427,7 @@ export function boot(options: BootOptions): void {
     el.dataset.cawcoChoice = file;
     const head = document.createElement("header");
     head.className = "cawco-section-head cawco-ui";
-    head.textContent = file;
+    headOf(head, file);
     const grid = document.createElement("div");
     grid.className = "cawco-grid";
     el.append(head, grid);
@@ -468,6 +490,25 @@ export function boot(options: BootOptions): void {
     return media("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   };
 
+  /**
+   * A frame's small line: its story's name where the label above it says
+   * other words (an unnamed story's label says "Unnamed"), its form, its
+   * scheme when the frames show both, and its state past rest.
+   */
+  const smallOf = (story: Story, column: Column): string => {
+    const bits = [formWords(story, column.width)];
+    if (story.label !== story.name) {
+      bits.unshift(story.name);
+    }
+    if (column.scheme !== "page" && (view.scheme === "both" || view.all)) {
+      bits.push(column.scheme);
+    }
+    if (column.interaction !== "rest") {
+      bits.push(column.interaction);
+    }
+    return bits.join(" · ");
+  };
+
   /** One frame's element: its label (a pick of its story) over its body, in the section's grid. */
   function frameFor(section: Section, story: Story, column: Column): Frame {
     const key = frameKey(section.file, story.name, column);
@@ -490,17 +531,10 @@ export function boot(options: BootOptions): void {
     label.dataset.option = story.name;
     const words = document.createElement("span");
     words.className = "cawco-frame-words";
-    words.textContent = story.label ?? story.name;
+    words.textContent = story.label ?? "Unnamed";
     const small = document.createElement("span");
     small.className = "cawco-frame-small";
-    const bits = [story.name, formWords(story, column.width)];
-    if (column.scheme !== "page" && (view.scheme === "both" || view.all)) {
-      bits.push(column.scheme);
-    }
-    if (column.interaction !== "rest") {
-      bits.push(column.interaction);
-    }
-    small.textContent = bits.join(" · ");
+    small.textContent = smallOf(story, column);
     label.append(words, small);
     if (!story.label) {
       label.dataset.cawcoUnnamed = "";
@@ -815,7 +849,7 @@ export function boot(options: BootOptions): void {
   function showSection(section: Section): void {
     const mod = section.mod as SectionModule;
     section.loaded = true;
-    section.head.textContent = mod.SHEET.meta.title ?? section.file;
+    headOf(section.head, section.file, mod.SHEET.meta.title);
     delete section.el.dataset.cawcoAsleep;
     for (const story of mod.SHEET.stories) {
       if (!section.interactions.has(story.name)) {
@@ -1728,20 +1762,7 @@ export function boot(options: BootOptions): void {
           dress(frame);
           const label = frame.label.querySelector(".cawco-frame-small");
           if (label) {
-            const bits = [
-              frame.story.name,
-              formWords(frame.story, frame.column.width),
-            ];
-            if (
-              frame.column.scheme !== "page" &&
-              (view.scheme === "both" || view.all)
-            ) {
-              bits.push(frame.column.scheme);
-            }
-            if (frame.column.interaction !== "rest") {
-              bits.push(frame.column.interaction);
-            }
-            label.textContent = bits.join(" · ");
+            label.textContent = smallOf(frame.story, frame.column);
           }
         }
       }
@@ -1813,6 +1834,7 @@ export function boot(options: BootOptions): void {
     canvas,
     spec,
     tokens: options.tokens,
+    faces: options.faces,
     view,
     sections: () => sections,
     go,

@@ -202,10 +202,13 @@ declare const __CANVAS_RUNTIME__: string;
 declare const __CANVAS_TOKENS__: string;
 declare const __DIALKIT_JS__: string;
 declare const __DIALKIT_CSS__: string;
+declare const __CANVAS_FACES__: string;
+declare const __CANVAS_FACE_FILES__: Record<string, string>;
 const CANVAS_RUNTIME = __CANVAS_RUNTIME__;
 const CANVAS_TOKENS = __CANVAS_TOKENS__;
 const DIALKIT_JS = __DIALKIT_JS__;
 const DIALKIT_CSS = __DIALKIT_CSS__;
+const CANVAS_FACES = __CANVAS_FACES__;
 const root = process.cwd();
 const port = Number(process.env.CAWCO_STAGE_PORT);
 const framework = process.env.CAWCO_STAGE_FRAMEWORK as Framework;
@@ -608,6 +611,7 @@ boot({
   adapter: { mountStory },
   root: ${JSON.stringify(root)},
   tokens: ${JSON.stringify(CANVAS_TOKENS)},
+  faces: ${JSON.stringify(CANVAS_FACES)},
   load: (file) => import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js"),
 });
 if (import.meta.hot) {
@@ -785,10 +789,21 @@ async function reportOf(files: string[]): Promise<RenderReport> {
   };
 }
 
-/** DialKit's vendored vanilla build and stylesheet (decision-page kit, MIT), served beside the canvas for its timeline and dials. */
-const CANVAS_ASSETS: Record<string, { text: string; type: string }> = {
-  "/@cawco/dialkit.js": { text: DIALKIT_JS, type: "text/javascript" },
-  "/@cawco/dialkit.css": { text: DIALKIT_CSS, type: "text/css" },
+/**
+ * DialKit's vendored vanilla build and stylesheet (decision-page kit, MIT),
+ * served beside the canvas for its timeline and dials, and the house faces'
+ * files (the dashboard's @fontsource-variable packages, OFL) its `faces`
+ * rules name, at `faces/<file>`.
+ */
+const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
+  "/@cawco/dialkit.js": { body: DIALKIT_JS, type: "text/javascript" },
+  "/@cawco/dialkit.css": { body: DIALKIT_CSS, type: "text/css" },
+  ...Object.fromEntries(
+    Object.entries(__CANVAS_FACE_FILES__).map(([name, base64]) => [
+      `/@cawco/faces/${name}`,
+      { body: Buffer.from(base64, "base64"), type: "font/woff2" },
+    ])
+  ),
 };
 
 const BODY = /(<body\b[^>]*>)[\s\S]*(<\/body>)/i;
@@ -1635,7 +1650,7 @@ async function serveStage(
   if (asset) {
     res.setHeader("content-type", asset.type);
     res.setHeader("cache-control", "max-age=3600");
-    res.end(asset.text);
+    res.end(asset.body);
     return;
   }
   if (path === RENDERED_PATH && req.method === "POST") {
