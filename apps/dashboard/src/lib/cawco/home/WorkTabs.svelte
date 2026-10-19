@@ -630,30 +630,26 @@
 {#snippet header(group: Group, anim: string | undefined, unseen: boolean)}
   {@const finished = shown === "finished" ? finishedOn(group.machineId) : []}
   <!-- Where these run, said once for the rows under it. -->
-  <!-- literal: 22px -->
   <h3
     data-slot="machine"
-    class="mark-line mx-0 mt-space-2 mb-space-1 flex min-h-(--machine-min) items-center gap-space-1 px-space-3 py-0 type-meta text-ink-muted"
+    class="mark-line mx-0 mt-space-2 mb-space-1 flex min-h-space-6 items-center gap-space-1 px-space-3 py-0 type-meta text-ink-muted"
     data-key="head:{group.machineId}"
-    style:--machine-min="22px"
     style:animation={anim}
     style:opacity={unseen ? "0" : undefined}
   >
-    <OsMark class="size-space-4" os={group.os} />
+    <OsMark class="size-icon-md" os={group.os} />
     <span>{group.name}</span>
     {#if finished.length > 0}
       <!-- Everything this machine has finished, failures too, off the list
            in one go: "Archive all", at the header's end. -->
-      <!-- literal: 22px -->
       <button
         aria-label="Archive all finished on {group.name}"
-        class="mark-line focus-inset touch-hit press-tint ms-auto -me-space-1 inline-flex h-(--archive-h) cursor-pointer items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 type-meta text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
+        class="mark-line focus-inset touch-hit press-tint ms-auto -me-space-1 inline-flex h-space-6 cursor-pointer items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 type-meta text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
         data-box
         onclick={() => archive(finished)}
-        style:--archive-h="22px"
         type="button"
       >
-        <IconArchive aria-hidden="true" class="size-space-4" /><span
+        <IconArchive aria-hidden="true" class="size-icon-md" /><span
           >Archive all</span
         >
       </button>
@@ -691,7 +687,11 @@
   {@const leave = leaveAnim(line.key)}
   <!-- The row's nesting line is this item's own (app.css .kit-nest): it
        leaves on the row's exit, in the row's frames (`--leave`). -->
-  <li data-tree-node class="relative" style:--leave={leave}>
+  <li
+    data-tree-node
+    class="relative in-data-leaving:before:animate-(--leave) in-data-leaving:after:animate-(--leave)"
+    style:--leave={leave}
+  >
     <div data-slot="tree-line" class="relative" style:animation={leave}>
       {@render sessionRow(line.row as BoardRow, line.tab, line.machineId)}
     </div>
@@ -768,14 +768,12 @@
          labels stand whole beside their counts at any width: at 227px
          "Working" and "Finished" were each cut by a pixel beside two-digit
          counts. -->
-    <!-- literal: 0px, 260px, 100cqw, 33px; 6px; 32px -->
     <div
       data-slot="head"
       class="mb-space-1 flex items-end justify-between gap-(--head-gap) border-b border-b-seam pt-space-1 pr-space-2 pb-0 pl-0"
       style:--head-gap="calc(var(--space-2) - var(--tight) * 0.09)"
-      style:--tight="clamp(0px, calc(260px - 100cqw - var(--space-4)), 33px)"
-      style:--work-tab-item="32px"
-      style:--work-tab-px="6px"
+      style:--tight="clamp(0px, calc(var(--c-work-tabs-roomy-w) - 100cqw - var(--space-4)), var(--c-work-tabs-squeeze))"
+      style:--count-end="max(0px, var(--space-row) - var(--tight) * 0.06)"
     >
       <!-- The session tabs' folder tabs, hosted: no shelf, the chosen
            sheet the only mark, the section's seam under the row. -->
@@ -806,7 +804,7 @@
                     <Badge
                       data-num
                       data-slot="count"
-                      class="num"
+                      class="num pointer-events-none ms-space-1 me-(--count-end)"
                       data-flip="pop"
                       data-tab={tab.id}
                       size="count"
@@ -827,15 +825,13 @@
           <!-- The corner actions' icon button (Sidebar .head-action), at one
                size whatever it shows. Pressed, its glyph turns solid in
                strong ink: no fill, nothing that moves. -->
-          <!-- literal: 28px -->
           <button
             {...tip}
             aria-label="Delegates"
             aria-pressed={rail.delegates}
-            class="focus-inset touch-hit mb-space-row inline-grid size-(--delegates-side) flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted transition-[background-color,color] dur-control ease-out hover:bg-surface-hover hover:text-ink-strong data-on:text-ink-strong"
+            class="focus-inset touch-hit mb-space-row inline-grid size-c-bar-item flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted transition-[background-color,color] dur-control ease-out hover:bg-surface-hover hover:text-ink-strong data-on:text-ink-strong"
             data-on={rail.delegates || undefined}
             onclick={() => rail.setDelegates(!rail.delegates)}
-            style:--delegates-side="28px"
             type="button"
           >
             {#if rail.delegates}
@@ -941,33 +937,29 @@
                 {@const line = more.get(id) as More}
                 <!-- A line of the list like the rows above it (`data-flip`): when
                  a tree over it opens or folds, it slides with them. -->
-                <!-- literal: 28px; 0.3em -->
                 <button
                   data-slot="more"
-                  class="focus-inset touch-hit press-tint mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
+                  class="focus-inset touch-hit press-tint mt-space-row flex min-h-c-row-lead cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
                   data-flip={plan ? undefined : ""}
                   data-key={moreKey(id)}
                   data-rail-row
                   onclick={() => fold(id)}
-                  style:--more-min="28px"
                   style:animation={enterAnim(moreKey(id))}
                   type="button"
                 >
                   {line.words}
                   {#if line.failed > 0}
                     <span
-                      class="ms-(--more-gap) text-status-fail-ink"
-                      style:--more-gap="0.3em">{failedWords(line.failed)}</span
+                      class="ms-space-1 text-status-fail-ink"
+                      >{failedWords(line.failed)}</span
                     >
                   {/if}
                 </button>
               {:else if plan?.more.get(id)}
-                <!-- literal: 28px -->
                 <span
                   data-slot="more"
                   aria-hidden="true"
-                  class="mt-space-row flex min-h-(--more-min) cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
-                  style:--more-min="28px"
+                  class="mt-space-row flex min-h-c-row-lead cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start type-meta text-ink-muted"
                   style:animation={leaveAnim(moreKey(id))}
                   >{plan.more.get(id)}</span
                 >
@@ -1014,83 +1006,3 @@
     {/if}
   </section>
 {/if}
-
-<style>
-  /* residual: foreign-dom — the kit's fluid tabs (ui/fluid-tabs), hosted:
-     their sizes and sheets are custom properties the kit sets on its own
-     list and tabs, so they are set there, at the specificity the class
-     selector had. */
-  /* The session tabs' sizes (PaneTabs): sized to their content plus --px.
-     The chosen sheet stands off the rail in both themes (raised on the light
-     rail, lit on the dark one). Hovering an unchosen tab is the hover step
-     by day, as on the rows below it, and by night a lighter tint than
-     choosing it. */
-  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list) {
-    --px: calc(var(--work-tab-px) - var(--tight) * 0.09);
-    --text: var(--text-label);
-    --item: var(--work-tab-item);
-    --sheet: light-dark(var(--surface-raised), var(--surface-hover));
-    --tab-hover: light-dark(
-      var(--surface-hover),
-      color-mix(in oklch, var(--surface-fill) 50%, transparent)
-    );
-    /* An unchosen tab's card is the rail's own surface (Home .home, the
-       rail's column and the phone's page, both surface-recess), so at rest
-       it shows no shape: in surface-recess-deep, on the light rail, it was
-       the darker shape and read as the chosen one. It is still a card, and
-       opaque: on a switch the front tab's covers the sheet of the one
-       behind, so the edge is the front's alone where it glides. With no
-       card the two half-faded sheets stacked over the overlap, and the
-       stack's far end, the tab behind's own edge, showed as a second edge
-       mid-switch (1.19:1 by night, where the sheet stands furthest off the
-       rail). */
-    --tab-fill: var(--surface-recess);
-  }
-  /* A label to its count (the kit's --gap + 4px), closer on a narrow rail. */
-  :global(
-    [data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"]
-  ) {
-    --gap: max(0px, 2px - var(--tight) * 0.06);
-  }
-  /* A tab is as wide as its label and its count together: the count never
-     stands outside the tab, whatever the row's width. */
-  :global(
-    [data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"]
-  ) {
-    min-inline-size: max-content;
-  }
-  /* A tab after the first tucks its start under its neighbour by the
-     overlap (TabsList), and the chosen Working sheet covered that much of
-     "Finished": its label starts past the overlap, as PaneTabs' titles do,
-     on either choice, so a choice never resizes a tab. The first tab's
-     overlap is the track's leading pad. */
-  :global(
-    [data-work-tabs][data-slot="tabs"]
-      .ff-tabs-list
-      [data-slot="ff-tab"]
-      ~ [data-slot="ff-tab"]
-  ) {
-    --px-start: calc(var(--overlap) + var(--px));
-  }
-  /* A label never gives way: the header's spacing does. */
-  :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="hit"]) {
-    flex-shrink: 0;
-  }
-  /* residual: foreign-dom — the count is the kit's badge (its root takes
-     no class from here): only its place in the tab is the tab's, and a press
-     on it is a press on its tab, reaching the hit. */
-  [data-slot="head"] :global([data-slot="count"]) {
-    margin-inline: var(--space-1) max(0px, 2px - var(--tight) * 0.06);
-    pointer-events: none;
-  }
-  /* residual: pseudo — a leaving row's nesting line (the list item's
-     pseudo-elements, app.css .kit-nest) goes out on the row's own exit
-     (`--leave`, the row's `leaveAnim`). The item is named by its own
-     attribute: `data-leaving` changes on live rows, Chrome keys an attribute
-     selector under it to the attribute's name alone, and
-     `[data-slot="tree-node"]` restyled every `data-slot` in a leaving row. */
-  [data-leaving] :global([data-tree-node])::before,
-  [data-leaving] :global([data-tree-node])::after {
-    animation: var(--leave, none);
-  }
-</style>

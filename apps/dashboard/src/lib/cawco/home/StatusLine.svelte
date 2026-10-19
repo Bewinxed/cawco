@@ -13,11 +13,9 @@
 
 <!-- Reading leaves the same way it came: one fade. -->
 {#if home.status === "reading"}
-  <!-- literal: 28px -->
   <div
-    class="flex min-h-(--line-h) items-center type-meta text-ink-muted"
+    class="flex min-h-c-row-lead items-center type-meta text-ink-muted"
     role="status"
-    style:--line-h="28px"
     out:crossOut
   >
     Reading the fleet…

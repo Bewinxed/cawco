@@ -44,20 +44,17 @@
      that much, so its ink ends on the panel's one trailing edge, where a
      wait's figures and Approve's fill end; its box keeps its size. An entry of
      a group (`nested`): the same columns, less air between entries. -->
-<!-- literal: 28px, 44px, 12px, 24px, 5.25 -->
 <article
   data-slot="notice"
   aria-label={label}
-  class="group relative grid min-h-(--row-min) grid-cols-(--columns) items-box-start gap-x-space-3 px-space-3 py-(--pad-block)"
+  class="group relative grid min-h-c-row-h grid-cols-(--columns) items-box-start gap-x-space-3 px-space-3 py-(--pad-block) data-nested:min-h-0"
   data-flip="box"
   data-nested={nested || undefined}
-  style:--columns="var(--lead) minmax(0, 1fr)"
-  style:--lead="28px"
+  style:--columns="var(--c-row-lead) minmax(0, 1fr)"
   style:--pad-block={nested ? "var(--space-1)" : "var(--space-3)"}
-  style:--row-min={nested ? "0px" : "44px"}
-  style:--x-ink="calc((24px - 12px) / 2 + 12px * 5.25 / 24)"
+  style:--x-ink="calc((var(--c-btn-h-xs) - var(--icon-sm)) / 2 + var(--icon-sm) * 5.25 / 24)"
 >
-  <span data-slot="lead" class="grid size-(--lead) place-items-center"
+  <span data-slot="lead" class="grid size-c-row-lead place-items-center"
     >{@render lead()}</span
   >
   <!-- The first line pads by `--x-room` so its words stop `space-2` short of
@@ -65,7 +62,7 @@
   <div
     data-slot="body"
     class="flex min-w-0 flex-col gap-space-row"
-    style:--x-room="calc(24px - var(--x-ink) + var(--space-2))"
+    style:--x-room="calc(var(--c-btn-h-xs) - var(--x-ink) + var(--space-2))"
   >
     {@render children()}
   </div>
@@ -77,17 +74,16 @@
       data-slot="end"
       class="absolute end-(--end-edge) top-(--end-top) flex type-label group-data-nested:type-body"
       style:--end-edge="calc(var(--space-3) - var(--x-ink))"
-      style:--end-top="calc(var(--pad-block) + (1lh - 24px) / 2)"
+      style:--end-top="calc(var(--pad-block) + (1lh - var(--c-btn-h-xs)) / 2)"
     >
       <button
         data-slot="x"
         aria-label={dismissLabel}
-        class="touch-hit pointer-hit grid size-(--box) cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) hover:bg-surface-hover hover:text-ink-strong"
+        class="touch-hit pointer-hit grid size-c-btn-h-xs cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-surface-hover hover:text-ink-strong"
         onclick={ondismiss}
-        style:--box="24px"
         style:--tpress="scale(var(--press-scale))"
-        style:--hit-edge="0px"
-        style:--hit-shift="calc((24px - 44px) / 2)"
+        style:--hit-start="calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--x-ink))"
+        style:--hit-end="calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--x-ink))"
         type="button"
       >
         <IconClose aria-hidden="true" class="size-icon-sm" />
@@ -95,16 +91,3 @@
     </span>
   {/if}
 </article>
-
-<style>
-  /* A finger's 44px area (`touch-hit`) stays whole and centred where the box
-     stood before it hung: moved back inboard by `--x-ink`, it ends inside the
-     list as it did, so the list never grows a sideways scroll for it. */
-  @media (pointer: coarse) {
-    /* residual: pseudo */
-    [data-slot="x"]::after {
-      inset-inline-start: calc(var(--hit-shift) - var(--x-ink));
-      inset-inline-end: calc(var(--hit-shift) + var(--x-ink));
-    }
-  }
-</style>
