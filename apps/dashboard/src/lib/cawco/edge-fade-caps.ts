@@ -4,8 +4,9 @@
  * `--fade-cap-end`, as the tabs track cuts its fades short at the chosen
  * tab): each edge's fade reaches in only as far as the line or mark that
  * edge cuts, so a line standing whole in the scroller is in full ink, at
- * rest and while it scrolls, and a line the edge cuts fades across what
- * shows of it. Where an edge falls between lines, that edge fades nothing.
+ * rest, while it scrolls and while it moves, and a line the edge cuts fades
+ * across what shows of it. Where an edge falls between lines, that edge
+ * fades nothing.
  *
  * A line's place in what scrolls does not change as it scrolls, so each
  * run of words (an element holding words of its own) and each mark is read
@@ -18,10 +19,11 @@
  * size, the fonts settled, or a run of motion ended (a CSS transition or
  * animation by its end event rising to the list; a script's run, a
  * component's transition or a list's reflow, by its `finished`, the list
- * asked for those once after its nodes or a fold's state change). A run of
- * paint alone (a fade, a colour, a ring's stroke) moves no line, and its end
- * reads nothing. While a run of motion plays, the places kept are where it
- * started.
+ * asked for those once after its nodes or a fold's state change). While a
+ * run of motion plays, each frame reads the places again, and once more on
+ * the frame after it is held (paused), where it was held; a held run is
+ * watched until it ends, to be seen played again. A run of paint alone (a
+ * fade, a colour, a ring's stroke) moves no line and reads nothing.
  *
  * Every capped list on the page is read in one frame and then written,
  * reads before writes, so one list's caps never force the next list's
@@ -266,8 +268,10 @@ export const capEdgeFades: Attachment<HTMLElement> = (node) => {
   let feet: number[] = [];
   /** The runs already asked whether they move a line. */
   const awaited = new WeakSet<Animation>();
-  /** The script's and the CSS animations' runs moving lines in the list, each until it ends. */
+  /** The script's and the CSS animations' runs moving lines in the list, each until it ends, held or playing. */
   const moving = new Set<Animation>();
+  /** Whether any of `moving` played at the last frame read. */
+  let played = false;
   /** The CSS transitions moving lines in the list, by element, each until its end event. */
   const sliding = new Map<EventTarget, Set<string>>();
   /** The lines may have moved: the next frame reads their places again. */
@@ -321,13 +325,16 @@ export const capEdgeFades: Attachment<HTMLElement> = (node) => {
     again();
   };
   /** Whether a run that moves lines plays in the list now. */
-  const inMotion = (): boolean => {
+  const playing = (): boolean => {
     for (const run of moving) {
-      if (run.playState !== "running") {
-        // Held still (a paused clock), it moves nothing; its end still reads.
-        moving.delete(run);
+      if (run.playState === "running") {
+        return true;
       }
     }
+    return false;
+  };
+  /** Whether a run that moves lines is under way in the list, playing or held. */
+  const inMotion = (): boolean => {
     for (const target of sliding.keys()) {
       if (!(target instanceof Node && node.contains(target))) {
         // A node taken out of the list ends its runs with no event to say so.
@@ -380,11 +387,14 @@ export const capEdgeFades: Attachment<HTMLElement> = (node) => {
       if (height === 0) {
         return;
       }
-      // While lines move, each frame reads where they stand now.
-      if (moved || moving.size > 0 || sliding.size > 0) {
+      // While lines move, each frame reads where they stand now, and the
+      // frame after a run is held reads where it was held.
+      const plays = playing();
+      if (moved || plays || played || sliding.size > 0) {
         moved = false;
         place();
       }
+      played = plays;
       const reach = reachAt(tops, feet, node.scrollTop, height);
       next.start = `${Math.floor(reach.start)}px`;
       next.end = `${Math.floor(reach.end)}px`;
