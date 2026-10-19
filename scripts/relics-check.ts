@@ -14,8 +14,9 @@
  *                 residual stays only where v4 cannot say the thing, and
  *                 says why with the page of the docs that shows it
  *
- * Dead or duplicate rules are svelte-unused-css's, and the kit's contracts
- * (no-restyle, variant-order) are ESLint's, both in the same lint.
+ * The one exception is an override in SANCTIONED below: the form is the only
+ * one that can say it, and the entry names why and the docs page that shows
+ * it. Dead or duplicate rules are svelte-unused-css's, in the same lint.
  *
  *   bun scripts/relics-check.ts            every file under apps/dashboard/src
  *   bun scripts/relics-check.ts <file…>    those files (a lane's)
@@ -46,7 +47,37 @@ const IMPORTANT = /!important/;
 /** A quoted string in source: the class lists live in them. */
 const STRING = /"([^"\n]*)"|'([^'\n]*)'|`([^`\n]*)`/g;
 /** A utility with Tailwind's trailing `!`: a token with a `-` or `:` in it (words in copy end in `!` too). */
-const BANG = /(?:^|\s)([\w:.[\]()/%#-]*[-:][\w:.[\]()/%#-]*[\w)\]])!(?=\s|$)/;
+const BANG = /(?:^|\s)([\w:.[\]()/%#-]*[-:][\w:.[\]()/%#-]*[\w)\]])!(?=\s|$)/g;
+
+/**
+ * The overrides the design system sanctions: where only this form can say
+ * the thing, each with why and the page of the docs that shows it. A relic
+ * of the kind, in the file, whose text matches is not counted; anything else
+ * on the same line still is.
+ */
+const SANCTIONED: readonly {
+  docs: string;
+  file: string;
+  kind: Kind;
+  reason: string;
+  text: RegExp;
+}[] = [
+  {
+    file: "apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte",
+    kind: "bang",
+    text: /^motion-reduce:(animate|transition)-none$/,
+    reason:
+      "vaul-svelte (1.0.0-next.7) writes the drawer's transition inline (helpers.js set() → el.style) and ships its slide animations as unlayered :global rules, which outrank any layered utility; only an important utility turns them off under reduced motion",
+    docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
+  },
+];
+const sanctioned = (file: string, kind: Kind, text: string): boolean =>
+  SANCTIONED.some(
+    (entry) =>
+      entry.kind === kind &&
+      relative(ROOT, file) === entry.file &&
+      entry.text.test(text)
+  );
 const STYLE_OPEN = /<style\b[^>]*>/;
 const STYLE_REASON = /^\s*\/\*\s*tailwind:\s*\S.*tailwindcss\.com\/docs/;
 /** A file the check reads: Svelte, a stylesheet or TypeScript, never a declaration file. */
@@ -101,12 +132,13 @@ for (const file of files) {
       note(file, line, "important", text);
     }
     if (!file.endsWith(".css")) {
-      for (const match of text.matchAll(STRING)) {
-        const value = match[1] ?? match[2] ?? match[3] ?? "";
-        if (BANG.test(value)) {
-          note(file, line, "bang", text);
-          break;
-        }
+      const bangs = [...text.matchAll(STRING)].flatMap((match) =>
+        [...(match[1] ?? match[2] ?? match[3] ?? "").matchAll(BANG)].map(
+          (bang) => bang[1] ?? ""
+        )
+      );
+      if (bangs.some((utility) => !sanctioned(file, "bang", utility))) {
+        note(file, line, "bang", text);
       }
     }
     if (svelte && STYLE_OPEN.test(text)) {

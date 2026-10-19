@@ -290,15 +290,15 @@ function check(path: string): Report {
  * bun-plugin-svelte, no Tailwind) into the page the hub serves, so no utility
  * reaches it and its `<style>` is its styling.
  */
-const OTHER_BUNDLES = new Set([
-  join(SOURCE, "lib", "cawco", "decisions", "host"),
-]);
+const OTHER_BUNDLES = [join(SOURCE, "lib", "cawco", "decisions", "host")];
+const otherBundle = (path: string): boolean =>
+  OTHER_BUNDLES.some((dir) => path === dir || path.startsWith(`${dir}/`));
 
 function svelteFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry);
-    if (SKIP_DIRS.has(entry) || OTHER_BUNDLES.has(path)) {
+    if (SKIP_DIRS.has(entry) || otherBundle(path)) {
       continue;
     }
     if (statSync(path).isDirectory()) {
@@ -317,10 +317,20 @@ const named = args.filter((arg) => arg !== "--no-cap" && arg !== "--list");
 const whole = named.length === 0;
 const files = whole
   ? svelteFiles(SOURCE)
-  : named.map((arg) => {
-      const here = resolve(arg);
-      return existsSync(here) ? here : resolve(ROOT, arg);
-    });
+  : named
+      .map((arg) => {
+        const here = resolve(arg);
+        return existsSync(here) ? here : resolve(ROOT, arg);
+      })
+      .filter((file) => {
+        if (otherBundle(file)) {
+          console.log(
+            `${relative(ROOT, file)}: another bundle's (no Tailwind), not read`
+          );
+          return false;
+        }
+        return true;
+      });
 const missing = files.filter((file) => !existsSync(file));
 if (missing.length > 0) {
   console.error(`no such file: ${missing.join(", ")}`);
