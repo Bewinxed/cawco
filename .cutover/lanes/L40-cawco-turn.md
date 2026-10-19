@@ -136,8 +136,8 @@ theme: component release-notes
 
 ## Tokens
 
-token: --c-turn-clock-w 9ch — the room a grouped turn's floated clock (or note) keeps at the end of its first line, so the line's wrap does not move when the clock shows; a `ch` measure, no ladder step; read as `data-grouped:min-w-(--c-turn-clock-w)` (Who.svelte:79).
-token: --c-update-said-h 10rem — the cap on a machine's whole update error unfolded under its cell; scrolls past it; a `rem` height so it follows the reader's text size, no ladder step; read as `max-h-(--c-update-said-h)` (UpdateCell.svelte:116).
+token: --c-turn-clock-w 9ch — the room a grouped turn's floated clock (or note) keeps at the end of its first line, so the line's wrap does not move when the clock shows; a `ch` measure, no ladder step; read as `data-grouped:min-w-c-turn-clock-w` (Who.svelte:79).
+token: --c-update-said-h 10rem — the cap on a machine's whole update error unfolded under its cell; scrolls past it; a `rem` height so it follows the reader's text size, no ladder step; read as `max-h-c-update-said-h` (UpdateCell.svelte:116).
 
 ## Kit swaps
 
@@ -178,9 +178,9 @@ fixed: apps/dashboard/src/lib/cawco/updates/ChannelCards.svelte:151 the check's 
 
 ## Gaps
 
-gap: apps/dashboard/src/lib/cawco/updates/ReleaseNotes.svelte:64 the section label re-implements the kit Badge recipe (20px, `rounded-xs`, recess, label role, 12px glyph) on an `h3` with `note-*` tones — the kit Badge renders a `span` and has no note tones — DESIGN.md Badges and state chips
-gap: apps/dashboard/src/lib/cawco/updates/ReleaseNotes.svelte:80 the Markdown renderer takes no `class`, so release notes' prose reset needs a foreign-DOM theme component — DESIGN.md Typography (prose inherits the surface's type)
-gap: apps/dashboard/src/lib/cawco/turn/Well.svelte:43 the `ms-(--well-x)`, `px-(--pad)` and `[data-slot="msg"]` coupling to Turn/MessageRow is a cross-file layout contract; the well's box depends on `--pad` from Turn — DESIGN.md Transcript columns
+gap: apps/dashboard/src/lib/components/ui/badge/badge.svelte:6 needs a `note` tone (`note-new|improved|fixed` ink on fill) and an `as="h3"` element; ReleaseNotes.svelte:64 then swaps its hand-built heading label for it — DESIGN.md Badges and state chips
+gap: apps/dashboard/src/lib/components/ui/markdown/markdown.svelte:249 takes no `class` for its root, so ReleaseNotes.svelte:80's prose reset lives in the `release-notes` theme component instead of utilities on the Markdown — DESIGN.md Typography (prose inherits the surface's type)
+gap: apps/dashboard/src/app.css:2658 `--pad` is set there for the transcript turn, and Well.svelte:49 reads it (`px-(--pad)`, `after:inset-x-(--pad)`); the well's box depends on a custom property from another file — DESIGN.md Transcript columns
 
 ## Cross-file hooks and checks
 

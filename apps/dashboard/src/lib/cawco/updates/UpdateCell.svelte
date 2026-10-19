@@ -113,7 +113,7 @@
   {/key}
   {#if reading && cell.buttons.includes("error")}
     <pre
-      class="mt-space-2 max-h-(--c-update-said-h) overflow-auto rounded-xs border border-border-well bg-surface-well p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
+      class="mt-space-2 max-h-c-update-said-h overflow-auto rounded-xs border border-border-well bg-surface-well p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
       transition:unfold>{machine.binaryUpdate?.error ??
         "The machine did not say why."}</pre>
   {/if}
