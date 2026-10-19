@@ -1622,6 +1622,15 @@ const openAsCanvas = async (on: On) => {
     return;
   }
   await unfold(desk, back, "stack");
+  // The tap lands where the button stands once the card has opened and the
+  // layout stopped moving: measured mid-unfold, it lands beside it.
+  await until(
+    "the stack card open",
+    () => foldOf(back, "stack"),
+    (fold) => !fold.decided,
+    10_000
+  ).catch(() => null);
+  await settle(desk, 300);
   // The page's foot holds the DialKit panel, floating: the button goes to the view's top, clear of it.
   await back
     .locator("#decision-stack figure.diagram button.open")
@@ -1832,6 +1841,9 @@ here = Option("here", "Here", "As it runs now.", true, [live])
 there = Option("there", "Elsewhere", "Somewhere new.")
 live = Preview("${site}", "The site as it runs")`;
 
+/** What the crash leg's fresh dev server says. */
+const FRESH_SITE = "The fresh site";
+
 /** A page of one plain decision, card `card`. */
 const plainPage = (
   card: string,
@@ -1843,9 +1855,9 @@ no = Option("no", "No")`;
 
 /**
  * (i) Nothing published takes the hub down: a page whose option embeds a
- * live preview, drawn in the panel (which starts the embed's origin), then a
- * second page right after it, then a third. The hub's process stays the one
- * the fleet started, `/health` answers every 100 ms throughout, each page
+ * live preview no page embedded before, drawn in the panel (which starts the
+ * embed's origin), then a second page right after it, then a third. The
+ * hub's process stays the one the fleet started, `/health` answers every 100 ms throughout, each page
  * draws (the first with its embed live), and the hub's log holds no FOREIGN
  * KEY line: an embed's key read as a session's once bound it a session port,
  * whose row the database refused, and that throw in the board's publish
@@ -1911,7 +1923,23 @@ const burstLeg = async (on: On) => {
     );
   };
 
-  const first = await make("host-pick", embedPage(on.site)).catch(
+  // A dev server no page has embedded yet: its embed's key is new to the
+  // hub, so the first read of it comes after this page draws. The launch
+  // site's key was read long before, by the legs above.
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(
+        `<!doctype html><html><body><h1>${FRESH_SITE}</h1></body></html>`,
+        { headers: { "content-type": "text/html" } }
+      ),
+  });
+  const fresh = await fleet.api<{ id: string }>(
+    `/api/instances/${writer}/artifacts`,
+    { kind: "preview", name: "fresh-site", port: server.port, machine: MACHINE }
+  );
+  const first = await make("host-pick", embedPage(fresh.id)).catch(
     (error: unknown) => ({ id: "", error: String(error) })
   );
   const firstFrame = await cardIn("where");
@@ -1939,7 +1967,7 @@ const burstLeg = async (on: On) => {
     ? await until(
         "the first page's embed live",
         () => wordsAt(desk, src),
-        (words) => words === "The live site",
+        (words) => words === FRESH_SITE,
         30_000
       ).catch(() => "")
     : "";
@@ -1965,7 +1993,7 @@ const burstLeg = async (on: On) => {
   );
   kit.check(
     "(i) every page draws: the first with its option's embed live, the second, the third",
-    !!framed && live === "The live site" && secondDrew && thirdDrew,
+    !!framed && live === FRESH_SITE && secondDrew && thirdDrew,
     JSON.stringify({
       first,
       second,
@@ -1981,6 +2009,7 @@ const burstLeg = async (on: On) => {
     foreignKey.length === 0,
     foreignKey.slice(0, 4).join(" | ") || "none"
   );
+  server.stop(true);
 };
 
 const run = async (kit: Kit) => {
