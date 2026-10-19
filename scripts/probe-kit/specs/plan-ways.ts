@@ -78,8 +78,19 @@ const STATES = [
   "Live",
 ] as const;
 
+/** A mark's tile as the spec reads it: its side, corner, border and glyph. */
+interface Tile {
+  border: string;
+  glyph: boolean;
+  radius: string;
+  side: number;
+}
+
 /** A figure in a head: the to-dos head carries none. */
 const DIGIT = /\d/;
+
+/** A task's id as the board writes one ("tsk-142", "#142"), never on a badge. */
+const TASK_ID = /\b[a-z]{2,5}-\d+\b|#\d+/i;
 
 const WAYS = [
   { file: "OneList", label: "One list", variation: "a" },
@@ -970,7 +981,38 @@ const readReview = (page: Page) =>
             `[data-row="${id}"] > [data-slot="plan-row"] [data-slot="time"]`
           )?.textContent ?? ""
         );
+      /** A mark's tile as drawn: its side in layout pixels, its corner, its border, and whether a glyph stands on it. */
+      const tileOf = (el: Element) => {
+        const style = getComputedStyle(el);
+        return {
+          side: Math.round((el.getBoundingClientRect().width / zoom) * 10) / 10,
+          radius: style.borderTopLeftRadius,
+          border: `${style.borderTopWidth} ${style.borderTopStyle}`,
+          glyph: !!el.querySelector("svg"),
+        };
+      };
+      const tiles = {
+        steps: [
+          ...body.querySelectorAll(
+            '[data-slot="plan-row"] [data-slot="step-tile"]'
+          ),
+        ].map(tileOf),
+        delegates: [
+          ...body.querySelectorAll(
+            '[data-delegate] [data-slot="tree-mark"] > .face[data-slot="tile"]'
+          ),
+        ].map(tileOf),
+      };
+      const badges = [
+        ...body.querySelectorAll<HTMLElement>('[data-slot="task-badge"]'),
+      ].map((badge) => ({
+        glyph: !!badge.querySelector("svg"),
+        name: badge.getAttribute("aria-label") ?? "",
+        words: badge.textContent?.replace(/\s+/g, " ").trim() ?? "",
+      }));
       out[story] = {
+        tiles,
+        badges,
         replies,
         lines,
         drawn,
@@ -2188,6 +2230,52 @@ function checkSmall(kit: Kit, name: string, review: Review): void {
     `${name}: a delegate's row shows its title alone (${(plan.titles as string[]).join(" | ")})`,
     plan.named === 0 && (plan.titles as string[]).length > 0,
     json({ named: plan.named, titles: plan.titles })
+  );
+  // The owner's pin: the same bordered icons as the design system and the
+  // delegates. Each step's mark is a bordered tile of the delegates' tile's
+  // side and corner (TreeMark's), every one in every frame.
+  const tiles = Object.values(review).map(
+    (one) => one.tiles as { delegates: Tile[]; steps: Tile[] }
+  );
+  const steps = tiles.flatMap((one) => one.steps);
+  const marks = tiles.flatMap((one) => one.delegates);
+  const [mark] = marks;
+  kit.check(
+    `${name}: every step's mark is a bordered tile of the delegates' tile's side and corner (${steps.length} steps, ${steps.filter((one) => one.glyph).length} with a glyph: ${steps[0]?.side}px, ${steps[0]?.radius}, ${steps[0]?.border}; ${marks.length} delegates: ${mark?.side}px, ${mark?.radius})`,
+    steps.length > 0 &&
+      !!mark &&
+      steps.every(
+        (one) =>
+          one.side === mark.side &&
+          one.radius === mark.radius &&
+          one.border === "1px solid"
+      ) &&
+      marks.every(
+        (one) => one.side === mark.side && one.radius === mark.radius
+      ),
+    json({ steps: steps.slice(0, 4), marks: marks.slice(0, 2) })
+  );
+  // The owner's pin: glyphs for task ids. A to-do that grew into a task
+  // wears the task's glyph and its stage, says its title in its name, and
+  // never shows or says an id.
+  const badges = plan.badges as {
+    glyph: boolean;
+    name: string;
+    words: string;
+  }[];
+  kit.check(
+    `${name}: a to-do that became a task wears the task's glyph and its stage, says its title in its name, and no id (${badges.map((one) => `"${one.words}"${one.glyph ? " with its glyph" : " no glyph"}, named "${one.name}"`).join("; ")})`,
+    badges.length > 0 &&
+      badges.every(
+        (one) =>
+          one.glyph &&
+          one.words.length > 0 &&
+          one.name.startsWith("Open the task ") &&
+          one.name.endsWith(`, in ${one.words}`) &&
+          !TASK_ID.test(one.words) &&
+          !TASK_ID.test(one.name)
+      ),
+    json(badges)
   );
   const times = plan.times as { fable: number; datePicker: number };
   kit.check(
