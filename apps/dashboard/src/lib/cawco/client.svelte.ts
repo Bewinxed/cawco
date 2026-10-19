@@ -121,6 +121,7 @@ import {
   WIRE_PROTOCOL,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { ListedBrowser } from "@cawco/core/browser";
 import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import { UPSTREAM_POST_TOOL } from "@cawco/core/upstream-post";
 import { announcingParts, clientLine } from "@cawco/core/wire";
@@ -1171,6 +1172,12 @@ const state = $state({
    * read.
    */
   fleetUpstream: undefined as UpstreamPosts | null | undefined,
+  /**
+   * Every machine's browsers as the hub lists them: the `browser_list`
+   * frame the socket opens with, then each one on a change; undefined until
+   * the first.
+   */
+  browsers: undefined as ListedBrowser[] | undefined,
   /**
    * HTTPS on the hub machine's tailnet name (`GET /api/tailnet-https`, then
    * each `tailnet.https` frame): Needs you shows its step while one needs
@@ -3283,6 +3290,12 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "fleet.upstream") {
     heardFrame("fleet.upstream");
     state.fleetUpstream = frame.upstream;
+    return;
+  }
+
+  // A browser changed (a take-over, its state, its page's origin): every view of one follows.
+  if (frame.kind === "browser_list") {
+    state.browsers = frame.browsers;
     return;
   }
 
@@ -8480,7 +8493,7 @@ export function permissionAnswer(
   request: PendingPermission,
   answer: PermissionAnswer
 ): PermissionResult {
-  // A browser ask's Deny carries the person's words alone, none here.
+  // A browser ask's Deny refuses and says nothing more: its card takes no words.
   if (answer === "deny") {
     return {
       behavior: "deny",
@@ -8965,6 +8978,10 @@ export const cawco = {
   /** The fleet's upstream answer; null while nobody has given it, undefined until read. */
   get fleetUpstream(): UpstreamPosts | null | undefined {
     return state.fleetUpstream;
+  },
+  /** Every machine's browsers as the hub last told them; undefined until its first frame. */
+  get browsers(): ListedBrowser[] | undefined {
+    return state.browsers;
   },
   /** HTTPS on the hub machine's tailnet name; undefined until read. */
   get tailnetHttps(): TailnetHttps | undefined {

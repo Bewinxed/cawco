@@ -292,9 +292,9 @@ type BrowserSocket = PreviewSocket | CdpSocket;
 
 const isCdp = (data: BrowserSocket): data is CdpSocket => "cdp" in data;
 
-/** What the hub tells a view whose browser is not taken over here. */
-const NOT_TAKEN_OVER =
-  "This browser is not taken over on this machine's local host.";
+/** What the hub tells a view of a browser that is no live local one here, or that shows no page (shield.ts `cdpView`). */
+const NO_VIEW =
+  "This browser is no live local browser on this machine, or shows no page.";
 
 const cdpSocket: WebSocketHandler<CdpSocket> = {
   open(socket) {
@@ -309,7 +309,7 @@ const cdpSocket: WebSocketHandler<CdpSocket> = {
     })
       .then((view) => {
         if (!view) {
-          socket.close(4404, NOT_TAKEN_OVER);
+          socket.close(4404, NO_VIEW);
           return;
         }
         if (data.closed) {

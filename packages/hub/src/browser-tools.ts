@@ -66,8 +66,6 @@ export interface BrowserAsksDeps {
   readonly park: (envelope: Envelope) => void;
   /** Takes an answered ask off the pending ledger. */
   readonly settle: (requestId: string) => void;
-  /** The person took the ask from an app that answers it as an Approve: the take-over starts (browsers.ts). */
-  readonly takeOver: (requestId: string) => Promise<void>;
 }
 
 interface Waiter {
@@ -157,22 +155,25 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
     /**
      * The person's answer from an ask card (`answerPendingPermission`), for
      * an ask {@link owns} holds: a Decline answers the call with their
-     * words; an Approve (an app with no Take over) is the take-over itself,
-     * settled once it has started and refused in the hub's words when it
-     * cannot.
+     * words. An Approve is refused: the person answers a browser ask by
+     * taking over (`POST /api/browsers/:key/takeover`), never by approving it.
      */
-    async answer(requestId: string, result: PermissionResult): Promise<void> {
+    answer(requestId: string, result: PermissionResult): Promise<void> {
       const waiter = waiting.get(requestId);
       if (!waiter || waiter.taken) {
-        throw new Error("That request is no longer pending.");
+        return Promise.reject(new Error("That request is no longer pending."));
       }
       if (result.behavior === "allow") {
-        await deps.takeOver(requestId);
-        return;
+        return Promise.reject(
+          new Error(
+            "A browser ask is answered by taking over the browser, not by approving it. Press Take over on its card, or Decline."
+          )
+        );
       }
       waiting.delete(requestId);
       deps.settle(requestId);
       waiter.resolve({ outcome: "declined", words: result.message.trim() });
+      return Promise.resolve();
     },
 
     /** The person took ask `requestId`: off every screen, its call waiting for the hand-back. */

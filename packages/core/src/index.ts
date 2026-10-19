@@ -1691,6 +1691,8 @@ export type FramePayload =
   | import("./browser").BrowserFrame
   /** Daemon-originated: a take-over the daemon ended itself (no view for two minutes, or the browser stopped). */
   | import("./browser").BrowserHandedBackFrame
+  /** Hub-originated: every browser of the fleet, whole, on each change. */
+  | import("./browser").BrowserListFrame
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */
   | import("./stream-relay").RelayFrame
   /** Hub-originated: the stream relay's journey, whole, on each change. */

@@ -100,6 +100,14 @@ export interface BrowserRow {
   /** ms epoch of the last agent connection or viewer. */
   lastUsedAt: number;
   name: string;
+  /**
+   * The origin of the page the person's view shows (neko's front window on
+   * the container host, the screencast's page on the local host), as the
+   * machine reads it through its own DevTools link; absent while that page
+   * is none (`about:blank`, no page). For the person's band alone: the gate
+   * never sends it to an agent.
+   */
+  origin?: string;
   ports?: BrowserPorts;
   /** How far an image build is, while `state` is `pulling` or `building`. */
   progress?: { done: number; total: number; what: "image" };
@@ -229,6 +237,44 @@ export interface BrowserHandback {
   origin: string | null;
   /** The browser ask the take-over answered, when it answered one. */
   requestId?: string;
+}
+
+/**
+ * One browser of the fleet as the hub lists it (`GET /api/browsers`, and
+ * {@link BrowserListFrame}): the row its machine last reported, kept by the
+ * hub, with the machine's name and what the machine says of it now (`why`,
+ * `progress`, `origin`, from its latest frame).
+ */
+export interface ListedBrowser {
+  host: BrowserHostKind;
+  key: BrowserKey;
+  /** ms epoch of the last agent connection or viewer. */
+  lastUsedAt: number;
+  machineId: string;
+  machineName: string;
+  name: string;
+  /** The origin of the page the person's view shows; absent while it shows none. */
+  origin?: string;
+  /** How far an image build is, while `state` is `pulling` or `building`. */
+  progress?: { done: number; total: number; what: "image" };
+  /** The project of a `project:` key; null for a machine's own browser. */
+  projectId: string | null;
+  state: BrowserState;
+  /** Who holds it privately: the asking workspace, `""` when nobody asked; null while nobody does. */
+  takeover: { by: string; requestId: string | null; since: number } | null;
+  /** Why it is `failed`, one sentence. */
+  why?: string;
+}
+
+/**
+ * Hub-originated, to every dashboard socket (the app's included): every
+ * browser of the fleet, whole, as the socket opens and on each change of
+ * any (a machine's frame, a start, stop, take-over, hand-back or removal).
+ * A view paints from it and follows it, and never polls.
+ */
+export interface BrowserListFrame {
+  browsers: ListedBrowser[];
+  kind: "browser_list";
 }
 
 /**

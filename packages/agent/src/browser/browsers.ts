@@ -41,6 +41,7 @@ import type {
 import { isBrowserKey, SHIELD_WORDS } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
+import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
 import { findRuntime, type Runtime } from "./runtime";
@@ -142,6 +143,9 @@ const rowOf = (record: BrowserRecord): BrowserRow => {
     viewers: 0,
     takeover: record.takeover,
     ...(record.why ? { why: record.why } : {}),
+    ...(record.state === "live" && frontOrigin(record.key)
+      ? { origin: frontOrigin(record.key) }
+      : {}),
   };
 };
 
@@ -165,6 +169,24 @@ export const browserFrame = async (): Promise<BrowserFrame> => ({
 
 /** Tells the hub the runtime and every browser, when anything of it changed. */
 const tell = async (): Promise<void> => {
+  // The daemon reads each live browser's page origin (front-origin.ts).
+  if (servingGates) {
+    syncOrigins(
+      new Map(
+        (await allBrowsers())
+          .filter(
+            (record) => record.state === "live" && record.slot !== undefined
+          )
+          .map((record) => [
+            record.key,
+            {
+              devtools: `http://127.0.0.1:${portsOf(record).devtools}`,
+              host: record.host,
+            },
+          ])
+      )
+    );
+  }
   const frame = await browserFrame();
   const text = JSON.stringify(frame);
   if (text !== lastSent) {
@@ -841,6 +863,8 @@ const tick = async (): Promise<void> => {
  */
 export const watchBrowsers = async (): Promise<() => void> => {
   servingGates = true;
+  // A page's origin that settled is told as any change is.
+  setOriginSink(() => told());
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
   // Every kept browser's gate made before the port answers, so a connection
   // as the agent starts meets its gate as its record says: closed under a

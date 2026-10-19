@@ -287,21 +287,41 @@ export class CdpTakeover {
   #state: CastState = "idle";
   /** The pointer's held button, which a move carries. */
   #held: keyof typeof BUTTON | undefined;
+  /** A screencast alone: the view's input is dropped. */
+  readonly #watch: boolean;
 
-  private constructor(link: CdpLink, session: string, targetId: string) {
+  private constructor(
+    link: CdpLink,
+    session: string,
+    targetId: string,
+    watch = false
+  ) {
     this.#link = link;
     this.#session = session;
     this.targetId = targetId;
+    this.#watch = watch;
     link.onEvent = (message) => this.#event(message);
     link.onClose = () => this.#end("The browser stopped.");
   }
 
-  /** Starts a take-over of page `targetId` of the Chromium at `devtools`. */
-  static async start(devtools: string, targetId: string): Promise<CdpTakeover> {
+  /**
+   * Starts a take-over of page `targetId` of the Chromium at `devtools`;
+   * with `watch`, a screencast alone, for a view while nobody holds the
+   * browser (cdp-watch.ts): the page keeps the viewport the agent drives it
+   * at, and the view's input never reaches it.
+   */
+  static async start(
+    devtools: string,
+    targetId: string,
+    { watch = false }: { watch?: boolean } = {}
+  ): Promise<CdpTakeover> {
     const link = await CdpLink.open(devtools);
     try {
       const session = await link.attach(targetId);
       await link.call("Page.enable", {}, session);
+      if (watch) {
+        return new CdpTakeover(link, session, targetId, true);
+      }
       // The person's view is the container host's 1280x800 (its neko
       // screen). Headless Chromium lays the page out in its window less the
       // browser's own UI, whose height changes by version (1280x657 under
@@ -366,7 +386,7 @@ export class CdpTakeover {
 
   /** One message of a view's: the person's pointer, keys or words, onto the page. */
   async input(input: CdpInput): Promise<void> {
-    if (this.#state === "stopped") {
+    if (this.#state === "stopped" || this.#watch) {
       return;
     }
     const at = (x: number, y: number) => ({ x, y });
@@ -488,25 +508,28 @@ export class CdpTakeover {
     }
   }
 
-  #end(why: string): void {
+  #end(why: string, code = 1001): void {
     if (this.#state === "stopped") {
       return;
     }
     this.#state = "stopped";
     for (const viewer of this.#viewers) {
-      viewer.close(1001, why);
+      viewer.close(code, why);
     }
     this.#viewers.clear();
   }
 
-  /** Ends the screencast, every view and the connection. */
-  async stop(): Promise<void> {
+  /** Ends the screencast, every view (with `code` and `why`) and the connection. */
+  async stop(
+    code = 1001,
+    why = "The person handed the browser back."
+  ): Promise<void> {
     if (this.#state === "casting") {
       await this.#link
         .call("Page.stopScreencast", {}, this.#session)
         .catch(() => undefined);
     }
-    this.#end("The person handed the browser back.");
+    this.#end(why, code);
     this.#link.close();
   }
 }

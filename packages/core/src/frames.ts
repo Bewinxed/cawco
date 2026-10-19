@@ -1,6 +1,6 @@
 /** Named frame shapes keep schema and generated-client names independent of union order. */
 
-import type { BrowserKey } from "./browser";
+import type { BrowserKey, ListedBrowser } from "./browser";
 import type {
   FleetMcpServer,
   FleetPlugin,
@@ -268,6 +268,18 @@ export const ARTIFACT_GONE =
  * every change of it.
  */
 export interface ArtifactSessionFrame {
+  /**
+   * The session's open browser ask for the browser its panel shows (its
+   * artifact or its key), whole as it parks and gone as it settles: the tab
+   * alone carries its reason. Null while none is open.
+   */
+  ask: { browserAsk: BrowserAskFrame; requestId: string } | null;
+  /**
+   * The browser the session's panel shows, as the hub lists it, whole on
+   * each change of it: null while the panel shows no browser, or its machine
+   * has reported none for that key.
+   */
+  browser: ListedBrowser | null;
   /** Every machine of the fleet: the session's own is named in the pane's states, and a page's place picker offers the online ones. */
   machines: {
     hostname: string;
