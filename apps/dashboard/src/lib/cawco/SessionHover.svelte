@@ -343,7 +343,7 @@
       <div data-nest-host>
         <div
           data-slot="head"
-          class="mark-line mb-space-2 flex min-w-(--c-session-hover-head) items-center gap-space-2"
+          class="mark-line mb-space-2 flex min-w-c-session-hover-head items-center gap-space-2"
         >
           <span
             data-slot="mark"
