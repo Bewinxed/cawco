@@ -325,8 +325,8 @@ export function boot(options: BootOptions): void {
    * A decision page's Preview (`by=embed`): a second page of a canvas that
    * draws only the stories `story` names (every story when it names none),
    * at rest, one under another in the page's own flow at their own size,
-   * each as wide as its form up to the embed's width, with none of the
-   * canvas's chrome; it never posts, and tells the page holding it how tall
+   * centred, one wider than the embed scaled down to fit it (`fitToEmbed`),
+   * with none of the canvas's chrome; it never posts, and tells the page holding it how tall
    * it stands (`cawco:embed-size`), so the frame is as tall as it.
    */
   const embed = params.get("by") === "embed";
@@ -842,6 +842,21 @@ export function boot(options: BootOptions): void {
     }
   }
 
+  /**
+   * An embed's frame at its own width, never reflowed below it: a story
+   * wider than the embed is scaled down to fit it with CSS zoom, which
+   * scales its box and its paint together (MDN, zoom: it "scales the
+   * targeted element, which can affect the page layout", where scale()
+   * leaves the layout), so the embed stands as tall as what it draws and a
+   * narrower story centres in it at its own size.
+   */
+  function fitToEmbed(frame: Frame): void {
+    const width = widthOf(frame.story, frame.column.width);
+    const room = world.clientWidth;
+    const fit = width === null || room === 0 ? 1 : Math.min(1, room / width);
+    frame.body.style.zoom = fit < 1 ? String(fit) : "";
+  }
+
   /** The frame's body set for its column: its scheme, width and forced state. */
   function dress(frame: Frame): void {
     const { body, column, story } = frame;
@@ -853,9 +868,10 @@ export function boot(options: BootOptions): void {
     body.style.backgroundColor = ground.background;
     body.style.color = ground.color;
     const width = widthOf(story, column.width);
-    // An embed's frame is as wide as its form where the embed holds it, else the embed's own width: the component at its own size, never scaled.
-    const across = embed ? `min(${width}px, 100%)` : `${width}px`;
-    body.style.width = width === null ? "" : across;
+    body.style.width = width === null ? "" : `${width}px`;
+    if (embed) {
+      fitToEmbed(frame);
+    }
     for (const states of Object.values(FORCED)) {
       for (const state of states) {
         body.classList.remove(allClass(state));
@@ -2252,6 +2268,12 @@ export function boot(options: BootOptions): void {
     drawEdges();
     later();
     if (embed) {
+      // The embed's width changed: each frame wider than it fits it again.
+      for (const section of sections) {
+        for (const frame of section.frames.values()) {
+          fitToEmbed(frame);
+        }
+      }
       // The page holding an embed (a decision page's Preview) makes its frame this tall: the frames whole, no inner scroll.
       window.parent.postMessage(
         { type: CANVAS_EMBED_SIZE, height: Math.ceil(world.offsetHeight) },

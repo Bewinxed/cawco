@@ -148,7 +148,9 @@
     min-inline-size: 0;
     overflow-wrap: anywhere;
   }
+  /* Under a finger its area reaches 44px (DESIGN.md, The 44 Touch Rule), its drawn size unchanged. */
   .open {
+    position: relative;
     font: var(--type-meta);
     min-inline-size: max-content;
     padding: var(--space-1) var(--space-2);
@@ -164,6 +166,17 @@
     @media (hover: hover) {
       &:hover {
         border-color: var(--ink-muted);
+      }
+    }
+    @media (pointer: coarse) {
+      &::after {
+        content: "";
+        position: absolute;
+        inset-block-start: 50%;
+        inset-inline-start: 50%;
+        inline-size: max(100%, 44px);
+        block-size: max(100%, 44px);
+        translate: -50% -50%;
       }
     }
   }

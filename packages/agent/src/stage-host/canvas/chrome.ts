@@ -273,16 +273,17 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
    inside; the timeline starts at a quarter too (Chrome.openMove), its height the person's after that, through DialKit's handle. */
 html[data-cawco-phone] .cawco-dock-dials { inset-block-start: auto; inset-inline: var(--space-3); inline-size: auto;
   inset-block-end: calc(var(--foot) + var(--space-2) + var(--cawco-timeline-room)); max-block-size: 25dvh; }
-/* A decision page's Preview (runtime by=embed): its frames alone, one under another in the page's own flow at their own size,
-   each as wide as its form up to the embed's width; the page holding it makes its frame as tall (CANVAS_EMBED_SIZE), and a
-   wheel or a finger on it scrolls that page. A section that didn't load, or names no story it has, still says so. */
+/* A decision page's Preview (runtime by=embed): its frames alone, one under another in the page's own flow, each at its own
+   width and centred in the embed, one wider than the embed scaled down to fit it (runtime fitToEmbed, CSS zoom); the page
+   holding it makes its frame as tall (CANVAS_EMBED_SIZE), and a wheel or a finger on it scrolls that page. A section that
+   didn't load, or names no story it has, still says so. */
 html.cawco-embed, html.cawco-embed body { block-size: auto; overflow-x: hidden; overflow-y: auto; }
 html.cawco-embed .cawco-canvas { position: static; inset: auto; overflow: visible; touch-action: auto; }
 html.cawco-embed .cawco-world { position: static; inline-size: 100%; gap: var(--space-3); padding: 0; will-change: auto; }
 html.cawco-embed .cawco-section { min-block-size: 0; gap: var(--space-3); }
 html.cawco-embed :is(.cawco-section-head, .cawco-colhead, .cawco-frame-label, .cawco-frame-status, .cawco-edges, .cawco-stand-in > .cawco-frame-words) { display: none; }
-html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-3); }
-html.cawco-embed .cawco-frame { gap: 0; }
+html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
+html.cawco-embed .cawco-frame { gap: 0; min-inline-size: 0; max-inline-size: 100%; }
 html.cawco-embed .cawco-stand-in-body { max-inline-size: 100%; }
 html[data-cawco-phone][data-cawco-current] .cawco-frame:not([data-cawco-shown]), html[data-cawco-phone] .cawco-colhead, html[data-cawco-phone][data-cawco-current] .cawco-section:not([data-cawco-shown]) { display: none; }
 `;

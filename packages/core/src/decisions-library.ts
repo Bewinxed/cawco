@@ -122,7 +122,7 @@ export const decisionLibrary = <C>(
   );
   const Preview = define(
     "Preview",
-    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone, each story at its own size up to the card's width.",
+    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone, each story at its own size and centred, one wider than the card scaled down to fit it.",
     z.object({
       artifact: z.string().describe("Its id."),
       caption,

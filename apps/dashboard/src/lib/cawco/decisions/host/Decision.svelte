@@ -184,7 +184,7 @@
   <div bind:this={body} class="dp-body" hidden={decided}>
     {#if props.why}<p class="dp-why">{String(props.why)}</p>{/if}
     {#if Array.isArray(props.media) && props.media.length > 0}
-      <div class={["dp-show", props.media.length === 1 && "solo"]}>
+      <div class={["dp-show", props.media.length !== 2 && "solo"]}>
         {@render renderNode(props.media)}
       </div>
     {/if}
