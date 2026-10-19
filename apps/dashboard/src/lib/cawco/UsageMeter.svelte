@@ -503,8 +503,8 @@
             <span
               data-slot="mark"
               aria-hidden="true"
-              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs [&_svg]:size-full"
-              ><ClaudeIcon /></span
+              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
+              ><ClaudeIcon class="size-full" /></span
             >
             <!-- The marks are the part of line 1 that gives: they ask for a
                  slot each and shrink to one mark's width, the marks closing
@@ -877,8 +877,8 @@
             <span
               data-slot="mark"
               aria-hidden="true"
-              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs [&_svg]:size-full"
-              data-box><ClaudeIcon /></span
+              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
+              data-box><ClaudeIcon class="size-full" /></span
             >
             <span>Claude</span>
           </h3>
@@ -931,7 +931,7 @@
          the head, a hairline. -->
     <div
       class={[
-        "kit-edge-fade-block min-h-0 flex-auto overflow-y-auto overscroll-contain",
+        "kit-edge-fade-block relative min-h-0 flex-auto overflow-y-auto overscroll-contain",
         sheet && "kit-sheet-scroll",
         claude && "border-t border-t-border-hairline",
       ]}
@@ -966,20 +966,19 @@
                first stands the same space-3 from the one before. -->
           <div
             data-slot="wall"
-            class="grid grid-cols-(--wall-cols) gap-space-1 [&>[data-slot=block]+[data-slot=block]>h4]:mt-(--org-gap)"
+            class="grid grid-cols-(--wall-cols) gap-space-1"
             data-flyover-span
-            style:--org-gap="calc(var(--space-3) - var(--space-1))"
             style:--wall-cols="repeat(2, auto var(--icon-sm) minmax(0, 1fr) var(--icon-sm) auto)"
           >
             {#each wall as block (block.org ?? "")}
               <div
                 data-slot="block"
-                class="contents"
+                class="group/block contents"
                 data-org-group={block.org ?? ""}
               >
                 {#if block.head}
                   <h4
-                    class="col-span-full px-space-1 pt-0 pb-space-row type-meta text-ink-muted"
+                    class="col-span-full px-space-1 pt-0 pb-space-row type-meta text-ink-muted group-not-first/block:mt-space-2"
                     data-flyover-edge
                     data-org-head
                   >
@@ -1001,8 +1000,7 @@
                      the whole popover, edge to edge, as a section's edge
                      is: `border: 0`, then its top edge. -->
                 <hr
-                  class="col-span-full mx-(--seam-pull) my-space-1 border-t border-t-border-hairline border-r-none border-b-none border-l-none"
-                  style:--seam-pull="calc(-1 * var(--space-3))"
+                  class="col-span-full my-space-1 h-0 border-none before:absolute before:inset-x-0 before:border-t before:border-t-border-hairline"
                 />
                 {@render cell(openCode, null, sideFor())}
               </div>
@@ -1038,8 +1036,8 @@
             <span
               data-slot="mark"
               aria-hidden="true"
-              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs [&_svg]:size-full"
-              data-box><ClaudeIcon /></span
+              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
+              data-box><ClaudeIcon class="size-full" /></span
             >
             <span>{gap.reason}</span>
           </p>

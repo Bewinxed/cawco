@@ -941,9 +941,7 @@
         <ul
           data-slot="sessions"
           aria-label="Running sessions"
-          class="mx-(--pull-x) my-(--pull-y) list-none overflow-x-clip px-space-2 py-space-1"
-          style:--pull-x="calc(-1 * var(--space-2))"
-          style:--pull-y="calc(-1 * var(--space-1))"
+          class="list-none overflow-x-clip clip-margin-echo"
           {@attach echoBeat()}
         >
           {@render branch(null)}

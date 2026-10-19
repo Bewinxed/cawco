@@ -71,6 +71,15 @@ theme: utility fault-ink-muted
 }
 ```
 
+theme: utility clip-margin-echo
+```css
+/* A clipped list (overflow-x: clip) lets what grows past its edge show for one
+   space-2: the working marks' echo (StopTray's sessions list). */
+@utility clip-margin-echo {
+  overflow-clip-margin: var(--space-2);
+}
+```
+
 theme: variant has-needs-stack
 ```css
 /* A filed task that needs you: its TaskNeedsFor stack stands inside it. */
@@ -133,17 +142,22 @@ note: the 74ch needs-row measure is `max-w-c-measure` (72ch) and the 60ch read-f
 removed: apps/dashboard/src/routes/(app)/workflows/+page.svelte:149 trailing `!` on `workflow-cards:hidden` (header row) — a `workflow-cards:` variant outranks the base `grid` by Tailwind's variant order; the `!` fought nothing
 removed: apps/dashboard/src/routes/(app)/workflows/+page.svelte:211 trailing `!` on `workflow-cards:hidden` (header row) — same
 removed: apps/dashboard/src/routes/(app)/workflows/+page.svelte:254 trailing `!` on the Run button's `workflow-cards:hidden` — the shared sheet sets `.wf-btn` display at zero weight (workflows.css W1), so the variant wins
-removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1111 inline `--strip-hit-h` custom property switched in script on `variant` — the strip already carries `data-variant`; the triggers read it with `group-variant-home/strip:`
-removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1081 the `--foot-touch` inline style on the sheet's Open usage button — a class (`h-c-btn-h-lg`)
-removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:939 `--fade-len: 40px` on the accounts scroller — `.kit-edge-fade-block` sets the same 40px
+removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1109 inline `--strip-hit-h` custom property switched in script on `variant` — the strip already carries `data-variant`; the triggers read it with `group-variant-home/strip:`
+removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1079 the `--foot-touch` inline style on the sheet's Open usage button — a class (`h-c-btn-h-lg`)
+removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:939 `--fade-len: 40px` on the accounts scroller (:939) — `.kit-edge-fade-block` sets the same 40px
 removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:538 `leading-(--more-lh)` 16px on the "+N" slot — the slot is a 16px grid centring its text; the line-height set no box
 removed: apps/dashboard/src/routes/artifact/[id]/+page.svelte:91 `--tab-h: 100dvh` custom property — `h-dvh`
 removed: apps/dashboard/src/routes/(app)/workflows/+page.svelte:270 `--summary-min` custom property — the 44px touch floor is `c-btn-h-lg`
 
+removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1003 `mx-(--seam-pull)` and `--seam-pull: calc(-1 * var(--space-3))` on the provider hairline — a negative margin cancelling the group's px-space-3
+removed: apps/dashboard/src/lib/cawco/StopTray.svelte:944 `mx-(--pull-x) my-(--pull-y)`, `--pull-x`, `--pull-y` and the list's `px-space-2 py-space-1` — negative margins cancelling the list's own padding
+removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:969 `--org-gap` and the sibling-selector arbitrary variant on the wall — see the `fixed:` line at :981
+removed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:507 `[&_svg]:size-full` on the three Claude mark wrappers (:507, :881, :1040)
+
 ## Kit swaps
-kit-swap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1111 DrawerTrigger press-tint flex h-c-btn-h-lg … hover:bg-surface-hover … — a bare-row trigger variant ("strip": the whole row is the button, hover/open wash on the ground it stands on)
-kit-swap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1129 PopoverTrigger press-tint flex h-c-btn-h-lg … hover:bg-surface-hover … — the same "strip" trigger variant
-kit-swap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1081 Button h-c-btn-h-lg w-full — a full-width touch-floor Button size/variant (`size="lg"` fill)
+kit-swap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1109 DrawerTrigger press-tint flex h-c-btn-h-lg … hover:bg-surface-hover … — a bare-row trigger variant ("strip": the whole row is the button, hover/open wash on the ground it stands on)
+kit-swap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1127 PopoverTrigger press-tint flex h-c-btn-h-lg … hover:bg-surface-hover … — the same "strip" trigger variant
+kit-swap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1079 Button h-c-btn-h-lg w-full — a full-width touch-floor Button size/variant (`size="lg"` fill)
 kit-swap: apps/dashboard/src/lib/cawco/StopTray.svelte:847 Spinner size-icon-md — a Spinner size (`md`)
 kit-swap: apps/dashboard/src/lib/cawco/ThreadPane.svelte:1123 Alert items-center — an Alert variant that centres its row (the action beside a one-line description)
 kit-swap: apps/dashboard/src/routes/(app)/workflows/+page.svelte:89 DropdownMenu.PendingItem min-h-c-top-bar-h flex-wrap — a PendingItem `look="titled"` that wraps its description under the label
@@ -154,7 +168,7 @@ kit-swap: apps/dashboard/src/routes/(app)/workflows/+page.svelte:175 Skeleton h-
 kit-swap: apps/dashboard/src/routes/(app)/workflows/+page.svelte:178 Skeleton h-icon-md — Skeleton `height="line"`
 kit-swap: apps/dashboard/src/routes/(app)/workflows/+page.svelte:181 Skeleton h-space-8 — Skeleton `height` for a button
 
-shadcn/no-restyle: the same sites, by file:line and component: StopTray.svelte:847 Spinner size-icon-md; ThreadPane.svelte:1123 Alert items-center; UsageMeter.svelte:1081 Button h-c-btn-h-lg; UsageMeter.svelte:1111 DrawerTrigger and :1129 PopoverTrigger (the strip classes above); workflows/+page.svelte:89, :101 DropdownMenu.PendingItem; :171, :173, :175, :178, :181 Skeleton.
+shadcn/no-restyle: the same sites, by file:line and component: StopTray.svelte:847 Spinner size-icon-md; ThreadPane.svelte:1123 Alert items-center; UsageMeter.svelte:1079 Button h-c-btn-h-lg; UsageMeter.svelte:1109 DrawerTrigger and :1129 PopoverTrigger (the strip classes above); workflows/+page.svelte:89, :101 DropdownMenu.PendingItem; :171, :173, :175, :178, :181 Skeleton.
 
 ## Fixed
 fixed: apps/dashboard/src/routes/dev/finder/+page.svelte:101 `bg-(--background)` → `bg-surface-page` — DESIGN.md: the page ground is the role token, not the raw `--background`
@@ -163,14 +177,18 @@ fixed: apps/dashboard/src/lib/cawco/TreeMark.svelte:167 deck cards' shade and ca
 fixed: apps/dashboard/src/routes/(app)/workflows/+page.svelte:143 grid columns read named `--c-workflow-*` tokens — DESIGN.md Layout: no hand-kept magic numbers
 fixed: apps/dashboard/src/routes/dev/finder/+page.svelte:179 Finder takes `class="flex-1"` from its sheet (the `:global` rule is gone) — a child component given its class, not styled from outside
 
+fixed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1003 the provider hairline runs edge to edge as a `before:` rule on the `hr`, positioned against the now-`relative` scroller (UsageMeter.svelte:934), instead of a negative inline margin cancelling the group's padding — DESIGN.md Layout: no padding cancelled by margin
+fixed: apps/dashboard/src/lib/cawco/StopTray.svelte:944 the sessions list clips its inline overflow with `overflow-clip-margin` (theme utility `clip-margin-echo`), so the echo leaves the list without padding that negative margins cancel — DESIGN.md Layout
+fixed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:981 an org head after the first block spaces itself with `group-not-first/block:mt-space-2` on the head, replacing the sibling selector `[&>[data-slot=block]+[data-slot=block]>h4]:mt-(--org-gap)` — one rule per element
+fixed: apps/dashboard/src/lib/cawco/UsageMeter.svelte:507 the Claude mark wrappers (also :881, :1040) pass `class="size-full"` to ClaudeIcon instead of `[&_svg]:size-full`
+
 ## Gaps
-gap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1004 the hairline between providers cancels the group's padding with a negative inline margin — the group's padding belongs to the scroller, so the seam can run edge to edge (DESIGN.md Layout: no padding cancelled by margin)
-gap: apps/dashboard/src/lib/cawco/StopTray.svelte:944 the sessions list pads by `space-2`/`space-1` and cancels it with equal negative margins so the echo can leave the clipped list — a clip margin (`overflow-clip-margin`) is the target (DESIGN.md Layout)
-gap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:506 `[&_svg]:size-full` on the three mark wrappers (ClaudeIcon, OpenCodeLogo take no class) — the icons should take `class` (DESIGN.md: a hook is data-slot)
-gap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:969 `[&>[data-slot=block]+[data-slot=block]>h4]:mt-(--org-gap)` — the org blocks should space themselves (`gap`/subgrid) rather than a sibling selector (DESIGN.md Layout)
-gap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:493 the strip row is a fixed height with a clipped wrap row, so a second line of cells is hidden — the strip should be one scroll-free row of intrinsic height (DESIGN.md Layout: min-height, not height)
+gap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:590 `[&_svg]:size-full` on the OpenCode mark wrapper (and :806, the Go cell's) — OpenCodeLogo.svelte:8 (`<svg>`) takes no `class`; it should accept one, so the wrapper passes `class="size-full"` as the Claude marks now do (DESIGN.md: a class is a style)
+gap: apps/dashboard/src/lib/cawco/UsageMeter.svelte:1066 `[&_svg]:size-full` on a provider note's mark wrapper — the marks come from `notes` (each a different icon component, built where the note is made, UsageMeter.svelte:412 and the other providers' icon modules), so passing `class="size-full"` needs those icon components to take a class: OpenCodeLogo.svelte:8 is one
 
 ## Notes
+- UsageMeter.svelte:493 the strip's row is a fixed `c-usage-strip-row` with a clipped wrap row by design (the face comment: opencode's cell wraps onto a second row the strip does not show, rather than Claude's answer being cut); not scar tissue, so no gap.
+- `overflow-clip-margin` (clip-margin-echo) is unsupported where the engine lacks it; there the echo is clipped at the list edge. Not verified in a browser.
 - StopTray.svelte, UsageMeter.svelte: the 18px `--mark-size` fallback is `--space-5` (TreeMark's own default); the 12px/10px wall tracks are `--icon-sm`.
 - ThreadPane.svelte: `row-start-(--task-span)` with `span 2` is `row-span-2`; the `.not-woken` class was only styled by the removed rule (the `data-not-woken` hook stays).
 - UsageMeter.svelte: the popover's `--usage-pop-w` stays a `style` prop on `Popover.Content` (a kit component with no width prop); its 16px margin is `2 * var(--space-2)`.
