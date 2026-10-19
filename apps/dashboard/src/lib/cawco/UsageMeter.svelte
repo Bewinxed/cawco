@@ -864,9 +864,7 @@
       <header
         class={[
           "flex flex-none flex-col gap-space-2",
-          sheet
-            ? "px-space-5 pt-space-1 pb-space-3"
-            : "px-space-4 py-space-3",
+          sheet ? "px-space-5 pt-space-1 pb-space-3" : "px-space-4 py-space-3",
         ]}
         data-pop-head
       >
@@ -902,8 +900,7 @@
                   <span
                     aria-hidden="true"
                     class="me-space-1 inline-grid align-middle text-ink-muted"
-                    data-stop-back
-                    ><IconRefresh class="size-icon-md" /></span
+                    data-stop-back><IconRefresh class="size-icon-md" /></span
                   >
                 {/if}
                 <Figure text={stop?.figure ?? ""} /></span
@@ -968,7 +965,8 @@
             data-slot="wall"
             class="grid grid-cols-(--wall-cols) gap-space-1"
             data-flyover-span
-            style:--wall-cols="repeat(2, auto var(--icon-sm) minmax(0, 1fr) var(--icon-sm) auto)"
+            style:--wall-cols="repeat(2, auto var(--icon-sm) minmax(0, 1fr)
+            var(--icon-sm) auto)"
           >
             {#each wall as block (block.org ?? "")}
               <div
@@ -1020,7 +1018,8 @@
             data-slot="wall"
             class="grid grid-cols-(--wall-cols) gap-space-1"
             data-flyover-span
-            style:--wall-cols="repeat(2, auto var(--icon-sm) minmax(0, 1fr) var(--icon-sm) auto)"
+            style:--wall-cols="repeat(2, auto var(--icon-sm) minmax(0, 1fr)
+            var(--icon-sm) auto)"
           >
             {@render cell(openCode, null, sideFor())}
           </div>

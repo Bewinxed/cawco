@@ -181,6 +181,17 @@
   }
 }
 
+/* A filed task that needs you: its TaskNeedsFor stack stands inside it. */
+@custom-variant has-needs-stack (&:has([data-slot="task-needs-needs-stack"]));
+
+/* Under a theme switch (theme.svelte.ts marks the root): app.css stops the
+   elements' transitions; a pseudo-element names it where it is styled. */
+@custom-variant theme-flip (:root[data-theme-flip] &);
+
+/* Inside a workflow node whose Svelte Flow wrapper holds keyboard focus
+   (WorkflowNodeCard draws the ring on the card). */
+@custom-variant node-focus-visible (:where(.svelte-flow__node:focus-visible) &);
+
 /* A <summary>'s marker in WebKit, which draws it as its own pseudo-element
    (Tailwind's `marker:` is ::marker). */
 @custom-variant details-marker (&::-webkit-details-marker);

@@ -102,8 +102,7 @@
         data-slot="chev"
         aria-hidden="true"
         class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/bhead:rotate-90"
-        data-box
-        ><IconChevronRight class="size-icon-sm block" /></span
+        data-box><IconChevronRight class="size-icon-sm block" /></span
       >
       {#if title !== branch.subagentType}
         <span
@@ -149,10 +148,7 @@
       <p
         class="rail-line items-start mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-c-measure"
       >
-        <span
-          data-slot="rail-cell"
-          aria-hidden="true"
-          class="rail-cell h-lh"
+        <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
           ><span
             class="breathe size-(--status-dot-size) flex-none rounded-pill bg-status-live-glyph"
           ></span></span

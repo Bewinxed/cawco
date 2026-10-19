@@ -1198,6 +1198,132 @@
     --c-task-col-todos-w: 96px;
     /* The task ledger's Created and Updated columns. */
     --c-task-col-time-w: 112px;
+    /* The stop tray's status word column: one word and its glyph. */
+    --c-stop-tray-status-w: 13ch;
+    /* The stop tray's trail column (`12s`, `1m`). */
+    --c-stop-tray-trail-w: 3ch;
+    /* The anti-aliased edge of the status dot's cut in a tree mark's tile. */
+    --c-tree-mark-hole-edge: 0.25px;
+    /* A tree mark's count box: two figures. */
+    --c-tree-mark-num-w: 2ch;
+    /* The usage strip's caption line, the second line of its row. */
+    --c-usage-cap-lh: 15px;
+    /* The usage strip's one row of cells: first line, gap, caption. */
+    --c-usage-strip-row: calc(
+      var(--icon-md) + var(--space-1) + var(--c-usage-cap-lh)
+    );
+    /* The usage strip's hit height on the home card. */
+    --c-usage-strip-home-h: 56px;
+    /* The week share's column: as wide as "100%" in the figure face. */
+    --c-usage-pct-w: 4ch;
+    /* A filed task card's least track in a reply. */
+    --c-filed-task-w: 14rem;
+    /* The workflow list's name column floor. */
+    --c-workflow-name-col: 180px;
+    /* The workflow list's last-run and started columns. */
+    --c-workflow-when-col: 110px;
+    /* The workflow list's run count column. */
+    --c-workflow-count-col: 60px;
+    /* The workflow list's actions column. */
+    --c-workflow-actions-col: 70px;
+    /* The workflow list's row floor, the height its loading rows stand at so nothing moves when they swap. */
+    --c-workflow-row-h: 64px;
+    /* The composer's attachments row before it scrolls. */
+    --c-atts-max-h: 180px;
+    /* How far the settle's text clip reaches past a word's box, so ascenders and descenders survive. */
+    --c-compaction-word-bleed: 0.5em;
+    /* A ticking clock's room: seven digit widths hold "59m 59s". */
+    --c-elapsed-w: 7ch;
+    /* The room the folded field's "+N lines" stands in. */
+    --c-composer-more-w: 4.5rem;
+    /* How far the recall roll's clip reaches past the field on the sides it does not cut: past any screen. */
+    --roll-reach: 100vmax;
+    /* The composer's / and @ menu before its list scrolls. */
+    --c-composer-menu-max-h: 320px;
+    /* The send plane's optical centring, up and right: the glyph's mass sits low-left in its box. */
+    --optical-nudge: 0.5px;
+    /* A mention chip's end padding (MentionField, and Composer's autosize twin). */
+    --c-mention-chip-pad-end: 6px;
+    /* A mention chip's type size (MentionField, and Composer's autosize twin). */
+    --c-mention-chip-size: 15px;
+    /* A mention chip's line height (MentionField, and Composer's autosize twin). */
+    --c-mention-chip-leading: 22px;
+    /* A permission card's field value before it scrolls. */
+    --c-ask-value-max-h: 200px;
+    /* The project offer's line basis, so its buttons wrap under it on a narrow card. */
+    --c-offer-line: 24ch;
+    /* The skeleton holding a suggestion chip's place while an ask is slow. */
+    --c-suggest-shimmer-w: 9rem;
+    /* The hairline's width: a bordered touch-hit host's `--hit-edge`, the hitl card's content column. */
+    --border-width: 1px;
+    /* The room a grouped turn's floated clock keeps at its first line's end, so the wrap holds when the clock shows. */
+    --c-turn-clock-w: 9ch;
+    /* A machine's whole update error unfolded under its cell, before it scrolls. */
+    --c-update-said-h: 10rem;
+    /* History's chart plot height. */
+    --c-usage-plot: 96px;
+    /* A provider limit's bar track in the session details strip. */
+    --c-limit-bar: 64px;
+    /* A Limits tile's least width (its dial, figure and sentence). */
+    --c-usage-tile-min: 15.5rem;
+    /* A project spend stat tile's least width. */
+    --c-stat-tile-min: 9.5rem;
+    /* The usage key's label column, so values line up down a tile and across a row. */
+    --c-rings-key-label-w: 52px;
+    /* The usage key's value column. */
+    --c-rings-key-value-w: 84px;
+    /* The dot that leads an account's name in running words. */
+    --c-mark-dot: 6px;
+    /* The room a Where-it-goes row keeps beside its meter for the figure and its gap. */
+    --c-usage-figure-w: 5.5rem;
+    /* A row meter's height on the Usage page (DESIGN.md Limit bar: "8px on a page"). */
+    --c-meter-bar-h: 8px;
+    /* A dialog's height cap, its body scrolling inside; a document dialog stands at it (the parent's call: DESIGN.md's Drawer cap, its Dialog naming none). */
+    --c-dialog-max-h: 85dvh;
+    /* What a dialog's header keeps clear at its trailing edge for the kit's Close, 30px and 12px from the corner. */
+    --c-dialog-close-clear: 52px;
+    /* A document dialog's width on a narrow window. */
+    --c-dialog-document-w: 95vw;
+    /* The tallest a tool call's document well grows in the transcript before it scrolls. */
+    --c-tool-well-max-h: 420px;
+    /* The workflow graph canvas's least height. */
+    --c-graph-canvas-min: 300px;
+    /* A connection handle's diameter on the workflow canvas. */
+    --c-graph-handle: 10px;
+    /* The workflow editor's breadcrumb basis. */
+    --c-workflow-crumb: 220px;
+    /* The workflow name field's widest in the header. */
+    --c-workflow-name-max: 300px;
+    /* The save-state readout's width, so its words swap and nothing moves. */
+    --c-workflow-save-w: 24ch;
+    /* The runs list column of the workflow editor's Runs tab. */
+    --c-workflow-runs-w: 300px;
+    /* The template-path completer's tallest list. */
+    --c-completer-max-h: 240px;
+    /* A workflow graph node card's width. */
+    --c-wf-node-w: 260px;
+    /* An inline scroll region on a workflow page (the problems list, the run log). */
+    --c-wf-scroll-max-h: 30dvh;
+    /* The Set-key field's basis beside its buttons. */
+    --c-key-field-basis: 14rem;
+    /* The Set-key field's widest. */
+    --c-key-field-max: 24rem;
+    /* A bench's phone frame width (the probe kit's 390x844 phone). */
+    --c-bench-phone-w: 390px;
+    /* A bench's phone frame height. */
+    --c-bench-phone-h: 844px;
+    /* A bench's controls column. */
+    --c-bench-controls-w: 380px;
+    /* The square Caw bench stage, twice the 160px Caw it holds. */
+    --c-bench-stage: 320px;
+    /* The chosen-hover bench's side-panel well width. */
+    --c-bench-side-w: 360px;
+    /* The chosen-hover bench's side-panel well height. */
+    --c-bench-side-h: 240px;
+    /* The chosen-hover bench's model list and editor width. */
+    --c-bench-field-w: 480px;
+    /* A bench slider's readout ("32px", "100%"), so the figure never jumps. */
+    --c-bench-readout-w: 4ch;
     /* How much of the page's own background the scrim lays over what is under it: its alpha. The screen's edges under an open scrim (ScreenEdges) mix the same share of background into the edge colour, so the strip Safari extends is the scrim's colour over that edge. */
     --scrim-mix: 72%;
     /* A message not yet said in the conversation (sending, queued). */

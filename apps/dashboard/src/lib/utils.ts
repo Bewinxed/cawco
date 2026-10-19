@@ -75,6 +75,7 @@ const twMergeConfig = {
       "auto-rows": [{ "auto-rows": ["line", "band", "band-phone"] }],
       duration: [{ dur: durations }],
       "animation-duration": [{ "anim-dur": durations }],
+      "animation-delay": [{ "anim-delay": durations }, "arrive-delay"],
       "type-role": [{ type: utilities("type") }],
       // app.css's per-side shorthands, one group to a side, which
       // tailwind-merge would otherwise read as that side's colour and drop
@@ -163,6 +164,7 @@ const twMergeConfig = {
 };
 const twMerge = extendTailwindMerge<
   | "animation-duration"
+  | "animation-delay"
   | "type-role"
   | "border-none-t"
   | "border-none-b"

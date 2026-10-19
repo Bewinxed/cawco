@@ -260,8 +260,12 @@
             </EmptyState>
           </div>
         {:else if empty && canTalk}
-          <div data-slot="caw-empty" class="max-w-c-starters-w">
-            <EmptyState line={words.emptyCaw} title={words.empty}>
+          <div class="max-w-c-starters-w">
+            <EmptyState
+              actionWidth="fill"
+              line={words.emptyCaw}
+              title={words.empty}
+            >
               {#snippet mark()}
                 <div
                   data-slot="caw-80"

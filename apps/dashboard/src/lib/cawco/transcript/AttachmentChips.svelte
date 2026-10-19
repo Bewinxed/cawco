@@ -142,7 +142,7 @@
         <DocThumb content={t.content} name={t.name} />
         <button
           aria-label={`Remove ${t.name}`}
-          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
           onclick={() => removeText(i)}
           type="button"
         >
@@ -161,7 +161,7 @@
         />
         <button
           aria-label={`Remove ${f.name}`}
-          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge-hair rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
           onclick={() => removeFile(f.id)}
           type="button"
         >

@@ -10,6 +10,7 @@
    * artifact. A press on a card opens its page scrolled to it. Fitted to the
    * canvas once, and again when the cards come or go.
    */
+  import "#lib/vendor-css/xyflow.css";
   import type { DecisionGraph as Graph } from "@cawco/core/decisions";
   import {
     Background,

@@ -160,9 +160,8 @@
               ></circle>
               <path
                 d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                class="stroke-status-live-glyph motion-safe:animate-check-draw"
-                stroke-dasharray="12"
-                stroke-dashoffset="0"
+                class="stroke-status-live-glyph dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-ghost"
+                pathLength="1"
                 stroke-width="1.8"
               ></path>
             </svg>

@@ -700,6 +700,9 @@ function themeKeys(
 const DURATION_UTILITIES: ThemeUtility[] = [
   ["dur-*", ["transition-duration: --value(--duration-*);"]],
   ["anim-dur-*", ["animation-duration: --value(--duration-*);"]],
+  // Tailwind's `delay-*` is the transition's; an animation's start waits on
+  // the same steps.
+  ["anim-delay-*", ["animation-delay: --value(--duration-*);"]],
 ];
 
 /** Every utility the tokens make: the composites, each type role's three forms, and the theme's own few. */

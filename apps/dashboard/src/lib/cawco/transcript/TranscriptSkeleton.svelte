@@ -66,9 +66,7 @@
       style:--well-pad-block="calc(var(--space-2) + 1px)"
       class="ms-(--well-x) py-(--well-pad-block) px-(--pad) inset-ring-1 inset-ring-well-edge rounded-well-r bg-surface-recess-deep"
     >
-      <div
-        class="flex flex-col max-w-c-measure text-size-body leading-body"
-      >
+      <div class="flex flex-col max-w-c-measure text-size-body leading-body">
         <Skeleton
           class="my-(--sk-line-my)"
           height="x-height"
@@ -157,9 +155,7 @@
         width="short"
       />
     </div>
-    <div
-      class="flex flex-col max-w-c-measure text-size-body leading-body"
-    >
+    <div class="flex flex-col max-w-c-measure text-size-body leading-body">
       {#each AFTER as width (width)}
         <Skeleton
           class="my-(--sk-line-my)"

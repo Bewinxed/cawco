@@ -179,10 +179,7 @@
     {/each}
   </RowList>
   {#if !mainShown && shown.length === 0}
-    <p
-      data-slot="note"
-      class="type-meta max-w-c-measure text-ink-muted"
-    >
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       {words.noMatch(filter.trim())}
     </p>
   {/if}

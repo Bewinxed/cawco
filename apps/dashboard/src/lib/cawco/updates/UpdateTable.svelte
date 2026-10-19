@@ -43,7 +43,7 @@
     <Table.Root class="border-collapse text-start max-phone:block">
       <Table.Header class="max-phone:hidden">
         <Table.Row
-          class="align-top max-phone:grid max-phone:grid-cols-fill-auto max-phone:items-center"
+          class="align-top max-phone:grid max-phone:grid-cols-fluid-auto max-phone:items-center"
           variant="stacks-ruled"
         >
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -64,7 +64,7 @@
           {@const os = machineOs(machine.os)}
           {@const online = isOnline(machine)}
           <Table.Row
-            class="max-phone:grid max-phone:grid-cols-fill-auto max-phone:items-center"
+            class="max-phone:grid max-phone:grid-cols-fluid-auto max-phone:items-center"
             inactive={!online}
             variant="stacks-ruled"
           >

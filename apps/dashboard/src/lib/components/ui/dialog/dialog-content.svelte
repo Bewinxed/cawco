@@ -3,7 +3,9 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' widths past the phone, each as they drew it: a form, a
-      report (an error's whole text), a document (a diff). */
+      report (an error's whole text), a document (a diff). Every dialog is as
+      tall as its content up to the cap (`c-dialog-max-h`), its body
+      scrolling inside; a document stands at the cap from the first frame. */
   export const dialogContentVariants = tv({
     variants: {
       width: {
@@ -11,11 +13,21 @@
         report: "phone:max-w-168",
         document: "phone:max-w-320",
       },
+      height: { cap: "h-c-dialog-max-h" },
     },
   });
-  /** The raised body's looks: flush, for what draws its own padding and gaps. */
+  /**
+   * The raised body: a frame that holds Close where it stands, and the grid
+   * of the caller's content that scrolls inside it. `flush`, for what draws
+   * its own padding and gaps.
+   */
   export const dialogBodyVariants = tv({
-    variants: { bodyPad: { flush: "gap-0 p-0" } },
+    slots: {
+      frame:
+        "kit-dialog-body relative flex min-h-0 flex-1 flex-col text-body text-ink-strong",
+      grid: "grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain",
+    },
+    variants: { bodyPad: { flush: { frame: "p-0", grid: "gap-0" } } },
   });
 
   export type DialogContentLooks = VariantProps<typeof dialogContentVariants> &
@@ -43,6 +55,7 @@
     bodyClass,
     width,
     bodyPad,
+    height,
     restoreScrollDelay = 0,
     ...restProps
   }: WithoutChildrenOrChild<DialogPrimitive.ContentProps> &
@@ -50,13 +63,14 @@
       portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DialogPortal>>;
       children: Snippet;
       showCloseButton?: boolean;
-      /** Classes for the raised body inside the tray. */
+      /** Classes for the content grid inside the raised body. */
       bodyClass?: string;
     } = $props();
 
   // A dialog whose body changes (a step, an error, a result) tweens to its
   // new height; it is centred, so it grows from the middle.
   const resize = morph();
+  const body = $derived(dialogBodyVariants({ bodyPad }));
   $effect(() => {
     if (ref) {
       return resize(ref);
@@ -70,8 +84,8 @@
        is open, and clears it at once (floating-presence). -->
   <DialogPrimitive.Content
     class={cn(
-      "kit-dialog fixed top-1/2 left-1/2 z-50 w-full max-w-[calc(100%-2rem)] phone:max-w-112 -translate-x-1/2 -translate-y-1/2 outline-none",
-      dialogContentVariants({ width }),
+      "kit-dialog fixed top-1/2 left-1/2 z-50 flex max-h-c-dialog-max-h w-full max-w-[calc(100%-2rem)] phone:max-w-112 -translate-x-1/2 -translate-y-1/2 flex-col outline-none",
+      dialogContentVariants({ width, height }),
       className
     )}
     data-slot="dialog-content"
@@ -81,15 +95,10 @@
   >
     {#snippet child({ props, open })}
       <div {...props} style:pointer-events={pressable(open)}>
-        <div
-          data-slot="grid"
-          class={cn(
-            "kit-dialog-body relative grid gap-6 text-body text-ink-strong",
-            dialogBodyVariants({ bodyPad }),
-            bodyClass
-          )}
-        >
-          {@render children?.()}
+        <div data-slot="body" class={body.frame()}>
+          <div data-slot="grid" class={cn(body.grid(), bodyClass)}>
+            {@render children?.()}
+          </div>
           {#if showCloseButton}
             <DialogPrimitive.Close data-slot="dialog-close">
               {#snippet child({ props: closeProps })}

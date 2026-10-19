@@ -708,9 +708,7 @@
   {:else}
     <!-- One tab's pane gives way to the next in one cell, sliding across in
          tab order (pane-slide). -->
-    <div
-      class="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden"
-    >
+    <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden">
       {#key tab}
         <div
           data-slot="pane"
@@ -855,7 +853,7 @@
       ><Dialog.Title>Add node</Dialog.Title><Dialog.Description
         >Choose a kind or a delegate template.</Dialog.Description
       >
-      <div class="wf max-h-c-dialog-scroll-max overflow-y-auto">
+      <div class="wf">
         {@render palette()}
       </div></Dialog.Content
     ></Dialog.Root

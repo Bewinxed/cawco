@@ -24,10 +24,7 @@
 
 <div
   data-slot="offer-acts"
-  class={[
-    "flex flex-wrap items-center gap-space-2 mt-space-2",
-    className,
-  ]}
+  class={["flex flex-wrap items-center gap-space-2 mt-space-2", className]}
   {...rest}
 >
   {#if said}

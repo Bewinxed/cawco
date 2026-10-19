@@ -142,7 +142,7 @@
   </button>
   <p
     data-slot="detail"
-    class="grid grid-rows-fold-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-fold-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-fold-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-fold-open group-hover/move:opacity-100 @phone:grid-rows-fold-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:dur-toggle motion-safe:ease-out"
+    class="grid grid-rows-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-open group-hover/move:opacity-100 @phone:grid-rows-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:dur-toggle motion-safe:ease-out"
   >
     <span class="overflow-hidden">{words.detail}</span>
   </p>

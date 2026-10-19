@@ -37,7 +37,8 @@
     <Dialog.Description>{description}</Dialog.Description>
   </Dialog.Header>
   <Dialog.Content
-    bodyClass="gap-0 overflow-hidden p-0"
+    bodyClass="overflow-hidden"
+    bodyPad="flush"
     class={cn("top-1/3 translate-y-0", className)}
     {portalProps}
     {showCloseButton}

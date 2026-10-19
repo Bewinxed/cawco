@@ -496,6 +496,65 @@
   --spacing-c-task-col-labels-w: var(--c-task-col-labels-w);
   --spacing-c-task-col-todos-w: var(--c-task-col-todos-w);
   --spacing-c-task-col-time-w: var(--c-task-col-time-w);
+  --spacing-c-stop-tray-status-w: var(--c-stop-tray-status-w);
+  --spacing-c-stop-tray-trail-w: var(--c-stop-tray-trail-w);
+  --spacing-c-tree-mark-hole-edge: var(--c-tree-mark-hole-edge);
+  --spacing-c-tree-mark-num-w: var(--c-tree-mark-num-w);
+  --spacing-c-usage-cap-lh: var(--c-usage-cap-lh);
+  --spacing-c-usage-strip-row: var(--c-usage-strip-row);
+  --spacing-c-usage-strip-home-h: var(--c-usage-strip-home-h);
+  --spacing-c-usage-pct-w: var(--c-usage-pct-w);
+  --spacing-c-filed-task-w: var(--c-filed-task-w);
+  --spacing-c-workflow-name-col: var(--c-workflow-name-col);
+  --spacing-c-workflow-when-col: var(--c-workflow-when-col);
+  --spacing-c-workflow-count-col: var(--c-workflow-count-col);
+  --spacing-c-workflow-actions-col: var(--c-workflow-actions-col);
+  --spacing-c-workflow-row-h: var(--c-workflow-row-h);
+  --spacing-c-atts-max-h: var(--c-atts-max-h);
+  --spacing-c-compaction-word-bleed: var(--c-compaction-word-bleed);
+  --spacing-c-elapsed-w: var(--c-elapsed-w);
+  --spacing-c-composer-more-w: var(--c-composer-more-w);
+  --spacing-c-composer-menu-max-h: var(--c-composer-menu-max-h);
+  --spacing-c-mention-chip-pad-end: var(--c-mention-chip-pad-end);
+  --spacing-c-mention-chip-size: var(--c-mention-chip-size);
+  --spacing-c-mention-chip-leading: var(--c-mention-chip-leading);
+  --spacing-c-ask-value-max-h: var(--c-ask-value-max-h);
+  --spacing-c-offer-line: var(--c-offer-line);
+  --spacing-c-suggest-shimmer-w: var(--c-suggest-shimmer-w);
+  --spacing-c-turn-clock-w: var(--c-turn-clock-w);
+  --spacing-c-update-said-h: var(--c-update-said-h);
+  --spacing-c-usage-plot: var(--c-usage-plot);
+  --spacing-c-limit-bar: var(--c-limit-bar);
+  --spacing-c-usage-tile-min: var(--c-usage-tile-min);
+  --spacing-c-stat-tile-min: var(--c-stat-tile-min);
+  --spacing-c-rings-key-label-w: var(--c-rings-key-label-w);
+  --spacing-c-rings-key-value-w: var(--c-rings-key-value-w);
+  --spacing-c-mark-dot: var(--c-mark-dot);
+  --spacing-c-usage-figure-w: var(--c-usage-figure-w);
+  --spacing-c-meter-bar-h: var(--c-meter-bar-h);
+  --spacing-c-dialog-max-h: var(--c-dialog-max-h);
+  --spacing-c-dialog-close-clear: var(--c-dialog-close-clear);
+  --spacing-c-dialog-document-w: var(--c-dialog-document-w);
+  --spacing-c-tool-well-max-h: var(--c-tool-well-max-h);
+  --spacing-c-graph-canvas-min: var(--c-graph-canvas-min);
+  --spacing-c-graph-handle: var(--c-graph-handle);
+  --spacing-c-workflow-crumb: var(--c-workflow-crumb);
+  --spacing-c-workflow-name-max: var(--c-workflow-name-max);
+  --spacing-c-workflow-save-w: var(--c-workflow-save-w);
+  --spacing-c-workflow-runs-w: var(--c-workflow-runs-w);
+  --spacing-c-completer-max-h: var(--c-completer-max-h);
+  --spacing-c-wf-node-w: var(--c-wf-node-w);
+  --spacing-c-wf-scroll-max-h: var(--c-wf-scroll-max-h);
+  --spacing-c-key-field-basis: var(--c-key-field-basis);
+  --spacing-c-key-field-max: var(--c-key-field-max);
+  --spacing-c-bench-phone-w: var(--c-bench-phone-w);
+  --spacing-c-bench-phone-h: var(--c-bench-phone-h);
+  --spacing-c-bench-controls-w: var(--c-bench-controls-w);
+  --spacing-c-bench-stage: var(--c-bench-stage);
+  --spacing-c-bench-side-w: var(--c-bench-side-w);
+  --spacing-c-bench-side-h: var(--c-bench-side-h);
+  --spacing-c-bench-field-w: var(--c-bench-field-w);
+  --spacing-c-bench-readout-w: var(--c-bench-readout-w);
 
   --radius-well-r: var(--well-r);
   --radius-row-mark: var(--row-mark-r);
@@ -573,6 +632,22 @@
   --animate-ns-card-out: ns-panel-out var(--dur-exit) var(--ease-out) both;
   --animate-ns-scrim-in: kit-fade-in var(--dur-panel) var(--ease-out) backwards;
   --animate-ns-scrim-out: kit-fade-out var(--dur-exit) var(--ease-out) both;
+  --animate-filed-fade: kit-fade-in var(--dur-pop) var(--ease-out) backwards;
+  --animate-filed-rise: rise-in var(--dur-pop) var(--ease-out) backwards;
+  --animate-offer-settle: rise-in calc(var(--dur-control) * 2) var(--ease-out)
+    backwards;
+  --animate-face-out: kit-fade-out var(--dur-exit) var(--ease-out) forwards;
+  --animate-face-in: kit-fade-in var(--dur-menu) var(--ease-out) backwards;
+  --animate-wave-arrive: wave-draw var(--dur-pop) var(--ease-out)
+    calc(var(--dur-rail) + var(--lead)) backwards;
+  --animate-wave-draw: wave-draw var(--dur-pop) var(--ease-out) backwards;
+  --animate-wave-breathe:
+    wave-breath-draw calc(var(--breath) * 2) var(--ease-out) infinite,
+    wave-breath-fade calc(var(--breath) * 2) var(--ease-in-out) infinite;
+  --animate-icon-swap: mark-in var(--dur-control) var(--ease-out) both;
+  --animate-icon-swap-still: kit-fade-in var(--dur-control) var(--ease-out) both;
+  --animate-cell-swap: cell-swap var(--dur-control) var(--ease-out);
+  --animate-cell-fade: kit-fade-in var(--dur-control) var(--ease-out);
   @keyframes spin {
     to {
       transform: rotate(360deg);
@@ -696,6 +771,41 @@
     to {
       transform: translateY(var(--space-2)) scale(var(--press-scale));
       opacity: 0;
+    }
+  }
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      translate: 0 var(--pop-rise);
+    }
+  }
+  @keyframes wave-draw {
+    from {
+      stroke-dashoffset: var(--run);
+    }
+  }
+  @keyframes wave-breath-draw {
+    0% {
+      stroke-dashoffset: var(--run);
+    }
+    50%,
+    100% {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes wave-breath-fade {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes cell-swap {
+    from {
+      opacity: 0;
+      scale: var(--pop-scale);
     }
   }
 }
@@ -1020,4 +1130,8 @@
 
 @utility anim-dur-* {
   animation-duration: --value(--duration-*);
+}
+
+@utility anim-delay-* {
+  animation-delay: --value(--duration-*);
 }

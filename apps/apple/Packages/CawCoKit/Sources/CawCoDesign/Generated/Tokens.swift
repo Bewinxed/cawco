@@ -1036,6 +1036,131 @@ public enum Size {
     public static let cTaskColTodosW: Double = 96
     /// The task ledger's Created and Updated columns.
     public static let cTaskColTimeW: Double = 112
+    /// The stop tray's status word column: one word and its glyph.
+    public static let cStopTrayStatusW: Double = 104
+    /// The stop tray's trail column (`12s`, `1m`).
+    public static let cStopTrayTrailW: Double = 24
+    /// The anti-aliased edge of the status dot's cut in a tree mark's tile.
+    public static let cTreeMarkHoleEdge: Double = 0.25
+    /// A tree mark's count box: two figures.
+    public static let cTreeMarkNumW: Double = 16
+    /// The usage strip's caption line, the second line of its row.
+    public static let cUsageCapLh: Double = 15
+    /// The usage strip's one row of cells: first line, gap, caption.
+    public static let cUsageStripRow: Double = 35
+    /// The usage strip's hit height on the home card.
+    public static let cUsageStripHomeH: Double = 56
+    /// The week share's column: as wide as "100%" in the figure face.
+    public static let cUsagePctW: Double = 32
+    /// A filed task card's least track in a reply.
+    public static let cFiledTaskW: Double = 224
+    /// The workflow list's name column floor.
+    public static let cWorkflowNameCol: Double = 180
+    /// The workflow list's last-run and started columns.
+    public static let cWorkflowWhenCol: Double = 110
+    /// The workflow list's run count column.
+    public static let cWorkflowCountCol: Double = 60
+    /// The workflow list's actions column.
+    public static let cWorkflowActionsCol: Double = 70
+    /// The workflow list's row floor, the height its loading rows stand at so nothing moves when they swap.
+    public static let cWorkflowRowH: Double = 64
+    /// The composer's attachments row before it scrolls.
+    public static let cAttsMaxH: Double = 180
+    /// How far the settle's text clip reaches past a word's box, so ascenders and descenders survive.
+    /// In em: multiply by the font size for points.
+    public static let cCompactionWordBleed: Double = 0.5
+    /// A ticking clock's room: seven digit widths hold "59m 59s".
+    public static let cElapsedW: Double = 56
+    /// The room the folded field's "+N lines" stands in.
+    public static let cComposerMoreW: Double = 72
+    /// How far the recall roll's clip reaches past the field on the sides it does not cut: past any screen.
+    public static let rollReach: Double = 844
+    /// The composer's / and @ menu before its list scrolls.
+    public static let cComposerMenuMaxH: Double = 320
+    /// The send plane's optical centring, up and right: the glyph's mass sits low-left in its box.
+    public static let opticalNudge: Double = 0.5
+    /// A mention chip's end padding (MentionField, and Composer's autosize twin).
+    public static let cMentionChipPadEnd: Double = 6
+    /// A mention chip's type size (MentionField, and Composer's autosize twin).
+    public static let cMentionChipSize: Double = 15
+    /// A mention chip's line height (MentionField, and Composer's autosize twin).
+    public static let cMentionChipLeading: Double = 22
+    /// A permission card's field value before it scrolls.
+    public static let cAskValueMaxH: Double = 200
+    /// The project offer's line basis, so its buttons wrap under it on a narrow card.
+    public static let cOfferLine: Double = 192
+    /// The skeleton holding a suggestion chip's place while an ask is slow.
+    public static let cSuggestShimmerW: Double = 144
+    /// The hairline's width: a bordered touch-hit host's `--hit-edge`, the hitl card's content column.
+    public static let borderWidth: Double = 1
+    /// The room a grouped turn's floated clock keeps at its first line's end, so the wrap holds when the clock shows.
+    public static let cTurnClockW: Double = 72
+    /// A machine's whole update error unfolded under its cell, before it scrolls.
+    public static let cUpdateSaidH: Double = 160
+    /// History's chart plot height.
+    public static let cUsagePlot: Double = 96
+    /// A provider limit's bar track in the session details strip.
+    public static let cLimitBar: Double = 64
+    /// A Limits tile's least width (its dial, figure and sentence).
+    public static let cUsageTileMin: Double = 248
+    /// A project spend stat tile's least width.
+    public static let cStatTileMin: Double = 152
+    /// The usage key's label column, so values line up down a tile and across a row.
+    public static let cRingsKeyLabelW: Double = 52
+    /// The usage key's value column.
+    public static let cRingsKeyValueW: Double = 84
+    /// The dot that leads an account's name in running words.
+    public static let cMarkDot: Double = 6
+    /// The room a Where-it-goes row keeps beside its meter for the figure and its gap.
+    public static let cUsageFigureW: Double = 88
+    /// A row meter's height on the Usage page (DESIGN.md Limit bar: "8px on a page").
+    public static let cMeterBarH: Double = 8
+    /// A dialog's height cap, its body scrolling inside; a document dialog stands at it (the parent's call: DESIGN.md's Drawer cap, its Dialog naming none).
+    public static let cDialogMaxH: Double = 717.4
+    /// What a dialog's header keeps clear at its trailing edge for the kit's Close, 30px and 12px from the corner.
+    public static let cDialogCloseClear: Double = 52
+    /// A document dialog's width on a narrow window.
+    public static let cDialogDocumentW: Double = 370.5
+    /// The tallest a tool call's document well grows in the transcript before it scrolls.
+    public static let cToolWellMaxH: Double = 420
+    /// The workflow graph canvas's least height.
+    public static let cGraphCanvasMin: Double = 300
+    /// A connection handle's diameter on the workflow canvas.
+    public static let cGraphHandle: Double = 10
+    /// The workflow editor's breadcrumb basis.
+    public static let cWorkflowCrumb: Double = 220
+    /// The workflow name field's widest in the header.
+    public static let cWorkflowNameMax: Double = 300
+    /// The save-state readout's width, so its words swap and nothing moves.
+    public static let cWorkflowSaveW: Double = 192
+    /// The runs list column of the workflow editor's Runs tab.
+    public static let cWorkflowRunsW: Double = 300
+    /// The template-path completer's tallest list.
+    public static let cCompleterMaxH: Double = 240
+    /// A workflow graph node card's width.
+    public static let cWfNodeW: Double = 260
+    /// An inline scroll region on a workflow page (the problems list, the run log).
+    public static let cWfScrollMaxH: Double = 253.2
+    /// The Set-key field's basis beside its buttons.
+    public static let cKeyFieldBasis: Double = 224
+    /// The Set-key field's widest.
+    public static let cKeyFieldMax: Double = 384
+    /// A bench's phone frame width (the probe kit's 390x844 phone).
+    public static let cBenchPhoneW: Double = 390
+    /// A bench's phone frame height.
+    public static let cBenchPhoneH: Double = 844
+    /// A bench's controls column.
+    public static let cBenchControlsW: Double = 380
+    /// The square Caw bench stage, twice the 160px Caw it holds.
+    public static let cBenchStage: Double = 320
+    /// The chosen-hover bench's side-panel well width.
+    public static let cBenchSideW: Double = 360
+    /// The chosen-hover bench's side-panel well height.
+    public static let cBenchSideH: Double = 240
+    /// The chosen-hover bench's model list and editor width.
+    public static let cBenchFieldW: Double = 480
+    /// A bench slider's readout ("32px", "100%"), so the figure never jumps.
+    public static let cBenchReadoutW: Double = 32
 }
 
 public enum Effect {

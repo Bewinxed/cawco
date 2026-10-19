@@ -191,6 +191,31 @@ const ANIMATIONS: Record<string, string> = {
   "animate-ns-scrim-in":
     "kit-fade-in var(--dur-panel) var(--ease-out) backwards",
   "animate-ns-scrim-out": "kit-fade-out var(--dur-exit) var(--ease-out) both",
+  // A reply's filed tasks arrive in a cascade (`arrive-delay`), rising, or
+  // with reduced motion fading; a project offer settles in the same rise.
+  "animate-filed-fade": "kit-fade-in var(--dur-pop) var(--ease-out) backwards",
+  "animate-filed-rise": "rise-in var(--dur-pop) var(--ease-out) backwards",
+  "animate-offer-settle":
+    "rise-in calc(var(--dur-control) * 2) var(--ease-out) backwards",
+  // An offer's face swapping: the old out, the new in.
+  "animate-face-out": "kit-fade-out var(--dur-exit) var(--ease-out) forwards",
+  "animate-face-in": "kit-fade-in var(--dur-menu) var(--ease-out) backwards",
+  // The compaction line draws along its dash (`wave-dash`), arriving after
+  // the rail and its own lead; while it compacts it breathes, drawing out
+  // over one breath and fading where it stands over the next.
+  "animate-wave-arrive":
+    "wave-draw var(--dur-pop) var(--ease-out) calc(var(--dur-rail) + var(--lead)) backwards",
+  "animate-wave-draw": "wave-draw var(--dur-pop) var(--ease-out) backwards",
+  "animate-wave-breathe":
+    "wave-breath-draw calc(var(--breath) * 2) var(--ease-out) infinite, wave-breath-fade calc(var(--breath) * 2) var(--ease-in-out) infinite",
+  // A glyph swapping in its slot grows in as a mark does; with reduced
+  // motion it only fades.
+  "animate-icon-swap": "mark-in var(--dur-control) var(--ease-out) both",
+  "animate-icon-swap-still":
+    "kit-fade-in var(--dur-control) var(--ease-out) both",
+  // An update cell's new state pops in; with reduced motion it fades.
+  "animate-cell-swap": "cell-swap var(--dur-control) var(--ease-out)",
+  "animate-cell-fade": "kit-fade-in var(--dur-control) var(--ease-out)",
 };
 /** The keyframes the house's animations name that app.css does not keep. */
 const KEYFRAMES: Record<string, string> = {
@@ -216,6 +241,12 @@ const KEYFRAMES: Record<string, string> = {
   "sheet-out": "to {\n  transform: var(--sheet-away);\n}",
   "ns-panel-out":
     "to {\n  transform: translateY(var(--space-2)) scale(var(--press-scale));\n  opacity: 0;\n}",
+  "rise-in": "from {\n  opacity: 0;\n  translate: 0 var(--pop-rise);\n}",
+  "wave-draw": "from {\n  stroke-dashoffset: var(--run);\n}",
+  "wave-breath-draw":
+    "0% {\n  stroke-dashoffset: var(--run);\n}\n50%,\n100% {\n  stroke-dashoffset: 0;\n}",
+  "wave-breath-fade": "0%,\n50% {\n  opacity: 1;\n}\n100% {\n  opacity: 0;\n}",
+  "cell-swap": "from {\n  opacity: 0;\n  scale: var(--pop-scale);\n}",
 };
 
 /**

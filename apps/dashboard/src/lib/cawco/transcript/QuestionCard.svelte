@@ -337,7 +337,7 @@
       {/if}
     </div>
     {#if otherText(q)}
-        <p
+      <p
         class="rail-hang text-size-body font-normal leading-body text-ink-strong max-w-c-measure flex gap-space-2 items-baseline"
         in:crossIn
       >

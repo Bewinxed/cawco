@@ -448,8 +448,7 @@
           data-slot="chev"
           aria-hidden="true"
           class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/bhead:rotate-90"
-          data-box
-          ><IconChevronRight class="size-icon-sm block" /></span
+          data-box><IconChevronRight class="size-icon-sm block" /></span
         >
         <!-- Its words on their x-height in the box (.mark-text): the trim's
              room given back as padding, so the box keeps its row-mark line. -->
@@ -561,7 +560,10 @@
           >
             <!-- It breathes, as live work does (DESIGN.md, Live work breathes);
                  under reduced motion the live hue says it, nothing loops. -->
-            <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
+            <span
+              data-slot="rail-cell"
+              aria-hidden="true"
+              class="rail-cell h-lh"
               >{#if status.beat}
                 <span
                   class="size-space-1 flex-none rounded-pill bg-status-live-glyph motion-safe:animate-breath"

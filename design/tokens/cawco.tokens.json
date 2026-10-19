@@ -6201,6 +6201,577 @@
         "unit": "px"
       },
       "$description": "The task ledger's Created and Updated columns."
+    },
+    "c-stop-tray-status-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 104,
+        "unit": "px"
+      },
+      "$description": "The stop tray's status word column: one word and its glyph.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "13ch"
+        }
+      }
+    },
+    "c-stop-tray-trail-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "The stop tray's trail column (`12s`, `1m`).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "3ch"
+        }
+      }
+    },
+    "c-tree-mark-hole-edge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 0.25,
+        "unit": "px"
+      },
+      "$description": "The anti-aliased edge of the status dot's cut in a tree mark's tile."
+    },
+    "c-tree-mark-num-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$description": "A tree mark's count box: two figures.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "2ch"
+        }
+      }
+    },
+    "c-usage-cap-lh": {
+      "$type": "dimension",
+      "$value": {
+        "value": 15,
+        "unit": "px"
+      },
+      "$description": "The usage strip's caption line, the second line of its row."
+    },
+    "c-usage-strip-row": {
+      "$type": "dimension",
+      "$value": {
+        "value": 35,
+        "unit": "px"
+      },
+      "$description": "The usage strip's one row of cells: first line, gap, caption.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.icon-md} + {space.space-1} + {size.c-usage-cap-lh})"
+        }
+      }
+    },
+    "c-usage-strip-home-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 56,
+        "unit": "px"
+      },
+      "$description": "The usage strip's hit height on the home card."
+    },
+    "c-usage-pct-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
+      "$description": "The week share's column: as wide as \"100%\" in the figure face.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "4ch"
+        }
+      }
+    },
+    "c-filed-task-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "rem"
+      },
+      "$description": "A filed task card's least track in a reply."
+    },
+    "c-workflow-name-col": {
+      "$type": "dimension",
+      "$value": {
+        "value": 180,
+        "unit": "px"
+      },
+      "$description": "The workflow list's name column floor."
+    },
+    "c-workflow-when-col": {
+      "$type": "dimension",
+      "$value": {
+        "value": 110,
+        "unit": "px"
+      },
+      "$description": "The workflow list's last-run and started columns."
+    },
+    "c-workflow-count-col": {
+      "$type": "dimension",
+      "$value": {
+        "value": 60,
+        "unit": "px"
+      },
+      "$description": "The workflow list's run count column."
+    },
+    "c-workflow-actions-col": {
+      "$type": "dimension",
+      "$value": {
+        "value": 70,
+        "unit": "px"
+      },
+      "$description": "The workflow list's actions column."
+    },
+    "c-workflow-row-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 64,
+        "unit": "px"
+      },
+      "$description": "The workflow list's row floor, the height its loading rows stand at so nothing moves when they swap."
+    },
+    "c-atts-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 180,
+        "unit": "px"
+      },
+      "$description": "The composer's attachments row before it scrolls."
+    },
+    "c-compaction-word-bleed": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "How far the settle's text clip reaches past a word's box, so ascenders and descenders survive.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "0.5em"
+        }
+      }
+    },
+    "c-elapsed-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 56,
+        "unit": "px"
+      },
+      "$description": "A ticking clock's room: seven digit widths hold \"59m 59s\".",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "7ch"
+        }
+      }
+    },
+    "c-composer-more-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4.5,
+        "unit": "rem"
+      },
+      "$description": "The room the folded field's \"+N lines\" stands in."
+    },
+    "roll-reach": {
+      "$type": "dimension",
+      "$value": {
+        "value": 844,
+        "unit": "px"
+      },
+      "$description": "How far the recall roll's clip reaches past the field on the sides it does not cut: past any screen.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "100vmax"
+        }
+      }
+    },
+    "c-composer-menu-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "The composer's / and @ menu before its list scrolls."
+    },
+    "optical-nudge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 0.5,
+        "unit": "px"
+      },
+      "$description": "The send plane's optical centring, up and right: the glyph's mass sits low-left in its box."
+    },
+    "c-mention-chip-pad-end": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "A mention chip's end padding (MentionField, and Composer's autosize twin)."
+    },
+    "c-mention-chip-size": {
+      "$type": "dimension",
+      "$value": {
+        "value": 15,
+        "unit": "px"
+      },
+      "$description": "A mention chip's type size (MentionField, and Composer's autosize twin)."
+    },
+    "c-mention-chip-leading": {
+      "$type": "dimension",
+      "$value": {
+        "value": 22,
+        "unit": "px"
+      },
+      "$description": "A mention chip's line height (MentionField, and Composer's autosize twin)."
+    },
+    "c-ask-value-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 200,
+        "unit": "px"
+      },
+      "$description": "A permission card's field value before it scrolls."
+    },
+    "c-offer-line": {
+      "$type": "dimension",
+      "$value": {
+        "value": 192,
+        "unit": "px"
+      },
+      "$description": "The project offer's line basis, so its buttons wrap under it on a narrow card.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "24ch"
+        }
+      }
+    },
+    "c-suggest-shimmer-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 9,
+        "unit": "rem"
+      },
+      "$description": "The skeleton holding a suggestion chip's place while an ask is slow."
+    },
+    "border-width": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1,
+        "unit": "px"
+      },
+      "$description": "The hairline's width: a bordered touch-hit host's `--hit-edge`, the hitl card's content column."
+    },
+    "c-turn-clock-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 72,
+        "unit": "px"
+      },
+      "$description": "The room a grouped turn's floated clock keeps at its first line's end, so the wrap holds when the clock shows.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "9ch"
+        }
+      }
+    },
+    "c-update-said-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "rem"
+      },
+      "$description": "A machine's whole update error unfolded under its cell, before it scrolls."
+    },
+    "c-usage-plot": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "History's chart plot height."
+    },
+    "c-limit-bar": {
+      "$type": "dimension",
+      "$value": {
+        "value": 64,
+        "unit": "px"
+      },
+      "$description": "A provider limit's bar track in the session details strip."
+    },
+    "c-usage-tile-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 15.5,
+        "unit": "rem"
+      },
+      "$description": "A Limits tile's least width (its dial, figure and sentence)."
+    },
+    "c-stat-tile-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 9.5,
+        "unit": "rem"
+      },
+      "$description": "A project spend stat tile's least width."
+    },
+    "c-rings-key-label-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 52,
+        "unit": "px"
+      },
+      "$description": "The usage key's label column, so values line up down a tile and across a row."
+    },
+    "c-rings-key-value-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 84,
+        "unit": "px"
+      },
+      "$description": "The usage key's value column."
+    },
+    "c-mark-dot": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "The dot that leads an account's name in running words."
+    },
+    "c-usage-figure-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 5.5,
+        "unit": "rem"
+      },
+      "$description": "The room a Where-it-goes row keeps beside its meter for the figure and its gap."
+    },
+    "c-meter-bar-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "A row meter's height on the Usage page (DESIGN.md Limit bar: \"8px on a page\")."
+    },
+    "c-dialog-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 717.4,
+        "unit": "px"
+      },
+      "$description": "A dialog's height cap, its body scrolling inside; a document dialog stands at it (the parent's call: DESIGN.md's Drawer cap, its Dialog naming none).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "85dvh"
+        }
+      }
+    },
+    "c-dialog-close-clear": {
+      "$type": "dimension",
+      "$value": {
+        "value": 52,
+        "unit": "px"
+      },
+      "$description": "What a dialog's header keeps clear at its trailing edge for the kit's Close, 30px and 12px from the corner."
+    },
+    "c-dialog-document-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 370.5,
+        "unit": "px"
+      },
+      "$description": "A document dialog's width on a narrow window.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "95vw"
+        }
+      }
+    },
+    "c-tool-well-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 420,
+        "unit": "px"
+      },
+      "$description": "The tallest a tool call's document well grows in the transcript before it scrolls."
+    },
+    "c-graph-canvas-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 300,
+        "unit": "px"
+      },
+      "$description": "The workflow graph canvas's least height."
+    },
+    "c-graph-handle": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$description": "A connection handle's diameter on the workflow canvas."
+    },
+    "c-workflow-crumb": {
+      "$type": "dimension",
+      "$value": {
+        "value": 220,
+        "unit": "px"
+      },
+      "$description": "The workflow editor's breadcrumb basis."
+    },
+    "c-workflow-name-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 300,
+        "unit": "px"
+      },
+      "$description": "The workflow name field's widest in the header."
+    },
+    "c-workflow-save-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 192,
+        "unit": "px"
+      },
+      "$description": "The save-state readout's width, so its words swap and nothing moves.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "24ch"
+        }
+      }
+    },
+    "c-workflow-runs-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 300,
+        "unit": "px"
+      },
+      "$description": "The runs list column of the workflow editor's Runs tab."
+    },
+    "c-completer-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "The template-path completer's tallest list."
+    },
+    "c-wf-node-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 260,
+        "unit": "px"
+      },
+      "$description": "A workflow graph node card's width."
+    },
+    "c-wf-scroll-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 253.2,
+        "unit": "px"
+      },
+      "$description": "An inline scroll region on a workflow page (the problems list, the run log).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "30dvh"
+        }
+      }
+    },
+    "c-key-field-basis": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "rem"
+      },
+      "$description": "The Set-key field's basis beside its buttons."
+    },
+    "c-key-field-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "rem"
+      },
+      "$description": "The Set-key field's widest."
+    },
+    "c-bench-phone-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 390,
+        "unit": "px"
+      },
+      "$description": "A bench's phone frame width (the probe kit's 390x844 phone)."
+    },
+    "c-bench-phone-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 844,
+        "unit": "px"
+      },
+      "$description": "A bench's phone frame height."
+    },
+    "c-bench-controls-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 380,
+        "unit": "px"
+      },
+      "$description": "A bench's controls column."
+    },
+    "c-bench-stage": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "The square Caw bench stage, twice the 160px Caw it holds."
+    },
+    "c-bench-side-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 360,
+        "unit": "px"
+      },
+      "$description": "The chosen-hover bench's side-panel well width."
+    },
+    "c-bench-side-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "The chosen-hover bench's side-panel well height."
+    },
+    "c-bench-field-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 480,
+        "unit": "px"
+      },
+      "$description": "The chosen-hover bench's model list and editor width."
+    },
+    "c-bench-readout-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
+      "$description": "A bench slider's readout (\"32px\", \"100%\"), so the figure never jumps.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "4ch"
+        }
+      }
     }
   },
   "effect": {

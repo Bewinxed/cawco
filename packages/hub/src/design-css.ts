@@ -125,6 +125,22 @@ function unit(n: number, u: string, where: string): number {
     case "dvh":
     case "vb":
       return (n / 100) * REFERENCE_VIEWPORT.block;
+    case "vmin":
+    case "svmin":
+    case "lvmin":
+    case "dvmin":
+      return (
+        (n / 100) *
+        Math.min(REFERENCE_VIEWPORT.inline, REFERENCE_VIEWPORT.block)
+      );
+    case "vmax":
+    case "svmax":
+    case "lvmax":
+    case "dvmax":
+      return (
+        (n / 100) *
+        Math.max(REFERENCE_VIEWPORT.inline, REFERENCE_VIEWPORT.block)
+      );
     case "ms":
       return n / 1000;
     case "%":

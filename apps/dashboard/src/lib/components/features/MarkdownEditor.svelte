@@ -11,29 +11,17 @@
    * Crepe reaches for `document` when it is constructed, so it is imported
    * inside `onMount`: this editor never runs on the server.
    */
+  // Crepe's structure, in its layer (lib/vendor-css/crepe.css), and only for
+  // the features Crepe runs by default (top-bar, ai and the ai diff stay off,
+  // so their sheets are not shipped). Crepe's own theme files are nothing but
+  // a palette, and the palette this app already has is app.css's `crepe-host`
+  // rules, anchored under `data-slot="crepe-host"`, so none is imported.
+  import "#lib/vendor-css/crepe.css";
   import { onMount } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  // Structure only, and only for the features Crepe runs by default (top-bar,
-  // ai and the ai diff stay off, so their sheets are not shipped). Crepe's own
-  // theme files are nothing but a palette, and the palette this app already
-  // has is the one in theme.css (the `crepe-host` component, anchored under
-  // `data-slot="crepe-host"`) — so none is imported, and there is no second
-  // light/dark theme to keep in step with the first.
-  import "@milkdown/crepe/theme/common/prosemirror.css";
-  import "@milkdown/crepe/theme/common/reset.css";
-  import "@milkdown/crepe/theme/common/block-edit.css";
-  import "@milkdown/crepe/theme/common/code-mirror.css";
-  import "@milkdown/crepe/theme/common/cursor.css";
-  import "@milkdown/crepe/theme/common/image-block.css";
-  import "@milkdown/crepe/theme/common/link-tooltip.css";
-  import "@milkdown/crepe/theme/common/list-item.css";
-  import "@milkdown/crepe/theme/common/placeholder.css";
-  import "@milkdown/crepe/theme/common/toolbar.css";
-  import "@milkdown/crepe/theme/common/table.css";
-  import "@milkdown/crepe/theme/common/latex.css";
 
   let {
     value = $bindable(),
@@ -132,4 +120,3 @@
   bind:this={host}
   {@attach morph()}
 ></section>
-

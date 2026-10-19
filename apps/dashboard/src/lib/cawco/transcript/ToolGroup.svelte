@@ -538,8 +538,7 @@
               <span
                 data-slot="chev"
                 class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/trow:rotate-90"
-                data-box
-                ><IconChevronRight class="size-icon-md block" /></span
+                data-box><IconChevronRight class="size-icon-md block" /></span
               >
             </button>
             {#if disclosed.get() || opened.has(callId(m))}
@@ -563,8 +562,10 @@
                        header's inset (`--tx-diff-head-inline`). -->
                       <div
                         class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--diffs-start)"
-                        style:--diffs-inset="calc(var(--tx-diff-head-inline) + 1px)"
-                        style:--diffs-start="calc(var(--x-hang) - var(--diffs-inset))"
+                        style:--diffs-inset="calc(var(--tx-diff-head-inline) +
+                        1px)"
+                        style:--diffs-start="calc(var(--x-hang) -
+                        var(--diffs-inset))"
                       >
                         {#if refusal}
                           <p

@@ -16,7 +16,13 @@
     },
   });
 
-  export type EmptyStateLooks = VariantProps<typeof emptyStateVariants>;
+  /** Its action's looks: `fill`, an action as wide as the block (a column of starters). */
+  export const emptyActionVariants = tv({
+    variants: { actionWidth: { fill: "self-stretch" } },
+  });
+
+  export type EmptyStateLooks = VariantProps<typeof emptyStateVariants> &
+    VariantProps<typeof emptyActionVariants>;
 </script>
 
 <script lang="ts">
@@ -43,6 +49,7 @@
     action,
     inline = false,
     pad,
+    actionWidth,
     class: className,
     ...restProps
   }: Omit<HTMLAttributes<HTMLDivElement>, "title"> &
@@ -93,6 +100,11 @@
     {/if}
   {/if}
   {#if action}
-    <div class="kit-empty-action" data-box>{@render action()}</div>
+    <div
+      class={["kit-empty-action", emptyActionVariants({ actionWidth })]}
+      data-box
+    >
+      {@render action()}
+    </div>
   {/if}
 </div>

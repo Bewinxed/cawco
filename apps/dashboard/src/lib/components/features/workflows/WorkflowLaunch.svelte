@@ -139,7 +139,6 @@
   }}
   bind:open={shown}
   ><Dialog.Content
-    class="max-h-c-dialog-max-h overflow-y-auto"
     escapeKeydownBehavior={busy ? "ignore" : "close"}
     interactOutsideBehavior={busy ? "ignore" : "close"}
     width="form"

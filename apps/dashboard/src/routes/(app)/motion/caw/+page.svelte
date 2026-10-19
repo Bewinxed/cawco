@@ -63,10 +63,7 @@
 <main
   class="type-body flex min-h-dvh flex-col items-center gap-space-5 bg-surface-recess p-space-7 text-ink-muted"
 >
-  <div
-    data-slot="stage"
-    class="grid size-c-bench-stage place-items-center"
-  >
+  <div data-slot="stage" class="grid size-c-bench-stage place-items-center">
     {#if mounted}
       {#key generation}
         <Caw

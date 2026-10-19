@@ -56,7 +56,7 @@
     <DropdownMenu.Trigger
       data-att-btn
       aria-label="Attach or draw"
-      class="size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-xs border border-border-control hit-edge bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:pressed:scale-(--press-scale) group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs"
+      class="size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-xs border border-border-control hit-edge-hair bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:pressed:scale-(--press-scale) group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs"
     >
       <IconPlus class="size-icon-md" />
     </DropdownMenu.Trigger>
@@ -76,7 +76,7 @@
   <button
     data-att-btn
     aria-label="Attach a file or image"
-    class="touch-hit hit-edge size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale) group-inert/ctrls:border-border-button-outline group-inert/ctrls:shadow-xs"
+    class="touch-hit hit-edge-hair size-c-composer-field flex-none grid place-items-center cursor-pointer rounded-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale) group-inert/ctrls:border-border-button-outline group-inert/ctrls:shadow-xs"
     onclick={() => input?.click()}
     type="button"
   >

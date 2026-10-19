@@ -166,10 +166,7 @@
       value="default"
     />
   </section>
-  <section
-    class="h-c-bench-side-h w-c-bench-side-w min-w-0"
-    data-probe="side"
-  >
+  <section class="h-c-bench-side-h w-c-bench-side-w min-w-0" data-probe="side">
     <SideSurface label="Preview" onclose={noop} title="Preview">
       {#snippet actions()}
         <button aria-label="Inspect" aria-pressed="true" type="button"

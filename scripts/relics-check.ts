@@ -86,6 +86,14 @@ const SANCTIONED: readonly {
       "svelte-streamdown 4.2.1 (the npm latest) writes each streamed token's animation, inline-block and pre-wrap into its style attribute (dist/context.svelte.js:53–59, :67) and offers no mode without them; only an important declaration outranks an inline style",
     docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
   },
+  {
+    file: "apps/dashboard/src/app.css",
+    kind: "important",
+    text: /^\s*(visibility|pointer-events): inherit !important;$/,
+    reason:
+      "virtua 0.53.4 (0.53.5, the latest, the same) writes a measuring item's visibility inline (lib/svelte/ListItem.svelte:54) and its container's pointer-events while it scrolls (lib/svelte/Virtualizer.svelte:186), with no option to skip either; only an important declaration outranks an inline style",
+    docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
+  },
 ];
 const sanctioned = (file: string, kind: Kind, text: string): boolean =>
   SANCTIONED.some(

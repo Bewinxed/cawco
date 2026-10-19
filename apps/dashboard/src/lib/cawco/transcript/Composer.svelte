@@ -2199,12 +2199,12 @@
       return;
     }
     const root = document.documentElement;
-    root.classList.add("composer-holding");
+    root.dataset.composerHolding = "";
     getSelection()?.removeAllRanges();
     const refuse = (event: Event) => event.preventDefault();
     document.addEventListener("selectstart", refuse);
     return () => {
-      root.classList.remove("composer-holding");
+      delete root.dataset.composerHolding;
       document.removeEventListener("selectstart", refuse);
     };
   });
@@ -3676,4 +3676,3 @@
     </div>
   </div>
 </div>
-

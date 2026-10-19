@@ -207,7 +207,9 @@
         <Collapsible.Trigger
           class="inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start max-w-full rail-line"
         >
-          <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
+          <span data-slot="rail-cell" class="rail-cell"
+            ><IconInfo class="size-icon-sm" /></span
+          >
           <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
             >{harness.title}</span
           >
@@ -240,7 +242,9 @@
       <span
         class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
       >
-        <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
+        <span data-slot="rail-cell" class="rail-cell"
+          ><IconInfo class="size-icon-sm" /></span
+        >
         <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
           >{harness.title}</span
         >
@@ -268,7 +272,9 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
+      <span data-slot="rail-cell" class="rail-cell"
+        ><IconInfo class="size-icon-sm" /></span
+      >
       <span
         class="flex-none text-ink-strong data-bad:text-data-bad"
         data-bad={message?.content === "task failed" || undefined}
@@ -294,7 +300,9 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconTerminal class="size-icon-sm" /></span>
+      <span data-slot="rail-cell" class="rail-cell"
+        ><IconTerminal class="size-icon-sm" /></span
+      >
       <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >{foldCommand ?? "Output"}</span
       >
@@ -315,7 +323,9 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconStop class="size-icon-sm" /></span>
+      <span data-slot="rail-cell" class="rail-cell"
+        ><IconStop class="size-icon-sm" /></span
+      >
       <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >Interrupted</span
       >
@@ -336,7 +346,9 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted gap-space-2 items-baseline rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><ResponseGlyph class="size-icon-sm" /></span>
+      <span data-slot="rail-cell" class="rail-cell"
+        ><ResponseGlyph class="size-icon-sm" /></span
+      >
       <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >{responses.lead}
         <button
@@ -421,7 +433,9 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-strong rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconClock class="size-icon-md" /></span>
+      <span data-slot="rail-cell" class="rail-cell"
+        ><IconClock class="size-icon-md" /></span
+      >
       <span
         data-slot="ftitle"
         class="min-w-0 overflow-clip text-ellipsis wrap-anywhere text-pretty"
@@ -455,7 +469,9 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-inherit rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconError class="size-icon-sm" /></span>
+      <span data-slot="rail-cell" class="rail-cell"
+        ><IconError class="size-icon-sm" /></span
+      >
       <b data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >{failTitle}</b
       >
@@ -481,7 +497,9 @@
       <Collapsible.Trigger
         class="inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
       >
-        <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
+        <span data-slot="rail-cell" class="rail-cell"
+          ><IconInfo class="size-icon-sm" /></span
+        >
         <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
           >{foldTitle}</span
         >
@@ -535,7 +553,9 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
+      <span data-slot="rail-cell" class="rail-cell"
+        ><IconInfo class="size-icon-sm" /></span
+      >
       <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >{foldTitle}</span
       >

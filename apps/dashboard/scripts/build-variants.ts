@@ -236,13 +236,24 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
   }
 }
 
+/* A filed task that needs you: its TaskNeedsFor stack stands inside it. */
+@custom-variant has-needs-stack (&:has([data-slot="task-needs-needs-stack"]));
+
+/* Under a theme switch (theme.svelte.ts marks the root): app.css stops the
+   elements' transitions; a pseudo-element names it where it is styled. */
+@custom-variant theme-flip (:root[data-theme-flip] &);
+
+/* Inside a workflow node whose Svelte Flow wrapper holds keyboard focus
+   (WorkflowNodeCard draws the ring on the card). */
+@custom-variant node-focus-visible (:where(.svelte-flow__node:focus-visible) &);
+
 /* A <summary>'s marker in WebKit, which draws it as its own pseudo-element
    (Tailwind's \`marker:\` is ::marker). */
 @custom-variant details-marker (&::-webkit-details-marker);`;
 
 /** Names Tailwind or the house already give a variant, or begin a functional one. */
 const RESERVED =
-  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|workflow-cards|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|short-window|tall-window|details-marker|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
+  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|workflow-cards|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|short-window|tall-window|details-marker|has-needs-stack|theme-flip|node-focus-visible|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
 
 interface Pair {
   attr: string;

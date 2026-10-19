@@ -12,6 +12,7 @@
    * zoom tools. In a pane under 640px it is a list: Used in, This canvas,
    * Made of.
    */
+  import "#lib/vendor-css/xyflow.css";
   import type { CanvasMap, CanvasMapNode } from "@cawco/core/stage";
   import {
     Background,

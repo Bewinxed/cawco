@@ -1,0 +1,16 @@
+/* Milkdown Crepe's stylesheets in their own layer, under the house's
+   components (app.css states the order), loaded with the editor alone
+   (MarkdownEditor). The `crepe-host` rules in app.css then restyle the
+   editor without `!important` (https://developer.mozilla.org/en-US/docs/Web/CSS/@import#importing_css_rules_into_a_cascade_layer). */
+@import "@milkdown/crepe/theme/common/prosemirror.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/reset.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/block-edit.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/code-mirror.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/cursor.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/image-block.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/link-tooltip.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/list-item.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/placeholder.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/toolbar.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/table.css" layer(crepe);
+@import "@milkdown/crepe/theme/common/latex.css" layer(crepe);

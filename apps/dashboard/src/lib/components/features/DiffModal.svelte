@@ -79,7 +79,8 @@
     aria-label={`Diff: ${filePath}`}
     bodyClass="flex h-full flex-col overflow-hidden"
     bodyPad="flush"
-    class="h-c-dialog-document-h w-c-dialog-document-w"
+    class="w-c-dialog-document-w"
+    height="cap"
     width="document"
   >
     <header

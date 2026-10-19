@@ -169,7 +169,8 @@
           style:--p="max(0, calc(var(--n) - var(--i) + 1))"
           style:--shade-seen="calc(var(--p) * var(--deck-shade-step))"
           style:--cast-h="calc(var(--deck-step) * 1.5)"
-          style:--cast-y="calc((var(--size) - var(--deck-step) - var(--size) * var(--deck-shrink) * var(--p)) / (1 - var(--deck-shrink) * var(--p)))"
+          style:--cast-y="calc((var(--size) - var(--deck-step) - var(--size) *
+          var(--deck-shrink) * var(--p)) / (1 - var(--deck-shrink) * var(--p)))"
           style:--card-seen="clamp(0, calc(var(--n) - var(--i) + 1), 1)"
           style:--card-origin={"50% calc(var(--size) + var(--deck-step) / var(--deck-shrink))"}
           style:--card-scale="scale(calc(1 - var(--deck-shrink) * var(--p)))"
@@ -245,7 +246,8 @@
     style:--p="1"
     style:--shade-seen="calc(var(--p) * var(--deck-shade-step))"
     style:--cast-h="calc(var(--deck-step) * 1.5)"
-    style:--cast-y="calc((var(--size) - var(--deck-step) - var(--size) * var(--deck-shrink) * var(--p)) / (1 - var(--deck-shrink) * var(--p)))"
+    style:--cast-y="calc((var(--size) - var(--deck-step) - var(--size) *
+    var(--deck-shrink) * var(--p)) / (1 - var(--deck-shrink) * var(--p)))"
     style:--skin-fill="var(--pfill, var(--fill))"
   ></span>
   {#if dot}
@@ -327,7 +329,8 @@
       aria-label={label}
       class="focus-inset touch-hit absolute z-4 -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) coarse:-bottom-(--reach) rounded-xs cursor-pointer coarse:hit-gap-x-(--hit-stop-x) coarse:hit-gap-y-(--hit-stop-y)"
       style:--reach="calc(var(--status-dot-size) / 2)"
-      style:--hit-max="var(--mark-hit-max, calc(var(--space-1) + var(--tree-gap)))"
+      style:--hit-max="var(--mark-hit-max, calc(var(--space-1) +
+      var(--tree-gap)))"
       style:--hit-foot={"calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"}
       style:--hit-stop-x={"calc(2 * (var(--mark-hit-gap, var(--row-compact-gap)) - var(--reach)))"}
       style:--hit-stop-y={"calc(2 * (var(--hit-max) - var(--tree-gap) / 2 - var(--reach)))"}

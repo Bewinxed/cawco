@@ -132,4 +132,3 @@
     <RowFault data-project-offer-refused class="basis-full" reason={refused} />
   </section>
 {/if}
-

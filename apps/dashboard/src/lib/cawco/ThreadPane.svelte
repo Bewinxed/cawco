@@ -862,7 +862,7 @@
         {#each filed as task, at (task.id)}
           <li
             data-slot="filed-task"
-            class="grid row-span-2 grid-rows-subgrid min-w-0 arrive-delay has-needs-stack:col-span-full has-needs-stack:max-w-c-measure motion-safe:data-arrive:animate-filed-rise motion-reduce:data-arrive:animate-filed-fade"
+            class="*:mb-space-2 grid row-span-2 grid-rows-subgrid min-w-0 arrive-delay has-needs-stack:col-span-full has-needs-stack:max-w-c-measure motion-safe:data-arrive:animate-filed-rise motion-reduce:data-arrive:animate-filed-fade"
             data-arrive={live || undefined}
             style:--arrive-delay={live ? `${(at + 1) * step}ms` : undefined}
           >
@@ -975,6 +975,7 @@
         in:crossIn
       >
         <EmptyState
+          actionWidth="fill"
           line={view && !view.on
             ? "Caw is off, so he acts only when you write to him."
             : undefined}

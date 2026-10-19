@@ -238,7 +238,9 @@
       </div>
     {/if}
 
-    <div class="mark-line type-label flex items-center gap-space-2 text-ink-strong">
+    <div
+      class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
+    >
       <span
         data-slot="glyph"
         aria-hidden="true"
@@ -306,7 +308,9 @@
     {/if}
 
     {#if openCode || (spend && spend.all > 0)}
-      <div class="mark-line type-label flex items-center gap-space-2 text-ink-strong">
+      <div
+        class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
+      >
         <span
           data-slot="glyph"
           aria-hidden="true"

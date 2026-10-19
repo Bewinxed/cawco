@@ -682,7 +682,8 @@
                 data-slot="fill"
                 class="h-c-meter-bar-h w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
                 style:--share={item.share}
-                style:--fill-w="calc(var(--share) * (100% - var(--c-usage-figure-w)))"
+                style:--fill-w="calc(var(--share) * (100% -
+                var(--c-usage-figure-w)))"
               ></span>
               <span
                 data-where-it-goes-value

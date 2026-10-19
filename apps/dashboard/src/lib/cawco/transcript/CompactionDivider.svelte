@@ -223,8 +223,7 @@
       class="relative inline-block align-middle w-(--tx-compact-caw) h-(--tx-compact-caw) me-c-pill-gap group-data-live/divider:w-(--tx-compacting-caw) motion-safe:transition-[inline-size,margin-inline-end] motion-safe:dur-panel motion-safe:ease-out"
       data-caw
       >{#if working}
-        <span
-          class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
+        <span class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
           ><Caw
             next={[COMPACTION_MARK.status]}
             ongone={() => {

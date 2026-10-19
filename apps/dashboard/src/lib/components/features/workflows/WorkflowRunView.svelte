@@ -333,11 +333,7 @@
       {@const ask = run.ask}
       <!-- The question folds open; answered, the picked option pends until
            the hub moves the run on, and then the block folds away. -->
-      <div
-        class="max-w-c-measure"
-        in:unfold
-        out:unfold
-      >
+      <div class="max-w-c-measure" in:unfold out:unfold>
         <Card.Root size="sm">
           <Card.Header>
             <Card.Title>{ask.question}</Card.Title>
