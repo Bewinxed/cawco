@@ -12,13 +12,18 @@
 
 <script lang="ts">
   /**
-   * THE CONNECTORS (proposal, Lanes and Crew first): the lines the panel
-   * draws between tiles, in the nesting rail's stroke (1px, `nest-ink`)
-   * with the rail's own quarter-turn at each bend, under the tiles. Lanes
-   * leaves a tile's foot and arrives at the dependent's top, bending across
-   * a lane; Crew first runs a line straight down the mark column, and one
-   * that would cross another tile runs down the gap between the tiles and
-   * the words, inside the card. A line draws down over 160ms when it first
+   * THE CONNECTORS (proposal, Lanes and Crew first's to-dos): the lines the
+   * panel draws between tiles, in the nesting rail's stroke (1px,
+   * `nest-ink`) with the rail's own quarter-turn at each bend, under the
+   * tiles. Every upright run stands on a lane's rail, the x of that lane's
+   * tile centres, which is the x the nesting rails under a tile take too:
+   * one line system. A line to a step in the same lane runs straight down
+   * the rail into the dependent's top; a line out to the other lane leaves
+   * the source's side and turns down that lane's rail into the dependent's
+   * top; a line back runs down the source's rail and turns into the
+   * dependent's side. So two lines into one step arrive at two different
+   * edges and share no stretch, and each crosses to the other lane in the
+   * gutter beside its own tile. A line draws down over 160ms when it first
    * appears (Thinking steps). Where a step's delegate is working, a band of
    * the live ink travels its line once per --dur-loop, by transform only,
    * and is drawn only while it moves.
@@ -28,7 +33,7 @@
    */
   import { onMount } from "svelte";
 
-  let { edges, mode }: { edges: Edge[]; mode: "lanes" | "column" } = $props();
+  let { edges }: { edges: Edge[] } = $props();
 
   interface Drawn {
     d: string;
@@ -44,9 +49,42 @@
   let svg = $state<SVGSVGElement>();
   let drawn = $state<Drawn[]>([]);
   const R = 3;
-  const BEND = 7;
-  /** Half the gap between the mark column and the words (--space-2). */
-  const GAP = 4;
+
+  interface Box {
+    bottom: number;
+    cx: number;
+    cy: number;
+    left: number;
+    right: number;
+    top: number;
+  }
+
+  /** The path of one line between two measured tiles. */
+  function pathOf(edge: Edge, a: Box, b: Box): Pick<Drawn, "d" | "pulse"> {
+    if (edge.kind === "carries") {
+      // Down from the step's tile, round, and along to the delegate's.
+      const turn = b.cy - R;
+      return {
+        d: `M ${a.cx} ${a.bottom} V ${turn} Q ${a.cx} ${b.cy} ${a.cx + R} ${b.cy} H ${b.left}`,
+        pulse: edge.pulse
+          ? { x: a.cx, y: a.bottom, length: Math.max(0, turn - a.bottom) }
+          : undefined,
+      };
+    }
+    if (Math.abs(a.cx - b.cx) < 1) {
+      return { d: `M ${a.cx} ${a.bottom} V ${b.top}` };
+    }
+    if (b.cx > a.cx) {
+      // Out of the source's side, then down the other lane's rail.
+      return {
+        d: `M ${a.right} ${a.cy} H ${b.cx - R} Q ${b.cx} ${a.cy} ${b.cx} ${a.cy + R} V ${b.top}`,
+      };
+    }
+    // Down the source's rail, then into the dependent's side.
+    return {
+      d: `M ${a.cx} ${a.bottom} V ${b.cy - R} Q ${a.cx} ${b.cy} ${a.cx - R} ${b.cy} H ${b.right}`,
+    };
+  }
 
   function measure(): void {
     const host = svg?.parentElement;
@@ -54,7 +92,7 @@
       return;
     }
     const origin = host.getBoundingClientRect();
-    const box = (id: string) => {
+    const box = (id: string): Box | null => {
       const el = host.querySelector(`[data-tile="${CSS.escape(id)}"]`);
       const r = el?.getBoundingClientRect();
       if (!r || r.width === 0) {
@@ -69,79 +107,19 @@
         cy: r.top - origin.top + r.height / 2,
       };
     };
-    const tops = [...host.querySelectorAll("[data-tile]")]
-      .filter((el) => !el.getAttribute("data-tile")?.startsWith("d:"))
-      .map((el) => {
-        const r = el.getBoundingClientRect();
-        return {
-          top: r.top - origin.top,
-          cx: r.left - origin.left + r.width / 2,
-        };
-      });
     drawn = edges.flatMap((edge): Drawn[] => {
       const a = box(edge.from);
       const b = box(edge.to);
       if (!(a && b)) {
         return [];
       }
-      const id = `${edge.from}>${edge.to}`;
-      if (edge.kind === "carries") {
-        // Down from the step's tile, round, and along to the delegate's.
-        const turn = b.cy - R;
-        return [
-          {
-            id,
-            from: edge.from,
-            to: edge.to,
-            kind: edge.kind,
-            d: `M ${a.cx} ${a.bottom} V ${turn} Q ${a.cx} ${b.cy} ${a.cx + R} ${b.cy} H ${b.left}`,
-            pulse: edge.pulse
-              ? { x: a.cx, y: a.bottom, length: Math.max(0, turn - a.bottom) }
-              : undefined,
-          },
-        ];
-      }
-      if (Math.abs(a.cx - b.cx) < 1) {
-        const crosses = tops.some(
-          (t) =>
-            Math.abs(t.cx - a.cx) < 1 && t.top > a.bottom && t.top < b.top - 1
-        );
-        if (crosses && mode === "column") {
-          // Past the tiles between, down the gap between the tiles and the
-          // words: inside the card, never through a tile.
-          const x = a.right + GAP;
-          return [
-            {
-              id,
-              from: edge.from,
-              to: edge.to,
-              kind: edge.kind,
-              d: `M ${a.right} ${a.cy} H ${x - R} Q ${x} ${a.cy} ${x} ${a.cy + R} V ${b.cy - R} Q ${x} ${b.cy} ${x - R} ${b.cy} H ${b.right}`,
-            },
-          ];
-        }
-        return [
-          {
-            id,
-            from: edge.from,
-            to: edge.to,
-            kind: edge.kind,
-            d: `M ${a.cx} ${a.bottom} V ${b.top}`,
-          },
-        ];
-      }
-      // Across a lane: bend just after the source going out, just before
-      // the dependent coming back.
-      const out = b.cx > a.cx;
-      const y = out ? a.bottom + BEND : b.top - BEND;
-      const dir = out ? 1 : -1;
       return [
         {
-          id,
+          id: `${edge.from}>${edge.to}`,
           from: edge.from,
           to: edge.to,
           kind: edge.kind,
-          d: `M ${a.cx} ${a.bottom} V ${y - R} Q ${a.cx} ${y} ${a.cx + dir * R} ${y} H ${b.cx - dir * R} Q ${b.cx} ${y} ${b.cx} ${y + R} V ${b.top}`,
+          ...pathOf(edge, a, b),
         },
       ];
     });
@@ -262,13 +240,19 @@
   .pv-pulse {
     opacity: 0;
   }
+  /* At rest at either end (a still picture is paused at the start): no
+     band. It shows only along the way. */
   @keyframes pv-pulse {
-    from {
-      opacity: 1;
+    0% {
+      opacity: 0;
       translate: 0 0;
     }
-    to {
+    15%,
+    85% {
       opacity: 1;
+    }
+    100% {
+      opacity: 0;
       translate: 0 var(--len);
     }
   }
