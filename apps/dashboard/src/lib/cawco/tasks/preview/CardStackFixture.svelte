@@ -4,7 +4,13 @@
    * column stands them: the one-state-line cards, fed the tidewater tasks.
    */
   import TaskCardStateLine from "../TaskCardStateLine.svelte";
-  import { CARD_STATES, DATES, sessionNameOf, taskOf } from "./tidewater";
+  import {
+    CARD_STATES,
+    DATES,
+    sessionNameOf,
+    sessionPlaceOf,
+    taskOf,
+  } from "./tidewater";
 </script>
 
 <ol class="stack" data-card-stack>
@@ -15,6 +21,7 @@
         date={DATES[task.id] ?? null}
         href="?task={task.id}"
         nameOf={sessionNameOf}
+        placeOf={sessionPlaceOf}
         {task}
       />
     </li>

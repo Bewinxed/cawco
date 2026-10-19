@@ -10,6 +10,7 @@
    * Try again with More. The stage is said once, on its chip; the session
    * row says the session's own state.
    */
+  import type { DecisionCard } from "@cawco/core/decisions";
   import { untrack } from "svelte";
   import {
     approveTarget,
@@ -45,6 +46,9 @@
     IconColumns,
     IconDocument,
     IconDot,
+    IconEye,
+    IconHistory,
+    IconInfo,
     IconLink,
     IconMinusCircle,
     IconMore,
@@ -52,12 +56,15 @@
     IconSuccess,
     IconTaskList,
     IconToolTodo,
-    IconWarningTriangle,
+    IconTranscript,
     IconWorking,
   } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
-  import { sessionName } from "./session-name";
-  import { type NameOf, placeOf } from "./task-state-line";
+  // The failure and blocked marks are solid Solar bold (the failure-mark
+  // ruling): no warning triangle and no x in a circle marks a status.
+  import IconFailed from "~icons/solar/danger-circle-bold";
+  import IconBlocked from "~icons/solar/forbidden-circle-bold";
+  import type { NameOf, PlaceOf } from "./task-state-line";
 
   type Tab = "review" | "session" | "details" | "activity";
 
@@ -69,7 +76,9 @@
     tab: startTab = null,
     tail = [],
     tool = null,
-    nameOf = sessionName,
+    asked = null,
+    nameOf,
+    placeOf,
   }: {
     task: TaskView;
     stages: StagesView;
@@ -78,8 +87,17 @@
     tail?: string[];
     /** The tool its session is running, while it runs. */
     tool?: string | null;
-    /** A session's name; the fleet's when left out. */
-    nameOf?: NameOf;
+    /**
+     * The decision its agent asks with the review: the open card of the
+     * decision page its attempt handed in (a result artifact of kind
+     * `artifact`, read with `readDecision`). Its options stand over
+     * Approve and Send back, so the agent offers whatever moves it has.
+     */
+    asked?: DecisionCard | null;
+    /** A session's name: the fleet's (session-name.ts) or a sheet's fixture. */
+    nameOf: NameOf;
+    /** Where a session works: the fleet's (session-name.ts) or a sheet's fixture. */
+    placeOf: PlaceOf;
     /** A phone: the task is its own page, with Back. */
     page?: boolean;
     /** The tab it opens on; null: the default for its state. */
@@ -331,13 +349,10 @@
       {#if cantStart}
         <p data-slot="refusal" class="refusal mark-line">
           <span class="mark-cell"
-            ><IconWarningTriangle
-              aria-hidden="true"
-              class="refusal-glyph"
-            /></span
+            ><IconBlocked aria-hidden="true" class="refusal-glyph" /></span
           >
           <span
-            ><span class="refusal-word">Couldn't start</span> · {cantStart}</span
+            ><span class="refusal-word">Can't start</span> · {cantStart}</span
           >
         </p>
       {/if}
@@ -349,12 +364,14 @@
         value={view}
       >
         <TabsList aria-label="Task">
+          <!-- Each section leads with its glyph (owner pin: "ICONS IN SECTIONS"),
+               none of them a glyph its own headings already wear. -->
           {#if reviewable}
-            <TabItem label="Review" value="review" />
+            <TabItem icon={IconEye} label="Review" value="review" />
           {/if}
-          <TabItem label="Session" value="session" />
-          <TabItem label="Details" value="details" />
-          <TabItem label="Activity" value="activity" />
+          <TabItem icon={IconTranscript} label="Session" value="session" />
+          <TabItem icon={IconInfo} label="Details" value="details" />
+          <TabItem icon={IconHistory} label="Activity" value="activity" />
         </TabsList>
       </Tabs>
     </header>
@@ -437,10 +454,7 @@
                   {#if sessionState.status === "live"}
                     <IconWorking aria-hidden="true" class="status-glyph" />
                   {:else if sessionState.status === "fail"}
-                    <IconWarningTriangle
-                      aria-hidden="true"
-                      class="status-glyph"
-                    />
+                    <IconFailed aria-hidden="true" class="status-glyph" />
                   {:else}
                     <IconSuccess aria-hidden="true" class="status-glyph" />
                   {/if}
@@ -580,6 +594,22 @@
 
     {#if hasFoot}
       <div data-slot="foot" class="foot" data-band="decide">
+        {#if deciding && asked}
+          <!-- The agent's own decision: its question, then its options as the
+               kit's option chips, a press picking it on the agent's page. -->
+          <fieldset class="asked" data-asked={asked.id}>
+            <legend class="asked-question">{asked.question}</legend>
+            <ul class="asked-options kit-chips">
+              {#each asked.options as option (option.id)}
+                <li>
+                  <button class="kit-chip touch-hit" type="button"
+                    >{option.label}</button
+                  >
+                </li>
+              {/each}
+            </ul>
+          </fieldset>
+        {/if}
         {#if deciding && approveTo && backTo}
           <Button data-approve size="sm"
             >{@render arrowLabel("Approve", approveTo)}</Button
@@ -990,6 +1020,37 @@
     gap: var(--space-2);
     padding: var(--space-3) var(--pane-inline);
     padding-block-end: max(var(--space-3), env(safe-area-inset-bottom));
+  }
+  /* The agent's decision: a line of its own over CawCo's fixed moves. */
+  .asked {
+    display: flex;
+    flex: 1 0 100%;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .asked-question {
+    padding: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    text-wrap: pretty;
+    overflow-wrap: anywhere;
+  }
+  .asked-options {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & > li {
+      min-inline-size: 0;
+      max-inline-size: 100%;
+    }
+    & .kit-chip {
+      overflow-wrap: anywhere;
+    }
   }
   .foot :global(.arrow-mark) {
     inline-size: var(--icon-sm);

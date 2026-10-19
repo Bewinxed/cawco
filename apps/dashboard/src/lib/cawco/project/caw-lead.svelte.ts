@@ -41,8 +41,9 @@ import {
 } from "../client.svelte";
 import type { CawStatus } from "../home/Caw.svelte";
 import { dur } from "../motion/curves.svelte";
-import { isRetry, type TaskSummary } from "../project-tasks";
+import type { TaskSummary } from "../project-tasks";
 import { store, stored } from "../storage";
+import { isRetry } from "../tasks/retry";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";
 

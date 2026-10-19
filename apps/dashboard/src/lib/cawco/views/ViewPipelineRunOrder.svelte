@@ -17,8 +17,13 @@
     IconNeedsYou,
     IconSuccess,
   } from "#lib/icons.js";
+  import IconFailed from "~icons/solar/danger-circle-bold";
   import StateLine from "../tasks/TaskStateLine.svelte";
-  import { type NameOf, stateLineOf } from "../tasks/task-state-line";
+  import {
+    type NameOf,
+    type PlaceOf,
+    stateLineOf,
+  } from "../tasks/task-state-line";
 
   let {
     tasks,
@@ -26,6 +31,7 @@
     hrefOf,
     onopen,
     nameOf,
+    placeOf,
   }: {
     tasks: TaskSummary[];
     hrefOf: (id: string) => string;
@@ -33,8 +39,10 @@
     onopen?: (id: string) => void;
     /** The date a task's file sets it for, said short. */
     dateOf: (id: string) => string | null;
-    /** A session's name; the fleet's when left out. */
-    nameOf?: NameOf;
+    /** A session's name: the fleet's (session-name.ts) or a sheet's fixture. */
+    nameOf: NameOf;
+    /** Where a session works: the fleet's (session-name.ts) or a sheet's fixture. */
+    placeOf: PlaceOf;
   } = $props();
 
   let foldOpen = $state(false);
@@ -83,7 +91,11 @@
 </script>
 
 {#snippet row(task: TaskSummary, depth: number)}
-  {@const line = stateLineOf(task, { date: dateOf(task.id), nameOf })}
+  {@const line = stateLineOf(task, {
+    date: dateOf(task.id),
+    nameOf,
+    placeOf,
+  })}
   <li>
     <a
       class="row press-tint focus-inset"
@@ -103,7 +115,10 @@
     >
       <span class="lead mark-line">
         <span class="slot" data-box>
-          {#if line && line.kind === "session"}
+          {#if line && line.kind === "session" && line.status === "fail"}
+            <!-- A failure leads with the failure mark, as its state line does. -->
+            <IconFailed aria-hidden="true" class="glyph fail" />
+          {:else if line && line.kind === "session"}
             <SessionMark
               id={line.session}
               place={line.place}
@@ -258,6 +273,9 @@
   }
   .slot :global(.glyph.attn) {
     color: var(--status-attn-glyph);
+  }
+  .slot :global(.glyph.fail) {
+    color: var(--status-fail-glyph);
   }
   .slot :global(.glyph.done) {
     color: var(--status-done-glyph);
