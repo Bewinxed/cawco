@@ -164,7 +164,7 @@ async function sideHead(kit: Kit, bench: string): Promise<void> {
   for (const width of WIDTHS) {
     // biome-ignore lint/performance/noAwaitInLoops: one width at a time on one page
     await page.setViewportSize({ width, height: 900 });
-    await open(page, `${bench}/motion/side-head`, '[data-card] [data-action]');
+    await open(page, `${bench}/motion/side-head`, "[data-card] [data-action]");
     // The head re-fits on its ResizeObserver: two frames for it to land.
     await page.evaluate(
       () =>
@@ -217,7 +217,9 @@ async function sideHead(kit: Kit, bench: string): Promise<void> {
                 const box = one.getBoundingClientRect();
                 return !edge || box.right > edge.right + 0.5;
               })
-              .map((one) => one.getAttribute("aria-label") ?? one.textContent ?? "");
+              .map(
+                (one) => one.getAttribute("aria-label") ?? one.textContent ?? ""
+              );
             const overlaps: string[] = [];
             let words = 0;
             let firstKept = false;
@@ -245,10 +247,7 @@ async function sideHead(kit: Kit, bench: string): Promise<void> {
             };
             if (name) {
               // Every word of the name, and its ring, in reading order.
-              const walk = document.createTreeWalker(
-                name,
-                NodeFilter.SHOW_ALL
-              );
+              const walk = document.createTreeWalker(name, NodeFilter.SHOW_ALL);
               for (let node = walk.nextNode(); node; node = walk.nextNode()) {
                 if (node instanceof SVGSVGElement) {
                   test("ring", node.getBoundingClientRect(), node);
@@ -309,7 +308,11 @@ interface PromptHead {
 
 async function promptHead(kit: Kit, bench: string): Promise<void> {
   const page = await kit.page("phone", { theme: "light" });
-  await open(page, `${bench}/motion/prompt-head`, '[data-slot="hitl"] h2 .place');
+  await open(
+    page,
+    `${bench}/motion/prompt-head`,
+    '[data-slot="hitl"] h2 .place'
+  );
   const head = await page.evaluate((): PromptHead | null => {
     const h2 = document.querySelector('[data-slot="hitl"] h2');
     const place = h2?.querySelector<HTMLElement>(".place");

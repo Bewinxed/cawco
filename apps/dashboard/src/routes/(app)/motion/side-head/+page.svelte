@@ -28,9 +28,9 @@
 </script>
 
 {#snippet planName()}
-  <span class="plan-name" data-name-row>
+  <span class="plan-name mark-line" data-name-row>
     <span data-name-lead>{planWords.plan}</span>
-    <TaskRing done={3} size="md" total={12} />
+    <span data-box><TaskRing done={3} size="md" total={12} /></span>
     <span class="figure">{planWords.figure(3, 12)}</span>
   </span>
 {/snippet}
@@ -55,8 +55,8 @@
               ><IconMaximize /></button
             >
           {:else}
-            <button data-action type="button"
-              ><IconExternal />{planWords.openInCanvas}</button
+            <button class="mark-line" data-action type="button"
+              ><IconExternal /><span>{planWords.openInCanvas}</span></button
             >
             <!-- A desk's split gives every side card its Expand. -->
             <button aria-label="Expand" data-action type="button"

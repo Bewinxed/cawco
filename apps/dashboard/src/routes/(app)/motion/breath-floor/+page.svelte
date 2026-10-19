@@ -7,7 +7,7 @@
    * against each surface's colour.
    */
   import FindRow from "#lib/cawco/find/FindRow.svelte";
-  import type { Row } from "#lib/cawco/find/find-rows";
+  import type { Row } from "#lib/cawco/find/find-rows.js";
   import Working from "~icons/solar/refresh-circle-bold-duotone";
 
   const SURFACES = [
