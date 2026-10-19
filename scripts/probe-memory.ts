@@ -677,6 +677,31 @@ try {
     );
   });
 
+  // ── (c) the person's first words open Setup ──────────────────────────────
+  // Now, before (b): a routine's run opens the routine's own thread, a
+  // conversation. The project was made from a folder, so nothing opened its
+  // Setup thread, and (d)'s notes live in the notes thread, which is none.
+  await section("c: the person's first words open Setup", async () => {
+    const before = await fleet.api<{ notes: boolean; title: string }[]>(
+      `/api/projects/${projectId}/threads`
+    );
+    const setup = await http("POST", `/api/projects/${projectId}/threads`, {
+      body: "PROBE-MEMORY-SETUP: set the project up.",
+    });
+    const opened = JSON.parse(setup.text) as {
+      thread?: { notes: boolean; setup: boolean; title: string };
+    };
+    check(
+      "c: after notes alone, the person's first words to Caw open the project's Setup thread",
+      before.length === 1 &&
+        before[0]?.notes === true &&
+        setup.status === 200 &&
+        opened.thread?.setup === true &&
+        opened.thread.notes === false,
+      `before: ${JSON.stringify(before.map(({ notes, title }) => ({ notes, title })))}; ${setup.status} ${JSON.stringify(opened.thread ?? setup.text)}`
+    );
+  });
+
   // The person's knowledge files.
   for (const [path, content] of [
     [
@@ -938,23 +963,7 @@ try {
 
   // ── (c) Caw's proposals: Approve commits as the person, Deny archives ──
   await section("c: Caw's proposals", async () => {
-    // The project was made from a folder, so nothing opened its Setup
-    // thread; (d)'s notes live in the notes thread, which is no conversation:
-    // the person's first words to Caw open Setup, and the next a thread of
-    // their own.
-    const setup = await http("POST", `/api/projects/${projectId}/threads`, {
-      body: "PROBE-MEMORY-SETUP: set the project up.",
-    });
-    const opened = JSON.parse(setup.text) as {
-      thread?: { notes: boolean; setup: boolean; title: string };
-    };
-    check(
-      "c: after notes alone, the person's first words to Caw open the project's Setup thread",
-      setup.status === 200 &&
-        opened.thread?.setup === true &&
-        opened.thread.notes === false,
-      `${setup.status} ${JSON.stringify(opened.thread ?? setup.text)}`
-    );
+    // Setup is open (above), so Caw's ask opens a thread of its own.
     const agentsNow = await wordsOf(projectId, "AGENTS.md");
     await http("POST", `/api/projects/${projectId}/threads`, {
       body: `PROBE-MEMORY-CAW-PROPOSE ${idOf(workerNote)}\n---AGENTS---\n${agentsNow}\n---END---`,
