@@ -208,8 +208,8 @@ export const artifactCreate = {
 /** What artifact_create adds for a session that has a parent (a delegate): `to`, and its words. */
 export const artifactCreateToParent = {
   description:
-    ' to: "parent" puts it in your parent\'s panel; they are told once and get its picks and pins. ' +
-    "You keep update, read and show.",
+    ' to: "parent" hands it to your parent unopened: they are told once per hand-off, open it in their panel with artifact_show, and get its picks and pins. ' +
+    "You keep update and read.",
   input: { to: z.literal("parent").optional() },
 };
 

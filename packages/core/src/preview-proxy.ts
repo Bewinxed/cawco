@@ -2,7 +2,12 @@ import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Server, WebSocketHandler } from "bun";
 import { refuseSchemeLowering } from "./bundle-css-guard";
-import { PREVIEW_DOWN_META, PREVIEW_WHY_META, type PreviewDown } from "./index";
+import {
+  PREVIEW_DOWN_META,
+  PREVIEW_WHY_META,
+  type PreviewDown,
+  SHOWN_FAILURES,
+} from "./index";
 import { embeddedFile, standalone } from "./runtime";
 
 /** Where every previewed page loads the overlay from, on its own origin. */
@@ -227,6 +232,47 @@ export function downResponse(
       },
     }
   );
+}
+
+const DOWN_META = new RegExp(
+  `<meta name="${PREVIEW_DOWN_META}" content="([a-z]+)">`
+);
+/** The hops a proxy's page may name: every way a view fails but `page`, which no proxy says. */
+const DOWNS: ReadonlySet<string> = new Set(
+  SHOWN_FAILURES.filter((failure) => failure !== "page")
+);
+const WHY_META = new RegExp(
+  `<meta name="${PREVIEW_WHY_META}" content="([^"]*)">`
+);
+const HTML_UNESCAPES: Record<string, string> = Object.fromEntries(
+  Object.entries(HTML_ESCAPES).map(([char, escaped]) => [escaped, char])
+);
+
+/**
+ * The hop a proxy's own page names ({@link downResponse}) and the machine's
+ * words for it, read back as the pane reads its `cawco:down`: for a reader
+ * on no page (the hub checking a preview no panel shows); null for a page
+ * the previewed server answered.
+ */
+export function downOf(
+  html: string
+): { down: PreviewDown; why: string | null } | null {
+  const named = DOWN_META.exec(html)?.[1];
+  if (!(named && DOWNS.has(named))) {
+    return null;
+  }
+  const down = named as PreviewDown;
+  const why = WHY_META.exec(html)?.[1];
+  return {
+    down,
+    why:
+      why === undefined
+        ? null
+        : why.replaceAll(
+            /&(?:amp|quot|lt|gt);/g,
+            (escaped) => HTML_UNESCAPES[escaped] ?? escaped
+          ),
+  };
 }
 
 /** How long one hop's line for one preview and cause stands for every repeat of it. Our call: a dev server's client retries each second. */

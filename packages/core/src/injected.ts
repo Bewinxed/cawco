@@ -391,10 +391,11 @@ export const artifactSavesNotice = (
   `${markerTag("artifact-saves", { id, kind, name })}[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
 
 /**
- * A delegate put an artifact in its parent's panel (hub artifacts/service.ts
- * `create` with `to: "parent"`): the parent owns it now, and the person's
- * picks and pins on it come to the parent. Told once, when it first arrives
- * from that delegate; the delegate's updates after are not told. Sent under
+ * A delegate handed its parent an artifact (hub artifacts/service.ts
+ * `create` with `to: "parent"`), readied and not opened: the parent owns it
+ * now and opens it in its panel with artifact_show once it has reviewed it.
+ * Told once per hand-off: when it starts waiting on the parent, or arrives
+ * from another delegate; that delegate's updates while it waits are not told. Sent under
  * the system origin {@link import("./harness").ARTIFACT_ORIGIN}; a transcript
  * draws it as one quiet note.
  */
@@ -409,7 +410,7 @@ export const artifactHandedNotice = ({
   kind,
   name,
 }: ArtifactHanded): string =>
-  `${markerTag("artifact-handed", { from, id, kind, name })}[CawCo] ${from} put the ${kind} "${name}" in your panel (artifact ${id}). The person's picks and pins on it come to you; artifact_read reads it.`;
+  `${markerTag("artifact-handed", { from, id, kind, name })}[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened: artifact_show opens it in your panel.`;
 
 /** A handed-up artifact's notice read back into who handed what. */
 export function parseArtifactHanded(text: string): ArtifactHanded | null {

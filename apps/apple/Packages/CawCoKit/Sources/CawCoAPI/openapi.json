@@ -36681,7 +36681,7 @@
             "type": "string"
           },
           "waitingOn": {
-            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks or a canvas's changes unread).",
+            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it by a delegate and not opened yet).",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ArtifactStatusWaitingOn"

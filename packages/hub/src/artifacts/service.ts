@@ -91,7 +91,7 @@ import {
 } from "@cawco/core/stage";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { applyPatch, type Operation } from "rfc6902";
-import type { Doc } from "yjs";
+import type { Doc, YMapEvent } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import {
   type BuiltProgram,
@@ -201,9 +201,10 @@ export interface ArtifactInput {
    */
   serve?: { command: string; cwd?: string | undefined } | undefined;
   /**
-   * `parent`: a delegate puts it in its parent's panel. The parent owns it
-   * (its panel, its list, the person's picks and pins on it), and is told
-   * once; the delegate stays its maker ({@link ArtifactRow.madeBy}).
+   * `parent`: a delegate hands it to its parent, readied and not opened.
+   * The parent owns it (its panel, its list, the person's picks and pins on
+   * it), is told once per hand-off and opens it itself with artifact_show;
+   * the delegate stays its maker ({@link ArtifactRow.madeBy}).
    */
   to?: "parent" | undefined;
   /**
@@ -212,6 +213,17 @@ export interface ArtifactInput {
    * `machine` names the host the port is on.
    */
   workspace?: string | undefined;
+}
+
+/** What says where an artifact is served from, before it has a row or with one. */
+type Placed = Pick<ArtifactRow, "kind" | "machineId" | "name" | "source">;
+
+/** The hub machine's headless screen on one canvas ({@link ArtifactServiceDeps.screen}). */
+export interface CanvasScreen {
+  /** Keeps it open through another write. */
+  hold: () => void;
+  /** Lets it go. */
+  release: () => void;
 }
 
 /** Whose panel a create puts the artifact in (`owner`), and whose call it was (`maker`): one session, or a delegate and its parent. */
@@ -408,7 +420,7 @@ export interface ArtifactStatus {
   /** The person's changes (picks, notes, drawn elements) since the session last read it. */
   unread: number;
   updatedAt: string;
-  /** Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks or a canvas's changes unread). */
+  /** Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it by a delegate and not opened yet). */
   waitingOn: ("person" | "session")[];
 }
 
@@ -476,6 +488,13 @@ export const SHOWN_WAIT_MS = 10_000;
 /** No view of the session said it showed the artifact in time. WORDS.md's error formula. */
 export const NO_VIEW =
   "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
+
+/** Why a `to: "parent"` create opened nothing: the parent opens it. */
+const HELD =
+  "Handed to your parent, not opened: it opens in their panel when they call artifact_show.";
+
+/** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
+const HANDED = "handed";
 
 /** A view's word that it has (or could not load) the artifact at `revision` (`POST …/artifacts/:artifact/shown`). */
 export interface ShownAck {
@@ -633,7 +652,8 @@ const newestHash = (state: Record<string, ChoiceEntry>): string | null =>
   Object.values(state).sort((a, b) => b.at.localeCompare(a.at))[0]?.pageHash ??
   null;
 
-const named = (row: ArtifactRow) => `the ${row.kind} "${row.name}"`;
+const named = (row: Pick<ArtifactRow, "kind" | "name">) =>
+  `the ${row.kind} "${row.name}"`;
 
 /** The machine a hostname, its label or its id names. */
 const machineNamed = (
@@ -754,7 +774,7 @@ const sheetOf = (
 
 /** A workspace preview's server (core `ServeSpec`): its workspace and port; null for any other artifact. */
 const servedOf = (
-  row: ArtifactRow
+  row: Pick<ArtifactRow, "kind" | "source">
 ): { port: number; workspace: string } | null =>
   row.kind === "preview" &&
   "port" in row.source &&
@@ -876,8 +896,8 @@ export interface ArtifactServiceDeps {
   /** What a folder preview of `dir` loads, weighed on machine `machineId` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
   folderWeight: (machineId: string, dir: string) => Promise<FolderWeight>;
   /**
-   * Tells `parent` once that its delegate `maker` put `artifact` in its
-   * panel (core `artifactHandedNotice`), on the channel the person's picks
+   * Tells `parent` once that its delegate `maker` handed it `artifact`, not
+   * opened (core `artifactHandedNotice`), on the channel the person's picks
    * take (server.ts `handArtifactUp`).
    */
   handedUp: (
@@ -941,6 +961,16 @@ export interface ArtifactServiceDeps {
    */
   previewAddress: (instanceId: string) => PreviewAddress;
   /**
+   * A preview no panel shows, loaded once through a listener of its own on
+   * machine `machineId` as a pane's load would be, then let go: null when
+   * its page answered, else the hop that didn't and the machine's words for
+   * it. A preview handed to a parent is checked so before it reaches them.
+   */
+  reachable: (
+    machineId: string,
+    source: Exclude<PreviewSource, { page: string }>
+  ) => Promise<{ failure: ShownFailure; why: string | null } | null>;
+  /**
    * Every view of session `instanceId`'s panel hears its artifacts again on
    * the frame it follows (the panel's open frame, unchanged otherwise); none
    * when the panel shows nothing.
@@ -953,6 +983,14 @@ export interface ArtifactServiceDeps {
   removed?: (row: ArtifactRow) => void;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
+  /**
+   * Canvas `artifact`'s host page opened in the Chromium of the hub's own
+   * machine (agent canvas-screen.ts), told it is that canvas, its doc at
+   * `sync`, where it joins the doc as a screen: what holds it on through a
+   * write, and what lets it go. Throws an {@link ArtifactRefusal} saying why
+   * when none can open.
+   */
+  screen: (artifact: ArtifactRow, sync: string) => Promise<CanvasScreen>;
   /**
    * What a send applies before the session hears it (setup.ts
    * `applySetupPicks`); a refusal throws and nothing is sent.
@@ -1137,7 +1175,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Artifact `id`, when the session owns it or made it: a delegate goes on
-   * updating, reading and showing what it put in its parent's panel.
+   * updating and reading what it handed to its parent.
    */
   const ownedOrMade = (instance: InstanceRow, id: string): ArtifactRow => {
     const row = db.get(id);
@@ -1193,19 +1231,53 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Tells the owner, once, that its delegate put the artifact in its panel:
-   * when it first arrives from that maker (new, or one the owner had from
-   * someone else). The maker's own panel, and its re-creates, are not told.
+   * Whether a create hands the artifact to its owner: a delegate's
+   * `to: "parent"`, readied but never shown by the create, so the parent
+   * reviews each revision its delegate makes before the person sees it.
    */
-  const handUp = async (
-    { owner, maker }: Making,
+  const handing = ({ owner, maker }: Making): boolean => owner.id !== maker.id;
+
+  /** Whether an artifact waits on its parent unopened ({@link handOver}). */
+  const isHanded = (row: ArtifactRow): boolean =>
+    docs.doc(row.id).getMap("meta").get(HANDED) === true;
+
+  /**
+   * A create's show, and what readies the artifact after it (`ready`, a
+   * canvas's drawing). The session's own artifact is shown in its panel,
+   * then readied there. One handed to its parent ({@link handing}) is
+   * marked {@link HANDED} and not shown, until the parent's own show opens
+   * it; it is readied unopened, and only then is the parent told, once per
+   * hand-off: when it wasn't waiting on them already, or came from another
+   * delegate than the one it was waiting from. A `ready` that throws tells
+   * the parent nothing and leaves its mark as it was.
+   */
+  const handOver = async (
+    making: Making,
     before: ArtifactRow | undefined,
-    row: ArtifactRow
-  ): Promise<void> => {
-    if (owner.id === maker.id || before?.madeBy === maker.id) {
-      return;
+    row: ArtifactRow,
+    ready?: () => Promise<void>
+  ): ReturnType<typeof show> => {
+    if (!handing(making)) {
+      const shown = await show(row, "agent");
+      await ready?.();
+      return shown;
     }
-    await deps.handedUp(owner, maker, row);
+    const was = isHanded(row);
+    const waiting = was && before?.madeBy === making.maker.id;
+    const meta = docs.doc(row.id).getMap("meta");
+    docs.transact(row.id, "hub", () => meta.set(HANDED, true));
+    try {
+      await ready?.();
+    } catch (error) {
+      if (!was) {
+        docs.transact(row.id, "hub", () => meta.delete(HANDED));
+      }
+      throw error;
+    }
+    if (!waiting) {
+      await deps.handedUp(making.owner, making.maker, row);
+    }
+    return { opened: false, started: true, why: HELD };
   };
 
   /**
@@ -1314,6 +1386,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * project's and stays.
    */
   const discard = (row: ArtifactRow) => {
+    letGoHeadless(row.id);
     docs.drop(row.id);
     db.remove(row.id);
     rmSync(join(deps.root, row.id), { recursive: true, force: true });
@@ -1364,7 +1437,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The server `row` previewed (core `ServeSpec`) is stopped once no other
    * artifact previews that port of its workspace: its life is its artifacts'.
    */
-  const releaseServed = (row: ArtifactRow) => {
+  const releaseServed = (row: Placed & { id?: string }) => {
     const served = servedOf(row);
     if (!(served && row.machineId)) {
       return;
@@ -1763,7 +1836,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /** Why a view could not load the artifact, in WORDS.md's error formula: what failed, and why. */
-  const notLoaded = (row: ArtifactRow, failure: ShownFailure): string => {
+  const notLoaded = (row: Placed, failure: ShownFailure): string => {
     const { source } = row;
     const machine = machineOf(row);
     const subject =
@@ -1785,7 +1858,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return `${subject} answered, but not with a page the panel can show.`;
     }
   };
-  const machineOf = (row: ArtifactRow): string => {
+  const machineOf = (row: Pick<ArtifactRow, "machineId">): string => {
     const machine = deps
       .machines()
       .find((one) => one.machineId === row.machineId);
@@ -1807,6 +1880,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const published = await deps.open(row, by);
     if (!published.ok) {
       return { opened: false, why: published.error, started: false };
+    }
+    const meta = docs.doc(row.id).getMap("meta");
+    if (meta.get(HANDED) === true) {
+      docs.transact(row.id, "hub", () => meta.delete(HANDED));
     }
     const shown = await shownBy(row.id, published.revision);
     let ack: ShownAck;
@@ -2182,7 +2259,103 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** What a canvas's create or update draws: skeleton elements or Mermaid, converted on a screen; the ids written. */
+  /**
+   * The hub machine's screen on each canvas handed to its parent and not
+   * opened ({@link isHanded}), by artifact: opened by the first write that
+   * finds no screen joined, kept while any write on it runs (`writing`), and
+   * let go once a picture has followed the last of them (the page posts one
+   * after a quiet 2 s), or `screenHoldMs` after it. `joined` answers once its
+   * page has joined the canvas's doc; `settle` stops a let-go that waits.
+   */
+  const headless = new Map<
+    string,
+    { joined: Promise<CanvasScreen>; settle?: () => void; writing: number }
+  >();
+
+  /**
+   * The canvas's headless screen, opened when it has none and held on when
+   * it has: a write on it counted, any let-go that waited called off.
+   */
+  const headlessScreen = (row: ArtifactRow) => {
+    let screen = headless.get(row.id);
+    if (screen) {
+      screen.joined.then(
+        (one) => one.hold(),
+        () => undefined
+      );
+    } else {
+      const joined = deps.screen(row, routeOf(row.id)).then(async (one) => {
+        if (await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs)) {
+          return one;
+        }
+        one.release();
+        throw new ArtifactRefusal(
+          504,
+          `The canvas ${row.name} wasn't drawn: the hub's machine opened it, but its page didn't join the canvas within ${Math.round(CANVAS_LIMITS.convertMs / 1000)} s.`
+        );
+      });
+      const opened = { joined, writing: 0 };
+      headless.set(row.id, opened);
+      joined.catch(() => {
+        if (headless.get(row.id) === opened) {
+          headless.delete(row.id);
+        }
+      });
+      screen = opened;
+    }
+    screen.settle?.();
+    screen.writing += 1;
+    return screen;
+  };
+
+  /** The canvas's headless screen let go now, if it has one. */
+  const letGoHeadless = (id: string) => {
+    const screen = headless.get(id);
+    if (!screen) {
+      return;
+    }
+    screen.settle?.();
+    headless.delete(id);
+    screen.joined.then(
+      (one) => one.release(),
+      () => undefined
+    );
+  };
+
+  /** A write on the headless screen done: the last one lets it go once a picture follows it, or `screenHoldMs` on. */
+  const wroteHeadless = (id: string) => {
+    const screen = headless.get(id);
+    if (!screen) {
+      return;
+    }
+    screen.writing -= 1;
+    if (screen.writing > 0) {
+      return;
+    }
+    const meta = docs.doc(id).getMap("meta");
+    const pictured = (event: YMapEvent<unknown>) => {
+      if (event.keysChanged.has("pictureAt")) {
+        letGoHeadless(id);
+      }
+    };
+    const timer = setTimeout(
+      () => letGoHeadless(id),
+      CANVAS_LIMITS.screenHoldMs
+    );
+    meta.observe(pictured);
+    screen.settle = () => {
+      clearTimeout(timer);
+      meta.unobserve(pictured);
+      screen.settle = undefined;
+    };
+  };
+
+  /**
+   * What a canvas's create or update draws: skeleton elements or Mermaid,
+   * converted on a screen; the ids written. A canvas handed to its parent
+   * and not opened is drawn on the hub machine's headless screen
+   * ({@link headlessScreen}), so the parent reads it before anyone sees it.
+   */
   const draw = async (
     row: ArtifactRow,
     change: { elements: SkeletonElement[] } | { mermaid: string }
@@ -2194,19 +2367,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `One call writes at most ${CANVAS_LIMITS.elementsPerCall} elements; send the rest in another.`
         );
       }
-      return await convertOnScreen(docs, row.id, "elements", {
-        elements: change.elements,
-      });
-    }
-    if (change.mermaid.length > CANVAS_LIMITS.mermaid) {
+    } else if (change.mermaid.length > CANVAS_LIMITS.mermaid) {
       throw new ArtifactRefusal(
         413,
         `Mermaid is at most ${CANVAS_LIMITS.mermaid} characters; split the diagram.`
       );
     }
-    return await convertOnScreen(docs, row.id, "mermaid", {
-      mermaid: change.mermaid,
-    });
+    const convert = () =>
+      "elements" in change
+        ? convertOnScreen(docs, row.id, "elements", {
+            elements: change.elements,
+          })
+        : convertOnScreen(docs, row.id, "mermaid", {
+            mermaid: change.mermaid,
+          });
+    if (!(
+      isHanded(row) &&
+      (headless.has(row.id) || docs.screens(row.id) === 0)
+    )) {
+      return await convert();
+    }
+    try {
+      await headlessScreen(row).joined;
+      return await convert();
+    } finally {
+      wroteHeadless(row.id);
+    }
   };
 
   /**
@@ -2263,24 +2449,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /**
-   * Makes a canvas in `owner`'s panel (or opens the one of that name) and
-   * shows it; with elements or Mermaid, waits for a screen to join and
-   * draws them. `maker` is whose call it was.
-   */
-  const createCanvas = async (
-    making: Making,
-    input: ArtifactInput
-  ): Promise<Created> => {
-    const { owner, maker } = making;
-    if (input.elements !== undefined && input.mermaid !== undefined) {
-      throw new ArtifactRefusal(
-        400,
-        "A canvas takes elements or mermaid, not both."
-      );
-    }
+  /** The owner's canvas of that name, its maker now `maker`, or a new one; and what was there. */
+  const canvasPlaced = (
+    { owner, maker }: Making,
+    name: string
+  ): { before: ArtifactRow | undefined; row: ArtifactRow } => {
     const now = new Date();
-    const before = db.byName(owner.id, "canvas", input.name);
+    const before = db.byName(owner.id, "canvas", name);
     const row =
       (before && db.update(before.id, { madeBy: maker.id, updatedAt: now })) ??
       db.create({
@@ -2289,10 +2464,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         madeBy: maker.id,
         projectId: owner.projectId ?? null,
         kind: "canvas",
-        name: input.name,
+        name,
         machineId: null,
         // The hub serves it, as it serves a page.
-        source: { page: input.name },
+        source: { page: name },
         revision: 1,
         seq: 0,
         deliveredSeq: 0,
@@ -2302,52 +2477,124 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         updatedAt: now,
         shownAt: null,
       });
-    stampMeta(row, null);
-    await handUp(making, before, row);
-    const made = {
-      id: row.id,
-      kind: row.kind,
-      name: row.name,
-      route: routeOf(row.id),
-      ...openedOf(await show(row, "agent")),
-    };
-    // Its outline as it stands, read as the owner's read only when the owner made it.
-    const outlineNow = () =>
-      readCanvas(
-        db.get(row.id) as ArtifactRow,
-        undefined,
-        false,
-        owner.id === maker.id
-      ).outline;
-    if (input.elements === undefined && input.mermaid === undefined) {
-      const outline = outlineNow();
-      return {
-        ...made,
-        outline,
-        ...(outline
-          ? {}
-          : {
-              note: "The canvas is empty. Draw on it with artifact_update (elements or mermaid), or wait for the person to draw.",
-            }),
-      };
+    return { before, row };
+  };
+
+  /** What a canvas's create draws: its elements, its Mermaid, or nothing. */
+  const drawingOf = ({
+    elements,
+    mermaid,
+  }: ArtifactInput):
+    { elements: SkeletonElement[] } | { mermaid: string } | null => {
+    if (elements !== undefined) {
+      return { elements };
     }
-    if (!(await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs))) {
+    return mermaid === undefined ? null : { mermaid };
+  };
+
+  /**
+   * A create's drawing on canvas `row`: on its panel's screen once one
+   * joins, or, handed up, on its headless screen ({@link draw}); the ids
+   * written.
+   */
+  const drawnOn = async (
+    row: ArtifactRow,
+    change: { elements: SkeletonElement[] } | { mermaid: string }
+  ): Promise<string[]> => {
+    if (!(
+      isHanded(row) ||
+      (await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs))
+    )) {
       throw new ArtifactRefusal(
         503,
         `The canvas ${row.name} is made (id ${row.id}) and empty. ${NO_SCREEN}`
       );
     }
-    const wrote = await draw(
-      row,
-      input.elements === undefined
-        ? { mermaid: input.mermaid as string }
-        : { elements: input.elements }
+    return await draw(row, change);
+  };
+
+  /**
+   * A handed canvas that couldn't be readied, refused: one the parent
+   * never had is not kept, so nothing of it reaches them.
+   */
+  const unhanded = (
+    before: ArtifactRow | undefined,
+    row: ArtifactRow,
+    error: ArtifactRefusal
+  ): ArtifactRefusal => {
+    if (!before) {
+      discard(row);
+    }
+    return new ArtifactRefusal(
+      error.status,
+      `${error.message} ${before ? "Your parent wasn't told." : "Nothing was handed to your parent."}`,
+      { cause: error }
     );
-    return {
-      ...made,
-      wrote,
-      outline: outlineNow(),
+  };
+
+  /**
+   * Makes a canvas in `owner`'s panel (or opens the one of that name) and
+   * shows it, or hands it to its parent unopened ({@link handOver}); with
+   * elements or Mermaid, draws them ({@link drawnOn}) before the parent
+   * hears of it. `maker` is whose call it was.
+   */
+  const createCanvas = async (
+    making: Making,
+    input: ArtifactInput
+  ): Promise<Created> => {
+    if (input.elements !== undefined && input.mermaid !== undefined) {
+      throw new ArtifactRefusal(
+        400,
+        "A canvas takes elements or mermaid, not both."
+      );
+    }
+    const { before, row } = canvasPlaced(making, input.name);
+    stampMeta(row, null);
+    const change = drawingOf(input);
+    let wrote: string[] | undefined;
+    let shown: Opened;
+    try {
+      shown = openedOf(
+        await handOver(
+          making,
+          before,
+          row,
+          change
+            ? async () => {
+                wrote = await drawnOn(row, change);
+              }
+            : undefined
+        )
+      );
+    } catch (error) {
+      throw handing(making) && error instanceof ArtifactRefusal
+        ? unhanded(before, row, error)
+        : error;
+    }
+    // Its outline as it stands, read as the owner's read only when the owner made it.
+    const { outline } = readCanvas(
+      db.get(row.id) as ArtifactRow,
+      undefined,
+      false,
+      making.owner.id === making.maker.id
+    );
+    const made = {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      route: routeOf(row.id),
+      ...shown,
+      outline,
     };
+    if (wrote) {
+      return { ...made, wrote };
+    }
+    return outline
+      ? made
+      : {
+          ...made,
+          note: "The canvas is empty. Draw on it with artifact_update (elements or mermaid), or wait for the person to draw.",
+        };
   };
 
   /** A canvas's change: elements added or replaced by id, ids deleted, or Mermaid appended; read after as `ownersRead` says. */
@@ -2736,12 +2983,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         });
     stampMeta(row, null);
     writeStage(row, opened.state, opened.sheet);
-    const shown = await show(row, "agent");
+    const shown = await handOver(making, before, row);
     if (!(shown.started || before)) {
       discard(row);
       throw new ArtifactRefusal(503, shown.why);
     }
-    await handUp(making, before, row);
     const owned = sheetOf(row);
     const report = await drawnReport(
       { workspace },
@@ -2968,6 +3214,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return { before, row };
   };
 
+  /**
+   * A preview handed to a parent, loaded first: no panel loads it to say it
+   * failed, so one that doesn't answer is refused here, its served server let
+   * go, and it never reaches the parent. Nothing for a page.
+   */
+  const answersFirst = async (at: Placed): Promise<void> => {
+    const { kind, machineId, source } = at;
+    if (!(kind === "preview" && machineId) || "page" in source) {
+      return;
+    }
+    const down = await deps.reachable(machineId, source);
+    if (!down) {
+      return;
+    }
+    releaseServed(at);
+    throw new ArtifactRefusal(
+      503,
+      `${notLoaded(at, down.failure)}${down.why ? ` (${down.why})` : ""} It wasn't handed to your parent.`
+    );
+  };
+
   /** The delegate that put it in its owner's panel, as `artifact_list` names it; nothing when the owner made it. */
   const handedBy = (row: ArtifactRow): { madeBy?: string } =>
     row.madeBy && row.madeBy !== row.instanceId ? { madeBy: row.madeBy } : {};
@@ -2999,6 +3266,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const shown = deps.showing(row.instanceId) === row.id;
     const opened = row.openedRevision === row.revision;
     const draft = doc.getMap("meta").get("draft") === true;
+    const handed = doc.getMap("meta").get(HANDED) === true;
     const waitingOn: ArtifactStatus["waitingOn"] = [];
     if (
       !draft &&
@@ -3009,7 +3277,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     if (
       !draft &&
-      (picksAwaiting > 0 || (row.kind === "canvas" && unread.length > 0))
+      (handed ||
+        picksAwaiting > 0 ||
+        (row.kind === "canvas" && unread.length > 0))
     ) {
       waitingOn.push("session");
     }
@@ -3181,9 +3451,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Makes an artifact and shows it in the session's panel, or with
-     * `to: "parent"` in its parent's ({@link ownerFor}), the parent told once
-     * ({@link handUp}). A page or preview the panel's owner already has under
+     * Makes an artifact and shows it in the session's panel; with
+     * `to: "parent"` readies it for its parent ({@link ownerFor}) unopened,
+     * the parent told once and opening it itself ({@link handOver}).
+     * A preview handed so is loaded first ({@link ArtifactServiceDeps.reachable}),
+     * and one that doesn't answer is refused, nothing kept. A page or preview the panel's owner already has under
      * the same kind and name is replaced in place: its doc, and so every
      * pick, stays, and the caller becomes its maker. What it is made from (a
      * page's folder, a preview's workspace, a sheet's stage) is the caller's.
@@ -3225,6 +3497,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? await deps.folderWeight(machineId, source.dir)
           : undefined;
       const stage = await serveFirst(source, machineId);
+      if (handing(making)) {
+        await answersFirst({
+          kind: input.kind,
+          name: input.name,
+          machineId,
+          source,
+        });
+      }
       const { before, row } = placed(making, input, { source, machineId });
       if (html !== null) {
         writePage(row.id, html, program);
@@ -3232,14 +3512,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       stampMeta(row, pageHashOf(html, program));
       keepProgramDir(row, program, input.dir);
       keepServed(row, before, stage);
-      const shown = await show(row, "agent");
+      const shown = await handOver(making, before, row);
       if (!(shown.started || before) && input.kind === "preview") {
         // A preview nothing could start shows nothing: it is not kept. One
         // whose server did not answer stays in the panel, its failure on it.
         discard(row);
         throw new ArtifactRefusal(503, shown.why);
       }
-      await handUp(making, before, row);
       return {
         id: row.id,
         kind: row.kind,
@@ -3442,8 +3721,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * The state, meta and sentAt; a canvas's outline and what the person
      * changed, with its picture when `png`; with no id, the session's
-     * newest artifact. Its maker reads one it put in its parent's panel
-     * too, which leaves the parent's unread as it was.
+     * newest artifact. Its maker reads one it handed to its parent too,
+     * which leaves the parent's unread as it was.
      */
     read: async (
       instanceId: string,
@@ -3774,16 +4053,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * Brings an artifact to the front of its owner's panel and waits for a
      * view to have it on screen ({@link Opened}); a refusal when its server
-     * could not be started. Its owner's or its maker's to call, or the
-     * person's: what they open is what the panel goes back to when the agent
-     * takes away something it showed over it.
+     * could not be started. Its owner's to call, or the person's: what they
+     * open is what the panel goes back to when the agent takes away
+     * something it showed over it. A delegate that handed it up is refused:
+     * its parent's panel changes only when the parent opens it.
      */
     show: async (
       instanceId: string,
       id: string,
       by: PanelHand
     ): Promise<Opened> => {
-      const shown = await show(ownedOrMade(sessionOf(instanceId), id), by);
+      const instance = sessionOf(instanceId);
+      const row = ownedOrMade(instance, id);
+      if (row.instanceId !== instance.id) {
+        throw new ArtifactRefusal(
+          409,
+          `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is your parent's: it opens in their panel when they call artifact_show.`
+        );
+      }
+      const shown = await show(row, by);
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }

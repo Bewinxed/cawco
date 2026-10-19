@@ -2,7 +2,7 @@
  * The artifact routes (Projects spec §5.10), on the session that made the
  * artifact: the panel's list, its Show and Remove, what the six tools call, and the
  * lookup an artifact's own tab opens with. A session reaches only its own
- * artifacts, and those it put in its parent's panel (update, read, show);
+ * artifacts, and those it handed to its parent (update, read);
  * any other id is 404. The person's Send is on the preview
  * listener, beside the doc's socket (sync.ts `artifactSend`).
  */
@@ -390,7 +390,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             })
           ),
           draft: t.Optional(t.Boolean()),
-          // A delegate puts it in its parent's panel.
+          // A delegate hands it to its parent, unopened.
           to: t.Optional(t.Literal("parent")),
         }),
       },

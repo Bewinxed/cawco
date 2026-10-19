@@ -1390,6 +1390,24 @@ export function createPreviewListeners(
     },
 
     /**
+     * Session `instanceId`'s origin as a process on the hub's own machine
+     * dials it: its own port on the listeners' bind address, loopback for a
+     * wildcard. That listener has no lock in either mode, so no ticket.
+     */
+    local(instanceId: string): string {
+      const port = portOf(instanceId);
+      let host = hostname;
+      if (hostname === "0.0.0.0") {
+        host = "127.0.0.1";
+      } else if (hostname === "::") {
+        host = "[::1]";
+      } else if (hostname.includes(":")) {
+        host = `[${hostname}]`;
+      }
+      return `http://${host}:${port}`;
+    },
+
+    /**
      * An embedded preview's origin (`key`, {@link embedKey}) for session
      * `owner`'s decision page: its listener on a free preview port of its
      * own, started when it has none, which that session's origins may

@@ -1180,7 +1180,7 @@ export function handoffTools(deps: HandoffDeps) {
         openWorldHint: false,
       }
     ),
-    // A delegate may put it in its parent's panel instead (`to`).
+    // A delegate may hand it to its parent instead (`to`), unopened.
     deps.hasParent
       ? tool(
           artifactCreate.name,

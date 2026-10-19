@@ -3567,8 +3567,8 @@ export const artifacts = sqliteTable(
       .references(() => instances.id, { onDelete: "cascade" }),
     /**
      * The session whose `artifact_create` last made it: the owner itself, or
-     * a delegate that put it in its parent's panel (`to: "parent"`), which
-     * may go on updating, reading and showing it. Null on one made before it
+     * a delegate that handed it to its parent (`to: "parent"`), which may
+     * go on updating and reading it. Null on one made before it
      * was kept.
      */
     madeBy: text("made_by").references(() => instances.id, {

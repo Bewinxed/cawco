@@ -1,6 +1,10 @@
 import { existsSync, readdirSync } from "node:fs";
 import { homedir, networkInterfaces, platform } from "node:os";
 import { join } from "node:path";
+import {
+  nestedBwrapLabel,
+  nestedSeatbeltRefusal,
+} from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type {
   MachineCapabilities,
@@ -20,6 +24,26 @@ import { claudeHostVersion } from "./claude-version";
 import { opencodeBinary } from "./harnesses/opencode-client";
 import { probeStarted } from "./probe-count";
 import { installAdvice, resolveBin } from "./tools";
+
+let sandboxable: boolean | undefined;
+
+/**
+ * Whether a Chromium this process launches runs its own sandbox: always,
+ * but where this process already runs inside a workspace's boundary (a
+ * scratch fleet's daemon started from a workspace), which holds the browser
+ * already and refuses Chromium's own sandbox what it needs, so a sandboxed
+ * launch there dies at once ("Chromium sandboxing failed!"): beneath bwrap
+ * under the host's `bwrap-userns-restrict` its namespaces get no
+ * capabilities, and macOS's Seatbelt does not nest (core
+ * boundary-nesting.ts). Read once per process.
+ */
+export const chromiumSandboxed = (): boolean => {
+  sandboxable ??=
+    platform() === "darwin"
+      ? nestedSeatbeltRefusal() === undefined
+      : nestedBwrapLabel() === undefined;
+  return sandboxable;
+};
 
 export function browserExecutable(): string | undefined {
   const candidates =

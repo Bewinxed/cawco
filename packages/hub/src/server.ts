@@ -329,6 +329,11 @@ import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { BrowserFrame, BrowserHandedBackFrame } from "@cawco/core/browser";
 import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
+import {
+  CANVAS_LIMITS,
+  CANVAS_SCREEN_CLOSE,
+  CANVAS_SCREEN_OPEN,
+} from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -342,7 +347,12 @@ import {
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
-import { DOWN_WORDS, type FolderWeight } from "@cawco/core/preview-proxy";
+import {
+  DOWN_WORDS,
+  downOf,
+  type FolderWeight,
+  RELAY_HEADER,
+} from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import {
   type DesignMap,
@@ -409,6 +419,7 @@ import {
   type MarksDelivery,
   type MarksOutcome,
   type PageFrom,
+  SHOWN_WAIT_MS,
   type StageAt,
 } from "./artifacts/service";
 import {
@@ -10867,8 +10878,8 @@ export const createServer = (
     );
   };
   /**
-   * A delegate put an artifact in its parent's panel (artifacts/service.ts
-   * `handUp`): the parent hears it once, on the channel the person's picks
+   * A delegate handed its parent an artifact, not opened (artifacts/service.ts
+   * `handOver`): the parent hears it once per hand-off, on the channel the person's picks
    * take, which wakes it as their words do. One the parent didn't take is
    * kept in its transcript as not sent, with why.
    */
@@ -10888,7 +10899,7 @@ export const createServer = (
         const record = sendArtifactEvent(parent, text, [], undefined);
         if (record?.state === "failed") {
           console.warn(
-            `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate put it in its panel: ${record.reason ?? "the send failed"}`
+            `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate handed it up: ${record.reason ?? "the send failed"}`
           );
         }
       } catch (error) {
@@ -11196,7 +11207,7 @@ export const createServer = (
     // Your pins, replies, resolves and ink go by themselves once quiet.
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
-    // A delegate's artifact in its parent's panel: the parent hears it once.
+    // A delegate's artifact handed to its parent unopened: the parent hears it once.
     handedUp: (parent, maker, artifact) =>
       handArtifactUp(parent, maker, artifact),
     instance: (id) => db.getInstancesByIds([id])[0],
@@ -11310,6 +11321,125 @@ export const createServer = (
       (await onStage(at, STAGE_WRITE, write)).result as SheetWritten,
     stageComponents: async (at, ask) =>
       (await onStage(at, STAGE_COMPONENTS, ask)).result as DesignMap,
+    // A preview no panel shows, loaded once through a listener of its own
+    // (keyed by no session, so no panel's listener moves), then let go.
+    reachable: async (machineId, source) => {
+      const key = `handed-${crypto.randomUUID()}`;
+      const started = await startListener(
+        key,
+        machineId,
+        source,
+        previewGenerationOf(key)
+      );
+      if (!started.ok) {
+        return { failure: started.down, why: started.error };
+      }
+      const { address, port, token } = started.upstream;
+      const host = address.includes(":") ? `[${address}]` : address;
+      try {
+        const read = await readWithin(SHOWN_WAIT_MS, (signal) =>
+          fetch(`http://${host}:${port}${source.path ?? "/"}`, {
+            // A pane's load: a sleeping stage or served server wakes for it.
+            headers: { [RELAY_HEADER]: token, "sec-fetch-mode": "navigate" },
+            redirect: "manual",
+            signal,
+          })
+        );
+        if (read.kind !== "answered") {
+          return {
+            failure: "machine",
+            why: `its listener didn't answer within ${Math.round(read.after / 1000)} s`,
+          };
+        }
+        const down = downOf(await read.value.text());
+        return down ? { failure: down.down, why: down.why } : null;
+      } catch (error) {
+        return {
+          failure: "machine",
+          why: error instanceof Error ? error.message : String(error),
+        };
+      } finally {
+        detach(
+          callAgent(
+            machineId,
+            PREVIEW_STOP,
+            [{ instanceId: key, token }],
+            BUSY_TIMEOUT_MS
+          ),
+          "handed preview check stop"
+        );
+      }
+    },
+    // A canvas no person's screen shows, drawn headless by the hub machine's
+    // daemon on the canvas's own origin, which answers there on loopback.
+    screen: async (artifact, sync) => {
+      const machineId = await ownMachineId;
+      if (!registry.agent(machineId)) {
+        throw new ArtifactRefusal(
+          503,
+          `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
+        );
+      }
+      const token = crypto.randomUUID();
+      const open = {
+        canvas: { id: artifact.id, name: artifact.name, sync },
+        token,
+        url: `${previewListeners.local(artifact.instanceId)}/__cawco/canvas/${artifact.id}/`,
+      };
+      const asked = await callAgent(
+        machineId,
+        CANVAS_SCREEN_OPEN,
+        [open],
+        CANVAS_LIMITS.screenOpenMs
+      );
+      switch (asked.kind) {
+        case "unanswered":
+          if (asked.reason !== "dead") {
+            // It may still open after this gave up: told to close.
+            detach(
+              callAgent(
+                machineId,
+                CANVAS_SCREEN_CLOSE,
+                [{ token }],
+                BUSY_TIMEOUT_MS
+              ),
+              "late canvas screen close"
+            );
+          }
+          throw new ArtifactRefusal(
+            503,
+            `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${Math.round(asked.after / 1000)} s`}.`
+          );
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
+      }
+      if (!asked.value.ok) {
+        throw new ArtifactRefusal(
+          503,
+          `The canvas ${artifact.name} wasn't drawn: ${asked.value.error ?? "the hub's machine couldn't open it."}`
+        );
+      }
+      return {
+        // The same open again holds the page on (agent canvas-screen.ts).
+        hold: () =>
+          detach(
+            callAgent(machineId, CANVAS_SCREEN_OPEN, [open], BUSY_TIMEOUT_MS),
+            "canvas screen hold"
+          ),
+        release: () =>
+          detach(
+            callAgent(
+              machineId,
+              CANVAS_SCREEN_CLOSE,
+              [{ token }],
+              BUSY_TIMEOUT_MS
+            ),
+            "canvas screen close"
+          ),
+      };
+    },
     // A workspace preview's server, run and kept up on the workspace's machine.
     serve: async (machineId, workspace, serve) => {
       const asked = await callAgent(

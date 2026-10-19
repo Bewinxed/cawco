@@ -109,6 +109,7 @@ import {
   waitingWords,
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
 import { keepRoomSampled, measureMemoryRoom } from "@cawco/core/heavy-run";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -133,6 +134,11 @@ import {
   closeBrowserDoor,
   forgetBrowserDoor,
 } from "./browser/door";
+import {
+  closeCanvasScreen,
+  closeCanvasScreens,
+  openCanvasScreen,
+} from "./canvas-screen";
 import { carryWorktree, worktreeHeld } from "./carry";
 import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
@@ -965,6 +971,13 @@ export class SessionSupervisor {
     [PREVIEW_STOP]: (options) =>
       stopPreview(options as Parameters<typeof stopPreview>[0]),
     [PREVIEW_WEIGHT]: (dir) => previewWeight(dir),
+    // A canvas no person's screen shows, drawn by this machine's Chromium (canvas-screen.ts).
+    [CANVAS_SCREEN_OPEN]: (options) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : openCanvasScreen(options as Parameters<typeof openCanvasScreen>[0]),
+    [CANVAS_SCREEN_CLOSE]: (options) =>
+      closeCanvasScreen(options as Parameters<typeof closeCanvasScreen>[0]),
     [AGENT_BUSY]: () => this.busyNow(),
   };
 
@@ -2314,6 +2327,7 @@ export class SessionSupervisor {
    */
   detach(): void {
     stopPreviews();
+    closeCanvasScreens();
     // A stage speaks to this daemon alone (its stdout): the next one starts it again on its next open.
     stopStages();
     for (const instanceId of [...this.#sessions.keys()]) {

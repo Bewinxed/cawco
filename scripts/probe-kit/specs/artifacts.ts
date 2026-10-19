@@ -74,6 +74,23 @@
  *    delegation-mcp.ts `PROJECT_ONLY`, 2edf20006): neither the hub's listing
  *    nor any request the model got names it, artifact_create is listed, and
  *    no project folder holds anything.
+ *
+ * A delegate's `to: "parent"` (`handChecks`), first, before any dashboard:
+ *
+ * H1–H6. The parent shows its own page; its delegate's canvas handed up
+ *    answers opened false; the parent's panel still shows its page; the
+ *    parent hears the hand-off line once; its artifact_list has the canvas
+ *    shown false, waiting on its session; its artifact_show opens it.
+ * H7. A handed canvas with elements is drawn unopened, on the hub machine's
+ *    headless screen: its create wrote them, the parent reads them and a
+ *    picture, and the parent's panel still shows its own page.
+ * H9. The delegate's own artifact_show of what it handed up is refused, and
+ *    the parent's panel keeps its page.
+ * H8. Once the parent opened it, the delegate's next revision is handed
+ *    again: not opened, waiting on the parent, the parent told once more.
+ * P1–P3. The delegate's `to: "parent"` preview of a folder that isn't there,
+ *    and one of a port nothing listens on, are refused, and the parent gets
+ *    no artifact and no send of either.
  */
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -358,6 +375,8 @@ const run = async (kit: Kit) => {
       )) as string;
     };
   const call = callIn(session);
+  // H, P: a hand-up's own sessions, before anything opens a dashboard.
+  await handChecks({ kit, fleet, callIn });
   const read = (artifact: string) =>
     fleet.api<Read>(`/api/instances/${session}/artifacts/${artifact}`);
 
@@ -565,6 +584,327 @@ const run = async (kit: Kit) => {
 
   await fieldChecks({ kit, fleet, session, page, base, call, said });
   await promoteChecks({ kit, fleet, base, callIn, session });
+};
+
+/** The hand-off line a parent gets for its delegate's `to: "parent"` artifact (core `artifactHandedNotice`), after its tag. */
+const handedLine = (from: string, kind: string, name: string, id: string) =>
+  `[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened: artifact_show opens it in your panel.`;
+
+/** One artifact as artifact_list answers it (artifacts/service.ts `ArtifactStatus`). */
+interface Listed {
+  id: string;
+  madeBy?: string;
+  shown: boolean;
+  waitingOn: string[];
+}
+
+/**
+ * H1–H9: a delegate's `to: "parent"` artifact reaches its parent listed,
+ * not opened, a canvas drawn all the same; only the parent's own
+ * artifact_show puts it in its panel.
+ * P1–P3: a `to: "parent"` preview that can't start or doesn't answer is
+ * refused, and nothing reaches the parent. Read from the hub
+ * (`/api/artifacts/:id`'s `shown`, the parent's `sent_messages`) and the
+ * tools' answers; no dashboard is open.
+ */
+const handChecks = async ({
+  kit,
+  fleet,
+  callIn,
+}: {
+  callIn: (on: string) => (tool: string, input: object) => Promise<string>;
+  fleet: KitFleet;
+  kit: Kit;
+}) => {
+  const parent = await fleet.spawn("claude", "Hand parent", fleet.repo);
+  const delegate = await fleet.spawn("claude", "Hand delegate", fleet.repo, {
+    parent: { instanceId: parent },
+  });
+  const callParent = callIn(parent);
+  const callDelegate = callIn(delegate);
+  const shownOf = (id: string) =>
+    fleet.api<{ instanceId: string; shown: boolean }>(`/api/artifacts/${id}`);
+  /** The words of the parent's sends that carry a hand-off tag naming `id` (each body is the harness's JSON line). */
+  const handedSends = (id: string) =>
+    fleet
+      .query<{ body: string }>(
+        "SELECT body FROM sent_messages WHERE instance_id = ? ORDER BY accepted_at",
+        parent
+      )
+      .map(
+        (one) =>
+          (JSON.parse(one.body) as { message?: { content?: unknown } }).message
+            ?.content
+      )
+      .map((content) =>
+        typeof content === "string" ? content : JSON.stringify(content ?? "")
+      )
+      .filter((text) => text.includes("artifact-handed") && text.includes(id));
+
+  // H1. The parent shows its own page.
+  const own = await callParent(CREATE, {
+    kind: "page",
+    name: "parent-own",
+    html: PAGE,
+  });
+  const ownId = own.match(ANSWERED_ID)?.[1];
+  if (!ownId) {
+    kit.check("H1: the parent's own page is made", false, own.slice(0, 400));
+    return;
+  }
+  const ownShown = await shownOf(ownId);
+  kit.check(
+    "H1: the parent's own page is what its panel shows",
+    ownShown.shown && ownShown.instanceId === parent,
+    JSON.stringify(ownShown)
+  );
+
+  // H2. The delegate hands up a canvas.
+  const handed = await callDelegate(CREATE, {
+    kind: "canvas",
+    name: "handed-canvas",
+    to: "parent",
+  });
+  const handedId = handed.match(ANSWERED_ID)?.[1];
+  const handedAt = handed.slice(Math.max(0, handed.indexOf('{"id"')));
+  kit.check(
+    "H2: the delegate's to: parent canvas is made, readied and not opened",
+    !!handedId &&
+      handedAt.includes('"opened":false') &&
+      handedAt.includes("Handed to your parent, not opened"),
+    handedAt.slice(0, 400)
+  );
+  if (!handedId) {
+    return;
+  }
+
+  // H3. The parent's panel still shows its own page.
+  const [ownAfter, handedShown] = await Promise.all([
+    shownOf(ownId),
+    shownOf(handedId),
+  ]);
+  kit.check(
+    "H3: the parent's panel still shows its own page, not the handed canvas",
+    ownAfter.shown && !handedShown.shown && handedShown.instanceId === parent,
+    `own ${JSON.stringify(ownAfter)}; handed ${JSON.stringify(handedShown)}`
+  );
+
+  // H4. The parent got the hand-off line once.
+  const line = handedLine("Hand delegate", "canvas", "handed-canvas", handedId);
+  const sends = await until(
+    "the parent's hand-off send",
+    () => handedSends(handedId),
+    (found) => found.length > 0,
+    30_000
+  ).catch(() => handedSends(handedId));
+  await Bun.sleep(LISTEN_MS);
+  const sendsLater = handedSends(handedId);
+  kit.check(
+    "H4: the parent got the hand-off line once",
+    sendsLater.length === 1 && sends[0]?.includes(line) === true,
+    `${sendsLater.length} send(s); first: ${sends[0]?.slice(0, 400) ?? "none"}`
+  );
+
+  // H5. artifact_list from the parent: shown false, waiting on the parent.
+  const listedText = await callParent("mcp__cawco__artifact_list", {});
+  const listed = await fleet.api<Listed[]>(
+    `/api/instances/${parent}/artifacts/status`
+  );
+  const entry = listed.find((one) => one.id === handedId);
+  kit.check(
+    "H5: artifact_list from the parent has it shown false, madeBy the delegate, waitingOn the parent's session",
+    entry?.shown === false &&
+      entry.madeBy === delegate &&
+      entry.waitingOn.includes("session") &&
+      listedText.includes(handedId),
+    JSON.stringify(entry ?? null)
+  );
+
+  // H7. A handed canvas with elements is drawn unopened: on the hub
+  // machine's headless screen, while the parent's panel keeps its page.
+  const drawing = await callDelegate(CREATE, {
+    kind: "canvas",
+    name: "handed-drawing",
+    to: "parent",
+    elements: [
+      {
+        type: "rectangle",
+        id: "handed-box",
+        x: 0,
+        y: 0,
+        width: 160,
+        height: 60,
+        label: { text: "Handed box" },
+      },
+    ],
+  });
+  const drawingId = drawing.match(ANSWERED_ID)?.[1];
+  const drawn = drawingId
+    ? await until(
+        "the handed drawing's picture, from its headless screen",
+        () =>
+          fleet.api<{ outline: string; pictureAt: string | null }>(
+            `/api/instances/${parent}/artifacts/${drawingId}`
+          ),
+        (read) => read.pictureAt !== null,
+        30_000
+      ).catch(() =>
+        fleet.api<{ outline: string; pictureAt: string | null }>(
+          `/api/instances/${parent}/artifacts/${drawingId}`
+        )
+      )
+    : null;
+  const [ownWhileDrawn, drawingShown] = await Promise.all([
+    shownOf(ownId),
+    drawingId ? shownOf(drawingId) : Promise.resolve(null),
+  ]);
+  const drawingSends = drawingId ? handedSends(drawingId).length : 0;
+  kit.check(
+    "H7: a handed canvas with elements is drawn unopened: its create wrote them, the parent reads them and a picture, is told once, and its panel still shows its own page",
+    drawing.includes('"wrote":["handed-box"') &&
+      drawing.includes("Handed to your parent, not opened") &&
+      drawn?.outline.includes("Handed box") === true &&
+      drawn.pictureAt !== null &&
+      drawingSends === 1 &&
+      ownWhileDrawn.shown &&
+      drawingShown?.shown === false,
+    `create: ${drawing.slice(Math.max(0, drawing.indexOf('{"id"')), drawing.indexOf('{"id"') + 500)}; read ${JSON.stringify(drawn)}; ${drawingSends} send(s); own ${ownWhileDrawn.shown}, drawing ${drawingShown?.shown}`
+  );
+
+  // H9. The delegate can't open what it handed up: its artifact_show is
+  // refused, and the parent's panel keeps its page.
+  const delegateShow = await callDelegate("mcp__cawco__artifact_show", {
+    id: handedId,
+  });
+  const [ownAfterRefused, handedAfterRefused] = await Promise.all([
+    shownOf(ownId),
+    shownOf(handedId),
+  ]);
+  kit.check(
+    "H9: the delegate's artifact_show of the canvas it handed up is refused, and the parent's panel keeps its page",
+    delegateShow.includes("is your parent's: it opens in their panel") &&
+      ownAfterRefused.shown &&
+      !handedAfterRefused.shown,
+    `delegate show: ${delegateShow.slice(-300)}; own ${ownAfterRefused.shown}, handed ${handedAfterRefused.shown}`
+  );
+
+  // H6. The parent's artifact_show opens it; it waits on no one for it after.
+  const opened = await callParent("mcp__cawco__artifact_show", {
+    id: handedId,
+  });
+  const [handedOpened, ownClosed] = await Promise.all([
+    shownOf(handedId),
+    shownOf(ownId),
+  ]);
+  const after = (
+    await fleet.api<Listed[]>(`/api/instances/${parent}/artifacts/status`)
+  ).find((one) => one.id === handedId);
+  kit.check(
+    "H6: the parent's artifact_show puts it in its panel, and the hand-off waits on the parent no more",
+    handedOpened.shown &&
+      !ownClosed.shown &&
+      after?.shown === true &&
+      !after.waitingOn.includes("session"),
+    `show: ${opened.slice(Math.max(0, opened.lastIndexOf("{")), opened.lastIndexOf("{") + 200)}; handed ${JSON.stringify(handedOpened)}; list ${JSON.stringify(after ?? null)}`
+  );
+
+  // H8. Its delegate's next revision, while the parent's panel shows it, is
+  // handed again: not opened, waiting on the parent, the parent told again.
+  const again = await callDelegate(CREATE, {
+    kind: "canvas",
+    name: "handed-canvas",
+    to: "parent",
+  });
+  const sendsAgain = await until(
+    "the parent's second hand-off send",
+    () => handedSends(handedId),
+    (found) => found.length > 1,
+    30_000
+  ).catch(() => handedSends(handedId));
+  const relisted = (
+    await fleet.api<Listed[]>(`/api/instances/${parent}/artifacts/status`)
+  ).find((one) => one.id === handedId);
+  kit.check(
+    "H8: a re-hand after the parent opened it answers not opened, waits on the parent again, and tells the parent once more",
+    again.includes("Handed to your parent, not opened") &&
+      relisted?.waitingOn.includes("session") === true &&
+      sendsAgain.length === 2,
+    `create: ${again.slice(Math.max(0, again.indexOf('{"id"')), again.indexOf('{"id"') + 300)}; list ${JSON.stringify(relisted ?? null)}; ${sendsAgain.length} send(s)`
+  );
+
+  await refusedHandChecks({ kit, fleet, parent, callDelegate });
+};
+
+/**
+ * P1–P3: a delegate's `to: "parent"` preview that can't start, or whose
+ * port nothing answers on, is refused, and nothing of it reaches `parent`:
+ * no artifact, no send.
+ */
+const refusedHandChecks = async ({
+  kit,
+  fleet,
+  parent,
+  callDelegate,
+}: {
+  callDelegate: (tool: string, input: object) => Promise<string>;
+  fleet: KitFleet;
+  kit: Kit;
+  parent: string;
+}) => {
+  /** The parent's artifacts and sends, counted. */
+  const reached = () => ({
+    artifacts: fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM artifacts WHERE instance_id = ?",
+      parent
+    )[0]?.n,
+    sends: fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ?",
+      parent
+    )[0]?.n,
+  });
+
+  // P1. A preview that can't start (its folder is not there) is refused.
+  const before = reached();
+  const broken = await callDelegate(CREATE, {
+    kind: "preview",
+    name: "broken-preview",
+    dir: join(fleet.repo, "no-such-folder"),
+    to: "parent",
+  });
+  kit.check(
+    "P1: a delegate's to: parent preview whose folder can't be served is refused",
+    !ANSWERED_ID.test(broken) && broken.includes("no such file or directory"),
+    broken.slice(-400)
+  );
+
+  // P3. A preview of a port nothing listens on: no panel would load it to
+  // fail, so it is loaded first, refused, and never handed up.
+  const free = Bun.serve({ port: 0, fetch: () => new Response("") });
+  const silent = free.port;
+  free.stop(true);
+  const deaf = await callDelegate(CREATE, {
+    kind: "preview",
+    name: "silent-preview",
+    port: silent,
+    to: "parent",
+  });
+  kit.check(
+    "P3: a delegate's to: parent preview of a port nothing listens on is refused with the server sentence",
+    !ANSWERED_ID.test(deaf) &&
+      deaf.includes(`The server on port ${silent} on `) &&
+      deaf.includes("did not answer: nothing is listening on that port.") &&
+      deaf.includes("It wasn't handed to your parent."),
+    deaf.slice(-400)
+  );
+
+  // P2. Nothing of either reaches the parent: no artifact, no send.
+  await Bun.sleep(LISTEN_MS);
+  const after2 = reached();
+  kit.check(
+    "P2: nothing of the refused previews reaches the parent: no artifact in its list, no send",
+    after2.artifacts === before.artifacts && after2.sends === before.sends,
+    `artifacts ${before.artifacts} → ${after2.artifacts}; sends ${before.sends} → ${after2.sends}`
+  );
 };
 
 /** A git command in `folder`; its output. */

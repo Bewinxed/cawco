@@ -1274,18 +1274,13 @@ async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
       10_000
     );
     const started = performance.now();
-    // Inside a workspace the boundary already holds the browser, which has no namespaces of its own to make.
-    const rendered = await renderCanvas(
-      socket,
-      port,
-      {
-        files: ["src/Button.stories.js", "src/Pairing.stories.js"],
-        spec: { name: "Kit", about: "The button and the pairing card" },
-        png: true,
-        state: { story: "Primary", interaction: "hover" },
-      },
-      !process.env.CAWCO_WORKSPACE
-    );
+    // Its sandbox follows the rule (agent capabilities.ts `chromiumSandboxed`): off beneath a workspace's boundary.
+    const rendered = await renderCanvas(socket, port, {
+      files: ["src/Button.stories.js", "src/Pairing.stories.js"],
+      spec: { name: "Kit", about: "The button and the pairing card" },
+      png: true,
+      state: { story: "Primary", interaction: "hover" },
+    });
     const frames = framesOf(rendered.report);
     const move = rendered.report.sections.find(
       (one) => one.file === "src/Pairing.stories.js"

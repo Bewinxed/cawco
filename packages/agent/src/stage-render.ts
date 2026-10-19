@@ -24,7 +24,7 @@ import {
   STAGE_RENDER_MS,
 } from "@cawco/core/stage";
 import type { Socket, TCPSocketListener } from "bun";
-import { browserExecutable } from "./capabilities";
+import { browserExecutable, chromiumSandboxed } from "./capabilities";
 
 /** How long a render may take, page load to the last section's report. */
 const RENDER_WAIT_MS = STAGE_RENDER_MS;
@@ -177,8 +177,8 @@ export async function renderCanvas(
   reached: string,
   port: number,
   ask: RenderAsk,
-  /** Chromium's own sandbox: off only where a boundary already holds the browser (a probe inside a workspace). */
-  sandbox = true
+  /** Chromium's own sandbox: the daemon's rule ({@link chromiumSandboxed}) unless the caller knows its own. */
+  sandbox = chromiumSandboxed()
 ): Promise<Rendered> {
   const executable = browserExecutable();
   if (!executable) {
