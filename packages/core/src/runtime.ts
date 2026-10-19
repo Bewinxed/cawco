@@ -49,6 +49,7 @@ const RUNTIME_TREES = new Set([
   "dashboard",
   "drizzle",
   "pi",
+  "playwright-core",
   "skills",
   "srt",
   "workflow",

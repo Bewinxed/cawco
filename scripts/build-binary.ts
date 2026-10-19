@@ -184,6 +184,7 @@ export async function buildBinary(options: {
   // bun inside the workspace's boundary, never by cawco (agent stage.ts).
   await writeFile(join(work, "stage-host.mjs"), await buildStageHost());
   const ripgrep = packageDir("@vscode/ripgrep-universal", requireAgent);
+  const playwright = packageDir("playwright-core", requireAgent);
   const assets = [
     ...(linuxTarget
       ? [
@@ -240,6 +241,18 @@ export async function buildBinary(options: {
     // A project's browser image's build context, sent to the machine's
     // container runtime as it is (agent browser/image.ts).
     ...(await filesUnder(join(ROOT, "packages/agent/browser"), "browser")),
+    // The files playwright-core's bundled code reads beside itself at run
+    // time, published as its runtime tree (the plugin's coreBundle.js load).
+    ["playwright-core/package.json", join(playwright, "package.json")],
+    ["playwright-core/browsers.json", join(playwright, "browsers.json")],
+    [
+      "playwright-core/lib/webp_codec.wasm",
+      join(playwright, "lib/webp_codec.wasm"),
+    ],
+    ...(await filesUnder(
+      join(playwright, "lib/server"),
+      "playwright-core/lib/server"
+    )),
   ] as [string, string][];
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;
   const [platform, arch] = options.target.split("-");
@@ -275,11 +288,15 @@ export async function buildBinary(options: {
     // unix sockets alone, never SSH. lightningcss and browserslist: the
     // runtime pages' CSS compiler (core page-css.ts), which loads them on a
     // compile only; the binary carries every page prebuilt and compiles none.
+    // chromium-bidi and electron: playwright-core requires them only for
+    // BiDi over CDP and Electron, which nothing here drives, and installs
+    // neither, so from source those requires fail the same way.
     external: [
-      "playwright-core",
       "cpu-features",
       "lightningcss",
       "browserslist",
+      "chromium-bidi",
+      "electron",
     ],
     define: {
       __CAWCO_RELEASE__: "true",
@@ -313,6 +330,17 @@ export async function buildBinary(options: {
           build.onLoad(
             { filter: /packages\/core\/src\/binary-assets\.ts$/ },
             () => ({ contents: assetsSource, loader: "ts", resolveDir: ROOT })
+          );
+          // playwright-core reads package.json, browsers.json and its wasm
+          // from __dirname, which the bundle would fix at this machine's
+          // node_modules: point it at the tree the binary publishes.
+          build.onLoad(
+            { filter: /playwright-core\/lib\/coreBundle\.js$/ },
+            async ({ path }) => ({
+              contents: `var __dirname=require(${JSON.stringify(join(ROOT, "packages/core/src/runtime.ts"))}).runtimeTree("playwright-core/lib");\n${await Bun.file(path).text()}`,
+              loader: "js",
+              resolveDir: dirname(path),
+            })
           );
           build.onResolve({ filter: /^socket-activation$/ }, () => ({
             path: join(ROOT, "scripts/binary/socket-activation.ts"),
