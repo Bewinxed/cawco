@@ -133,3 +133,15 @@ fixed: apps/dashboard/src/lib/components/ui/button/pending-content.svelte:256 th
 gap: apps/dashboard/src/lib/components/ui/button/button.svelte:117 a disabled row-reach button stays hidden under a hover-capable pointer when its row is reached (no caller is disabled today); a disabled one would need its own reveal at 50%
 gap: ui-observer not run: no `/motion` bench or stories file in this workspace renders these kit parts, so their rendered layout is Not verified
 fixed: apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte:164 under reduced motion a kit sheet slid in over vaul's 500ms (vaul reads no motion preference), and the new-session sheet swapped instantly (`animate-none!`); every sheet now fades in and out over --dur-control, 120ms, on --ease-out (DESIGN.md, Sheet: "with reduced motion it fades over 120ms"), and the new-session one keeps none of vaul's settling transform
+
+## Proof: the reduced-motion fade, live
+
+On `/motion/new-session` (this workspace's `vite dev`), Chromium headless shell 1248 through playwright-core 1.64.1, 390×844 at 2×, touch, `reducedMotion: "reduce"`, the page timeline frozen with CDP `Animation.setPlaybackRate 0` before the sheet opens, each animation paused and seeked to 0, ½ and 1 of its duration. The theme addition's compiled CSS (above) injected before load, as integration will add it:
+
+    OPEN  {"state":"open","animationName":"sheet-fade-in","animationDuration":"0.12s","animations":[{"name":"sheet-fade-in","duration":120}]}
+    OPEN  scrub opacity 0 → 0.965983 → 1, transform none at every point
+    CLOSE {"state":"closed","animationName":"sheet-fade-out","animationDuration":"0.12s","animations":[{"name":"sheet-fade-out","duration":120}]}
+    CLOSE scrub opacity 1 → 0.0340174 → 0, transform none at every point
+    AFTER CLOSE {"gone":true}
+
+The same run without the addition (this branch alone, before integration): `slideFromBottom`, 500ms, transform `matrix(1, 0, 0, 1, 0, 820)` → `37.0563` → none: vaul's slide, which the addition replaces.
