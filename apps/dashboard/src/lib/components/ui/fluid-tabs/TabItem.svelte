@@ -409,7 +409,7 @@
     /* The press tints the whole segment (trailing controls included), not
        the label's hit alone. A press on a trailing control leaves it be. */
     &:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
-      --press: light-dark(var(--surface-fill-strong), var(--surface-fill));
+      --press: var(--surface-pressed);
       background-color: var(--press);
     }
 

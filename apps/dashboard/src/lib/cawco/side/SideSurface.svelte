@@ -238,7 +238,7 @@
   /* A pressed button stands a step past the hover by day (the kit Toggle's
      on state), and keeps it under the pointer. */
   .side-head :global(button[aria-pressed="true"]:not([role="tab"])) {
-    background: light-dark(var(--surface-fill-strong), var(--surface-fill));
+    background: var(--surface-pressed);
     color: var(--ink-strong);
   }
   .side-head :global(button:disabled) {

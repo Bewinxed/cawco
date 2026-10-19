@@ -14,6 +14,7 @@
 import { rm } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { agentReact } from "./agent-react";
+import { refuseSchemeLowering } from "./bundle-css-guard";
 import { HOST_PLUGINS } from "./canvas-host-plugins";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -78,6 +79,7 @@ export async function buildCanvasHost(outdir?: string) {
   if (!result.success) {
     throw new AggregateError(result.logs, "Canvas host build failed");
   }
+  await refuseSchemeLowering("The canvas host", result.outputs);
   return result.outputs;
 }
 

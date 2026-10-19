@@ -1,6 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Server, WebSocketHandler } from "bun";
+import { refuseSchemeLowering } from "./bundle-css-guard";
 import { PREVIEW_DOWN_META, PREVIEW_WHY_META, type PreviewDown } from "./index";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -34,6 +35,7 @@ async function buildOverlay(): Promise<string> {
   if (!result.success) {
     throw new AggregateError(result.logs, "Preview overlay build failed");
   }
+  await refuseSchemeLowering("The preview overlay", result.outputs);
   return result.outputs[0].text();
 }
 

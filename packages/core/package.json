@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./runtime": "./src/runtime.ts",
+    "./bundle-css-guard": "./src/bundle-css-guard.ts",
     "./at-most": "./src/at-most.ts",
     "./bounded": "./src/bounded.ts",
     "./machine-path": "./src/machine-path.ts",

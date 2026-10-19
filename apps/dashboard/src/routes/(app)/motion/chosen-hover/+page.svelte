@@ -3,15 +3,18 @@
    * The controls that mark a chosen or current item, each with one item
    * chosen and one not, for the chosen-hover probe: the new-session chips'
    * rows (`?control=lifetime|project|machines` opens that one's popover),
-   * the permission rows, the side panel's pressed head button, the plan
-   * ring, the comments list's current pin, the model list (its catalogue
-   * is the browser's kept one, `cawco-models:by-harness`, which the
-   * chosen-hover spec seeds with two Claude models before the page loads),
+   * the permission rows, the side panel's pressed head button, the kit
+   * Toggle itself (one pressed, one not), the plan ring, the comments list's current pin, the model list (its catalogue
+   * is what the machines report, models.svelte.ts: the bench has no hub, so
+   * it stands one machine in the client's own state reporting two Claude
+   * models, the first chosen),
    * a live Crepe editor, for its slash menu, and a Caw reply's file chips
    * (`?control=files` stands the page on that project's file, shallowly, as
    * the project page does, so the first chip reads current).
    */
+  import { CAPABILITIES_NONE } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
+  import { cawco } from "#lib/cawco/client.svelte.js";
   import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
   import PinList from "#lib/cawco/preview/PinList.svelte";
   import FolderFiles from "#lib/cawco/project/FolderFiles.svelte";
@@ -23,6 +26,7 @@
   import PermissionSection from "#lib/cawco/spawn/PermissionSection.svelte";
   import ProjectChip from "#lib/cawco/spawn/ProjectChip.svelte";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
+  import { Toggle } from "#lib/components/ui/toggle/index.js";
   import { IconEye, IconLaptop, IconPen, IconServer } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -78,6 +82,36 @@
   const pins: Pin[] = [pin("pin-1", 1), pin("pin-2", 2)];
   const noop = () => undefined;
   let markdown = $state("");
+
+  // The model list's catalogue: one machine reporting two Claude models.
+  // Stood once, in the browser: the board never comes over a bench's hub.
+  $effect(() => {
+    if (cawco.machines.some((one) => one.machineId === "bench-models")) {
+      return;
+    }
+    cawco.machines.push({
+      auth: "unknown",
+      harnesses: [
+        {
+          auth: "authenticated",
+          capabilities: CAPABILITIES_NONE,
+          harness: "claude",
+          installed: true,
+          models: [
+            { displayName: "Opus 4.5", value: "claude-opus-4-5" },
+            { displayName: "Sonnet 4.5", value: "claude-sonnet-4-5" },
+          ],
+        },
+      ],
+      hostname: "studio",
+      lastSeenAt: null,
+      machineId: "bench-models",
+      os: "darwin",
+      pausedUntil: null,
+      pauseStopped: null,
+      status: "online",
+    });
+  });
 
   $effect(() => {
     if (control === "files") {
@@ -140,6 +174,10 @@
       {/snippet}
       <p>Well</p>
     </SideSurface>
+  </section>
+  <section data-probe="toggle">
+    <Toggle aria-label="Bold" pressed={true}>B</Toggle>
+    <Toggle aria-label="Italic" pressed={false}>I</Toggle>
   </section>
   <section data-probe="plan-ring">
     <PlanRing done={1} onopen={noop} open={true} total={3} />

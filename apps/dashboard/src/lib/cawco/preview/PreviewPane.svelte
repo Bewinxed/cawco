@@ -2346,7 +2346,7 @@
   .comments[aria-expanded="true"],
   .inspect[aria-pressed="true"] {
     /* The kit Toggle's on state: by day a step past the hover. */
-    background: light-dark(var(--surface-fill-strong), var(--surface-fill));
+    background: var(--surface-pressed);
   }
   .count,
   .comments :global(.pins-hidden) {

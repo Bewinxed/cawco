@@ -133,6 +133,8 @@ public enum Palette {
     public static let surfaceFill = Palette.named("surface-fill")
     /// A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open).
     public static let surfaceFillStrong = Palette.named("surface-fill-strong")
+    /// The kit Toggle's on step, where a pressed or chosen control stands (a chosen canvas tool, a pressed head button, a held tab): by day the surface-fill-strong step, a step past the hover; at night the surface-fill step, so it never reads as hovered.
+    public static let surfacePressed = Palette.named("surface-pressed")
     /// Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike.
     public static let surfaceHover = Palette.named("surface-hover")
     /// The reader's well edge: darker than the well by day, the ink at 8% at night.

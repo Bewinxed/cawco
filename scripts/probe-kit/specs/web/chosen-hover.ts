@@ -10,7 +10,7 @@
  * one is DESIGN.md's recipe for it, resolved in the same page: a list's
  * chosen row the selection wash (`selected-bg`, Colors: Selected; the kit's
  * selection pill), a pressed toggle the kit Toggle's on step
- * (`light-dark(surface-fill-strong, surface-fill)`). The wash comes with
+ * (`surface-pressed`). The wash comes with
  * its ink (DESIGN.md Colors: Selected; the kit's selected row,
  * `text-selected-ink`): a washed row's label is `selected-ink`, and every
  * text in the row holds 4.5:1 on the wash.
@@ -29,9 +29,11 @@
  * unchosen item's tick unseen, and a hovered unchosen item takes
  * `surface-hover`. The canvas host is its own
  * bundle, whose sheet styles html and body, so the rail is drawn on a page of
- * its own from the sheets the host loads: the decision-page kit's tokens
- * (host.tsx) and canvas.css, in the host's scheme (`color-scheme` on the
- * root, as host.tsx sets it). The rail's material is translucent: each
+ * its own from the sheets the host loads: the decision-page kit's tokens as
+ * written (host.tsx) and the bundle's host.css as Bun builds it (canvas.css
+ * raw would miss what Bun lowers: a `light-dark()` there drew no fill), in
+ * the host's scheme (`color-scheme` on the root, as host.tsx sets it). The
+ * rail's material is translucent: each
  * ground is painted as it stacks (the canvas's surface-raised, the rail's
  * material, the box), its backdrop's blur and saturation left out, which
  * over the flat raised ground changes nothing measurable.
@@ -45,11 +47,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CDPSession, Page } from "playwright-core";
+import { buildCanvasHost } from "../../../../packages/core/src/canvas-host";
 import type { Kit, Spec } from "../../kit";
 import { open, ROOT, settle, THEMES } from "../../kit";
 
 const WASH = "var(--selected-bg)";
-const ON_STEP = "light-dark(var(--surface-fill-strong), var(--surface-fill))";
+const ON_STEP = "var(--surface-pressed)";
 
 interface Control {
   /** The element painting the chosen state's background. */
@@ -137,6 +140,13 @@ const CONTROLS: Control[] = [
     other: '[data-probe="side"] button[aria-pressed="false"]',
   },
   {
+    name: "Kit Toggle",
+    hover: "force",
+    recipe: ON_STEP,
+    chosen: '[data-probe="toggle"] button[aria-pressed="true"]',
+    other: '[data-probe="toggle"] button[aria-pressed="false"]',
+  },
+  {
     name: "Plan ring",
     hover: "force",
     recipe: ON_STEP,
@@ -201,29 +211,6 @@ const CONTROLS: Control[] = [
     },
   },
 ];
-
-/**
- * The model list's catalogue: what the browser kept from the last visit
- * (models.svelte `cawco-models:by-harness`), read as the app loads, so it is
- * written before the page's own scripts. Two Claude models, the first chosen.
- */
-const seedModels = () => {
-  localStorage.setItem(
-    "cawco-models:by-harness",
-    JSON.stringify([
-      {
-        displayName: "Opus 4.5",
-        harness: "claude",
-        value: "claude-opus-4-5",
-      },
-      {
-        displayName: "Sonnet 4.5",
-        harness: "claude",
-        value: "claude-sonnet-4-5",
-      },
-    ])
-  );
-};
 
 interface Read {
   color: string;
@@ -459,18 +446,34 @@ async function checkInks(
 const same = (a: number[], b: number[]) =>
   a.length === b.length && a.every((c, i) => Math.abs(c - (b[i] ?? 0)) <= 1);
 
-const RAIL_SHEETS = [
-  join(ROOT, "packages/hub/skills/decision-page/kit/tokens.css"),
-  join(ROOT, "packages/agent/src/canvas-host/canvas.css"),
-];
+/**
+ * The sheets the canvas host loads, as it loads them: the kit's tokens as
+ * written (host.tsx sets them unbundled) and the host's own sheet as Bun
+ * bundles it (canvas-host.ts `buildCanvasHost`, minified, `light-dark()`
+ * and all lowered as the hub serves it), never canvas.css raw.
+ */
+const railSheets = async (): Promise<string[]> => {
+  const outputs = await buildCanvasHost();
+  const sheet = outputs.find((output) => output.path.endsWith("host.css"));
+  if (!sheet) {
+    throw new Error("the canvas host's bundle has no host.css");
+  }
+  return [
+    readFileSync(
+      join(ROOT, "packages/hub/skills/decision-page/kit/tokens.css"),
+      "utf8"
+    ),
+    await sheet.text(),
+  ];
+};
 
 /**
  * Two tools of the rail's tools group, the first chosen, and two items of a
  * radio menu, the first checked, as rail.tsx draws them.
  */
-const RAIL_PAGE = (scheme: string) => `<!doctype html>
+const RAIL_PAGE = (scheme: string, sheets: string[]) => `<!doctype html>
 <html data-canvas-inset style="color-scheme: ${scheme}">
-<head>${RAIL_SHEETS.map((path) => `<style>${readFileSync(path, "utf8")}</style>`).join("")}</head>
+<head>${sheets.map((sheet) => `<style>${sheet}</style>`).join("")}</head>
 <body><div id="canvas-root"><div class="canvas-host">
   <div aria-label="Tools" class="rail rail-tools" role="toolbar">
     <button class="rail-box" data-chosen data-probe="chosen" type="button"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 4h16v16H4z" fill="currentColor"/></svg></button>
@@ -530,9 +533,10 @@ async function checkRail(
   kit: Kit,
   theme: string,
   cdp: CDPSession,
-  page: Page
+  page: Page,
+  sheets: string[]
 ): Promise<void> {
-  await page.setContent(RAIL_PAGE(theme));
+  await page.setContent(RAIL_PAGE(theme, sheets));
   await page.mouse.move(1, 1);
   await settle(page, 400);
   const host = { selector: ".canvas-host" };
@@ -699,9 +703,10 @@ const spec: Spec = {
   name: "chosen-hover",
   run: async (kit: Kit) => {
     const bench = await kit.bench();
+    const sheets = await railSheets();
     for (const theme of THEMES) {
       // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time, each on its own page
-      const page = await kit.page("desk", { theme, init: [seedModels] });
+      const page = await kit.page("desk", { theme });
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("DOM.enable");
       await cdp.send("CSS.enable");
@@ -741,7 +746,7 @@ const spec: Spec = {
         );
       }
       await checkCawRule(kit, theme, page, bench);
-      await checkRail(kit, theme, cdp, page);
+      await checkRail(kit, theme, cdp, page, sheets);
     }
   },
 };

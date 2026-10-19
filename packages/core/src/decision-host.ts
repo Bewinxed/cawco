@@ -20,6 +20,7 @@ import { readFile, rm } from "node:fs/promises";
 import { join, normalize } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
 import { agentReact } from "./agent-react";
+import { refuseSchemeLowering } from "./bundle-css-guard";
 import { embeddedFile, standalone } from "./runtime";
 
 const HOST_DIR = new URL(
@@ -60,6 +61,7 @@ export async function buildDecisionHost(outdir?: string) {
   if (!result.success) {
     throw new AggregateError(result.logs, "Decision host build failed");
   }
+  await refuseSchemeLowering("The decision host", result.outputs);
   return result.outputs;
 }
 

@@ -50,10 +50,7 @@
 
     /* The kit Toggle's on state: by day a step past the hover. */
     &::before {
-      background-color: light-dark(
-        var(--surface-fill-strong),
-        var(--surface-fill)
-      );
+      background-color: var(--surface-pressed);
     }
   }
   .num {

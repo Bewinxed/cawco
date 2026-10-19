@@ -8,6 +8,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 
 const HOST = new URL("./host.ts", import.meta.url).pathname;
@@ -119,6 +120,7 @@ async function canvasRuntime(): Promise<string> {
   if (!result.success) {
     throw new AggregateError(result.logs, "The canvas runtime's build failed");
   }
+  await refuseSchemeLowering("The stage's canvas runtime", result.outputs);
   return await (result.outputs[0] as Bun.BuildArtifact).text();
 }
 
@@ -149,6 +151,7 @@ export async function buildStageHost(): Promise<string> {
   if (!result.success) {
     throw new AggregateError(result.logs, "The stage host's build failed");
   }
+  await refuseSchemeLowering("The stage host", result.outputs);
   return await (result.outputs[0] as Bun.BuildArtifact).text();
 }
 

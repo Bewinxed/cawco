@@ -295,7 +295,7 @@ const runSpec = async (kit: Kit) => {
 /**
  * The rail and the empty canvas as DESIGN.md draws them (Artifact panel,
  * canvas and ink), from geometry and computed style: the tool group 11px
- * in, 34px boxes at 5px, the chosen one on surface-fill, the groups apart,
+ * in, 34px boxes at 5px, the chosen one on surface-pressed, the groups apart,
  * Excalidraw's own chrome gone; an empty canvas made by the agent says so,
  * shows the empty recipe, and its Draw picks the pen.
  */
@@ -320,7 +320,7 @@ const emptyChecks = async (on: OnCanvas) => {
     const box = (selector: string) =>
       document.querySelector(selector)?.getBoundingClientRect();
     const probe = document.createElement("span");
-    probe.style.background = "var(--surface-fill)";
+    probe.style.background = "var(--surface-pressed)";
     document.body.append(probe);
     const fill = getComputedStyle(probe).backgroundColor;
     probe.remove();
@@ -356,7 +356,7 @@ const emptyChecks = async (on: OnCanvas) => {
     };
   });
   on.kit.check(
-    "rail: tools --space-3 (11px) in and --space-2 (7px) down in the panel (no host chrome over it), 34px boxes at 5px, the chosen one on surface-fill, the two groups apart, Excalidraw's chrome hidden",
+    "rail: tools --space-3 (11px) in and --space-2 (7px) down in the panel (no host chrome over it), 34px boxes at 5px, the chosen one on surface-pressed, the two groups apart, Excalidraw's chrome hidden",
     rail.tools?.join() === "11,7" &&
       rail.boxes.every((size) => size === "34×34") &&
       rail.radius === "5px" &&
@@ -1346,11 +1346,53 @@ const fitChecks = async (on: OnCanvas) => {
 };
 
 /**
+ * The tools group's fills inside a canvas frame, on the host's own bundle
+ * (Bun's minified host.css, where a `light-dark()` once lowered to switch
+ * variables nothing set and drew no fill): the chosen tool's at rest, the
+ * first unchosen one's under the pointer, and the two tokens they stand on
+ * as the frame resolves them in its scheme.
+ */
+const railFills = async (frame: Frame, page: Page) => {
+  const fill = (selector: string) =>
+    frame.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      return el ? getComputedStyle(el).backgroundColor : null;
+    }, selector);
+  const token = (value: string) =>
+    frame.evaluate((background) => {
+      const probe = document.createElement("span");
+      probe.style.background = background;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    }, value);
+  const other = ".rail-tools .rail-box:not([data-chosen])";
+  const chosen = await fill(".rail-tools .rail-box[data-chosen]");
+  const hovered = await frame
+    .hover(other, { timeout: 10_000 })
+    .then(async () => {
+      // Past the box's --dur-control fade.
+      await settle(page, 400);
+      return fill(other);
+    })
+    .catch((error: Error) => `not hovered: ${error.message.split("\n")[0]}`);
+  await page.mouse.move(1, 1);
+  return {
+    chosen,
+    hovered,
+    pressed: await token("var(--surface-pressed)"),
+    hover: await token("var(--surface-hover)"),
+  };
+};
+
+/**
  * Check 17: the canvas draws in the dashboard's theme, never the OS's:
  * with the system dark and the dashboard light its ground is the day
  * value and Excalidraw's theme light; the reverse the other way; an
  * agent's stroke is the day ink either way (Excalidraw's dark theme
- * inverts it).
+ * inverts it). In each, the rail's chosen tool stands on the kit Toggle's
+ * on step and a hovered unchosen one on the hover, read in the frame.
  */
 const themeChecks = async (on: OnCanvas, id: string) => {
   const lines: string[] = [];
@@ -1434,6 +1476,15 @@ const themeChecks = async (on: OnCanvas, id: string) => {
     ok &&= pass;
     lines.push(
       `dashboard ${dashboard}, system ${system}: ${JSON.stringify(read)}`
+    );
+    const rail = await railFills(frame as Frame, page);
+    on.kit.check(
+      `17: dashboard ${dashboard}: on the host's bundle as the hub serves it, the chosen tool is on surface-pressed (the kit Toggle's on step) and an unchosen tool under the pointer on surface-hover, the two apart`,
+      rail.chosen === rail.pressed &&
+        rail.hovered === rail.hover &&
+        rail.chosen !== rail.hovered &&
+        rail.chosen !== "rgba(0, 0, 0, 0)",
+      JSON.stringify(rail)
     );
     await page.close();
   }
@@ -1932,7 +1983,7 @@ const staysInkChecks = async (
 const railNow = (frame: Frame) =>
   frame.evaluate(() => {
     const probe = document.createElement("span");
-    probe.style.background = "var(--surface-fill)";
+    probe.style.background = "var(--surface-pressed)";
     document.body.append(probe);
     const fill = getComputedStyle(probe).backgroundColor;
     probe.remove();
@@ -2087,7 +2138,7 @@ const doubleTapCheck = async (on: OnCanvas, frame: Frame) => {
   await frame.click('[data-action="tool:freedraw"]');
   await settle(on.page, 300);
   on.kit.check(
-    "23: cawco:pencil-double-tap swaps the eraser's glyph into the pen's box, still chosen on surface-fill, the eraser's own box not chosen, as one --dur-control run pair on opacity/transform/blur; a second swaps the pen's back; the rail's eraser box picks the eraser in its own box",
+    "23: cawco:pencil-double-tap swaps the eraser's glyph into the pen's box, still chosen on surface-pressed, the eraser's own box not chosen, as one --dur-control run pair on opacity/transform/blur; a second swaps the pen's back; the rail's eraser box picks the eraser in its own box",
     before.tool === "freedraw" &&
       before.pen.glyph === "pen" &&
       erasing.tool === "eraser" &&

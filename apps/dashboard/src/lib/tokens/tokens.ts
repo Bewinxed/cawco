@@ -108,6 +108,7 @@ export type TokenColor =
   | "color.surface-tile"
   | "color.surface-fill"
   | "color.surface-fill-strong"
+  | "color.surface-pressed"
   | "color.surface-hover"
   | "color.well-edge"
   | "color.seam"

@@ -280,7 +280,7 @@
      and not through --crepe-color-selected, which is also the document's
      text selection. */
   .crepe-host :global(.milkdown .milkdown-block-handle .operation-item.active) {
-    background: light-dark(var(--surface-fill-strong), var(--surface-fill));
+    background: var(--surface-pressed);
 
     & :global(svg) {
       fill: light-dark(var(--ink-strong), var(--ink-muted));

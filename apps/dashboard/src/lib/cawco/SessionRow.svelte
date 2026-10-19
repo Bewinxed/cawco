@@ -629,7 +629,7 @@
     /* They stand on the row's ghost, by day the hover step itself: their own
        hover is the step past it. */
     .row-action:hover {
-      background: light-dark(var(--surface-fill-strong), var(--surface-fill));
+      background: var(--surface-pressed);
       color: var(--ink-strong);
     }
   }
