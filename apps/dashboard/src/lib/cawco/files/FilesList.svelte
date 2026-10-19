@@ -861,17 +861,19 @@
   }
   /* Each region's own scroll, with the house fade at its foot while more is
      below, at its full length on every width as Caw's panel has it. It pads
-     its end into an equal negative margin (The 44 Touch Rule), so a row's
-     Show in conversation keeps its touch area in the scroller's own box and
-     the cards and rows still end on their head's trailing edge. */
+     its end into an equal negative margin (The 44 Touch Rule), by Files'
+     card's own inset (`--space-2`, FilesFace), so a row's Show in
+     conversation keeps its touch area in the scroller's own box, the cards
+     and rows still end on their head's trailing edge, and the scroller (and
+     its scrollbar) ends on the card's edge, never past it. */
   .files-scroll {
     --fade-len: 40px;
     flex: 1 1 auto;
     min-block-size: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding-inline-end: var(--space-3);
-    margin-inline-end: calc(-1 * var(--space-3));
+    padding-inline-end: var(--space-2);
+    margin-inline-end: calc(-1 * var(--space-2));
     scrollbar-width: thin;
     scrollbar-color: var(--border-control) transparent;
   }

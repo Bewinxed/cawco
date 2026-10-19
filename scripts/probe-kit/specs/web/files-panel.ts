@@ -1384,6 +1384,7 @@ const roundThree = async (
       );
     });
     // No ancestor that clips: nothing can cut the scroller or Show's area.
+    // And none of it stands past Files' card, the surface it is drawn on.
     const unclipped = read.every(
       (one) =>
         one.scrollerRight !== null &&
@@ -1393,7 +1394,11 @@ const roundThree = async (
               one.showRight <= one.clipper.right + 0.5)))
     );
     // Files' card, drawn round the regions: its trailing edge and its inline-end padding.
-    const filesCard = await page.evaluate(() => {
+    const filesCard: {
+      right: number;
+      paddingEnd: string;
+      overflow: string;
+    } | null = await page.evaluate(() => {
       const pop = document.querySelector<HTMLElement>(".kit-pop.files-pop");
       if (!pop) {
         return null;
@@ -1410,9 +1415,17 @@ const roundThree = async (
       flush,
       JSON.stringify(read.map(({ clipper: _clipper, ...rest }) => rest))
     );
+    const onCard =
+      !!filesCard &&
+      read.every(
+        (one) =>
+          one.scrollerRight !== null &&
+          one.scrollerRight <= filesCard.right + 0.5 &&
+          (one.showRight === null || one.showRight <= filesCard.right + 0.5)
+      );
     kit.check(
-      `24b (${view}): the scroller's trailing edge and Show's touch area lie inside the nearest ancestor that clips (named)`,
-      unclipped,
+      `24b (${view}): the scroller's trailing edge and Show's touch area lie inside the nearest ancestor that clips (named), and none of it past Files' card`,
+      unclipped && onCard,
       `${JSON.stringify(
         read.map((one) => ({
           region: one.region,
