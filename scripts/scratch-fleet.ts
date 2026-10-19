@@ -29,8 +29,10 @@ import {
   readFile,
   readlink,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
+import { homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
@@ -1250,6 +1252,18 @@ async function standUp(
     const account = join(dir, ".cawco", "accounts", ACCOUNT, "claude");
     await mkdir(account, { recursive: true });
     await mkdir(join(dir, ".config", "cawco"), { recursive: true });
+    // The host's Playwright browsers, where the agent's own lookup reads them
+    // (capabilities.ts `playwrightBrowser`): a machine's daemon draws a canvas
+    // no panel has open in its Chromium (stage-render.ts), and a HOME of the
+    // fleet's own has none.
+    const browsers = platform() === "darwin" ? "Library/Caches" : ".cache";
+    const hostBrowsers =
+      process.env.PLAYWRIGHT_BROWSERS_PATH ??
+      join(homedir(), browsers, "ms-playwright");
+    if (existsSync(hostBrowsers)) {
+      await mkdir(join(dir, browsers), { recursive: true });
+      await symlink(hostBrowsers, join(dir, browsers, "ms-playwright"));
+    }
     await writeFile(
       join(account, ".credentials.json"),
       JSON.stringify({
@@ -1357,13 +1371,17 @@ async function standUp(
 
   // ── The scratch services ──────────────────────────────────────────────
   /**
-   * A temp dir of its own for one process the fleet starts, `name`, inside
-   * the sandbox (so it goes with the fleet): never the host's /tmp, which a
-   * workspace boundary refuses (the hub stages an approved memory proposal
-   * with `mkdtemp(tmpdir())`: `EPERM … mkdtemp '/tmp/cawco-memory-…'`).
+   * A temp dir of its own for one process the fleet starts, `name`, in the
+   * fleet's short HOME `under` (so it goes with the fleet): never the host's
+   * /tmp, which a workspace boundary refuses (the hub stages an approved
+   * memory proposal with `mkdtemp(tmpdir())`: `EPERM … mkdtemp
+   * '/tmp/cawco-memory-…'`), and never the sandbox's long path, where a
+   * socket made in it does not fit: the agent's Chromium (stage-render.ts)
+   * died "Socket path too long: …/tmp/agent/org.chromium.Chromium.QcIT6E/
+   * SingletonSocket".
    */
-  const tmpFor = (name: string): string => {
-    const dir = join(sandbox, "tmp", name);
+  const tmpFor = (name: string, under: string = home): string => {
+    const dir = join(under, "t", name);
     mkdirSync(dir, { recursive: true });
     return dir;
   };
@@ -2022,7 +2040,7 @@ async function standUp(
       const err = join(sandbox, `${machineId}-${role}.err`);
       const child = serviceSpawn(root, role, {
         cwd: role === "sessiond" ? sandbox : root,
-        env: { ...machineEnv, TMPDIR: tmpFor(`${machineId}-${role}`) },
+        env: { ...machineEnv, TMPDIR: tmpFor(role, machineHome) },
         stdout: Bun.file(join(sandbox, `${machineId}-${role}.log`)),
         stderr: Bun.file(err),
       });

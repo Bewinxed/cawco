@@ -10,9 +10,9 @@
  *
  * On a scratch fleet, a Claude Code session spawned in the fleet's repo,
  * which holds a Vite + Svelte project, all of it uncommitted (`Card.svelte`
- * and its story file; its node_modules a link to the dashboard's, which the
- * stage's boundary holds read-only, so Vite's config load and caches must
- * write elsewhere), against the mock model:
+ * and its story file; its bun.lock, which names the manager its stage clone
+ * installs with, and nothing installed in the checkout), against the mock
+ * model:
  *
  * 1. `design_map` answers the repo's components, `src/Card.svelte`
  *    with its story file, never "this session runs in no workspace".
@@ -49,22 +49,22 @@
  * fleet's agent runs with `CAWCO_STAGE_IDLE_MS` short, so its stage sleeps
  * within a minute of its last use.
  *
- * 9. `artifact_create(kind: "sheet")` there answers an id and its stage
+ * 9. `artifact_create(kind: "component")` there answers an id and its stage
  *    `live`.
  * 10. The hub's retire sweep (`POST /api/workspaces/retire`) holds the stage
  *     clone, filed as a workspace, for its stage that serves.
  * 11. Once the stage sleeps, a sweep retires the clone and its folder is
  *     gone.
- * 12. The next `components_list` there cuts it again and answers the card,
+ * 12. The next `design_map` there cuts it again and answers the card,
  *     and the sweep holds it again.
  *
  * Then back in the SvelteKit checkout, which also holds
  * `src/other/Other.svelte` and its own Prettier with this repository's
  * `.prettierrc`:
  *
- * 13. `components_list({ dir: "src/lib" })` answers `src/lib/Card.svelte`
+ * 13. `design_map({ dir: "src/lib" })` answers `src/lib/Card.svelte`
  *     alone: the folder asked for, not the whole app.
- * 14. `components_list({ dir: "../.." })` is refused, saying it is outside.
+ * 14. `design_map({ dir: "../.." })` is refused, saying it is outside.
  * 15. `artifact_update` of story `One`'s args with a title past the print
  *     width leaves the story file passing the project's `prettier --check`,
  *     and changes nothing outside that story's statement.
@@ -73,13 +73,14 @@
  * stories four ways: a literal, a spread of a local object, a call of a
  * local helper, and a spread of an imported helper's call.
  *
- * 16. `artifact_create(kind: "sheet")` of it answers an id and its stage
+ * 16. `artifact_create(kind: "component")` of it answers an id and its stage
  *     `live`.
- * 17. `artifact_read` of it lists each readable story's own component and
- *     args (the literal writable, the spread and the helper call read-only
- *     as shared code) and the imported one "args not readable here", with
- *     its export name and the reason, its component and args empty rather
- *     than the meta's.
+ * 17. `artifact_read({ detail: "story" })` answers each story's own args as
+ *     the file builds them (the literal's, the spread's, the helper call's)
+ *     and the imported one's empty rather than the meta's; an
+ *     `artifact_update` of the imported one's args is refused "args not
+ *     readable here", with its export name and the reason, and one of the
+ *     spread's as shared code, the file unchanged by either.
  *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
@@ -93,7 +94,6 @@ import {
   readdir,
   readFile,
   realpath,
-  symlink,
   writeFile,
 } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
@@ -107,19 +107,19 @@ const STORY = "src/Card.stories.js";
 const MIXED = "src/Mixed.stories.js";
 const REFUSAL = "this session runs in no workspace";
 
-/** The project in the session's folder: plain Vite and Svelte, the dashboard's packages linked in. */
+/** The project in the session's folder: plain Vite and Svelte, installed only in its stage clone. */
 const PROJECT: Record<string, string> = {
+  ".gitignore": "node_modules\n",
   "package.json": JSON.stringify({
     name: "probe-cards",
     private: true,
     type: "module",
     devDependencies: {
-      "@sveltejs/vite-plugin-svelte": "*",
-      svelte: "*",
-      vite: "*",
+      "@sveltejs/vite-plugin-svelte": "^7.3.1",
+      svelte: "5.57.1",
+      vite: "^8.3.4",
     },
   }),
-  // The linked node_modules are the dashboard's, outside the place and read-only in its boundary: the stage writes nothing there.
   "vite.config.mjs": `import { svelte } from "@sveltejs/vite-plugin-svelte";
 export default { plugins: [svelte()], server: { fs: { strict: false } } };
 `,
@@ -172,7 +172,7 @@ const KIT: Record<string, string> = {
       vite: "^8.3.4",
     },
   }),
-  // A component outside src/lib: a components_list of src/lib leaves it out (leg 13).
+  // A component outside src/lib: a design_map of src/lib leaves it out (leg 13).
   "src/other/Other.svelte": "<p>other</p>\n",
   "vite.config.ts": `import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
@@ -204,7 +204,8 @@ const EDITED = `<script>\n  let { title } = $props();\n</script>\n\n<h2 data-pro
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\d+)/g;
+/** A call's marker: its leg's number, and the letter of a leg's later calls (2c). */
+const COMMAND = /PROBE-CALL:(\d+[a-z]?)/g;
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -240,43 +241,6 @@ const respond = (request: Seen): Reply => {
 
 const STATUS = /"status":"(\w+)"/;
 
-/** A story as `artifact_read` lists it (core stage.ts `Story`), as far as legs 16 and 17 read it. */
-interface ListedStory {
-  args: Record<string, unknown>;
-  component: string | null;
-  name: string;
-  readOnly: { read: boolean; reason: string } | null;
-}
-
-/** The `stories` array of the sheet an `artifact_read` answered, its JSON scanned out of the answer's text; empty when it has none. */
-const storiesIn = (said: string): ListedStory[] => {
-  const start = said.indexOf("[", said.indexOf('"stories":'));
-  if (said.indexOf('"stories":') < 0 || start < 0) {
-    return [];
-  }
-  let depth = 0;
-  let quoted = false;
-  let escaped = false;
-  for (let at = start; at < said.length; at += 1) {
-    const char = said[at];
-    if (escaped) {
-      escaped = false;
-    } else if (quoted) {
-      escaped = char === "\\";
-      quoted = char !== '"';
-    } else if (char === '"') {
-      quoted = true;
-    } else if (char === "[" || char === "{") {
-      depth += 1;
-    } else if (char === "]" || char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return JSON.parse(said.slice(start, at + 1)) as ListedStory[];
-      }
-    }
-  }
-  return [];
-};
 const ERRORS = /"errors":(\[[^\]]*\])/;
 const ID = /"id":"([0-9a-f-]{36})"/;
 const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 500);
@@ -380,13 +344,10 @@ const sweep = async (
     await fetch(`${base}/api/workspaces/retire`, { method: "POST" })
   ).json()) as Awaited<ReturnType<typeof sweep>>;
 
-/** {@link PROJECT} written into `dir`, the dashboard's packages linked in. */
+/** {@link PROJECT} written into `dir` with the bun.lock bun resolves for it, nothing installed: the stage clone installs from it (agent stage-clone.ts `installOf`). */
 const writeProject = async (dir: string) => {
   await writeFiles(dir, PROJECT);
-  await symlink(
-    join(ROOT, "apps/dashboard/node_modules"),
-    join(dir, "node_modules")
-  );
+  await Bun.$`bun install --lockfile-only --no-progress`.cwd(dir).quiet();
 };
 
 /** Legs 2b to 2e: the component canvas's answers through the session's own tools. */
@@ -439,12 +400,90 @@ const componentLegs = async (
   });
   kit.check(
     "2e: design_map with component answers its card: states file, stories, used in and made of",
-    card.includes(`"statesFiles":["${STORY}"]`) &&
+    // Mixed.stories.js renders Card too: the card lists both.
+    card.includes('"statesFiles":[') &&
+      card.includes(`"${STORY}"`) &&
       card.includes('"stories":[{') &&
       card.includes('"usedIn":['),
     short(card)
   );
 };
+
+/** Legs 16 and 17, in the first session's folder: a sheet whose stories are built by spreads and helpers. */
+async function builtStories(
+  kit: Kit,
+  call: (n: string, name: string, input: object) => Promise<string>,
+  repo: string
+): Promise<void> {
+  // 16. The sheet made.
+  const mixed = await call("16", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "mixed",
+    file: MIXED,
+    about: "The card's stories, built four ways",
+  });
+  const mixedId = mixed.match(ID)?.[1];
+  kit.check(
+    "16: artifact_create(kind: component) of the story file built four ways answers an id and its stage live",
+    !!mixedId && mixed.match(STATUS)?.[1] === "live",
+    short(mixed)
+  );
+
+  // 17. Each story's args as the file builds them, one story at a time.
+  const detail = async (n: string, story: string) =>
+    mixedId
+      ? await call(n, "mcp__cawco__artifact_read", {
+          id: mixedId,
+          detail: "story",
+          story,
+        })
+      : "no sheet from leg 16";
+  const reads = {
+    Literal: await detail("17a", "Literal"),
+    Spread: await detail("17b", "Spread"),
+    Helper: await detail("17c", "Helper"),
+    Imported: await detail("17d", "Imported"),
+  };
+  const argsOf = (name: keyof typeof reads, args: object) =>
+    reads[name].includes(
+      `"story":{"name":"${name}","args":${JSON.stringify(args)}`
+    );
+  kit.check(
+    "17: artifact_read with detail story answers the literal, spread and helper stories' own args, and the imported one's empty",
+    argsOf("Literal", { title: "Literal" }) &&
+      argsOf("Spread", { title: "Shared" }) &&
+      argsOf("Helper", { title: "Helper" }) &&
+      argsOf("Imported", {}),
+    Object.entries(reads)
+      .map(([name, said]) => {
+        const at = said.indexOf('"story":{');
+        return `${name} ${at < 0 ? short(said).slice(0, 200) : said.slice(at, at + 160)}`;
+      })
+      .join("; ")
+  );
+
+  // 17. A write the file's code decides is refused with why, and writes nothing.
+  const mixedPath = join(repo, MIXED);
+  const before = await readFile(mixedPath, "utf8");
+  const write = (n: string, story: string) =>
+    mixedId
+      ? call(n, "mcp__cawco__artifact_update", {
+          id: mixedId,
+          args: { story, values: { title: "Written" } },
+        })
+      : Promise.resolve("no sheet from leg 16");
+  const imported = await write("17e", "Imported");
+  const spread = await write("17f", "Spread");
+  const after = await readFile(mixedPath, "utf8");
+  kit.check(
+    "17: an args write to the imported story is refused, args not readable here, with its name and why; one to the spread story as shared code; the file unchanged",
+    imported.includes("Imported: args not readable here") &&
+      imported.includes("./fixture.js") &&
+      spread.includes("code other stories may share") &&
+      after === before,
+    `imported: ${short(imported).slice(0, 250)}; spread: ${short(spread).slice(0, 250)}; file ${after === before ? "unchanged" : "changed"}`
+  );
+}
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
@@ -595,11 +634,16 @@ const run = async (kit: Kit) => {
   const npmCreated = await call(
     "9",
     "mcp__cawco__artifact_create",
-    { kind: "sheet", name: "npm-cards", file: STORY },
+    {
+      kind: "component",
+      name: "npm-cards",
+      file: STORY,
+      about: "The npm project's card in each of its states",
+    },
     npmSession
   );
   kit.check(
-    "9: artifact_create(kind: sheet) in an npm-lockfile checkout answers an id and its stage live",
+    "9: artifact_create(kind: component) in an npm-lockfile checkout answers an id and its stage live",
     !!npmCreated.match(ID)?.[1] && npmCreated.match(STATUS)?.[1] === "live",
     short(npmCreated)
   );
@@ -611,7 +655,7 @@ const run = async (kit: Kit) => {
   kit.check(
     "10: the retire sweep keeps the npm stage clone for its stage that serves",
     !!hold?.hold.includes("sheet stage"),
-    `clone ${clone ? `${clone.id} at ${clone.path}` : "not found"}; sweep ${JSON.stringify(serving).slice(0, 400)}`
+    `clone ${clone ? `${clone.id} at ${clone.path}` : "not found"}; sweep ${String(JSON.stringify(serving)).slice(0, 400)}`
   );
 
   // 11. Its stage sleeps, and the clone retires.
@@ -639,15 +683,10 @@ const run = async (kit: Kit) => {
   );
 
   // 12. The next sheet call cuts it again, and the hub holds it again.
-  const relisted = await call(
-    "12",
-    "mcp__cawco__components_list",
-    {},
-    npmSession
-  );
+  const relisted = await call("12", "mcp__cawco__design_map", {}, npmSession);
   const again = await sweep(fleet.base);
   kit.check(
-    "12: the next components_list cuts the clone again and answers the card, and the sweep keeps it again",
+    "12: the next design_map cuts the clone again and answers the card, and the sweep keeps it again",
     relisted.includes('"src/Card.svelte"') &&
       !!clone &&
       existsSync(clone.path) &&
@@ -656,67 +695,19 @@ const run = async (kit: Kit) => {
   );
 
   await scopedAndStyled(kitCreated.match(ID)?.[1]);
-  await builtStories();
-
-  /** Legs 16 and 17, in the first session's folder: a sheet whose stories are built by spreads and helpers. */
-  async function builtStories(): Promise<void> {
-    // 16. The sheet made.
-    const mixed = await call("16", "mcp__cawco__artifact_create", {
-      kind: "sheet",
-      name: "mixed",
-      file: MIXED,
-    });
-    const mixedId = mixed.match(ID)?.[1];
-    kit.check(
-      "16: artifact_create(kind: sheet) of the story file built four ways answers an id and its stage live",
-      !!mixedId && mixed.match(STATUS)?.[1] === "live",
-      short(mixed)
-    );
-
-    // 17. Each story as the file builds it.
-    const read = mixedId
-      ? await call("17", "mcp__cawco__artifact_read", { id: mixedId })
-      : "no sheet from leg 16";
-    const stories = storiesIn(read);
-    const one = (name: string) => stories.find((story) => story.name === name);
-    const said = (name: string) => JSON.stringify(one(name) ?? null);
-    const titled = (name: string, title: string) =>
-      JSON.stringify(one(name)?.args) === JSON.stringify({ title });
-    const imported = one("Imported");
-    kit.check(
-      "17: artifact_read lists the literal, spread and helper stories' own component and args, and the imported one read-only with its name and why",
-      titled("Literal", "Literal") &&
-        one("Literal")?.readOnly === null &&
-        titled("Spread", "Shared") &&
-        one("Spread")?.readOnly?.read === true &&
-        titled("Helper", "Helper") &&
-        one("Helper")?.component === "src/Card.svelte" &&
-        one("Helper")?.readOnly?.read === true &&
-        imported?.readOnly?.read === false &&
-        imported.readOnly.reason.startsWith(
-          "Imported: args not readable here"
-        ) &&
-        imported.readOnly.reason.includes("./fixture.js") &&
-        imported.component === null &&
-        JSON.stringify(imported.args) === "{}",
-      ["Literal", "Spread", "Helper", "Imported"]
-        .map((name) => `${name} ${said(name)}`)
-        .join("; ")
-        .slice(0, 1500) || short(read)
-    );
-  }
+  await builtStories(kit, call, fleet.repo);
 
   /** Legs 13 to 15, in the SvelteKit checkout of legs 6 to 8 (its session `kitSession`), on the sheet leg 7 made (`kitId`). */
   async function scopedAndStyled(kitId: string | undefined): Promise<void> {
-    // 13. A components_list of one folder answers that folder's components alone.
+    // 13. A design_map of one folder answers that folder's components alone.
     const scoped = await call(
       "13",
-      "mcp__cawco__components_list",
+      "mcp__cawco__design_map",
       { dir: "src/lib" },
       kitSession
     );
     kit.check(
-      "13: components_list with dir src/lib answers src/lib/Card.svelte alone, not src/other/Other.svelte",
+      "13: design_map with dir src/lib answers src/lib/Card.svelte alone, not src/other/Other.svelte",
       scoped.includes('"src/lib/Card.svelte"') &&
         !scoped.includes("Other.svelte") &&
         (scoped.match(/"name":/g)?.length ?? 0) === 1,
@@ -726,12 +717,12 @@ const run = async (kit: Kit) => {
     // 14. A dir outside the session's folder is refused in words.
     const outside = await call(
       "14",
-      "mcp__cawco__components_list",
+      "mcp__cawco__design_map",
       { dir: "../.." },
       kitSession
     );
     kit.check(
-      "14: components_list with a dir outside the folder is refused, saying it is outside",
+      "14: design_map with a dir outside the folder is refused, saying it is outside",
       outside.includes("is outside") && !outside.includes('"components"'),
       short(outside)
     );

@@ -81,6 +81,8 @@ const spec: Spec = {
           cwd: fleet.workdir,
           harness: "claude",
           model: "claude-haiku-4-5",
+          // A mode chosen, as every start must name one (server.ts): the account is what refuses it.
+          permissionMode: "bypassPermissions",
         },
       })
     );
