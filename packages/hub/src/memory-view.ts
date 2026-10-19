@@ -26,7 +26,6 @@ import {
   type MemoryFileView,
   type MemoryMark,
   type MemoryNoteRow,
-  type MemoryNoteView,
   type MemoryPage,
   type MemoryProposalKind,
   type MemoryProposalRow,
@@ -92,7 +91,6 @@ export interface MemorySources {
 
 const DAY_MS = 86_400_000;
 const DELEGATES_DIR = "delegates/";
-const CURATOR_NAME = "Memory curator";
 const MD = /\.md$/;
 const FACT_LINE = /^- /;
 
@@ -128,13 +126,6 @@ const kindOf = (proposal: Proposal): MemoryProposalKind => {
   if ((proposal.sorts?.length ?? 0) > 0 || proposal.notes.length > 0) {
     return "sort";
   }
-  const facts = proposal.files.filter((file) => isFactFile(file.path));
-  if (proposal.by === CURATOR_NAME && facts.length > 1) {
-    return "reshape";
-  }
-  if (proposal.by === CURATOR_NAME && facts.length === 1) {
-    return "fold";
-  }
   return "change";
 };
 
@@ -151,7 +142,7 @@ const proposalRow = (proposal: Proposal): MemoryProposalRow => ({
     file: sort.path,
     line: sort.line,
   })),
-  time: Date.parse(proposal.time) || 0,
+  time: Date.parse(proposal.time),
 });
 
 /** Every line of a fact file, as one mark each, in file order. */
@@ -217,7 +208,7 @@ const inboxRows = (src: MemorySources): MemoryNoteRow[] => {
         id: note.id,
         text: note.text,
         author: note.author,
-        at: Date.parse(note.time) || 0,
+        at: Date.parse(note.time),
         since: note.since,
         proposal: proposal?.id ?? null,
         sort: sort
@@ -337,7 +328,7 @@ const sourceOf = (src: MemorySources, id: string): MemorySourceNote => {
     ? {
         id,
         author: note.author,
-        at: Date.parse(note.time) || null,
+        at: Date.parse(note.time),
         text: note.text.split("\n")[0] ?? "",
         where: inbox ? "inbox" : "archive",
       }
@@ -424,27 +415,6 @@ export const memoryFile = (
           title: use.title,
         })),
     })),
-  };
-};
-
-/** One note, whole, from the inbox or the archive. */
-export const memoryNote = (src: MemorySources, id: string): MemoryNoteView => {
-  const inbox = src.inbox.find((each) => each.id === id);
-  const note = inbox ?? src.archived.find((each) => each.id === id);
-  if (!note) {
-    throw new MemoryRefusal(404, `${id} is no note of this project.`);
-  }
-  return {
-    id: note.id,
-    author: note.author,
-    role: note.role,
-    source: note.source,
-    task: note.task,
-    at: Date.parse(note.time) || null,
-    since: note.since,
-    text: note.text,
-    outcome: note.outcome,
-    where: inbox ? "inbox" : "archive",
   };
 };
 
@@ -625,17 +595,6 @@ export const memoryViewRoutes = (deps: MemoryViewDeps) => {
       async ({ params, query }) => {
         try {
           return memoryFile(await read(params.id), query.path);
-        } catch (error) {
-          return answerOf(error);
-        }
-      }
-    )
-    .get(
-      "/api/projects/:id/memory/notes/:note",
-      { detail: { hide: true } },
-      async ({ params }) => {
-        try {
-          return memoryNote(await read(params.id), params.note);
         } catch (error) {
           return answerOf(error);
         }

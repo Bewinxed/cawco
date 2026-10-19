@@ -249,6 +249,7 @@ const stateOf = (name: string) => {
             presentation: presentPermission(MEMORY_PROPOSAL_TOOL, input, {
               asker: proposal.by,
               project: rows.project,
+              projectId: rows.projectId,
               current: () => undefined,
               memory: () => undefined,
               projectName: () => rows.project,

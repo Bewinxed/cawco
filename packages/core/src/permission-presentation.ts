@@ -66,6 +66,8 @@ export interface PermissionPresentation {
   post?: HeldPostNaming;
   /** The project the asker works in, by name; absent for a session in none. The card's head reads "Caw · cockpit". */
   project?: string;
+  /** The project the ask is in, by id: where a project's own surfaces find its asks (the Memory view its proposals). Absent for an ask in none. */
+  projectId?: string;
   /**
    * What will happen and why, in one line: "Change the fleet's CLAUDE.md";
    * for a shell call, the session's own reason for it ("Check whether the
@@ -133,6 +135,8 @@ export interface PresentationContext {
   memory: (path: string | null) => string | undefined;
   /** The asking session's project, by name; undefined when it is in none. */
   project?: string;
+  /** The project the ask is in, by id, as the hub parked it; undefined when it is in none. */
+  projectId?: string;
   /** A project's name by its id; undefined when the hub keeps no such project. */
   projectName: (id: string) => string | undefined;
   /** An install's or a link's source, read when it was proposed; undefined for any other call. */
@@ -1519,6 +1523,7 @@ export function presentPermission(
   const who = {
     asker: context.asker,
     ...(context.project ? { project: context.project } : {}),
+    ...(context.projectId ? { projectId: context.projectId } : {}),
   };
   const questions = questionsOf(toolName, input);
   if (questions) {

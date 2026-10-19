@@ -70,7 +70,7 @@ export interface BuiltInBlock {
  * Each page's own blocks, in their own order: what a page the person has
  * not arranged lays out, and what the hub counts a proposed block's place
  * among when it is kept. A task view's page holds the view; the Routines
- * page its three parts; the Memory page its pipeline's three (Inbox, Facts,
+ * page its three parts; the Memory page its pipeline's three (Inbox, Knowledge,
  * In briefs).
  */
 export const BLOCK_BUILT_INS: Record<BlockPage, BuiltInBlock[]> = {

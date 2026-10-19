@@ -25,6 +25,7 @@
     type MemoryFactView,
     type MemoryFileView,
     type MemorySourceNote,
+    routinesWords,
     memoryViewWords as words,
   } from "@cawco/core";
   import AskHere from "#lib/cawco/AskHere.svelte";
@@ -140,7 +141,13 @@
   });
 
   const ago = (at: number | null): string =>
-    at === null ? "—" : since(at + source.skew);
+    at === null ? routinesWords.neverAt : since(at + source.skew);
+  /** A note's day as this device's clock tells it (git blame's instant). */
+  const LOCAL_DAY = new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+  });
+  /** A fact's `since`/`until` day: a date, so read in UTC, never shifted by the zone. */
   const DAY = new Intl.DateTimeFormat(undefined, {
     day: "numeric",
     month: "short",
@@ -151,8 +158,10 @@
     const at = Date.parse(`${day}T00:00:00Z`);
     return Number.isNaN(at) ? day : DAY.format(at);
   };
+  const MD = /\.md$/;
+  /** The file's name: the hub's once read, its path's last part until then. */
   const title = $derived(
-    view?.name ?? path.split("/").at(-1)?.replace(/\.md$/, "") ?? path
+    view ? view.name : path.slice(path.lastIndexOf("/") + 1).replace(MD, "")
   );
   /** Its sections' headings' ids: one card per page, named by its path. */
   const headId = $derived(`memory-${path.replace(/[^\w-]/g, "-")}`);
@@ -163,9 +172,11 @@
   const conflicts = $derived.by(() => {
     const groups = new Map<number, MemoryFactView[]>();
     for (const fact of facts?.facts ?? []) {
-      if (fact.section === "conflict") {
-        const group = fact.conflictGroup ?? 0;
-        groups.set(group, [...(groups.get(group) ?? []), fact]);
+      if (fact.section === "conflict" && fact.conflictGroup !== null) {
+        groups.set(fact.conflictGroup, [
+          ...(groups.get(fact.conflictGroup) ?? []),
+          fact,
+        ]);
       }
     }
     return [...groups.values()];
@@ -221,7 +232,7 @@
               // biome-ignore lint/complexity/noVoid: the question keeps its own state
               void asker.ask({
                 at: "head",
-                title: words.archiveAsk,
+                title: words.archiveAsk(facts.thresholds.archiveDays),
                 body: words.archiveAskLine,
                 confirmLabel: words.archiveUnused,
                 pendingLabel: words.archiving,
@@ -436,7 +447,11 @@
             </div>
             <span class="fact-meta"
               ><span class="meta-words"
-                ><span>{note.at === null ? "—" : DAY.format(note.at)}</span>
+                ><span
+                  >{note.at === null
+                    ? routinesWords.neverAt
+                    : LOCAL_DAY.format(note.at)}</span
+                >
                 <span>· {words.you}</span></span
               ></span
             >
@@ -585,9 +600,7 @@
               <li class="change">
                 <span class="change-message">{change.message}</span>
                 <span class="change-meta"
-                  >{change.author} · {ago(
-                    Date.parse(change.date) || null
-                  )}</span
+                  >{change.author} · {ago(Date.parse(change.date))}</span
                 >
               </li>
             {/each}
@@ -611,7 +624,7 @@
     {@render body()}
   </section>
 {:else}
-  <SideSurface class="memory-file" label={words.fileCard} {onclose} {title}>
+  <SideSurface class="memory-file" label={title} {onclose} {title}>
     {#snippet actions()}
       <RowMenu actions={fileMenu} label={title} />
     {/snippet}

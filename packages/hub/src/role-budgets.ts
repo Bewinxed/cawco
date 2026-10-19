@@ -442,6 +442,7 @@ export const measureRoles = (): RoleSize[] => {
         curator: () => ({
           ensure: () => undefined,
           inboxPassed: () => undefined,
+          asked: () => undefined,
         }),
         db: {} as never,
         folderChanged: () => undefined,

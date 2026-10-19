@@ -19733,6 +19733,7 @@ export const createServer = (
     curator: () => ({
       ensure: (projectId) => routines.ensureCurator(projectId),
       inboxPassed: (projectId) => routines.inboxPassed(projectId),
+      asked: (instanceId) => routines.curatorAsked(instanceId),
     }),
     folderChanged: (projectId) => {
       tasks.touched(projectId);

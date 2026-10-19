@@ -1260,7 +1260,6 @@
         "notes": ["n-20261019-100000-a1b2c3"],
         "why": "Jev's sort: n-20261019-100000-a1b2c3 changes knowledge/deploy.md:6",
         "project": "cockpit",
-        "projectId": "fixture-cockpit",
         "open": "/project/fixture-cockpit?view=memory&file=knowledge%2Fdeploy.md&proposal=p-20261019-103000-0a1b2c"
       },
       "instanceId": "p-20261019-103000-0a1b2c",
@@ -1270,6 +1269,7 @@
       "presentation": {
         "asker": "Jev",
         "project": "cockpit",
+        "projectId": "fixture-cockpit",
         "summary": "Change knowledge/deploy.md",
         "detail": "2 lines changed",
         "changes": [
@@ -1286,10 +1286,6 @@
           {
             "key": "why",
             "value": "Jev's sort: n-20261019-100000-a1b2c3 changes knowledge/deploy.md:6"
-          },
-          {
-            "key": "projectId",
-            "value": "fixture-cockpit"
           },
           {
             "key": "from notes",

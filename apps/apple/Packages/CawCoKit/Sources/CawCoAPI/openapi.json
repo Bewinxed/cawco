@@ -55533,6 +55533,10 @@
             "description": "The project the asker works in, by name; absent for a session in none. The card's head reads \"Caw · cockpit\".",
             "type": "string"
           },
+          "projectId": {
+            "description": "The project the ask is in, by id: where a project's own surfaces find its asks (the Memory view its proposals). Absent for an ask in none.",
+            "type": "string"
+          },
           "summary": {
             "description": "What will happen and why, in one line: \"Change the fleet's CLAUDE.md\";\nfor a shell call, the session's own reason for it (\"Check whether the\ntwo commits are on origin/main\"), its command under it in `command`.",
             "type": "string"

@@ -203,6 +203,7 @@ export const createAskPresenter = (
   /** Stamps the ask's presentation onto its payload, read from what the hub holds now. */
   return (envelope: Envelope): void => {
     const payload = envelope.payload as PermissionRequestFrame & {
+      projectId?: unknown;
       proposer?: unknown;
       sourceFacts?: SourceFacts;
       workflowRunId?: unknown;
@@ -212,6 +213,9 @@ export const createAskPresenter = (
       memory,
       current,
       projectName,
+      ...(typeof payload.projectId === "string"
+        ? { projectId: payload.projectId }
+        : {}),
       ...(payload.sourceFacts ? { source: payload.sourceFacts } : {}),
     });
   };

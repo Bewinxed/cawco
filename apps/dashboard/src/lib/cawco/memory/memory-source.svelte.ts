@@ -70,7 +70,7 @@ export interface MemorySource {
   history: (path: string) => Promise<MemoryChange[]>;
   /** Keeps the page live while a view shows it; the cleanup stops it. */
   keep: () => () => void;
-  /** Make a note: the person's words into AGENTS.md's `## Notes`, as the Caw thread message that says so ({@link tellCaw}). */
+  /** Make a note: the person's words into AGENTS.md's `## Notes`, as the Caw thread message that says so, in the project's standing notes thread. */
   makeNote: (text: string) => Promise<void>;
   readonly page: MemoryPage | null;
   /** Why the last read failed while nothing has been read. */
@@ -98,14 +98,14 @@ const base = (projectId: string) =>
 /** While the curator's run goes, the page is read every this many ms (a delegate's run notes nothing on the socket). */
 const RUN_READ_MS = 5000;
 
-/** The memory proposals parked for one project: their input names it (hub memory.ts `proposalInput`). */
+/** The memory proposals parked for one project: their presentation names it, as the hub parked them. */
 export const memoryAsksOf = (projectId: string): PendingPermission[] =>
   cawco.blocked
     .map((blocked) => blocked.request)
     .filter(
       (request) =>
         request.toolName === MEMORY_PROPOSAL_TOOL &&
-        request.input.projectId === projectId
+        request.presentation.projectId === projectId
     );
 
 /** The hub's project memory, read and kept live. */
@@ -325,6 +325,7 @@ export class LiveMemory implements MemorySource {
     return said.thread.id;
   }
 
+  /** A note: the Caw thread message, which the hub keeps in AGENTS.md and lays in the project's one standing notes thread. */
   async makeNote(text: string): Promise<void> {
     await this.tellCaw(`${memoryViewWords.notePrefix}${text}`);
   }

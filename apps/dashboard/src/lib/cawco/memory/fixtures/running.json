@@ -1249,7 +1249,6 @@
         "notes": [],
         "why": "deploy is past its budget: its Why: lines are cut, every fact line kept word for word",
         "project": "cockpit",
-        "projectId": "fixture-cockpit",
         "open": "/project/fixture-cockpit?view=memory&file=knowledge%2Fdeploy.md&proposal=p-20261019-104500-1b2c3d"
       },
       "instanceId": "p-20261019-104500-1b2c3d",
@@ -1259,6 +1258,7 @@
       "presentation": {
         "asker": "Memory curator",
         "project": "cockpit",
+        "projectId": "fixture-cockpit",
         "summary": "Change knowledge/deploy.md",
         "detail": "1 line removed",
         "changes": [
@@ -1275,10 +1275,6 @@
           {
             "key": "why",
             "value": "deploy is past its budget: its Why: lines are cut, every fact line kept word for word"
-          },
-          {
-            "key": "projectId",
-            "value": "fixture-cockpit"
           }
         ]
       }

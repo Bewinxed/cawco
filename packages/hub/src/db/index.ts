@@ -735,6 +735,8 @@ export interface DbShape {
     title: string;
     /** The project's Setup thread (caw.ts `setup`). */
     setup?: boolean;
+    /** The project's standing notes thread (caw.ts `start`). */
+    notes?: boolean;
     first: Pick<ThreadMessageRow, "author" | "body"> &
       Partial<
         Pick<
@@ -7362,6 +7364,8 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(projectThreads.projectId, projectId),
+            // The standing notes thread holds your notes alone: never his conversation.
+            eq(projectThreads.notes, false),
             inArray(threadMessages.author, ["you", "caw"]),
             notInArray(
               projectThreads.id,
@@ -7436,7 +7440,7 @@ const make = async (path: string): Promise<DbShape> => {
         .onConflictDoNothing()
         .run();
     },
-    createThread: ({ id, projectId, title, setup, first }) =>
+    createThread: ({ id, projectId, title, setup, notes, first }) =>
       db.transaction((tx) => {
         const at = new Date();
         const thread = tx
@@ -7446,6 +7450,7 @@ const make = async (path: string): Promise<DbShape> => {
             projectId,
             title,
             setup: setup ?? false,
+            notes: notes ?? false,
             createdAt: at,
             updatedAt: at,
           })

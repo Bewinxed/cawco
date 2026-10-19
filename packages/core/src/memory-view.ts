@@ -6,10 +6,9 @@
  * their task. Every number here is the hub's: the parsers' counts, the
  * thresholds it acts on, each brief's record of what it carried.
  *
- * Read with `GET /api/projects/:id/memory` (the page),
- * `GET /api/projects/:id/memory/file?path=` (one file, line by line) and
- * `GET /api/projects/:id/memory/notes/:note` (one note, whole). The view
- * reads them again on `memory.changed`.
+ * Read with `GET /api/projects/:id/memory` (the page) and
+ * `GET /api/projects/:id/memory/file?path=` (one file, line by line). The
+ * view reads them again on `memory.changed`.
  */
 
 /** How Jev's sort says a note bears on a fact line (hub memory.ts `Sort`). */
@@ -49,7 +48,7 @@ export interface MemoryNoteRow {
   text: string;
 }
 
-/** A fact file's row in Facts. */
+/** A knowledge file's row in Knowledge. */
 export interface MemoryFileRow {
   /** Its last commit, ms epoch; null when the folder's git has none. */
   changedAt: number | null;
@@ -140,7 +139,7 @@ export type MemoryCuratorRun = {
 
 /** The project's curator routine, as Inbox's head says it. */
 export interface MemoryCurator {
-  /** Its schedule, as the routine keeps it: the empty Facts block says when it runs. */
+  /** Its schedule, as the routine keeps it: the empty Knowledge block says when it runs. */
   cron: string;
   enabled: boolean;
   /** The newest run, or null before its first. */
@@ -250,21 +249,6 @@ export interface MemoryNotesFile {
 
 export type MemoryFileView = MemoryFactFile | MemoryNotesFile;
 
-/** `GET /api/projects/:id/memory/notes/:note`. */
-export interface MemoryNoteView {
-  at: number | null;
-  author: string;
-  id: string;
-  /** What came of it, once archived (`applied <sha>`, `rejected`, `withdrawn`). */
-  outcome: string | null;
-  role: string;
-  since: string | null;
-  source: string;
-  task: string | null;
-  text: string;
-  where: "inbox" | "archive";
-}
-
 /** `POST /api/projects/:id/memory/curate`, `…/propose/fold`, `…/propose/reshape`: the curator's run, started. */
 export interface MemoryRunStarted {
   reason: string | null;
@@ -297,6 +281,9 @@ export const memoryHref = (
 /** What opens a Caw thread message that is the person's note, not words to Caw: "Make a note" (WORDS.md), its one path. */
 export const MAKE_A_NOTE = /^make a note\s*:\s*/i;
 
+/** The name of a project's one standing notes thread, where every note made from the Memory view lands (WORDS.md: Make a note). */
+export const NOTES_THREAD = "Make a note";
+
 /** The days a use sparkline draws. */
 export const MEMORY_USE_DAYS = 14;
 
@@ -324,7 +311,7 @@ export const memoryViewWords = {
   openRun: "Open run",
   runAgain: "Run again",
   retry: "Retry",
-  openInMemory: "Open in memory",
+  openInMemory: "Open in Memory",
   approve: "Approve",
   deny: "Deny",
   approving: "Approving…",
@@ -358,8 +345,8 @@ export const memoryViewWords = {
   /** The person's notes row and card: the file itself (WORDS.md: AGENTS.md, not "memory file"). */
   yourNotes: "AGENTS.md",
   everyBrief: "every brief",
-  addPlaceholder: "Add to your notes…",
-  addLabel: "Add to your notes",
+  addPlaceholder: "Make a note…",
+  addLabel: "Make a note",
   /** Counts and meta. */
   lines: (n: number) => `${n} ${n === 1 ? "line" : "lines"}`,
   notes: (n: number) => `${n} ${n === 1 ? "note" : "notes"}`,
@@ -389,7 +376,6 @@ export const memoryViewWords = {
     `${chars} of ${limit} characters: past it, a fold is proposed`,
   /** The block heads' run status. */
   runningSince: (time: string) => `Running since ${time}`,
-  running: "Running",
   neverRun: "Not run yet",
   /** Proposal card heads: the kind, then why. */
   kind: {
@@ -417,9 +403,9 @@ export const memoryViewWords = {
   foldAsk: (name: string) => `Fold ${name}?`,
   foldAskLine:
     "The curator rewrites it shorter. You approve the result before it lands.",
-  archiveAsk: "Archive the lines unused for 90 days?",
+  archiveAsk: (days: number) => `Archive the lines unused for ${days} days?`,
   archiveAskLine: "They move to the archive once you approve.",
-  reshapeAsk: "Reshape the fact files?",
+  reshapeAsk: "Reshape knowledge?",
   reshapeAskLine:
     "The curator proposes a new set; nothing moves until you approve.",
   withdrawAsk: "Withdraw this note?",
@@ -434,8 +420,6 @@ export const memoryViewWords = {
   curatedAgo: (ago: string) => `Curated ${ago}`,
   /** A file card's Back on a phone. */
   back: "Back",
-  /** A file card's name for its kind, beside the view. */
-  fileCard: "A memory file",
   /** A fact line's uses' fold. */
   briefsCarried: "The briefs that carried it",
   /** A fact's grounds, under it. */

@@ -4137,6 +4137,12 @@ export const projectThreads = sqliteTable(
     title: text("title").notNull(),
     /** The project's Setup thread, opened when New project made it (caw.ts `setup`). */
     setup: integer("setup", { mode: "boolean" }).notNull().default(false),
+    /**
+     * The project's one standing notes thread: every "Make a note: …" that
+     * opens no thread of its own (the Memory view's fields) lands here, the
+     * first opening it (caw.ts `start`). Never Caw's conversation.
+     */
+    notes: integer("notes", { mode: "boolean" }).notNull().default(false),
     createdAt: timestamp("created_at").notNull(),
     /** When its newest message was added. */
     updatedAt: timestamp("updated_at").notNull(),

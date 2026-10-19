@@ -74,6 +74,7 @@ import {
   type ItemEnd,
   MAKE_A_NOTE,
   type NeutralOrigin,
+  NOTES_THREAD,
   type PermissionMode,
   type PermissionRequestFrame,
   type PermissionResult,
@@ -2005,6 +2006,47 @@ export const createCaw = ({
     }
   };
 
+  /**
+   * A note that opens no thread of its own (the Memory view's fields): kept
+   * in AGENTS.md, then laid in the project's one standing notes thread, the
+   * first note opening it and every later one joining it. No one is woken.
+   */
+  const noteInStanding = async (
+    projectId: string,
+    body: string,
+    id: string | undefined
+  ): Promise<ThreadSaid> => {
+    const sha = await noteInAgents(projectId, body);
+    const notesThread = db
+      .projectThreads(projectId)
+      .find((thread) => thread.notes);
+    if (notesThread) {
+      const added = db.addThreadMessage({
+        threadId: notesThread.id,
+        author: "you",
+        body,
+        ...(id ? { id } : {}),
+      });
+      noteIn(projectId, notesThread.id, notedLine(sha));
+      return {
+        ...said(added.thread, added.message, false),
+        thread: summaryOf(added.thread),
+      };
+    }
+    const opened = db.createThread({
+      id: crypto.randomUUID(),
+      projectId,
+      title: NOTES_THREAD,
+      notes: true,
+      first: { author: "you", body, ...(id ? { id } : {}) },
+    });
+    noteIn(projectId, opened.thread.id, notedLine(sha));
+    return {
+      ...said(opened.thread, opened.message, false),
+      thread: summaryOf(opened.thread),
+    };
+  };
+
   /** The thread's word on a note you made. */
   const notedLine = (sha: string): ThreadNote => ({
     title: "AGENTS.md · noted",
@@ -2460,16 +2502,13 @@ export const createCaw = ({
         const body = bodyOf(raw);
         if (MAKE_A_NOTE.test(body)) {
           projectOf(projectId);
-          const sha = await noteInAgents(projectId, body);
-          const opened = open(projectId, body, id);
-          noteIn(projectId, opened.row.id, notedLine(sha));
-          return { ...opened.said, thread: summaryOf(opened.row) };
+          return await noteInStanding(projectId, body, id);
         }
         listening(projectId);
         // A project's first words to him, where nothing opened its Setup
         // thread (one made from a folder): they open it, and wake him to set
         // the project up, as New project's prompt does (setup).
-        if (db.projectThreads(projectId).length === 0) {
+        if (db.projectThreads(projectId).every((thread) => thread.notes)) {
           const project = projectOf(projectId);
           const made = db.createThread({
             id: crypto.randomUUID(),

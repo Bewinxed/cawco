@@ -824,7 +824,7 @@ export interface Proposal {
    * of a prose file rejected is not proposed again until the file changes.
    * A `retire` moves lines whose `until` has come under Formerly.
    */
-  kind?: "archive" | "rewrite" | "retire";
+  kind?: "archive" | "rewrite" | "retire" | "fold" | "reshape";
   /** The inbox notes it comes from. */
   notes: string[];
   projectId: string;
@@ -882,7 +882,6 @@ export const proposalInput = (
     notes: proposal.notes,
     why: proposal.why,
     project: projectName,
-    projectId: proposal.projectId,
     ...(open ? { open } : {}),
   };
 };
@@ -1836,6 +1835,8 @@ export interface MemoryDeps {
   readonly curator: () => {
     ensure: (projectId: string) => void;
     inboxPassed: (projectId: string) => void;
+    /** What the curator run a session works was asked for (a fold, a reshape): the kind its proposal is stamped with. */
+    asked: (instanceId: string) => CuratorAsk | undefined;
   };
   readonly db: Pick<
     DbShape,
@@ -1879,6 +1880,15 @@ export const createMemory = ({
 }: MemoryDeps) => {
   /** Open proposals, by id: the project each is in. */
   const open = new Map<string, string>();
+
+  /** A curator run asked for a fold or a reshape (the Memory view): the kind its proposal is stamped with. */
+  const askedKind = (instanceId: string): "fold" | "reshape" | undefined => {
+    const ask = curator().asked(instanceId);
+    if (!ask) {
+      return;
+    }
+    return "fold" in ask ? "fold" : "reshape";
+  };
 
   const projectOf = (projectId: string): ProjectRow =>
     db.project(projectId) ??
@@ -2885,6 +2895,7 @@ export const createMemory = ({
     const [head] = (await folderHistory(projectId, "", 1)).commits;
     const at = new Date();
     const threadId = curatorRun ? undefined : threadOf(actor);
+    const kind = curatorRun ? askedKind(actor.id) : undefined;
     const proposal: Proposal = {
       id: idAt("p", at),
       projectId,
@@ -2897,6 +2908,7 @@ export const createMemory = ({
       time: at.toISOString(),
       ...(threadId ? { threadId } : {}),
       ...(toolUseId ? { toolUseId } : {}),
+      ...(kind ? { kind } : {}),
     };
     if (!(curatorRun || asked.ask)) {
       const sha = await apply(proposal, CAW, false);

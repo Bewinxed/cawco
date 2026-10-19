@@ -117,15 +117,37 @@ export const ManyFilesPhone = {
   parameters: { viewport: 390 },
 };
 
+/** The person's own arrangement: In briefs first, Knowledge wide, Inbox hidden. */
+const arranged = () => {
+  const each = blocks();
+  each.arrangement = {
+    pages: {
+      memory: [
+        { block: "briefs", width: "narrow", hidden: false },
+        { block: "facts", width: "wide", hidden: false },
+        { block: "inbox", width: "narrow", hidden: true },
+      ],
+    },
+    proposed: [],
+  };
+  return each;
+};
+
+/** The first read still out: the person's own page of blocks stands, each body its skeleton, at its place. 1440. */
+export const LoadingArranged = {
+  args: { source: source(loading), blocks: arranged() },
+  parameters: { viewport: 1440 },
+};
+
 /** The first read outlasting --dur-wait-grace: the three blocks stand as skeletons at their places. 1440. */
 export const Loading = {
-  args: { source: source(loading), blocks: blocks(), grace: 0 },
+  args: { source: source(loading), blocks: blocks() },
   parameters: { viewport: 1440 },
 };
 
 /** The first read outlasting --dur-wait-grace: the blocks stand stacked as skeletons. 390. */
 export const LoadingPhone = {
-  args: { source: source(loading), blocks: blocks(), grace: 0 },
+  args: { source: source(loading), blocks: blocks() },
   parameters: { viewport: 390 },
 };
 

@@ -30,18 +30,16 @@
   let {
     source,
     proposal,
-    names,
   }: {
     source: MemorySource;
     proposal: MemoryProposalRow;
-    /** Each fact file's name by its path, for the why line. */
-    names: Map<string, string>;
   } = $props();
 
   const ask = $derived(source.ask(proposal.id));
   const state = $derived(source.answerOf(proposal.id));
+  /** A file's name as its row says it: the path's last part, without `.md` (hub memory-view.ts `nameOf`). */
   const nameOf = (path: string) =>
-    names.get(path) ?? path.split("/").at(-1)?.replace(MD, "") ?? path;
+    path.slice(path.lastIndexOf("/") + 1).replace(MD, "");
 
   /** The why line: a sort in words, else the reason the hub keeps with it. */
   const why = $derived.by(() => {
@@ -61,13 +59,15 @@
 
 <section
   data-slot="memory-proposal"
-  aria-label="{words.kind[proposal.kind]}: {why}"
+  aria-labelledby="proposal-{proposal.id}"
   class="proposal"
   data-kind={proposal.kind}
   data-proposal={proposal.id}
 >
   <header class="head">
-    <h3 data-slot="kind" class="kind">{words.kind[proposal.kind]}</h3>
+    <h3 id="proposal-{proposal.id}" data-slot="kind" class="kind">
+      {words.kind[proposal.kind]}
+    </h3>
     <p data-slot="why" class="why">{why}</p>
   </header>
   {#each changes as change (change.path)}

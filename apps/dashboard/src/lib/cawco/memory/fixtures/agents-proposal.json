@@ -64,7 +64,6 @@
         "notes": [],
         "why": "Caw asked: the preview rule belongs where every session reads it.",
         "project": "cockpit",
-        "projectId": "fixture-cockpit",
         "open": "/project/fixture-cockpit?view=memory&file=AGENTS.md&proposal=p-20261019-110000-2c3d4e"
       },
       "instanceId": "p-20261019-110000-2c3d4e",
@@ -74,6 +73,7 @@
       "presentation": {
         "asker": "Caw",
         "project": "cockpit",
+        "projectId": "fixture-cockpit",
         "summary": "Change AGENTS.md",
         "detail": "2 lines added",
         "changes": [
@@ -90,10 +90,6 @@
           {
             "key": "why",
             "value": "Caw asked: the preview rule belongs where every session reads it."
-          },
-          {
-            "key": "projectId",
-            "value": "fixture-cockpit"
           }
         ]
       }

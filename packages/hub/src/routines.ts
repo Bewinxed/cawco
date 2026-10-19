@@ -2236,6 +2236,18 @@ export const createRoutines = ({
    * The inbox passed its mark (memory.ts): the curator runs now, unless it
    * is off, a run of it goes, or its last run began within the hour.
    */
+  /** What the curator run a session works is asked for beyond its inbox (a fold, a reshape), read off its slot; undefined for any other session. */
+  const curatorAsked = (instanceId: string): CuratorAsk | undefined => {
+    const run = store
+      .liveRuns()
+      .find(
+        (each) =>
+          each.workItemId !== null &&
+          db.workItem(each.workItemId)?.instanceId === instanceId
+      );
+    return run ? curatorAskOf(run.slot) : undefined;
+  };
+
   const inboxPassed = (projectId: string): void => {
     const routine = curatorOf(projectId);
     if (!routine?.enabled) {
@@ -2412,6 +2424,7 @@ export const createRoutines = ({
     ensureCurator,
     get,
     inboxPassed,
+    curatorAsked,
     itemEnded,
     sendLeft,
     leadTurnEnded,

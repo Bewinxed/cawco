@@ -30,7 +30,7 @@
  * mock model; Jev from the kit's mock), the desk fixture's folder seeded
  * into a project:
  *
- * 6. `GET …/memory`, `…/memory/file` and `…/memory/notes/:note` answer the
+ * 6. `GET …/memory` and `…/memory/file` answer the
  *    folder's real numbers: what the hub's `memoryPage` draws from the
  *    same files, line by line, and the hub's thresholds.
  * 7. A task's brief carries fact lines, and In briefs, the file's 14-day
@@ -41,7 +41,9 @@
  *    characters.
  * 8. Archive unused makes the hub's archive proposal, parked as a card whose
  *    link opens the Memory view on its file, and the card lands on its row.
- * 9. A note added from the field reaches AGENTS.md's `## Notes`.
+ * 9. A note added from the field reaches AGENTS.md's `## Notes`, as the Caw
+ *    thread message "Make a note: …"; two notes land in the project's one
+ *    standing notes thread, so its thread count goes up by one, not two.
  * 8a. A question asked of a row takes its own clicks: at desk the point
  *    under each of its buttons' centres is that button, never the row's
  *    opener.
@@ -79,9 +81,9 @@ import type { Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import {
   type MemoryFactFile,
-  type MemoryNoteView,
   type MemoryPage,
   memoryViewWords,
+  NOTES_THREAD,
 } from "../../../packages/core/src/memory-view";
 import type {
   FrameRender,
@@ -112,6 +114,8 @@ const NOTE = {
   jevoff: "n-20261019-070000-c3d4e5",
 } as const;
 const FORTY = "A start republishes every runtime file";
+/** What readDrawn looks for in a frame: the 40-word fact, and Curate inbox's words. */
+const READ_WORDS = { forty: FORTY, curate: memoryViewWords.curateNow };
 const LEGACY_PATH = "knowledge/legacy.md";
 const LEGACY =
   "Legacy: what was kept long ago.\n\n- The legacy queue drains on Sundays (since 2025-01-01, from n-20250101-090000-f0f0f0, used 2025-01-01)\n";
@@ -155,6 +159,7 @@ const TOKENS = {
   ],
 };
 const FIELD_NOTE = "PROBE-MEMORY-VIEW notes from the field reach AGENTS.md.";
+const SECOND_NOTE = "PROBE-MEMORY-VIEW a second note joins the newest thread.";
 
 // --- the stage --------------------------------------------------------------------
 
@@ -232,6 +237,8 @@ async function reportOn(page: Page): Promise<RenderReport> {
 interface Drawn {
   blocks: { block: string; h: number; top: number; w: number }[];
   card: number | null;
+  /** Every Curate inbox standing in the frame: the head's button and any button saying it. */
+  curates: number;
   /** The 40-word fact: lines its words took, its meta line's height and line height, its chevron inside the meta. */
   forty: {
     chevronInside: boolean;
@@ -246,6 +253,8 @@ interface Drawn {
   /** Each block head whose tools stand past its edge. */
   heads: string[];
   narrow: string[];
+  /** The page's blocks in the order they stand. */
+  order: string[];
   overlaps: string[];
   spills: string[];
   /** File names under 10rem on a ledger standing in columns. */
@@ -254,7 +263,12 @@ interface Drawn {
 }
 
 /** Read inside `root` (a frame's body, or the page): layout sizes, so the canvas's zoom never skews them. */
-function readDrawn(root: Element, fortyWords: string): Drawn {
+function readDrawn(
+  root: Element,
+  look: { curate: string; forty: string }
+): Drawn {
+  const fortyWords = look.forty;
+  const CURATE_WORDS = look.curate;
   const box = (el: Element) => el.getBoundingClientRect();
   const rootBox = box(root);
   const scale = rootBox.width / ((root as HTMLElement).offsetWidth || 1);
@@ -457,6 +471,15 @@ function readDrawn(root: Element, fortyWords: string): Drawn {
         }
       : null,
     card: cardEl ? cardEl.offsetWidth : null,
+    order: [...root.querySelectorAll<HTMLElement>('[data-slot="block"]')].map(
+      (el) => el.dataset.block ?? ""
+    ),
+    curates: [...root.querySelectorAll<HTMLElement>("button")].filter(
+      (el) =>
+        el.checkVisibility() &&
+        (el.dataset.slot === "curate" ||
+          el.textContent?.trim() === CURATE_WORDS)
+    ).length,
     heads: [
       ...root.querySelectorAll<HTMLElement>('[data-slot="block-head"]'),
     ].flatMap((head) => {
@@ -581,7 +604,21 @@ function reportChecks(
 /** Legs 3 and 4 on one frame's body. */
 function frameChecks(kit: Kit, frame: FrameRender, drawn: Drawn): void {
   const where = `${frame.story} ${frame.scheme}`;
-  blocksHold(kit, where, drawn);
+  if (!frame.story.startsWith("LoadingArranged")) {
+    blocksHold(kit, where, drawn);
+  }
+  kit.check(
+    `${where}: Curate inbox stands at most once`,
+    drawn.curates <= 1,
+    `${drawn.curates}`
+  );
+  if (frame.story.startsWith("LoadingArranged")) {
+    kit.check(
+      `${where}: the loading page's blocks stand in the person's own order, the hidden one absent`,
+      drawn.order.join() === "briefs,facts",
+      drawn.order.join()
+    );
+  }
   if (frame.story.startsWith("File") && drawn.card !== null) {
     const want = frame.story.endsWith("Phone") ? frame.width : 485;
     kit.check(
@@ -747,7 +784,7 @@ async function stageLegs(kit: Kit): Promise<void> {
     // Each frame's body read first, the world where the canvas left it; then each captured, chrome hidden.
     for (const frame of rest) {
       // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
-      const drawn = await bodyOf(page, frame).evaluate(readDrawn, FORTY);
+      const drawn = await bodyOf(page, frame).evaluate(readDrawn, READ_WORDS);
       frameChecks(kit, frame, drawn);
     }
     await emptyActLeg(kit, page, rest);
@@ -979,14 +1016,6 @@ async function routeLegs(kit: Kit, probe: Probe): Promise<void> {
       file.body.unreadable[0]?.line === 8,
     `${file.status} ${JSON.stringify(file.body.unreadable)}`
   );
-  const note = await probe.get<MemoryNoteView>(`/memory/notes/${NOTE.maestro}`);
-  kit.check(
-    "GET …/memory/notes/:note answers the note whole",
-    note.status === 200 &&
-      note.body.text.startsWith("Maestro runs need a Mac") &&
-      note.body.where === "inbox",
-    `${note.status} ${JSON.stringify(note.body).slice(0, 160)}`
-  );
 }
 
 /** Leg 7: a task's brief carries fact lines, and the view says so; answers the brief's row. */
@@ -1129,11 +1158,30 @@ async function archiveLeg(kit: Kit, probe: Probe, page: Page): Promise<void> {
     made.status === 200 && id !== "",
     `${made.status} ${JSON.stringify(made.body)}`
   );
-  const asks =
-    await probe.fleet.api<
-      { requestId: string; payload: { presentation?: { open?: string } } }[]
-    >("/api/pending");
+  const asks = await probe.fleet.api<
+    {
+      requestId: string;
+      payload: {
+        presentation?: {
+          fields?: { key: string }[];
+          open?: string;
+          projectId?: string;
+        };
+      };
+    }[]
+  >("/api/pending");
   const ask = asks.find((one) => one.requestId === id);
+  kit.check(
+    "the proposal's card names its project on its presentation, never as a field the card draws",
+    ask?.payload.presentation?.projectId === probe.projectId &&
+      !(ask?.payload.presentation?.fields ?? []).some(
+        (field) => field.key === "projectId"
+      ),
+    JSON.stringify({
+      projectId: ask?.payload.presentation?.projectId,
+      fields: ask?.payload.presentation?.fields?.map((field) => field.key),
+    })
+  );
   kit.check(
     "the proposal is parked as a card whose link opens the Memory view on its file",
     ask?.payload.presentation?.open ===
@@ -1173,6 +1221,7 @@ async function noteLeg(kit: Kit, probe: Probe, page: Page): Promise<void> {
   const field = page.locator(
     '[data-block="facts"] [data-slot="add-note"] input'
   );
+  const threadsBefore = await threadCount(probe);
   await field.fill(FIELD_NOTE);
   await field.press("Enter");
   const agents = await until(
@@ -1198,7 +1247,37 @@ async function noteLeg(kit: Kit, probe: Probe, page: Page): Promise<void> {
     cleared === "",
     cleared
   );
+  // A second note: into the same standing notes thread.
+  await field.fill(SECOND_NOTE);
+  await field.press("Enter");
+  const second = await until(
+    "AGENTS.md to hold the second note",
+    () => probe.read("AGENTS.md"),
+    (words) => words.includes(`- ${SECOND_NOTE}`),
+    20_000
+  ).catch(() => "");
+  const after = await threadCount(probe);
+  const notesThreads = (
+    (
+      await probe.fleet.api<Record<string, { title: string }[]>>("/api/threads")
+    )[probe.projectId] ?? []
+  ).filter((thread) => thread.title === NOTES_THREAD).length;
+  kit.check(
+    "two notes made from the field land in one standing notes thread: the project's thread count goes up by one, not two",
+    second.includes(`- ${SECOND_NOTE}`) &&
+      after === threadsBefore + 1 &&
+      notesThreads === 1,
+    `threads ${threadsBefore} → ${after}; "${NOTES_THREAD}" threads: ${notesThreads}`
+  );
 }
+
+/** The project's Caw threads, as the hub lists them. */
+const threadCount = async (probe: Probe): Promise<number> =>
+  (
+    (await probe.fleet.api<Record<string, unknown[]>>("/api/threads"))[
+      probe.projectId
+    ] ?? []
+  ).length;
 
 /** Leg 8a: a question asked of a row takes its own clicks; the row's opener covers none of its buttons. */
 async function askLeg(kit: Kit, page: Page): Promise<void> {
@@ -1498,7 +1577,7 @@ async function liveLegs(
       await page.waitForTimeout(800);
       const drawn = await page
         .locator("[data-view-memory]")
-        .evaluate(readDrawn, FORTY);
+        .evaluate(readDrawn, READ_WORDS);
       const where = `live ${view} ${theme}`;
       blocksHold(kit, where, drawn);
       kit.check(
@@ -1553,7 +1632,7 @@ async function liveLegs(
       const inCard = await page
         .locator(".memory-file, .file-page")
         .first()
-        .evaluate(readDrawn, FORTY);
+        .evaluate(readDrawn, READ_WORDS);
       kit.check(
         `${where}: the card's overflow sweep totals zero`,
         inCard.spills.length === 0,

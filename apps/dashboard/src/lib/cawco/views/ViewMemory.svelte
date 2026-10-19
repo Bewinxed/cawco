@@ -40,6 +40,8 @@
     type MemoryFileRow,
     type MemoryNoteRow,
     type MemoryProposalRow,
+    type MemoryThresholds,
+    routinesWords,
     memoryViewWords as words,
   } from "@cawco/core";
   import { untrack } from "svelte";
@@ -112,7 +114,6 @@
     taskHref,
     narrow = false,
     landing = null,
-    grace = null,
   }: {
     project: { id: string; name: string };
     source: MemorySource;
@@ -133,22 +134,19 @@
     narrow?: boolean;
     /** The proposal a link names (`?proposal=`): its row is scrolled into view once read. */
     landing?: string | null;
-    /** How long the first read is waited out before the skeletons stand, ms; null is --dur-wait-grace (the states file's Loading draws them at once). */
-    grace?: number | null;
   } = $props();
 
   $effect(() => source.keep());
 
   const page = $derived(source.page);
   const ago = (at: number | null): string =>
-    at === null ? "—" : since(at + source.skew);
+    at === null ? routinesWords.neverAt : since(at + source.skew);
 
   // --- the proposals, and the rows they land on ------------------------------------
 
   const proposals = $derived(page?.proposals ?? []);
   const inbox = $derived(page?.inbox ?? []);
   const files = $derived(page?.files ?? []);
-  const names = $derived(new Map(files.map((file) => [file.path, file.name])));
   const ARCHIVE_PREFIX = "knowledge/archive/";
   /** A path a proposal changes, as the fact file it concerns: an archive's is its source's. */
   const factPathOf = (path: string): string =>
@@ -158,8 +156,8 @@
 
   /**
    * Where each proposal lands: under the inbox note it cites, else a
-   * reshape at the top of Facts, else over the first fact file it changes,
-   * else (AGENTS.md alone) over Your notes.
+   * reshape at the top of Knowledge, else over the first knowledge file it
+   * changes, else (AGENTS.md alone) over AGENTS.md's row.
    */
   const landed = $derived.by(() => {
     const at = new Map<string, string>();
@@ -224,26 +222,6 @@
     });
   });
 
-  /** The first read has outlasted --dur-wait-grace: the blocks stand as skeletons (The Real Wait Rule). */
-  let waited = $state(untrack(() => grace === 0));
-  $effect(() => {
-    if (page !== null) {
-      waited = false;
-      return;
-    }
-    if (grace === 0) {
-      waited = true;
-      return;
-    }
-    const timer = setTimeout(
-      () => {
-        waited = true;
-      },
-      grace ?? dur("--dur-wait-grace")
-    );
-    return () => clearTimeout(timer);
-  });
-
   // --- the curator -------------------------------------------------------------------
 
   const curator = $derived(page?.curator ?? null);
@@ -285,7 +263,7 @@
       };
     }
   );
-  /** When the curator runs, as the empty Facts block says it. */
+  /** When the curator runs, as the empty Knowledge block says it. */
   const runsWhen = $derived(
     curator
       ? scheduleOf(curator.cron, curator.timeZone, curator.nextSlot).words
@@ -309,7 +287,7 @@
     page ? fileCount > page.thresholds.reshapeAbove : false
   );
 
-  function fileMenu(file: MemoryFileRow): RowAction[] {
+  function fileMenu(file: MemoryFileRow, archiveDays: number): RowAction[] {
     return [
       {
         label: words.fold,
@@ -332,7 +310,7 @@
         onselect: () =>
           ask({
             at: `file:${file.path}`,
-            title: words.archiveAsk,
+            title: words.archiveAsk(archiveDays),
             body: words.archiveAskLine,
             confirmLabel: words.archiveUnused,
             pendingLabel: words.archiving,
@@ -352,9 +330,9 @@
     ];
   }
   const factsMenu = $derived<RowAction[]>(
-    page ? factsActions(page.thresholds.reshapeAbove) : []
+    page ? factsActions(page.thresholds) : []
   );
-  function factsActions(reshapeAbove: number): RowAction[] {
+  function factsActions(thresholds: MemoryThresholds): RowAction[] {
     return [
       {
         label: words.archiveUnused,
@@ -363,7 +341,7 @@
         onselect: () =>
           ask({
             at: "facts",
-            title: words.archiveAsk,
+            title: words.archiveAsk(thresholds.archiveDays),
             body: words.archiveAskLine,
             confirmLabel: words.archiveUnused,
             pendingLabel: words.archiving,
@@ -373,7 +351,7 @@
       {
         label: reshapeOpen
           ? words.reshape
-          : `${words.reshape} · ${words.reshapeOffered(reshapeAbove)}`,
+          : `${words.reshape} · ${words.reshapeOffered(thresholds.reshapeAbove)}`,
         icon: IconLayers,
         disabled: !reshapeOpen,
         onselect: () =>
@@ -409,7 +387,7 @@
     ];
   }
 
-  // --- your notes' field ---------------------------------------------------------------
+  // --- AGENTS.md's field: Make a note ---------------------------------------------------
 
   let noteText = $state("");
   let noting = $state(false);
@@ -472,7 +450,7 @@
     file.current + file.formerly + file.conflicts * 2 + file.unreadable;
   let archiveOpen = $state(false);
   const archiveLines = $derived(
-    (page?.archive ?? []).reduce((sum, file) => sum + file.lines, 0)
+    page ? page.archive.reduce((sum, file) => sum + file.lines, 0) : 0
   );
   const briefs = $derived(page?.briefs ?? []);
   /** The most characters any listed brief's lines took: what each brief's meter is scaled to. */
@@ -495,6 +473,24 @@
     fade(node, { duration: dur("--dur-fade"), easing: easeOut });
   const fadeOut = (node: Element) =>
     fade(node, { duration: dur("--dur-exit"), easing: easeOut });
+
+  /** The page's blocks while the first read is out: each its head, its body a skeleton; a placed view draws itself. */
+  const loadingItems = $derived.by<Record<string, BlockItem>>(() =>
+    Object.fromEntries(
+      Object.entries(items).map(([id, item]) => [
+        id,
+        id in viewItems
+          ? item
+          : {
+              ...item,
+              meta: undefined,
+              action: undefined,
+              actions: undefined,
+              content: skeletonBody,
+            },
+      ])
+    )
+  );
 
   const items = $derived<Record<string, BlockItem>>({
     inbox: {
@@ -533,6 +529,12 @@
   });
 </script>
 
+{#snippet skeletonBody()}
+  <div aria-hidden="true" class="skeleton-body">
+    <Skeleton class="skeleton-fill" />
+  </div>
+{/snippet}
+
 {#snippet count(n: number, waiting: number)}
   <span data-num data-slot="count" class="count num">{n}</span>
   {#if waiting > 0}
@@ -552,7 +554,7 @@
         {#snippet children(tip)}
           <button
             {...tip}
-            aria-label="{words.jevOff}: {words.jevOffTitle}"
+            aria-describedby="memory-jev-off-{project.id}"
             class="jev-off touch-hit"
             data-slot="jev-off"
             type="button"><Badge><span>{words.jevOff}</span></Badge></button
@@ -560,6 +562,9 @@
         {/snippet}
       </Tip>
     </Tooltip.Provider>
+    <span id="memory-jev-off-{project.id}" class="sr-only"
+      >{words.jevOffTitle}</span
+    >
   {/if}
 {/snippet}
 {#snippet factsMeta()}
@@ -596,7 +601,7 @@
 {#snippet landedAt(at: string)}
   {#each proposalsAt(at) as proposal (proposal.id)}
     <li data-flip data-slot="landed" class="landed">
-      <MemoryProposal {names} {proposal} {source} />
+      <MemoryProposal {proposal} {source} />
     </li>
   {/each}
 {/snippet}
@@ -698,10 +703,10 @@
   </div>
 {/snippet}
 
-{#snippet fileRow(file: MemoryFileRow, fileChars: number)}
+{#snippet fileRow(file: MemoryFileRow, thresholds: MemoryThresholds)}
   {#each proposalsAt(`file:${file.path}`) as proposal (proposal.id)}
     <li data-flip data-slot="landed" class="landed">
-      <MemoryProposal {names} {proposal} {source} />
+      <MemoryProposal {proposal} {source} />
     </li>
   {/each}
   <li
@@ -723,7 +728,11 @@
           {#if file.prose}
             <span class="meta">{words.notRead}</span>
           {:else}
-            <LineRun chars={file.chars} limit={fileChars} marks={file.marks} />
+            <LineRun
+              chars={file.chars}
+              limit={thresholds.fileChars}
+              marks={file.marks}
+            />
             <span class="num">{lineCount(file)}</span>
           {/if}
         </span>
@@ -760,7 +769,10 @@
       {/if}
     </div>
     <span class="row-menu"
-      ><RowMenu actions={fileMenu(file)} label={file.name} /></span
+      ><RowMenu
+        actions={fileMenu(file, thresholds.archiveDays)}
+        label={file.name}
+      /></span
     >
   </li>
   <li data-flip data-slot="ask-row" class="ask-row">
@@ -789,7 +801,7 @@
 {#snippet factsBody()}
   <div class="block-body">
     <div class="head-ask"><AskHere {asker} at="facts" /></div>
-    {#if files.length > 0}
+    {#if shownFiles.length > 0 || yoursShown}
       <!-- The ledger's columns, named over them on a wide ledger (report 2, A). -->
       <div aria-hidden="true" class="band">
         <span class="row-main">
@@ -847,28 +859,16 @@
       {/if}
       {#if page}
         {#each shownFiles as file (file.path)}
-          {@render fileRow(file, page.thresholds.fileChars)}
+          {@render fileRow(file, page.thresholds)}
         {/each}
       {/if}
     </ul>
     {#if files.length === 0 && page && page.yours.count === 0}
-      <div class="no-facts">
-        <p class="purpose">
-          {runsWhen ? words.noFacts(runsWhen) : words.noFactsUnscheduled}
-        </p>
-        {#if inbox.length > 0}
-          <Button
-            label={words.curateNow}
-            onclick={curate}
-            pending={curating}
-            pendingLabel={words.curating}
-            size="sm"
-            variant="outline"
-          />
-        {/if}
-      </div>
+      <p class="purpose">
+        {runsWhen ? words.noFacts(runsWhen) : words.noFactsUnscheduled}
+      </p>
     {/if}
-    {#if archiveLines > 0 && !narrow}
+    {#if page && archiveLines > 0 && !narrow}
       <div class="archive">
         <button
           aria-expanded={archiveOpen}
@@ -887,7 +887,7 @@
         </button>
         {#if archiveOpen}
           <ul class="archive-files" in:fadeIn out:fadeOut>
-            {#each page?.archive ?? [] as file (file.path)}
+            {#each page.archive as file (file.path)}
               <li>
                 <button
                   class="archive-file touch-hit"
@@ -968,20 +968,15 @@
       </EmptyState>
     </div>
   {:else if page === null}
-    <!-- The three blocks at their places and size, once the first read outlasts --dur-wait-grace (The Real Wait Rule, The Claim Of Nothing Rule). -->
-    {#if waited}
-      <div
-        aria-hidden="true"
-        class="skeletons"
-        data-slot="memory-skeletons"
-        in:crossIn
-        out:crossOut
-      >
-        <Skeleton class="skeleton-block" data-block="inbox" />
-        <Skeleton class="skeleton-block" data-block="facts" />
-        <Skeleton class="skeleton-block" data-block="briefs" />
-      </div>
-    {/if}
+    <!-- Until the hub's first read, the person's own page of blocks, each body its skeleton: their order, widths, hidden blocks and placed views, so what arrives lands where it stood (The Claim Of Nothing Rule; the kit's skeleton keeps the wait's grace). -->
+    <div
+      class="memory-view"
+      data-slot="memory-skeletons"
+      in:crossIn
+      out:crossOut
+    >
+      <BlockPage {blocks} items={loadingItems} page="memory" />
+    </div>
   {:else if blank}
     <div data-slot="memory-empty" class="empty" in:crossIn out:crossOut>
       <EmptyState
@@ -1045,38 +1040,11 @@
     flex: 1 1 auto;
     flex-direction: column;
     min-block-size: 0;
-    container: memory-place / inline-size;
   }
-  /* The skeletons stand where the blocks will: one column, two from
-     --c-grid-2, four from --c-grid-4 with Knowledge across two (BlockPage's
-     grid; a container query takes no var(), so 46rem and 60rem are those
-     tokens). Each is a block's capped body tall. The leaving one is pinned
-     over the arriving one (crossOut): the place is its reference. */
-  .skeletons {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-group);
-  }
-  .skeletons :global(.skeleton-block) {
+  /* A loading block's body: one skeleton, a capped body tall. */
+  .skeleton-body :global(.skeleton-fill) {
     block-size: var(--c-block-body-max);
     border-radius: var(--radius-lg);
-  }
-  @container memory-place (width >= 46rem) {
-    .skeletons {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .skeletons :global(.skeleton-block[data-block="facts"]) {
-      grid-column: span 2;
-    }
-  }
-  @container memory-place (width >= 60rem) {
-    .skeletons {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-    .skeletons :global(.skeleton-block[data-block="facts"]) {
-      grid-row: 1;
-      grid-column: 2 / span 2;
-    }
   }
   .unread,
   .empty {
@@ -1447,20 +1415,6 @@
     color: var(--ink-muted);
     text-wrap: pretty;
   }
-  .no-facts {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-    padding-block-end: var(--space-3);
-  }
-  .no-facts .purpose {
-    padding-block-end: 0;
-  }
-  .no-facts :global(button) {
-    margin-inline-start: var(--space-3);
-  }
-
   /* The archive: one folded row at the foot, its files under it. */
   .archive {
     border-block-start: 1px solid var(--border-hairline);
