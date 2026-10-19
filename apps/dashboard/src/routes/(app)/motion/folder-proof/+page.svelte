@@ -13,7 +13,7 @@
    *   rim's stroke, px); `?taper=`, `?subtle=` and `?width=` start them;
    * - the home's Working and Finished (`data-strip="work"`): the real
    *   WorkTabs over twelve working runs and fourteen finished, hosted as
-   *   the shell hosts it, in the rail's 260px column on the desk and across
+   *   the shell hosts it, in the rail's 228px column on the desk and across
    *   the phone's home page under 900px.
    *
    * `?theme=` light | dark; `?at=` the index of the session tab chosen
@@ -288,13 +288,11 @@
 
 <!-- Over the shell and anything it draws (a hub banner): the strip on its
      shelf, and the page its chosen tab opens into. -->
-<!-- literal: 2147483000 -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
-  class="fixed inset-0 z-(--bench-z) flex flex-col bg-surface-recess text-ink-strong"
+  class="fixed inset-0 z-40 flex flex-col bg-surface-recess text-ink-strong"
   data-folder-proof
   bind:this={proofEl}
-  style:--bench-z="2147483000"
   style:--tab-rim-mix-subtle={subtle === null
     ? undefined
     : String(subtle / 100)}
@@ -340,10 +338,8 @@
           }
         }
       />
-      <!-- literal: 4ch -->
-      <output
-        class="num min-w-(--output-w) text-ink-strong"
-        style:--output-w="4ch">{taper ?? "–"}px</output
+      <output class="num min-w-c-bench-readout-w text-ink-strong"
+        >{taper ?? "–"}px</output
       >
     </label>
     <label class="flex items-center gap-space-2">
@@ -360,10 +356,8 @@
           }
         }
       />
-      <!-- literal: 4ch -->
-      <output
-        class="num min-w-(--output-w) text-ink-strong"
-        style:--output-w="4ch">{subtle ?? "–"}%</output
+      <output class="num min-w-c-bench-readout-w text-ink-strong"
+        >{subtle ?? "–"}%</output
       >
     </label>
     <label class="flex items-center gap-space-2">
@@ -380,10 +374,8 @@
           }
         }
       />
-      <!-- literal: 4ch -->
-      <output
-        class="num min-w-(--output-w) text-ink-strong"
-        style:--output-w="4ch">{width ?? "–"}px</output
+      <output class="num min-w-c-bench-readout-w text-ink-strong"
+        >{width ?? "–"}px</output
       >
     </label>
   </div>
@@ -393,12 +385,10 @@
   <!-- The rail's column (Shell .rail, Home .rail .groups) on the desk; the
        phone's home page (Home .page .groups) under 900px. Both stand on
        surface-recess. -->
-  <!-- literal: 260px -->
   <div
-    class="min-h-0 w-(--home-w) flex-auto overflow-hidden bg-surface-recess px-space-2 pt-space-1 pb-space-2 max-desk:w-full max-desk:px-space-5 max-desk:pt-space-2 max-desk:pb-space-7"
+    class="min-h-0 w-c-sidebar-w flex-auto overflow-hidden bg-surface-recess px-space-2 pt-space-1 pb-space-2 max-desk:w-full max-desk:px-space-5 max-desk:pt-space-2 max-desk:pb-space-7"
     data-strip="work"
     bind:this={workEl}
-    style:--home-w="260px"
   >
     <WorkTabs
       onstart={() => undefined}
@@ -408,13 +398,3 @@
     />
   </div>
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  /* What the strips open (the session card, a tab's menu) is portalled to
-     the body and stands over the bench, so a finger reaches it. bits-ui
-     writes the wrapper's z-index inline, from the surface's own. */
-  :global(body:has([data-folder-proof]) [data-bits-floating-content-wrapper]) {
-    z-index: 2147483001 !important;
-  }
-</style>
