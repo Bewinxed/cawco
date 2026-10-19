@@ -14,8 +14,8 @@ Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:bet
 | apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte | `<style>` deleted: main's dead pre-cutover rules removed, the rest onto its elements | none | 0 |
 | apps/dashboard/src/lib/components/ui/fluid-tabs/TabsList.svelte | `<style>` deleted: the children's rules onto the track as child variants | none | 0 |
 | apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte | frame sizes on tokens, `max-[900px]:` → `max-desk:` | none | 0 |
-| apps/dashboard/src/lib/components/ui/input-group/input-group-button.svelte | K1 `face: surface` variant; raw values onto tokens | none | 0 |
-| apps/dashboard/src/lib/components/ui/input-group/input-group-input.svelte | K2 `ink: subtle` variant (new tv module) | none | 0 |
+| apps/dashboard/src/lib/components/ui/input-group/input-group-button.svelte | raw values onto tokens; no K1 variant (removed, DESIGN.md Buttons) | none | 0 |
+| apps/dashboard/src/lib/components/ui/input-group/input-group-input.svelte | unchanged from f5c5024ab: no K2 variant (removed, DESIGN.md Inputs and fields) | none | 0 |
 
 needs variant: none. needs transition token: none. Literals preserved: none (delta T). shadcn variant (delta N): none.
 
@@ -27,8 +27,6 @@ variant: apps/dashboard/src/lib/cawco/preview/CanvasView.svelte:94 DropdownMenuS
 variant: apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte:223 DropdownMenuTrigger face="title" — a pane head's title control, the name of what is on show (label role, strong ink: ArtifactMenu.svelte:336 `:global(.artifact-trigger)`'s colour and font); `min-w-0 max-w-full` stay the consumer's (width constraints), `mark-line` is a house class
 variant: apps/dashboard/src/lib/cawco/side/SideSurface.svelte:406 DropdownMenuTrigger none — `more` selects nothing (no rule in SideSurface or app.css; the element's hook is its `data-slot="more"`, which SideSurface.svelte:178 reads): drop the class, keep `mark-line`
 variant: apps/dashboard/src/lib/cawco/files/FilesList.svelte:396 EmptyState none — `files-empty` is placement only (FilesList.svelte `.files :global(.files-empty) { flex: 1 }`): it becomes `flex-1` at the site
-variant: apps/dashboard/src/lib/cawco/spawn/ns-theme.css:101 InputGroupButton face="surface" — K1: inside `.ns-theme` the kit's InputGroup.Button takes the surface's font and ink (`font-inherit text-inherit`, tailwind-merge drops the Button's `font-medium text-[var(--ink-strong)] text-body leading-none` and the group's `text-label` for them); its transition is the Button's own `press: scale` (`var(--transition-control), transform var(--dur-toggle) var(--ease-out)`), which is K1's. Sites: apps/dashboard/src/lib/cawco/accounts/KeyPanel.svelte:154 where AccountMachines' NsPopover hosts it (AccountSetup's KeyPanel is outside `.ns-theme` and takes neither K1 nor K2, so KeyPanel needs the look as a prop from its host), and any InputGroup.Button inside a kit Drawer (drawer-content.svelte:26 carries `ns-theme`)
-variant: apps/dashboard/src/lib/cawco/spawn/ns-theme.css:113 InputGroupInput ink="subtle" — K2: inside `.ns-theme` the InputGroup.Input's placeholder in the subtle ink (`placeholder:text-ink-subtle` over the Input's `placeholder:text-ink-muted`, which tailwind-merge drops). Sites as K1: KeyPanel.svelte:144 under AccountMachines' NsPopover, and inside a kit Drawer. The K2 half for the bare kit Input (`[data-slot="input"]`) is the Input part's lane
 
 Variant-order flags in this lane's files: none (eslint reports none).
 
@@ -43,6 +41,8 @@ removed: apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte:484 (f5c
 removed: apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte (f5c5024ab) `<style>` deleted whole; TabsList.svelte (f5c5024ab:1167) `<style>` deleted whole
 removed: apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte:441 (f5c5024ab) the `<!-- literal: … -->` marker — its values are tokens now
 removed: apps/dashboard/src/lib/components/ui/input-group/input-group-button.svelte:6 `rounded-[var(--radius-sm)]` — the arbitrary form of the theme's own `rounded-sm` (same value)
+removed: apps/dashboard/src/lib/cawco/spawn/ns-theme.css:101 K1 (InputGroupButton `face="surface"`, font and ink inherited from the surface) — no variant: the kit Button's own recipe is the target (DESIGN.md, Buttons: `sm` at the label size, outline in strong ink, primary in `on-action`); K1 put a primary Button in the surface's ink on coral and every `sm` Button in the body role. L00-kit-sheets (fdc5ff811) removed the carve-out, so no consumer wants the look and the variant is deleted with it
+removed: apps/dashboard/src/lib/cawco/spawn/ns-theme.css:113 K2 (InputGroupInput `ink="subtle"`, the placeholder in the subtle ink) — no variant: DESIGN.md, Inputs and fields: "muted placeholder", which the kit Input draws (`placeholder:text-ink-muted`). L00-kit-sheets (fdc5ff811) removed the carve-out and moved ns-theme.css's raw-input placeholder to `--ink-muted`; input-group-input.svelte stays in its plain form (no tv module)
 
 ## Fixed
 
