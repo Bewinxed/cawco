@@ -1259,9 +1259,11 @@ export interface DbShape {
   /**
    * A project's newest conversation: the thread whose newest message from
    * you or Caw is the newest. Event notes (a routine's runs, his call notes)
-   * never rank it, and a routine's own thread (`routines.thread_id`) is never
-   * one, whoever has written in it: it takes only its runs. Undefined when
-   * no other thread has a word from either.
+   * never rank it, and neither the standing notes thread nor a routine's own
+   * thread (`routines.thread_id`) is ever one, whoever has written in it: the
+   * one holds your notes, the other only its runs. Undefined when no other
+   * thread has a word from either: the person has not talked with Caw here,
+   * so their first words open Setup (caw.ts `start`).
    */
   readonly newestConversation: (projectId: string) => ThreadRow | undefined;
   /** Records the window a claude turn reported for its model. */

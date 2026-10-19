@@ -8,7 +8,9 @@
  *     directly, as the person's commit, waking no model.
  * (b) A note from a routine run is tainted: Caw woken by a lead routine, and
  *     a delegate routine's run. The curator never proposes either.
- * (c) Proposals are the person's asks with their diff: Caw's, made with
+ * (c) The person's first words to Caw open Setup while the project holds no
+ *     conversation: after notes alone, and after a routine's run alone.
+ *     Proposals are the person's asks with their diff: Caw's, made with
  *     `ask` in a thread after the Setup one (Approve commits AGENTS.md as
  *     the person, Deny archives the cited note), then the curator run's,
  *     citing the notes it read.
@@ -701,6 +703,64 @@ try {
       `before: ${JSON.stringify(before.map(({ notes, title }) => ({ notes, title })))}; ${setup.status} ${JSON.stringify(opened.thread ?? setup.text)}`
     );
   });
+
+  // A routine's own thread is no conversation either: in a fresh project
+  // made from a folder, a lead routine's test run notes itself in its own
+  // thread before the person writes, and their first words still open Setup.
+  await section(
+    "c: a routine first, then the person's first words",
+    async () => {
+      const firstSrc = join(fleet.sandbox, "routine-first");
+      await mkdir(firstSrc, { recursive: true });
+      await Bun.$`git init -q -b main && echo first > README.md && git add -A && git commit -qm 'First commit'`
+        .cwd(firstSrc)
+        .env({ ...process.env, HOME: home })
+        .quiet();
+      const fresh = await fleet.api<{ id?: string; project?: { id: string } }>(
+        "/api/projects",
+        { name: "Routine first", machineId: MACHINE, cwd: firstSrc, caw: false }
+      );
+      const freshId = fresh.project?.id ?? fresh.id ?? "";
+      // A lead run with Caw off is skipped before it notes anything.
+      await http("PATCH", `/api/projects/${freshId}/caw`, { on: true });
+      const routine = await fleet.api<{ id: string }>("/api/routines", {
+        projectId: freshId,
+        name: "First look",
+        cron: "0 0 1 1 *",
+        timeZone: "UTC",
+        target: "lead",
+        prompt: "PROBE-MEMORY-FIRST-LOOK: look at the board.",
+      });
+      const [own] = await until(
+        "the routine's own thread, from its test run",
+        () =>
+          fleet.query<{ thread_id: string | null }>(
+            "SELECT thread_id FROM routines WHERE id = ?",
+            routine.id
+          ),
+        (rows) => !!rows[0]?.thread_id,
+        120_000
+      );
+      const before = await fleet.api<
+        { id: string; setup: boolean; title: string }[]
+      >(`/api/projects/${freshId}/threads`);
+      const words = await http("POST", `/api/projects/${freshId}/threads`, {
+        body: "PROBE-MEMORY-SETUP-AFTER-ROUTINE: set the project up.",
+      });
+      const opened = JSON.parse(words.text) as {
+        thread?: { notes: boolean; setup: boolean; title: string };
+      };
+      check(
+        "c: after a routine's run alone, the person's first words to Caw open the project's Setup thread",
+        before.some((thread) => thread.id === own?.thread_id) &&
+          !before.some((thread) => thread.setup) &&
+          words.status === 200 &&
+          opened.thread?.setup === true &&
+          opened.thread.notes === false,
+        `before: ${JSON.stringify(before.map(({ id, setup, title }) => ({ own: id === own?.thread_id, setup, title })))}; ${words.status} ${JSON.stringify(opened.thread ?? words.text)}`
+      );
+    }
+  );
 
   // The person's knowledge files.
   for (const [path, content] of [

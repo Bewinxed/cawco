@@ -2487,8 +2487,9 @@ export const createCaw = ({
     /**
      * Starts a thread with your first message, answered once it is kept, and
      * wakes Caw with it behind that answer ({@link wakeForYou}); "Make a
-     * note: …" goes to AGENTS.md instead. A project's first thread is its
-     * Setup thread, Caw woken to set the project up ({@link wakeForSetup}).
+     * note: …" goes to AGENTS.md instead. A project's first conversation
+     * ({@link DbShape.newestConversation}) is its Setup thread, Caw woken to
+     * set the project up ({@link wakeForSetup}).
      * `sent`: the message's id, the send
      * to his session it came as ({@link personSent}), and what rode with
      * your words, which the message keeps ({@link keepCarried}) and the wake
@@ -2508,8 +2509,10 @@ export const createCaw = ({
         listening(projectId);
         // A project's first words to him, where nothing opened its Setup
         // thread (one made from a folder): they open it, and wake him to set
-        // the project up, as New project's prompt does (setup).
-        if (db.projectThreads(projectId).every((thread) => thread.notes)) {
+        // the project up, as New project's prompt does (setup). Only a
+        // conversation counts: the notes thread, a routine's own thread and
+        // a thread of event notes alone are not one.
+        if (!db.newestConversation(projectId)) {
           const project = projectOf(projectId);
           const made = db.createThread({
             id: crypto.randomUUID(),
