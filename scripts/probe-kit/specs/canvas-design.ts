@@ -72,9 +72,13 @@
  *
  * The bench head swept every px from 300 to 800, light, desk pointer, for a
  * component canvas and a plain preview, with Send picks standing and
- * without, at 0 and 2 open pins (W0–W3, `CANVAS_DESIGN=sweep` alone): a
+ * without, at 0 and 2 open pins (W0–W4, `CANVAS_DESIGN=sweep` alone): a
  * wider head stands every control a narrower one does, no width alternates
- * between frames, and the way down stands what the way up did.
+ * between frames, the way down stands what the way up did, and the head's
+ * width (what the words key on) is the content box of the size container
+ * the old `@container (width < 640px)` label rule queried. D
+ * (`CANVAS_DESIGN=desk` alone): at session-sheet leg 18's 523px desk pane
+ * that box is under 640 and Comments' word is not drawn.
  *
  * Captures for a second review (never read here) go to `$TMPDIR/caps/`:
  * `canvas-{390,523,desk}-{light,dark}.png`, the panel's pane at 2×, and
@@ -2373,8 +2377,9 @@ async function commentsCount(
   await page.close();
 }
 
-/** One head width's reading: the head's own width, and on each of three frames the controls standing (`key` or `key(form)`) and whether More stands. */
+/** One head width's reading: the head's own width, the content box of the size container around Comments (the old label rule's), and on each of three frames the controls standing (`key` or `key(form)`) and whether More stands. */
 interface SweepRead {
+  box: number | null;
   frames: string[];
   head: number;
   w: number;
@@ -2408,6 +2413,21 @@ const SWEEP = async ({
       ),
       ...(head.querySelector(":scope > [data-slot=more]") ? ["More"] : []),
     ].join(",");
+  let container = head.querySelector("[data-head-item=comments]");
+  while (container && getComputedStyle(container).containerType === "normal") {
+    container = container.parentElement;
+  }
+  const box = () => {
+    if (!container) {
+      return null;
+    }
+    const style = getComputedStyle(container);
+    return (
+      container.clientWidth -
+      Number.parseFloat(style.paddingInlineStart) -
+      Number.parseFloat(style.paddingInlineEnd)
+    );
+  };
   const reads: SweepRead[] = [];
   const outside = pane.getBoundingClientRect().width - head.clientWidth;
   const step = from <= to ? 1 : -1;
@@ -2422,7 +2442,7 @@ const SWEEP = async ({
       await frame();
       frames.push(read());
     }
-    reads.push({ w, head: head.clientWidth, frames });
+    reads.push({ w, head: head.clientWidth, box: box(), frames });
   }
   return reads;
 };
@@ -2496,6 +2516,15 @@ async function sweepLeg(
         .slice(0, 5)
         .map((one) => `${one.w}: head ${one.head}`)
         .join("; ") || "every width"
+    );
+    const apart = up.filter((one) => one.box !== one.head);
+    kit.check(
+      `W4: ${leg}: the words read the box the old label rule queried: the head's width is its size container's content box at every px`,
+      apart.length === 0,
+      apart
+        .slice(0, 5)
+        .map((one) => `${one.w}: head ${one.head}, box ${one.box}`)
+        .join("; ") || "the same box"
     );
     const lost: string[] = [];
     for (let at = 1; at < up.length; at += 1) {
@@ -2731,6 +2760,86 @@ async function footLeg(
   await page.close();
 }
 
+/**
+ * The head at session-sheet leg 18's desk pane, as drawn: the head's width
+ * (what side/head.ts `standing` reads for the words, against `WORDS_FROM`,
+ * 640),
+ * the size container the old `@container (width < 640px)` label rule
+ * queried (the nearest one around Comments' word) and its content box,
+ * and Comments' form and whether its word is drawn.
+ */
+const DESK_READ = () => {
+  const head = document.querySelector<HTMLElement>(
+    "[data-bench-pane] [data-slot=side-head]"
+  ) as HTMLElement;
+  const comments = head.querySelector<HTMLElement>(
+    ":scope > [data-head-item=comments]"
+  );
+  const label = comments?.querySelector<HTMLElement>(".comments-label");
+  let container = comments?.parentElement ?? null;
+  while (container && getComputedStyle(container).containerType === "normal") {
+    container = container.parentElement;
+  }
+  const inner = (el: HTMLElement) => {
+    const style = getComputedStyle(el);
+    return (
+      el.clientWidth -
+      Number.parseFloat(style.paddingInlineStart) -
+      Number.parseFloat(style.paddingInlineEnd)
+    );
+  };
+  return {
+    head: head.clientWidth,
+    container: container
+      ? `${container.tagName.toLowerCase()}.${[...container.classList].join(".")}`
+      : null,
+    box: container ? inner(container) : null,
+    form: comments?.dataset.form ?? null,
+    word: !!label && getComputedStyle(label).display !== "none",
+  };
+};
+
+/**
+ * D: the head at session-sheet leg 18's desk pane (523px, a component
+ * canvas, no Send picks, no open pins): its width and the old label rule's
+ * container box agree, both under 640, so Comments stands by glyph and
+ * count with its word not drawn, as the old rule drew it there.
+ */
+async function deskLeg(kit: Kit, bench: string, stage: Stage): Promise<void> {
+  const page = await kit.page("desk", { theme: "light" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  await serveDoc(page, {}, false);
+  await page.goto(
+    `${bench}/motion/artifact-head?w=523&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+  );
+  const ready = await page
+    .waitForSelector("[data-bench-pane] [data-head-item=comments]", {
+      timeout: 60_000,
+    })
+    .then(() => true)
+    .catch(() => false);
+  if (!ready) {
+    kit.check("D: the desk pane's head draws", false, "never drew");
+    await page.close();
+    return;
+  }
+  await page.waitForTimeout(3000);
+  const read = await page.evaluate(DESK_READ);
+  kit.note(`desk pane 523: ${JSON.stringify(read)}`);
+  kit.check(
+    "D: at leg 18's 523px desk pane the head's width is the old label rule's container box, under 640, and Comments' word is not drawn",
+    read.head === read.box && read.head < 640 && !read.word,
+    JSON.stringify(read)
+  );
+  await page.close();
+}
+
 /** W0–W3 for a component canvas and a plain preview, with Send picks standing and without. */
 async function sweeps(kit: Kit, bench: string, stage: Stage): Promise<void> {
   for (const kind of ["component", "preview"] as const) {
@@ -2745,7 +2854,7 @@ const spec: Spec = {
   name: "canvas-design",
   run: async (kit) => {
     const stage = await stageOf();
-    // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash); `=sweep` the head's W0–W3 alone.
+    // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash); `=sweep` the head's W0–W4 alone; `=desk` leg D alone.
     const only = process.env.CANVAS_DESIGN;
     try {
       if (only === "switch") {
@@ -2758,6 +2867,10 @@ const spec: Spec = {
       }
       if (only === "sweep") {
         await sweeps(kit, await kit.bench(), stage);
+        return;
+      }
+      if (only === "desk") {
+        await deskLeg(kit, await kit.bench(), stage);
         return;
       }
       for (const theme of only === "head" ? [] : (["light", "dark"] as const)) {
@@ -2803,6 +2916,7 @@ const spec: Spec = {
       }
       if (only !== "page") {
         await sweeps(kit, bench, stage);
+        await deskLeg(kit, bench, stage);
       }
       sameLoadPlace(kit);
     } finally {

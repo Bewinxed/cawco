@@ -88,7 +88,10 @@
  *
  * 18. The panel head (side/head.ts `standing`, DESIGN.md Artifact panel):
  *     at the desk, the canvas's name short of the 120px it keeps, every
- *     control stands whole, in head order, with no More;
+ *     control stands, in head order, with no More, each in the form
+ *     `standing` gives it: under a 640px head (the desk's pane is 523px)
+ *     Send picks and Comments by glyph and count, their words not drawn,
+ *     every other control whole;
  *     at 390 the mode stands as its one button, More stands before Close,
  *     and More's menu holds the controls that went to it, in head order.
  * 19. The sidebar's theme switch, with no reload, turns the canvas frame's
@@ -522,6 +525,8 @@ const PANE =
   ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
 /** The canvas page's frame, which the panel themes (PreviewPane `data-scheme`). */
 const FRAME = `${PANE} iframe[data-scheme]`;
+/** The controls with words, which only a head 640px or wider draws (side/head.ts `WORDS_FROM`). */
+const WORDED = new Set(["send", "comments"]);
 /** DESIGN.md's head order, Send picks to Expand; Close stands after them all. */
 const HEAD_ORDER = [
   "send",
@@ -539,7 +544,7 @@ const HEAD_ORDER = [
 const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
 const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/;
 
-/** The head as drawn: its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, its name; then whether More and Close stand, More before Close. */
+/** The head as drawn: its width (what the words key on), its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, whether its word is drawn, its name; then whether More and Close stand, More before Close. */
 const headOf = (page: Page) =>
   page.evaluate((pane) => {
     const head = document.querySelector<HTMLElement>(
@@ -552,10 +557,12 @@ const headOf = (page: Page) =>
         []),
     ].map((one) => {
       const control = one.querySelector("[aria-label], button");
+      const word = one.querySelector(".comments-label, .send-label");
       return {
         key: one.dataset.headItem ?? "",
         stands: !one.hidden,
         form: one.dataset.form ?? null,
+        word: !!word && getComputedStyle(word).display !== "none",
         name:
           control?.getAttribute("aria-label") ??
           control?.textContent?.trim() ??
@@ -569,6 +576,7 @@ const headOf = (page: Page) =>
       ':scope > [data-slot="close"]'
     );
     return {
+      width: head?.clientWidth ?? null,
       room:
         head && style
           ? head.clientWidth -
@@ -760,13 +768,22 @@ async function panelLegs(
     .waitFor({ timeout: 120_000 });
   await drawn(desk);
 
-  // 18. The head at the desk: every control whole, in head order, no More.
+  // 18. The head at the desk: every control stands, in head order, no More;
+  // under a 640px head the worded ones by glyph and count, the rest whole.
   const wide = await headOf(desk);
   const keys = wide.items.map((one) => one.key);
+  const worded = (wide.width ?? 0) >= 640;
   kit.check(
-    "18: at the desk every head control stands whole, in head order, with no More, Close last",
+    "18: at the desk every head control stands, in head order, with no More, Close last; under a 640px head Send picks and Comments by glyph and count with no word drawn, every other control whole",
     wide.items.length > 0 &&
-      wide.items.every((one) => one.stands && one.form === "whole") &&
+      wide.items.every(
+        (one) =>
+          one.stands &&
+          (WORDED.has(one.key)
+            ? one.word === (one.form === "whole") &&
+              (worded || one.form === "compact")
+            : one.form === "whole")
+      ) &&
       keys.every((key) => HEAD_ORDER.includes(key)) &&
       keys.every(
         (key, at) =>
