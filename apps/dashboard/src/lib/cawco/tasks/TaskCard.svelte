@@ -104,7 +104,7 @@
 
 <a
   data-task-card
-  class="press-tint focus-inset flex cursor-pointer flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] dur-control ease-out data-dragging:opacity-40 hover:bg-surface-hover"
+  class="press-tint focus-inset flex cursor-pointer flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] dur-control ease-out data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
   data-task={task.id}
@@ -122,7 +122,10 @@
       >{task.title}</span
     >
   {/if}
-  <span data-task-head class="flex min-h-c-badge-h items-center gap-space-1">
+  <span
+    data-task-head
+    class="flex min-h-c-badge-h items-center gap-space-1 group-data-pickable/task:pe-space-6"
+  >
     <span
       data-slot="id"
       class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle"
@@ -172,14 +175,12 @@
         />
         <span>{asks ? "its session asks you" : "an action waits on you"}</span>
       {:else if flags.live}
-        <!-- literal: 6px -->
         <span
           data-task-card-live
           data-slot="dot"
           aria-hidden="true"
-          class="size-(--dot) flex-none rounded-pill bg-status-live-glyph"
+          class="size-space-2 flex-none rounded-pill bg-status-live-glyph motion-safe:animate-breath"
           data-box
-          style:--dot="6px"
         ></span>
         {#if retry}
           <span>retrying · attempt {task.attempts.length}</span>
@@ -241,12 +242,3 @@
     </span>
   {/if}
 </a>
-
-<style>
-  /* residual: keyframes — the live dot's pulse. */
-  @media (prefers-reduced-motion: no-preference) {
-    .dot.live {
-      animation: breath var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-</style>

@@ -147,11 +147,10 @@
   class="group flex h-full min-h-0 gap-space-3 max-phone:h-auto"
   data-rail-open={railed && railOpen ? "" : undefined}
 >
-  <!-- literal: minmax(15rem, 22rem) -->
   <div
     data-slot="board"
     class="kit-edge-fade grid h-full min-h-0 min-w-0 flex-auto auto-cols-(--cols) grid-flow-col gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3 max-phone:h-auto max-phone:auto-cols-(--cols-phone) max-phone:snap-x max-phone:snap-mandatory max-phone:group-data-rail-open:hidden"
-    style:--cols="minmax(15rem, 22rem)"
+    style:--cols="minmax(var(--c-task-column-min), var(--c-task-column-max))"
     style:--cols-phone="calc(100% - var(--space-8))"
   >
     {#each stages as stage (stage.name)}
@@ -168,11 +167,10 @@
   </div>
   {#if railed}
     {#if railOpen}
-      <!-- literal: min(22rem, 80%) -->
       <div
         data-slot="rail-open"
         class="mb-space-3 flex min-h-0 w-(--w) flex-none flex-col gap-space-1 max-phone:w-full"
-        style:--w="min(22rem, 80%)"
+        style:--w="min(var(--c-task-column-max), 80%)"
       >
         <TaskColumn
           archived
@@ -217,12 +215,3 @@
     {/if}
   {/if}
 </div>
-
-<style>
-  /* residual: foreign-dom — a phone's board settles a swipe on a column; TaskColumn's root takes no class. */
-  @media (max-width: 639px) {
-    [data-slot="board"] > :global([data-slot="column"]) {
-      scroll-snap-align: start;
-    }
-  }
-</style>

@@ -68,11 +68,11 @@
 <section class="flex flex-col gap-space-2">
   <h3 class="kit-section-head m-0 min-h-c-btn-h-xs px-0">Fields</h3>
   {#if Object.keys(fields).length > 0}
-    <!-- literal: 6rem minmax(0, 1fr). The Relations' column, so the two parts' values stand on one line. -->
+    <!-- The Relations' key column, so the two parts' values stand on one line. -->
     <dl
       data-slot="grid"
       class="m-0 grid grid-cols-(--cols) gap-x-space-2 gap-y-space-1"
-      style:--cols="6rem minmax(0, 1fr)"
+      style:--cols="var(--c-task-key-w) minmax(0, 1fr)"
     >
       {#each Object.entries(fields) as [key, value] (key)}
         <dt class="type-code liga-none wrap-anywhere pt-space-1 text-ink-muted">
@@ -136,13 +136,11 @@
         add();
       }}
     >
-      <!-- literal: 6rem -->
       <input
         data-slot="task-fields-field"
         aria-label="Field name"
-        class="h-c-btn-h-sm min-w-0 shrink grow-0 basis-(--basis) rounded-sm border border-border-control bg-surface-raised px-space-2 type-code text-ink-strong"
+        class="h-c-btn-h-sm min-w-0 shrink grow-0 basis-(--c-task-key-w) rounded-sm border border-border-control bg-surface-raised px-space-2 type-code text-ink-strong"
         placeholder="name"
-        style:--basis="6rem"
         bind:value={newKey}
         {@attach (node) => node.focus()}
       />

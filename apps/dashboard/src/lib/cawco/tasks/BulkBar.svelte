@@ -128,7 +128,7 @@
   class="fixed inset-x-space-3 bottom-(--off-bottom) z-40 flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-border-control rounded-lg bg-surface-raised shadow-overlay py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
   role="toolbar"
   style:--off-bottom="calc(var(--space-5) + var(--safe-bottom, 0px))"
-  style:--off-bottom-phone={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-2))"}
+  style:--off-bottom-phone="calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-2))"
   style:--min-h="calc(var(--c-btn-h-sm) + var(--space-2))"
 >
   {#if run}
@@ -221,12 +221,10 @@
           >
         </form>
         {#if labels.length > 0}
-          <!-- literal: 14rem -->
           <ul
             data-slot="known"
-            class="mx-0 mt-space-1 mb-0 flex max-h-(--max-h) list-none flex-col overflow-y-auto p-0"
+            class="mx-0 mt-space-1 mb-0 flex max-h-(--c-bulk-labels-max-h) list-none flex-col overflow-y-auto p-0"
             aria-label="The project's labels"
-            style:--max-h="14rem"
           >
             {#each labels as each (each)}
               <li>

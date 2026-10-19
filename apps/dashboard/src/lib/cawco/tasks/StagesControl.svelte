@@ -162,7 +162,7 @@
       data-stages-fault
       reason={problem}
     />
-    <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
+    <ul data-slot="list" data-stages-list class="m-0 flex list-none flex-col p-0">
       {#if templates}
         {#each templates as template (template.name)}
           <li>
@@ -183,7 +183,7 @@
               >
                 <span>{NAMES[template.name]}</span>
                 {#if applying === template.name}
-                  <Spinner class="ml-auto" />
+                  <Spinner class="ms-auto" />
                 {/if}
               </span>
               <span class="type-meta text-ink-muted">
@@ -207,15 +207,3 @@
     </ul>
   </Popover.Content>
 </Popover.Root>
-
-<style>
-  /* residual: foreign-dom — RowFault and AskHere take their insets as custom properties, and no style prop. */
-  :global([data-stages-fault]) {
-    --fault-indent: var(--space-2);
-    --fault-end: var(--space-2);
-  }
-  [data-slot="list"] > li > :global([data-ask]) {
-    --ask-indent: var(--space-2);
-    --ask-end: var(--space-2);
-  }
-</style>
