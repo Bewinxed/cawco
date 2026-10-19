@@ -231,25 +231,29 @@ fixed: apps/dashboard/src/lib/components/ui/section-header/section-header.svelte
 fixed: apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte:102 `bg-[var(--surface-raised)]`, `shadow-[var(--shadow-drawer)]` and the twenty `data-[side=…]:` arbitrary variants → `bg-surface-raised shadow-drawer side-<edge>:` — DESIGN.md Sheet ("a raised side or edge panel with the drawer shadow"); the named side variants match the same `[data-side]` pairs; `shadow-drawer` draws as `box-shadow: var(--shadow-drawer)` (delta R1).
 fixed: apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte:108 the sheet's motion as utilities: `motion-safe:` slide over `--dur-panel` / `--dur-exit` on the drawer curve, `motion-reduce:` fade over `--dur-control` — DESIGN.md Sheet: "slides its whole size in over 280ms on the drawer curve and leaves over 160ms; with reduced motion it fades over 120ms".
 fixed: apps/dashboard/src/lib/components/ui/sidebar/sidebar-menu-badge.svelte:41 `h-icon-lg min-w-5` → `h-c-badge-h min-w-c-badge-h`, `rounded-[var(--radius-xs)]` → `rounded-xs` — DESIGN.md: the badge recipe is 20px at `radius-xs` (`--c-badge-h`); an icon size was standing in for a badge height.
+fixed: apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte:48 the presence dot `bg-neutral-8` / `bg-hue-orange-500` / `bg-hue-green-500` → `bg-presence-off` / `bg-presence-away` / `bg-presence-online` — DESIGN.md color tokens `presence-online` / `presence-away` (lines 89–90) and Machine row ("green online, orange away, neutral-8 off"). Off and away are the same values (`--presence-off: var(--neutral-8)`; away 70.5% 0.187 47.6 vs orange-500's 70.49% 0.1867 47.6). Online now draws DESIGN's presence green (62.7% 0.17 149 by day, 74% at night), not hue-green-500's 72.27% 0.192 (delta S: the target, never a copy).
+fixed: apps/dashboard/src/lib/components/ui/section-header/section-header.svelte:25 the icon and label row takes `.mark-line` — DESIGN.md The Mark Line Rule ("any other row takes .mark-line"). The label sits in its own span and the icon is an svg, which the rule leaves alone, so only the label's x-height centring changes.
+fixed: apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte:94 `sheet-pan` now sits in `@layer components`, so a descendant's own `touch-*` utility outranks it. Audited: walking the Svelte import tree of both Sheet.Content consumers (Shell.svelte:1026 → Sidebar.svelte, and motion/overlays/+page.svelte:86) covers 132 files. One sets touch-action: SessionRow.svelte:429 `data-archivable:touch-pan-y` and :799 `touch-action: pan-y`. That is the left sheet's own axis, so nothing in a sheet claims the dismissing drag — DESIGN.md Drag to dismiss.
+
+Numeric utilities kept as written per delta C ("existing numeric utilities stay as written"; none is a ladder value of 4/7/11/14/18/21/25/32): input.svelte and native-select.svelte `px-3` / `pl-3` (12) and `file:h-7` (28); sheet-content.svelte `top-4 right-4` (16) and `phone:max-w-96`; sidebar-menu-badge.svelte `top-1.5` (6) and `top-2.5` (10); markdown.svelte `my-3` (12) and PLAIN's `mr-2` (8).
 
 Critique (interface-craft Design Critique, from markup and classes, against DESIGN.md):
 fixed: machine-row — tile, name and meta line now sit on DESIGN's own sizes (26px tile at 8px, 6px presence dot, ladder gap); the meta run keeps `overflow: clip` for the Mark Line Rule.
 fixed: sidebar-menu-badge — the live count's ink can no longer be repainted by the row's hover or selection at any specificity, without an override.
 fixed: sheet-content — motion matches the Sheet recipe in both motion preferences, transform and opacity only.
 fixed: markdown — the code well wins over prose dressing by selector weight, so its fade stays off `!important` (the Press Rule's reasoning).
-Rendered layout (ui-observer): not verified. No stories file and no `/motion`
-bench in this workspace renders any of the eight parts, and the brief keeps
-lanes off the style compare and probe specs.
+Rendered layout (ui-observer): not verified in this lane. Only the sheet has
+a bench (`/motion/overlays`). Its motion, its pan rule and the markdown and
+morph rules are `theme:` additions that reach theme.css only at integration,
+and lanes may not edit theme.css, so a render here would measure a sheet
+without them. The other parts have no stories file, and the brief keeps lanes
+off the style compare and probe specs. The rendered check belongs after
+integration.
 
 ## Gaps
 
-gap: apps/dashboard/src/lib/components/ui/input/input.svelte:73 and native-select.svelte:45 `px-3` / `pl-3` (12px) is off the ladder (11 or 14) — DESIGN.md Inputs and fields names no field padding; left as the kit's default look (this lane changes no default look). A DESIGN line for the field's inline padding would settle it.
-gap: apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte:136 `sheet-pan` was an unlayered scoped rule and now sits in `@layer components`, so a descendant's own `touch-*` utility (utilities layer) now outranks the sheet's pan axis — DESIGN.md Drag to dismiss. No descendant in the sheet consumers was audited for `touch-*` classes; the post-cutover audit should.
-gap: apps/dashboard/src/lib/components/ui/markdown/markdown.svelte:251 the `markdown-tokens` theme rule still needs `!important`: svelte-streamdown 4.2.1 (npm latest) writes `animation-*`, `display` and `white-space` inline whenever `animation.enabled`, and offers no option for word spans without them (`type` is typed `'fade' | 'blur' | 'slideUp' | 'slideDown'`). An upstream option would let the rule go.
+gap: apps/dashboard/src/lib/components/ui/markdown/markdown.svelte:251 the `markdown-tokens` theme rule still needs `!important`: svelte-streamdown 4.2.1 (npm latest) writes `animation-*`, `display` and `white-space` inline whenever `animation.enabled`, and offers no option for word spans without them (`type` is typed `'fade' | 'blur' | 'slideUp' | 'slideDown'`). An upstream option would let the rule go. Checked 2026-10-19: `npm view svelte-streamdown version` → 4.2.1. The README (github.com/beynar/svelte-streamdown) lists `animation.type` as "'fade' | 'blur' | 'typewriter' | 'slideUp' | 'slideDown'", with no unanimated token mode.
 gap: apps/dashboard/src/lib/prose.ts:10 PROSE's `[&_pre]:*` and `[&_code]:*` dressing ignores `not-prose`, which is why the code well needs `well-pre:` / `well-code:` at all; scoped to `:not(.not-prose *)` (Typography's own convention) the well's overrides could go. prose.ts is on no lane's list — Typography convention, DESIGN.md Transcript (the well is "the same well a tool result opens into").
-gap: apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte:48 the presence dot paints `bg-hue-orange-500` / `bg-hue-green-500` / `bg-neutral-8` while the theme holds `presence-online` / `presence-away` / `presence-off` — DESIGN.md Machine row (green online, orange away, neutral-8 off); whether those tokens hold those values is not checked here, so the swap is left to the audit.
-gap: apps/dashboard/src/lib/components/ui/section-header/section-header.svelte:25 the icon and its label stand in a plain flex row with no `.mark-line` — DESIGN.md The Mark Line Rule ("any other row takes `.mark-line`").
-gap: numeric utilities left as written (delta C, and no default look changed): input.svelte `file:h-7`; sheet-content.svelte `top-4 right-4` on the close button, `phone:max-w-96`; sidebar-menu-badge.svelte `top-1.5`, `top-2.5`; markdown.svelte `my-3`, PLAIN's `mr-2`.
 
 ## Contracts
 
