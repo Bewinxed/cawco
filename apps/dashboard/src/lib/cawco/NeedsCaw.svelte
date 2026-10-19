@@ -579,8 +579,7 @@
 
 <!-- What waits, on his rim: an arc each, a second lap on top in its own ink
      past ARCS, closed whole past two laps; the wide bar's circle and the
-     phone's standing outline (the one the width draws is shown, styles
-     below). One half of it: the upper, or the lower that fades while his
+     phone's standing outline (the one the width draws is shown). One half of it: the upper, or the lower that fades while his
      panel hangs. -->
 {#snippet rim(low: boolean)}
   <!-- What waits, on his circle's rim: his circle's box round his item's
@@ -600,10 +599,10 @@
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
-    <g class="max-[900px]:hidden">
+    <g class="max-desk:hidden">
       {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
-          class="fill-none stroke-status-attn-glyph"
+          class="rim-arc fill-none stroke-status-attn-glyph"
           d={arcPath(k)}
           pathLength="1"
           transition:drawn
@@ -611,7 +610,7 @@
       {/each}
       {#each lapSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
-          class="fill-none stroke-status-fail-glyph"
+          class="rim-arc fill-none stroke-status-fail-glyph"
           d={arcPath(k)}
           pathLength="1"
           transition:drawn
@@ -620,17 +619,17 @@
       {#if ringClosed}
         <path
           data-slot="whole"
-          class="fill-none stroke-status-fail-glyph"
+          class="rim-arc fill-none stroke-status-fail-glyph"
           d={low ? ROUND_HALF.low : ROUND_HALF.high}
           pathLength="1"
           transition:drawn
         />
       {/if}
     </g>
-    <g data-slot="standing" class="hidden max-[900px]:inline">
+    <g data-slot="standing" class="hidden max-desk:inline">
       {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
-          class="fill-none stroke-status-attn-glyph"
+          class="rim-arc fill-none stroke-status-attn-glyph"
           d={outlinePath(k)}
           pathLength="1"
           transition:drawn
@@ -638,7 +637,7 @@
       {/each}
       {#each lapSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
-          class="fill-none stroke-status-fail-glyph"
+          class="rim-arc fill-none stroke-status-fail-glyph"
           d={outlinePath(k)}
           pathLength="1"
           transition:drawn
@@ -647,7 +646,7 @@
       {#if ringClosed}
         <path
           data-slot="whole"
-          class="fill-none stroke-status-fail-glyph"
+          class="rim-arc fill-none stroke-status-fail-glyph"
           d={low ? STAND_HALF.low : STAND_HALF.high}
           pathLength="1"
           transition:drawn
@@ -662,7 +661,6 @@
     <!-- An item of the bar's group (Shell's bar-item recipe, on
          [data-bar-item], draws its box, hover and focus); a circle whatever
          the strips' boxes: the beat's reaches past it. -->
-    <!-- literal: 44px -->
     <button
       data-bar-item
       {...mergeProps(tip, {
@@ -674,9 +672,10 @@
       aria-expanded={barGlass.open === "caw"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none"
+      class="touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none max-desk:coarse:after:start-auto max-desk:coarse:after:end-0 max-desk:coarse:after:top-(--caw-hit-top) max-desk:coarse:after:bottom-auto max-desk:coarse:after:size-c-btn-h-lg"
       data-needs-caw
-      style:--caw-hit="44px"
+      style:--caw-hit-top="calc((var(--c-bar-caw-glass-phone) -
+      var(--c-btn-h-lg)) / 2)"
       type="button"
     >
       <!-- His head: his face and the clip playing over it in one cell,
@@ -696,7 +695,7 @@
              under it for the frame the clip lands. -->
         <span
           data-needs-caw-covered={covering || undefined}
-          class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid data-needs-caw-covered:[&>[data-caw-face]]:invisible"
+          class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid data-needs-caw-covered:invisible"
           data-caw-phase={phase}
           style:--bleed="{CAW_STILL_BLEED}px"
           style:--dx={0.5 - CAW_HEAD_CENTRE.x}
@@ -723,29 +722,3 @@
     </button>
   {/snippet}
 </Tip>
-
-<style>
-  /* residual: pseudo — on a phone his box is his own glass's (Shell). His
-     touch area (touch-hit's ::after) is a 44px square (Apple HIG, Buttons:
-     "a hit region of at least 44x44 pt") at the screen's edge, centred on
-     his glass, so none of it falls off the screen or under the transcript. */
-  @media (width < 900px) and (pointer: coarse) {
-    [data-needs-caw]::after {
-      inset: auto;
-      inset-inline-end: 0;
-      inset-block-start: calc(
-        (var(--c-bar-caw-glass-phone) - var(--caw-hit)) / 2
-      );
-      inline-size: var(--caw-hit);
-      block-size: var(--caw-hit);
-    }
-  }
-  /* residual: svg-paint — the arcs: a 2px round-capped stroke, each with a
-     path length of 1 so it draws in and out along itself. */
-  [data-slot="rim"] path {
-    stroke-width: var(--c-caw-ring);
-    stroke-linecap: round;
-    stroke-dasharray: 1;
-    stroke-dashoffset: 0;
-  }
-</style>

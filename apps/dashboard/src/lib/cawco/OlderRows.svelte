@@ -249,10 +249,8 @@
           older</span
         >
         {#if failed > 0}
-          <!-- literal: 0.3em -->
-          <span
-            class="ms-(--failed-gap) text-status-fail-ink"
-            style:--failed-gap="0.3em">{failedWords(failed)}</span
+          <span class="ms-space-1 text-status-fail-ink"
+            >{failedWords(failed)}</span
           >
         {/if}
       </button>
