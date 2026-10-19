@@ -1837,6 +1837,11 @@ export const mcpServers = sqliteTable("mcp_servers", {
    * of any other is never sent it. Null: every machine.
    */
   platforms: text("platforms", { mode: "json" }).$type<McpPlatform[]>(),
+  /**
+   * One instance per machine for every session (`FleetMcpServer.shared`),
+   * started at its first call, rather than one per session at its start.
+   */
+  shared: integer("shared", { mode: "boolean" }).notNull().default(false),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -3004,11 +3009,16 @@ export const continuations = sqliteTable("continuations", {
  * - `moved`: it started on a machine its project was moved to for it (core
  *   `MOVED_HERE`), the move's ready line: what moved and what stayed. Its
  *   transcript opens on it; one per session.
+ * - `room`: its start waits for its machine's memory (core `ROOM_HELD`),
+ *   the line its machine said, with the machine's readings.
  */
-export type SessionLineKind = "limit" | "outdated" | "watch" | "moved";
+export type SessionLineKind = "limit" | "outdated" | "watch" | "moved" | "room";
 
 /** The lines a session's machine says about it, which the hub keeps as said. */
-export type MachineLineKind = Extract<SessionLineKind, "limit" | "outdated">;
+export type MachineLineKind = Extract<
+  SessionLineKind,
+  "limit" | "outdated" | "room"
+>;
 
 /**
  * Lines the hub writes into a session's transcript, each where it happened,

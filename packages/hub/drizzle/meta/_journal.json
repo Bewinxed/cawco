@@ -1772,6 +1772,13 @@
       "when": 1792400001000,
       "tag": "0260_design_check_artifact",
       "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "6",
+      "when": 1792397226205,
+      "tag": "0261_mcp_server_shared",
+      "breakpoints": true
     }
   ]
 }

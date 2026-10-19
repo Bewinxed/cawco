@@ -1595,7 +1595,8 @@ export interface DbShape {
    * Upsert. `projectId` binds it to one project (placed at each of its
    * checkouts and workspaces), null makes it every machine's, and left out
    * keeps what it was. `platforms` the same way: the platforms it runs on,
-   * null every platform, left out as it was.
+   * null every platform, left out as it was. `shared`, one instance per
+   * machine started at its first call, left out as it was.
    */
   readonly putMcpServer: (server: {
     name: string;
@@ -1603,6 +1604,7 @@ export interface DbShape {
     enabled?: boolean;
     projectId?: string | null;
     platforms?: McpPlatform[] | null;
+    shared?: boolean;
   }) => FleetMcpServer;
   /** A fleet MCP relay session opened: its `initialize` params, kept across hub restarts. */
   readonly putMcpSession: (row: {
@@ -5750,6 +5752,7 @@ const make = async (path: string): Promise<DbShape> => {
               authError,
               projectId,
               platforms,
+              shared,
             }) => {
               const signedIn =
                 authMode === "direct" ||
@@ -5772,6 +5775,7 @@ const make = async (path: string): Promise<DbShape> => {
                 enabled,
                 ...(projectId ? { projectId, scope: "local" as const } : {}),
                 ...(platforms ? { platforms } : {}),
+                ...(shared ? { shared } : {}),
                 auth: {
                   mode: authMode,
                   state,
@@ -5924,7 +5928,7 @@ const make = async (path: string): Promise<DbShape> => {
         cawcoTodos: supervisorChoices().cawcoTodos,
       };
     },
-    putMcpServer: ({ name, config, enabled, projectId, platforms }) => {
+    putMcpServer: ({ name, config, enabled, projectId, platforms, shared }) => {
       const previous = db
         .select()
         .from(mcpServers)
@@ -5940,6 +5944,7 @@ const make = async (path: string): Promise<DbShape> => {
       const asked = platforms?.length ? platforms : null;
       const runsOn =
         platforms === undefined ? (previous?.platforms ?? null) : asked;
+      const one = shared ?? previous?.shared ?? false;
       // A new or changed config is unsettled — failed, so never synced — until
       // the hub hears from the server (fleet-mcp.ts `#probe`).
       const unsettled = {
@@ -5952,6 +5957,7 @@ const make = async (path: string): Promise<DbShape> => {
           config,
           enabled: enabled ?? true,
           platforms: runsOn,
+          shared: one,
           ...placement,
           ...unsettled,
         })
@@ -5961,6 +5967,7 @@ const make = async (path: string): Promise<DbShape> => {
             config,
             enabled: enabled ?? true,
             platforms: runsOn,
+            shared: one,
             ...placement,
             ...(changed ? unsettled : {}),
           },
@@ -5972,6 +5979,7 @@ const make = async (path: string): Promise<DbShape> => {
         enabled: enabled ?? true,
         ...(bound ? { projectId: bound, scope: "local" as const } : {}),
         ...(runsOn ? { platforms: runsOn } : {}),
+        ...(one ? { shared: one } : {}),
       };
     },
     putMarketplace: ({ name, source }) => {
@@ -8393,7 +8401,7 @@ const make = async (path: string): Promise<DbShape> => {
     noteMachineLine: (id, kind, note) =>
       keepLine(id, kind, note, LIMIT_NOTES_KEPT),
     machineLinesOf: (id) =>
-      (["limit", "outdated"] as const).flatMap((kind) =>
+      (["limit", "outdated", "room"] as const).flatMap((kind) =>
         linesOf(id, kind).map(({ id: lineId, at, content }) => ({
           kind,
           id: lineId,

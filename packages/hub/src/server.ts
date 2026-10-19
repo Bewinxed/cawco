@@ -282,6 +282,7 @@ import {
   RESOLVE_PERMISSION,
   type RebalanceNotice,
   type Relaunch,
+  ROOM_HELD,
   RULE_TEMPLATES,
   type RunKind,
   readProvenance,
@@ -1923,6 +1924,7 @@ const custodyLine = (
 const MACHINE_LINE_SUBTYPE: Record<MachineLineKind, string> = {
   limit: LIMIT_REACHED,
   outdated: CLI_OUTDATED,
+  room: ROOM_HELD,
 };
 
 /** Which line its machine said, by the frame's subtype; none for any other frame. */
@@ -8474,6 +8476,43 @@ export const createServer = (
         })
     );
 
+  /**
+   * A session's start, waited on as {@link awaitReply} does, and on past
+   * {@link SPAWN_START_TIMEOUT_MS} for as long as its machine has said the
+   * start waits for memory since it was sent (a `room` line, core
+   * `ROOM_HELD`): a start is never refused for the machine's room. The spawn
+   * is sent once; a later wait listens for the same answer.
+   */
+  const awaitStart = async (
+    machineId: string,
+    instanceId: string,
+    requestId: string,
+    send: () => void
+  ): Promise<Bounded<ControlResult>> => {
+    const sentAt = Date.now();
+    let reply = await awaitReply(
+      machineId,
+      requestId,
+      SPAWN_START_TIMEOUT_MS,
+      send
+    );
+    while (
+      reply.kind === "unanswered" &&
+      db
+        .machineLinesOf(instanceId)
+        .some((line) => line.kind === "room" && line.at >= sentAt)
+    ) {
+      // biome-ignore lint/performance/noAwaitInLoops: one wait at a time, on the same answer
+      reply = await awaitReply(
+        machineId,
+        requestId,
+        SPAWN_START_TIMEOUT_MS,
+        () => undefined
+      );
+    }
+    return reply;
+  };
+
   /** How long a machine gets to carry sessions' data: a few folders moved within one disk. */
   const CARRY_TIMEOUT_MS = 120_000;
 
@@ -12263,10 +12302,10 @@ export const createServer = (
       issueSpawn(machineId, payload, undefined, fallbackMode);
       return;
     }
-    const reply = await awaitReply(
+    const reply = await awaitStart(
       machineId,
+      payload.instanceId,
       requestId,
-      SPAWN_START_TIMEOUT_MS,
       () => issueSpawn(machineId, payload, undefined, fallbackMode)
     );
     switch (reply.kind) {
@@ -12382,10 +12421,10 @@ export const createServer = (
       ...forkedFromOf(payload),
     });
     publishInstances(machineId);
-    const reply = await awaitReply(
+    const reply = await awaitStart(
       machineId,
+      payload.instanceId,
       requestId,
-      SPAWN_START_TIMEOUT_MS,
       () =>
         sendFrame(agent, {
           verb: "spawn",
@@ -16555,6 +16594,33 @@ export const createServer = (
     projectId && !db.project(projectId)
       ? `There is no project ${projectId} on this hub.`
       : undefined;
+
+  /**
+   * Why a fleet row cannot be shared, or nothing when it can: a shared server
+   * is one each machine's agent starts once for every session, so it is a
+   * command, and the whole fleet's (a project's runs in each of its places).
+   */
+  const sharedProblem = (
+    name: string,
+    config: Record<string, unknown>,
+    projectId: string | null | undefined,
+    shared: boolean
+  ): string | undefined => {
+    if (!shared) {
+      return;
+    }
+    if (typeof config.command !== "string") {
+      return "Only a server CawCo starts from a command can be shared; a server reached by URL is one instance already.";
+    }
+    // Each session's chrome-devtools reaches its own browser door (the
+    // agent's browser/door.ts `CHROME_DEVTOOLS`), its page state its own.
+    if (name === "chrome-devtools") {
+      return "chrome-devtools reaches each session's own browser door, so it cannot be shared.";
+    }
+    return projectId
+      ? "A project's server runs in each of its places, so it cannot be shared. Share it as a fleet server, or keep it per session."
+      : undefined;
+  };
 
   /** Tells every dashboard the projects changed: each reads them again. */
   const projectsChanged = (): void =>
@@ -24110,12 +24176,26 @@ export const createServer = (
                 t.Null(),
               ])
             ),
+            /**
+             * One instance on each machine for all its sessions, started at
+             * its first call (core `FleetMcpServer.shared`). Left out: as it
+             * was.
+             */
+            shared: t.Optional(t.Boolean()),
           }),
         },
         async ({ params, body, status }) => {
           const problem =
             mcpProblem(params.name, body.config) ??
-            boundProblem(body.projectId);
+            boundProblem(body.projectId) ??
+            sharedProblem(
+              params.name,
+              body.config,
+              body.projectId === undefined
+                ? db.getMcpServer(params.name)?.projectId
+                : body.projectId,
+              body.shared ?? db.getMcpServer(params.name)?.shared ?? false
+            );
           if (problem) {
             return status(400, problem);
           }
@@ -24126,6 +24206,7 @@ export const createServer = (
             enabled: body.enabled,
             projectId: body.projectId,
             platforms: body.platforms,
+            shared: body.shared,
           });
           await fleetMcp.probe(params.name);
           announceMcp();

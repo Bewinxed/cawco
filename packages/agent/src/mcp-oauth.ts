@@ -5,6 +5,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { portHolder } from "@cawco/core/live-processes";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
+import { HOSTED_PATH, mcpHost } from "./mcp-host";
 import {
   fenced,
   holdRestart,
@@ -264,7 +265,50 @@ const accountRoute = (
   return fresh?.[1] ? freshRoute(fresh[1]) : undefined;
 };
 
+/**
+ * A shared fleet server's request (mcp-host.ts), from loopback only and never
+ * from a page. A tool call on it holds a restart as a call on any fleet
+ * server does: the restart would end the process answering it.
+ */
+async function hostedRoute(name: string, request: Request): Promise<Response> {
+  const incoming = new URL(request.url);
+  if (incoming.hostname !== "127.0.0.1" || request.headers.has("Origin")) {
+    return new Response("A shared MCP server answers its harnesses only.", {
+      status: 403,
+    });
+  }
+  const body =
+    request.method === "POST" ? await request.arrayBuffer() : undefined;
+  const forward = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body,
+    signal: request.signal,
+  });
+  const call = body
+    ? heldMcpCall(`/mcp/fleet/${name}`, parsed(body))
+    : undefined;
+  if (call === undefined) {
+    return mcpHost.fetch(name, forward);
+  }
+  if (fenced()) {
+    return notStarted(body);
+  }
+  const release = holdRestart(
+    "tool-call",
+    `${call}#${crypto.randomUUID().slice(0, 8)}`
+  );
+  try {
+    return holdingUntilEnd(await mcpHost.fetch(name, forward), release);
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
 export const startMcpGateway = async (hubUrl: () => string) => {
+  // Shared servers an agent before this one left running are ended first.
+  await mcpHost.sweep();
   // The one setting every session's config names too: a different port on a
   // live machine leaves its running sessions dialling the old one.
   const port = mcpGatewayPort();
@@ -281,6 +325,10 @@ export const startMcpGateway = async (hubUrl: () => string) => {
         const accounts = accountRoute(url, request);
         if (accounts) {
           return await accounts;
+        }
+        const hosted = url.pathname.match(HOSTED_PATH)?.[1];
+        if (hosted) {
+          return await hostedRoute(hosted, request);
         }
         if (!(
           MCP_RELAY_PATH.test(url.pathname) ||

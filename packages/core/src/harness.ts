@@ -270,6 +270,21 @@ export const CUSTODY_HELD = "custody_held";
 export const LIMIT_REACHED = "limit_reached";
 
 /**
+ * A session's start waits for its machine's memory: the machine's room on
+ * memory (core heavy-run.ts `measureMemoryRoom`: swap read back, swap left,
+ * memory stall or pressure) fails, so its process is not started yet. The
+ * agent's frame to the hub (`content`, {@link roomHeldSentence}), and the
+ * hub's line in the session's transcript, kept on its row. Drawn as a note
+ * titled by its first sentence, the readings under it. The start goes on by
+ * itself once the room is back.
+ */
+export const ROOM_HELD = "room_held";
+
+/** The words for a start held on its machine's memory ({@link ROOM_HELD}): what happens, then the readings. */
+export const roomHeldSentence = (readings: string): string =>
+  `This session starts once its machine has memory for it, and starts by itself when the room is back. ${readings.charAt(0).toUpperCase()}${readings.slice(1)}.`;
+
+/**
  * A Claude session's process runs a Claude Code other than its machine's
  * (one launched before a `claude update`), and is not at rest yet: the
  * agent's frame to the hub, once per process and machine version (`content`

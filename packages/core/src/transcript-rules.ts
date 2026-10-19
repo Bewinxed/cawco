@@ -38,6 +38,7 @@ import {
   MOVED_HERE,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
+  ROOM_HELD,
   SESSION_STOPPED,
 } from "./harness";
 import {
@@ -1005,6 +1006,19 @@ export function mapFrame(
             systemLine(base, "ui.system_note", rest, {
               subtype: LIMIT_REACHED,
               noteKind: "Limit",
+              noteTitle: title,
+            })
+          );
+          break;
+        }
+        // Its start waits for its machine's memory: titled by what happens,
+        // the machine's readings under it (core `ROOM_HELD`).
+        case ROOM_HELD: {
+          const [title, rest] = firstSentence(sdk.content ?? "");
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", rest, {
+              subtype: ROOM_HELD,
+              noteKind: "Waiting",
               noteTitle: title,
             })
           );

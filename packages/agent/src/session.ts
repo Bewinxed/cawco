@@ -90,10 +90,12 @@ import {
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   RESOLVE_PERMISSION,
+  ROOM_HELD,
   readDelivered,
   readIngested,
   repoPath,
   resumeCursor,
+  roomHeldSentence,
   SESSION_DIR_READ,
   VERIFY_SESSION_CREDENTIAL,
   WITHDRAW_PERMISSION,
@@ -107,6 +109,7 @@ import {
   waitingWords,
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { keepRoomSampled, measureMemoryRoom } from "@cawco/core/heavy-run";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -150,6 +153,7 @@ import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
 import { type KeeperReading, withKeepers } from "./keepers";
 import { isMachineAgent } from "./machine-agent";
+import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
 import { resolveMcpLauncher } from "./mcp-launcher";
 import { gaugeGroup, gaugeTables } from "./memory";
 import { Outbox } from "./outbox";
@@ -308,6 +312,8 @@ const warn = (message: string): void => {
  * the hub's 120 s for the whole carry (hub `CARRY_TIMEOUT_MS`), so the hub
  * always hears the machine's own reason, never "not answering". Ours.
  */
+/** How often a start waiting for memory measures the room again: the heavy-run queue's own pace (core heavy-run.ts). */
+const ROOM_POLL_MS = 3000;
 const CARRY_KEEPERS_MS = 15_000;
 const CARRY_STOP_MS = 30_000;
 const CARRY_COPY_MS = 45_000;
@@ -739,6 +745,8 @@ export class SessionSupervisor {
       this.harnessCustodyReady("opencode")
     );
     keeperLimits.on("limit", (message) => this.#limitReached(message));
+    // The Mac's readings kept a window deep, so a start reads the room at once.
+    keepRoomSampled();
     setInterval(() => {
       this.#sweepIdle().catch((error: unknown) =>
         warn(`the idle sweep failed: ${error}`)
@@ -864,6 +872,11 @@ export class SessionSupervisor {
    * child rather than wait on an answer it may never give.
    */
   readonly #attaching = new Map<string, AbortController>();
+  /**
+   * Each start waiting for the machine's memory ({@link #roomForStart}), by
+   * instance id: a stop for it ends the wait ({@link dispatch}).
+   */
+  readonly #roomWaits = new Map<string, AbortController>();
   /** The fleet MCP heal passes, one session after another ({@link #healFleetMcp}). */
   #healing: Promise<void> = Promise.resolve();
   /**
@@ -1142,11 +1155,18 @@ export class SessionSupervisor {
     // A stop for a session being attached does not wait on its child's
     // answer: the attach lets go, and the stop behind it ends the child.
     if (envelope.verb === "stop") {
+      const stopping =
+        envelope.instanceId ?? (envelope.payload as StopPayload).instanceId;
       this.#attaching
-        .get(
-          envelope.instanceId ?? (envelope.payload as StopPayload).instanceId
-        )
+        .get(stopping)
         ?.abort(new Error("The session was stopped before it was attached."));
+      this.#roomWaits
+        .get(stopping)
+        ?.abort(
+          new Error(
+            "The session was stopped while it waited for its machine's memory."
+          )
+        );
     }
     // A question about the session waits for what is already on its way —
     // the spawn that makes the session, a send before it — but nothing waits
@@ -2366,6 +2386,62 @@ export class SessionSupervisor {
   }
 
   /**
+   * A launch waits here while its machine's room on memory fails (core
+   * heavy-run.ts `measureMemoryRoom`: swap read back, swap left, memory
+   * stall or pressure), measured again every {@link ROOM_POLL_MS}. Never
+   * refused: the session's transcript says once why it waits, in the
+   * machine's readings ({@link ROOM_HELD}), and the hub waits on its start
+   * as long as that line stands. A stop ends the wait ({@link dispatch}).
+   */
+  async #roomForStart(instanceId: string, harness: HarnessKind): Promise<void> {
+    let room = measureMemoryRoom();
+    if (room.ok) {
+      return;
+    }
+    const stop = new AbortController();
+    this.#roomWaits.set(instanceId, stop);
+    const began = Date.now();
+    console.info(`[session] ${instanceId}: start waits: ${room.words}`);
+    this.sink({
+      kind: "frame",
+      instanceId,
+      harness,
+      message: {
+        type: "system",
+        subtype: ROOM_HELD,
+        uuid: `room-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        session_id: "",
+        content: roomHeldSentence(room.words),
+      } as unknown as NeutralMessage,
+    });
+    try {
+      while (!room.ok) {
+        // biome-ignore lint/performance/noAwaitInLoops: one reading per tick until the room is back
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, ROOM_POLL_MS);
+          stop.signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              reject(stop.signal.reason);
+            },
+            { once: true }
+          );
+        });
+        room = measureMemoryRoom();
+      }
+      console.info(
+        `[session] ${instanceId}: starts after ${Math.round((Date.now() - began) / 1000)} s waiting for memory`
+      );
+    } finally {
+      if (this.#roomWaits.get(instanceId) === stop) {
+        this.#roomWaits.delete(instanceId);
+      }
+    }
+  }
+
+  /**
    * What a launch runs on, asked of the hub as its process is about to start
    * ({@link launchGrant}): its credential, minted now, and its account. A
    * launch held on its way (custody, an update, its queue) so never runs on
@@ -2705,6 +2781,11 @@ export class SessionSupervisor {
 
       if (payload.ingested) {
         this.#ingested.set(instanceId, payload.ingested);
+      }
+      // A launch waits for the machine's memory before anything of it
+      // starts, its grant included; a reattach starts nothing.
+      if (!payload.reattachOnly) {
+        await this.#roomForStart(instanceId, kind);
       }
       // A launch runs on what the hub grants it now, as its process starts,
       // and on nothing it was sent ({@link #granted}). A reattach launches
@@ -4841,6 +4922,9 @@ export class SessionSupervisor {
     if (incoming) {
       this.#mcpLauncherStates.clear();
     }
+    // The fleet's shared servers, run once for the machine by its gateway
+    // (mcp-host.ts): each harness dials the gateway for them.
+    const hosted: { name: string; config: HostedConfig }[] = [];
     const config = incoming && {
       ...incoming,
       mcp: incoming.mcp.map((row) => {
@@ -4856,6 +4940,15 @@ export class SessionSupervisor {
           return { ...row, enabled: false };
         }
         const local = { ...row, config: launcher.config };
+        if (local.shared && "command" in local.config) {
+          hosted.push({ name: row.name, config: local.config });
+          return {
+            ...local,
+            config: hostedEntry(
+              harnessMcpUrl(`/mcp/local/${encodeURIComponent(row.name)}`)
+            ),
+          };
+        }
         return local.proxied && "url" in local.config
           ? {
               ...local,
@@ -4869,6 +4962,9 @@ export class SessionSupervisor {
           : local;
       }),
     };
+    if (config) {
+      mcpHost.configure(hosted);
+    }
     type State = import("@cawco/core").FleetItemState;
     const mcp: FleetSyncReport["mcp"] = {};
     const mcpByHarness: NonNullable<FleetSyncReport["mcpByHarness"]> = {};

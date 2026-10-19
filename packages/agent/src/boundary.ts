@@ -833,6 +833,10 @@ const shimsOf = (id: string): string => join(roOf(id), "bin");
  *   free and the machine has room, unless a run it is under already holds
  *   one (`CAWCO_HEAVY_RUN_HELD`). `test-without-building` compiles nothing:
  *   Maestro's runner, on a simulator whose slot holds the run.
+ * - `xcrun simctl boot` is a heavy run too, as a simulator mac-slot.sh boots
+ *   is: on 2026-10-19 the Mac had a third simulator booted outside
+ *   mac-slot.sh while it paged at a load of 800. Every other `xcrun` call
+ *   runs as it is.
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
  *   or `log stream` outside the boundary (`log-relay.ts`).
  *
@@ -988,6 +992,22 @@ export CFFIXED_USER_HOME=${shellQuote(xcodeHomeOf(id))}
 run=("$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData.noindex"))} "\${args[@]}")
 [ -z "$compiles" ] || ${heavyRunLine}
 exec "\${run[@]}"
+`,
+      0o755
+    ),
+    // A simulator boot is one of the machine's heavy runs, as mac-slot.sh's
+    // are: it waits for a slot and the machine's room (memory and swap
+    // among it), then the boot runs and the slot goes once it returns.
+    writeWhole(
+      join(bin, "xcrun"),
+      `#!/bin/bash
+# CawCo workspace ${id}: xcrun, a simulator boot waiting for the machine's room.
+if [ "\${1:-}" = simctl ] && [ "\${2:-}" = boot ]; then
+  run=(/usr/bin/xcrun "$@")
+  ${heavyRunLine}
+  exec "\${run[@]}"
+fi
+exec /usr/bin/xcrun "$@"
 `,
       0o755
     ),

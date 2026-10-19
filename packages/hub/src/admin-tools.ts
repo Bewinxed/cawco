@@ -612,24 +612,35 @@ export function adminTools() {
             "Required for put. stdio: { command, args? }; remote: " +
               '{ type: "http"|"sse", url }.'
           ),
-        enabled: z
-          .boolean()
-          .optional()
-          .describe("Whether the server is enabled. Defaults to true for put."),
+        enabled: z.boolean().optional().describe("Defaults to true for put."),
         projectId: z
           .string()
           .nullable()
           .optional()
           .describe(
-            "For one project only: placed in every checkout and workspace of it. null: every machine."
+            "One project's only: placed in its every checkout and workspace. null: every machine."
           ),
         platforms: z
           .array(z.enum(MCP_PLATFORMS))
           .nullable()
           .optional()
           .describe("Only machines of these platforms get it. null: all."),
+        shared: z
+          .boolean()
+          .optional()
+          .describe(
+            "One per machine, started at first call; a stdio server with no per-session state."
+          ),
       },
-      async ({ action, name, config, enabled, projectId, platforms }) => {
+      async ({
+        action,
+        name,
+        config,
+        enabled,
+        projectId,
+        platforms,
+        shared,
+      }) => {
         if (action === "list") {
           const fleet = (await api("GET", "/api/fleet")) as {
             config?: { mcp?: unknown[] };
@@ -654,11 +665,12 @@ export function adminTools() {
             ...(enabled === undefined ? {} : { enabled }),
             ...(projectId === undefined ? {} : { projectId }),
             ...(platforms === undefined ? {} : { platforms }),
+            ...(shared === undefined ? {} : { shared }),
           })
         );
       },
-      " A change reaches sessions already running within seconds: a server put, enabled or signed in" +
-        " connects in them, and one removed, disabled or signed out leaves them. No new session is needed."
+      " A change reaches running sessions within seconds (a put connects, a removal leaves);" +
+        " no new session is needed."
     ),
 
     // ── rules ────────────────────────────────────────────────────────────

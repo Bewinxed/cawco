@@ -89,6 +89,15 @@ export interface FleetMcpServer extends FleetPlacement {
   platforms?: McpPlatform[];
   /** The config points at the hub's authenticated forwarder. */
   proxied?: boolean;
+  /**
+   * One instance on each machine serves every session there, started at its
+   * first call (the agent's MCP gateway, packages/agent mcp-host.ts), rather
+   * than one per session started with it. A stdio fleet server only, and
+   * only one whose tools keep nothing per session and resolve no path
+   * against its working directory. Absent: one per session, as the harness
+   * starts it.
+   */
+  shared?: boolean;
 }
 
 /** The platforms an MCP server can be scoped to ({@link FleetMcpServer.platforms}). */

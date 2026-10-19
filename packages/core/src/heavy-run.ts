@@ -46,6 +46,13 @@
  * level 2 and a load of 7 to 16 (Colima, Brave, the sessions and their MCP
  * servers), so it started nothing for hours while twenty gates waited.
  *
+ * Both also read how full swap is: Linux's SwapFree, the Mac's
+ * `vm.swapusage`. On 2026-10-19 the Mac had 29.6 GiB swapped out of 32 GiB
+ * of memory at a load of 800, and its swap read-back refused heavy runs while
+ * nothing held a session start. Memory's readings alone
+ * ({@link measureMemoryRoom}) hold session starts and simulator boots, in
+ * the same words.
+ *
  * A work item's landing gate goes first. A run under a gate step
  * ({@link HEAVY_GATE_ENV}, set by the machine that runs the step: core
  * harness.ts `CommandRun.gate`) holds a ticket while it waits, a
@@ -147,6 +154,26 @@ const MAC_CPU_BUSY_MAX = 75;
 const MAC_SWAPIN_MAX_MIB = 128;
 /** macOS: the window every rate reading spans, as Linux's PSI avg10 does. */
 const MAC_WINDOW_MS = 10_000;
+/**
+ * Linux: the least share of swap left free (`/proc/meminfo` SwapFree over
+ * SwapTotal, a percent) that still admits. Our call: Linux's swap is the
+ * size it was made, and once it is full the next allocation that cannot be
+ * reclaimed is the OOM killer's; a tenth left is the last moment a start can
+ * still be held back rather than ended. A machine with no swap has none to
+ * fill and is read on its memory stall alone.
+ */
+const LINUX_SWAP_FREE_MIN_PCT = 10;
+/**
+ * macOS: the most swap in use (`vm.swapusage` used), as a percent of the
+ * Mac's memory, that still admits. macOS adds swap files as it needs them, so
+ * `vm.swapusage`'s free is the slack in the files made so far, not what is
+ * left: at rest it read 1 GiB free of 10 GiB (2026-10-17), on the night of
+ * 2026-10-19 1.4 GiB free of 31 GiB. What tells the two apart is how much is
+ * swapped out against the memory there is to bring it back into: 9 GiB of 32
+ * (28%) at rest, 29.6 GiB of 32 (93%) with the Mac paging at a load of 800.
+ * Our call: half of memory, between the two.
+ */
+const MAC_SWAP_USED_MAX_PCT = 50;
 
 /**
  * Overrides of the thresholds above, for proving the gate holds and admits
@@ -159,6 +186,8 @@ const ROOM_ENV = {
   reserveGib: "CAWCO_HEAVY_RESERVE_GIB",
   cpuBusy: "CAWCO_HEAVY_CPU_BUSY_MAX",
   swapInMib: "CAWCO_HEAVY_SWAPIN_MAX_MIB",
+  swapFreeMin: "CAWCO_HEAVY_SWAP_FREE_MIN_PCT",
+  swapUsedMax: "CAWCO_HEAVY_SWAP_USED_MAX_PCT",
 } as const;
 
 /** How often a waiting run tries the slots, and a `hold` looks for its shell. */
@@ -218,8 +247,27 @@ export interface Room {
   words: string;
 }
 
+/**
+ * One reading of the machine's room: whether it admits, in words, and
+ * whether it is one of memory's ({@link measureMemoryRoom} reads those
+ * alone).
+ */
+interface Reading {
+  memory: boolean;
+  ok: boolean;
+  words: string;
+}
+
+/** Readings as the queue says them: each in turn, a refusing one marked. */
+const roomOf = (readings: Reading[]): Room => ({
+  ok: readings.every((reading) => reading.ok),
+  words: `this machine's measured room: ${readings.map((reading) => `${reading.words}${reading.ok ? "" : " ✗"}`).join(", ")}`,
+});
+
 const SOME_AVG10 = /^some avg10=([\d.]+)/m;
 const MEM_AVAILABLE = /^MemAvailable:\s+(\d+) kB$/m;
+const SWAP_TOTAL = /^SwapTotal:\s+(\d+) kB$/m;
+const SWAP_FREE = /^SwapFree:\s+(\d+) kB$/m;
 
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;
 
@@ -232,7 +280,40 @@ const someAvg10 = (path: string): number => {
   return Number(found[1]);
 };
 
-const linuxRoom = (): Room => {
+/** A `/proc/meminfo` line's kB, as bytes. */
+const meminfoBytes = (meminfo: string, line: RegExp, name: string): number => {
+  const found = line.exec(meminfo);
+  if (!found) {
+    throw new Error(`/proc/meminfo has no ${name} line`);
+  }
+  return Number(found[1]) * 1024;
+};
+
+/**
+ * Swap's reading from SwapTotal and SwapFree: refused once less than the
+ * least share is left free while memory is short too (MemAvailable under
+ * {@link LINUX_SWAP_FREE_MIN_PCT} of RAM). A full swap beside plenty of
+ * memory is pages nothing uses: obelisk's 0.5 GiB was all in use with
+ * 100 GiB available (2026-10-19), and refused there it would hold every
+ * start on a machine with room.
+ */
+const linuxSwap = (meminfo: string, available: number): Reading => {
+  const total = meminfoBytes(meminfo, SWAP_TOTAL, "SwapTotal");
+  const free = meminfoBytes(meminfo, SWAP_FREE, "SwapFree");
+  const freeMin = threshold(ROOM_ENV.swapFreeMin, LINUX_SWAP_FREE_MIN_PCT);
+  if (total === 0) {
+    return { memory: true, ok: true, words: "no swap" };
+  }
+  const share = (100 * free) / total;
+  const short = (100 * available) / totalmem() < LINUX_SWAP_FREE_MIN_PCT;
+  return {
+    memory: true,
+    ok: share >= freeMin || !short,
+    words: `swap ${gib(free)} free of ${gib(total)}, ${share.toFixed(0)}% (a start needs ${freeMin}% free once under ${LINUX_SWAP_FREE_MIN_PCT}% of memory is available)`,
+  };
+};
+
+const linuxReadings = (): Reading[] => {
   const memoryMax = threshold(ROOM_ENV.memoryStall, MEMORY_STALL_MAX);
   const cpuMax = threshold(ROOM_ENV.cpuStall, CPU_STALL_MAX);
   const reserve =
@@ -242,20 +323,27 @@ const linuxRoom = (): Room => {
       : Math.max(RESERVE_FLOOR, totalmem() * RESERVE_SHARE);
   const memory = someAvg10("/proc/pressure/memory");
   const cpu = someAvg10("/proc/pressure/cpu");
-  const available = MEM_AVAILABLE.exec(readFileSync("/proc/meminfo", "utf8"));
-  if (!available) {
-    throw new Error("/proc/meminfo has no MemAvailable line");
-  }
-  const free = Number(available[1]) * 1024;
+  const meminfo = readFileSync("/proc/meminfo", "utf8");
+  const free = meminfoBytes(meminfo, MEM_AVAILABLE, "MemAvailable");
   const needs = SLOT_MEMORY + reserve;
-  const memoryOk = memory < memoryMax;
-  const cpuOk = cpu < cpuMax;
-  const freeOk = free >= needs;
-  const mark = (ok: boolean) => (ok ? "" : " ✗");
-  return {
-    ok: memoryOk && cpuOk && freeOk,
-    words: `this machine's measured room: memory stall ${memory.toFixed(2)}% of the last 10 s (a run starts under ${memoryMax})${mark(memoryOk)}, CPU stall ${cpu.toFixed(2)}% (under ${cpuMax})${mark(cpuOk)}, ${gib(free)} available (a run needs ${gib(needs)}: ${gib(SLOT_MEMORY)} for it, ${gib(reserve)} kept for the person)${mark(freeOk)}`,
-  };
+  return [
+    {
+      memory: true,
+      ok: memory < memoryMax,
+      words: `memory stall ${memory.toFixed(2)}% of the last 10 s (a run starts under ${memoryMax})`,
+    },
+    linuxSwap(meminfo, free),
+    {
+      memory: false,
+      ok: cpu < cpuMax,
+      words: `CPU stall ${cpu.toFixed(2)}% (under ${cpuMax})`,
+    },
+    {
+      memory: false,
+      ok: free >= needs,
+      words: `${gib(free)} available (a run needs ${gib(needs)}: ${gib(SLOT_MEMORY)} for it, ${gib(reserve)} kept for the person)`,
+    },
+  ];
 };
 
 /**
@@ -366,6 +454,31 @@ const sysctlInt = (name: string): number => {
   return value[0] ?? 0;
 };
 
+/**
+ * `vm.swapusage`, as `sysctl vm.swapusage` prints it: `struct xsw_usage`
+ * (<sys/sysctl.h>: `xsu_total`, `xsu_avail`, `xsu_used`, each a u_int64_t,
+ * then `xsu_pagesize` and `xsu_encrypted`), in bytes.
+ */
+const macSwapUsage = (): { free: number; total: number; used: number } => {
+  const usage = new BigUint64Array(4);
+  const size = new BigUint64Array([BigInt(usage.byteLength)]);
+  const code = machHost().lib.symbols.sysctlbyname(
+    new TextEncoder().encode("vm.swapusage\0"),
+    ptr(usage),
+    ptr(size),
+    null,
+    0
+  );
+  if (code !== 0) {
+    throw new Error(`sysctlbyname vm.swapusage answered ${code}`);
+  }
+  return {
+    total: Number(usage[0]),
+    free: Number(usage[1]),
+    used: Number(usage[2]),
+  };
+};
+
 /** The page size the VM counters count in. */
 const macPageSize = (): number => {
   const size = new BigUint64Array(1);
@@ -409,9 +522,10 @@ const readyRoom = async (): Promise<void> => {
   await Bun.sleep(Math.max(0, first.at + MAC_WINDOW_MS - Date.now()));
 };
 
-const macRoom = (): Room => {
+const macReadings = (): Reading[] => {
   const busyMax = threshold(ROOM_ENV.cpuBusy, MAC_CPU_BUSY_MAX);
   const swapInMax = threshold(ROOM_ENV.swapInMib, MAC_SWAPIN_MAX_MIB);
+  const swapUsedMax = threshold(ROOM_ENV.swapUsedMax, MAC_SWAP_USED_MAX_PCT);
   const reserve = threshold(ROOM_ENV.reserveGib, 0) * GIB;
   const now = recordMacSample();
   const then = windowStart(now.at);
@@ -427,32 +541,52 @@ const macRoom = (): Room => {
       : 0;
   const swappedIn =
     (Number(now.swapins - then.swapins) * macPageSize()) / 1024 ** 2;
+  const swap = macSwapUsage();
+  const swapShare = (100 * swap.used) / totalmem();
   const free = (sysctlInt("kern.memorystatus_level") / 100) * totalmem();
   const level = sysctlInt("kern.memorystatus_vm_pressure_level");
   const needs = SLOT_MEMORY + reserve;
-  const busyOk = busy < busyMax;
-  const swapOk = swappedIn < swapInMax;
-  const freeOk = free >= needs;
-  const levelOk = level < MAC_PRESSURE_CRITICAL;
-  const mark = (ok: boolean) => (ok ? "" : " ✗");
-  return {
-    ok: busyOk && swapOk && freeOk && levelOk,
-    words: `this machine's measured room: CPU busy ${busy.toFixed(0)}% of the last ${seconds} s (a run starts under ${busyMax})${mark(busyOk)}, ${swappedIn.toFixed(1)} MiB read back from swap (under ${swapInMax})${mark(swapOk)}, ${gib(free)} available (a run needs ${gib(needs)}${reserve > 0 ? `: ${gib(SLOT_MEMORY)} for it, ${gib(reserve)} kept for the person` : ""})${mark(freeOk)}, memory pressure level ${level} (refused at ${MAC_PRESSURE_CRITICAL}, critical)${mark(levelOk)}`,
-  };
+  return [
+    {
+      memory: false,
+      ok: busy < busyMax,
+      words: `CPU busy ${busy.toFixed(0)}% of the last ${seconds} s (a run starts under ${busyMax})`,
+    },
+    {
+      memory: true,
+      ok: swappedIn < swapInMax,
+      words: `${swappedIn.toFixed(1)} MiB read back from swap (under ${swapInMax})`,
+    },
+    {
+      memory: true,
+      ok: swapShare < swapUsedMax,
+      words: `${gib(swap.used)} swapped out, ${swapShare.toFixed(0)}% of memory (under ${swapUsedMax}%; ${gib(swap.free)} free of ${gib(swap.total)} in its swap files)`,
+    },
+    {
+      memory: false,
+      ok: free >= needs,
+      words: `${gib(free)} available (a run needs ${gib(needs)}${reserve > 0 ? `: ${gib(SLOT_MEMORY)} for it, ${gib(reserve)} kept for the person` : ""})`,
+    },
+    {
+      memory: true,
+      ok: level < MAC_PRESSURE_CRITICAL,
+      words: `memory pressure level ${level} (refused at ${MAC_PRESSURE_CRITICAL}, critical)`,
+    },
+  ];
 };
 
 /**
- * This machine's room for one more heavy run, measured now. A reading that
- * cannot be taken is no room, in words naming why: the gate never admits a
- * run it could not measure for.
+ * The room `pick` keeps of this machine's readings, measured now. A reading
+ * that cannot be taken is no room, in words naming why: the gate never admits
+ * what it could not measure for.
  */
-export const measureRoom = (): Room => {
+const measured = (pick: (reading: Reading) => boolean): Room => {
   try {
     if (process.platform === "linux") {
-      return linuxRoom();
+      return roomOf(linuxReadings().filter(pick));
     }
     if (process.platform === "darwin") {
-      return macRoom();
+      return roomOf(macReadings().filter(pick));
     }
     return {
       ok: false,
@@ -464,6 +598,33 @@ export const measureRoom = (): Room => {
       words: `this machine's room could not be measured: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+};
+
+/** This machine's room for one more heavy run, measured now: every reading. */
+export const measureRoom = (): Room => measured(() => true);
+
+/**
+ * This machine's room on memory alone, measured now: what a session start and
+ * a simulator boot wait on (Linux's memory stall and swap left; the Mac's
+ * swap read back, swap out and pressure level), in the words the heavy-run
+ * queue says them. A start needs no slot's 8 GiB, nor idle CPUs.
+ */
+export const measureMemoryRoom = (): Room => measured(({ memory }) => memory);
+
+/**
+ * Keeps this process's Mac readings a window deep, so {@link
+ * measureMemoryRoom} answers at once in a process that measures now and then
+ * (the agent, at each session start). Nothing elsewhere: Linux's kernel keeps
+ * its own windows. Answers the stop.
+ */
+export const keepRoomSampled = (): (() => void) => {
+  if (process.platform !== "darwin") {
+    return () => undefined;
+  }
+  recordMacSample();
+  const timer = setInterval(recordMacSample, MAC_WINDOW_MS / 2);
+  timer.unref();
+  return () => clearInterval(timer);
 };
 
 const slotsDir = (): string => join(workspaceCacheDir(), "heavy-runs");

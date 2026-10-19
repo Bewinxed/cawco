@@ -20036,6 +20036,9 @@
                         "win32"
                       ]
                     }
+                  },
+                  "shared": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -47937,6 +47940,10 @@
           },
           "proxied": {
             "description": "The config points at the hub's authenticated forwarder.",
+            "type": "boolean"
+          },
+          "shared": {
+            "description": "One instance on each machine serves every session there, started at its\nfirst call (the agent's MCP gateway, packages/agent mcp-host.ts), rather\nthan one per session started with it. A stdio fleet server only, and\nonly one whose tools keep nothing per session and resolve no path\nagainst its working directory. Absent: one per session, as the harness\nstarts it.",
             "type": "boolean"
           },
           "cwd": {
