@@ -69,7 +69,15 @@ if (standalone && !process.env.ADDRESS_HEADER) {
 // hub's own 100 MB (media.ts `FILE_LIMIT_BYTES`), which answers a larger one
 // itself; the adapter's 512K default refused any file past it here first.
 process.env.BODY_SIZE_LIMIT = "101M";
-const { handler } = await import("./build/handler.js");
+// The binary bundles none of the build: its server is published whole beside
+// its client tree (scripts/build-binary.ts), where adapter-node's `dir`, the
+// directory of its own module, finds it. `__CAWCO_RELEASE__` is defined only
+// in that build, so the bundler drops the other import.
+const { handler } =
+  // biome-ignore lint/correctness/noUndeclaredVariables: the binary build's `define` (scripts/build-binary.ts)
+  typeof __CAWCO_RELEASE__ === "boolean"
+    ? await import(join(resources.runtimeTree("dashboard"), "handler.js"))
+    : await import("./build/handler.js");
 // Captured once: version.json on disk changes during a build before this process restarts.
 const runningVersion = readFileSync(
   standalone

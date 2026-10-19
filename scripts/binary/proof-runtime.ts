@@ -271,6 +271,112 @@ globalThis.__cawcoCanvas = {
   } finally {
     stage.stop(true);
   }
+} else if (verb === "proof-playwright") {
+  // playwright-core loaded from the tree the binary publishes (core
+  // published-package.ts): its registry reads browsers.json beside itself,
+  // and a launch runs its server code from there up to the executable check.
+  const { chromium } = await import("playwright-core");
+  const loaded = Object.keys(require.cache).filter((path) =>
+    path.endsWith("/playwright-core/index.js")
+  );
+  console.log(`playwright-core loaded from ${loaded.join(", ")}`);
+  console.log(`its Chromium revision: ${chromium.executablePath()}`);
+  const refused = await chromium
+    .launch({ executablePath: "/nonexistent/chromium", headless: true })
+    .then(
+      () => "launched",
+      (error: Error) => error.message.split("\n")[0]
+    );
+  console.log(`launch with no executable: ${refused}`);
+} else if (verb === "proof-pi") {
+  // pi's runtime as pi's own code runs it in the binary: config.js names
+  // the codemode worker, image-resize.js spawns the resize worker by the
+  // name pi's Bun binary gives it, that worker loads photon-node from the
+  // published tree, and pi-tui finds its native helper beside its module
+  // (scripts/build-binary.ts, the binary's root).
+  const { getCodemodeWorkerSpecifier } = await import("cawco:pi-config");
+  const { resizeImage } = await import("cawco:proof-pi");
+  const { getNativeClipboard } = await import("cawco:proof-pi-tui");
+  const { publishedPackage } =
+    await import("../../packages/core/src/published-package");
+  publishedPackage("photon-node");
+  const photon = Object.keys(require.cache).filter((path) =>
+    path.endsWith("/photon_rs.js")
+  );
+  console.log(`photon-node loaded from ${photon.join(", ")}`);
+  // An 8×8 PNG, drawn to 4×4.
+  const png = Uint8Array.from(
+    Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGM4oaGBFTEMLQkAgl1GAWqNFmsAAAAASUVORK5CYII=",
+      "base64"
+    )
+  );
+  const options = { maxWidth: 4, maxHeight: 4 };
+  // Spawned as image-resize.js spawns it under Bun, by the same name.
+  const { Worker: ThreadWorker } = await import("node:worker_threads");
+  const fromWorker = await new Promise<unknown>((resolve, reject) => {
+    const worker = new ThreadWorker("./src/utils/image-resize-worker.ts");
+    worker.once("message", (message) => {
+      worker.terminate();
+      resolve(message);
+    });
+    worker.once("error", (error: Error) => {
+      worker.terminate();
+      reject(new Error(`pi's image resize worker: ${error.message}`));
+    });
+    worker.postMessage({ inputBytes: png, mimeType: "image/png", options });
+  });
+  const { result } = fromWorker as {
+    result?: { width: number; height: number; wasResized: boolean };
+  };
+  if (!result?.wasResized || result.width !== 4) {
+    throw new Error(
+      `pi's image resize worker answered ${JSON.stringify(fromWorker)}`
+    );
+  }
+  console.log(
+    `pi's image resize worker drew the PNG ${result.width}×${result.height}`
+  );
+  const resized = await resizeImage(png, "image/png", options);
+  if (!resized?.wasResized || resized.width !== 4) {
+    throw new Error(`pi's resizeImage answered ${JSON.stringify(resized)}`);
+  }
+  console.log(`pi's resizeImage drew it ${resized.width}×${resized.height}`);
+  const codemode = getCodemodeWorkerSpecifier();
+  if (typeof codemode !== "string") {
+    throw new Error(`pi names its codemode worker ${String(codemode)}`);
+  }
+  // Spawned as pi-codemode's host does (runtime/host.js), with no workerData:
+  // its own `main` answers that with a `crash` message, so a reply is its
+  // code loaded and running.
+  const crash = await new Promise<{ type?: string; message?: string }>(
+    (resolve, reject) => {
+      const worker = new ThreadWorker(codemode);
+      worker.once("message", (message) => {
+        worker.terminate();
+        resolve(message);
+      });
+      worker.once("error", (error: Error) => {
+        worker.terminate();
+        reject(new Error(`pi's codemode worker ${codemode}: ${error.message}`));
+      });
+    }
+  );
+  if (crash.type !== "crash") {
+    throw new Error(
+      `pi's codemode worker ${codemode} answered ${JSON.stringify(crash)}`
+    );
+  }
+  console.log(
+    `pi's codemode worker ${codemode} ran its main: ${crash.message}`
+  );
+  const clipboard = getNativeClipboard();
+  if (typeof clipboard?.getText !== "function") {
+    throw new Error(
+      `pi-tui found no native clipboard helper (DISPLAY=${process.env.DISPLAY})`
+    );
+  }
+  console.log("pi-tui loaded its native clipboard helper");
 } else if (verb === "proof-child") {
   process.stdin.resume();
   process.stdin.on("data", (chunk) => process.stdout.write(chunk));
