@@ -384,11 +384,9 @@
 
 {#if !framed}
   <main class="flex flex-wrap items-start gap-space-6 p-space-5">
-    <!-- literal: 380px -->
     <div
       data-slot="controls"
-      class="grid max-w-(--measure) justify-items-start gap-space-4"
-      style:--measure="380px"
+      class="grid max-w-c-bench-controls-w justify-items-start gap-space-4"
     >
       <h1 class="type-title m-0">Caw's notices</h1>
       <div class="type-meta grid gap-space-1 text-ink-muted">
@@ -431,11 +429,8 @@
     </div>
     {#if width === "phone"}
       {#key `${search}:${generation}`}
-        <!-- literal: 390px, 844px -->
         <iframe
-          class="h-(--frame-h) w-(--frame-w) rounded-lg border border-border-hairline bg-surface-page"
-          style:--frame-h="844px"
-          style:--frame-w="390px"
+          class="h-c-bench-phone-h w-c-bench-phone-w rounded-lg border border-border-hairline bg-surface-page"
           src="/motion/caw-notices?frame&{search}"
           title="Caw's panel on a 390px phone"
         ></iframe>

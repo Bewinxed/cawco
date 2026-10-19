@@ -124,9 +124,9 @@
 <svelte:head><title>Chosen and hover | CawCo</title></svelte:head>
 <main
   data-bench
-  class="flex flex-wrap items-box-start gap-space-6 p-space-8 text-ink-strong *:min-w-0"
+  class="flex flex-wrap items-start gap-space-6 p-space-8 text-ink-strong"
 >
-  <section data-probe="lifetime">
+  <section class="min-w-0" data-probe="lifetime">
     <LifetimeChip
       ephemeral={false}
       onchange={noop}
@@ -134,7 +134,7 @@
       open={control === "lifetime"}
     />
   </section>
-  <section data-probe="project">
+  <section class="min-w-0" data-probe="project">
     <ProjectChip
       home="/home/me"
       onchange={noop}
@@ -146,7 +146,7 @@
       {projects}
     />
   </section>
-  <section data-probe="machines">
+  <section class="min-w-0" data-probe="machines">
     <MachinesChip
       {machines}
       onchange={noop}
@@ -155,7 +155,7 @@
       selected={["m1"]}
     />
   </section>
-  <section data-probe="permission">
+  <section class="min-w-0" data-probe="permission">
     <PermissionSection
       harness="claude"
       modes={[
@@ -166,12 +166,9 @@
       value="default"
     />
   </section>
-  <!-- literal: 360px, 240px -->
   <section
-    class="h-(--side-h) w-(--side-w)"
+    class="h-c-bench-side-h w-c-bench-side-w min-w-0"
     data-probe="side"
-    style:--side-h="240px"
-    style:--side-w="360px"
   >
     <SideSurface label="Preview" onclose={noop} title="Preview">
       {#snippet actions()}
@@ -185,16 +182,15 @@
       <p>Well</p>
     </SideSurface>
   </section>
-  <section data-probe="toggle">
+  <section class="min-w-0" data-probe="toggle">
     <Toggle aria-label="Bold" pressed={true}>B</Toggle>
     <Toggle aria-label="Italic" pressed={false}>I</Toggle>
   </section>
-  <section data-probe="plan-ring">
+  <section class="min-w-0" data-probe="plan-ring">
     <PlanRing done={1} onopen={noop} open={true} total={3} />
     <PlanRing done={1} onopen={noop} open={false} total={3} />
   </section>
-  <!-- literal: 480px -->
-  <section class="w-(--bench-w)" data-probe="model" style:--bench-w="480px">
+  <section class="w-c-bench-field-w min-w-0" data-probe="model">
     <ModelSection
       harness="claude"
       installed={["claude"]}
@@ -205,11 +201,10 @@
       onmodel={noop}
     />
   </section>
-  <!-- literal: 480px -->
-  <section class="w-(--bench-w)" data-probe="slash" style:--bench-w="480px">
+  <section class="w-c-bench-field-w min-w-0" data-probe="slash">
     <MarkdownEditor bind:value={markdown} label="Notes" />
   </section>
-  <section data-probe="pins">
+  <section class="min-w-0" data-probe="pins">
     <PinList
       focused="pin-1"
       hold="ready"
@@ -222,7 +217,7 @@
       placing={null}
     />
   </section>
-  <section data-probe="files">
+  <section class="min-w-0" data-probe="files">
     <FolderFiles files={["notes.md", "plan.md"]} projectId="p1" />
   </section>
 </main>

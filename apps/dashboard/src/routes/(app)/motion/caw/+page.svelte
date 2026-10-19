@@ -60,15 +60,12 @@
 
 <svelte:head><title>Caw bench · CawCo</title></svelte:head>
 
-<!-- literal: 100vh, 320px -->
 <main
-  class="type-body flex min-h-(--page-h) flex-col items-center gap-space-5 bg-surface-recess p-space-7 text-ink-muted"
-  style:--page-h="100vh"
+  class="type-body flex min-h-dvh flex-col items-center gap-space-5 bg-surface-recess p-space-7 text-ink-muted"
 >
   <div
     data-slot="stage"
-    class="grid size-(--stage) place-items-center"
-    style:--stage="320px"
+    class="grid size-c-bench-stage place-items-center"
   >
     {#if mounted}
       {#key generation}

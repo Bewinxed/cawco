@@ -27,10 +27,8 @@
 
 <svelte:head><title>Echo bench · CawCo</title></svelte:head>
 
-<!-- literal: 100vh -->
 <main
-  class="type-body grid min-h-(--page-h) place-items-center bg-surface-recess p-space-7 text-ink-muted"
-  style:--page-h="100vh"
+  class="type-body grid min-h-dvh place-items-center bg-surface-recess p-space-7 text-ink-muted"
 >
   <ul class="m-0 grid list-none gap-space-5 p-0" {@attach echoBeat()}>
     {#each marks as status, row (row)}
@@ -60,7 +58,7 @@
   </ul>
   <!-- A working mark in no beat: it never echoes, and stands still on its
        live dot. -->
-  <p class="mark-line flex items-center gap-space-5" data-unbeaten>
+  <p class="flex items-center gap-space-5" data-unbeaten>
     <TreeMark fill="var(--mark-8)" status="live">
       {#snippet face()}
         <span></span>

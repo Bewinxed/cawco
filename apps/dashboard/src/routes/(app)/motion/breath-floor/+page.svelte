@@ -25,6 +25,14 @@
     "surface-recess-deep",
     "surface-well",
   ] as const;
+  /** Each surface's background, written out whole. */
+  const BACKGROUND = {
+    "surface-page": "bg-surface-page",
+    "surface-raised": "bg-surface-raised",
+    "surface-recess": "bg-surface-recess",
+    "surface-recess-deep": "bg-surface-recess-deep",
+    "surface-well": "bg-surface-well",
+  } as const satisfies Record<(typeof SURFACES)[number], string>;
   /** The transcript's tool inks (tool-cards/descriptors.ts INKS), written out whole. */
   const INKS = [
     "text-tool-run",
@@ -58,11 +66,10 @@
   };
 </script>
 
-<main class="bench">
+<main class="grid gap-space-2 p-space-4">
   {#each SURFACES as surface (surface)}
     <section
-      style:background="var(--{surface})"
-      class="surface"
+      class="grid gap-space-2 rounded-md p-space-2 {BACKGROUND[surface]}"
       data-surface={surface}
     >
       <div data-breather="find-row">
@@ -74,44 +81,14 @@
       <div data-breather="plan-step">
         <PlanTree nodes={steps} />
       </div>
-      <div class="catch" data-breather="catch-up"><CatchUp /></div>
-      <div class="tools">
+      <div class="relative" data-breather="catch-up"><CatchUp /></div>
+      <div class="flex flex-wrap gap-space-2">
         {#each INKS as ink (ink)}
-          <span class="ic breathe {ink}" data-breather={ink}
-            ><IconToolGeneric /></span
+          <span class="breathe inline-flex {ink}" data-breather={ink}
+            ><IconToolGeneric class="size-icon-md" /></span
           >
         {/each}
       </div>
     </section>
   {/each}
 </main>
-
-<style>
-  .bench {
-    display: grid;
-    gap: var(--space-2);
-    padding: var(--space-4);
-  }
-  .surface {
-    display: grid;
-    gap: var(--space-2);
-    padding: var(--space-2);
-    border-radius: var(--radius-md);
-  }
-  .catch {
-    position: relative;
-  }
-  .tools {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .ic {
-    display: inline-flex;
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-  }
-</style>
