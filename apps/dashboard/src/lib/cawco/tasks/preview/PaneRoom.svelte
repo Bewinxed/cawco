@@ -20,7 +20,9 @@
   answerTaskReads();
 </script>
 
-<div class="room" style:block-size="{height}px">{@render children()}</div>
+<!-- The page's room is the pane's cap: a short pane stands at its own height,
+     a long one scrolls inside it. -->
+<div class="room" style:max-block-size="{height}px">{@render children()}</div>
 
 <style>
   .room {
