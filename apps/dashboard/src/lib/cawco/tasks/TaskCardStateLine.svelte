@@ -46,7 +46,11 @@
   data-task={task.id}
   {href}
   onclick={(event) => {
-    if (onopen && event.button === 0 && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
+    if (
+      onopen &&
+      event.button === 0 &&
+      !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    ) {
       event.preventDefault();
       onopen(task.id);
     }
@@ -61,6 +65,7 @@
     {#if task.todos.total > 0}
       <span
         class="todos mark-line"
+        data-box
         title="{task.todos.done} of {task.todos.total} to-dos done"
       >
         <TaskRing done={task.todos.done} total={task.todos.total} />

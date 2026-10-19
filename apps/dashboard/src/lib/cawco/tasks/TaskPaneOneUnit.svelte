@@ -13,6 +13,7 @@
   import { untrack } from "svelte";
   import {
     approveTarget,
+    attemptWord,
     reviewOf,
     type StagesView,
     sendBackTarget,
@@ -23,12 +24,14 @@
   import SessionMark from "#lib/cawco/SessionMark.svelte";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
+  import type { MarkStatus } from "#lib/cawco/TreeMark.svelte";
   import TaskActivity from "#lib/cawco/tasks/TaskActivity.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu, as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     TabItem,
     Tabs,
@@ -89,17 +92,24 @@
   const failed = $derived(task.lastAttemptFailed && !live);
   const review = $derived(reviewOf(task));
   const reviewable = $derived(task.kind === "you" || review !== null || failed);
-  const cantStart = $derived(task.startProblem && !live ? task.startProblem : null);
+  const cantStart = $derived(
+    task.startProblem && !live ? task.startProblem : null
+  );
   const deciding = $derived(task.kind === "you");
 
   /** Review while there is one; else Session while one is live or failed or refused; else Details. */
-  const fallback = $derived<Tab>(
-    task.kind === "you" || (review && !failed && !live)
-      ? "review"
-      : live || failed || cantStart
-        ? "session"
-        : "details"
-  );
+  const fallback = $derived.by<Tab>(() => {
+    if (task.kind === "you" || (review && !failed && !live)) {
+      return "review";
+    }
+    return live || failed || cantStart ? "session" : "details";
+  });
+  /** A session's status word's mark tone, as TaskPane's session rows take it. */
+  const TONE: Record<string, MarkStatus> = {
+    Working: "live",
+    Done: "done",
+    Failed: "fail",
+  };
   let picked = $state<Tab | null>(untrack(() => startTab));
   const view = $derived<Tab>(picked ?? fallback);
 
@@ -135,25 +145,43 @@
   let sayFoot = $state(0);
   const shownName = $derived(newest ? nameOf(newest.instanceId) : "");
   const age = $derived(
-    newest ? formatDistanceToNow(new Date(newest.endedAt ?? newest.startedAt)) : ""
+    newest
+      ? formatDistanceToNow(new Date(newest.endedAt ?? newest.startedAt))
+      : ""
   );
 
-  const approveTo = $derived(deciding ? approveTarget(stages, task.stage)?.name ?? null : null);
-  const backTo = $derived(deciding ? sendBackTarget(stages, task.stage)?.name ?? null : null);
+  const approveTo = $derived(
+    deciding ? (approveTarget(stages, task.stage)?.name ?? null) : null
+  );
+  const backTo = $derived(
+    deciding ? (sendBackTarget(stages, task.stage)?.name ?? null) : null
+  );
   const hasFoot = $derived(deciding || failed || !!cantStart);
 
   const result = $derived(review?.result ?? null);
   const DETAIL_PARTS = $derived([
-    { glyph: IconDocument, title: "Description", text: task.description || null },
-    { glyph: IconSuccess, title: "Acceptance criteria", text: task.acceptance || null },
+    {
+      glyph: IconDocument,
+      title: "Description",
+      text: task.description || null,
+    },
+    {
+      glyph: IconSuccess,
+      title: "Acceptance criteria",
+      text: task.acceptance || null,
+    },
   ]);
   const todosDone = $derived(task.todos.filter((todo) => todo.done).length);
-
 </script>
 
 {#snippet arrowLabel(verb: string, to: string)}
   <span>{verb}</span>
-  <IconArrowRight aria-hidden="true" class="arrow-mark size-3" data-box data-arrow-mark />
+  <IconArrowRight
+    aria-hidden="true"
+    class="arrow-mark size-3"
+    data-box
+    data-arrow-mark
+  />
   <span>{stageLabel(to)}</span>
 {/snippet}
 
@@ -161,7 +189,12 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <Button {...props} aria-label="More for {task.id}" size="icon-sm" variant="ghost">
+        <Button
+          {...props}
+          aria-label="More for {task.id}"
+          size="icon-sm"
+          variant="ghost"
+        >
           <IconMore />
         </Button>
       {/snippet}
@@ -176,7 +209,7 @@
         {/each}
         <DropdownMenu.Separator />
       {/if}
-      {#if !failed && !cantStart}
+      {#if !(failed || cantStart)}
         <DropdownMenu.Item>
           <IconWorking />
           <span>Try again</span>
@@ -204,8 +237,10 @@
   <div class="pane" data-task-pane-next={task.id} data-tab={view}>
     <header data-slot="head" class="head">
       <h2 data-slot="title" class="title">
-        <button class="title-button press-tint focus-inset" title="Edit the title" type="button"
-          >{task.title}</button
+        <button
+          class="title-button press-tint focus-inset"
+          title="Edit the title"
+          type="button">{task.title}</button
         >
       </h2>
       <div data-slot="chips" class="chips">
@@ -220,9 +255,17 @@
                 data-kind={kind}
                 type="button"
               >
-                <StageGlyph aria-hidden="true" class="chip-glyph" data-breath={kind === "active" && live ? "" : undefined} />
+                <StageGlyph
+                  aria-hidden="true"
+                  class="chip-glyph"
+                  data-breath={kind === "active" && live ? "" : undefined}
+                />
                 <span class="chip-label">{stageLabel(task.stage)}</span>
-                <IconChevronDown aria-hidden="true" class="chip-chevron" data-box />
+                <IconChevronDown
+                  aria-hidden="true"
+                  class="chip-chevron"
+                  data-box
+                />
               </button>
             {/snippet}
           </DropdownMenu.Trigger>
@@ -236,15 +279,31 @@
             {/each}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
-        <button aria-label="Labels" class="kit-chip touch-hit chip" type="button">
+        <button
+          aria-label="Labels"
+          class="kit-chip touch-hit chip"
+          type="button"
+        >
           <IconColumns aria-hidden="true" class="chip-glyph" />
-          <span class="chip-label">{task.labels.length > 0 ? task.labels.join(" · ") : "Add label"}</span>
+          <span class="chip-label"
+            >{task.labels.length > 0
+              ? task.labels.join(" · ")
+              : "Add label"}</span
+          >
           <IconChevronDown aria-hidden="true" class="chip-chevron" data-box />
         </button>
       </div>
       {#if newest && sessionState}
-        <div data-slot="session-row" class="session-row mark-line" data-status={sessionState.status}>
-          <SessionMark id={newest.instanceId} place={placeOf(newest.instanceId)} status={sessionState.status} />
+        <div
+          data-slot="session-row"
+          class="session-row mark-line"
+          data-status={sessionState.status}
+        >
+          <SessionMark
+            id={newest.instanceId}
+            place={placeOf(newest.instanceId)}
+            status={sessionState.status}
+          />
           <span class="session-name">{shownName}</span>
           <span class="session-word">{sessionState.word}</span>
           <span data-slot="num" class="session-age num">{age}</span>
@@ -255,8 +314,15 @@
       {/if}
       {#if cantStart}
         <p data-slot="refusal" class="refusal mark-line">
-          <span class="mark-cell"><IconWarningTriangle aria-hidden="true" class="refusal-glyph" /></span>
-          <span><span class="refusal-word">Couldn't start</span> · {cantStart}</span>
+          <span class="mark-cell"
+            ><IconWarningTriangle
+              aria-hidden="true"
+              class="refusal-glyph"
+            /></span
+          >
+          <span
+            ><span class="refusal-word">Couldn't start</span> · {cantStart}</span
+          >
         </p>
       {/if}
       <Tabs
@@ -277,27 +343,43 @@
       </Tabs>
     </header>
 
-    <div data-slot="content" class="content kit-edge-fade-block" data-content={view}>
+    <div
+      data-slot="content"
+      class="content kit-edge-fade-block"
+      data-content={view}
+    >
       {#if view === "review"}
         <section aria-label="Review {task.id}" class="review" data-review-stage>
           {#if result}
             <p class="summary">{result.summary}</p>
             {#if result.check.length > 0}
-              <p class="check"><span class="check-label">Check:</span> {result.check.join(" · ")}</p>
+              <p class="check">
+                <span class="check-label">Check:</span>
+                {result.check.join(" · ")}
+              </p>
             {/if}
             {#if result.artifacts.length > 0}
               <div class="attachments">
                 {#each result.artifacts as one, index (index)}
                   {@const Glyph = one.kind === "link" ? IconLink : IconDocument}
-                  <a class="attachment mark-line press-tint focus-inset" href="?file={index}">
+                  <a
+                    class="attachment mark-line press-tint focus-inset"
+                    href="?file={index}"
+                  >
                     <Glyph aria-hidden="true" class="attachment-glyph" />
-                    <span class="attachment-name">{one.name}{#if one.kind === "link"} · github.com{/if}</span>
+                    <span class="attachment-name"
+                      >{one.name}{#if one.kind === "link"}
+                        · github.com{/if}</span
+                    >
                   </a>
                 {/each}
               </div>
             {/if}
           {:else if failed && newest}
-            <p class="summary muted">It handed nothing in before it stopped. The Session tab has where it got to.</p>
+            <p class="summary muted">
+              It handed nothing in before it stopped. The Session tab has where
+              it got to.
+            </p>
           {/if}
         </section>
       {:else if view === "session"}
@@ -306,12 +388,22 @@
             {#if page}
               <ol class="attempts">
                 {#each task.attempts as attempt (attempt.workItemId)}
-                  {@const word = attempt.state === "running" || attempt.state === "starting" ? "Working" : attempt.state === "failed" ? "Failed" : attempt.state === "cancelled" ? "Stopped" : "Done"}
+                  {@const word = attemptWord(attempt.state)}
                   <li class="attempt mark-line">
-                    <SessionMark id={attempt.instanceId} place={placeOf(attempt.instanceId)} status={word === "Working" ? "live" : word === "Failed" ? "fail" : word === "Done" ? "done" : "idle"} />
-                    <span class="session-name">{nameOf(attempt.instanceId)}</span>
+                    <SessionMark
+                      id={attempt.instanceId}
+                      place={placeOf(attempt.instanceId)}
+                      status={TONE[word] ?? "idle"}
+                    />
+                    <span class="session-name"
+                      >{nameOf(attempt.instanceId)}</span
+                    >
                     <span class="session-word" data-word={word}>{word}</span>
-                    <span data-slot="num" class="session-age num">{formatDistanceToNow(new Date(attempt.endedAt ?? attempt.startedAt))}</span>
+                    <span data-slot="num" class="session-age num"
+                      >{formatDistanceToNow(
+                        new Date(attempt.endedAt ?? attempt.startedAt)
+                      )}</span
+                    >
                   </li>
                 {/each}
               </ol>
@@ -321,7 +413,11 @@
               </Button>
             {:else}
               <div class="peek-head mark-line">
-                <span class="status mark-line" data-status={sessionState.status}>
+                <span
+                  class="status mark-line"
+                  data-box
+                  data-status={sessionState.status}
+                >
                   {#if sessionState.status === "live"}
                     <IconWorking aria-hidden="true" class="status-glyph" />
                   {:else if sessionState.status === "fail"}
@@ -334,7 +430,7 @@
                 {#if live && tool}
                   <span class="tool">{tool}</span>
                 {/if}
-                <Button class="open" size="sm" variant="ghost">
+                <Button class="open" data-box size="sm" variant="ghost">
                   <span>Open</span>
                   <IconArrowUpRight data-box />
                 </Button>
@@ -344,7 +440,9 @@
                   <p class="plan-head mark-line">
                     <TaskRing done={todosDone} total={task.todos.length} />
                     <span>Plan</span>
-                    <span data-slot="num" class="num">{todosDone}/{task.todos.length}</span>
+                    <span data-slot="num" class="num"
+                      >{todosDone}/{task.todos.length}</span
+                    >
                   </p>
                   <ol class="plan-list">
                     {#each task.todos.slice(0, 5) as todo (todo.path)}
@@ -360,7 +458,11 @@
               </ol>
               <!-- The session's own Composer, words alone: talking to the agent
                    is this tab's, the decision is the foot's. -->
-              <div data-slot="say" class="say" style:block-size="calc({sayFoot}px + var(--space-3))">
+              <div
+                data-slot="say"
+                class="say"
+                style:block-size="calc({sayFoot}px + var(--space-3))"
+              >
                 <Composer
                   agentName={shownName}
                   attach={false}
@@ -375,17 +477,17 @@
               </div>
             {/if}
           {:else}
-            <div class="kit-empty session-empty">
-              <IconWorking aria-hidden="true" data-slot="empty-mark" />
-              <p class="kit-empty-title">No session yet</p>
-              {#if cantStart}
-                <p class="kit-empty-line mark-text">It starts once a machine for tidewater is online.</p>
-              {:else}
-                <div class="kit-empty-action" data-box>
+            <EmptyState
+              class="session-empty"
+              icon={IconWorking}
+              title="No session yet"
+            >
+              {#snippet action()}
+                {#if !cantStart}
                   <Button size="sm" variant="outline">Start a session</Button>
-                </div>
-              {/if}
-            </div>
+                {/if}
+              {/snippet}
+            </EmptyState>
           {/if}
         </section>
       {:else if view === "details"}
@@ -393,7 +495,11 @@
           {#each DETAIL_PARTS as part (part.title)}
             {@const Glyph = part.glyph}
             <div class="part">
-              <h3 class="part-head mark-line"><Glyph aria-hidden="true" class="part-glyph" /><span>{part.title}</span></h3>
+              <h3 class="part-head mark-line">
+                <Glyph aria-hidden="true" class="part-glyph" /><span
+                  >{part.title}</span
+                >
+              </h3>
               {#if part.text}
                 <p class="part-text">{part.text}</p>
               {:else}
@@ -406,21 +512,37 @@
               <IconToolTodo aria-hidden="true" class="part-glyph" />
               <span>To-dos</span>
               {#if task.todos.length > 0}
-                <span data-slot="num" class="part-count num">{todosDone}/{task.todos.length}</span>
+                <span data-slot="num" class="part-count num"
+                  >{todosDone}/{task.todos.length}</span
+                >
               {/if}
             </h3>
             <ol class="todo-list">
               {#each task.todos as todo (todo.path)}
                 <li class="todo mark-line" data-done={todo.done || undefined}>
-                  {#if todo.done}<IconSuccess aria-hidden="true" class="todo-glyph done" />{:else}<IconDot aria-hidden="true" class="todo-glyph" />{/if}
+                  {#if todo.done}<IconSuccess
+                      aria-hidden="true"
+                      class="todo-glyph done"
+                    />{:else}<IconDot
+                      aria-hidden="true"
+                      class="todo-glyph"
+                    />{/if}
                   <span>{todo.text}</span>
                 </li>
               {/each}
             </ol>
           </div>
           <div class="part">
-            <h3 class="part-head mark-line"><IconLink aria-hidden="true" class="part-glyph" /><span>Relations</span></h3>
-            <p class="part-text muted">{task.after.length > 0 ? `After ${task.after.join(", ")}` : "None."}</p>
+            <h3 class="part-head mark-line">
+              <IconLink aria-hidden="true" class="part-glyph" /><span
+                >Relations</span
+              >
+            </h3>
+            <p class="part-text muted">
+              {task.after.length > 0
+                ? `After ${task.after.join(", ")}`
+                : "None."}
+            </p>
           </div>
         </section>
       {:else}
@@ -429,7 +551,7 @@
             comments={task.comments}
             {history}
             historyProblem={null}
-            oncomment={async () => {}}
+            oncomment={() => Promise.resolve()}
             reaches={live ? { kind: "live", session: shownName } : null}
             rereadHistory={() => undefined}
           />
@@ -440,7 +562,9 @@
     {#if hasFoot}
       <div data-slot="foot" class="foot" data-band="decide">
         {#if deciding && approveTo && backTo}
-          <Button data-approve size="sm">{@render arrowLabel("Approve", approveTo)}</Button>
+          <Button data-approve size="sm"
+            >{@render arrowLabel("Approve", approveTo)}</Button
+          >
           <Button data-send-back size="sm" variant="outline">Send back</Button>
           {@render more(true)}
         {:else}
@@ -464,7 +588,13 @@
     {@render body()}
   </section>
 {:else}
-  <SideSurface class="task-card" label="Task {task.id}" onclose={() => undefined} recessed={false} title={task.id}>
+  <SideSurface
+    class="task-card"
+    label="Task {task.id}"
+    onclose={() => undefined}
+    recessed={false}
+    title={task.id}
+  >
     {@render body()}
   </SideSurface>
 {/if}
@@ -786,7 +916,7 @@
     flex: none;
     inline-size: 100%;
   }
-  .session-empty {
+  .content :global(.session-empty) {
     padding-block: var(--space-3);
   }
   .part {

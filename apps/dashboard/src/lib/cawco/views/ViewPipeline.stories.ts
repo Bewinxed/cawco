@@ -7,7 +7,12 @@
  * width on a 1440 screen, then a phone.
  */
 import PageRoom from "../project/preview/PageRoom.svelte";
-import { DATES, sessionNameOf, STAGES, TASKS } from "../tasks/preview/tidewater";
+import {
+  DATES,
+  STAGES,
+  sessionNameOf,
+  TASKS,
+} from "../tasks/preview/tidewater";
 import PipelineRemovedFixture from "./preview/PipelineRemovedFixture.svelte";
 import ViewPipeline from "./ViewPipeline.svelte";
 import ViewPipelineRunOrder from "./ViewPipelineRunOrder.svelte";
@@ -48,7 +53,11 @@ export const RunOrderPhone = {
 };
 
 /** Desk · Removed: no Pipeline tab; the board's column heads count each stage. */
-export const Removed = { component: PipelineRemovedFixture, args: {}, parameters: DESK };
+export const Removed = {
+  component: PipelineRemovedFixture,
+  args: {},
+  parameters: DESK,
+};
 /** Phone · Removed. */
 export const RemovedPhone = {
   component: PipelineRemovedFixture,

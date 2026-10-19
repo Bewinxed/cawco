@@ -7,11 +7,11 @@
    * Composer, words alone. Proposed: the block's purpose line and the
    * starter cards on the card's own padding (WorkColumnEmpty, no title).
    */
-  import { routinesWords as words } from "@cawco/core";
+  import { routinesWords as words } from "@cawco/core/words/routines";
   import Block from "#lib/cawco/blocks/Block.svelte";
   import { BlockDragState } from "#lib/cawco/blocks/block-dnd.svelte.js";
-  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
+  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconClock } from "#lib/icons.js";
   import {

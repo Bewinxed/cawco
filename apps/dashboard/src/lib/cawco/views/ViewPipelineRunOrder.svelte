@@ -39,7 +39,9 @@
 
   let foldOpen = $state(false);
 
-  const open = $derived(tasks.filter((task) => task.kind !== "done" && task.kind !== "dropped"));
+  const open = $derived(
+    tasks.filter((task) => task.kind !== "done" && task.kind !== "dropped")
+  );
   const done = $derived(tasks.filter((task) => task.kind === "done"));
   const openIds = $derived(new Set(open.map((task) => task.id)));
   /** The open task each waiting one stands under: the first it waits on still open. */
@@ -65,7 +67,9 @@
     return 3;
   };
   const roots = $derived(
-    open.filter((task) => !under.has(task.id)).sort((a, b) => RANK(a) - RANK(b) || a.number - b.number)
+    open
+      .filter((task) => !under.has(task.id))
+      .sort((a, b) => RANK(a) - RANK(b) || a.number - b.number)
   );
   const childrenOf = (id: string): TaskSummary[] =>
     open.filter((task) => under.get(task.id) === id);
@@ -87,7 +91,11 @@
       data-run-row={task.id}
       href={hrefOf(task.id)}
       onclick={(event) => {
-        if (onopen && event.button === 0 && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
+        if (
+          onopen &&
+          event.button === 0 &&
+          !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+        ) {
           event.preventDefault();
           onopen(task.id);
         }
@@ -96,9 +104,13 @@
       <span class="lead mark-line">
         <span class="slot" data-box>
           {#if line && line.kind === "session"}
-            <SessionMark id={line.session} place={line.place} status={line.status} />
+            <SessionMark
+              id={line.session}
+              place={line.place}
+              status={line.status}
+            />
           {:else if task.kind === "you"}
-              <IconNeedsYou aria-hidden="true" class="glyph attn" />
+            <IconNeedsYou aria-hidden="true" class="glyph attn" />
           {:else if task.kind === "done"}
             <IconSuccess aria-hidden="true" class="glyph done" />
           {:else}
@@ -120,7 +132,9 @@
       <span class="todos mark-line">
         {#if task.todos.total > 0}
           <TaskRing done={task.todos.done} total={task.todos.total} />
-          <span data-slot="num" class="num">{task.todos.done}/{task.todos.total}</span>
+          <span data-slot="num" class="num"
+            >{task.todos.done}/{task.todos.total}</span
+          >
         {/if}
       </span>
     </a>

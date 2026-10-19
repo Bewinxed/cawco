@@ -8,15 +8,18 @@
 
   let {
     phone = false,
+    bare = false,
     children,
   }: {
     /** A phone's pane: 18px a side. */
     phone?: boolean;
+    /** What it holds pads itself (the project's head). */
+    bare?: boolean;
     children: Snippet;
   } = $props();
 </script>
 
-<div class="room" class:phone>{@render children()}</div>
+<div class={["room", { bare, phone }]}>{@render children()}</div>
 
 <style>
   .room {
@@ -29,5 +32,9 @@
   }
   .room.phone {
     padding-inline: var(--space-5);
+  }
+  .room.bare {
+    min-block-size: 0;
+    padding: 0;
   }
 </style>
