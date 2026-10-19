@@ -89,11 +89,19 @@
 
 {#snippet movedRow(pin: Pin)}
   <!-- Its element is gone: no card to open on the page, Place again pins it anew. -->
-  <li data-slot="moved-row" class="moved-row" data-moved-row={pin.number}>
+  <li
+    data-slot="moved-row"
+    class="flex items-center gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-0 rounded-sm text-ink-row text-start"
+    data-moved-row={pin.number}
+  >
     <PinDisc moved number={pin.number} resolved={!!pin.resolvedAt} />
-    <span data-slot="words" class="words">
-      <span data-slot="name" class="name">{pinName(pin)}</span>
-      <span class="last">{words.pinElementGone}</span>
+    <span data-slot="words" class="flex flex-1 min-w-0 flex-col">
+      <span data-slot="name" class="truncate text-ink-strong type-label"
+        >{pinName(pin)}</span
+      >
+      <span class="truncate text-ink-muted text-size-meta"
+        >{words.pinElementGone}</span
+      >
     </span>
     <Button
       aria-pressed={placing === pin.id}
@@ -134,12 +142,10 @@
   </li>
 {/snippet}
 
-<!-- literal: 8px -->
 <section
   data-slot="pin-list"
   aria-label="Comments"
   class="flex flex-initial flex-col gap-space-1 min-h-0"
-  style:--live-dot="8px"
 >
   <header
     data-slot="head"
@@ -169,7 +175,11 @@
       </TabsList>
     </Tabs>
   </div>
-  <div class="scroll kit-edge-fade-block">
+  <div
+    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain kit-edge-fade-block"
+    style:--fault-indent="var(--space-2)"
+    style:--fault-end="var(--space-2)"
+  >
     {#if hold === "quiet"}
       <!-- Inside the wait's grace: its plain surface (The Real Wait Rule). -->
     {:else if hold === "reading"}
@@ -177,16 +187,23 @@
       <div
         data-slot="pin-list-reading"
         aria-label={words.readingComments}
-        class="rows"
         role="status"
         out:crossOut
       >
         {#each [0, 1, 2] as skeleton (skeleton)}
-          <span class="skeleton-row">
-            <span class="kit-skeleton skeleton-disc"></span>
-            <span class="words">
-              <span class="kit-skeleton skeleton-name"></span>
-              <span class="kit-skeleton skeleton-last"></span>
+          <span
+            class="flex items-center gap-space-2 min-h-c-artifact-row-h px-space-2 py-0"
+          >
+            <span
+              class="kit-skeleton size-c-pin flex-none rounded-pill"
+            ></span>
+            <span class="flex flex-1 min-w-0 flex-col gap-space-1">
+              <span
+                class="kit-skeleton block w-3/5 h-(--text-label) rounded-xs"
+              ></span>
+              <span
+                class="kit-skeleton block w-17/20 h-(--text-meta) rounded-xs"
+              ></span>
             </span>
           </span>
         {/each}
@@ -195,12 +212,13 @@
       <RowFault
         data-pin-list-failed
         again={onretry}
+        class="py-space-2"
         reason={words.commentsNotRead(failed)}
       />
     {:else}
       <div data-slot="pin-list-read" in:crossIn>
         {#if shown.length > 0}
-          <ul class="rows">
+          <ul>
             {#each shown as pin (pin.id)}
               {#if pin.movedAt}
                 {@render movedRow(pin)}
@@ -210,13 +228,19 @@
             {/each}
           </ul>
         {:else if filter === "open"}
-          <p data-slot="pin-list-empty" class="empty">
-            <span class="empty-title">No open comments</span>
+          <p
+            data-slot="pin-list-empty"
+            class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
+          >
+            <span class="text-ink-strong type-label">No open comments</span>
             Choose Comment, then click the page to pin one.
           </p>
         {:else}
-          <p data-slot="pin-list-empty" class="empty">
-            <span class="empty-title">No resolved comments</span>
+          <p
+            data-slot="pin-list-empty"
+            class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
+          >
+            <span class="text-ink-strong type-label">No resolved comments</span>
             A pin you resolve leaves the page and waits here.
           </p>
         {/if}
@@ -224,157 +248,3 @@
     {/if}
   </div>
 </section>
-
-<style>
-  /* A column the panel's height bounds: the head and the filter stand, the
-     rows under them scroll on their own. */
-  .pin-list {
-    display: flex;
-    flex: 0 1 auto;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-height: 0;
-  }
-  .head {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    padding-inline-start: var(--space-2);
-  }
-  .title {
-    margin: 0;
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .filter {
-    flex-shrink: 0;
-    padding: var(--space-1) var(--space-2);
-  }
-  /* The offset parent a leaving skeleton is pinned in as the read fades in over it. */
-  .scroll {
-    position: relative;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .empty {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: var(--space-3) var(--space-2);
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-  }
-  .empty-title {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .rows {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .pin-row,
-  .moved-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-    min-height: var(--c-artifact-row-h);
-    padding: 0 var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--ink-row);
-    text-align: start;
-    font: inherit;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .pin-row {
-    cursor: pointer;
-  }
-  @media (hover: hover) {
-    .pin-row:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .pin-row:active {
-    background: var(--surface-fill);
-  }
-  /* The pin on show takes the selected wash, apart from the hover step. */
-  .pin-row[aria-current="true"] {
-    background: var(--selected-bg);
-
-    /* Its last line too: ink-muted measures 4.49:1 on the wash by day,
-       selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
-    & :is(.name, .last) {
-      color: var(--selected-ink);
-    }
-  }
-  .pin-row:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  .words {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    flex-direction: column;
-  }
-  .name,
-  .last {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .name {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .last {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-  }
-  /* A skeleton row at a pin row's size: the disc, the name's line in the
-     label role's height and the last line's in meta's. */
-  .skeleton-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-height: var(--c-artifact-row-h);
-    padding: 0 var(--space-2);
-  }
-  .skeleton-disc {
-    flex-shrink: 0;
-    width: var(--c-pin);
-    height: var(--c-pin);
-    border-radius: var(--radius-pill);
-  }
-  .skeleton-row .words {
-    gap: var(--space-1);
-  }
-  .skeleton-name,
-  .skeleton-last {
-    display: block;
-    border-radius: var(--radius-xs);
-  }
-  .skeleton-name {
-    inline-size: 60%;
-    block-size: var(--text-label);
-  }
-  .skeleton-last {
-    inline-size: 85%;
-    block-size: var(--text-meta);
-  }
-  /* The read's fault on the rows' line, from where a row's words start. */
-  .scroll > :global([data-slot="row-fault"]) {
-    --fault-indent: var(--space-2);
-    --fault-end: var(--space-2);
-
-    padding-block: var(--space-2);
-  }
-</style>

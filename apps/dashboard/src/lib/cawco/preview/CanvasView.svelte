@@ -104,7 +104,7 @@
     >
       <IconLayers />
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-52">
+    <DropdownMenu.Content align="end" width="regular">
       {@render entries()}
     </DropdownMenu.Content>
   </DropdownMenu.Root>
