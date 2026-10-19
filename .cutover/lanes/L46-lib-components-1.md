@@ -1,0 +1,304 @@
+# L46-lib-components-1
+
+Skills loaded (Skill tool): defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding; before the report: interface-craft, ui-observer. (No file has a transition, animation or keyframes of its own beyond the chevron's existing transition, so emil-design-eng and transitions-dev were not needed; the chevron keeps its `dur-control ease-out` and `motion-reduce` pair as written.)
+
+better-ui rules followed: transition only what changes (the doc chevron names `rotate`, the property it now turns, not `transform`); hover only on hover-capable pointers (Tailwind 4's `hover:`; Crepe's `(hover: none)` carve-out is `@variant no-hover`); outer radius / token radii (rounded-sm on the wells, the Crepe code block keeps `--radius-sm`); gate motion behind the reduced-motion preference (Crepe's blanket `animation: none` / `transition: none` stays, now without `!important`).
+better-layout rules followed: space groups, not lines (the diff header's gaps and padding are ladder steps); hit areas on a finger (the doc row's `--tx-line-touch` floor, Crepe's controls at `--c-btn-h-lg`); plan for growth (header `flex-wrap`, `min-w-0` kept, the skeleton bars use the kit's widths); a fixed height is a `min-height` (the doc row).
+
+Base: 9ec5a3111. Files: 7 of 7 done.
+
+| file | rules moved | residual (1/2/3/4/5) | literals preserved | breakpoint edges | STOPs |
+| --- | --- | --- | --- | --- | --- |
+| DiffModal.svelte | header gaps/padding 5 custom props → utilities; `--diffs-*` literals → tokens | 0 | 0 | none | none |
+| DirectoryPicker.svelte | skeleton row 30px + bar width/height → kit Skeleton variants | 0 | 0 | none | none |
+| MarkdownEditor.svelte | whole `<style>` (76 declarations, 14 `!important`) → `theme: component crepe-host`; 44px `--hit` → `--c-btn-h-lg` | 0 | 0 | `(hover: none)` → `no-hover` (also matches a coarse pointer), `(pointer: coarse)` → `coarse` | none |
+| ProviderLogo.svelte | `<style>` → `data-slot="provider-logo"` + `data-ink` + `text-ink-strong`, `theme: component provider-logo` | 0 | 0 | none | none |
+| tool-cards/MemoryBody.svelte | 420px/26px/44px/rotate/line-height literals → tokens and utilities | 0 | 0 | none | none |
+| tool-cards/OutputBlock.svelte | 10px/12px padding → `p-space-3` | 0 | 0 | none | none |
+| tool-cards/ToolProse.svelte | whole `<style>` → `theme: component tool-prose` | 0 | 0 | none | none |
+
+needs variant / needs transition token: none. Kind-5 declarations: none. `<style>` kept: none.
+
+## Kit swaps
+
+kit-swap: apps/dashboard/src/lib/components/features/DiffModal.svelte:80 DialogContent `bodyClass="flex h-full flex-col overflow-hidden"` — a `bodyPad="flush"` sibling look that makes the body a full-height column with its own overflow (`body="column"`)
+kit-swap: apps/dashboard/src/lib/components/features/DiffModal.svelte:82 DialogContent `h-(--modal-h)` (with `w-(--modal-w)`, inline `--modal-h: 90vh; --modal-w: 95vw`) — a size look `size="viewport"` next to `width="document"` that owns the 90vh by 95vw box
+kit-swap: apps/dashboard/src/lib/components/features/DirectoryPicker.svelte:180 Collapsible `flex flex-col` — the Root's own layout (`layout="column"`)
+kit-swap: apps/dashboard/src/lib/components/features/DirectoryPicker.svelte:182 CollapsibleTrigger `mark-line flex items-center gap-1.5 text-meta text-ink-muted transition-colors hover:text-ink-strong` — `skin="quiet"`: a meta-role muted link that goes strong on hover with the mark line
+kit-swap: apps/dashboard/src/lib/components/features/DirectoryPicker.svelte:233 Button `justify-start` — `align="start"` on the ghost `face="path"` row (a path row reads from its leading edge)
+kit-swap: apps/dashboard/src/lib/components/features/DirectoryPicker.svelte:214 Skeleton `cell="glyph"` / :217 Skeleton `height="x-height" radius="line" type="label" width` — done (L04's variants)
+kit-swap: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte:233 CollapsibleTrigger `mark-line min-h-(--tx-line) flex items-center gap-space-2 p-0 border-none border-current bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--tx-line-touch)` — `skin="row"`: a full-width disclosure row in the label role, strong ink, at the transcript line's height (26px, 44px under a finger)
+
+## Theme additions
+
+theme: component crepe-host
+The file's whole `<style>`, no `!important`. It needs the Crepe sheets (the six `@milkdown/crepe/theme/common/*.css` imports, which are unlayered) in a layer BELOW `components`: integration changes them to `@import "…" layer(crepe)` in app.css and puts `crepe` before `components` in the layer order (see `gap:` below). Without that, an unlayered Crepe rule outranks every layered rule.
+```css
+@layer components {
+  /* Crepe's structural CSS reads these off `.milkdown` itself, so they are set
+     there rather than on the host. Every value is an app token, so the editor
+     follows light and dark with everything else. */
+  [data-slot="crepe-host"] .milkdown {
+    --crepe-color-background: var(--surface-recess);
+    --crepe-color-on-background: var(--ink-strong);
+    --crepe-color-surface: var(--surface-raised);
+    --crepe-color-surface-low: var(--surface-recess);
+    --crepe-color-on-surface: var(--ink-strong);
+    --crepe-color-on-surface-variant: var(--ink-muted);
+    --crepe-color-outline: var(--ink-muted);
+    --crepe-color-primary: var(--ink-strong);
+    --crepe-color-secondary: var(--surface-hover);
+    --crepe-color-on-secondary: var(--ink-strong);
+    --crepe-color-inverse: var(--ink-strong);
+    --crepe-color-on-inverse: var(--surface-raised);
+    --crepe-color-inline-code: var(--ink-strong);
+    --crepe-color-inline-area: var(--surface-recess);
+    --crepe-color-error: var(--ink-strong);
+    --crepe-color-hover: var(--surface-hover);
+    --crepe-color-selected: var(--surface-fill);
+
+    --crepe-base-font-size: var(--text-body);
+    --crepe-font-title: var(--font-body);
+    --crepe-font-default: var(--font-body);
+    --crepe-font-code: var(--font-mono);
+
+    --crepe-shadow-1: var(--shadow-tile);
+    --crepe-shadow-2: var(--shadow-overlay);
+
+    /* The card already draws the frame; the editor must not draw a second. */
+    background: var(--surface-recess);
+    box-shadow: none;
+    padding: var(--space-1);
+
+    @variant no-hover {
+      --crepe-color-hover: transparent;
+    }
+  }
+  /* Crepe's stock CSS sizes text off its own scale, and DESIGN.md admits only
+     the type roles: the body role everywhere, then the exemptions below put
+     the hierarchy back on the elements that carry it (h1 and h2 in the title
+     role, smaller headings and strong text at the body size in 500, code at
+     the label size in the mono). */
+  [data-slot="crepe-host"] .milkdown * {
+    font-weight: var(--weight-body);
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
+  [data-slot="crepe-host"] .milkdown *::before,
+  [data-slot="crepe-host"] .milkdown *::after {
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
+  [data-slot="crepe-host"] .milkdown :is(strong, b, h1, h2, h3, h4, h5, h6, th) {
+    font-weight: var(--weight-strong);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+    margin-top: var(--space-5);
+    padding: var(--space-1) 0;
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror :is(h1, h2) {
+    font-size: var(--text-title);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror :is(h3, h4, h5, h6) {
+    font-size: var(--text-body);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror {
+    padding: var(--space-4) calc(var(--space-6) - var(--space-1)) var(--space-6)
+      calc(var(--space-7) - var(--space-1));
+    overflow-wrap: anywhere;
+    min-height: calc(var(--space-8) * 8);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror > :first-child {
+    margin-top: 0;
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror p {
+    padding: var(--space-1) 0;
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror code {
+    font-size: var(--text-label);
+    padding-inline: var(--space-1);
+    border-radius: var(--radius-xs);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror pre {
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    white-space: pre-wrap;
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror blockquote {
+    padding-inline-start: var(--space-6);
+    margin-block: var(--space-1);
+  }
+  [data-slot="crepe-host"] .milkdown .ProseMirror blockquote::before {
+    width: var(--space-1);
+    top: var(--space-1);
+    bottom: var(--space-1);
+    border-radius: var(--radius-pill);
+  }
+  [data-slot="crepe-host"] .milkdown .milkdown-code-block {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    margin-block: var(--space-2);
+    background: var(--surface-recess);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-sm);
+  }
+  [data-slot="crepe-host"] .milkdown :is(.cm-editor, .cm-gutters) {
+    background: var(--surface-recess);
+  }
+  [data-slot="crepe-host"] .milkdown :is(button, input, [role="button"]) {
+    border-radius: var(--radius-sm);
+    font-size: var(--text-label);
+    line-height: var(--leading-ui);
+  }
+  [data-slot="crepe-host"] .milkdown button {
+    border: 1px solid var(--border-control);
+    box-shadow: var(--shadow-tile);
+  }
+  /* Crepe's own focus styles give way to the app's one ring. */
+  [data-slot="crepe-host"] .milkdown :focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+  [data-slot="crepe-host"] .milkdown :is(input, [contenteditable]):focus-visible {
+    outline-offset: var(--focus-ring-inset);
+  }
+  [data-slot="crepe-host"] .milkdown :is(button, [role="button"]):active {
+    background: var(--surface-fill);
+    box-shadow: var(--shadow-inset-sel);
+  }
+  /* The block handle's open item: by day a step past its hover, with its glyph
+     in the strong ink. Not through --crepe-color-selected, which is also the
+     document's text selection. */
+  [data-slot="crepe-host"] .milkdown .milkdown-block-handle .operation-item.active {
+    background: var(--surface-pressed);
+
+    & svg {
+      fill: light-dark(var(--ink-strong), var(--ink-muted));
+    }
+  }
+  /* The slash menu's chosen group tab takes the selected wash, apart from its
+     hover (--crepe-color-hover). */
+  [data-slot="crepe-host"] .milkdown .milkdown-slash-menu .tab-group ul li.selected {
+    background: var(--selected-bg);
+    color: var(--selected-ink);
+  }
+  /* Milkdown renders its own toolbar and menus, so they cannot carry
+     `.touch-hit`; under a finger they keep a 44px box. */
+  @variant coarse {
+    [data-slot="crepe-host"]
+      .milkdown
+      :is(button, input, [role="button"], .operation-item, .milkdown-slash-menu li) {
+      min-width: var(--c-btn-h-lg);
+      min-height: var(--c-btn-h-lg);
+    }
+  }
+}
+```
+
+theme: component tool-prose
+The file's whole `<style>`, in `@layer components`. App.css's `.prose` rules are in a `utilities` layer, which outranks `components`; integration places this sheet where it outranks them (the `overrides` layer), as the unlayered scoped rules did.
+```css
+@layer components {
+  [data-slot="tprose"] .prose {
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
+    line-height: var(--leading-body);
+    color: var(--ink-strong);
+  }
+  /* Every block takes the gap and the first gives it back: `* + *` restyled
+     the whole document per block. */
+  [data-slot="tprose"] .prose > * {
+    margin-top: var(--space-2);
+  }
+  [data-slot="tprose"] .prose > :first-child {
+    margin-top: 0;
+  }
+  [data-slot="tprose"] .prose > :last-child {
+    margin-bottom: 0;
+  }
+  [data-slot="tprose"] :is(p, ul, ol, blockquote) {
+    margin-block: 0;
+  }
+  /* A list holds only items: every one but the first. */
+  [data-slot="tprose"] li:where(:not(:first-child)) {
+    margin-top: var(--space-1);
+  }
+  [data-slot="tprose"] :is(ul, ol) {
+    padding-inline-start: var(--space-5);
+  }
+  [data-slot="tprose"] .prose :is(h1, h2, h3, h4, h5, h6) {
+    font-size: var(--text-label);
+    line-height: var(--leading-ui);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+  }
+  [data-slot="tprose"] .prose > :is(h1, h2, h3, h4):where(:not(:first-child)) {
+    margin-top: var(--space-4);
+  }
+  /* prose wraps inline code in literal backticks; the code face already marks it. */
+  [data-slot="tprose"] code::before,
+  [data-slot="tprose"] code::after {
+    content: none;
+  }
+  [data-slot="tprose"] code {
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+  }
+}
+```
+
+theme: component provider-logo
+The mark's paths: a presentation attribute loses to any rule that matches, and `github-icon` sets its fill on the path. `color` is set by the `text-ink-strong` utility the file puts on the mark (WebKit resolves `light-dark()` wrongly inside an SVG `fill`, bugs.webkit.org 283489, so the ink travels as `color`).
+```css
+@layer components {
+  [data-slot="provider-logo"][data-ink],
+  [data-slot="provider-logo"][data-ink] * {
+    fill: currentColor;
+  }
+}
+```
+
+## Tokens
+
+token: --c-dialog-close-clear 52px — the diff dialog's header keeps this much clear at its trailing edge for the kit Dialog's 30px close button 12px from the corner (DESIGN.md, Dialog: "a 30px ghost icon button 12px from the corner"); a component dimension no ladder step fits.
+token: --c-tool-well-max-h 420px — the tallest a tool-call document well (a memory document) grows before it scrolls inside the transcript; a component dimension no ladder step fits.
+
+## Removed
+
+removed: apps/dashboard/src/lib/components/features/MarkdownEditor.svelte:138 (old) 14 `!important` declarations on the Crepe overrides — they fought Crepe's unlayered sheets; with the sheets in the `crepe` layer below `components` the layer order wins and no `!important` is needed.
+removed: apps/dashboard/src/lib/components/features/MarkdownEditor.svelte:284 (old) `.crepe-host :global(...)` block-handle rule — the `crepe-host` class no longer exists (it became `data-slot`), so the rule matched nothing and its declarations were lost; the rule lives on in `crepe-host` with the data-slot anchor (fixed, below).
+removed: apps/dashboard/src/lib/components/features/ProviderLogo.svelte:146 (old) `color: var(--ink-strong) !important` — it existed to beat `.row svg.lead` on the clone field; no such rule exists in the tree any more, and the ink is now the `text-ink-strong` utility.
+removed: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte:193 `mr-0` — the default; the flex column has no margin to cancel.
+removed: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte:218 `leading-(--lh-normal)` with `style:--lh-normal="normal"` — a custom property standing in for `line-height: normal` on a mono footer; the footer takes the code role.
+
+## Fixed
+
+fixed: apps/dashboard/src/lib/components/features/DiffModal.svelte:88 header padding-start 16px → `ps-space-5` (18px, the Dialog's body padding, so the title stands on the dialog's own edge); padding-block 12 → `py-space-3`, gaps 8/12 → `gap-y-space-2` / `gap-x-space-3` — DESIGN.md, Layout: the spacing ladder, Dialog: 18px body padding.
+fixed: apps/dashboard/src/lib/components/features/DiffModal.svelte:129 `--diffs-font-size: 0.8125rem` → `var(--text-label)`, `--diffs-line-height: 1.6` → `var(--leading-code)` — DESIGN.md, Typography: only the type roles' sizes and leadings.
+fixed: apps/dashboard/src/lib/components/features/DirectoryPicker.svelte:212 skeleton row 30px → `h-c-btn-h-sm` (the `sm` Button row it stands for), bar widths 7/10/6rem → the kit's `label` / `title` / `name`, bar height 12px → the label role's x-height — DESIGN.md, Empty, loading and skeleton states: "exactly the size of what it stands for".
+fixed: apps/dashboard/src/lib/components/features/MarkdownEditor.svelte `crepe-host` block-handle rule re-anchored from the dead `.crepe-host` class to `[data-slot="crepe-host"]`.
+fixed: apps/dashboard/src/lib/components/features/MarkdownEditor.svelte `--hit: 44px` → `--c-btn-h-lg` — DESIGN.md, Focus and hit areas: the 44px floor.
+fixed: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte:233 doc row min-height 26px / 44px → `--tx-line` / `--tx-line-touch`, the transcript line's own height and its touch floor.
+fixed: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte:254 chevron turn `transform: rotate(90deg)` through a custom property → `group-state-open:rotate-90` on `transition-[rotate]`.
+fixed: apps/dashboard/src/lib/components/features/tool-cards/OutputBlock.svelte:57 well padding 10px 12px → `p-space-3` (11px).
+
+## Gaps
+
+gap: apps/dashboard/src/app.css (outside this lane) the Crepe sheets are imported unlayered by MarkdownEditor.svelte:24-35; for `crepe-host` to win without `!important` they must be `@import … layer(crepe)` with `crepe` ahead of `components` in `@layer theme, base, components, utilities, overrides;` — DESIGN.md: the app's one cascade order.
+gap: apps/dashboard/src/app.css `.prose` rules sit in a `utilities` layer and outrank any `components` rule; `tool-prose` must land in `overrides` — the same cascade order.
+gap: apps/dashboard/src/lib/components/features/MarkdownEditor.svelte `(hover: none)` carve-out became `no-hover`, which also matches a coarse pointer on a hover-capable device — wider than the original, by the theme's own definition of no-hover.
+gap: apps/dashboard/src/lib/components/features/DiffModal.svelte:82 the 90vh × 95vw box is inline custom properties on DialogContent; no token holds a modal's viewport share — DESIGN.md, Dialog.
+gap: apps/dashboard/src/lib/components/features/ProviderLogo.svelte `style` box (`width:Npx;height:Npx`) is a runtime inline string from the `size` prop; every caller passes a px number, no token — DESIGN.md, Layout (icon 12/16/20).
+
+## Contracts
+
+None.
+
+## Design Critique (interface-craft), from the markup and classes against DESIGN.md
+
+fixed: the diff dialog's header title now starts on the dialog's own 18px edge and keeps 52px clear for the close button, so a long path wraps (`flex-wrap`, `min-w-0`) rather than running under it.
+fixed: the memory document row's touch height is the transcript line's own token, so a finger gets 44px and a pointer keeps 26px.
+gap: the Browse trigger, the doc row and the path rows restyle kit parts by class (kit-swap above) — until the variants land they stay hand-built.

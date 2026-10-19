@@ -125,28 +125,10 @@
   <Logo
     data-provider-logo-class={classes}
     aria-hidden="true"
-    class={INK.has(key) ? `${classes} provider-ink` : classes}
+    data-slot="provider-logo"
+    data-ink={INK.has(key) || undefined}
+    class={INK.has(key) ? cn(classes, "text-ink-strong") : classes}
     style={`${box}${style}`}
     {...sized}
   />
 {/if}
-
-<style>
-  /* residual: foreign-dom — the icon component's own svg and its paths */
-  /* The ink is the mark's `color`, and its shapes fill with `currentColor`.
-     `--ink-strong` is a `light-dark()` value, and WebKit resolved that
-     function wrongly inside an SVG `fill` (bugs.webkit.org 283489), which
-     left these marks in the light theme's ink on the dark ground. `color`
-     takes the same token the way every line of text does. The descendants
-     too: `github-icon` sets its fill on the path, and a presentation
-     attribute loses to any rule that matches. A caller never tints a mark,
-     so a row that colours its own icons (`.row svg.lead` on the clone field)
-     must not reach this one: the ink is declared over any such rule. */
-  :global(svg.provider-ink) {
-    color: var(--ink-strong) !important;
-  }
-  :global(svg.provider-ink),
-  :global(svg.provider-ink *) {
-    fill: currentColor;
-  }
-</style>

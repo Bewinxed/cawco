@@ -83,15 +83,9 @@
     style="--modal-h: 90vh; --modal-w: 95vw"
     width="document"
   >
-    <!-- literal: gap 8px 12px, padding 12px 52px 12px 16px -->
     <header
       data-slot="head"
-      class="flex flex-wrap items-center justify-between gap-y-(--head-gap-y) gap-x-(--head-gap-x) pt-(--head-pad-y) pr-(--head-pad-end) pb-(--head-pad-y) pl-(--head-pad-start) border-b border-b-border-hairline"
-      style:--head-gap-y="8px"
-      style:--head-gap-x="12px"
-      style:--head-pad-y="12px"
-      style:--head-pad-end="52px"
-      style:--head-pad-start="16px"
+      class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2 py-space-3 ps-space-5 pe-(--c-dialog-close-clear) border-b border-b-border-hairline"
     >
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex min-w-0 items-center gap-2">
@@ -132,8 +126,8 @@
         <div
           data-slot="layer"
           class="min-h-full"
-          style:--diffs-font-size="0.8125rem"
-          style:--diffs-line-height="1.6"
+          style:--diffs-font-size="var(--text-label)"
+          style:--diffs-line-height="var(--leading-code)"
           style:--diffs-bg-separator-override="var(--muted)"
           in:crossIn
           out:crossOut
