@@ -310,3 +310,60 @@ export async function proveSwap(
     `arrivals ${JSON.stringify(runs)}`
   );
 }
+
+/** Now on the page's own clock (`performance.now()`): where a carried wait is dated from. */
+export const pageNow = (page: Page): Promise<number> =>
+  page.evaluate(() => performance.now());
+
+/**
+ * A wait already under way when its skeleton is drawn (a timer that waited
+ * first, rows let go at the grace): its bones, `bones` naming every kit
+ * skeleton of it, carry the wait on (motion/curves `carriesWait`) from
+ * `since` (`pageNow` as the wait began). Unseen at grace − 100 ms from then,
+ * every one seen by grace + `--dur-fade` + 50 ms (never a second grace, which
+ * would leave them unseen until twice the grace), whole by +400 ms.
+ */
+export async function proveCarried(
+  kit: Kit,
+  page: Page,
+  name: string,
+  bones: string,
+  since: number
+): Promise<void> {
+  const grace = await tokenMs(page, "--dur-wait-grace");
+  const fade = await tokenMs(page, "--dur-fade");
+  const at = (when: number) =>
+    page.evaluate(
+      async ({ selector, from, offset }) => {
+        const wait = from + offset - performance.now();
+        if (wait > 0) {
+          await new Promise((done) => setTimeout(done, wait));
+        }
+        const all = [...document.querySelectorAll(selector)];
+        return {
+          late: Math.round(performance.now() - from - offset),
+          bones: all.length,
+          seen: all.filter((bone) =>
+            bone.checkVisibility({ opacityProperty: true })
+          ).length,
+          opacities: all.map(
+            (bone) =>
+              Math.round(Number(getComputedStyle(bone).opacity) * 100) / 100
+          ),
+        };
+      },
+      { selector: bones, from: since, offset: when }
+    );
+  const before = await at(grace - 100);
+  const past = await at(grace + fade + 50);
+  const whole = await at(grace + fade + 400);
+  kit.check(
+    `${name}: the wait carried on: nothing seen at --dur-wait-grace − 100 ms (${grace} ms), every bone seen by grace + --dur-fade + 50 ms, whole by +400 ms, never a second grace`,
+    before.seen === 0 &&
+      past.bones > 0 &&
+      past.seen === past.bones &&
+      whole.bones > 0 &&
+      whole.opacities.every((one) => one >= 0.99),
+    `at grace − 100: ${JSON.stringify(before)}; at grace + fade + 50: ${JSON.stringify(past)}; at +400: ${JSON.stringify(whole)}`
+  );
+}

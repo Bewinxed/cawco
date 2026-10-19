@@ -38,19 +38,32 @@
  *  8a. Routines read a second time in the same browser: every block's body,
  *     Sources and Actions too, stands at the height it last drew at
  *     (kept-bodies.ts): the whole page's box is the read's.
+ *  3b. The graph asked for cold, the list's read held too: one skeleton,
+ *     the graph's (the hub's measured shape says it is one).
+ *  6. (also) The tab's wait reaches the pane's cover alone, never a later
+ *     skeleton of the pane (SheetInspector's rows).
+ *  9. The board on a slow switch to another project, and 10. Jump's names
+ *     let go at the grace: a wait already under way is carried into its
+ *     skeleton (`carriesWait`), seen by grace + fade, never a second grace.
+ *  11. A hub just started answers its projects and their decisions' shapes
+ *     from memory, and measures a project with no folder without making one.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, in order
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Page } from "playwright-core";
 import {
   PRICING,
   pageProgram,
   seedDecisions,
 } from "../../../decisions-preview/seed";
-import { MACHINE, type Reply } from "../../../scratch-fleet";
+import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../../kit";
 import {
   type HeldRead,
   holdRead,
+  pageNow,
+  proveCarried,
   proveSwap,
   type SwapSite,
   watchSwaps,
@@ -65,6 +78,8 @@ const GRAPH_READ = /\/api\/projects\/[^/]+\/decisions\/graph$/;
 const PAGE_READ = /\/api\/projects\/[^/]+\/decisions\/landing$/;
 const ADDRESS_READ = /\/api\/instances\/[^/]+\/preview-(address|ticket)/;
 const ARTIFACT_READ = /\/api\/artifacts\/[^/?]+$/;
+/** Jump's names ask (find-client `findNames`: no transcripts). */
+const NAMES_READ = /\/api\/find\?.*transcripts=0/;
 /** A project's tasks, and one task, as the board and the pane read them. */
 const TASK_READS = /\/api\/projects\/[^/]+\/tasks(\/[^/?]+)?(\?.*)?$/;
 
@@ -156,6 +171,20 @@ const run = async (kit: Kit) => {
     empty: '[data-routines-read] [data-slot="empty"]',
   });
 
+  // The hub measures a project's decisions off the request path (decisions.ts
+  // `measure`): the legs start once it has, as a person's later visit would.
+  const measured = (id: string, pages: number) =>
+    until(
+      `the hub's measure of ${id}'s decisions`,
+      () =>
+        fleet.api<Record<string, { graphed: boolean; pages: number }>>(
+          "/api/decisions/shapes"
+        ),
+      (all) => all[id]?.pages === pages,
+      60_000
+    );
+  await measured(project, 3);
+
   // 2. Decisions, the list: cold on the graphed project and on one with no
   // graph, then the graphed one read a second time.
   const listSite = (name: string): SwapSite => ({
@@ -171,6 +200,7 @@ const run = async (kit: Kit) => {
     listSite("2a decisions list, graphed, cold")
   );
   const flat = await flatProject(fleet);
+  await measured(flat, 1);
   await leg(
     kit,
     `${base}/project/${flat}?view=decisions`,
@@ -192,6 +222,43 @@ const run = async (kit: Kit) => {
     empty: '[data-slot="decisions"] [data-slot="empty"]',
   });
 
+  // 3b. The graph asked for cold, the list's read held too: the hub's shape
+  // says it is a graph, so the graph's skeleton is the one that stands; the
+  // list's never does.
+  {
+    const graphSite: SwapSite = {
+      name: "3b decisions graph, cold, the list held",
+      skeleton: '[data-decisions-reading="graph"]',
+      content: "[data-decisions-graph-read]",
+    };
+    const shown = await kit.page("desk", { theme: "light" });
+    shown.setDefaultTimeout(60_000);
+    await watchSwaps(shown, [
+      graphSite,
+      {
+        name: "list",
+        skeleton: '[data-decisions-reading="list"]',
+        content: "x-never",
+      },
+    ]);
+    const listHeld = await holdRead(shown, DECISIONS_READ);
+    const graphHeld = await holdRead(shown, GRAPH_READ);
+    await shown.goto(at("view=decisions&mode=graph"), {
+      waitUntil: "domcontentloaded",
+    });
+    await proveSwap(kit, shown, graphSite, graphHeld);
+    const listBorn = await shown.evaluate(
+      () => window.probeSwap?.born.list ?? null
+    );
+    kit.check(
+      "3b: one skeleton stands, the graph's; the list's never does",
+      listBorn === null,
+      `the list's skeleton born at ${listBorn}`
+    );
+    await listHeld.release();
+    await shown.close();
+  }
+
   // 4. A decision page, its read held: its opening line, then its frame.
   await leg(kit, at("view=decisions&page=landing"), PAGE_READ, {
     name: "4 decision page",
@@ -207,14 +274,55 @@ const run = async (kit: Kit) => {
     content: '[data-slot="decisions"] iframe',
   });
 
-  // 6. An artifact in a tab of its own.
+  // 6. An artifact in a tab of its own; the wait it carries reaches the
+  // pane's cover alone (PreviewPane `waitingSince`), never a skeleton the
+  // pane draws later (SheetInspector's rows).
   const artifact = seeded.artifacts.landing;
-  await leg(kit, `${base}/artifact/${artifact}`, ARTIFACT_READ, {
-    name: "6 artifact tab",
-    skeleton: "[data-artifact-opening]",
-    content: '[data-slot="artifact-tab"] > [data-artifact-arrived]',
-    empty: '[data-slot="artifact-tab"] [data-slot="empty"]',
-  });
+  {
+    const tabSite: SwapSite = {
+      name: "6 artifact tab",
+      skeleton: "[data-artifact-opening]",
+      content: '[data-slot="artifact-tab"] > [data-artifact-arrived]',
+      empty: '[data-slot="artifact-tab"] [data-slot="empty"]',
+    };
+    const { page: tab, held } = await heldPage(
+      kit,
+      `${base}/artifact/${artifact}`,
+      ARTIFACT_READ,
+      tabSite
+    );
+    await proveSwap(kit, tab, tabSite, held);
+    const carried = await tab.evaluate(() => {
+      const arrived = document.querySelector("[data-artifact-arrived]");
+      const cover = arrived?.querySelector('[data-slot="cover"]');
+      const outside = [...(arrived?.querySelectorAll("*") ?? [])].filter(
+        (el) =>
+          !cover?.contains(el) &&
+          getComputedStyle(el).getPropertyValue("--wait-grace-left").trim() !==
+            ""
+      );
+      return {
+        cover: cover
+          ? getComputedStyle(cover).getPropertyValue("--wait-grace-left").trim()
+          : null,
+        outside: outside.length,
+        wrapper: arrived
+          ? getComputedStyle(arrived)
+              .getPropertyValue("--wait-grace-left")
+              .trim()
+          : null,
+      };
+    });
+    kit.check(
+      "6: the tab's wait reaches the pane's cover alone: no other element in the pane (SheetInspector's rows among them) carries it",
+      carried.cover !== null &&
+        carried.cover !== "" &&
+        carried.outside === 0 &&
+        carried.wrapper === "",
+      JSON.stringify(carried)
+    );
+    await tab.close();
+  }
 
   // 7. A task's review stage, drawing what its session presented.
   const task = await fleet.api<{ id: string }>(
@@ -237,6 +345,136 @@ const run = async (kit: Kit) => {
   await page.goto(at(`task=${task.id}`), { waitUntil: "domcontentloaded" });
   await proveSwap(kit, page, stageSite, held);
   await page.close();
+
+  // 9. The board on a slow switch to another project: its timer waits the
+  // grace, then the skeleton stands at once, carrying that wait on.
+  {
+    const board = await kit.page("desk", { theme: "light" });
+    board.setDefaultTimeout(60_000);
+    await board.goto(`${base}/project/${flat}?view=board`, {
+      waitUntil: "domcontentloaded",
+    });
+    await board.waitForSelector('[data-slot="pane"]');
+    await board.waitForTimeout(800);
+    const switching = await holdRead(
+      board,
+      new RegExp(`/api/projects/${project}/tasks`)
+    );
+    const since = await pageNow(board);
+    await board.evaluate((to) => {
+      const link = document.createElement("a");
+      link.href = to;
+      link.textContent = "switch";
+      document.body.append(link);
+      link.click();
+    }, `/project/${project}?view=board`);
+    await proveCarried(
+      kit,
+      board,
+      "9 the board on a slow switch",
+      "[data-board-reading] .kit-skeleton",
+      since
+    );
+    await switching.release();
+    await board.close();
+  }
+
+  // 10. Jump's names let go at the grace (the last answer kept while the
+  // next is asked): the skeleton that takes their place carries that wait.
+  {
+    const jump = await kit.page("desk", { theme: "light" });
+    jump.setDefaultTimeout(60_000);
+    await jump.goto(`${base}/session/${seeded.writers.landing}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await jump.waitForSelector('[data-slot="pane"]');
+    await jump.waitForTimeout(1500);
+    await jump.keyboard.press("Control+KeyK");
+    const field = jump.locator(".jump-pop [data-slot='finder-field'] input");
+    await field.waitFor({ timeout: 10_000 });
+    await jump.waitForTimeout(1500);
+    const asking = await holdRead(jump, NAMES_READ);
+    const since = await pageNow(jump);
+    await field.type("z");
+    await proveCarried(
+      kit,
+      jump,
+      "10 Jump's names let go at the grace",
+      ".jump-pop .skeleton-row:not(.tall)",
+      since
+    );
+    await asking.release();
+    await jump.close();
+  }
+
+  // 11. A hub just started: its projects and their decisions' shapes answer
+  // at once, from memory, and a project with no folder is measured without
+  // one being made (no mkdir, no git init, no commit).
+  const bare = await fleet.api<{ id: string }>("/api/projects", {
+    name: "skeleton-swaps-bare",
+    caw: false,
+  });
+  const projectsDir = await projectsDirOf(fleet);
+  const hadFolder = existsSync(join(projectsDir, bare.id));
+  await fleet.stop("hub");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const asked = performance.now();
+  const listed = await fetch(`${fleet.base}/api/projects`);
+  const shapes = await fetch(`${fleet.base}/api/decisions/shapes`);
+  const answeredMs = Math.round(performance.now() - asked);
+  const bareShape = await until(
+    "the bare project measured",
+    () =>
+      fleet.api<Record<string, { graphed: boolean; pages: number }>>(
+        "/api/decisions/shapes"
+      ),
+    (all) => all[bare.id] !== undefined,
+    30_000
+  ).catch(() => null);
+  const madeFolder = existsSync(join(projectsDir, bare.id));
+  const hubLog = await fleet.logs("hub");
+  const failedMeasure = hubLog
+    .split("\n")
+    .filter((line) => line.includes("measuring the projects' decisions"));
+  kit.check(
+    "11: a cold hub answers its projects and their shapes from memory, and measures a project with no folder without making one",
+    listed.status === 200 &&
+      shapes.status === 200 &&
+      !hadFolder &&
+      !madeFolder &&
+      bareShape?.[bare.id]?.pages === 0 &&
+      bareShape[bare.id]?.graphed === false &&
+      failedMeasure.length === 0,
+    JSON.stringify({
+      projects: listed.status,
+      shapes: shapes.status,
+      answeredMs,
+      bare: bareShape?.[bare.id] ?? null,
+      folder: {
+        before: hadFolder,
+        after: madeFolder,
+        at: join(projectsDir, bare.id),
+      },
+      failedMeasure,
+    })
+  );
+};
+
+/** Where the scratch hub keeps its projects' folders: `projects/` beside its database (core paths.ts `hubProjectsDir`). */
+const projectsDirOf = async (fleet: KitFleet): Promise<string> => {
+  const named = fleet.env.CAWCO_DB_PATH;
+  if (named) {
+    return join(dirname(named), "projects");
+  }
+  for await (const db of new Bun.Glob("**/cawco.db").scan({
+    cwd: fleet.home,
+    dot: true,
+    onlyFiles: true,
+  })) {
+    return join(fleet.home, dirname(db), "projects");
+  }
+  throw new Error(`no cawco.db under ${fleet.home}`);
 };
 
 /**
