@@ -27,6 +27,12 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  *
  * Every timer is unref'd: a hub is kept alive by its listening socket, never
  * by something it scheduled.
+ *
+ * A run that throws fails that run alone: its error goes to the log with its
+ * stack ({@link timerFailed}), and the hub, and every other timer, go on (an
+ * `every` keeps its schedule). A timer has no caller to hand the error to,
+ * and the runtime ends the process on a throw no one catches: one publish
+ * that met a bad row took the whole fleet's hub down that way.
  */
 export interface HubLifetimeShape {
   /** Runs `run` once after `ms`, unless it is cancelled or the lifetime closes first. */
@@ -54,6 +60,22 @@ export interface HubLifetimeShape {
   readonly sleep: (ms: number) => Promise<void>;
 }
 
+/** A timer's run threw: said in one line with its stack, the hub's own words before it. */
+const timerFailed = (error: unknown): void => {
+  console.error(
+    `[hub] a scheduled run failed, and only that run: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`
+  );
+};
+
+/** `run`, its throw said rather than left to end the process. */
+const guarded = (run: () => void) => (): void => {
+  try {
+    run();
+  } catch (error) {
+    timerFailed(error);
+  }
+};
+
 export const makeLifetime = (): HubLifetimeShape => {
   const timers = new Set<HubTimer>();
   const releases: (() => void)[] = [];
@@ -70,15 +92,16 @@ export const makeLifetime = (): HubLifetimeShape => {
     return timer;
   };
   const after = (ms: number, run: () => void): HubTimer => {
+    const guardedRun = guarded(run);
     const timer = setTimeout(() => {
       timers.delete(timer);
-      run();
+      guardedRun();
     }, ms);
     return hold(timer);
   };
   return {
     after,
-    every: (ms, run) => hold(setInterval(run, ms)),
+    every: (ms, run) => hold(setInterval(guarded(run), ms)),
     cancel: (timer) => {
       if (timer) {
         clearTimeout(timer);

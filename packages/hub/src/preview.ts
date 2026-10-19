@@ -92,19 +92,36 @@ export interface PreviewTarget {
   upstream?: { address: string; port: number; token: string };
 }
 
+/**
+ * What each session's panel shows, by instance id: every key is a session's,
+ * so the board, the panel's frames and the session's own port read it as one.
+ */
 export const previewTargets = new Map<string, PreviewTarget>();
 
 /**
  * A decision page's Preview of a session's dev-server preview or sheet: its
- * target in {@link previewTargets} and its listener on an origin of its own
- * are keyed by the embedded artifact, apart from every session's. A dev
- * server and a stage serve from their root, so the page cannot show one under
- * a path of its own origin; the machine keys its listener by the same key.
+ * target in {@link embedTargets} and its listener on an origin of its own
+ * are keyed by the embedded artifact ({@link embedKey}), apart from every
+ * session's. A dev server and a stage serve from their root, so the page
+ * cannot show one under a path of its own origin; the machine keys its
+ * listener by the same key. No session owns the key: it has no row, no
+ * session port and no panel, so it is never in {@link previewTargets}.
  */
+export const embedTargets = new Map<string, PreviewTarget>();
+
 const EMBED_PREFIX = "embed-";
 export const embedKey = (artifactId: string): string =>
   `${EMBED_PREFIX}${artifactId}`;
-export const isEmbed = (key: string): boolean => key.startsWith(EMBED_PREFIX);
+const isEmbed = (key: string): boolean => key.startsWith(EMBED_PREFIX);
+
+/**
+ * The map that holds `key`'s target: an embed's, or a session's. Only what
+ * reaches a machine's listener (the relay, its start, a register, a machine
+ * gone) takes either key; everything a session's panel or the board reads
+ * goes to {@link previewTargets} by name.
+ */
+export const targetsOf = (key: string): Map<string, PreviewTarget> =>
+  isEmbed(key) ? embedTargets : previewTargets;
 
 /**
  * The dashboard origins this hub is reached from: each one a dashboard or an
@@ -488,7 +505,7 @@ async function pingSession(
   instanceId: string,
   deps: PreviewListenerDeps
 ): Promise<Response> {
-  const target = previewTargets.get(instanceId);
+  const target = targetsOf(instanceId).get(instanceId);
   if (
     !target ||
     ("page" in target.source && target.artifact.kind !== "component")
@@ -711,7 +728,7 @@ async function serveSession(
   if (hubsOwn(pathname)) {
     return new Response("Not found", { status: 404 });
   }
-  const target = previewTargets.get(instanceId);
+  const target = targetsOf(instanceId).get(instanceId);
   if (!target) {
     previewFailed(HOP, instanceId, "its session shows no preview");
     return downResponse("closed", 404);

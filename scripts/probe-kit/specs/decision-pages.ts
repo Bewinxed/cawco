@@ -42,11 +42,16 @@
  *     live embed: a loop that crosses into the embed keeps every move made
  *     inside it, and marks an element inside the embed; a Comment tap inside
  *     the embed anchors to the element under it there.
+ * (i) Nothing published takes the hub down: a page whose option embeds a
+ *     live preview, then a second and a third published right after it;
+ *     the hub's pid stays, /health answers throughout, every page draws, and
+ *     the hub's log holds no FOREIGN KEY line.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
 import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -427,6 +432,8 @@ interface On {
   base: string;
   desk: Page;
   fleet: KitFleet;
+  /** The hub's process, as the fleet launched it. */
+  hub: ReturnType<KitFleet["launch"]>;
   kit: Kit;
   mockup: string;
   page: string;
@@ -434,6 +441,8 @@ interface On {
   projectId: string;
   read: () => Promise<{ pageHash: string; state: Doc["state"] }>;
   said: string[];
+  /** The dev server's preview artifact, which the pages embed. */
+  site: string;
   writer: string;
 }
 
@@ -442,7 +451,7 @@ const standUp = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
-  fleet.launch("hub");
+  const hub = fleet.launch("hub");
   await fleet.hubUp();
   fleet.fileAccount();
   fleet.launch("agent");
@@ -464,7 +473,7 @@ const standUp = async (kit: Kit) => {
   const said: string[] = [];
   desk.on("pageerror", (error) => said.push(String(error)));
   await open(desk, `${base}/session/${writer}`, '[data-slot="pane"]');
-  return { base, desk, fleet, projectId, said, writer };
+  return { base, desk, fleet, hub, projectId, said, writer };
 };
 
 /**
@@ -565,6 +574,7 @@ const publish = async (
         `/api/instances/${writer}/artifacts/${made.id}`
       ),
     said,
+    site: site.id,
   };
 };
 
@@ -1813,6 +1823,166 @@ const openToDraw = async (on: On) => {
     .catch(() => undefined);
 };
 
+/** A page whose option embeds the dev server's preview, live. */
+const embedPage = (
+  site: string
+) => `root = Decisions("Pick the host", [where], "Where the site runs.")
+where = Decision("where", "Where does the site run?", [here, there], "It runs on the machine today.")
+here = Option("here", "Here", "As it runs now.", true, [live])
+there = Option("there", "Elsewhere", "Somewhere new.")
+live = Preview("${site}", "The site as it runs")`;
+
+/** A page of one plain decision, card `card`. */
+const plainPage = (
+  card: string,
+  ask: string
+) => `root = Decisions("${ask}", [${card}])
+${card} = Decision("${card}", "${ask}", [yes, no], "Nothing is set yet.")
+yes = Option("yes", "Yes")
+no = Option("no", "No")`;
+
+/**
+ * (i) Nothing published takes the hub down: a page whose option embeds a
+ * live preview, drawn in the panel (which starts the embed's origin), then a
+ * second page right after it, then a third. The hub's process stays the one
+ * the fleet started, `/health` answers every 100 ms throughout, each page
+ * draws (the first with its embed live), and the hub's log holds no FOREIGN
+ * KEY line: an embed's key read as a session's once bound it a session port,
+ * whose row the database refused, and that throw in the board's publish
+ * timer ended the hub.
+ */
+const burstLeg = async (on: On) => {
+  const { desk, fleet, hub, kit, writer } = on;
+  const { pid } = hub;
+  const misses: string[] = [];
+  let polls = 0;
+  const watching: { on: boolean } = { on: true };
+  /** One read of `/health`: whether it answered ok within 2 s. */
+  const healthy = async () => {
+    try {
+      const read = await readWithin(2000, (signal) =>
+        fetch(`${fleet.base}/health`, { signal })
+      );
+      return read.kind === "answered" && read.value.ok;
+    } catch {
+      return false;
+    }
+  };
+  const watch = (async () => {
+    while (watching.on) {
+      polls += 1;
+      if (!(await healthy())) {
+        misses.push(new Date().toISOString());
+      }
+      await Bun.sleep(100);
+    }
+  })();
+  const make = (name: string, program: string) =>
+    fleet.api<{ id: string }>(`/api/instances/${writer}/artifacts`, {
+      kind: "page",
+      name,
+      program,
+    });
+  /** The page's card `card` in the desk's panel; null when it never draws. */
+  const cardIn = (card: string) =>
+    until(
+      `#decision-${card} in the panel`,
+      async () => {
+        const frame = await frameAt(desk, FRAME);
+        return (await countIn(frame, `#decision-${card}`)) > 0 ? frame : null;
+      },
+      Boolean,
+      30_000
+    ).catch(() => null);
+  /** The embed's source in the first page's card, once its page has it. */
+  const embedOf = (frame: Frame) => {
+    const src = async () => {
+      try {
+        return await frame
+          .locator("#decision-where iframe.screen")
+          .first()
+          .getAttribute("src", { timeout: 1000 });
+      } catch {
+        return null;
+      }
+    };
+    return until("the option's embed framed", src, Boolean, 30_000).catch(
+      () => null
+    );
+  };
+
+  const first = await make("host-pick", embedPage(on.site)).catch(
+    (error: unknown) => ({ id: "", error: String(error) })
+  );
+  const firstFrame = await cardIn("where");
+  const framed = firstFrame ? await embedOf(firstFrame) : null;
+  // Right after the embed's origin started: the next publishes.
+  const second = await make(
+    "second-pick",
+    plainPage("tone", "Which tone?")
+  ).catch((error: unknown) => ({ id: "", error: String(error) }));
+  const third = await make(
+    "third-pick",
+    plainPage("size", "Which size?")
+  ).catch((error: unknown) => ({ id: "", error: String(error) }));
+  const thirdDrew = !!(await cardIn("size"));
+  // Each page drawn again from the panel, the first with its embed live.
+  const shows = async (id: string, card: string) => {
+    await fleet
+      .api(`/api/instances/${writer}/artifacts/${id}/show`, {})
+      .catch(() => undefined);
+    return cardIn(card);
+  };
+  const again = first.id ? await shows(first.id, "where") : null;
+  const src = again ? await embedOf(again) : null;
+  const live = src
+    ? await until(
+        "the first page's embed live",
+        () => wordsAt(desk, src),
+        (words) => words === "The live site",
+        30_000
+      ).catch(() => "")
+    : "";
+  const secondDrew = second.id ? !!(await shows(second.id, "tone")) : false;
+  watching.on = false;
+  await watch;
+  const log = await fleet.logs("hub");
+  const foreignKey = log
+    .split("\n")
+    .filter((line) => line.includes("FOREIGN KEY"));
+  const alive = hub.exitCode === null && hub.pid === pid;
+  kit.check(
+    "(i) the hub outlives three pages published in a row, the first embedding a live preview: its process the same, /health answering throughout",
+    alive && misses.length === 0 && polls > 0,
+    JSON.stringify({
+      pid,
+      exitCode: hub.exitCode,
+      signal: hub.signalCode,
+      polls,
+      missed: misses.length,
+      firstMiss: misses[0] ?? null,
+    })
+  );
+  kit.check(
+    "(i) every page draws: the first with its option's embed live, the second, the third",
+    !!framed && live === "The live site" && secondDrew && thirdDrew,
+    JSON.stringify({
+      first,
+      second,
+      third,
+      framed,
+      live,
+      secondDrew,
+      thirdDrew,
+    })
+  );
+  kit.check(
+    "(i) the hub's log holds no FOREIGN KEY line",
+    foreignKey.length === 0,
+    foreignKey.slice(0, 4).join(" | ") || "none"
+  );
+};
+
 const run = async (kit: Kit) => {
   const on = await publish(kit, await standUp(kit));
   for (const view of ["desk", "phone"] as const) {
@@ -1844,6 +2014,8 @@ const run = async (kit: Kit) => {
   }
   await openToDraw(on);
   await openAsCanvas(on);
+  // Last: its pages join the project's graph, which (c) counts.
+  await burstLeg(on);
   kit.check(
     "the pages said no error",
     on.said.length === 0,

@@ -637,7 +637,7 @@ import {
 import {
   createPreviewListeners,
   embedKey,
-  isEmbed,
+  embedTargets,
   noteParent,
   type PreviewListenerDeps,
   type PreviewReach,
@@ -646,6 +646,7 @@ import {
   previewFrame,
   previewSourceKey,
   previewTargets,
+  targetsOf,
 } from "./preview";
 import { mintTicket } from "./preview-access";
 import { previewRoutes } from "./preview-routes";
@@ -9675,11 +9676,6 @@ export const createServer = (
     state: "open" | "closed",
     target: Pick<PreviewTarget, "artifact" | "revision" | "source">
   ) => {
-    // An embedded preview is a decision page's, never a session's panel: no
-    // view follows it, and it has no session port to name.
-    if (isEmbed(instanceId)) {
-      return previewFrame(instanceId, state, target, null, [], null);
-    }
     const frame = previewFrame(
       instanceId,
       state,
@@ -9760,8 +9756,8 @@ export const createServer = (
     // Its decision pages' embedded previews go with it, their machines'
     // listeners too.
     for (const key of previewListeners.releaseEmbeds(instanceId)) {
-      const target = previewTargets.get(key);
-      previewTargets.delete(key);
+      const target = embedTargets.get(key);
+      embedTargets.delete(key);
       if (target && !("page" in target.source)) {
         detach(
           callAgent(
@@ -9810,7 +9806,7 @@ export const createServer = (
     const token = crypto.randomUUID();
     const stopLate = () => {
       // Not when a register has since pointed the target at this very listener.
-      if (previewTargets.get(instanceId)?.upstream?.token === token) {
+      if (targetsOf(instanceId).get(instanceId)?.upstream?.token === token) {
         return;
       }
       detach(
@@ -10042,7 +10038,8 @@ export const createServer = (
     if (inFlight?.generation === generation) {
       return inFlight.reach;
     }
-    const target = previewTargets.get(instanceId);
+    const targets = targetsOf(instanceId);
+    const target = targets.get(instanceId);
     if (!target) {
       return Promise.resolve({
         ok: false,
@@ -10069,7 +10066,7 @@ export const createServer = (
         target.source,
         generation
       );
-      const now = previewTargets.get(instanceId);
+      const now = targets.get(instanceId);
       if (!now) {
         return {
           ok: false,
@@ -10083,7 +10080,7 @@ export const createServer = (
       if (!started.ok) {
         return started;
       }
-      previewTargets.set(instanceId, { ...now, upstream: started.upstream });
+      targets.set(instanceId, { ...now, upstream: started.upstream });
       return started;
     })().finally(() => {
       if (reaching.get(instanceId)?.reach === reach) {
@@ -10103,12 +10100,13 @@ export const createServer = (
     instanceId: string,
     upstream: NonNullable<PreviewTarget["upstream"]>
   ): void => {
-    const target = previewTargets.get(instanceId);
+    const targets = targetsOf(instanceId);
+    const target = targets.get(instanceId);
     if (
       target?.upstream?.address === upstream.address &&
       target.upstream.port === upstream.port
     ) {
-      previewTargets.set(instanceId, {
+      targets.set(instanceId, {
         artifact: target.artifact,
         machineId: target.machineId,
         source: target.source,
@@ -11337,13 +11335,13 @@ export const createServer = (
       return {};
     }
     const key = embedKey(artifactId);
-    const now = previewTargets.get(key);
+    const now = embedTargets.get(key);
     if (
       !now ||
       previewSourceKey(now.source) !== previewSourceKey(row.source) ||
       now.machineId !== row.machineId
     ) {
-      previewTargets.set(key, {
+      embedTargets.set(key, {
         artifact: { id: row.id, kind: row.kind, name: row.name },
         machineId: row.machineId,
         source: row.source,
@@ -11478,18 +11476,21 @@ export const createServer = (
     const listeners = new Map(
       serving.map((listener) => [listener.instanceId, listener])
     );
-    for (const [instanceId, target] of previewTargets) {
+    // A session's panel and a decision page's embed alike: the machine keys
+    // its listeners by either.
+    for (const [key, target] of [...previewTargets, ...embedTargets]) {
       if (target.machineId !== machineId || "page" in target.source) {
         continue;
       }
-      nextPreviewGeneration(instanceId);
+      const targets = targetsOf(key);
+      nextPreviewGeneration(key);
       const held: PreviewTarget = {
         artifact: target.artifact,
         machineId,
         source: target.source,
         revision: target.revision,
       };
-      const listener = listeners.get(instanceId);
+      const listener = listeners.get(key);
       if (
         listener &&
         previewSourceKey(listener.source) === previewSourceKey(target.source) &&
@@ -11497,17 +11498,17 @@ export const createServer = (
       ) {
         // Through the hub's SSH connection to the machine, carried anew on
         // this connection: until it is, a request starts the listener again.
-        previewTargets.set(instanceId, held);
-        const generation = previewGenerationOf(instanceId);
+        targets.set(key, held);
+        const generation = previewGenerationOf(key);
         sshTunnels.carry(machineId, listener.port).then(
           (port) => {
-            const now = previewTargets.get(instanceId);
+            const now = targets.get(key);
             if (
               now &&
               !now.upstream &&
-              previewGenerationOf(instanceId) === generation
+              previewGenerationOf(key) === generation
             ) {
-              previewTargets.set(instanceId, {
+              targets.set(key, {
                 ...now,
                 upstream: { address: "127.0.0.1", port, token: listener.token },
               });
@@ -11515,7 +11516,7 @@ export const createServer = (
           },
           (error: unknown) =>
             console.warn(
-              `[hub] preview for ${instanceId} is not pointed at its listener again: ${error instanceof Error ? error.message : String(error)}`
+              `[hub] preview for ${key} is not pointed at its listener again: ${error instanceof Error ? error.message : String(error)}`
             )
         );
         continue;
@@ -11524,7 +11525,7 @@ export const createServer = (
         listener &&
         previewSourceKey(listener.source) === previewSourceKey(target.source)
       ) {
-        previewTargets.set(instanceId, {
+        targets.set(key, {
           ...held,
           upstream: {
             address,
@@ -11534,30 +11535,35 @@ export const createServer = (
         });
         continue;
       }
-      previewTargets.set(instanceId, held);
-      reachPreview(instanceId)
+      targets.set(key, held);
+      reachPreview(key)
         .then((reached) => {
           if (!reached.ok) {
             // Closed meanwhile: nothing is owed. Gone again: its next
             // register tries again.
             if (reached.down !== "closed" && registry.agent(machineId)) {
               console.warn(
-                `[hub] preview for ${instanceId} did not restart (${reached.down}): ${reached.error}`
+                `[hub] preview for ${key} did not restart (${reached.down}): ${reached.error}`
               );
             }
             return;
           }
-          const now = previewTargets.get(instanceId);
+          // A session's panel reloads onto the new listener; an embed has
+          // no panel, and its next request is relayed to the new one.
+          const now = previewTargets.get(key);
           if (now) {
             const moved = { ...now, revision: crypto.randomUUID() };
-            previewTargets.set(instanceId, moved);
-            publishPreview(instanceId, "open", moved);
+            previewTargets.set(key, moved);
+            publishPreview(key, "open", moved);
           }
         })
         .catch(console.error);
     }
     for (const listener of serving) {
-      if (previewTargets.get(listener.instanceId)?.machineId === machineId) {
+      if (
+        targetsOf(listener.instanceId).get(listener.instanceId)?.machineId ===
+        machineId
+      ) {
         continue;
       }
       callAgent(
@@ -29516,11 +29522,11 @@ export const createServer = (
           // a listener, until the register that brings the machine back
           // starts one again (see `reconcilePreviews`). Nothing is published;
           // the panes keep the page they have until that "open" reloads them.
-          for (const [instanceId, target] of previewTargets) {
+          for (const [key, target] of [...previewTargets, ...embedTargets]) {
             // A page is the hub's own; no machine serves it.
             if (target.machineId === machineId && !("page" in target.source)) {
-              nextPreviewGeneration(instanceId);
-              previewTargets.set(instanceId, {
+              nextPreviewGeneration(key);
+              targetsOf(key).set(key, {
                 artifact: target.artifact,
                 machineId,
                 source: target.source,
