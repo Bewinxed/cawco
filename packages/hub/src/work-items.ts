@@ -786,6 +786,11 @@ export interface WorkItemDeps {
    */
   readonly end: (instanceId: string, waitMs?: number) => Promise<void>;
   /**
+   * The {@link WorkItems.finishingFor} hold on `instanceId` is over: what it
+   * kept at the hub goes now, in order (server.ts `releaseOwed`).
+   */
+  readonly finishOver: (instanceId: string) => void;
+  /**
    * THE gate on input to a session (server.ts `inputRefusal`): why a message
    * from `origin` may not reach it now, or nothing when it may.
    */
@@ -855,6 +860,15 @@ export interface WorkItemDeps {
    */
   readonly planSteps: (instanceId: string) => Promise<PlanStep[]>;
   readonly publish: (item: WorkItemSummary) => void;
+  /**
+   * The session called `finish_item`, and its turn ends with that call: each
+   * send its harness was handed and has not read, from a sender the
+   * {@link WorkItems.finishingFor} hold keeps, is taken back from the harness
+   * and kept at the hub, so it goes as the session's next turn and never
+   * into the turn that is ending (server.ts `reclaimUnread`). Settles once
+   * each has answered; never throws.
+   */
+  readonly reclaimUnread: (instanceId: string) => Promise<void>;
   /**
    * The retired workspace of `instanceId`'s item is cut again
    * ({@link WorkItems.recutFor}): what was kept at the hub for the session
@@ -1887,12 +1901,14 @@ export const createWorkItems = ({
   designHeld,
   designHold,
   end,
+  finishOver,
   itemEnded,
   lifetime,
   pauses,
   placeAhead,
   planSteps,
   publish,
+  reclaimUnread,
   recutDone,
   recutFailed,
   report,
@@ -1956,6 +1972,51 @@ export const createWorkItems = ({
   };
   /** Items whose landing this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
+  /**
+   * Items whose session called `finish_item` (to land, or blocked) in the
+   * turn still under way: that call is the turn's last step, and the turn
+   * ends as it answers. While an item is here, or its landing runs, a send
+   * from one who may reopen it waits at the hub ({@link finishingFor}) and
+   * goes once the turn is over ({@link closeTurn}). In memory: after a hub
+   * restart a landing's `landingSince` holds alone.
+   */
+  const lastTurns = new Set<string>();
+  /**
+   * The {@link finishingFor} hold on `item` ends if nothing keeps it: not
+   * its landing, and not its session's last turn, unless `turnOver` (that
+   * turn has ended) or the item is live (a gate sent it back, and the turn
+   * goes on). What the hold kept goes now.
+   */
+  const closeTurn = (item: WorkItemRow, turnOver: boolean): void => {
+    const now = db.workItem(item.id) ?? item;
+    if (now.landingSince) {
+      if (turnOver) {
+        lastTurns.delete(item.id);
+      }
+      return;
+    }
+    const [row] = db.getInstancesByIds([now.instanceId]);
+    if (
+      !(turnOver || LIVE.has(now.state)) &&
+      lastTurns.has(item.id) &&
+      row &&
+      inTurn(row)
+    ) {
+      return;
+    }
+    lastTurns.delete(item.id);
+    finishOver(now.instanceId);
+  };
+  /**
+   * `item`'s session called `finish_item`, and the call ends its turn: from
+   * here its reopeners' sends wait at the hub ({@link finishingFor}), and
+   * what its harness holds of theirs unread is taken back to wait with them
+   * ({@link WorkItemDeps.reclaimUnread}).
+   */
+  const lastTurn = async (item: WorkItemRow): Promise<void> => {
+    lastTurns.add(item.id);
+    await reclaimUnread(item.instanceId);
+  };
   /**
    * Each landing this hub process runs, by item: aborted as its item ends
    * ({@link finish}), which cancels every command the landing has running,
@@ -5099,10 +5160,10 @@ export const createWorkItems = ({
   /**
    * Whether a done item's workspace holds work since it landed: commits no
    * branch of `origin` has, or changes not committed (its outputs passed
-   * over). Its session made them after the item ended, on a word that
-   * reopened nothing (one sent while it was landing, {@link reopen}), and a
-   * `finish_item` lands them. A call repeated after its landing settled (a
-   * hub restarted under it) finds none: everything it landed is on `origin`.
+   * over). Its session made them after the item ended, in the turn that
+   * landed it, and a `finish_item` lands them. A call repeated after its
+   * landing settled (a hub restarted under it) finds none: everything it
+   * landed is on `origin`.
    * A held workspace holds such work by its record. Git inside its boundary,
    * never waiting; a read git cannot answer throws its words.
    */
@@ -6410,6 +6471,9 @@ export const createWorkItems = ({
       if (!LIVE.has((db.workItem(item.id) ?? item).state)) {
         settleSoon(item.workspaceId);
       }
+      // What waited out the landing goes: into the turn a failed gate hands
+      // back, or, landed, once the turn that called finish_item is over.
+      closeTurn(item, false);
     }
   };
 
@@ -7040,7 +7104,9 @@ export const createWorkItems = ({
       const item = row ? itemOf(row) : undefined;
       // Only a send made to finished work reopens it: one accepted while the
       // item was live and read after it ended was never addressed to a
-      // finished item.
+      // finished item. A reopener's send made while the item was finishing
+      // waited at the hub ({@link finishingFor}) and is accepted again as it
+      // goes, after the end, so it reopens it.
       if (
         item &&
         !LIVE.has(item.state) &&
@@ -7222,6 +7288,7 @@ export const createWorkItems = ({
       clearWait(item);
 
       if (request.blocked) {
+        await lastTurn(item);
         const error = `Blocked: ${request.blocked.command}${fenced(request.blocked.error)}`;
         const ended = finish(item, {
           state: "failed",
@@ -7253,8 +7320,43 @@ export const createWorkItems = ({
       if (held) {
         return held;
       }
+      await lastTurn(item);
       update(item.id, { submission: request, landingSince: new Date() });
       return (await settleLanding(item, request)).text;
+    },
+
+    /**
+     * Whether a send from `origin` waits at the hub because the session's
+     * item is finishing: its landing runs, or its session is in the turn
+     * that called `finish_item` ({@link lastTurns}). Only the words of one
+     * who may reopen the item wait (its parent, its lead, the reader): such
+     * a send handed to the harness now would join a turn that ends as
+     * `finish_item` answers, and read after the item ended it would reopen
+     * nothing ({@link reopen}: it was accepted while the item was live). Kept,
+     * it goes once that turn is over ({@link closeTurn}), as the next turn:
+     * a send the item's landing ended before reopens it.
+     */
+    finishingFor(instanceId: string, origin: NeutralOrigin): boolean {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      return (
+        !!item &&
+        (!!item.landingSince || lastTurns.has(item.id)) &&
+        mayReopen(item, origin)
+      );
+    },
+
+    /**
+     * A turn of `instanceId` ended: when it was the one that called
+     * `finish_item`, what the {@link finishingFor} hold kept goes now, unless
+     * its landing still runs (it goes as that settles).
+     */
+    turnOver(instanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item && lastTurns.has(item.id)) {
+        closeTurn(item, true);
+      }
     },
 
     /**
