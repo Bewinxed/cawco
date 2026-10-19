@@ -1,3 +1,12 @@
+<script lang="ts" module>
+  /**
+   * A switch under way from one project's page to another's: the project it
+   * goes to, and when it began (`performance.now()`). The shell mounts a new
+   * page for the project it lands on (Shell `pageKey`), which takes it once.
+   */
+  let switching: { to: string; at: number } | null = null;
+</script>
+
 <script lang="ts">
   /**
    * The project's views (design §2, PRD §5.2): the head with Caw as the
@@ -308,18 +317,37 @@
   );
   let reading = $state(false);
   /** When that wait began: the board's skeleton carries it on (`carriesWait`), never waiting the grace twice. */
-  let readingFrom = 0;
+  let readingFrom = $state(0);
   $effect(() => {
     if (!leavingFor) {
       reading = false;
+      // A switch that stopped short (this page still on its own project)
+      // hands nothing to a later visit.
+      if (switching && page.params.id !== switching.to) {
+        switching = null;
+      }
       return;
     }
     const began = performance.now();
+    switching = { to: String(navigating.to?.params?.id), at: began };
     const grace = setTimeout(() => {
       readingFrom = began;
       reading = true;
     }, dur("--dur-wait-grace"));
     return () => clearTimeout(grace);
+  });
+
+  /**
+   * The switch this page landed by (`switching`, the page before's): its
+   * wait, under way since the click, is carried on by the views drawn with
+   * the landing (DecisionsView `waitingSince`), and by none drawn later.
+   */
+  let landedFrom = $state(
+    switching?.to === untrack(() => projectId) ? switching.at : undefined
+  );
+  switching = null;
+  $effect(() => {
+    landedFrom = undefined;
   });
 
   const lead = new CawLead(
@@ -1753,6 +1781,7 @@
       starters={decisionStarters}
       taskHref={(id) => hrefOf(id)}
       {taskOf}
+      waitingSince={landedFrom}
     />
   {:else if !list}
     <div class="state">

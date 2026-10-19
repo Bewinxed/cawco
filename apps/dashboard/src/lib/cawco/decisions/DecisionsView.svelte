@@ -59,6 +59,7 @@
     sitDown,
     starters,
     go,
+    waitingSince,
   }: {
     projectId: string;
     projectName: string;
@@ -96,6 +97,8 @@
       mode?: DecisionsMode;
       page?: string | null;
     }) => void;
+    /** When the switch that landed on this project's page began (`performance.now()`), its load running first: the tab's wait from then. */
+    waitingSince?: number;
   } = $props();
 
   const list = $derived(decisions.list);
@@ -124,11 +127,13 @@
     shape ? Array.from({ length: shape.pages }, (_, i) => i) : []
   );
   /**
-   * When the tab's wait began: its opening. A skeleton that stands after it
-   * (the shapes read later, a tile counted in) carries that wait on rather
-   * than waiting the grace again (`carriesWait`).
+   * When the tab's wait began: the switch from another project that its
+   * page landed by (`waitingSince`: the click, its page's load ran after),
+   * else its opening. A skeleton that stands after it (the shapes read
+   * later, a tile counted in) carries that wait on rather than waiting the
+   * grace again (`carriesWait`).
    */
-  const waitFrom = performance.now();
+  const waitFrom = untrack(() => waitingSince) ?? performance.now();
   /** Caw's empty state arriving: one cross-fade, unless Caw lands into it by his flight, which is its arrival. */
   const cawArrives = (node: Element, flying: boolean): TransitionConfig =>
     flying ? { duration: 0 } : crossIn(node);
