@@ -1,48 +1,45 @@
 /**
- * The plan-view design preview (apps/dashboard/preview/plan-view), built and
- * served as the static folder the owner is shown, at a desk's 1440×900 and a
- * phone's 390×844 (touch), light and dark:
+ * The plan-view design preview (apps/dashboard/preview/plan-view): three
+ * ways to draw the plan, One ledger, Lanes and Crew first, built and served
+ * as the static page the stories' fixture also draws, at a desk's 1440×900
+ * and a phone's 390×844 (touch), light and dark:
  *
- * - every frame's caption starts "Desk" or "Phone";
- * - no row's words run past their frame, and the page never scrolls sideways;
- * - the proposed task frames draw one list: no second "To-dos" head or list;
- * - every row in a phone frame is 44px tall or more;
- * - each phone sheet stands on its screen's foot, inside it; the nesting
- *   rails are measured off their marks; nothing covers the intro;
- * - the progress ring stands bare: no outline, border or shadow round it;
- * - no to-do or task id is written anywhere but in the Today frames;
- * - in every plan, the times end on one x and the fold counts on another;
- * - the task, delegates and live frames list the same to-dos, word for word;
- * - the plan's quiet inks (a time, a done step's words, a count, the way
- *   into a delegate's session) hold 4.5:1 on what they stand on;
+ * - every step and delegate row leads with an 18px tile (the bordered step
+ *   tile or the delegate's SessionMark), and no dot mark is drawn;
+ * - a step opens to its description: in place on the desk and in One
+ *   ledger on the phone, on a pushed page in Lanes and Crew first;
+ * - no to-do, task or session id is written outside the Today frames;
+ * - one Pick per variation, inside the page's one choice, Crew first marked
+ *   Recommended;
+ * - every caption starts "Desk ·" or "Phone ·";
+ * - at 390 no words run past their frame and the page never scrolls
+ *   sideways; every phone row shown is 44px or taller;
+ * - the progress sweep runs only on a working delegate's line, and every
+ *   working delegate's line shown has one; scrubbed through the DevTools
+ *   protocol's Animation domain, the band crosses the fill from its start
+ *   to its end over one run;
  * - nothing is written to the console as an error.
  *
- * - on a phone the page holds every frame and sheet inside its width;
- * - a to-do the task and delegates states share wraps the same in both;
- * - the delegates state shows its queued and failed delegates inside the
- *   frame, and every line a step waits on is one recipe;
- * - every delegate's rail hangs from the to-do it is under, and its own
- *   steps' rail from its tile.
- *
- * Each frame is captured to `$TMPDIR/caps/round5/`, the live frame at the
- * beat its delegate's step has folded open and the beat its to-do ticks.
+ * Each frame is captured to `$TMPDIR/caps/` and the clone's `caps/`, the
+ * live frames at two beats.
  *
  *   bun scripts/probe-kit/run.ts web plan-view-preview
  */
-import { mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { Clock } from "../../anim";
 import type { Kit, Spec, View } from "../../kit";
 import { open, ROOT, settle, THEMES } from "../../kit";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const OUT = join(DASHBOARD, "preview", "plan-view", "out");
-const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps", "round5");
+const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
+const CLONE_CAPS = join(ROOT, "caps");
 
 /** A caption names its frame first: "Desk · …" or "Phone · …". */
 const CAPTION = /^(Desk|Phone) · \S/;
-/** The live frame's beats: each one captured, in every leg. */
-const LIVE_BEATS = 6;
+const VARIATIONS = ["a", "b", "c"] as const;
 
 async function build(): Promise<void> {
   const child = Bun.spawn(["bun", "preview/build.ts", "plan-view"], {
@@ -80,176 +77,68 @@ function serveFolder(): { base: string; stop: () => void } {
   };
 }
 
-interface Rows {
-  captions: string[];
-  overflows: string[];
-  pageWide: { scroll: number; view: number };
-  phoneRows: number;
-  shortPhoneRows: string[];
-  /** The proposed task frames: their "To-dos" heads and their lists. */
-  taskFrames: { heads: string[]; lists: number }[];
+/**
+ * Installed on the page: whether an element is shown to the person (laid
+ * out, visible, not inside a shut fold or a page pushed away).
+ */
+const SHOWN = `window.pvShown = (el) => {
+  if (!el.checkVisibility({ visibilityProperty: true })) return false;
+  if (el.closest('[data-slot="fold-body"]:not([data-open])')) return false;
+  if (el.closest("[data-today]")) return false;
+  const box = el.getBoundingClientRect();
+  return box.width > 0 && box.height > 0;
+};`;
+
+declare global {
+  interface Window {
+    pvShown: (el: Element) => boolean;
+  }
 }
-
-/** The rows: their words, their heights, the task frames' lists, the captions. */
-const readRows = (page: Page): Promise<Rows> =>
-  page.evaluate(() => {
-    const frameOf = (el: Element) =>
-      el.closest('[data-slot="phone-screen"], .desk') as HTMLElement | null;
-    const overflows: string[] = [];
-    for (const words of document.querySelectorAll(
-      '[data-slot="words"], [data-slot="wait"], [data-today] [data-slot="text"]'
-    )) {
-      const frame = frameOf(words);
-      if (!frame) {
-        continue;
-      }
-      const box = words.getBoundingClientRect();
-      const edge = frame.getBoundingClientRect();
-      const spills =
-        box.left < edge.left - 0.5 ||
-        box.right > edge.right + 0.5 ||
-        (words as HTMLElement).scrollWidth >
-          (words as HTMLElement).clientWidth + 1;
-      if (spills) {
-        overflows.push(
-          `${words.textContent?.slice(0, 40)} (${Math.round(box.left)}–${Math.round(box.right)} in ${Math.round(edge.left)}–${Math.round(edge.right)})`
-        );
-      }
-    }
-    const phoneRows = [
-      ...document.querySelectorAll(
-        '[data-slot="phone-screen"] [data-slot="plan-row"]'
-      ),
-    ];
-    const taskFrames = [
-      ...(document
-        .getElementById("task")
-        ?.querySelectorAll('.desk, [data-slot="phone-screen"]') ?? []),
-    ]
-      .filter((frame) => !frame.querySelector("[data-today]"))
-      .map((frame) => ({
-        heads: [...frame.querySelectorAll("h1, h2, h3, h4")]
-          .map((head) => head.textContent?.trim() ?? "")
-          .filter((text) =>
-            text.toLowerCase().replaceAll("-", "").includes("todos")
-          ),
-        lists: frame.querySelectorAll('[data-slot="plan"] > ul').length,
-      }));
-    return {
-      captions: [...document.querySelectorAll("figcaption")].map((caption) =>
-        (caption as HTMLElement).innerText.trim()
-      ),
-      overflows,
-      pageWide: {
-        scroll: document.scrollingElement?.scrollWidth ?? 0,
-        view: window.innerWidth,
-      },
-      phoneRows: phoneRows.length,
-      shortPhoneRows: phoneRows
-        .filter((row) => row.getBoundingClientRect().height < 44)
-        .map(
-          (row) =>
-            `${row.querySelector('[data-slot="words"]')?.textContent} ${row.getBoundingClientRect().height}px`
-        ),
-      taskFrames,
-    };
-  });
-
-interface Frames {
-  /** The intro's title is what a press there lands on: no sheet or scrim spilt over the page. */
-  introClear: boolean;
-  /** Sheets not standing on their screen's foot, inside it. */
-  loose: string[];
-  rails: number;
-  sheets: number;
-  /** Rails whose position was never measured (still at their 0px default). */
-  unmeasuredRails: number;
-}
-
-/** The frames: each phone sheet's place, the rails, the intro's clear. */
-const readFrames = (page: Page): Promise<Frames> =>
-  page.evaluate(() => {
-    const loose: string[] = [];
-    let sheets = 0;
-    for (const screen of document.querySelectorAll(
-      '[data-slot="phone-screen"]'
-    )) {
-      const sheet = screen.querySelector('[data-slot="drawer-content"]');
-      if (!sheet) {
-        loose.push("a screen with no sheet");
-        continue;
-      }
-      sheets += 1;
-      const box = sheet.getBoundingClientRect();
-      const edge = screen.getBoundingClientRect();
-      if (
-        Math.abs(box.bottom - edge.bottom) > 1 ||
-        box.top < edge.top - 0.5 ||
-        box.left < edge.left - 0.5 ||
-        box.right > edge.right + 0.5 ||
-        box.height < 200
-      ) {
-        loose.push(
-          `sheet ${Math.round(box.top)}–${Math.round(box.bottom)} in screen ${Math.round(edge.top)}–${Math.round(edge.bottom)}`
-        );
-      }
-    }
-    const rails = [
-      ...document.querySelectorAll('[data-slot="plan"] .kit-nest'),
-    ];
-    const h1 = document.querySelector("h1");
-    const at = h1?.getBoundingClientRect();
-    const hit = at
-      ? document.elementFromPoint(at.left + 4, at.top + at.height / 2)
-      : null;
-    return {
-      introClear: !!h1 && !!hit && h1.contains(hit),
-      loose,
-      rails: rails.length,
-      sheets,
-      unmeasuredRails: rails.filter(
-        (rail) =>
-          getComputedStyle(rail).getPropertyValue("--nest-x").trim() === "0px"
-      ).length,
-    };
-  });
 
 interface Faces {
-  /** Text outside the Today frames that writes a to-do's or a task's id. */
+  captions: string[];
+  dots: number;
+  /** Text outside Today that writes an id. */
   ids: string[];
-  /** Plans whose times, or whose fold counts, do not end on one x. */
-  ragged: string[];
-  /** Progress rings drawn with an outline, border or shadow round them. */
-  ringBoxes: string[];
-  rings: number;
-  /** Top-level to-do words of the task, delegates and live frames. */
-  todos: { delegates: string[]; live: string[]; task: string[] };
+  /** Rows whose lead is not an 18px tile. */
+  leads: string[];
+  overflows: string[];
+  pageWide: { scroll: number; view: number };
+  picks: { choices: number; perSection: string[]; recommended: string[] };
+  rows: number;
+  shortPhoneRows: string[];
 }
 
-/** The progress rings: any drawn with an outline, border or shadow round them. */
-const readRings = (page: Page): Promise<{ boxes: string[]; rings: number }> =>
+const readFaces = (page: Page): Promise<Faces> =>
   page.evaluate(() => {
-    const rings = [...document.querySelectorAll('[data-slot="progress"]')];
-    const boxes = rings
-      .flatMap((ring) => [ring, ...ring.querySelectorAll("svg")])
-      .map((el) => ({ el, style: getComputedStyle(el) }))
-      .filter(
-        ({ style }) =>
-          style.boxShadow !== "none" ||
-          style.outlineStyle !== "none" ||
-          Number.parseFloat(style.borderTopWidth) > 0
-      )
-      .map(
-        ({ el, style }) =>
-          `${el.tagName}: shadow ${style.boxShadow}, outline ${style.outlineStyle}, border ${style.borderTopWidth}`
+    const rows = [
+      ...document.querySelectorAll('figure [data-slot="plan-row"]'),
+    ].filter((row) => window.pvShown(row));
+    const leads = rows.flatMap((row) => {
+      const mark = row.querySelector(
+        ':scope > .pv-lead [data-slot="step-tile"], :scope > .pv-lead [data-slot="tree-mark"]'
       );
-    return { boxes, rings: rings.length };
-  });
-
-/** The faces: the ids, the trailing columns, the shared rows. */
-const readFaces = async (page: Page): Promise<Faces> => {
-  const { boxes, rings } = await readRings(page);
-  const rest = await page.evaluate(() => {
+      const words = row
+        .querySelector('[data-slot="words"]')
+        ?.textContent?.trim()
+        .slice(0, 40);
+      if (!mark) {
+        return [`"${words}" leads with no tile`];
+      }
+      const box = mark.getBoundingClientRect();
+      const bordered =
+        mark.getAttribute("data-slot") === "tree-mark" ||
+        getComputedStyle(mark).borderTopWidth === "1px";
+      return Math.abs(box.width - 18) <= 0.5 &&
+        Math.abs(box.height - 18) <= 0.5 &&
+        bordered
+        ? []
+        : [
+            `"${words}" leads with ${box.width.toFixed(1)}×${box.height.toFixed(1)}, border ${getComputedStyle(mark).borderTopWidth}`,
+          ];
+    });
+    // biome-ignore lint/performance/useTopLevelRegex: it runs in the page, once per read
+    const ID = /\b(td|tsk)-\d+\b|\b[a-z0-9]+-[a-z0-9]+-[0-9a-f]{3}\b/;
     const ids: string[] = [];
     const walker = document.createTreeWalker(
       document.body,
@@ -257,705 +146,246 @@ const readFaces = async (page: Page): Promise<Faces> => {
     );
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const text = node.textContent ?? "";
-      const written = text.includes("td-") || text.includes("tsk-");
-      if (written && !node.parentElement?.closest("[data-today]")) {
+      if (ID.test(text) && !node.parentElement?.closest("[data-today]")) {
         ids.push(`"${text.trim().slice(0, 50)}"`);
       }
     }
-
-    const ragged: string[] = [];
-    for (const [index, plan] of [
-      ...document.querySelectorAll('[data-slot="plan"]'),
-    ].entries()) {
-      for (const slot of ["time", "fold"]) {
-        const ends = [
-          ...plan.querySelectorAll(`[data-slot="${slot}"]`),
-        ].flatMap((cell) =>
-          slot === "time" && !cell.textContent?.trim()
-            ? []
-            : [Math.round(cell.getBoundingClientRect().right * 2) / 2]
+    const overflows: string[] = [];
+    for (const words of document.querySelectorAll(
+      'figure :is([data-slot="words"], [data-slot="wait"], [data-slot="description"], [data-slot="report"])'
+    )) {
+      if (!window.pvShown(words)) {
+        continue;
+      }
+      const frame = words.closest(
+        '[data-slot="phone-screen"], [data-slot="side-card"]'
+      );
+      const box = words.getBoundingClientRect();
+      const edge = frame?.getBoundingClientRect();
+      const spills =
+        !edge ||
+        box.left < edge.left - 0.5 ||
+        box.right > edge.right + 0.5 ||
+        (words as HTMLElement).scrollWidth >
+          (words as HTMLElement).clientWidth + 1;
+      if (spills) {
+        overflows.push(
+          `${words.textContent?.trim().slice(0, 40)} (${Math.round(box.left)}–${Math.round(box.right)} in ${Math.round(edge?.left ?? 0)}–${Math.round(edge?.right ?? 0)})`
         );
-        if (new Set(ends).size > 1) {
-          ragged.push(
-            `plan ${index + 1} ${slot}s end at ${[...new Set(ends)]}`
-          );
-        }
       }
     }
-
-    const topWords = (frame: Element | null | undefined) =>
-      [
-        ...(frame?.querySelectorAll(
-          '[data-slot="plan"] > ul > li > [data-slot="plan-row"] [data-slot="words"]'
-        ) ?? []),
-      ].map((words) => words.textContent?.trim() ?? "");
-    return {
-      ids,
-      ragged,
-      todos: {
-        task: topWords(document.querySelector("#task .desk")),
-        delegates: topWords(document.querySelector("#delegates .desk")),
-        live: topWords(document.querySelector('[data-slot="live"] .desk')),
-      },
-    };
-  });
-  return { ...rest, ringBoxes: boxes, rings };
-};
-
-/** A quiet ink's contrast on what it stands on, rasterised as the page draws it. */
-const readInks = (page: Page): Promise<{ least: number; what: string }[]> =>
-  page.evaluate(() => {
-    const pen = document.createElement("canvas").getContext("2d", {
-      willReadFrequently: true,
-    });
-    const rgb = (color: string): number[] => {
-      if (!pen) {
-        return [0, 0, 0];
-      }
-      pen.clearRect(0, 0, 1, 1);
-      pen.fillStyle = color;
-      pen.fillRect(0, 0, 1, 1);
-      return [...pen.getImageData(0, 0, 1, 1).data.slice(0, 3)];
-    };
-    const ground = (el: Element): string => {
-      for (let at: Element | null = el; at; at = at.parentElement) {
-        const paint = getComputedStyle(at).backgroundColor;
-        if (paint !== "rgba(0, 0, 0, 0)" && paint !== "transparent") {
-          return paint;
-        }
-      }
-      return getComputedStyle(document.body).backgroundColor;
-    };
-    const lin = (c: number) => {
-      const s = c / 255;
-      return s <= 0.040_45 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-    };
-    const lum = (p: number[]) =>
-      0.2126 * lin(p[0] ?? 0) +
-      0.7152 * lin(p[1] ?? 0) +
-      0.0722 * lin(p[2] ?? 0);
-    const ratio = (a: number[], b: number[]) => {
-      const x = lum(a);
-      const y = lum(b);
-      return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-    };
-    const inks = [
-      ['[data-slot="time"]:not(:empty)', "a time"],
-      ['[data-state="done"] > [data-slot="words"]', "a done step's words"],
-      ['[data-slot="fold"] [data-slot="count"]', "a fold's count"],
-      ['[data-slot="plan"] .open', "the way into a delegate's session"],
-      ['[data-slot="plan"] .open svg', "its glyph"],
-    ] as const;
-    return inks.map(([selector, what]) => {
-      const found = [...document.querySelectorAll(selector)];
-      const least = Math.min(
-        ...found.map((el) =>
-          ratio(rgb(getComputedStyle(el).color), rgb(ground(el)))
-        )
-      );
-      return { what: `${what} (${found.length})`, least };
-    });
-  });
-
-interface Layout {
-  /** The open spec's bullets: how many, and the least contrast on their ground. */
-  bullets: { count: number; least: number };
-  /** Captions past their frame's sides. */
-  captionsOff: string[];
-  /** Carried rows looked at. */
-  carried: number;
-  /** Desk frames whose side card is not in view, or which show a quiet conversation on a phone. */
-  desksOff: string[];
-  desksShown: number;
-  /** Words broken onto a new line while the line above had room for the next word. */
-  early: string[];
-  /** Desk heads with a task's title, and how far each stands off the "Plan" title's line. */
-  heads: number;
-  headsOff: string[];
-  /** Rows of the delegates state outside what their frame shows. */
-  hidden: string[];
-  keyMarks: number;
-  /** Key marks off their cell's centre, and samples starting inside the cell. */
-  keyOff: string[];
-  /** Nested rows looked at. */
-  nested: number;
-  /** Figures, desk scrollers or phone sheets past the viewport's sides. */
-  outside: string[];
-  pageWide: number;
-  /** Delegates whose rail does not hang from their to-do, or whose steps' rail not from their tile. */
-  railsOff: string[];
-  /** The device's width. */
-  screen: number;
-  waits: number;
-  /** Waiting lines whose type differs from the first, or which hold a mark. */
-  waitsOff: string[];
-  /** Shared to-dos whose words wrap to a different height in the two states. */
-  wraps: string[];
-}
-
-/**
- * Figures, desk scrollers and phone sheets past the device's sides, and the
- * page's width against the device's: on a phone a page wider than the
- * screen widens the layout viewport itself, so `innerWidth` alone would read
- * the overflow as the screen. Anything else past the screen's edge that no
- * scroller holds is named, the widest first.
- */
-const readOutside = (
-  page: Page
-): Promise<Pick<Layout, "outside" | "pageWide" | "screen">> =>
-  page.evaluate(() => {
-    const view = Math.min(window.innerWidth, screen.width);
-    const past = (el: Element) => {
-      const box = el.getBoundingClientRect();
-      return box.left < -0.5 || box.right > view + 0.5;
-    };
-    const held = (el: Element) =>
-      el.closest('[data-slot="desk-scroll"], [data-slot="phone-screen"]') !==
-        null &&
-      !el.matches('[data-slot="desk-scroll"], [data-slot="phone-screen"]');
-    const named = (el: Element) => {
-      const box = el.getBoundingClientRect();
-      return `${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]}[${el.getAttribute("data-slot") ?? ""}] ${Math.round(box.left)}–${Math.round(box.right)}`;
-    };
-    const outside = [
-      ...[
-        ...document.querySelectorAll(
-          'figure, [data-slot="desk-scroll"], [data-slot="drawer-content"]'
-        ),
-      ].filter(past),
-      ...[...document.querySelectorAll("body *")]
-        .filter((el) => past(el) && !held(el))
-        .sort(
-          (a, b) =>
-            b.getBoundingClientRect().width - a.getBoundingClientRect().width
-        )
-        .slice(0, 4),
-    ].map(named);
-    return {
-      outside: [...new Set(outside)],
-      pageWide: Math.max(
-        window.innerWidth,
-        document.documentElement.scrollWidth,
-        document.body.scrollWidth
-      ),
-      screen: screen.width,
-    };
-  });
-
-/** The proposed (not Today) desk or phone figure of a section. */
-const PROPOSED = (section: string, kind: string): string =>
-  `#${section} figure[data-kind="${kind}"]:not(:has([data-today]))`;
-
-/** The to-dos the task and delegates states share, and how tall each one's words stand. */
-const readWraps = (page: Page): Promise<Pick<Layout, "wraps">> =>
-  page.evaluate(
-    ([task, out]) => {
-      const tops = (selector: string) =>
-        new Map(
-          [
-            ...document.querySelectorAll(
-              `${selector} [data-slot="plan"] > ul > li > [data-slot="plan-row"] [data-slot="words"]`
-            ),
-          ].map((words) => [
-            words.textContent?.trim() ?? "",
-            {
-              height: Math.round(words.getBoundingClientRect().height),
-              width: Math.round(words.getBoundingClientRect().width),
-            },
-          ])
-        );
-      const wraps: string[] = [];
-      // A row whose trailing content differs between the two (a time in one
-      // and none in the other) has another width for its words, and wraps
-      // to its own: only rows of one width are held to one wrap.
-      for (const [index, selector] of task.entries()) {
-        const there = tops(out[index] ?? "");
-        for (const [words, here] of tops(selector)) {
-          const other = there.get(words);
-          if (
-            other &&
-            other.width === here.width &&
-            other.height !== here.height
-          ) {
-            wraps.push(`"${words}" ${here.height}px against ${other.height}px`);
-          }
-        }
-      }
-      return { wraps };
-    },
-    [
-      [PROPOSED("task", "desk"), PROPOSED("task", "phone")],
-      [PROPOSED("delegates", "desk"), PROPOSED("delegates", "phone")],
-    ]
-  );
-
-/** The delegates state's queued and failed rows against what their frame shows, and the waiting lines' type. */
-const readDelegates = (
-  page: Page
-): Promise<Pick<Layout, "hidden" | "waits" | "waitsOff">> =>
-  page.evaluate(
-    (figures) => {
-      const hidden: string[] = [];
-      for (const selector of figures) {
-        const figure = document.querySelector(selector);
-        const edge = figure
-          ?.querySelector(".body, .scroll")
-          ?.getBoundingClientRect();
-        for (const row of figure?.querySelectorAll(
-          '[data-state="queued"], [data-state="failed"]'
-        ) ?? []) {
-          const box = row.getBoundingClientRect();
-          const inside =
-            !!edge &&
-            box.top >= edge.top - 0.5 &&
-            box.bottom <= edge.bottom + 0.5;
-          if (!inside) {
-            hidden.push(
-              `"${row.querySelector('[data-slot="words"]')?.textContent}" ${Math.round(box.top)}–${Math.round(box.bottom)} in ${Math.round(edge?.top ?? 0)}–${Math.round(edge?.bottom ?? 0)}`
-            );
-          }
-        }
-      }
-      const waits = [...document.querySelectorAll('[data-slot="wait"]')];
-      const typeOf = (el: Element) => {
-        const style = getComputedStyle(el);
-        return `${style.fontSize} ${style.fontWeight} ${style.lineHeight} ${style.fontFamily}`;
-      };
-      const first = waits[0] ? typeOf(waits[0]) : "";
-      const waitsOff = waits
-        .filter((el) => typeOf(el) !== first || el.children.length > 0)
-        .map(
-          (el) =>
-            `"${el.textContent?.trim()}": ${typeOf(el)}, ${el.children.length} marks`
-        );
-      return { hidden, waits: waits.length, waitsOff };
-    },
-    [PROPOSED("delegates", "desk"), PROPOSED("delegates", "phone")]
-  );
-
-/**
- * Every nested row of the proposal, its parent's and its own: one nesting
- * for a session's sub-steps and a delegate alike. The child's mark stands
- * one --tree-step in from its parent's mark, the rail hangs from the
- * parent's mark, and the elbow's arm ends on the child's drawn mark (a dot,
- * a tick or a tile), neither short of it nor through it. A delegate stands
- * under a to-do.
- */
-const readNesting = (
-  page: Page
-): Promise<Pick<Layout, "carried" | "nested" | "railsOff">> =>
-  page.evaluate(() => {
-    const probe = document.createElement("div");
-    probe.style.inlineSize = "var(--tree-step)";
-    document.body.append(probe);
-    const step = probe.getBoundingClientRect().width;
-    probe.remove();
-    const centre = (el: Element | null | undefined) => {
-      const box = el?.getBoundingClientRect();
-      return box ? box.left + box.width / 2 : Number.NaN;
-    };
-    const rows = [
-      ...document.querySelectorAll(
-        'figure .kit-nest > li > [data-slot="plan-row"]'
-      ),
-    ].filter(
-      (row) =>
-        !row.closest("[data-today]") && row.getBoundingClientRect().width > 0
-    );
-    const railsOff = rows.flatMap((row) => {
-      const item = row.parentElement as HTMLElement;
-      const list = item.parentElement as HTMLElement;
-      const parentRow = list.parentElement?.querySelector(
-        ':scope > [data-slot="plan-row"]'
-      );
-      const words = row.querySelector('[data-slot="words"]')?.textContent;
-      const parentMark = centre(parentRow?.querySelector(".pv-mark"));
-      const indent = centre(row.querySelector(".pv-mark")) - parentMark;
-      const rail =
-        list.getBoundingClientRect().left +
-        Number.parseFloat(getComputedStyle(list).getPropertyValue("--nest-x"));
-      const elbow = getComputedStyle(item, "::before");
-      const armEnd =
-        item.getBoundingClientRect().left +
-        Number.parseFloat(elbow.left) +
-        Number.parseFloat(elbow.width);
-      const drawn = row
-        .querySelector(".pv-mark :is(.dot, .step-tick, .tree-mark)")
-        ?.getBoundingClientRect().left;
-      const off: string[] = [];
-      if (Math.abs(indent - step) > 1) {
-        off.push(
-          `"${words}" stands ${indent.toFixed(1)}px in from its parent, not ${step}px`
-        );
-      }
-      if (Math.abs(rail - parentMark) > 1) {
-        off.push(
-          `"${words}": its rail ${(rail - parentMark).toFixed(1)}px off its parent's mark`
-        );
-      }
-      if (drawn === undefined || Math.abs(armEnd - drawn) > 1.5) {
-        off.push(
-          `"${words}": its arm ends ${(armEnd - (drawn ?? 0)).toFixed(1)}px off its mark`
-        );
-      }
-      if (
-        row.hasAttribute("data-carried") &&
-        !parentRow?.querySelector(".tick-target")
-      ) {
-        off.push(`"${words}" is a delegate not under a to-do`);
-      }
-      return off;
-    });
-    return {
-      carried: rows.filter((row) => row.hasAttribute("data-carried")).length,
-      nested: rows.length,
-      railsOff,
-    };
-  });
-
-/**
- * Words that wrap while their line had room for the next word: each line
- * break of a proposal row's words, the next word's width (and a space)
- * against what was left on the line above.
- */
-const readEarlyWraps = (page: Page): Promise<Pick<Layout, "early">> =>
-  page.evaluate(() => {
-    const range = document.createRange();
-    const pen = document.createElement("canvas").getContext("2d");
-    /** One row's early breaks: each break whose next word fit the line above. */
-    const breaksIn = (words: Element): string[] => {
-      const text = words.firstChild;
-      const value = text?.textContent ?? "";
-      if (!text) {
-        return [];
-      }
-      // The row's own free width: up to its trailing content where it has
-      // some, past the column gap; to the row's end where it has none.
-      const row = words.closest('[data-slot="plan-row"]') as HTMLElement;
-      const trail = row.querySelector(':scope > [data-slot="trail"]');
-      const end = trail
-        ? trail.getBoundingClientRect().left -
-          Number.parseFloat(getComputedStyle(row).columnGap)
-        : row.getBoundingClientRect().right -
-          Number.parseFloat(getComputedStyle(row).paddingRight);
-      // A space at a soft break hangs past the line and measures nothing
-      // there: its width comes from the words' own font.
-      if (pen) {
-        pen.font = getComputedStyle(words).font;
-      }
-      const space = pen?.measureText(" ").width ?? 0;
-      const boxOf = (from: number, to: number) => {
-        range.setStart(text, from);
-        range.setEnd(text, to);
-        return range.getBoundingClientRect();
-      };
-      const spaces = [...value].flatMap((char, at) =>
-        char === " " ? [at] : []
-      );
-      return spaces.flatMap((at, index) => {
-        const before = boxOf(
-          index === 0 ? 0 : (spaces[index - 1] ?? 0) + 1,
-          at
-        );
-        const nextEnd = spaces[index + 1] ?? value.length;
-        const next = boxOf(at + 1, nextEnd);
-        const room = end - before.right - space;
-        return next.top > before.top + 1 && next.width < room - 1
-          ? [
-              `"${value}" breaks before "${value.slice(at + 1, nextEnd)}" (${next.width.toFixed(0)}px) with ${room.toFixed(0)}px left`,
-            ]
-          : [];
-      });
-    };
-    const early = [...document.querySelectorAll('figure [data-slot="words"]')]
+    const shortPhoneRows = rows
       .filter(
-        (el) =>
-          !el.closest("[data-today]") && el.getBoundingClientRect().width > 0
+        (row) =>
+          row.closest('[data-slot="phone-screen"]') &&
+          row.getBoundingClientRect().height < 44
       )
-      .flatMap(breaksIn);
-    return { early: [...new Set(early)] };
-  });
-
-/**
- * On a phone's page: each desk frame still shown has its side card whole
- * in view, and no quiet stand-in conversation stands in its place.
- */
-const readPhoneDesks = (
-  page: Page
-): Promise<Pick<Layout, "desksOff" | "desksShown">> =>
-  page.evaluate(() => {
-    const view = Math.min(window.innerWidth, screen.width);
-    const shown = (el: Element) => el.getBoundingClientRect().width > 0;
-    const frames = [
-      ...document.querySelectorAll('[data-slot="desk-frame"]'),
-    ].filter(shown);
-    const desksOff = frames.flatMap((frame) => {
-      const card = frame
-        .querySelector('[data-slot="side-card"]')
-        ?.getBoundingClientRect();
-      const quiet = frame.querySelector("[data-quiet]");
-      return [
-        ...(card && card.left >= -0.5 && card.right <= view + 0.5
-          ? []
-          : [
-              `a side card at ${Math.round(card?.left ?? 0)}–${Math.round(card?.right ?? 0)}`,
-            ]),
-        ...(quiet && shown(quiet) && view < 700
-          ? ["a quiet conversation shown on a phone"]
-          : []),
-      ];
-    });
-    return { desksOff, desksShown: frames.length };
-  });
-
-/**
- * Each desk head's title against its task's title: both set in the label
- * size on the mark line, so one centre is one baseline.
- */
-const readHeads = (page: Page): Promise<Pick<Layout, "heads" | "headsOff">> =>
-  page.evaluate(() => {
-    const heads = [
-      ...document.querySelectorAll('[data-slot="side-head"]'),
-    ].filter((head) => head.querySelector(".task-title"));
-    const middle = (el: Element | null) => {
-      const box = el?.getBoundingClientRect();
-      return box ? box.top + box.height / 2 : Number.NaN;
-    };
-    const sizeOf = (el: Element | null) =>
-      el ? getComputedStyle(el).fontSize : "none";
-    const headsOff = heads.flatMap((head) => {
-      const names = [".title", ".task-title", ".stage"].map((name) =>
-        head.querySelector(name)
+      .map(
+        (row) =>
+          `${row.querySelector('[data-slot="words"]')?.textContent?.trim()} ${row.getBoundingClientRect().height}px`
       );
-      const sizes = new Set(names.map(sizeOf));
-      const lines = names.map(middle);
-      const spread = Math.max(...lines) - Math.min(...lines);
-      return [
-        ...(sizes.size === 1 ? [] : [`sizes ${[...sizes].join(", ")}`]),
-        ...(spread <= 0.5 ? [] : [`lines ${spread.toFixed(2)}px apart`]),
-      ];
-    });
-    return { heads: heads.length, headsOff };
-  });
-
-/** Each caption against its frame: the phone's screen or the desk's frame. */
-const readCaptions = (page: Page): Promise<Pick<Layout, "captionsOff">> =>
-  page.evaluate(() => {
-    const captionsOff = [...document.querySelectorAll("figure")]
-      .filter((figure) => figure.getBoundingClientRect().width > 0)
-      .flatMap((figure) => {
-        const frame = figure.querySelector(
-          '[data-slot="phone-screen"], [data-slot="desk-scroll"]'
-        );
-        const caption = figure.querySelector("figcaption");
-        const edge = frame?.getBoundingClientRect();
-        const box = caption?.getBoundingClientRect();
-        return edge &&
-          box &&
-          box.left >= edge.left - 0.5 &&
-          box.right <= edge.right + 0.5
-          ? []
-          : [
-              `"${caption?.textContent?.trim().slice(0, 30)}" ${Math.round(box?.left ?? 0)}–${Math.round(box?.right ?? 0)} under a frame ${Math.round(edge?.left ?? 0)}–${Math.round(edge?.right ?? 0)}`,
-            ];
-      });
-    return { captionsOff };
-  });
-
-/** The key: each mark centred in its 18px cell, each sample starting after the cell. */
-const readKey = (page: Page): Promise<Pick<Layout, "keyOff" | "keyMarks">> =>
-  page.evaluate(() => {
-    const cells = [...document.querySelectorAll('[data-slot="key-cell"]')];
-    const centre = (box: DOMRect) => [
-      box.left + box.width / 2,
-      box.top + box.height / 2,
-    ];
-    const keyOff = [
-      ...cells.flatMap((cell) => {
-        const mark = cell.firstElementChild;
-        const [cx = 0, cy = 0] = centre(cell.getBoundingClientRect());
-        const [mx = 0, my = 0] = mark
-          ? centre(mark.getBoundingClientRect())
-          : [Number.NaN, Number.NaN];
-        return Math.abs(cx - mx) <= 0.5 && Math.abs(cy - my) <= 0.5
-          ? []
-          : [
-              `a mark ${(mx - cx).toFixed(1)}, ${(my - cy).toFixed(1)}px off its cell's centre`,
-            ];
-      }),
-      ...[...document.querySelectorAll('[data-slot="key-sample"]')].flatMap(
-        (sample) => {
-          const cell = sample.previousElementSibling?.getBoundingClientRect();
-          const box = sample.getBoundingClientRect();
-          return cell && box.left >= cell.right
-            ? []
-            : [`"${sample.textContent?.trim()}" starts inside the mark's cell`];
-        }
-      ),
-    ];
-    return { keyMarks: cells.length, keyOff };
-  });
-
-/** The open spec's list bullets against their card, in this scheme. */
-const readBullets = (page: Page): Promise<Pick<Layout, "bullets">> =>
-  page.evaluate(() => {
-    const pen = document.createElement("canvas").getContext("2d", {
-      willReadFrequently: true,
-    });
-    const rgb = (color: string): number[] => {
-      if (!pen) {
-        return [0, 0, 0];
-      }
-      pen.clearRect(0, 0, 1, 1);
-      pen.fillStyle = color;
-      pen.fillRect(0, 0, 1, 1);
-      return [...pen.getImageData(0, 0, 1, 1).data.slice(0, 3)];
-    };
-    const ground = (el: Element): string => {
-      for (let at: Element | null = el; at; at = at.parentElement) {
-        const paint = getComputedStyle(at).backgroundColor;
-        if (paint !== "rgba(0, 0, 0, 0)" && paint !== "transparent") {
-          return paint;
-        }
-      }
-      return getComputedStyle(document.body).backgroundColor;
-    };
-    const lin = (c: number) => {
-      const v = c / 255;
-      return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-    };
-    const lum = (p: number[]) =>
-      0.2126 * lin(p[0] ?? 0) +
-      0.7152 * lin(p[1] ?? 0) +
-      0.0722 * lin(p[2] ?? 0);
-    const items = [
-      ...document.querySelectorAll('[data-slot="spec-body"] li'),
-    ].filter((li) => li.getBoundingClientRect().width > 0);
-    const ratios = items.map((li) => {
-      const a = lum(rgb(getComputedStyle(li, "::marker").color));
-      const b = lum(rgb(ground(li)));
-      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-    });
+    const sections = [...document.querySelectorAll("section[data-variation]")];
     return {
-      bullets: { count: ratios.length, least: Math.min(...ratios) },
+      captions: [...document.querySelectorAll("figcaption")]
+        .filter((caption) => (caption as HTMLElement).offsetParent !== null)
+        .map((caption) => (caption as HTMLElement).innerText.trim()),
+      dots: document.querySelectorAll(
+        '[data-slot="step-mark"], .pv-mark, .step-tick'
+      ).length,
+      ids,
+      leads,
+      overflows,
+      pageWide: {
+        scroll: document.scrollingElement?.scrollWidth ?? 0,
+        view: window.innerWidth,
+      },
+      picks: {
+        choices: document.querySelectorAll(
+          '[data-cawco-choice="plan-variation"]'
+        ).length,
+        perSection: sections.map((section) => {
+          const options = [
+            ...section.querySelectorAll(
+              '[data-cawco-choice="plan-variation"] [data-option]'
+            ),
+          ].map((option) => option.getAttribute("data-option"));
+          return `${section.getAttribute("data-variation")}:${options.join(",")}`;
+        }),
+        recommended: sections
+          .filter((section) => section.querySelector("[data-option] .dp-tag"))
+          .map((section) => section.getAttribute("data-variation") ?? ""),
+      },
+      rows: rows.length,
+      shortPhoneRows,
     };
   });
 
-/** The layout: the phone page's width, the shared rows' wraps, the delegates' frames and rails. */
-const readLayout = async (page: Page): Promise<Layout> => ({
-  ...(await readHeads(page)),
-  ...(await readCaptions(page)),
-  ...(await readKey(page)),
-  ...(await readBullets(page)),
-  ...(await readOutside(page)),
-  ...(await readWraps(page)),
-  ...(await readDelegates(page)),
-  ...(await readNesting(page)),
-  ...(await readEarlyWraps(page)),
-  ...(await readPhoneDesks(page)),
-});
+/** The sweeps on the page: on which delegates' lines they run. */
+const readSweeps = (
+  page: Page
+): Promise<{ off: string[]; running: number; workingLines: number }> =>
+  page.evaluate(() => {
+    const runs = document
+      .getAnimations()
+      .filter(
+        (run) =>
+          run instanceof CSSAnimation &&
+          run.animationName === "kit-skeleton-sweep" &&
+          (run.effect as KeyframeEffect | null)?.target instanceof Element &&
+          ((run.effect as KeyframeEffect).target as Element).matches(
+            ".pv-sweep"
+          )
+      );
+    const off: string[] = [];
+    for (const run of runs) {
+      const target = (run.effect as KeyframeEffect).target as Element;
+      const status = target
+        .closest('[data-slot="progress-line"]')
+        ?.getAttribute("data-status");
+      if (status !== "live") {
+        off.push(`a sweep on a ${status} delegate's line`);
+      }
+    }
+    const lines = [
+      ...document.querySelectorAll('[data-slot="progress-line"]'),
+    ].filter((line) => window.pvShown(line));
+    for (const line of lines) {
+      const status = line.getAttribute("data-status");
+      const has = line.querySelector(".pv-sweep");
+      if (status === "live" && !has) {
+        off.push("a working delegate's line with no sweep");
+      }
+      if (status !== "live" && has) {
+        off.push(`a sweep drawn on a ${status} delegate's line`);
+      }
+    }
+    return {
+      off,
+      running: runs.length,
+      workingLines: lines.filter(
+        (line) => line.getAttribute("data-status") === "live"
+      ).length,
+    };
+  });
 
-function checkLayout(kit: Kit, leg: string, seen: Layout): void {
-  kit.check(
-    `${leg}: every caption stands inside its frame's width`,
-    seen.captionsOff.length === 0,
-    seen.captionsOff.join(" | ")
-  );
-  kit.check(
-    `${leg}: all ${seen.keyMarks} key marks stand centred in their cell, and every sample starts after it`,
-    seen.keyMarks > 0 && seen.keyOff.length === 0,
-    seen.keyOff.join(" | ")
-  );
-  kit.check(
-    `${leg}: the open spec's ${seen.bullets.count} bullets hold ${seen.bullets.least.toFixed(2)}:1, at least 3:1`,
-    seen.bullets.count > 0 && seen.bullets.least >= 3,
-    ""
-  );
-  kit.check(
-    `${leg}: in all ${seen.heads} desk heads "Plan", the task's title and its stage are one size on one line`,
-    seen.heads > 0 && seen.headsOff.length === 0,
-    seen.headsOff.join(" | ")
-  );
-  kit.check(
-    `${leg}: every frame, desk scroller and phone sheet stands inside the screen, and the page is the screen's width (${seen.pageWide} ≤ ${seen.screen})`,
-    seen.outside.length === 0 && seen.pageWide <= seen.screen,
-    seen.outside.join(" | ")
-  );
-  kit.check(
-    `${leg}: the to-dos the task and delegates states share wrap the same in both`,
-    seen.wraps.length === 0,
-    seen.wraps.join(" | ")
-  );
-  kit.check(
-    `${leg}: the queued and failed delegates stand inside their frame, desk and phone`,
-    seen.hidden.length === 0,
-    seen.hidden.join(" | ")
-  );
-  kit.check(
-    `${leg}: all ${seen.waits} waiting lines are one recipe, with no leading mark`,
-    seen.waits > 0 && seen.waitsOff.length === 0,
-    seen.waitsOff.join(" | ")
-  );
-  kit.check(
-    `${leg}: all ${seen.nested} nested rows (${seen.carried} of them delegates, each under a to-do) stand one step in from their parent, hang from its mark, and end their arm on their mark`,
-    seen.nested > 0 && seen.carried > 0 && seen.railsOff.length === 0,
-    seen.railsOff.join(" | ")
-  );
-  kit.check(
-    `${leg}: no row's words break while the line above had room for the next word`,
-    seen.early.length === 0,
-    seen.early.join(" | ")
-  );
-  kit.check(
-    `${leg}: every desk frame shown (${seen.desksShown}) has its plan card in view and no stand-in conversation on a phone`,
-    seen.desksShown > 0 && seen.desksOff.length === 0,
-    seen.desksOff.join(" | ")
-  );
-}
+/** Where the band stands across its fill, -1 (before it) to 1 (past it). */
+const bandAt = (page: Page, within: string): Promise<number> =>
+  page.evaluate((selector) => {
+    const band = document.querySelector(`${selector} .pv-sweep`);
+    const box = band?.parentElement?.getBoundingClientRect();
+    const at = band?.getBoundingClientRect();
+    return box && at && box.width > 0
+      ? (at.left - box.left) / box.width
+      : Number.NaN;
+  }, within);
 
-async function captureLive(page: Page, prefix: string): Promise<void> {
-  const live = page.locator("figure[data-slot=live]");
-  const now = Number(await live.getAttribute("data-beat"));
-  // Every beat, from the one after where the demo stands, round to it.
-  for (let step = 1; step <= LIVE_BEATS; step += 1) {
-    const beat = (now + step) % LIVE_BEATS;
-    // biome-ignore lint/performance/noAwaitInLoops: the live frame's beats, in their order
-    await page.waitForSelector(`figure[data-slot=live][data-beat="${beat}"]`, {
-      timeout: 20_000,
-    });
-    await live.scrollIntoViewIfNeeded();
-    await live.screenshot({
-      path: join(CAPS, `${prefix}-90-live-beat-${beat + 1}.png`),
-    });
+/**
+ * Scrubs the sweep on one frame's working delegate: its run restarted and
+ * held on the protocol's clock, then seeked through its length.
+ */
+async function scrubSweep(
+  page: Page,
+  within: string
+): Promise<{ at: number[]; length: number }> {
+  const clock = await Clock.on(page);
+  await page.locator(within).scrollIntoViewIfNeeded();
+  await clock.catchRuns(
+    () =>
+      page.evaluate((selector) => {
+        for (const band of document.querySelectorAll<HTMLElement>(
+          `${selector} .pv-sweep`
+        )) {
+          band.style.animationName = "none";
+          band.getBoundingClientRect();
+          band.style.animationName = "";
+        }
+      }, within),
+    within
+  );
+  const length = clock.length("kit-skeleton-sweep");
+  const at: number[] = [];
+  for (const fraction of [0, 0.25, 0.5, 0.75, 0.99]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one point on the clock at a time
+    await clock.seek(fraction, "kit-skeleton-sweep");
+    at.push(await bandAt(page, within));
   }
+  await clock.release();
+  return { at, length };
 }
 
-async function capture(page: Page, prefix: string): Promise<void> {
-  await page.screenshot({ path: join(CAPS, `${prefix}-00-intro.png`) });
-  const figures = await page
-    .locator("figure:not([data-slot=live]):visible")
-    .all();
-  for (const [index, figure] of figures.entries()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time, each scrolled into view and settled
-    const section = await figure.evaluate(
-      (node) => node.closest("section")?.id ?? "page"
+/** Opens a step from its words in each variation's first frame of a kind, and reads what opened. */
+async function openStep(page: Page, kind: "desk" | "phone"): Promise<string[]> {
+  const faults: string[] = [];
+  for (const variation of VARIATIONS) {
+    const figure = `section[data-variation="${variation}"] .frames > figure:nth-child(${kind === "phone" ? 2 : 1})`;
+    const words = page
+      .locator(
+        `${figure} [data-row="a1"] > [data-slot="plan-row"] [data-slot="words"]`
+      )
+      .first();
+    // biome-ignore lint/performance/noAwaitInLoops: one variation at a time
+    await words.scrollIntoViewIfNeeded();
+    await words.click();
+    await page.waitForTimeout(450);
+    const read = await page.evaluate(
+      ([selector, paged]) => {
+        const frame = document.querySelector(selector);
+        const description = paged
+          ? frame?.querySelector(
+              '[data-slot="pushed-page"] [data-slot="description"]'
+            )
+          : frame?.querySelector(
+              '[data-row="a1"] [data-slot="fold-body"][data-open] [data-slot="description"]'
+            );
+        const box = description?.getBoundingClientRect();
+        const stack = frame
+          ?.querySelector('[data-slot="push-stack"]')
+          ?.getBoundingClientRect();
+        return {
+          height: box?.height ?? 0,
+          shown: !!description && window.pvShown(description),
+          text: description?.textContent?.trim().slice(0, 30) ?? "",
+          inPlace: !paged || (!!stack && !!box && box.left >= stack.left - 1),
+        };
+      },
+      [figure, kind === "phone" && variation !== "a"] as const
     );
-    const today = (await figure.locator("[data-today]").count()) > 0;
-    const caption = (await figure.locator("figcaption").textContent()) ?? "";
-    const kind = caption.trim().startsWith("Desk") ? "desk" : "phone";
-    await figure.scrollIntoViewIfNeeded();
-    await settle(page);
-    await figure.screenshot({
-      path: join(
-        CAPS,
-        `${prefix}-${String(index + 1).padStart(2, "0")}-${section}-${today ? "today-" : ""}${kind}.png`
-      ),
-    });
+    if (!(read.shown && read.height > 20 && read.inPlace)) {
+      faults.push(`${variation}: ${JSON.stringify(read)}`);
+    }
+    // Put it back as the frame stood.
+    if (kind === "phone" && variation !== "a") {
+      await page
+        .locator(`${figure} [data-slot="pushed-page"] .back`)
+        .first()
+        .click();
+    } else {
+      await words.click();
+    }
+    await page.waitForTimeout(350);
   }
-  await captureLive(page, prefix);
+  return faults;
 }
 
-function checkRows(kit: Kit, leg: string, seen: Rows): void {
+function checkFaces(kit: Kit, leg: string, seen: Faces, phone: boolean): void {
+  kit.check(
+    `${leg}: all ${seen.rows} rows shown lead with an 18px bordered tile or a delegate's tile`,
+    seen.rows > 0 && seen.leads.length === 0,
+    seen.leads.slice(0, 6).join(" | ")
+  );
+  kit.check(`${leg}: no dot marks drawn`, seen.dots === 0, `${seen.dots}`);
+  kit.check(
+    `${leg}: no to-do, task or session id outside the Today frames`,
+    seen.ids.length === 0,
+    seen.ids.slice(0, 6).join(" | ")
+  );
+  kit.check(
+    `${leg}: one choice, one Pick per variation (${seen.picks.perSection.join(" ")}), Crew first recommended`,
+    seen.picks.choices >= 1 &&
+      seen.picks.perSection.join(" ") === "a:a b:b c:c" &&
+      seen.picks.recommended.join(",") === "c",
+    JSON.stringify(seen.picks)
+  );
   const bad = seen.captions.filter((caption) => !CAPTION.test(caption));
   kit.check(
     `${leg}: all ${seen.captions.length} captions start "Desk ·" or "Phone ·"`,
@@ -963,71 +393,56 @@ function checkRows(kit: Kit, leg: string, seen: Rows): void {
     bad.join(" | ")
   );
   kit.check(
-    `${leg}: no row's words run past their frame`,
+    `${leg}: no words run past their frame`,
     seen.overflows.length === 0,
-    seen.overflows.join(" | ")
+    seen.overflows.slice(0, 6).join(" | ")
   );
   kit.check(
     `${leg}: the page does not scroll sideways (${seen.pageWide.scroll} ≤ ${seen.pageWide.view})`,
     seen.pageWide.scroll <= seen.pageWide.view
   );
-  kit.check(
-    `${leg}: the proposed task frames draw one list and no "To-dos" head (${seen.taskFrames.length} frames)`,
-    seen.taskFrames.length === 2 &&
-      seen.taskFrames.every(
-        (frame) => frame.lists === 1 && frame.heads.length === 0
-      ),
-    JSON.stringify(seen.taskFrames)
-  );
-  kit.check(
-    `${leg}: all ${seen.phoneRows} phone rows are 44px or taller`,
-    seen.phoneRows > 0 && seen.shortPhoneRows.length === 0,
-    seen.shortPhoneRows.join(" | ")
-  );
+  if (phone) {
+    kit.check(
+      `${leg}: every phone row shown is 44px or taller`,
+      seen.shortPhoneRows.length === 0,
+      seen.shortPhoneRows.slice(0, 6).join(" | ")
+    );
+  }
 }
 
-function checkFrames(kit: Kit, leg: string, seen: Frames): void {
-  kit.check(
-    `${leg}: all ${seen.sheets} phone sheets stand on their screen's foot, inside it`,
-    seen.sheets > 0 && seen.loose.length === 0,
-    seen.loose.join(" | ")
-  );
-  kit.check(
-    `${leg}: all ${seen.rails} nesting rails are measured off their marks`,
-    seen.rails > 0 && seen.unmeasuredRails === 0,
-    `${seen.unmeasuredRails} at 0px`
-  );
-  kit.check(
-    `${leg}: nothing from a sheet covers the page's intro`,
-    seen.introClear
-  );
-}
-
-const same = (a: string[], b: string[]): boolean =>
-  a.length > 0 && a.length === b.length && a.every((w, i) => w === b[i]);
-
-function checkFaces(kit: Kit, leg: string, seen: Faces): void {
-  kit.check(
-    `${leg}: all ${seen.rings} progress rings stand bare, no outline, border or shadow`,
-    seen.rings > 0 && seen.ringBoxes.length === 0,
-    seen.ringBoxes.join(" | ")
-  );
-  kit.check(
-    `${leg}: no to-do or task id outside the Today frames`,
-    seen.ids.length === 0,
-    seen.ids.join(" | ")
-  );
-  kit.check(
-    `${leg}: in every plan the times end on one x and the counts on another`,
-    seen.ragged.length === 0,
-    seen.ragged.join(" | ")
-  );
-  kit.check(
-    `${leg}: the task, delegates and live frames list the same ${seen.todos.task.length} to-dos, word for word`,
-    same(seen.todos.task, seen.todos.delegates) &&
-      same(seen.todos.task, seen.todos.live),
-    JSON.stringify(seen.todos)
-  );
+async function capture(page: Page, prefix: string): Promise<number> {
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const figures = await page.locator("figure:visible").all();
+  let shots = 0;
+  for (const [index, figure] of figures.entries()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time, each scrolled into view and settled
+    const where = await figure.evaluate((node) => ({
+      section:
+        node.closest("section")?.getAttribute("data-variation") ??
+        node.closest("section")?.id ??
+        "page",
+      kind: node.getAttribute("data-kind") ?? "frame",
+    }));
+    await figure.scrollIntoViewIfNeeded();
+    await settle(page);
+    const name = `${prefix}-${where.section}-${String(index + 1).padStart(2, "0")}-${where.kind}`;
+    const beats = where.kind === "live" ? [0, 3] : [null];
+    for (const beat of beats) {
+      if (beat !== null) {
+        // biome-ignore lint/performance/noAwaitInLoops: the live frame's beats, in their order
+        await page.waitForSelector(
+          `section[data-variation="${where.section}"] figure[data-slot=live][data-beat="${beat}"]`,
+          { timeout: 20_000 }
+        );
+        await page.waitForTimeout(400);
+      }
+      const file = `${name}${beat === null ? "" : `-beat-${beat + 1}`}.png`;
+      await figure.screenshot({ path: join(CAPS, file) });
+      copyFileSync(join(CAPS, file), join(CLONE_CAPS, file));
+      shots += 1;
+    }
+  }
+  return shots;
 }
 
 const spec: Spec = {
@@ -1036,10 +451,12 @@ const spec: Spec = {
     await build();
     const served = serveFolder();
     mkdirSync(CAPS, { recursive: true });
+    mkdirSync(CLONE_CAPS, { recursive: true });
     try {
       for (const view of ["desk", "phone"] as View[]) {
         for (const theme of THEMES) {
           const leg = `${view} ${theme}`;
+          const phone = view === "phone";
           // biome-ignore lint/performance/noAwaitInLoops: one page per leg, in turn
           const page = await kit.page(view, { theme });
           const errors: string[] = [];
@@ -1049,6 +466,7 @@ const spec: Spec = {
             }
           });
           page.on("pageerror", (error) => errors.push(error.message));
+          await page.addInitScript(SHOWN);
           await open(
             page,
             `${served.base}/?theme=${theme}`,
@@ -1056,18 +474,42 @@ const spec: Spec = {
           );
           await settle(page);
 
-          checkRows(kit, leg, await readRows(page));
-          checkFrames(kit, leg, await readFrames(page));
-          checkFaces(kit, leg, await readFaces(page));
-          checkLayout(kit, leg, await readLayout(page));
-          for (const ink of await readInks(page)) {
-            kit.check(
-              `${leg}: ${ink.what} holds ${ink.least.toFixed(2)}:1, at least 4.5:1`,
-              ink.least >= 4.5
-            );
-          }
+          checkFaces(kit, leg, await readFaces(page), phone);
 
-          await capture(page, `${view}-${theme}`);
+          const sweeps = await readSweeps(page);
+          kit.check(
+            `${leg}: ${sweeps.running} sweeps run, each on a working delegate's line, and all ${sweeps.workingLines} working lines shown sweep`,
+            sweeps.running > 0 &&
+              sweeps.workingLines > 0 &&
+              sweeps.off.length === 0,
+            sweeps.off.slice(0, 6).join(" | ")
+          );
+          const within = `section[data-variation="c"] .frames > figure:nth-child(${phone ? 2 : 1})`;
+          const scrub = await scrubSweep(page, within);
+          const [start = Number.NaN, , half = Number.NaN, , end = Number.NaN] =
+            scrub.at;
+          const rising = scrub.at.every(
+            (value, index) => index === 0 || value > (scrub.at[index - 1] ?? 0)
+          );
+          kit.check(
+            `${leg}: scrubbed over its ${scrub.length}ms run, the sweep crosses the working line's fill (${scrub.at.map((value) => value.toFixed(2)).join(" → ")})`,
+            scrub.length === 1200 &&
+              rising &&
+              Math.abs(start + 1) < 0.05 &&
+              Math.abs(half) < 0.05 &&
+              end > 0.9,
+            JSON.stringify(scrub)
+          );
+
+          const opened = await openStep(page, phone ? "phone" : "desk");
+          kit.check(
+            `${leg}: a step opens to its description in all three variations (${phone ? "in place in One ledger, on a pushed page in Lanes and Crew first" : "in place"})`,
+            opened.length === 0,
+            opened.join(" | ")
+          );
+
+          const shots = await capture(page, `${view}-${theme}`);
+          kit.note(`${leg}: ${shots} captures`);
           kit.check(
             `${leg}: no console errors`,
             errors.length === 0,
@@ -1075,7 +517,7 @@ const spec: Spec = {
           );
         }
       }
-      kit.note(`captures in ${CAPS}`);
+      kit.note(`captures in ${CAPS} and ${CLONE_CAPS}`);
     } finally {
       served.stop();
     }
