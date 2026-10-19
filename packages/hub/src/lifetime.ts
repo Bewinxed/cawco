@@ -76,6 +76,14 @@ const guarded = (run: () => void) => (): void => {
   }
 };
 
+/**
+ * Runs `run` once the current step ends (a microtask), its throw said as a
+ * timer's is: the hub's one way to defer work to the end of a step.
+ */
+export const soon = (run: () => void): void => {
+  queueMicrotask(guarded(run));
+};
+
 export const makeLifetime = (): HubLifetimeShape => {
   const timers = new Set<HubTimer>();
   const releases: (() => void)[] = [];

@@ -567,7 +567,7 @@ import {
 import { type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { createLaws } from "./laws";
 import { createLeadGate, reviewProblem } from "./lead-gate";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import {
   type CommandOptions,
@@ -10902,21 +10902,21 @@ export const createServer = (
    * is told once per {@link DECISIONS_TOLD_MS}.
    */
   const DECISIONS_TOLD_MS = 400;
-  const decisionsTelling = new Map<string, ReturnType<typeof setTimeout>>();
+  const decisionsTelling = new Map<string, HubTimer>();
   const decisionsChanged = (projectId: string): void => {
     if (decisionsTelling.has(projectId)) {
       return;
     }
     decisionsTelling.set(
       projectId,
-      setTimeout(() => {
+      lifetime.after(DECISIONS_TOLD_MS, () => {
         decisionsTelling.delete(projectId);
         registry.broadcast({
           verb: "frames",
           machineId: "hub",
           payload: { kind: "decisions.changed", projectId },
         });
-      }, DECISIONS_TOLD_MS)
+      })
     );
   };
 
@@ -18784,7 +18784,7 @@ export const createServer = (
     // An attempt at a task ended: the dispatcher moves the task. Deferred: the
     // boot sweep below ends items before the dispatcher exists.
     itemEnded: (item) =>
-      queueMicrotask(() => {
+      soon(() => {
         dispatcher.itemEnded(item);
         push.itemEnded(item);
         caw.itemEnded(item);
@@ -27138,7 +27138,7 @@ export const createServer = (
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
               // A project Caw could not set up while no machine was online is set up now.
-              queueMicrotask(() => {
+              soon(() => {
                 caw.machineOnline();
                 repairThread();
               });

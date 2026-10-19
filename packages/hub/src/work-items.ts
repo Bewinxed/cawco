@@ -143,7 +143,7 @@ import {
   type Refusal,
   statusCommand,
 } from "./landing";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import {
   type CommandOptions,
   CommandStopped,
@@ -2112,7 +2112,7 @@ export const createWorkItems = ({
         itemEnded?.(after);
         // After the step that ended it, and after the failure report the
         // caller sends in that same step.
-        queueMicrotask(() => afterEnd(after));
+        soon(() => afterEnd(after));
       }
       return after;
     }
@@ -3484,7 +3484,7 @@ export const createWorkItems = ({
 
   /** {@link settleNow}, off the caller's step. */
   const settleSoon = (id: string): void => {
-    queueMicrotask(() => detach(settleNow(id), `settle ${id}`));
+    soon(() => detach(settleNow(id), `settle ${id}`));
   };
 
   /**
