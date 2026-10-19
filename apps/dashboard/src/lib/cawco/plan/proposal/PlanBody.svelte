@@ -29,6 +29,7 @@
     carriersOf,
     type Delegate,
     type PlanFixture,
+    progress,
     type Step,
     stackOrder,
   } from "./fixtures";
@@ -42,27 +43,18 @@
     variation,
     loaded,
     phone = false,
-    open = [],
-    pushed,
   }: {
     plan: PlanFixture;
     variation: Variation;
     /** When the page loaded: every running time counts from it. */
     loaded: number;
     phone?: boolean;
-    /** Rows the frame stands open. */
-    open?: string[];
-    /** The step or delegate whose page the phone frame stands on. */
-    pushed?: string;
   } = $props();
 
   const view = frameView({
     loaded: untrack(() => loaded),
-    // What the frame stands at as it starts; the person moves it from there.
-    open: untrack(() => open),
     phone: untrack(() => phone),
     plan: () => plan,
-    pushed: untrack(() => pushed),
   });
   const pushes = $derived(phone && variation !== "a");
 
@@ -105,6 +97,7 @@
   const onIt = $derived(
     stackOrder(plan.delegates.filter((one) => one.status !== "done"))
   );
+  const done = $derived(progress(plan));
   const finished = $derived(
     plan.delegates.filter((one) => one.status === "done")
   );
@@ -159,7 +152,10 @@
 
 {#snippet crew()}
   <section aria-labelledby="on-it-{variation}" class="group">
-    <h3 class="group-head" id="on-it-{variation}">On it</h3>
+    <h3 class="group-head mark-line" id="on-it-{variation}">
+      <span>On it</span>
+      <span class="num count" data-num>{onIt.length}</span>
+    </h3>
     <ul
       class="rows"
       data-slot="stack"
@@ -171,7 +167,7 @@
     {#if finished.length > 0}
       <button
         aria-expanded={view.opened.has("finished")}
-        class="finished"
+        class="finished mark-line"
         onclick={() => view.toggle("finished")}
         type="button"
       >
@@ -179,6 +175,7 @@
         <span
           aria-hidden="true"
           class="chev"
+          data-box
           data-open={view.opened.has("finished") || undefined}
           ><IconChevronRight /></span
         >
@@ -189,7 +186,10 @@
     {/if}
   </section>
   <section aria-labelledby="todos-{variation}" class="group">
-    <h3 class="group-head" id="todos-{variation}">To-dos</h3>
+    <h3 class="group-head mark-line" id="todos-{variation}">
+      <span>To-dos</span>
+      <span class="num count" data-num>{done.done} of {done.total}</span>
+    </h3>
     <div class="column">
       <Connectors edges={afterEdges} mode="column" />
       <ul class="rows" {@attach reflow()}>
@@ -276,10 +276,17 @@
     }
   }
   .group-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
     margin: 0;
     font: var(--type-label);
     font-weight: var(--weight-body);
     color: var(--ink-muted);
+  }
+  .count {
+    font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
   }
   .column {
     position: relative;

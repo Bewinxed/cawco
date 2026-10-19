@@ -41,15 +41,13 @@ const KEY = Symbol("plan-frame");
 
 export function frameView(options: {
   loaded: number;
-  open: string[];
   phone: boolean;
   plan: () => PlanFixture;
-  pushed?: string;
 }): FrameView {
-  const opened = new SvelteSet<string>(options.open);
+  const opened = new SvelteSet<string>();
   const ticked = new SvelteSet<string>();
   const agreed = new SvelteSet<string>();
-  const pushed = $state({ id: options.pushed ?? null });
+  const pushed = $state({ id: null as string | null });
   const lit = $state({ id: null as string | null });
   const clock = tickingClock(() =>
     options.plan().steps.some((step) => counting(step.state))

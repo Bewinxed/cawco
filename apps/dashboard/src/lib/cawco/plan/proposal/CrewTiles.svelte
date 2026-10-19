@@ -51,7 +51,7 @@
     box-shadow: 0 0 0 1.5px var(--surface-raised);
     cursor: pointer;
 
-    & :global(.session-mark-glyph) {
+    & :global(svg) {
       inline-size: 8px;
       block-size: 8px;
     }
