@@ -2095,7 +2095,7 @@ ws_served_pid() { as_user "$joinerc" pgrep -o -f "^socat TCP-LISTEN:$WS_SERVED_P
 # shell through the workspace's tool door (`cawco tool`, packages/cli/src/tools.ts), naming what serves the port. Its
 # answer is kept in $rigdir/ws-preview-open (its id closes it). The hub's preview port for it is read as the dashboard
 # learns it.
-ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
+ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
 # The delegate removes that preview (artifact_delete): its server's last artifact, so the stage stops it.
 ws_preview_close() {
   local id
