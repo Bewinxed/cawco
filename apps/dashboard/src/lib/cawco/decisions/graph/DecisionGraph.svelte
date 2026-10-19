@@ -149,13 +149,10 @@
   }
 </script>
 
-<!-- literal: 24rem, inset 0 0 0 1px (the frame's ring) -->
 <section
   aria-label="Decision graph"
-  class="relative min-h-(--graph-min-h) min-w-0 flex-auto overflow-hidden rounded-lg bg-surface-recess shadow-(--graph-ring)"
+  class="relative min-h-(--c-decision-graph-min-h) min-w-0 flex-auto overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
   data-slot="decision-graph"
-  style:--graph-min-h="24rem"
-  style:--graph-ring="inset 0 0 0 1px var(--border-hairline)"
 >
   <svg aria-hidden="true" class="absolute size-0">
     <defs>
@@ -223,17 +220,3 @@
     </SvelteFlow>
   {/if}
 </section>
-
-<style>
-  /* A card new to the graph fades up where it lands. */
-  @media (prefers-reduced-motion: no-preference) {
-    /* residual: foreign-dom */
-    [data-slot="decision-graph"] :global(.svelte-flow__node-decision) {
-      transition: opacity var(--dur-fade) var(--ease-out);
-
-      @starting-style {
-        opacity: 0;
-      }
-    }
-  }
-</style>
