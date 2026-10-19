@@ -391,11 +391,11 @@ async function promptHead(kit: Kit, bench: string): Promise<void> {
   await open(
     page,
     `${bench}/motion/prompt-head`,
-    '[data-slot="hitl"] h2 .place'
+    '[data-slot="hitl"] h2 [data-num]'
   );
   const head = await page.evaluate((): PromptHead | null => {
     const h2 = document.querySelector('[data-slot="hitl"] h2');
-    const place = h2?.querySelector<HTMLElement>(".place");
+    const place = h2?.querySelector<HTMLElement>("[data-num]");
     const asker = h2?.querySelector<HTMLElement>('[data-slot="title"]');
     if (!(place && asker)) {
       return null;

@@ -315,7 +315,7 @@
           data-slot="glyph"
           aria-hidden="true"
           class="inline-flex size-icon-md"
-          data-box><OpenCodeLogo /></span
+          data-box><OpenCodeLogo class="size-full" /></span
         >
         <span data-slot="name">opencode Go</span>
       </div>

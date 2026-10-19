@@ -1079,12 +1079,6 @@ public enum Size {
     public static let cComposerMenuMaxH: Double = 320
     /// The send plane's optical centring, up and right: the glyph's mass sits low-left in its box.
     public static let opticalNudge: Double = 0.5
-    /// A mention chip's end padding (MentionField, and Composer's autosize twin).
-    public static let cMentionChipPadEnd: Double = 6
-    /// A mention chip's type size (MentionField, and Composer's autosize twin).
-    public static let cMentionChipSize: Double = 15
-    /// A mention chip's line height (MentionField, and Composer's autosize twin).
-    public static let cMentionChipLeading: Double = 22
     /// A permission card's field value before it scrolls.
     public static let cAskValueMaxH: Double = 200
     /// The project offer's line basis, so its buttons wrap under it on a narrow card.
@@ -1113,7 +1107,7 @@ public enum Size {
     public static let cMarkDot: Double = 6
     /// The room a Where-it-goes row keeps beside its meter for the figure and its gap.
     public static let cUsageFigureW: Double = 88
-    /// A row meter's height on the Usage page (DESIGN.md Limit bar: "8px on a page").
+    /// A meter's height on a page: a Where-it-goes row's and a limit bar's at its regular size (DESIGN.md Limit bar: "8px on a page").
     public static let cMeterBarH: Double = 8
     /// A dialog's height cap, its body scrolling inside; a document dialog stands at it (the parent's call: DESIGN.md's Drawer cap, its Dialog naming none).
     public static let cDialogMaxH: Double = 717.4
@@ -1161,9 +1155,74 @@ public enum Size {
     public static let cBenchFieldW: Double = 480
     /// A bench slider's readout ("32px", "100%"), so the figure never jumps.
     public static let cBenchReadoutW: Double = 32
+    /// The side-head bench card's height: a side card's head and one body line.
+    public static let cSideBenchH: Double = 120
+    /// The phone's navigation sheet's width (Shell); the desk rail is c-sidebar-w.
+    public static let cRailSheetW: Double = 284
+    /// The height a run step's opened result scrolls inside (RunSteps).
+    public static let cRunResultMax: Double = 240
+    /// The session hover card's head at its narrowest, so a short title never narrows the card.
+    public static let cSessionHoverHead: Double = 240
+    /// The room the session hover card reads as its cell's (SessionHover).
+    public static let cSessionHoverRoom: Double = 360
+    /// A tree row's age column, as wide as "59m" (SessionRow).
+    public static let cTrailCol: Double = 24
+    /// The transcript foot's dissolve at rest (FootFade).
+    public static let cFootFade: Double = 96
+    /// How wide an attached file's thumb may run: its container, up to 16rem (DocThumb).
+    /// At most this, in points: on the web the least of it and a share of its container (min).
+    public static let cDocMax: Double = 256
+    /// The delegate tray's "+N" chip: two digits and a plus in the chip's label type.
+    public static let cTrayMoreW: Double = 52
+    /// A made tile's least width in its auto-fill grid (ViewMade).
+    public static let cMadeTileMin: Double = 288
+    /// The Canvas view's least height, the floor its graph reads at (ViewCanvas).
+    public static let cCanvasMinH: Double = 280
+    /// A pipeline row's stage-name column at its narrowest (ViewPipeline).
+    public static let cPipelineNameMin: Double = 96
+    /// A pipeline row's stage-name column at its widest.
+    public static let cPipelineNameMax: Double = 160
+    /// A pipeline row's stage-kind column at its narrowest.
+    public static let cPipelineKindMin: Double = 64
+    /// A pipeline row's stage-kind column at its widest.
+    public static let cPipelineKindMax: Double = 96
+    /// A pipeline row's count column.
+    public static let cPipelineCountW: Double = 48
+    /// The gap between two cards of the phone's pane deck; equal to GAP in workspace/deck.svelte.ts, which sizes the drag travel.
+    public static let cDeckGap: Double = 12
+    /// The new-project page's column.
+    public static let cNewProjectW: Double = 1152
+    /// The slot that holds Caw at his hero size over the new-project page; equal to CAW_SIZE in project/new/+page.svelte.
+    public static let cCawHero: Double = 80
+    /// The least a context meter's bar draws in the session details strip.
+    public static let cContextBarMin: Double = 48
+    /// The most a context meter's bar draws in the session details strip.
+    public static let cContextBarMax: Double = 96
+    /// The details card's model list cap: five 44px rows, four gaps and the list's padding, so rows scroll whole.
+    public static let cModelListMax: Double = 232
+    /// The phone tab strip's end fade run (PaneTabs).
+    public static let cTabStripFade: Double = 16
+    /// The tab strip's fade cap while no tab is drawn chosen: wider than any fade, so the min() never caps it.
+    public static let cTabStripUncapped: Double = 390
+    /// The session details card's width (DESIGN.md: "the card is 416px wide"); equal to cardWidth()'s 416 in PaneTabs.
+    public static let cDetailsCardW: Double = 416
+    /// The session details card's height cap on a desk.
+    public static let cDetailsCardMaxH: Double = 760
+    /// A tab's hanging menu at its narrowest, the kit menu's compact floor.
+    public static let cTabMenuMin: Double = 192
+    /// The table view's new-task form.
+    public static let cNewTaskW: Double = 576
+    /// The width a draft view's sentence takes before its Keep and Discard wrap beneath it.
+    public static let cDraftLine: Double = 224
+    /// A card's placeholder in the next project's board skeleton.
+    public static let cSkeletonCardH: Double = 54
+    /// The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page).
+    public static let cOfferTextBasis: Double = 240
 }
 
 public enum Effect {
+    /// A motion bench's stack: over the shell (the hub band's z-10), under the kit's floating layer (z-50, a hang card's z-60). Page-level; the layer lane folds it into the layer roles.
+    public static let zBench: Double = 49
     /// How much of the page's own background the scrim lays over what is under it: its alpha. The screen's edges under an open scrim (ScreenEdges) mix the same share of background into the edge colour, so the strip Safari extends is the scrim's colour over that edge.
     public static let scrimMix: Double = 0.72
     /// A message not yet said in the conversation (sending, queued).

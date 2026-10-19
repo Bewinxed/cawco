@@ -87,14 +87,8 @@
 <div
   data-slot="actions-ledger"
   style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
-  style:--none="0"
 >
-  <Table.Root
-    data-actions
-    aria-label={label}
-    class="table-fixed border-separate"
-    spacing="flush"
-  >
+  <Table.Root data-actions aria-label={label} layout="ledger">
     <Table.Header>
       <Table.Row variant="band">
         <Table.Head class="h-c-toolbar-ctl w-(--lead-w)" variant="caps"

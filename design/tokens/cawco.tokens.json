@@ -6410,30 +6410,6 @@
       },
       "$description": "The send plane's optical centring, up and right: the glyph's mass sits low-left in its box."
     },
-    "c-mention-chip-pad-end": {
-      "$type": "dimension",
-      "$value": {
-        "value": 6,
-        "unit": "px"
-      },
-      "$description": "A mention chip's end padding (MentionField, and Composer's autosize twin)."
-    },
-    "c-mention-chip-size": {
-      "$type": "dimension",
-      "$value": {
-        "value": 15,
-        "unit": "px"
-      },
-      "$description": "A mention chip's type size (MentionField, and Composer's autosize twin)."
-    },
-    "c-mention-chip-leading": {
-      "$type": "dimension",
-      "$value": {
-        "value": 22,
-        "unit": "px"
-      },
-      "$description": "A mention chip's line height (MentionField, and Composer's autosize twin)."
-    },
     "c-ask-value-max-h": {
       "$type": "dimension",
       "$value": {
@@ -6562,7 +6538,7 @@
         "value": 8,
         "unit": "px"
       },
-      "$description": "A row meter's height on the Usage page (DESIGN.md Limit bar: \"8px on a page\")."
+      "$description": "A meter's height on a page: a Where-it-goes row's and a limit bar's at its regular size (DESIGN.md Limit bar: \"8px on a page\")."
     },
     "c-dialog-max-h": {
       "$type": "dimension",
@@ -6772,9 +6748,277 @@
           "css": "4ch"
         }
       }
+    },
+    "c-side-bench-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 120,
+        "unit": "px"
+      },
+      "$description": "The side-head bench card's height: a side card's head and one body line."
+    },
+    "c-rail-sheet-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 284,
+        "unit": "px"
+      },
+      "$description": "The phone's navigation sheet's width (Shell); the desk rail is c-sidebar-w."
+    },
+    "c-run-result-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "The height a run step's opened result scrolls inside (RunSteps)."
+    },
+    "c-session-hover-head": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "The session hover card's head at its narrowest, so a short title never narrows the card."
+    },
+    "c-session-hover-room": {
+      "$type": "dimension",
+      "$value": {
+        "value": 360,
+        "unit": "px"
+      },
+      "$description": "The room the session hover card reads as its cell's (SessionHover)."
+    },
+    "c-trail-col": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "A tree row's age column, as wide as \"59m\" (SessionRow).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "3ch"
+        }
+      }
+    },
+    "c-foot-fade": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "The transcript foot's dissolve at rest (FootFade)."
+    },
+    "c-doc-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 256,
+        "unit": "px"
+      },
+      "$description": "How wide an attached file's thumb may run: its container, up to 16rem (DocThumb).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "min(100%, 16rem)"
+        }
+      }
+    },
+    "c-tray-more-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 52,
+        "unit": "px"
+      },
+      "$description": "The delegate tray's \"+N\" chip: two digits and a plus in the chip's label type."
+    },
+    "c-made-tile-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 18,
+        "unit": "rem"
+      },
+      "$description": "A made tile's least width in its auto-fill grid (ViewMade)."
+    },
+    "c-canvas-min-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 280,
+        "unit": "px"
+      },
+      "$description": "The Canvas view's least height, the floor its graph reads at (ViewCanvas)."
+    },
+    "c-pipeline-name-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "rem"
+      },
+      "$description": "A pipeline row's stage-name column at its narrowest (ViewPipeline)."
+    },
+    "c-pipeline-name-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "rem"
+      },
+      "$description": "A pipeline row's stage-name column at its widest."
+    },
+    "c-pipeline-kind-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "rem"
+      },
+      "$description": "A pipeline row's stage-kind column at its narrowest."
+    },
+    "c-pipeline-kind-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "rem"
+      },
+      "$description": "A pipeline row's stage-kind column at its widest."
+    },
+    "c-pipeline-count-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3,
+        "unit": "rem"
+      },
+      "$description": "A pipeline row's count column."
+    },
+    "c-deck-gap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
+      "$description": "The gap between two cards of the phone's pane deck; equal to GAP in workspace/deck.svelte.ts, which sizes the drag travel."
+    },
+    "c-new-project-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 72,
+        "unit": "rem"
+      },
+      "$description": "The new-project page's column."
+    },
+    "c-caw-hero": {
+      "$type": "dimension",
+      "$value": {
+        "value": 80,
+        "unit": "px"
+      },
+      "$description": "The slot that holds Caw at his hero size over the new-project page; equal to CAW_SIZE in project/new/+page.svelte."
+    },
+    "c-context-bar-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 48,
+        "unit": "px"
+      },
+      "$description": "The least a context meter's bar draws in the session details strip."
+    },
+    "c-context-bar-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "The most a context meter's bar draws in the session details strip."
+    },
+    "c-model-list-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 232,
+        "unit": "px"
+      },
+      "$description": "The details card's model list cap: five 44px rows, four gaps and the list's padding, so rows scroll whole."
+    },
+    "c-tab-strip-fade": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$description": "The phone tab strip's end fade run (PaneTabs)."
+    },
+    "c-tab-strip-uncapped": {
+      "$type": "dimension",
+      "$value": {
+        "value": 390,
+        "unit": "px"
+      },
+      "$description": "The tab strip's fade cap while no tab is drawn chosen: wider than any fade, so the min() never caps it.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "100vw"
+        }
+      }
+    },
+    "c-details-card-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 416,
+        "unit": "px"
+      },
+      "$description": "The session details card's width (DESIGN.md: \"the card is 416px wide\"); equal to cardWidth()'s 416 in PaneTabs."
+    },
+    "c-details-card-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 760,
+        "unit": "px"
+      },
+      "$description": "The session details card's height cap on a desk."
+    },
+    "c-tab-menu-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "rem"
+      },
+      "$description": "A tab's hanging menu at its narrowest, the kit menu's compact floor."
+    },
+    "c-new-task-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 36,
+        "unit": "rem"
+      },
+      "$description": "The table view's new-task form."
+    },
+    "c-draft-line": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "rem"
+      },
+      "$description": "The width a draft view's sentence takes before its Keep and Discard wrap beneath it."
+    },
+    "c-skeleton-card-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 54,
+        "unit": "px"
+      },
+      "$description": "A card's placeholder in the next project's board skeleton."
+    },
+    "c-offer-text-basis": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page)."
     }
   },
   "effect": {
+    "z-bench": {
+      "$type": "number",
+      "$value": 49,
+      "$description": "A motion bench's stack: over the shell (the hub band's z-10), under the kit's floating layer (z-50, a hang card's z-60). Page-level; the layer lane folds it into the layer roles."
+    },
     "scrim-mix": {
       "$type": "number",
       "$value": 0.72,
@@ -7505,7 +7749,7 @@
       "$description": "A suggestion chip: its press on the toggle's beat, its tint and outline on the panel's, its ink on the control's.",
       "$extensions": {
         "dev.cawco": {
-          "css": "transform {motion.dur-toggle} {motion.ease-out}, background-color {motion.dur-panel} {motion.ease-out}, border-color {motion.dur-panel} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+          "css": "scale {motion.dur-toggle} {motion.ease-out}, background-color {motion.dur-panel} {motion.ease-out}, border-color {motion.dur-panel} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
         }
       }
     },

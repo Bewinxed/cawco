@@ -3440,13 +3440,13 @@
         <!-- The pill's padding above and below the 34px field focuses it,
          the caret at the end: its touch area is the field's. -->
         <!-- The field's box. Its custom properties reach the field and the
-             autosize twin beside it (a copy of the field without its inline
-             style): the field's size, ceiling and padding, the hint's
-             tracking and ink, the scroll cue's run, the roll's reach, the
-             folded line's end the "+N lines" stands on, and the mention
-             chips' sizes (MentionField's own, for the twin). The field's
-             own height floor, ceiling, size and padding give way to the
-             composer's, so a single line sits on the buttons' midline; a
+             autosize twin beside it (a copy of the field, its classes
+             included, without its inline style): the field's padding, the
+             scroll cue's run, the roll's reach and the folded line's end the
+             "+N lines" stands on. The field's own height floor, size and
+             padding give way to the composer's (MentionField merges the
+             classes it is given over its own), so a single line sits on the
+             buttons' midline; a
              pick taken off the recall wheel fits the field on the wheel's
              fold clock and curve, over the folding duration. The scroll
              cue: the edge with text out of sight fades over about a line.
@@ -3465,7 +3465,7 @@
         <div
           data-folded={folded || undefined}
           data-slot="composer-field"
-          class="group/field touch-hit relative flex flex-auto min-w-0 [&>[data-editor]]:min-h-(--cin-ctl) [&>[data-editor]]:max-h-c-textarea-max-h [&>[data-editor]]:text-(length:--text-field-floor) [&>[data-editor]]:py-(--field-pad) [&>[data-editor]]:px-0 motion-safe:group-data-settling/cin:[&>[data-editor]]:dur-grow-exit motion-safe:group-data-settling/cin:[&>[data-editor]]:ease-drawer [&>[data-editor][data-cue-top]]:mask-(--cue-top-fade) [&>[data-editor][data-cue-bottom]]:mask-(--cue-bottom-fade) [&>[data-editor][data-cue-top][data-cue-bottom]]:mask-(--cue-both-fade) data-folded:[&>[data-editor]]:mask-(--fold-fade) [&>[data-editor]]:translate-raw-(--roll-move) [&>[data-editor]]:clip-path-(--roll-clip)"
+          class="group/field touch-hit relative flex flex-auto min-w-0"
           inert={askOpen}
           bind:this={fieldWrap}
           style:--roll-move="0 var(--roll-y)"
@@ -3476,9 +3476,6 @@
           style:--fold-fade={"linear-gradient(to right, var(--mask-opaque) calc(100% - var(--c-composer-more-w) - var(--space-8)), transparent calc(100% - var(--c-composer-more-w)))"}
           style:--field-pad="calc((var(--cin-ctl) - 1lh) / 2)"
           style:--cue-run="1lh"
-          style:--mention-chip-pad-end="var(--c-mention-chip-pad-end)"
-          style:--mention-chip-size="var(--c-mention-chip-size)"
-          style:--mention-chip-leading="var(--c-mention-chip-leading)"
           onclick={(event) => {
             if (field && !field.contains(event.target as Node)) {
               field.focus();
@@ -3503,7 +3500,7 @@
             aria-describedby={recallOf ? `${recallId}-way` : undefined}
             aria-expanded={menuOpen || !!recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-w-0 no-scrollbar opacity-(--roll-o) motion-safe:transition-[height] motion-safe:dur-control motion-safe:ease-out motion-safe:data-folding:dur-morph data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:dur-fade group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
+            class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:dur-control motion-safe:ease-out motion-safe:data-folding:dur-morph motion-safe:group-data-settling/cin:dur-grow-exit motion-safe:group-data-settling/cin:data-folding:dur-grow-exit motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:dur-fade group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
             data-cue-bottom={(cueBottom && !folded) || undefined}
             data-cue-top={(cueTop && !folded) || undefined}
             data-flying={flight !== null || !wordsLanded || undefined}

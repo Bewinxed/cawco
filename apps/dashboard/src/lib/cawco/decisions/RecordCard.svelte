@@ -87,7 +87,7 @@
           data-slot="chosen"
           class="flex max-w-full min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
         >
-          <span data-slot="sel" class="kit-chip sel cursor-default">
+          <span data-slot="sel" class="kit-chip kit-chip-chosen cursor-default">
             <span class="kit-keycap">{option.keycap}</span><span
               data-slot="record-card-label">{option.label}</span
             >

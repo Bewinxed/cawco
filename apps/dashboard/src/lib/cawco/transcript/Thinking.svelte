@@ -179,7 +179,12 @@
   );
 </script>
 
-<div data-slot="rail-row" data-think class="rail-row max-w-c-measure">
+<div
+  data-slot="rail-row"
+  data-think
+  data-tx-rail
+  class="rail-row max-w-c-measure"
+>
   <ThinkingSteps
     onOpenChange={(value) => {
       expanded = value;

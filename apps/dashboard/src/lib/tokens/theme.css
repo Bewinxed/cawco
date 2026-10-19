@@ -25,6 +25,7 @@
   --container-leaf: 620px;
   --container-setup: 640px;
   --container-decisions-900px: 900px;
+  --container-project-dock: 938px;
 }
 
 @theme inline {
@@ -515,9 +516,6 @@
   --spacing-c-elapsed-w: var(--c-elapsed-w);
   --spacing-c-composer-more-w: var(--c-composer-more-w);
   --spacing-c-composer-menu-max-h: var(--c-composer-menu-max-h);
-  --spacing-c-mention-chip-pad-end: var(--c-mention-chip-pad-end);
-  --spacing-c-mention-chip-size: var(--c-mention-chip-size);
-  --spacing-c-mention-chip-leading: var(--c-mention-chip-leading);
   --spacing-c-ask-value-max-h: var(--c-ask-value-max-h);
   --spacing-c-offer-line: var(--c-offer-line);
   --spacing-c-suggest-shimmer-w: var(--c-suggest-shimmer-w);
@@ -555,6 +553,37 @@
   --spacing-c-bench-side-h: var(--c-bench-side-h);
   --spacing-c-bench-field-w: var(--c-bench-field-w);
   --spacing-c-bench-readout-w: var(--c-bench-readout-w);
+  --spacing-c-side-bench-h: var(--c-side-bench-h);
+  --spacing-c-rail-sheet-w: var(--c-rail-sheet-w);
+  --spacing-c-run-result-max: var(--c-run-result-max);
+  --spacing-c-session-hover-head: var(--c-session-hover-head);
+  --spacing-c-session-hover-room: var(--c-session-hover-room);
+  --spacing-c-trail-col: var(--c-trail-col);
+  --spacing-c-foot-fade: var(--c-foot-fade);
+  --spacing-c-doc-max: var(--c-doc-max);
+  --spacing-c-tray-more-w: var(--c-tray-more-w);
+  --spacing-c-made-tile-min: var(--c-made-tile-min);
+  --spacing-c-canvas-min-h: var(--c-canvas-min-h);
+  --spacing-c-pipeline-name-min: var(--c-pipeline-name-min);
+  --spacing-c-pipeline-name-max: var(--c-pipeline-name-max);
+  --spacing-c-pipeline-kind-min: var(--c-pipeline-kind-min);
+  --spacing-c-pipeline-kind-max: var(--c-pipeline-kind-max);
+  --spacing-c-pipeline-count-w: var(--c-pipeline-count-w);
+  --spacing-c-deck-gap: var(--c-deck-gap);
+  --spacing-c-new-project-w: var(--c-new-project-w);
+  --spacing-c-caw-hero: var(--c-caw-hero);
+  --spacing-c-context-bar-min: var(--c-context-bar-min);
+  --spacing-c-context-bar-max: var(--c-context-bar-max);
+  --spacing-c-model-list-max: var(--c-model-list-max);
+  --spacing-c-tab-strip-fade: var(--c-tab-strip-fade);
+  --spacing-c-tab-strip-uncapped: var(--c-tab-strip-uncapped);
+  --spacing-c-details-card-w: var(--c-details-card-w);
+  --spacing-c-details-card-max-h: var(--c-details-card-max-h);
+  --spacing-c-tab-menu-min: var(--c-tab-menu-min);
+  --spacing-c-new-task-w: var(--c-new-task-w);
+  --spacing-c-draft-line: var(--c-draft-line);
+  --spacing-c-skeleton-card-h: var(--c-skeleton-card-h);
+  --spacing-c-offer-text-basis: var(--c-offer-text-basis);
 
   --radius-well-r: var(--well-r);
   --radius-row-mark: var(--row-mark-r);
@@ -648,6 +677,11 @@
   --animate-icon-swap-still: kit-fade-in var(--dur-control) var(--ease-out) both;
   --animate-cell-swap: cell-swap var(--dur-control) var(--ease-out);
   --animate-cell-fade: kit-fade-in var(--dur-control) var(--ease-out);
+  --animate-arrive: kit-fade-in var(--dur-menu) var(--ease-out) both;
+  --animate-arrive-late: kit-fade-in var(--dur-menu) var(--ease-out)
+    var(--dur-control) both;
+  --animate-finish: finish calc(var(--dur-fade) * 2) var(--ease-out);
+  --animate-head-fade: head-fade linear both;
   @keyframes spin {
     to {
       transform: rotate(360deg);
@@ -806,6 +840,16 @@
     from {
       opacity: 0;
       scale: var(--pop-scale);
+    }
+  }
+  @keyframes finish {
+    35% {
+      background-color: var(--status-done-bg);
+    }
+  }
+  @keyframes head-fade {
+    to {
+      opacity: 1;
     }
   }
 }

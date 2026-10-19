@@ -197,7 +197,7 @@
           {#snippet badge()}
             {#if row.stats.pending > 0}
               <Badge data-slot="num" variant="attn"
-                >{row.stats.pending} waiting</Badge
+                ><span>{row.stats.pending} waiting</span></Badge
               >
             {/if}
           {/snippet}

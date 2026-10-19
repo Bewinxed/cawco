@@ -1811,7 +1811,11 @@
       <!-- While his panel is open the project's starters are in it (CawFloat);
            put away, they stand here and open it with their words. -->
       <div data-slot="caw-empty" class="w-full max-w-c-starters-w">
-        <EmptyState line={cawLine} title="Nothing on the board yet">
+        <EmptyState
+          actionWidth="fill"
+          line={cawLine}
+          title="Nothing on the board yet"
+        >
           {#snippet mark()}
             <!-- He stands here instead of sitting in the head, and is the
                  same seat at 80: a press opens his panel beside the page
@@ -1914,7 +1918,7 @@
        where it has the room for both, under it where it has not; the page
        yields the panel its room, so it never covers a column or the head.
        On a phone the panel is the bottom sheet, and the page keeps it all. -->
-  <!-- The side column (`project-dock`, the panel and the page at their
+  <!-- The side column (`@project-dock`, the panel and the page at their
        narrowest) stands from the width where both fit: the panel with its
        end margin, the pane's inline padding and two board columns with the
        gap between. -->
@@ -1924,7 +1928,7 @@
          the bottom sheet). With room for the board beside it: a column of
          its own at the page's end, a conversation's width. -->
     <div
-      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) project-dock:data-caw-open:grid-areas-(--docked-areas-side) project-dock:data-caw-open:grid-cols-(--docked-cols-side) project-dock:data-caw-open:grid-rows-(--docked-rows)"
+      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) @project-dock:data-caw-open:grid-areas-(--docked-areas-side) @project-dock:data-caw-open:grid-cols-(--docked-cols-side) @project-dock:data-caw-open:grid-rows-(--docked-rows)"
       data-caw-open={docked || undefined}
       style:--docked-areas={'"page"'}
       style:--docked-areas-row={'"page" "dock"'}
@@ -2163,7 +2167,7 @@
       <div
         aria-hidden="true"
         class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
-        style:--skeleton-col="minmax(var(--c-board-col-min), var(--c-board-col-max))"
+        style:--skeleton-col={"minmax(var(--c-board-col-min), var(--c-board-col-max))"}
         style:--skeleton-col-phone="calc(100% - var(--space-8))"
         out:crossOut
       >

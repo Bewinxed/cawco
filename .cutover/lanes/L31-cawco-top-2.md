@@ -108,8 +108,7 @@ token: --c-empty-fleet-caw 80px — the slot Caw stands in on the empty fleet; e
 
 ## Contracts
 
-contract: apps/dashboard/src/lib/cawco/MachinesButton.svelte:94 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/Shell.svelte:1520 | Shell selects `.bar-item`, `.machines` (`.tools :global(.bar-item[data-counted])`, `.tools :global(:is(.jump, .machines))`) and writes the item's size; both sides move to a data-slot hook together
-contract: apps/dashboard/src/lib/cawco/MachinesButton.svelte:101 shadcn/no-unknown-classes | apps/dashboard/src/lib/cawco/Shell.svelte:1520 | `.bar-symbol` is Shell's symbol hook and Shell writes its size and `color: var(--ink-muted)` unlayered; the tint here (`group-tone-attn:` / `group-tone-fail:`) only wins once Shell's rule is a layered utility, so Shell must read the tone (or lose the colour) in the same change
+resolved at integration: MachinesButton's `bar-item`, `machines` and `bar-symbol` classes are gone; the button is `[data-bar-item]` and `[data-machines]`, its glyph `data-slot="bar-symbol"`, drawn by app.css's bar-group component (L33) in `@layer components`, so the glyph's `group-tone-*` tint (a utility) wins by layer.
 
 ## Gaps
 

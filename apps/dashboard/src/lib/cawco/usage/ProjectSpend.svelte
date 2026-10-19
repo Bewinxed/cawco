@@ -458,9 +458,9 @@
         class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
       >
         <Table.Root
-          class="table-fixed border-separate max-phone:block"
-          spacing="flush"
-          style="--none: 0; --col-count: 8rem; --col-usd: 6rem; --col-last: 6rem; --row-cols: 1fr auto auto"
+          class="max-phone:block"
+          layout="ledger"
+          style="--col-count: 8rem; --col-usd: 6rem; --col-last: 6rem; --row-cols: 1fr auto auto"
         >
           {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
             <Table.Header class="max-phone:block">

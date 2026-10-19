@@ -413,6 +413,7 @@
      (InlineTranscript) reaches out past that column by its padding. -->
 <div
   data-slot="rail-row"
+  data-tx-rail
   class="rail-row"
   style:--well-at="calc(var(--x-hang) - var(--space-1))"
 >

@@ -3986,7 +3986,7 @@
                    glyph: the tool family's `text-tool-*` tint governs it, the
                    generic case inheriting the row's strong ink. -->
               <div
-                data-transcript-rail-row
+                data-tx-rail
                 data-slot="livetool"
                 class="min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong rail-row rail-line"
               >

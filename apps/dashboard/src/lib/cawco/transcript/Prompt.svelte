@@ -859,8 +859,7 @@
           value={otherAt === 0 ? OTHER : ""}
         >
           <ToggleGroup.Item
-            data-sel={otherAt === 0 || undefined}
-            class="group/chip kit-chip touch-hit data-sel:border-brand-solid data-sel:bg-surface-recess"
+            class="kit-chip touch-hit"
             onclick={(event: MouseEvent) => {
               event.preventDefault();
               openOther(0);
@@ -992,10 +991,7 @@
         {#snippet face(digit: number, label: string, description?: string)}
           {#if list}
             <span class="mark-cell"
-              ><span
-                class="kit-keycap group-data-sel/chip:bg-chip-chosen-bg group-data-sel/chip:text-chip-chosen-ink"
-                >{digit}</span
-              ></span
+              ><span class="kit-keycap">{digit}</span></span
             ><span class="block min-w-0"
               ><span
                 data-slot="opt-label"
@@ -1007,10 +1003,7 @@
                 >{/if}</span
             >
           {:else}
-            <span
-              class="kit-keycap group-data-sel/chip:bg-chip-chosen-bg group-data-sel/chip:text-chip-chosen-ink"
-              >{digit}</span
-            ><span
+            <span class="kit-keycap">{digit}</span><span
               data-slot="opt-label"
               class="min-w-0 wrap-anywhere text-pretty">{label}</span
             >
@@ -1026,11 +1019,9 @@
         {#snippet chips()}
           {#each q.options as opt, i (opt.label)}
             {@const live = ownsKeys && qi === current && i < 9}
-            {@const sel = isSelected(q.question, opt.label)}
             <ToggleGroup.Item
-              data-sel={sel || undefined}
               aria-keyshortcuts={live ? String(i + 1) : undefined}
-              class="group/chip kit-chip touch-hit focus-inset data-sel:border-brand-solid data-sel:bg-surface-recess group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0"
+              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0"
               onkeydown={optionKey}
               type="button"
               value={opt.label}
@@ -1042,9 +1033,8 @@
           {#if own < 9}
             {@const live = ownsKeys && qi === current}
             <ToggleGroup.Item
-              data-sel={otherPicked(q) || otherAt === qi || undefined}
               aria-keyshortcuts={live ? String(own + 1) : undefined}
-              class="group/chip kit-chip touch-hit focus-inset data-sel:border-brand-solid data-sel:bg-surface-recess group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0"
+              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0"
               onclick={(event: MouseEvent) => {
                 event.preventDefault();
                 openOther(qi);

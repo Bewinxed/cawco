@@ -308,7 +308,7 @@
     };
 </script>
 
-<div data-slot="tools" data-tool-group-rail-row class="rail-row">
+<div data-slot="tools" data-tx-rail class="rail-row">
   {#each messages as m (m.id ?? m.toolCallId)}
     {@const d = describe(m)}
     {@const Icon = d.icon}

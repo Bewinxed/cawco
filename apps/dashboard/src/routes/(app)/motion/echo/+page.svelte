@@ -58,7 +58,7 @@
   </ul>
   <!-- A working mark in no beat: it never echoes, and stands still on its
        live dot. -->
-  <p class="flex items-center gap-space-5" data-unbeaten>
+  <p class="mark-line flex items-center gap-space-5" data-unbeaten>
     <TreeMark fill="var(--mark-8)" status="live">
       {#snippet face()}
         <span></span>

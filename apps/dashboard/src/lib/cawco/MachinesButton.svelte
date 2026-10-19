@@ -91,14 +91,15 @@
       aria-expanded={barGlass.open === "machines"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="group bar-item machines mark-line touch-hit press-tint"
+      class="group mark-line touch-hit press-tint"
       data-counted={count > 0 || undefined}
       data-tone={tone}
       type="button"
     >
       <IconServer
+        data-slot="bar-symbol"
         aria-hidden="true"
-        class="bar-symbol group-tone-attn:text-status-attn-glyph group-tone-fail:text-status-fail-glyph"
+        class="group-tone-attn:text-status-attn-glyph group-tone-fail:text-status-fail-glyph"
       />
       {#if count > 0}
         <span data-slot="num" class="num">{count}</span>

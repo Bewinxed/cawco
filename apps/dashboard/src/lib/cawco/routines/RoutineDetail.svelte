@@ -160,13 +160,11 @@
       <div
         data-slot="runs-ledger"
         class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
-        style:--none="0"
       >
         <Table.Root
           data-runs
           aria-labelledby="runs-{routine.id}"
-          class="table-fixed border-separate"
-          spacing="flush"
+          layout="ledger"
         >
           <Table.Header>
             <Table.Row variant="band">

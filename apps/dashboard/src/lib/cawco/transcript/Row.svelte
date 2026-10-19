@@ -185,26 +185,21 @@
   /**
    * What fades in once the place is open. A rail row's content is what
    * stands on its rail (its children), found through the single-child
-   * wrappers a row can sit in (the live row's face); a surface that draws
-   * its own frame (`data-frame`) is the same. Anything else is the row.
+   * wrappers a row can sit in (the live row's face); a rail row says so
+   * (`data-tx-rail`), and a surface that draws its own frame (`data-frame`)
+   * is the same. Anything else is the row.
    */
   function contentOf(row: HTMLElement): Element[] {
+    const STANDS = "[data-tx-rail], [data-frame]";
     let element = row.firstElementChild;
     while (
       element &&
-      !(
-        element.classList.contains("rail-row") ||
-        element.hasAttribute("data-frame")
-      ) &&
+      !element.matches(STANDS) &&
       element.childElementCount === 1
     ) {
       element = element.firstElementChild;
     }
-    if (
-      element &&
-      (element.classList.contains("rail-row") ||
-        element.hasAttribute("data-frame"))
-    ) {
+    if (element?.matches(STANDS)) {
       return [...element.children];
     }
     return row.firstElementChild ? [row.firstElementChild] : [];

@@ -86,8 +86,7 @@ removed: files.svelte.ts:374 `.kit-pop.files-pop` — matched nothing (no elemen
 gap: apps/dashboard/src/lib/cawco/files/FilesItem.svelte:40 `bar-item` / `bar-symbol` classes are Shell's recipe (`.tools :global(.bar-item[data-counted])`, `.bar-item .num`, `.tools :global(.bar-symbol)`) — an item's look should be one kit recipe, not a class a sibling file styles by selector — DESIGN.md Top bar's trailing edge
 
 ## Contracts
-contract: apps/dashboard/src/lib/cawco/files/FilesItem.svelte:40 shadcn/no-unknown-classes | cawco/Shell.svelte:1507-1520 `.tools :global(.bar-item[data-counted])`, `.bar-item .num` | Shell's lane turns `bar-item` into utilities or `[data-bar-item]` (the hook is on the button)
-contract: apps/dashboard/src/lib/cawco/files/FilesItem.svelte:45 shadcn/no-unknown-classes | cawco/Shell.svelte:1520 `.tools :global(.bar-symbol)` | Shell's lane gives the symbol a hook or a recipe
+resolved at integration: FilesItem's `bar-item`, `files` and `bar-symbol` classes are gone; the button is `[data-bar-item]`, its count `data-slot="num"`, its folder `data-slot="bar-symbol"`, all drawn by app.css's bar-group component (L33).
 
 ## Lists
 needs variant: (none beyond Theme additions)

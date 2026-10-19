@@ -146,9 +146,7 @@
 {/if}
 
 {#if phoneFrame}
-  <div
-    class="grid place-items-center p-space-4"
-  >
+  <div class="grid place-items-center p-space-4">
     <iframe
       class="rounded-lg border border-border-control bg-surface-recess"
       height="844"

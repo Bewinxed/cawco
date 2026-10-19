@@ -108,6 +108,7 @@
      says so in words and in the one colour the rail allows. -->
 <div
   data-slot="rail-row"
+  data-tx-rail
   class="group/peer rail-row data-waiting:opacity-70"
   data-message={message.id}
   data-err={row.failed || undefined}

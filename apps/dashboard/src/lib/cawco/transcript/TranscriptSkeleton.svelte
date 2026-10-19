@@ -118,7 +118,7 @@
   <!-- Its tool calls, one row each, on the rail, as ToolGroup draws it
        (app.css `.rail-row`): rows at the transcript's line height, the glyph
        in the rail cell, the verb, then the mono argument. -->
-  <div data-slot="tools" data-transcript-skeleton-rail-row class="rail-row">
+  <div data-slot="tools" data-tx-rail class="rail-row">
     {#each TOOLS as width (width)}
       <div class="min-h-(--tx-line) coarse:min-h-(--tx-line-touch) rail-line">
         <Skeleton data-rail-cell radius="text" cell="rail" data-box /><Skeleton

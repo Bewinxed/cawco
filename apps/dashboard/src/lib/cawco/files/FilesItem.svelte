@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Files, the item the top bar's glass group leads with (DESIGN.md, Top
-   * bar's trailing edge): the folder as the group's `.bar-symbol` in its
+   * bar's trailing edge): the folder as the group's bar symbol in its
    * muted ink and, once there is anything, the number beside it as the
    * machines show theirs (Shell's item-with-a-number recipe, `data-counted`): the
    * number in the label role, `--space-2` past the folder, never on its
@@ -37,12 +37,12 @@
       aria-expanded={barGlass.open === "files"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="bar-item files mark-line touch-hit press-tint"
+      class="mark-line touch-hit press-tint"
       data-counted={counted || undefined}
       data-files-control
       type="button"
     >
-      <IconFiles aria-hidden="true" class="bar-symbol" data-files-glyph />
+      <IconFiles data-slot="bar-symbol" aria-hidden="true" data-files-glyph />
       {#if counted}
         <span data-slot="num" class="num" data-files-count>{count}</span>
       {/if}

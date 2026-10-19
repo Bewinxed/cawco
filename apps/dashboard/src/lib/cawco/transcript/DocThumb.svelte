@@ -152,7 +152,7 @@
   <button
     data-slot="doc"
     aria-label={`Open ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
+    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
     data-share={share}
     onclick={() =>
       lightbox.open({ kind: "text", name, content: props.content, share })}
@@ -165,7 +165,7 @@
   <a
     data-slot="doc"
     aria-label={`Download ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
+    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
     download={name}
     href={file.href}
     title={name}
@@ -176,7 +176,7 @@
   <button
     data-slot="doc"
     aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
-    class="press-tint inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
+    class="press-tint inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
     onclick={() => file?.onretry?.()}
     title={`${name}: ${file.failed}`}
     type="button"
@@ -189,8 +189,8 @@
       data-slot="doc"
       aria-busy="true"
       aria-label={`Uploading ${name}`}
-      class="inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default"
-          role="status"
+      class="inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default"
+      role="status"
       title={name}
     >
       {@render face()}
@@ -198,8 +198,8 @@
   {:else}
     <span
       data-slot="doc"
-      class="inline-flex items-center gap-space-2 h-c-thumb max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default"
-          title={name}>{@render face()}</span
+      class="inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default"
+      title={name}>{@render face()}</span
     >
   {/if}
 {/if}

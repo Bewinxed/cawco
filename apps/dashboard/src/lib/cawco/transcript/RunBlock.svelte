@@ -98,6 +98,7 @@
      (`morph` on the rows' clock), so the chat under it never jumps. -->
 <div
   data-slot="rail-row"
+  data-tx-rail
   data-run-block
   class="rail-row"
   data-nest-host

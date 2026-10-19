@@ -42,7 +42,7 @@
        card, not flat on the page. -->
   <div
     data-slot="code"
-    class="mx-space-5 mt-space-4 mb-space-5 min-h-c-wf-code-min-h min-w-0 flex-1 rounded-md bg-surface-raised p-space-2 shadow-tile max-wide:mx-space-4"
+    class="mx-space-5 mt-space-4 mb-space-5 min-h-c-editor-well-min min-w-0 flex-1 rounded-md bg-surface-raised p-space-2 shadow-tile max-wide:mx-space-4"
   >
     <CodeView
       {editable}

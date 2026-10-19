@@ -11,16 +11,13 @@
       spacing: {
         /** Cells apart by the caller's `--cell-gap`. */
         gap: { table: "border-spacing-(--cell-gap)" },
-        /** Cells flush. */
-        // eslint-disable-next-line shadcn/no-raw-colors -- @shadcn/lint 0.2.3 (the latest) still reads `border-spacing-0` as a border colour: its classifier knows border-spacing only by the theme's spacing keys, so the numeric zero falls to `border-` (dist/index.js splitColorClass, judge). Tailwind's own zero is the form (spacing-ratchet counts no zero).
-        flush: { table: "border-spacing-0" },
       },
       layout: {
         /**
          * A ledger: fixed columns, cells flush and apart, so a sticky band
          * and each row's hairline draw on their own cells.
          */
-        // eslint-disable-next-line shadcn/no-raw-colors -- as `flush` above: the linter's misread of `border-spacing-0`.
+        // eslint-disable-next-line shadcn/no-raw-colors -- @shadcn/lint 0.2.3 (the latest) reads `border-spacing-0` as a border colour: its classifier's spacing scale is the theme's keys alone (dist/index.js:590 themedCnConfig), so Tailwind's numeric zero falls to the `border-` colour prefix (dist/similar.js:55 COLOR_PREFIX). tailwind-merge (cn) and Tailwind read it as border-spacing.
         ledger: { table: "table-fixed border-separate border-spacing-0" },
       },
       /** The sideways scroller fades the edges its content runs past. */

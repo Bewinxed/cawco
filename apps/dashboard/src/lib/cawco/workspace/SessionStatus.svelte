@@ -72,11 +72,7 @@
         {#if status.icon}
           <status.icon aria-hidden="true" class="size-icon-md flex-none" />
         {:else}
-          <Spinner
-            aria-hidden="true"
-            role="presentation"
-            class="flex-none"
-          />
+          <Spinner aria-hidden="true" role="presentation" class="flex-none" />
         {/if}
       </span>
     {/key}

@@ -615,7 +615,7 @@
             tone="muted"
             variant="ghost"
           >
-            <Link />
+            <Link data-box />
           </Button>
         </div>
         {#if harness}

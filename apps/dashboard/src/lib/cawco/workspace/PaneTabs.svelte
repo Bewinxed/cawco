@@ -50,6 +50,7 @@
   import { growTo } from "#lib/cawco/motion/hang.js";
   import { placeHang } from "#lib/cawco/motion/hang-shape.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
@@ -60,7 +61,6 @@
     TabsList,
     type TabsTravel,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -1751,7 +1751,9 @@
                      stands 2px inside its 20px box. A finger closes a tab
                      from its options (owner: "remove the x make it close on
                      hold menu then close"). -->
-                <span class="ms-space-row flex flex-none max-desk:hidden coarse:hidden">
+                <span
+                  class="ms-space-row flex flex-none max-desk:hidden coarse:hidden"
+                >
                   <Button
                     data-slot="tclose"
                     aria-hidden="true"
@@ -1847,7 +1849,9 @@
             {#if starting}
               <Spinner aria-label="Starting a session" />
             {:else}
-              <IconAddLine class="group-data-refused/new:text-status-fail-glyph" />
+              <IconAddLine
+                class="group-data-refused/new:text-status-fail-glyph"
+              />
             {/if}
           </Button>
         {/snippet}

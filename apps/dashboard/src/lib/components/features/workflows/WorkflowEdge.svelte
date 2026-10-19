@@ -54,6 +54,7 @@
     {/if}
     {#if data?.remove}
       <Button
+        data-box
         aria-label="Delete edge"
         icon={IconTrash}
         onclick={() => {

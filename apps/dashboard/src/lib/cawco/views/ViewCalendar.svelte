@@ -40,12 +40,11 @@
    * a task without one is left off. A chip is the task's title in the label
    * role: set for later on the raised surface with the control edge, done in
    * the done pair, waiting on you in the attention pair. A chip opens the
-   * task's sheet. The library's layout sheet stands in the `vendor` layer and
-   * its palette is not loaded (vite.config.ts, calendarSheet); its variables
-   * take the tokens here.
+   * task's sheet. The library's sheet, its palette included, stands in the
+   * `vendor` layer (app.css); its variables take the tokens here, on the
+   * `.ec` element its palette declares them on, from outside every layer.
    */
   import { Calendar, DayGrid, List, TimeGrid } from "@event-calendar/core";
-  import "../../../../node_modules/@event-calendar/core/src/styles/index.css";
   import { MediaQuery } from "svelte/reactivity";
 
   let {

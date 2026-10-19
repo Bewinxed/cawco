@@ -29,6 +29,7 @@
   import { Portal } from "bits-ui";
   import { type Component, mount, unmount, untrack } from "svelte";
   import type { ClassValue, HTMLAttributes } from "svelte/elements";
+  import { cn } from "#lib/utils.js";
   import Idle from "~icons/solar/pause-circle-bold-duotone";
   import Machine from "~icons/solar/server-bold-duotone";
   import { CURVE, dur, motionOk } from "../motion/curves.svelte.js";
@@ -738,10 +739,10 @@
   {...rest}
   bind:this={editor}
   data-phone={phone || undefined}
-  class={[
-    "relative min-h-c-composer-field max-h-c-textarea-max-h overflow-y-auto py-space-2 type-body leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar outline-off data-mention-field-empty:before:content-placeholder data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:pointer-events-none",
-    className,
-  ]}
+  class={cn(
+    "type-body wrap-anywhere no-scrollbar relative max-h-c-textarea-max-h min-h-c-composer-field overflow-y-auto whitespace-pre-wrap py-space-2 text-ink-strong leading-ui caret-brand-solid outline-off data-mention-field-empty:before:pointer-events-none data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:content-placeholder",
+    className
+  )}
   aria-activedescendant={mention.open && mention.active
     ? `${menuId}-${mention.active.kind}:${mention.active.id}`
     : rest["aria-activedescendant"]}

@@ -249,11 +249,30 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 
 /* A <summary>'s marker in WebKit, which draws it as its own pseudo-element
    (Tailwind's \`marker:\` is ::marker). */
-@custom-variant details-marker (&::-webkit-details-marker);`;
+@custom-variant details-marker (&::-webkit-details-marker);
+
+/* A tab in a strip while one of its tabs is dragged to a new place
+   (tab-drag.svelte.ts sets \`data-reordering\` on the track). */
+@custom-variant reordering (:where([data-slot="ff-tabs-list"][data-reordering]) > &);
+
+/* Inside the session details card while it glides to another tab (PaneTabs
+   sets \`data-morph\` on the card). */
+@custom-variant details-gliding (&:where([data-session-details-popover][data-morph] *));
+
+/* The rendered markdown under a wrapper that cannot pass Markdown's \`.prose\`
+   root a class (ToolProse): the root, its blocks, its headings, a heading
+   after the first block and a list item after the first. Each carries the
+   wrapper and \`.prose\`, so it outranks app.css's \`.prose\` rules in the same
+   layer by weight. */
+@custom-variant prose-root (& .prose);
+@custom-variant prose-block (& .prose > *);
+@custom-variant prose-heading (& .prose :is(h1, h2, h3, h4, h5, h6):not(:where([class~="not-prose"], [class~="not-prose"] *)));
+@custom-variant prose-block-heading (& .prose > :is(h1, h2, h3, h4):where(:not(:first-child)));
+@custom-variant prose-item (& .prose li:where(:not(:first-child)));`;
 
 /** Names Tailwind or the house already give a variant, or begin a functional one. */
 const RESERVED =
-  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|workflow-cards|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|short-window|tall-window|details-marker|has-needs-stack|theme-flip|node-focus-visible|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
+  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|workflow-cards|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|short-window|tall-window|details-marker|reordering|details-gliding|prose-root|prose-block|prose-heading|prose-block-heading|prose-item|has-needs-stack|theme-flip|node-focus-visible|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
 
 interface Pair {
   attr: string;

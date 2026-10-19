@@ -20,7 +20,7 @@
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
    * history — the same `.hitl` anatomy as the live prompt, but read-only: the
-   * chosen option carries `.sel`, and any freeform reply shows under the options.
+   * chosen option is a `.kit-chip-chosen` record, and any freeform reply shows under the options.
    * Ported from the mock's `#q-card` (.hitl / .lede / .qopts; chips are the kit option chip).
    */
   import { CLI_REJECTED } from "../question";
@@ -324,7 +324,7 @@
         {#each q.options.filter( (opt) => isSelected(q.question, opt.label) ) as opt (opt.label)}
           <span
             data-slot="sel"
-            class="kit-chip sel"
+            class="kit-chip kit-chip-chosen"
             {@attach land(() => shareKey(q.question, opt.label), {
               ms: dur("--dur-pop"),
             })}

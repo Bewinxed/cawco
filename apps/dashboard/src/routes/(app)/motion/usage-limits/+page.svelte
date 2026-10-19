@@ -24,9 +24,6 @@
 
 <svelte:head><title>Usage limits | CawCo</title></svelte:head>
 
-<main
-  class="mx-auto max-w-wide px-space-4 py-space-6"
-  data-usage-bench
->
+<main class="mx-auto max-w-wide px-space-4 py-space-6" data-usage-bench>
   <LimitsBlock />
 </main>

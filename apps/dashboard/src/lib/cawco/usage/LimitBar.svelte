@@ -66,7 +66,7 @@
   aria-valuemin={0}
   aria-valuenow={Math.round(shown)}
   aria-valuetext={said}
-  class="group/bar relative block h-c-limit-bar-h overflow-hidden rounded-hair bg-meter-calm-track state-near:bg-meter-near-track state-over:bg-meter-over-track state-reached:bg-meter-over-track state-stale:bg-meter-stale-track size-compact:h-space-1"
+  class="group/bar relative block h-c-meter-bar-h overflow-hidden rounded-hair bg-meter-calm-track state-near:bg-meter-near-track state-over:bg-meter-over-track state-reached:bg-meter-over-track state-stale:bg-meter-stale-track size-compact:h-space-1"
   data-reads={reads}
   data-size={size}
   data-state={state}

@@ -1,8 +1,9 @@
 /* One cascade order for the whole app, Tailwind's own with two more: tokens
    in theme, element defaults in base, the libraries' own stylesheets in
-   `vendor` under the house's components (Svelte Flow and Milkdown Crepe by
-   lib/vendor-css, Event Calendar by vite.config.ts's calendarSheet, each
-   loaded with what draws it), kit recipes
+   `vendor` under the house's components (Event Calendar's below; Svelte
+   Flow's and Milkdown Crepe's by lib/vendor-css, loaded with what draws
+   them; svelte-sonner's and vaul-svelte's component sheets by vite.config.ts's
+   vendorComponentSheets), kit recipes
    in components, single-purpose classes in utilities (with what has to
    outrank the typography plugin, which writes there too), and in `overrides`
    the few page-wide holds that outrank every utility on any element (a
@@ -17,6 +18,9 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource/fredoka/600.css";
 @import "@fontsource-variable/nunito";
+/* Event Calendar's sheet as the package exports it, in the libraries'
+   layer; the calendar view fills its variables from the tokens. */
+@import "@event-calendar/core/index.css" layer(vendor);
 /* Every token the app reads, generated from design/tokens/cawco.tokens.json
    (`bun run tokens`). This sheet defines none of its own. */
 @import "./lib/tokens/tokens.css";
@@ -605,9 +609,12 @@
      30px; the block padding is only the floor a wrapped label keeps from
      the border, small enough that one line (the 17px keycap or the label
      line) never pushes past 30, so a label that wraps inside the chip grows
-     it line by line. `.sel` is a pick: brand edge, recessed fill, inverted
-     keycap — never a size or weight change, so a pick never reflows the
-     row, and never the attn hue, because selection is not a warning. */
+     it line by line. A pick is the chip's own state by its role: a toggle
+     pressed (`aria-pressed`), a radio checked (`aria-checked`, a single-pick
+     group's item); a record of what was picked is `.kit-chip-chosen`. It
+     draws a brand edge, a recessed fill and an inverted keycap — never a
+     size or weight change, so a pick never reflows the row, and never the
+     attn hue, because selection is not a warning. */
   .kit-chip {
     --hit-edge: 1px;
     box-sizing: border-box;
@@ -636,10 +643,10 @@
     &:is(button) {
       cursor: pointer;
     }
-    &:is(button):not(.sel):hover {
+    &:is(button):not([aria-pressed="true"], [aria-checked="true"]):hover {
       background: var(--surface-hover);
     }
-    &.sel {
+    &:is([aria-pressed="true"], [aria-checked="true"], .kit-chip-chosen) {
       border-color: var(--brand-solid);
       background: var(--surface-recess);
     }
@@ -722,7 +729,8 @@
         background-color var(--dur-control) var(--ease-out),
         color var(--dur-control) var(--ease-out);
     }
-    .kit-chip.sel & {
+    .kit-chip:is([aria-pressed="true"], [aria-checked="true"], .kit-chip-chosen)
+      & {
       background: var(--chip-chosen-bg);
       color: var(--chip-chosen-ink);
     }
@@ -846,7 +854,7 @@
       --item: 32px;
     }
 
-    &.scrollable {
+    &[data-scrollable] {
       --edge-room-start: var(--fade-len);
       --edge-room-end: var(--fade-len);
       flex: 0 1 auto;
@@ -2094,53 +2102,6 @@
       outline-offset: -2px;
     }
   }
-
-  /* ---- The transcript's columns. Every row kind lays out on these four
-     edges, measured from the row's own inline start: the rail, the glyph
-     cell 11px past it, the 16px cell, and the text column 7px past the
-     cell. Avatars and prose stand at 0. An inner transcript (a delegate's,
-     a subagent's) starts at its parent's text column and repeats them, so
-     every level of nesting steps in by exactly one text column. */
-  .tx-columns {
-    --x-rail: var(--space-2);
-    --x-glyph: calc(var(--x-rail) + var(--space-3));
-    --w-glyph: 16px;
-    --x-text: calc(var(--x-glyph) + var(--w-glyph) + var(--space-2));
-    /* How far a hung body sits from the rail row's content edge (the glyph
-       column): the text column, relative. */
-    --x-hang: calc(var(--x-text) - var(--x-glyph));
-
-    @media (width < 900px) {
-      --x-rail: 0px;
-    }
-  }
-
-  /* A rail-led row: its 2px rail at --x-rail, its content from the glyph
-     column. The head line is the identity mark in the glyph cell, then the
-     row's words at the text column; a disclosure chevron trails the words.
-     Everything the head owns hangs at the text column. */
-  .rail-row {
-    margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--x-rail);
-    padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
-    background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
-  }
-  .rail-line {
-    display: flex;
-    align-items: center;
-    gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph));
-    min-inline-size: 0;
-  }
-  .rail-cell {
-    inline-size: var(--w-glyph);
-    block-size: var(--w-glyph);
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-  }
-  .rail-hang {
-    margin-inline-start: var(--x-hang);
-  }
 }
 
 /* ---- Rules into DOM a component does not render: a library's (PhotoSwipe,
@@ -2615,10 +2576,6 @@
     block-size: var(--icon-sm);
   }
 
-  /* A thread has no tool rail: its rows' own edge is the rail column. */
-  [data-slot="thread-pane-state"] .tx-columns {
-    --x-rail: 0px;
-  }
   /* Release notes inside a toast or a card take that surface's type: the
      prose keeps only its structure. */
   [data-slot="release-notes"] .prose {
@@ -3182,45 +3139,27 @@
   }
 }
 
-/* The preview's phone sheet (PreviewPane's `data-preview-sheet` drawer):
-   the whole pane, its grabber DESIGN.md's 100×6. Unlayered: vaul-svelte
-   ships its drawer and handle rules as unlayered :global styles
-   (components/drawer/drawer.svelte), and a layered rule never outranks an
-   unlayered one. */
-[data-preview-sheet][data-slot="drawer-content"] {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  outline: none;
-}
-[data-preview-sheet][data-slot="drawer-content"][data-state="closed"] {
-  visibility: hidden;
-}
-[data-preview-sheet][data-slot="drawer-content"]::before,
-[data-preview-sheet][data-slot="drawer-content"] > div:first-child {
-  display: none;
-}
-[data-preview-sheet] [data-preview-grab][data-vaul-handle] {
-  touch-action: none;
-  position: absolute;
-  top: var(--space-1);
-  left: calc(50% - var(--c-grabber-w) / 2);
-  width: var(--c-grabber-w);
-  height: var(--c-grabber-h);
-  border-radius: var(--radius-pill);
-  background: var(--border-control);
-  margin: 0;
-  opacity: 1;
-}
-[data-preview-sheet] [data-vaul-handle-hitarea] {
-  height: var(--c-sheet-inspector-head-h);
+/* The preview's phone sheet's grabber (SideSheet's `data-preview-grab`
+   handle), DESIGN.md's 100×6, and its hit area. The sheet itself is the
+   kit's hosted DrawerContent. vaul-svelte's own handle rules stand in the
+   `vendor` layer (vite.config.ts, vendorComponentSheets), so these win by
+   layer. */
+@layer components {
+  [data-preview-sheet] [data-preview-grab][data-vaul-handle] {
+    touch-action: none;
+    position: absolute;
+    top: var(--space-1);
+    left: calc(50% - var(--c-grabber-w) / 2);
+    width: var(--c-grabber-w);
+    height: var(--c-grabber-h);
+    border-radius: var(--radius-pill);
+    background: var(--border-control);
+    margin: 0;
+    opacity: 1;
+  }
+  [data-preview-sheet] [data-vaul-handle-hitarea] {
+    height: var(--c-sheet-inspector-head-h);
+  }
 }
 
 /* ---- Sonner's toaster and toasts (the kit's sonner.svelte hosts them;
@@ -3316,6 +3255,387 @@
       right: 0;
       left: 0;
       width: 100%;
+    }
+  }
+}
+
+/* ---- The screen's edges (ScreenEdges): the colours Safari extends past the
+   page at the top and the foot, from what stands at each edge: the bar or
+   the shelf, a scrim, a kit sheet. The strips read --edge-*-background,
+   --edge-*-fade and --edge-shown. */
+@layer components {
+  :root {
+    --edge-top-under: var(--surface-raised);
+    --edge-bottom-under: var(--surface-recess);
+    --edge-top-background: var(--edge-top-under);
+    --edge-bottom-background: var(--edge-bottom-under);
+    --edge-top-fade: 1ms;
+    --edge-bottom-fade: 1ms;
+    --edge-shown: 1;
+    --edge-show-fade: var(--dur-exit);
+    background: var(--edge-top-background);
+  }
+  body {
+    background: var(--edge-bottom-background);
+  }
+  :root[data-bar~="floating"],
+  :root[data-bar~="hosting"] {
+    --edge-top-under: var(--surface-shelf);
+  }
+  @media (width < 900px), (pointer: coarse) and (orientation: portrait) {
+    :root[data-bar~="hosting"] {
+      --edge-top-under: var(--surface-raised);
+    }
+  }
+  :root[data-scrim~="open"],
+  :root[data-scrim~="lightbox"] {
+    --edge-top-background: color-mix(
+      in srgb,
+      var(--background) var(--scrim-mix),
+      var(--edge-top-under)
+    );
+    --edge-bottom-background: color-mix(
+      in srgb,
+      var(--background) var(--scrim-mix),
+      var(--edge-bottom-under)
+    );
+    --edge-top-fade: var(--dur-panel);
+    --edge-bottom-fade: var(--dur-panel);
+  }
+  :root[data-scrim~="closed"] {
+    --edge-top-fade: var(--dur-exit);
+    --edge-bottom-fade: var(--dur-exit);
+  }
+  :root[data-kit-sheet~="bottom"] {
+    --edge-bottom-background: var(--surface-raised);
+    --edge-bottom-fade: 1ms;
+  }
+  :root[data-kit-sheet~="side"] {
+    --edge-top-background: var(--surface-raised);
+    --edge-bottom-background: var(--surface-raised);
+    --edge-shown: 0;
+    --edge-show-fade: 0s;
+  }
+  :root[data-kit-sheet~="rail"] {
+    --edge-top-background: var(--sidebar);
+    --edge-bottom-background: var(--sidebar);
+  }
+}
+
+/* ---- The bar's glass group (Shell's `tools`): its items (FilesItem,
+   MachinesButton, Jump: `[data-bar-item]`), an item's count
+   (`data-slot="num"`) and its symbol (`data-slot="bar-symbol"`). An item's
+   own utilities (a symbol's tone tint) outrank these by layer. */
+@layer components {
+  [data-slot="tools"] [data-bar-item] {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: var(--c-bar-item);
+    block-size: var(--c-bar-item);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--ink-strong);
+    cursor: pointer;
+    transition: var(--transition-control);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--surface-hover);
+      }
+    }
+    &[data-counted] {
+      --mark-inset: calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2);
+      gap: var(--space-2);
+      padding-inline: var(--mark-inset)
+        calc(var(--mark-inset) + var(--c-bar-symbol) / 12);
+    }
+    [data-slot="num"] {
+      font: var(--type-label);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    @media (width < 900px) {
+      inline-size: var(--c-bar-caw-glass-phone);
+      min-inline-size: var(--c-bar-caw-glass-phone);
+      block-size: var(--c-bar-caw-glass-phone);
+    }
+  }
+  [data-slot="tools"] [data-slot="bar-symbol"] {
+    inline-size: var(--c-bar-symbol);
+    block-size: var(--c-bar-symbol);
+    color: var(--ink-muted);
+  }
+  @media (width < 900px) {
+    [data-slot="tools"] [data-machines] {
+      display: none;
+    }
+  }
+}
+
+/* ---- Glyphs other components draw: the session hover card's head mark and
+   tone (CawFace, Sprite and the status icons), and a delegate tail's
+   streamed words, which render their own markdown. */
+@layer components {
+  [data-nest-host] [data-session-hover-tone] svg {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
+  [data-nest-host] [data-slot="head"] > [data-slot="mark"] svg {
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+    color: var(--mark-glyph);
+  }
+  [data-delegate-tail-kind="stream"] [data-slot="text"] * {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    font-size: inherit;
+    line-height: inherit;
+  }
+}
+
+/* ---- The Canvas view's cards (Svelte Flow's nodes): once placed, a card
+   the layout moves eases to its new place; a card new to the canvas fades
+   in where it lands. */
+@layer components {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="view-canvas"][data-settled] .svelte-flow__node {
+      transition:
+        transform var(--dur-panel) var(--ease-in-out),
+        opacity var(--dur-fade) var(--ease-out);
+
+      @starting-style {
+        opacity: 0;
+      }
+    }
+  }
+}
+
+/* ---- PaneTabs' strip: the host rules on the kit's Tabs root
+   (`data-session-tabs`, `data-hosted`) and on TabsList's track
+   (`.ff-tabs-list`, `data-scrollable` while it scrolls). They set the
+   track's size ladder and outrank its folder padding by selector. */
+@layer components {
+  [data-session-tabs] {
+    /* A tab's height, its inner pad and its flared foot's room at the
+       track's end, shared by the track and the "+" after it. */
+    --strip-px: var(--space-3);
+    --strip-item-rest: var(--space-8);
+    --strip-reach: var(--space-3);
+    --strip-fade: var(--c-tab-strip-fade);
+    --strip-uncapped: var(--c-tab-strip-uncapped);
+    --strip-item: var(--strip-item-rest);
+    --strip-flare: var(--radius-sm);
+    display: flex;
+    align-items: flex-end;
+    flex: 0 0 auto;
+    min-inline-size: 0;
+    padding-block: var(--space-1) 0;
+    padding-inline: var(--space-7) var(--space-4);
+    /* The shelf: two steps below the transcript, one below an unchosen tab,
+       so the chosen tab (in the transcript's own surface) reads as the page
+       it opens. */
+    background: var(--surface-shelf);
+
+    /* The tab controls' touch areas reach past the row's bottom edge: on a
+       coarse pointer the row stacks above the transcript beneath it. */
+    @variant coarse {
+      position: relative;
+      z-index: 1;
+    }
+  }
+  [data-session-tabs][data-hosted] {
+    flex: 1 1 0;
+    align-self: stretch;
+    padding: 0;
+    background: none;
+  }
+  /* The leaf's container query takes no var(): 620px is --container-leaf. */
+  @container leaf (width <= 620px) {
+    [data-session-tabs]:not([data-hosted]) {
+      padding-inline-start: var(--space-4);
+    }
+  }
+  /* On a phone this row is the app's only bar: the bar's height, its two ends
+     left to the sidebar toggle and to Caw's glass. */
+  [data-session-tabs]:not([data-hosted]) {
+    @variant max-desk {
+      --strip-item: var(--c-tab-row-h);
+      --strip-flare: var(--radius-lg);
+      min-block-size: var(--c-top-bar-h);
+      padding-block-start: 0;
+      padding-inline: calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))
+        calc(var(--c-bar-phone-gap) + var(--c-bar-caw-glass-phone));
+    }
+  }
+  /* The session track scrolls sideways, and a scroll container clips on both
+     axes; its transparent padding grows into an equal negative margin on a
+     coarse pointer, so the controls' touch areas above and below the tabs
+     sit inside its clip and nothing moves. */
+  [data-session-tabs][data-slot="tabs"] .ff-tabs-list[data-scrollable] {
+    @variant coarse {
+      padding-block: calc(var(--pad) + var(--strip-reach)) var(--strip-reach);
+      margin-block: calc(-1 * var(--strip-reach));
+    }
+  }
+  /* The strip takes one step taller than the component's default in a bar
+     with room, the component's own text size and a tighter pad. The hover
+     ghost lifts an unchosen tab's card toward the chosen sheet's surface; by
+     night it is the hover step. */
+  [data-session-tabs][data-slot="tabs"] .ff-tabs-list {
+    --px: var(--strip-px);
+    --text: var(--text-label);
+    --item: var(--strip-item);
+    /* The chosen tab's sheet: the transcript's head dissolves into the same
+       token (HeadFade). */
+    --sheet: var(--tab-sheet);
+    --tab-hover: light-dark(var(--surface-recess), var(--surface-hover));
+    /* The status rim's stroke, a plain number, drawn on each tab's own path
+       (TabItem); one unit under more contrast or less transparency. */
+    --rim-w: var(--tab-rim-width);
+  }
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    [data-session-tabs][data-slot="tabs"] .ff-tabs-list {
+      --rim-w: 1;
+    }
+  }
+  /* The phone's row: tabs a row's height tall, on the bar's floor, the
+     strip's ends fading over a short run so a tab slides under the toggle and
+     Caw rather than being cut. Each end's fade is cut short at a tab drawn
+     chosen (TabsList `--fade-cap-start`/`--fade-cap-end`). */
+  [data-session-tabs]:not([data-hosted])[data-slot="tabs"]
+    .ff-tabs-list[data-scrollable] {
+    @variant max-desk {
+      --item: var(--strip-item);
+      --pad: 0px;
+      --fade-len: var(--strip-fade);
+      --edge-room-start: calc(var(--fade-len) * 1.5);
+      --radius: var(--radius-lg);
+      --overlap: var(--radius-sm);
+      padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
+      margin-block-start: 0;
+      --fade-run-start: min(
+        var(--fade-start),
+        calc(var(--fade-cap-start, var(--strip-uncapped)) / 1.5)
+      );
+      --fade-run-end: min(
+        var(--fade-end),
+        var(--fade-cap-end, var(--strip-uncapped))
+      );
+      mask-image: linear-gradient(
+        to right,
+        transparent,
+        transparent calc(var(--fade-run-start) * 0.375),
+        var(--mask-opaque-a15) calc(var(--fade-run-start) * 0.75),
+        var(--mask-opaque-a60) calc(var(--fade-run-start) * 1.125),
+        var(--mask-opaque) calc(var(--fade-run-start) * 1.5),
+        var(--mask-opaque) calc(100% - var(--fade-run-end)),
+        var(--mask-opaque-a90) calc(100% - var(--fade-run-end) * 0.75),
+        var(--mask-opaque-a50) calc(100% - var(--fade-run-end) * 0.5),
+        var(--mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
+        transparent
+      );
+    }
+  }
+}
+
+/* ---- What hangs from a tab (PaneTabs): HangCard's portalled content, the
+   tab's box (TabItem) and bits-ui's floating wrapper, one silhouette with
+   the tab. The card is c-details-card-w wide, the screen less its margins at
+   most; a phone's card stands a margin in from each side, under its tab,
+   clear of the screen's foot. The card's width floor, width and stack are
+   classes PaneTabs gives HangCard. A tab's rim ink (--hang-rim) is read off
+   the tab alone: inherited, its value moving with --pick restyled every
+   element under the tab each frame of a choice. */
+@property --hang-rim {
+  syntax: "*";
+  inherits: false;
+}
+@layer components {
+  .kit-pop[data-session-details-popover] {
+    display: flex;
+    max-height: min(
+      var(--c-details-card-max-h),
+      var(--bits-popover-content-available-height, var(--c-sheet-max-h))
+    );
+    overflow: hidden;
+    overscroll-behavior: contain;
+    padding: 0;
+
+    @variant max-phone {
+      max-height: min(
+        calc(
+          100dvh - var(--c-top-bar-h) - 2 * var(--c-screen-margin) -
+            var(--safe-bottom)
+        ),
+        var(--bits-popover-content-available-height, var(--c-sheet-max-h))
+      );
+    }
+  }
+  /* The tab's menu hangs on the tab's own surface, as the card's head is. */
+  .kit-pop.kit-hang[data-tab-menu] {
+    --hang-surface: var(--surface-recess);
+  }
+  /* bits-ui rewrites where the card may stand a few times a frame as it opens
+     and follows its tab; only the card reads those properties (its
+     max-height), so they stop at its children and restyle nothing inside. */
+  .kit-pop[data-session-details-popover] > * {
+    --bits-floating-transform-origin: initial;
+    --bits-floating-available-width: initial;
+    --bits-floating-available-height: initial;
+    --bits-floating-anchor-width: initial;
+    --bits-floating-anchor-height: initial;
+    --bits-popover-content-transform-origin: initial;
+    --bits-popover-content-available-width: initial;
+    --bits-popover-content-available-height: initial;
+    --bits-popover-anchor-width: initial;
+    --bits-popover-anchor-height: initial;
+  }
+  /* A tab's rim's ink at the strength it wears it now, read off the tab
+     alone (--hang-rim does not inherit). */
+  [data-session-tabs] [data-slot="tab"] [data-slot="ff-tab"] {
+    --hang-rim: color-mix(
+      in oklab,
+      var(--rim-ink)
+        calc(
+          (
+              var(--rim-rest) + (var(--rim-full) - var(--rim-rest)) *
+                var(--pick)
+            ) *
+            100%
+        ),
+      var(--border-control)
+    );
+  }
+  /* A pinned card follows its tab as the strip scrolls, frame by frame, on a
+     layer of its own; its glide to another tab is the wrapper's move and the
+     card's height together (`data-details-morph`). */
+  [data-bits-floating-content-wrapper][data-session-details] {
+    will-change: transform;
+  }
+  [data-bits-floating-content-wrapper][data-details-morph] {
+    @variant motion-safe {
+      transition: transform var(--dur-pop) var(--ease-drawer);
+    }
+  }
+}
+
+/* ---- The project page: the kit Tabs root in the view strip, and a phone's
+   page children, which are other components' roots. */
+@layer components {
+  [data-slot="strip"] > [data-slot="tabs"] {
+    display: flex;
+    flex: 0 1 auto;
+    min-inline-size: 0;
+  }
+  [data-slot="project-page"] {
+    @variant max-phone {
+      & > * {
+        flex-shrink: 0;
+      }
     }
   }
 }
@@ -4063,6 +4383,185 @@
 /* Svelte Flow's handle reads its colour off this property. */
 @utility xy-handle-brand {
   --xy-handle-background-color: var(--brand-solid);
+}
+/* ---- The transcript's columns. Every row kind lays out on these four
+   edges, measured from the row's own inline start: the rail, the glyph cell
+   a space-3 past it, the cell (tx-w-glyph), and the text column a space-2
+   past the cell. Avatars and prose stand at 0. An inner transcript (a
+   delegate's, a subagent's) starts at its parent's text column and repeats
+   them, so every level of nesting steps in by exactly one text column. A
+   phone's rows, and a thread's (it has no tool rail), stand the rail on
+   their own edge. */
+@utility tx-columns {
+  --x-rail: var(--tx-x-rail);
+  --x-glyph: calc(var(--x-rail) + var(--space-3));
+  --w-glyph: var(--tx-w-glyph);
+  --x-text: calc(var(--x-glyph) + var(--w-glyph) + var(--space-2));
+  /* How far a hung body sits from the rail row's content edge (the glyph
+     column): the text column, relative. */
+  --x-hang: calc(var(--x-text) - var(--x-glyph));
+
+  @media (width < 900px) {
+    --x-rail: var(--tx-x-rail-narrow);
+  }
+  [data-slot="thread-pane-state"] & {
+    --x-rail: var(--tx-x-rail-narrow);
+  }
+}
+/* A row's place in the transcript's stack: the gap above it and the rail
+   column it stands on. */
+@utility rail-place {
+  margin-block-start: var(--rail-gap, var(--space-4));
+  margin-inline-start: var(--x-rail);
+}
+/* A rail-led row: in its place, its 2px rail at --x-rail and its content
+   from the glyph column. The head line is the identity mark in the glyph
+   cell, then the row's words at the text column; a disclosure chevron
+   trails the words. Everything the head owns hangs at the text column. */
+@utility rail-row {
+  margin-block-start: var(--rail-gap, var(--space-4));
+  margin-inline-start: var(--x-rail);
+  padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
+  background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
+}
+@utility rail-line {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph));
+  min-inline-size: 0;
+}
+@utility rail-cell {
+  inline-size: var(--w-glyph);
+  block-size: var(--w-glyph);
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+@utility rail-hang {
+  margin-inline-start: var(--x-hang);
+}
+/* ScreenEdges' top strip paints only above the safe area. */
+@utility edge-mask-top {
+  mask-image: linear-gradient(
+    to bottom,
+    var(--mask-opaque) calc(var(--space-2) + env(safe-area-inset-top)),
+    transparent 0
+  );
+}
+/* The shelf's hairline as one background layer over the shelf (Shell). */
+@utility shelf-hairline {
+  background:
+    linear-gradient(var(--border-hairline), var(--border-hairline)) bottom /
+      100% 1px no-repeat,
+    var(--surface-shelf);
+}
+/* The bar's glass, a step blurrier than the panel material (Shell). */
+@utility glass-backdrop {
+  backdrop-filter: blur(calc(var(--material-blur) * 1.4))
+    saturate(var(--material-saturate));
+}
+/* The bar's join to the strip under it: a flared foot (--f) into a rounded
+   top (--r) over its height (--h); on a phone it runs to the edge. */
+@utility clip-join {
+  clip-path: shape(
+    from 0 100%,
+    arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
+      calc(var(--f) + 1px) ccw,
+    line to calc(var(--f) + 1px) var(--r),
+    arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
+    line to calc(100% - var(--r)) 1px,
+    arc to calc(100% - 1px) var(--r) of calc(var(--r) - 1px) cw,
+    line to calc(100% - 1px) 100%,
+    close
+  );
+}
+@utility clip-join-phone {
+  clip-path: shape(
+    from 0 100%,
+    arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
+      calc(var(--f) + 1px) ccw,
+    line to calc(var(--f) + 1px) var(--r),
+    arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
+    line to 100% 1px,
+    line to 100% 100%,
+    close
+  );
+}
+/* A transcript head's layer coming in over the first c-head-fade of scroll,
+   on the transcript's scroll timeline (HeadFade). */
+@utility head-fade-scrub {
+  animation: var(--animate-head-fade);
+  animation-timeline: --transcript-head;
+  animation-range: 0 var(--c-head-fade);
+}
+@utility will-change-opacity {
+  will-change: opacity;
+}
+/* The session details card's settings row: the chips NsPopover's trigger,
+   ToolChips and AccountSwitch render sit in it. The card's width holds the
+   longest names whole, the chips' insides drawn in a little; a phone's row
+   (~350px) fits its three chips with their sides drawn in, and a bordered
+   chip's chevron goes, the account chip's staying (the only hint it opens
+   anything). */
+@utility session-details-chips {
+  & [data-model-chip] {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  & .ns-chip-btn {
+    gap: var(--space-1);
+    height: var(--row-compact-h);
+  }
+  @variant max-phone {
+    & .ns-chip-btn {
+      height: var(--c-btn-h-lg);
+      padding-inline: var(--space-2);
+    }
+    & .ns-chip-btn:not([data-account-chip]) > svg[data-slot="chevron"] {
+      display: none;
+    }
+  }
+}
+/* ModelSection's picker in the details card's model popover: no surface of
+   its own, the search as wide as what is typed in it (autowidth, a character
+   at a time), and the list scrolled in whole rows (c-model-list-max). */
+@utility session-details-model-pop {
+  & [data-slot="picker"] {
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  & [data-slot="search"] input {
+    --autowidth: 1;
+    @variant motion-safe {
+      transition: width var(--dur-control) var(--ease-out);
+    }
+  }
+  & [data-slot="list"] {
+    height: auto;
+    max-height: var(--c-model-list-max);
+    overflow: hidden auto;
+    scroll-snap-type: y mandatory;
+    /* The row gap, so a snapped row's neighbour shows none of itself. */
+    scroll-padding: var(--space-row);
+  }
+  & [data-slot="row"] {
+    scroll-snap-align: start;
+  }
+}
+/* A tab parked on you (`data-needs`): its label in the strong ink, chosen or
+   not, coming up at the panel's pace. The label is named by its own
+   attribute (`data-ff-tab`): keyed to `data-slot`, a state change restyled
+   every slot in the tab. A utility, so it outranks TabItem's
+   `text-ink-muted` by weight. */
+@utility pane-tab-needs {
+  &[data-needs] [data-ff-tab] {
+    color: var(--ink-strong);
+
+    @variant motion-safe {
+      transition: color var(--dur-panel) var(--ease-out);
+    }
+  }
 }
 
 /* ---- Recipes: custom properties a component's states rewrite, each as its

@@ -46,7 +46,7 @@
     <div
       class="h-c-side-bench-h w-(--card-w) max-w-full"
       data-card={card.key}
-      style:--card-w="calc(max(45vw, var(--c-side-surface-min)) - 2 * var(--space-3))"
+      style:--card-w={"calc(max(45vw, var(--c-side-surface-min)) - 2 * var(--space-3))"}
     >
       <SideSurface
         label="Bench {card.key}"

@@ -72,8 +72,8 @@
   };
 </script>
 
-<!-- The spine is the rail row every rail block uses (app.css `.rail-row`). -->
-<div data-slot="rail-row" class="rail-row">
+<!-- The spine is the rail row every rail block uses (app.css `rail-row`). -->
+<div data-slot="rail-row" data-tx-rail class="rail-row">
   <Collapsible.Root bind:open={open.get, open.set}>
     <!-- A disclosure header is as wide as its card, so it does not scale on
          press (that read as the whole card shrinking); it takes .press-tint.

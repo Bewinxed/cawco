@@ -216,6 +216,15 @@ const ANIMATIONS: Record<string, string> = {
   // An update cell's new state pops in; with reduced motion it fades.
   "animate-cell-swap": "cell-swap var(--dur-control) var(--ease-out)",
   "animate-cell-fade": "kit-fade-in var(--dur-control) var(--ease-out)",
+  // A delegate tray chip arriving fades in, its contents a beat later; a
+  // finished one flashes the done fill once.
+  "animate-arrive": "kit-fade-in var(--dur-menu) var(--ease-out) both",
+  "animate-arrive-late":
+    "kit-fade-in var(--dur-menu) var(--ease-out) var(--dur-control) both",
+  "animate-finish": "finish calc(var(--dur-fade) * 2) var(--ease-out)",
+  // The transcript head's layers come in over the first c-head-fade of
+  // scroll, on the transcript's scroll timeline (`head-fade-scrub`).
+  "animate-head-fade": "head-fade linear both",
 };
 /** The keyframes the house's animations name that app.css does not keep. */
 const KEYFRAMES: Record<string, string> = {
@@ -247,6 +256,8 @@ const KEYFRAMES: Record<string, string> = {
     "0% {\n  stroke-dashoffset: var(--run);\n}\n50%,\n100% {\n  stroke-dashoffset: 0;\n}",
   "wave-breath-fade": "0%,\n50% {\n  opacity: 1;\n}\n100% {\n  opacity: 0;\n}",
   "cell-swap": "from {\n  opacity: 0;\n  scale: var(--pop-scale);\n}",
+  finish: "35% {\n  background-color: var(--status-done-bg);\n}",
+  "head-fade": "to {\n  opacity: 1;\n}",
 };
 
 /**
@@ -269,6 +280,10 @@ const CONTAINERS = {
   leaf: "620px",
   setup: "640px",
   "decisions-900px": "900px",
+  // The project page holds Caw's docked panel beside the page: the panel
+  // (c-panel-w and its space-6 end margin), the pane's inline padding
+  // (space-7, space-6), two 240px board columns and the space-3 between.
+  "project-dock": "938px",
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */

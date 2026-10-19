@@ -196,6 +196,25 @@
    (Tailwind's `marker:` is ::marker). */
 @custom-variant details-marker (&::-webkit-details-marker);
 
+/* A tab in a strip while one of its tabs is dragged to a new place
+   (tab-drag.svelte.ts sets `data-reordering` on the track). */
+@custom-variant reordering (:where([data-slot="ff-tabs-list"][data-reordering]) > &);
+
+/* Inside the session details card while it glides to another tab (PaneTabs
+   sets `data-morph` on the card). */
+@custom-variant details-gliding (&:where([data-session-details-popover][data-morph] *));
+
+/* The rendered markdown under a wrapper that cannot pass Markdown's `.prose`
+   root a class (ToolProse): the root, its blocks, its headings, a heading
+   after the first block and a list item after the first. Each carries the
+   wrapper and `.prose`, so it outranks app.css's `.prose` rules in the same
+   layer by weight. */
+@custom-variant prose-root (& .prose);
+@custom-variant prose-block (& .prose > *);
+@custom-variant prose-heading (& .prose :is(h1, h2, h3, h4, h5, h6):not(:where([class~="not-prose"], [class~="not-prose"] *)));
+@custom-variant prose-block-heading (& .prose > :is(h1, h2, h3, h4):where(:not(:first-child)));
+@custom-variant prose-item (& .prose li:where(:not(:first-child)));
+
 /* One per attribute state a component styles: [data-tone="fail"] is
    tone-fail:, [aria-expanded="false"] is aria-expanded-false:. */
 @custom-variant act-dismiss (&[data-act="dismiss"]);

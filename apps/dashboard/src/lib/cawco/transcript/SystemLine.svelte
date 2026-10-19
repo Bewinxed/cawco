@@ -188,14 +188,15 @@
   );
 </script>
 
-<!-- Every line here is a rail row (app.css `.rail-row`): its mark in the
+<!-- Every line here is a rail row (app.css `rail-row`): its mark in the
      glyph cell, its words at the text column, a disclosure chevron after the
-     words, and whatever opens under it hung at the text column. -->
+     words, and whatever opens under it hung at the text column. A woke-Caw
+     note stands in the same place with no rail (`rail-place`). -->
 {#if harness}
   <!-- Harness plumbing, folded onto the rail: the summary and how it went on
        one quiet line, the report itself behind it. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
     class="text-size-label font-medium text-ink-muted rail-row"
   >
@@ -265,7 +266,7 @@
        The verb holds body ink; only failure carries colour. WHICH task, in
        the same muted register as every note: ellipsized, never wrapped. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
     class="text-size-label font-medium text-ink-muted rail-row"
   >
@@ -293,7 +294,7 @@
        its recessed well under it: its text at the text column, the well
        reaching out past it by its own padding. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
     class="text-size-label font-medium text-ink-muted rail-row"
   >
@@ -316,7 +317,7 @@
   <!-- One quiet word for a deliberate act. The colour budget is for things
        that happened TO the operator, not things they did. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
     class="text-size-label font-medium text-ink-muted rail-row"
   >
@@ -337,7 +338,7 @@
        than going anywhere. The state word follows it. Waiting for the agent:
        MessageRow's queued presence, as Peer has it. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
     class="text-size-label font-medium text-ink-muted data-waiting:opacity-(--ghost-presence) rail-row"
     data-artifact-responses={responses.id}
@@ -389,7 +390,7 @@
   <!-- Where the project came from: the done glyph in its status ink, what
        moved on the line, and what stayed under it in the meta voice. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
     data-moved
     class="text-size-label font-medium text-ink-muted rail-row"
@@ -425,7 +426,7 @@
        in the strong ink, and what hangs under it at the text column free to
        shrink and wrap. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
     class="py-space-2 text-size-label font-medium text-ink-muted rail-row"
     data-unread-note={message?.id}
@@ -461,7 +462,7 @@
        what failed on the line, why under it. The rail, the mark, the title
        and the reason, all in the fail ink. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
     style:--rail-head={"linear-gradient(var(--status-fail-ink), var(--status-fail-ink))"}
     class="text-size-label font-medium text-status-fail-ink rail-row"
@@ -487,11 +488,13 @@
        dashed box in the control edge (design §1, SystemLine), and the box is
        its one marker — no rail beside it, the box on the row's own edge. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
-    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 rail-row"
+    class={[
+      "group/note text-size-label font-medium text-ink-muted",
+      wokeCaw ? "rail-place" : "rail-row",
+    ]}
     data-code={wokeCaw || undefined}
-    style:--rail-head={wokeCaw ? "none" : undefined}
   >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger
@@ -544,11 +547,13 @@
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
        refusal the harness line and the tool rows already make. -->
   <div
-    data-system-line-rail-row
+    data-tx-rail
     data-slot="note"
-    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 rail-row"
+    class={[
+      "group/note text-size-label font-medium text-ink-muted",
+      wokeCaw ? "rail-place" : "rail-row",
+    ]}
     data-code={wokeCaw || undefined}
-    style:--rail-head={wokeCaw ? "none" : undefined}
   >
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"

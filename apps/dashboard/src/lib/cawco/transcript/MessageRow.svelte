@@ -814,7 +814,9 @@
                           size="xs"
                           variant="outline"
                           width="shrink"
-                          ><span data-slot="message-row-label" class="truncate"
+                          ><span
+                            data-slot="message-row-label"
+                            class="overflow-clip text-ellipsis whitespace-nowrap"
                             >{action.label}</span
                           ></Button
                         >
