@@ -9,10 +9,11 @@
    * gives the head the Plan | Preview switch SideSplit gives it while a plan
    * stands beside the preview, drawn as SideSplit draws it. `?own=1` draws
    * it as the artifact's own tab does (`/artifact/<id>`, PreviewPane
-   * `ownTab`). The probe answers the pane's reach check (`/__cawco/ping`)
-   * itself.
+   * `ownTab`). `?kind=preview` holds a plain preview of that address
+   * instead (no view, no inspector). The probe answers the pane's reach
+   * check (`/__cawco/ping`) itself.
    */
-  import { type FsEntry, sideWords } from "@cawco/core";
+  import { type ArtifactKind, type FsEntry, sideWords } from "@cawco/core";
   import type { Bounded } from "@cawco/core/bounded";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
@@ -37,9 +38,10 @@
     page.url.searchParams.get("name") ?? "Preview canvas view states";
   const switched = page.url.searchParams.get("switch") === "1";
   const own = page.url.searchParams.get("own") === "1";
-  /** `?kind=page`: the first artifact a page (the switch below starts from one). */
-  const kind =
-    page.url.searchParams.get("kind") === "page" ? "page" : "component";
+  /** `?kind=page`: the first artifact a page (the switch below starts from one); `?kind=preview` a plain preview. */
+  const asked = page.url.searchParams.get("kind");
+  const kind: ArtifactKind =
+    asked === "page" || asked === "preview" ? asked : "component";
   /** `?then=` a second canvas address: the panel switches to it, a component canvas named `?thenName=`, `?after=` ms in. */
   const then = page.url.searchParams.get("then");
   const after = Number(page.url.searchParams.get("after") ?? 3000);

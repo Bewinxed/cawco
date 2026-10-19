@@ -70,6 +70,12 @@
  *    its title, the plain line and Try again, the stage's own words under
  *    Show details only, folded until pressed and then whole; never blank.
  *
+ * The bench head swept every px from 300 to 800, light, desk pointer, for a
+ * component canvas and a plain preview, with Send picks standing and
+ * without, at 0 and 2 open pins (W0–W3, `CANVAS_DESIGN=sweep` alone): a
+ * wider head stands every control a narrower one does, no width alternates
+ * between frames, and the way down stands what the way up did.
+ *
  * Captures for a second review (never read here) go to `$TMPDIR/caps/`:
  * `canvas-{390,523,desk}-{light,dark}.png`, the panel's pane at 2×, and
  * `map-{desk,phone}-{light,dark}.png` (also to the clone's `caps/`).
@@ -2136,11 +2142,15 @@ const pinOf = (number: number, at: string) => ({
 /**
  * Each artifact's live doc as the hub's `/ws/artifact/<session>/<artifact>`
  * serves it (y-websocket's sync protocol), answered in the page's own
- * network, one doc per artifact: a pick the session has not heard, the
- * stage `stages` names for it (its `meta.stage`), and the pins `pins()`
- * holds as it changes.
+ * network, one doc per artifact: a pick the session has not heard (none,
+ * `pick` false: Send picks doesn't stand), the stage `stages` names for it
+ * (its `meta.stage`), and the pins `pins()` holds as it changes.
  */
-async function serveDoc(page: Page, stages: Record<string, StageState> = {}) {
+async function serveDoc(
+  page: Page,
+  stages: Record<string, StageState> = {},
+  pick = true
+) {
   const yws = Bun.resolveSync("y-websocket", DASHBOARD);
   // The dashboard's own yjs (the probe kit depends on none): the part of it this serves with.
   const Y = (await import(Bun.resolveSync("yjs", DASHBOARD))) as {
@@ -2175,13 +2185,15 @@ async function serveDoc(page: Page, stages: Record<string, StageState> = {}) {
     if (stageState) {
       doc.getMap("meta").set("stage", stageState);
     }
-    doc.getMap("state").set("pick", {
-      at,
-      note: null,
-      options: ["one"],
-      pageHash: "bench",
-      value: null,
-    });
+    if (pick) {
+      doc.getMap("state").set("pick", {
+        at,
+        note: null,
+        options: ["one"],
+        pageHash: "bench",
+        value: null,
+      });
+    }
     const made = { doc, sockets: [] as { send: (data: Buffer) => void }[] };
     doc.on("update", (update: Uint8Array) => {
       for (const ws of made.sockets) {
@@ -2356,6 +2368,187 @@ async function commentsCount(
       `8i: 720 ${theme}, ${open} open: Comments' count is ${count} and its name "${label}"`,
       said.count === count && said.label === label,
       JSON.stringify(said)
+    );
+  }
+  await page.close();
+}
+
+/** One head width's reading: the head's own width, and on each of three frames the controls standing (`key` or `key(form)`) and whether More stands. */
+interface SweepRead {
+  frames: string[];
+  head: number;
+  w: number;
+}
+
+/**
+ * The bench head swept a px at a time from `from` to `to`, in the page:
+ * the pane set so the head is `w` wide, two frames to settle, then what
+ * stands read on three frames running.
+ */
+const SWEEP = async ({
+  from,
+  to,
+}: {
+  from: number;
+  to: number;
+}): Promise<SweepRead[]> => {
+  const pane = document.querySelector("[data-bench-pane]") as HTMLElement;
+  const head = pane.querySelector("[data-slot=side-head]") as HTMLElement;
+  const frame = () =>
+    new Promise<void>((done) => requestAnimationFrame(() => done()));
+  const read = () =>
+    [
+      ...[
+        ...head.querySelectorAll<HTMLElement>(
+          ":scope > [data-head-item]:not([hidden])"
+        ),
+      ].map(
+        (one) =>
+          `${one.dataset.headItem}${one.dataset.form === "compact" ? "(compact)" : ""}`
+      ),
+      ...(head.querySelector(":scope > [data-slot=more]") ? ["More"] : []),
+    ].join(",");
+  const reads: SweepRead[] = [];
+  const outside = pane.getBoundingClientRect().width - head.clientWidth;
+  const step = from <= to ? 1 : -1;
+  for (let w = from; w !== to + step; w += step) {
+    pane.style.inlineSize = `${w + outside}px`;
+    // biome-ignore lint/performance/noAwaitInLoops: each width settles before the next
+    await frame();
+    await frame();
+    const frames: string[] = [];
+    for (let k = 0; k < 3; k += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: one frame after another
+      await frame();
+      frames.push(read());
+    }
+    reads.push({ w, head: head.clientWidth, frames });
+  }
+  return reads;
+};
+
+/** The standing keys of one frame's reading, forms and More aside. */
+const keysOf = (frame: string): Set<string> =>
+  new Set(
+    frame
+      .split(",")
+      .filter((one) => one && one !== "More")
+      .map((one) => one.replace("(compact)", ""))
+  );
+
+/**
+ * The head's invariant swept every px from 300 to 800 (DESIGN.md, the
+ * head's priority rule): a component canvas (the mode, the view, Inspect)
+ * or a plain preview, with Send picks standing or not, at 0 and 2 open
+ * pins. W1: every wider head stands every control a narrower one does; W2:
+ * no width alternates between frames; W3: coming back down stands the same
+ * controls at each width as going up.
+ */
+async function sweepLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  kind: "component" | "preview",
+  picks: boolean
+): Promise<void> {
+  const page = await kit.page("desk", { theme: "light" });
+  await page.setViewportSize({ width: 860, height: 844 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  const doc = await serveDoc(page, {}, picks);
+  await page.goto(
+    `${bench}/motion/artifact-head?w=800&kind=${kind}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+  );
+  const config = `${kind === "component" ? "component canvas" : "plain preview"}, ${picks ? "Send picks standing" : "no Send picks"}`;
+  const ready = await page
+    .waitForSelector(
+      picks
+        ? "[data-bench-pane] [data-slot=send]"
+        : "[data-bench-pane] [data-head-item=comments]",
+      { timeout: 60_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  if (!ready) {
+    kit.check(`W: ${config}: the head draws`, false, "never drew");
+    await page.close();
+    return;
+  }
+  await page.waitForTimeout(3000);
+  for (const open of [0, 2]) {
+    if (open > 0) {
+      doc.pins(open);
+      // biome-ignore lint/performance/noAwaitInLoops: the pins land, then the head is swept
+      await page.waitForTimeout(1200);
+    }
+    const leg = `${config}, ${open} open`;
+    const up = await page.evaluate(SWEEP, { from: 300, to: 800 });
+    const down = await page.evaluate(SWEEP, { from: 800, to: 300 });
+    const sized = up.filter((one) => one.head !== one.w);
+    kit.check(
+      `W0: ${leg}: the head stands every px 300–800 wide`,
+      sized.length === 0,
+      sized
+        .slice(0, 5)
+        .map((one) => `${one.w}: head ${one.head}`)
+        .join("; ") || "every width"
+    );
+    const lost: string[] = [];
+    for (let at = 1; at < up.length; at += 1) {
+      const narrower = up[at - 1] as SweepRead;
+      const wider = up[at] as SweepRead;
+      const keys = keysOf(wider.frames.at(-1) ?? "");
+      const gone = [...keysOf(narrower.frames.at(-1) ?? "")].filter(
+        (key) => !keys.has(key)
+      );
+      if (gone.length > 0) {
+        lost.push(
+          `${narrower.w}→${wider.w}: loses ${gone.join(",")} (${narrower.frames.at(-1)} → ${wider.frames.at(-1)})`
+        );
+      }
+    }
+    kit.check(
+      `W1: ${leg}: every wider head stands every control a narrower one does, 300–800 a px at a time`,
+      lost.length === 0,
+      lost.join("; ") || "no loss"
+    );
+    const alternating = [...up, ...down].filter(
+      (one) => new Set(one.frames).size > 1
+    );
+    kit.check(
+      `W2: ${leg}: no width alternates between frames`,
+      alternating.length === 0,
+      alternating
+        .slice(0, 5)
+        .map((one) => `${one.w}: ${one.frames.join(" | ")}`)
+        .join("; ") || "none"
+    );
+    const downAt = new Map(down.map((one) => [one.w, one.frames.at(-1)]));
+    const differ = up.filter((one) => downAt.get(one.w) !== one.frames.at(-1));
+    kit.check(
+      `W3: ${leg}: coming back down, each width stands what it stood going up`,
+      differ.length === 0,
+      differ
+        .slice(0, 5)
+        .map(
+          (one) =>
+            `${one.w}: up ${one.frames.at(-1)}, down ${downAt.get(one.w)}`
+        )
+        .join("; ") || "the same"
+    );
+    // Where what stands changes, for the report.
+    kit.note(
+      `sweep ${leg}: ${up
+        .filter(
+          (one, at) =>
+            at === 0 || up[at - 1]?.frames.at(-1) !== one.frames.at(-1)
+        )
+        .map((one) => `${one.w} ${one.frames.at(-1)}`)
+        .join(" | ")}`
     );
   }
   await page.close();
@@ -2538,11 +2731,21 @@ async function footLeg(
   await page.close();
 }
 
+/** W0–W3 for a component canvas and a plain preview, with Send picks standing and without. */
+async function sweeps(kit: Kit, bench: string, stage: Stage): Promise<void> {
+  for (const kind of ["component", "preview"] as const) {
+    for (const picks of [true, false]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+      await sweepLeg(kit, bench, stage, kind, picks);
+    }
+  }
+}
+
 const spec: Spec = {
   name: "canvas-design",
   run: async (kit) => {
     const stage = await stageOf();
-    // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash).
+    // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash); `=sweep` the head's W0–W3 alone.
     const only = process.env.CANVAS_DESIGN;
     try {
       if (only === "switch") {
@@ -2551,6 +2754,10 @@ const spec: Spec = {
           // biome-ignore lint/performance/noAwaitInLoops: one theme at a time
           await artifactSwitchLeg(kit, bench, stage, theme);
         }
+        return;
+      }
+      if (only === "sweep") {
+        await sweeps(kit, await kit.bench(), stage);
         return;
       }
       for (const theme of only === "head" ? [] : (["light", "dark"] as const)) {
@@ -2593,6 +2800,9 @@ const spec: Spec = {
         await ownTabLeg(kit, bench, stage, theme);
         await switchLeg(kit, bench, stage, theme);
         await artifactSwitchLeg(kit, bench, stage, theme);
+      }
+      if (only !== "page") {
+        await sweeps(kit, bench, stage);
       }
       sameLoadPlace(kit);
     } finally {

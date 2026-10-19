@@ -1901,6 +1901,7 @@
         priority: HEAD_PRIORITY.send,
         bar: sendBar,
         menu: sendMenu,
+        words: true,
       });
     }
     if (!(ownTab || linkSession)) {
@@ -1959,6 +1960,7 @@
         bar: commentsBar,
         menu: commentsMenu,
         count: { n: openCount, of: "Comments" },
+        words: true,
       });
     }
     all.push({
@@ -2903,13 +2905,12 @@
       font-weight: var(--weight-body);
     }
   }
-  /* A narrow pane keeps Send picks' and Comments' glyphs (and the count),
-     and lets their words go. */
-  @container (width < 640px) {
-    .comments-label,
-    .send-label {
-      display: none;
-    }
+  /* Send picks and Comments in their narrowest form keep their glyphs (and
+     the count) and let their words go: the head's fit decides (side/head.ts,
+     words only on a 640px pane and only where they fit). */
+  :global([data-head-item][data-form="compact"]) .comments-label,
+  :global([data-head-item][data-form="compact"]) .send-label {
+    display: none;
   }
   /* Comments in More says its open count at the entry's end. */
   .menu-count {

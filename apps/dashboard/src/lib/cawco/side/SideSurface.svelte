@@ -15,8 +15,10 @@
    *
    * A pane that gives its controls as `items` has them stand by the head's
    * priority rule (head.ts): the name keeps its width up to 120px, Close
-   * stands last, the mode takes its one-button form before it would go,
-   * and what doesn't fit goes in head order into one More.
+   * stands last, the controls that fit stand as a priority prefix at their
+   * narrowest, the rest going in head order into one More, and forms widen
+   * after (the mode's segments, then on a 640px pane the words) where the
+   * room left holds them.
    *
    * Expanded over the whole split, the card meets its edges: no inset,
    * corner or shadow, and the well's sides go, so a page is drawn at the
@@ -42,6 +44,7 @@
     NAME_KEEPS,
     type Standing,
     standing,
+    WORDS_FROM,
   } from "./head";
 
   let {
@@ -113,7 +116,7 @@
   let shown = $state<Map<string, Standing> | null>(null);
   /** The name's own width, up to {@link NAME_KEEPS}: it gives up no more of it to the controls. */
   let nameKeeps = $state(0);
-  /** Each control's width as last drawn in the head, whole (`key`) and in its one-button form (`key:compact`): what a control in More would take back. */
+  /** Each control's width as last drawn in the head, whole (`key`) and in its narrowest form (`key:compact`), and More's, its glyph alone (`more`) and saying a count (`more:counted`): what a control in More would take back. */
   const widths = new Map<string, number>();
   const stands = (key: string) => shown === null || shown.has(key);
   const formOf = (key: string): Standing => shown?.get(key) ?? "whole";
@@ -145,10 +148,9 @@
     };
   }
 
-  /** What always stands (the switch, Close), and More, as drawn; each control's width kept while it stands. */
+  /** What always stands (the switch, Close) as drawn; each control's width, and More's, kept while it stands. */
   function drawnWidths(el: HTMLElement, name: HTMLElement) {
     const kept: number[] = [];
-    let moreWidth = 0;
     for (const child of el.children) {
       const one = child as HTMLElement;
       const { width } = one.getBoundingClientRect();
@@ -159,12 +161,15 @@
           width
         );
       } else if (one.dataset.slot === "more") {
-        moreWidth = width;
+        widths.set(
+          one.querySelector(".more-count") ? "more:counted" : "more",
+          width
+        );
       } else if (!item && one !== name) {
         kept.push(width);
       }
     }
-    return { kept, moreWidth };
+    return { kept };
   }
 
   /**
@@ -205,22 +210,28 @@
       return;
     }
     const { gap, room } = roomOf(head);
-    const { kept, moreWidth } = drawnWidths(head, identity);
-    // More is Close's recipe, its glyph alone, until it stands to be read.
+    const { kept } = drawnWidths(head, identity);
+    // More and a form not drawn yet are Close's recipe, its glyph alone,
+    // until they stand to be read.
+    const glyph = kept.at(-1) ?? 0;
+    const moreGlyph = widths.get("more") ?? glyph;
     const next = standing(
       room,
       gap,
       [...kept, nameKeeps + nameMargins(identity)],
-      moreWidth || (kept.at(-1) ?? 0),
+      { glyph: moreGlyph, counted: widths.get("more:counted") ?? moreGlyph },
       all.map((one) => ({
         key: one.key,
         priority: one.priority,
         width: widths.get(one.key) ?? 0,
-        // Not drawn yet: Close's width, the recipe's glyph alone.
-        ...(one.compact
-          ? { compact: widths.get(`${one.key}:compact`) ?? kept.at(-1) ?? 0 }
+        counted: !!one.count && one.count.n > 0,
+        words: one.words,
+        ...(one.compact || one.words
+          ? { compact: widths.get(`${one.key}:compact`) ?? glyph }
           : {}),
-      }))
+      })),
+      // The pane's width: the card's, the head's box inside it.
+      head.clientWidth >= WORDS_FROM
     );
     const was = shown;
     if (
@@ -459,7 +470,9 @@
       max-inline-size: 100%;
     }
   }
-  .side-head:has(:global([role="tablist"])) .identity {
+  /* The switch's tablist, not the mode's among the controls: the name's
+     inset holds while the mode takes its segments back. */
+  .side-head:has(:global([role="tablist"]:not(.head-item *))) .identity {
     --inset: var(--space-1);
   }
   /* A title control's own padding is its text's inset, as the controls'. */
