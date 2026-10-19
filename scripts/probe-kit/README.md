@@ -117,6 +117,20 @@ MobileBuildMCP `launch_mac_app` is refused as a write to
 /Applications/Safari.app. A macOS Safari sample runs from a session started
 outside every workspace on the Mac, with the screen unlocked.
 
+An iOS Simulator booted from a workspace (`xcrun simctl boot`) runs Safari
+as one booted outside it does: on iOS 27.2 both loaded example.com, its web
+process launched and the page painted.
+
+The iOS 26.3 simulator runtime (23D8133) is not a Safari probe's runtime on
+a macOS 27 host: its JavaScriptCore crashes the web process (SIGBUS,
+`KERN_PROTECTION_FAILURE`) a second or two into JS-heavy pages, the
+dashboard and public sites alike (react.dev and figma.com 2 of 2 loads),
+while 26.0, 18.5 and 27.2 load the same pages clean. Older runtimes on
+macOS 27 crash the same way
+(https://blog.rinsuki.net/articles/old-ios-simulators-on-xcode-27/). A page
+that never painted there, and a Safari that started no load after it, was
+this crash. `ios-safari-load` runs on the newest runtime and on 26.0.
+
 ## A spec with its own git and HOME
 
 A spec that stands up its own git repositories, doors or forge sign-ins
