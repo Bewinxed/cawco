@@ -740,6 +740,12 @@ const errorSection = (error: StageError): string => {
   ].join("\n");
 };
 
+/**
+ * Who moved a session's panel: the person (a press in the panel, the artifact
+ * menu, a pin's link, a page's Open to draw), or the agent through its tools.
+ */
+export type PanelHand = "person" | "agent";
+
 /** What `artifact_delete` and the panel's Remove answer: what the session's panel shows now, or null for nothing. */
 export interface Removed {
   showing: { id: string; kind: ArtifactKind; name: string } | null;
@@ -837,10 +843,12 @@ export interface ArtifactServiceDeps {
    * Publishes `artifact` to its session's panel at a fresh revision (the open
    * frame every view of the session hears); why not, when its server could
    * not be started. Whether a view put it on screen is that view's word
-   * ({@link Artifacts.shown}).
+   * ({@link Artifacts.shown}). One the person opened is kept as what they
+   * have in front ({@link ArtifactServiceDeps.personShown}).
    */
   open: (
-    artifact: ArtifactRow
+    artifact: ArtifactRow,
+    by: PanelHand
   ) => Promise<{ ok: true; revision: string } | { error: string; ok: false }>;
   /** The workspace a session runs in, by id; undefined outside one. */
   ownWorkspace: (instance: InstanceRow) => string | undefined;
@@ -858,6 +866,12 @@ export interface ArtifactServiceDeps {
     | { html: string; program?: BuiltProgram }
     | { refused: string; status: ArtifactRefusal["status"] }
   >;
+  /**
+   * The artifact the person last opened in session `instanceId`'s panel
+   * themselves, kept until the panel closes; undefined when they opened none
+   * since. An agent's show never changes it.
+   */
+  personShown: (instanceId: string) => string | undefined;
   /**
    * Session `instanceId`'s preview origin (preview.ts), its listener started
    * when it has none; throws a refusal when every port is taken.
@@ -988,6 +1002,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return row;
     }
     return own(instance, id);
+  };
+
+  /** The session's newest artifact the panel can show: a draft canvas still in the composer is not one. */
+  const nextNewest = (instance: InstanceRow): ArtifactRow | undefined =>
+    db
+      .ofInstance(instance.id)
+      .find((other) => docs.doc(other.id).getMap("meta").get("draft") !== true);
+
+  /** What the person last opened in the session's panel themselves, while the session still has it. */
+  const personHad = (instance: InstanceRow): ArtifactRow | undefined => {
+    const id = deps.personShown(instance.id);
+    const row = id === undefined ? undefined : db.get(id);
+    return row?.instanceId === instance.id ? row : undefined;
   };
 
   /**
@@ -1628,12 +1655,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * started, and nothing was published.
    */
   const show = async (
-    row: ArtifactRow
+    row: ArtifactRow,
+    by: PanelHand
   ): Promise<
     | { opened: true; started: true }
     | { opened: false; started: boolean; why: string }
   > => {
-    const published = await deps.open(row);
+    const published = await deps.open(row, by);
     if (!published.ok) {
       return { opened: false, why: published.error, started: false };
     }
@@ -2141,7 +2169,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       kind: row.kind,
       name: row.name,
       route: routeOf(row.id),
-      ...openedOf(await show(row)),
+      ...openedOf(await show(row, "agent")),
     };
     // Its outline as it stands, read as the owner's read only when the owner made it.
     const outlineNow = () =>
@@ -2569,7 +2597,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         });
     stampMeta(row, null);
     writeStage(row, opened.state, opened.sheet);
-    const shown = await show(row);
+    const shown = await show(row, "agent");
     if (!(shown.started || before)) {
       discard(row);
       throw new ArtifactRefusal(503, shown.why);
@@ -2927,7 +2955,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       stampMeta(row, pageHashOf(html, program));
       keepProgramDir(row, program, input.dir);
       keepServed(row, before, stage);
-      const shown = await show(row);
+      const shown = await show(row, "agent");
       if (!(shown.started || before) && input.kind === "preview") {
         // A preview nothing could start shows nothing: it is not kept. One
         // whose server did not answer stays in the panel, its failure on it.
@@ -3229,7 +3257,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         updatedAt: new Date(),
       }) as ArtifactRow;
       if (deps.showing(next.instanceId) === next.id) {
-        await show(next);
+        await show(next, "agent");
       }
       return { id: next.id, revision: next.revision, spec };
     },
@@ -3396,10 +3424,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * Brings an artifact to the front of its owner's panel and waits for a
      * view to have it on screen ({@link Opened}); a refusal when its server
-     * could not be started. Its owner's or its maker's to call.
+     * could not be started. Its owner's or its maker's to call, or the
+     * person's: what they open is what the panel goes back to when the agent
+     * takes away something it showed over it.
      */
-    show: async (instanceId: string, id: string): Promise<Opened> => {
-      const shown = await show(ownedOrMade(sessionOf(instanceId), id));
+    show: async (
+      instanceId: string,
+      id: string,
+      by: PanelHand
+    ): Promise<Opened> => {
+      const shown = await show(ownedOrMade(sessionOf(instanceId), id), by);
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }
@@ -3408,11 +3442,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * Removes one of the session's artifacts (`artifact_delete`, the panel's
-     * Remove). When its panel showed it, the panel shows the session's next
-     * newest artifact (a draft canvas still in the composer is not one), or
-     * nothing; every view hears it on the frames it already follows.
+     * Remove); every view hears it on the frames it already follows. When
+     * its panel showed it:
+     * - the person's Remove shows the session's next newest artifact (a draft
+     *   canvas still in the composer is not one), as closing a tab does;
+     * - the agent's delete puts back what the person had in front before it
+     *   ({@link ArtifactServiceDeps.personShown}), or closes the panel: an
+     *   agent taking something away never brings a different artifact
+     *   forward as if it wanted the person there.
+     * Answers what the panel shows after.
      */
-    remove: async (instanceId: string, id: string): Promise<Removed> => {
+    remove: async (
+      instanceId: string,
+      id: string,
+      by: PanelHand
+    ): Promise<Removed> => {
       const instance = sessionOf(instanceId);
       const row = own(instance, id);
       const wasShown = deps.showing(instance.id) === row.id;
@@ -3425,12 +3469,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           showing: now ? { id: now.id, kind: now.kind, name: now.name } : null,
         };
       }
-      const next = db
-        .ofInstance(instance.id)
-        .find(
-          (other) => docs.doc(other.id).getMap("meta").get("draft") !== true
-        );
-      if (next && (await deps.open(next)).ok) {
+      const next = by === "person" ? nextNewest(instance) : personHad(instance);
+      if (next && (await deps.open(next, by)).ok) {
         return { showing: { id: next.id, kind: next.kind, name: next.name } };
       }
       await deps.close(instance.id);

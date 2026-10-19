@@ -435,21 +435,86 @@ const inkLeg = async (kit: Kit, page: Page, leg: string) => {
   );
 };
 
+/**
+ * The machines' item at the desk with `machines` joined: its number drawn
+ * only above 0, its name saying it only then, and with no number it is a
+ * plain item (no padding of its own) (DESIGN.md, The Earned Count Rule).
+ */
+const machinesLeg = async (
+  kit: Kit,
+  base: string,
+  theme: Theme,
+  machines: number
+) => {
+  const page = await kit.page("desk", { theme });
+  await open(page, `${base}/`, MACHINES, 120_000);
+  const said = await page
+    .waitForFunction(
+      ([sel, want]) => {
+        const item = document.querySelector(sel as string);
+        const label = item?.getAttribute("aria-label") ?? "";
+        const wanted =
+          want === 0
+            ? label === "Machines"
+            : label.startsWith(`${want} machine`);
+        return item && wanted
+          ? {
+              label,
+              num:
+                item.querySelector('[data-slot="num"]')?.textContent ?? "none",
+              pad: getComputedStyle(item).paddingInline,
+            }
+          : null;
+      },
+      [MACHINES, machines] as const,
+      { timeout: 60_000 }
+    )
+    .then((handle) => handle.jsonValue())
+    .catch(() =>
+      page.$eval(MACHINES, (item) => ({
+        label: item.getAttribute("aria-label") ?? "",
+        num: item.querySelector('[data-slot="num"]')?.textContent ?? "none",
+        pad: getComputedStyle(item).paddingInline,
+      }))
+    );
+  const num = machines > 0 ? String(machines) : "none";
+  const label =
+    machines > 0
+      ? `${machines} ${machines === 1 ? "machine" : "machines"}`
+      : "Machines";
+  kit.check(
+    `machines desk ${theme}, ${machines} joined: the number is ${num}, the name "${label}"${machines > 0 ? "" : ", a plain item"}`,
+    !!said &&
+      said.num === num &&
+      // Above 0 the name may go on to say what needs attention.
+      (machines > 0 ? said.label.startsWith(label) : said.label === label) &&
+      (machines > 0 || said.pad === "0px"),
+    JSON.stringify(said)
+  );
+  await page.close();
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
   await fleet.hubUp();
+  const base = await fleet.devDashboard();
+  for (const theme of THEMES) {
+    await machinesLeg(kit, base, theme, 0);
+  }
   fleet.fileAccount();
   fleet.launch("agent");
   await fleet.agentUp();
+  for (const theme of THEMES) {
+    await machinesLeg(kit, base, theme, 1);
+  }
   await fleet.accountSignedIn();
   const alpha = await fleet.spawn("claude", "Alpha");
   await fleet.send(alpha, "hello");
   const beta = await fleet.spawn("claude", "Beta");
   await fleet.send(beta, "hello");
-  const base = await fleet.devDashboard();
 
   /** A page on `view` with both sessions in its one pane, Alpha in front. */
   const pane: Pane = async (view, theme, scale) => {

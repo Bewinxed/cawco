@@ -39,7 +39,10 @@
  *    command reaches its server; the form its boundary lost is not taken
  *    there (the agent says it keeps it as it is while its work listens), so
  *    the server stays in the network its commands run in. A message after
- *    the quiet time: its command reaches the server again. (W shows no
+ *    the quiet time: its command reaches the server again. After each
+ *    command W rests in a wait for its parent's next word, so its item stays
+ *    live: three quiet turns would fail it, and the hub would retire its
+ *    workspace, server and boundary with it. (W shows no
  *    preview: a preview of a workspace's port names what serves it, and W's
  *    server is the one its own command left listening.)
  * 8. W's item finished: its boundary, its server still listening in it,
@@ -79,6 +82,12 @@ const WAIT_MINUTES = 15;
 const W_REASON = "the dev server in its workspace";
 /** How the hub wakes a delegate whose wait ended (hub work-items.ts). */
 const WAIT_OVER = `Your wait is over: ${W_REASON}.`;
+/**
+ * W's wait for its parent's next word once woken, and again once checked:
+ * longer than the rest of legs 7 and 8 take, so it ends only by W's own
+ * command or its finish.
+ */
+const PARENT_WAIT = { minutes: 60, reason: "its parent's word on the server" };
 /** How soon W's boundary closes once its item ends: the quiet time, a sweep's minute and slack. */
 const W_CLOSE_MS = 13 * 60_000;
 const KEPT_LINE = `is kept as it is while its work listens on ${PORT.W}`;
@@ -123,6 +132,8 @@ const steps = new Map<
   {
     checked?: boolean;
     finished?: boolean;
+    /** W's rests in a wait for its parent's word so far ({@link waiter}). */
+    rested?: number;
     searched?: boolean;
     shown?: boolean;
     waited?: boolean;
@@ -150,7 +161,12 @@ const offered = (request: Seen, name: string, input: object): Reply => {
 /**
  * W: starts its server and waits; woken by the wait's end, reaches its
  * server; asked to check, reaches it again and shows it; asked to finish,
- * finishes.
+ * finishes. After each command it rests in a wait for its parent's next word
+ * ({@link PARENT_WAIT}), as a live delegate keeping a server up does: a turn
+ * ended with a wait declared counts toward no quiet-turn failure (hub
+ * work-items.ts `waitingTurn`), where three quiet turns in a row fail its
+ * item, and the hub then retires its workspace, its server and boundary with
+ * it (`settle`).
  */
 const waiter = (request: Seen): Reply => {
   const step = steps.get("W") ?? {};
@@ -190,6 +206,15 @@ const waiter = (request: Seen): Reply => {
       summary: "W kept its server up through its wait.",
     });
     step.finished = reply.tool?.name === FINISH;
+    return reply;
+  }
+  // Woken, then checked: one rest after each, until the parent's next word.
+  const rests = Number(Boolean(step.woke)) + Number(Boolean(step.checked));
+  if (!step.finished && (step.rested ?? 0) < rests) {
+    const reply = offered(request, WAIT, PARENT_WAIT);
+    if (reply.tool?.name === WAIT) {
+      step.rested = rests;
+    }
     return reply;
   }
   return text("ok");

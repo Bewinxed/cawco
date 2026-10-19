@@ -1,5 +1,11 @@
 /** Server-only runtime layout. Never import through the browser-facing core barrel. */
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { atMost } from "./at-most";
@@ -49,6 +55,7 @@ const RUNTIME_TREES = new Set([
   "dashboard",
   "drizzle",
   "pi",
+  "playwright-core",
   "skills",
   "srt",
   "workflow",
@@ -65,39 +72,80 @@ const RUNTIME_TREES = new Set([
  */
 const PUBLISH_CONCURRENCY = 64;
 
-/** Written once every runtime file is published and flushed; while it is there nothing is checked again. */
+/**
+ * Written once every runtime file is published and flushed, holding
+ * {@link publishedSet}; while it holds this build's, nothing is checked
+ * again. A build of the same version that publishes another set of files (a
+ * tree added to {@link RUNTIME_TREES}, a file added to one, a file whose
+ * size changed) finds another and writes every file whose size on disk is
+ * not its own.
+ */
 const PUBLISHED_MARKER = ".published";
+
+/** The runtime files this build publishes, by name and size, as one hash. Nothing is read: an embedded file's blob carries its size. */
+const publishedSet = (files: [string, number][]): string =>
+  `${runtimeVersion} ${Bun.hash(
+    files
+      .map(([name, size]) => `${name}\t${size}`)
+      .sort()
+      .join("\n")
+  ).toString(36)}`;
+
+/** A runtime folder that refuses writes: a workspace's, which only the machine's processes publish. */
+const readOnly = (error: unknown): boolean => {
+  const { code } = error as NodeJS.ErrnoException;
+  return code === "EROFS" || code === "EACCES";
+};
 
 /**
  * A child process cannot open $bunfs, so every standalone process publishes
  * this build's runtime trees before anything reads one (scripts/binary
- * entry.ts): each missing file written whole and flushed (state-file.ts), all
- * at once, then the marker. A file already published is left alone without
- * touching its folder: inside a workspace the runtime folder is read-only,
- * and even a recursive mkdir of a folder that exists fails there with EEXIST
- * (`cawco tools` in a workspace). Processes that start together each write
- * what they find missing; a rename lands the same bytes whichever wins.
+ * entry.ts): each file missing or of another size written whole and flushed
+ * (state-file.ts), all at once, then the marker. A file already published is
+ * left alone without touching its folder: inside a workspace the runtime
+ * folder is read-only, and even a recursive mkdir of a folder that exists
+ * fails there with EEXIST (`cawco tools` in a workspace). With nothing to
+ * write, a marker of another build is still replaced where the folder takes
+ * it, so a complete tree is checked once. Processes that start together each
+ * write what they find; a rename lands the same bytes whichever wins.
  */
 export async function publishRuntime(): Promise<void> {
   const base = runtimeDataDir();
-  if (existsSync(join(base, PUBLISHED_MARKER))) {
+  const published = Object.entries(binaryAssets)
+    .filter(([name]) => RUNTIME_TREES.has(name.split("/")[0]))
+    .map(([name, source]): [string, string, number] => [
+      name,
+      source,
+      Bun.file(source).size,
+    ]);
+  if (!published.length) {
     return;
   }
-  const missing = Object.entries(binaryAssets).filter(
-    ([name]) =>
-      RUNTIME_TREES.has(name.split("/")[0]) && !existsSync(join(base, name))
+  const set = publishedSet(published.map(([name, , size]) => [name, size]));
+  const marker = join(base, PUBLISHED_MARKER);
+  if (existsSync(marker) && readFileSync(marker, "utf8") === set) {
+    return;
+  }
+  const stale = published.filter(
+    ([name, , size]) =>
+      statSync(join(base, name), { throwIfNoEntry: false })?.size !== size
   );
-  if (!missing.length) {
+  if (!stale.length) {
+    try {
+      await writeStateFile(marker, set, { mode: 0o600, inPlace: true });
+    } catch (error) {
+      if (!readOnly(error)) {
+        throw error;
+      }
+    }
     return;
   }
-  for (const dir of new Set(
-    missing.map(([name]) => dirname(join(base, name)))
-  )) {
+  for (const dir of new Set(stale.map(([name]) => dirname(join(base, name))))) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
   const limit = atMost(PUBLISH_CONCURRENCY);
   await Promise.all(
-    missing.map(([name, source]) =>
+    stale.map(([name, source]) =>
       limit(async () =>
         writeStateFile(join(base, name), await Bun.file(source).bytes(), {
           mode: 0o600,
@@ -106,9 +154,7 @@ export async function publishRuntime(): Promise<void> {
       )
     )
   );
-  await writeStateFile(join(base, PUBLISHED_MARKER), runtimeVersion, {
-    mode: 0o600,
-  });
+  await writeStateFile(marker, set, { mode: 0o600, inPlace: true });
 }
 
 /** Where an embedded tree {@link publishRuntime} published sits on disk. */

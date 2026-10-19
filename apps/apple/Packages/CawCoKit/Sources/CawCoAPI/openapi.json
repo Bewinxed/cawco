@@ -5475,6 +5475,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "agent"
+            }
           }
         ],
         "operationId": "deleteApiInstancesByIdArtifactsByArtifact",
@@ -5485,6 +5494,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Removed"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiInstancesByIdArtifactsByArtifact 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -6337,6 +6356,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "agent"
+            }
           }
         ],
         "operationId": "postApiInstancesByIdArtifactsByArtifactShow",
@@ -6347,6 +6375,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactShow200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsByArtifactShow 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -32633,35 +32671,30 @@
         "description": "One port the hub's health check asks, by its chip's words.",
         "type": "string",
         "enum": [
-          "tcp 3478",
           "tcp 443",
           "tls",
-          "udp 3478"
+          "udp 443"
         ]
       },
       "RelayPorts": {
-        "description": "What the relay's machine has bound: each listening port, and whether a certificate stands for TLS.",
+        "description": "What the relay's machine has bound: its listener on UDP and TCP 443, and whether a certificate stands for TLS on it.",
         "type": "object",
         "properties": {
           "tcp443": {
             "type": "boolean"
           },
-          "tcp3478": {
-            "type": "boolean"
-          },
           "tls": {
-            "description": "A certificate stands: 443 and 5349 answer TLS.",
+            "description": "A certificate stands and TCP 443 is bound: the listener answers TLS.",
             "type": "boolean"
           },
-          "udp3478": {
+          "udp443": {
             "type": "boolean"
           }
         },
         "required": [
-          "tcp3478",
           "tcp443",
           "tls",
-          "udp3478"
+          "udp443"
         ]
       },
       "StreamRelayState": {
@@ -36606,6 +36639,15 @@
               "position": {
                 "type": "string"
               },
+              "display": {
+                "type": "string"
+              },
+              "margin": {
+                "type": "string"
+              },
+              "padding": {
+                "type": "string"
+              },
               "backgroundColor": {
                 "type": "string"
               },
@@ -36619,15 +36661,6 @@
                 "type": "string"
               },
               "lineHeight": {
-                "type": "string"
-              },
-              "display": {
-                "type": "string"
-              },
-              "padding": {
-                "type": "string"
-              },
-              "margin": {
                 "type": "string"
               },
               "borderRadius": {

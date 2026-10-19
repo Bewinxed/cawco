@@ -80,6 +80,7 @@ import type {
   SessionMessageInfo,
   V2Event,
 } from "@opencode/client";
+import { CHROME_DEVTOOLS } from "../browser/door";
 import { gitIn } from "../checkout-exclude";
 import { harnessMcpUrl } from "../delegation";
 import {
@@ -144,7 +145,6 @@ import {
 } from "./opencode-models";
 import {
   buildPluginSource,
-  CHROME_DEVTOOLS,
   OPENCODE_DIR,
   OPENCODE_PLACED_MCP,
   PLAN_AGENT_OFF,
@@ -4354,6 +4354,19 @@ export class OpencodeHarness implements Harness {
       await (account === undefined
         ? this.#ensure(true)
         : this.#ensureAccount(account, true));
+    }
+    // Its workspace's browser door, before the location boots: OpenCode's
+    // MCP servers are its location's, so a workspace's location launches its
+    // chrome-devtools through the workspace's door (the plugin reads it), and
+    // a location in no workspace launches none.
+    if (ctx.workspace && ctx.browserDoor) {
+      await ctx
+        .browserDoor()
+        .catch((error: unknown) =>
+          console.warn(
+            `[opencode] ${ctx.instanceId}: workspace ${ctx.workspace}'s browser door could not be made, so its location launches no chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
     }
     if (spec.resume && !spec.resume.fork) {
       const recovered = await this.reattach(spec, ctx);

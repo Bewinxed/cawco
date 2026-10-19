@@ -4,10 +4,10 @@
  * holds nothing. The hub serves it at the canvas's root with the overlay in
  * it (core canvas-host.ts); the overlay joins the artifact's doc as it does
  * for any page, and hands it over through `window.cawcoArtifact`
- * (artifact.ts), which scene.ts binds Excalidraw to.
+ * (artifact.ts), which scene.ts binds Excalidraw to. Its stylesheet,
+ * Excalidraw's and canvas.css, is no import of this module's: Lightning CSS
+ * compiles it (core canvas-host.ts `SHEETS`), and index.html links it.
  */
-import "@excalidraw/excalidraw/index.css";
-import "./canvas.css";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
@@ -68,9 +68,9 @@ const UI_OPTIONS = {
   tools: { image: true },
 } as const;
 
-// The kit's tokens as written: Bun's CSS bundler lowers `light-dark()` into
-// `prefers-color-scheme` rules (the OS's scheme), so they stay out of it and
-// follow the host's `color-scheme` (`scheme` below).
+// The kit's tokens as written (a text import, which no CSS compiler
+// touches), ahead of the page's stylesheet: their `light-dark()`s follow
+// the host's `color-scheme` (`scheme` below).
 const tokenSheet = document.createElement("style");
 tokenSheet.textContent = tokensCss;
 document.head.prepend(tokenSheet);

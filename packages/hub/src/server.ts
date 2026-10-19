@@ -4390,6 +4390,11 @@ export const createServer = (
     // Nor is it doing anything any more: a pulse outliving its process is the
     // same stale-liveness lie in memory instead of in a column.
     pulses.delete(instanceId);
+    // A turn that called finish_item ends with its process: what waited out
+    // that turn is the next process's to read.
+    if (!outlived) {
+      workItems.turnOver(instanceId);
+    }
     // A lead's turn ends with its process: its thread is no longer working.
     lead?.sessionEnded(instanceId);
     // And whatever its turn had read or started with it (memory.ts).
@@ -5416,6 +5421,59 @@ export const createServer = (
       readSend(now, true);
     }
     return "started";
+  };
+
+  /**
+   * A delegate called finish_item, which ends its turn (work-items.ts
+   * `lastTurn`): each send it was handed and has not read, from one the
+   * item's finishing hold keeps (work-items.ts `finishingFor`), is withdrawn
+   * from its harness and owed again at the hub, kept there until that turn
+   * is over. Claude's CLI holds a send handed mid-turn in a queue it drains
+   * after the tool call under way: one handed as the model called
+   * finish_item joined the turn after the call's answer and was read after
+   * the item ended, which reopens nothing (work-items.ts `reopen`), and the
+   * turn ended on it. The CLI's withdrawal is atomic with its read, so one
+   * read first ("started") reached the model before it called finish_item,
+   * and stands. OpenCode and pi store a send as they are handed it, and
+   * take no withdrawal. A withdrawal its machine leaves unanswered leaves
+   * the send as it was. Never throws.
+   */
+  const reclaimUnread = async (instanceId: string): Promise<void> => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (row?.harness !== "claude") {
+      return;
+    }
+    const unread = db.sendsIn(instanceId, ["pending"]).filter((send) => {
+      const origin = (send.body as SentMessage | null)?.origin;
+      return (
+        send.owed === null &&
+        !isKeepAlive(send.body) &&
+        !!origin &&
+        workItems.finishingFor(instanceId, origin)
+      );
+    });
+    const takeBackOne = async (send: SentMessageRow): Promise<void> => {
+      const reply = await callAgent(
+        row.machineId,
+        "withdrawSend",
+        [send.uuid],
+        READ_TIMEOUT_MS,
+        undefined,
+        instanceId
+      );
+      if (
+        reply.kind === "answered" &&
+        reply.value.ok &&
+        reply.value.result === "withdrawn" &&
+        db.oweAgain(send.uuid)
+      ) {
+        console.log(
+          `[hub] send ${send.uuid} to ${instanceId} taken back as it called finish_item: it goes as its next turn`
+        );
+        publishSend(db.sendRecord(send.uuid) ?? send);
+      }
+    };
+    await Promise.all(unread.map(takeBackOne));
   };
 
   /** A retry or queued edit has superseded a send the harness no longer holds. */
@@ -7516,7 +7574,8 @@ export const createServer = (
    * start held while its machine installs an update ({@link holdingStarts}),
    * its machine's agent away within its reconnecting window
    * ({@link machinePresence}), its account at its limit or its compaction
-   * after a move under way ({@link heldAtLimit}), and a send owed before it
+   * after a move under way ({@link heldAtLimit}), its item finishing against
+   * one who may reopen it (work-items.ts `finishingFor`), and a send owed before it
    * to the same session, which it never overtakes — but that compaction's
    * own steps (`ahead`), which go first ({@link compactionSend}).
    */
@@ -7691,6 +7750,12 @@ export const createServer = (
     if (held) {
       workItems.recutFor(instanceId);
     }
+    // Kept while its item finishes: its landing runs, or the turn that
+    // called finish_item is still ending. Handed now, it would join that
+    // turn and reopen nothing; it goes as the session's next turn.
+    const finishing =
+      !(refused || keepAlive) &&
+      workItems.finishingFor(instanceId, message.origin);
     const agent = refused ? undefined : registry.agent(machineId);
     // Held for a machine inside its window, never failed there (core
     // handover.ts `send`).
@@ -7700,7 +7765,8 @@ export const createServer = (
         (command) =>
           command.kind === "send-verdict" && command.verdict === "hold"
       );
-    const accepted = Boolean(agent) || away || kept || paused || held;
+    const accepted =
+      Boolean(agent) || away || kept || paused || held || finishing;
     const from =
       message.origin.kind === "peer" ? message.origin.fromSession : undefined;
     const waitSummary =
@@ -7712,7 +7778,7 @@ export const createServer = (
           ? `${content}${waitSummary}`
           : [...content, { type: "text", text: waitSummary }];
     }
-    if (agent && !(kept || limited || paused || held)) {
+    if (agent && !(kept || limited || paused || held || finishing)) {
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
@@ -7724,6 +7790,7 @@ export const createServer = (
       kept ||
       paused ||
       held ||
+      finishing ||
       (agent !== undefined &&
         !keepAlive &&
         (limited || (!ahead && sendWaits(instanceId))));
@@ -7736,8 +7803,9 @@ export const createServer = (
     if (agent && !owed) {
       sendFrame(agent, envelope);
     }
-    // Kept for its machine alone, not for its session or an interrupt's hold.
-    if (owed && !agent && !(kept || held)) {
+    // Kept for its machine alone, not for its session, an interrupt's hold
+    // or its item's finish.
+    if (owed && !agent && !(kept || held || finishing)) {
       owedForMachine(machineId, message.uuid);
     }
     // Built after the send has gone: the machine is handed the image bytes,
@@ -7778,7 +7846,11 @@ export const createServer = (
     }
     publishSend(record);
     // A send that woke its session goes out behind what was kept for it.
-    if (agent && owed && !(kept || away || limited || paused || held)) {
+    if (
+      agent &&
+      owed &&
+      !(kept || away || limited || paused || held || finishing)
+    ) {
       releaseOwed({ instanceId });
     }
     // Kept at its account's limit: the move it owes, or one another account
@@ -7878,16 +7950,19 @@ export const createServer = (
    * owed before it. Undefined for a send its machine has.
    */
   /**
-   * A send kept for its machine's pause, for an interrupt's hold on its
-   * session's item against this sender, or while its retired workspace is
-   * cut again ({@link deliverToSession}).
+   * A send kept for its machine's pause, while its session's item finishes,
+   * for an interrupt's hold on that item against this sender, or while its
+   * retired workspace is cut again ({@link deliverToSession}).
    */
   const pausedOrHeld = (
     row: InstanceRow,
     origin: SentMessage["origin"] | undefined
-  ): "paused" | "held" | "recut" | undefined => {
+  ): "paused" | "finishing" | "held" | "recut" | undefined => {
     if (machinePause.until(row.machineId) !== undefined) {
       return "paused";
+    }
+    if (origin && workItems.finishingFor(row.id, origin)) {
+      return "finishing";
     }
     if (!(origin && workItems.heldFor(row.id, origin))) {
       return;
@@ -8006,7 +8081,8 @@ export const createServer = (
 
   /**
    * Whether an owed send stays kept for its session's account limit, its
-   * machine's pause, or its item's hold ({@link WorkItems.heldFor}). Held for
+   * machine's pause, its item's finish (work-items.ts `finishingFor`), or
+   * its item's hold ({@link WorkItems.heldFor}). Held for
    * its workspace's turn or cut, the wait that releases it is asked for
    * here too, as the send path asks for it.
    */
@@ -8019,6 +8095,9 @@ export const createServer = (
       heldAtLimit(instanceId, origin) ||
       machinePause.until(machineId) !== undefined
     ) {
+      return true;
+    }
+    if (workItems.finishingFor(instanceId, origin)) {
       return true;
     }
     if (!workItems.heldFor(instanceId, origin)) {
@@ -9547,6 +9626,14 @@ export const createServer = (
     return frame;
   };
 
+  /**
+   * What the person last opened in each session's panel themselves (a press
+   * in the panel, the artifact menu, a pin's link), until the panel closes:
+   * what an agent's delete of something it showed over it goes back to
+   * (artifacts/service.ts `remove`). An agent's show never changes it.
+   */
+  const personShown = new Map<string, string>();
+
   const closePreview = async (
     instanceId: string
   ): Promise<
@@ -9558,6 +9645,7 @@ export const createServer = (
       closed: { instanceId, state: "closed" },
     } as const;
     nextPreviewGeneration(instanceId);
+    personShown.delete(instanceId);
     const target = previewTargets.get(instanceId);
     if (!target) {
       return closed;
@@ -10905,17 +10993,22 @@ export const createServer = (
         .map((project) => project.id),
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
-    open: async (artifact) => {
+    open: async (artifact, by) => {
       const opened = await openPreview(
         artifact.instanceId,
         artifact.machineId ?? "",
         artifact.source,
         { id: artifact.id, kind: artifact.kind, name: artifact.name }
       );
-      return opened.ok
-        ? { ok: true, revision: opened.frame.revision }
-        : { ok: false, error: opened.error };
+      if (!opened.ok) {
+        return { ok: false, error: opened.error };
+      }
+      if (by === "person") {
+        personShown.set(artifact.instanceId, artifact.id);
+      }
+      return { ok: true, revision: opened.frame.revision };
     },
+    personShown: (instanceId) => personShown.get(instanceId),
     page: buildArtifactPage,
     sending: (instance, artifact, state) =>
       applySetupPicks(artifact, instance.projectId, state, {
@@ -11238,7 +11331,9 @@ export const createServer = (
         });
       }
       try {
-        return Response.json(await artifacts.show(instanceId, artifactId));
+        return Response.json(
+          await artifacts.show(instanceId, artifactId, "person")
+        );
       } catch (error) {
         if (error instanceof ArtifactRefusal) {
           return new Response(error.message, { status: error.status });
@@ -18622,6 +18717,10 @@ export const createServer = (
         failSend(send, reason);
       }
     },
+    // A delegate's finish_item ends its turn: what its harness holds unread
+    // waits at the hub, and goes once that turn is over.
+    reclaimUnread,
+    finishOver: (instanceId) => releaseOwed({ instanceId }),
     workspaceChanged: (workspace) => publishInstances(workspace.machineId),
   });
   // A hub crash after intent persistence cannot leave its work item reading
@@ -28790,6 +28889,9 @@ export const createServer = (
                   // budget, whatever answers it; one at the limit stops it.
                   if (row?.workItemId) {
                     workItems.countTurn(row);
+                    // The turn that called finish_item is over: what waited
+                    // out its end goes now, as the next turn.
+                    workItems.turnOver(row.id);
                   }
                   // Fleet watch counts the turn (and ends a triage run's).
                   watch?.endTurn(turnId, neutral);

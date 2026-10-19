@@ -1,10 +1,11 @@
 /**
  * The landing gate's check on the bundles Bun builds at runtime for a
- * browser: the canvas host, the decision host (which bundles dashboard
- * components' styles too), the preview overlay and the stage host. Each is
- * built as the hub builds it, and each builder refuses a `light-dark()` Bun
- * lowered to switch variables nothing sets (core bundle-css-guard.ts), so a
- * regression stops here instead of drawing transparent on the canvas.
+ * browser: the canvas host, the decision host (whose dashboard components'
+ * styles Lightning CSS compiles, core page-css.ts), the preview overlay and
+ * the stage host. Each is built as the hub builds it, and each builder
+ * refuses a `light-dark()` Bun lowered to switch variables nothing sets
+ * (core bundle-css-guard.ts): a stylesheet that reached Bun's CSS bundler
+ * again stops here instead of drawing transparent on the canvas.
  *
  *   bun scripts/runtime-bundles-check.ts
  */

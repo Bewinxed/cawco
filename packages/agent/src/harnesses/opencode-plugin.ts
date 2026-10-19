@@ -68,6 +68,12 @@ import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { JUDGE_SCRIPT } from "../boundary";
+import {
+  BROWSER_ARG,
+  CHROME_DEVTOOLS,
+  GATE_ENDPOINT_NAME,
+  GATE_TOKEN_NAME,
+} from "../browser/door";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import { readJson, writeJson } from "./fleet-common";
 import { CAWCO_PLUGIN_ID } from "./opencode-client";
@@ -89,14 +95,6 @@ export const OPENCODE_DIR = join(
  * the servers of the deepest place that holds it as it boots.
  */
 export const OPENCODE_PLACED_MCP = join(OPENCODE_DIR, "cawco-placed-mcp.json");
-
-/**
- * The fleet's Chrome DevTools MCP server, by its fleet name. A workspace
- * session's captures go to the workspace's scratch as well as its clone; it
- * writes a `filePath` only inside its roots: those its client answers
- * `roots/list` with, those named by `--filesystem-root`, and its own temp dir.
- */
-export const CHROME_DEVTOOLS = "chrome-devtools";
 
 /** The mark in a workspace's state dir that turns OpenCode's plan agent off in its clone. */
 export const PLAN_AGENT_OFF = "opencode-plan-agent-off";
@@ -142,6 +140,8 @@ const cawcoPlacedMcp = ${JSON.stringify(OPENCODE_PLACED_MCP)};
 const machineData = ${JSON.stringify(machineDataHome())};
 const sessionNames = ${JSON.stringify(SESSION_CAWCO_ENV)};
 const workflowTools = ${JSON.stringify(WORKFLOW_TOOLS)};
+// chrome-devtools-mcp's arguments that pick a browser: the door picks it.
+const browserArg = ${BROWSER_ARG.toString()};
 // Where this server saves a truncated tool output (its own data dir's
 // \`opencode/tool-output\`, observed on 2.0.28).
 const toolOutput = join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "opencode", "tool-output");
@@ -458,13 +458,24 @@ export default {
     // The workspace's scratch is a root of its chrome-devtools (and its clone:
     // in a directory inside it, roots/list names that directory alone).
     const roots = state ? JSON.parse(readFileSync(state + "/" + ${JSON.stringify(WORKSPACE_POLICY_NAME)}, "utf8")) : undefined;
+    // Its chrome-devtools reaches the project's browser through the
+    // workspace's door alone (the agent's browser/door.ts, made as its
+    // session spawned): a location with none launches no browser tool.
+    const doorOf = (name) => { try { return readFileSync(state + "/" + name, "utf8").trim(); } catch { return ""; } };
+    const door = state ? { endpoint: doorOf(${JSON.stringify(GATE_ENDPOINT_NAME)}), token: doorOf(${JSON.stringify(GATE_TOKEN_NAME)}) } : undefined;
     await ctx.mcp.transform((editor) => {
       placeMcp(editor, directory);
       for (const [name, config] of editor.list()) {
         if (config.type !== "local") continue;
         editor.update(name, (server) => {
           server.environment = { ...(server.environment ?? {}), XDG_DATA_HOME: machineData };
-          if (name === ${JSON.stringify(CHROME_DEVTOOLS)} && typeof roots?.scratch === "string" && typeof roots?.clone === "string") {
+          if (name !== ${JSON.stringify(CHROME_DEVTOOLS)}) return;
+          if (!(door?.endpoint && door.token)) {
+            server.enabled = false;
+            return;
+          }
+          server.command = [...server.command.filter((arg) => !browserArg.test(arg)), "--wsEndpoint=" + door.endpoint, "--wsHeaders=" + JSON.stringify({ Authorization: "Bearer " + door.token })];
+          if (typeof roots?.scratch === "string" && typeof roots?.clone === "string") {
             server.command = [...server.command, "--filesystem-root=" + roots.scratch, "--filesystem-root=" + roots.clone];
           }
         });

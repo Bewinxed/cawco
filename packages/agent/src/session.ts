@@ -118,6 +118,11 @@ import { isDamagedRecord } from "@cawco/core/state-file";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
 import { type Boundary, boundaryFor, hookArmed, shellQuote } from "./boundary";
+import {
+  type BrowserDoor,
+  browserDoor,
+  closeBrowserDoor,
+} from "./browser/door";
 import { carryWorktree, worktreeHeld } from "./carry";
 import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
@@ -138,7 +143,7 @@ import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
 import { type KeeperReading, withKeepers } from "./keepers";
 import { isMachineAgent } from "./machine-agent";
-import { prepareFleetMcp } from "./mcp-launcher";
+import { resolveMcpLauncher } from "./mcp-launcher";
 import { gaugeGroup, gaugeTables } from "./memory";
 import { Outbox } from "./outbox";
 import {
@@ -2759,7 +2764,15 @@ export class SessionSupervisor {
         spec.processGeneration,
         boundary && place ? { boundary, workspace: place.id } : undefined,
         grant?.sessionCredential,
-        !!spec.reattachOnly
+        !!spec.reattachOnly,
+        // Its browser tool's door (browser/door.ts): its workspace's, else
+        // its own. A fenced session takes no fleet server, so has none.
+        spec.fence
+          ? undefined
+          : () =>
+              place
+                ? browserDoor(place.id)
+                : browserDoor(instanceId, spec.projectId)
       );
 
       if (spec.resume) {
@@ -2960,7 +2973,8 @@ export class SessionSupervisor {
     processGeneration: string | undefined,
     bounded?: { boundary: Boundary; workspace: string },
     sessionCredential?: string,
-    recovery = false
+    recovery = false,
+    browser?: () => Promise<BrowserDoor>
   ): SessiondAwareContext {
     const boundary = bounded?.boundary;
     if (!processGeneration) {
@@ -3016,6 +3030,7 @@ export class SessionSupervisor {
         ? { ingested: this.#ingested.get(instanceId) }
         : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
+      ...(browser ? { browserDoor: browser } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
        * an adapter that does not read its frames off a ring never calls it,
@@ -3182,6 +3197,11 @@ export class SessionSupervisor {
       rejected: (uuid, error) => this.#reject(instanceId, uuid, error),
       emit: (envelope) => this.emit(envelope),
       closed: () => {
+        // A session outside any workspace browsed through a door of its own:
+        // its pages close with its process, as its browser tool's Chromium did.
+        if (!bounded) {
+          closeBrowserDoor(instanceId);
+        }
         // A dead process is never going to answer anything it asked.
         for (const [requestId, body] of this.#openAsks) {
           if (
@@ -4814,39 +4834,31 @@ export class SessionSupervisor {
     }
     const config = incoming && {
       ...incoming,
-      mcp: await Promise.all(
-        incoming.mcp.map(async (row) => {
-          if (!row.enabled) {
-            return row;
-          }
-          const launcher = await prepareFleetMcp(row.name, row.config);
-          if ("failure" in launcher || "unavailable" in launcher) {
-            this.#mcpLauncherStates.set(
-              row.name,
-              "unavailable" in launcher
-                ? { state: "pending", detail: launcher.unavailable }
-                : {
-                    state: "failed",
-                    cause: "unknown",
-                    detail: launcher.failure,
-                  }
-            );
-            return { ...row, enabled: false };
-          }
-          const local = { ...row, config: launcher.config };
-          return local.proxied && "url" in local.config
-            ? {
-                ...local,
-                config: {
-                  ...local.config,
-                  url: harnessMcpUrl(
-                    `/mcp/fleet/${encodeURIComponent(row.name)}`
-                  ),
-                },
-              }
-            : local;
-        })
-      ),
+      mcp: incoming.mcp.map((row) => {
+        if (!row.enabled) {
+          return row;
+        }
+        const launcher = resolveMcpLauncher(row.config);
+        if ("unavailable" in launcher) {
+          this.#mcpLauncherStates.set(row.name, {
+            state: "pending",
+            detail: launcher.unavailable,
+          });
+          return { ...row, enabled: false };
+        }
+        const local = { ...row, config: launcher.config };
+        return local.proxied && "url" in local.config
+          ? {
+              ...local,
+              config: {
+                ...local.config,
+                url: harnessMcpUrl(
+                  `/mcp/fleet/${encodeURIComponent(row.name)}`
+                ),
+              },
+            }
+          : local;
+      }),
     };
     type State = import("@cawco/core").FleetItemState;
     const mcp: FleetSyncReport["mcp"] = {};

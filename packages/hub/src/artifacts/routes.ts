@@ -68,6 +68,9 @@ const refused = (error: unknown) => {
   throw error;
 };
 
+/** Who moves the panel: `by=agent` from the session's own tools; left out, the person. */
+const handQuery = t.Object({ by: t.Optional(t.Literal("agent")) });
+
 /** A canvas's skeleton elements: a type, an optional id, and Excalidraw's own fields. */
 const skeletons = t.Array(
   t.Object(
@@ -514,14 +517,24 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // Removes the artifact; the panel that showed it shows the next newest, or nothing (artifact_delete, the panel's Remove).
-    .delete("/api/instances/:id/artifacts/:artifact", async ({ params }) => {
-      try {
-        return await artifacts.remove(params.id, params.artifact);
-      } catch (error) {
-        return refused(error);
+    // Removes the artifact (the panel's Remove; artifact_delete with by=agent).
+    // The panel that showed it shows the next newest after the person's
+    // Remove, what the person had before after the agent's, or nothing.
+    .delete(
+      "/api/instances/:id/artifacts/:artifact",
+      { query: handQuery },
+      async ({ params, query }) => {
+        try {
+          return await artifacts.remove(
+            params.id,
+            params.artifact,
+            query.by ?? "person"
+          );
+        } catch (error) {
+          return refused(error);
+        }
       }
-    })
+    )
     // The person's pins on the session's artifacts, with their threads (comment_read).
     .get(
       "/api/instances/:id/artifacts/comments",
@@ -598,14 +611,23 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // Whether a view has it on screen within 10 s, or why not; 503 when its server could not start.
-    .post("/api/instances/:id/artifacts/:artifact/show", async ({ params }) => {
-      try {
-        return await artifacts.show(params.id, params.artifact);
-      } catch (error) {
-        return refused(error);
+    // Whether a view has it on screen within 10 s, or why not; 503 when its
+    // server could not start. The person's show unless by=agent (artifact_show).
+    .post(
+      "/api/instances/:id/artifacts/:artifact/show",
+      { query: handQuery },
+      async ({ params, query }) => {
+        try {
+          return await artifacts.show(
+            params.id,
+            params.artifact,
+            query.by ?? "person"
+          );
+        } catch (error) {
+          return refused(error);
+        }
       }
-    })
+    )
     // A view (a dashboard tab, the app) has the artifact on screen at the
     // open frame's revision, or could not load it: the waiting show answers.
     .post(

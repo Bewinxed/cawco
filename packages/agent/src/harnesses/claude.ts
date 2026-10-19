@@ -140,6 +140,7 @@ import {
   launchedHook,
   workspaceHook,
 } from "../boundary";
+import { CHROME_DEVTOOLS, throughGate } from "../browser/door";
 import {
   mcpConfigOffArgv,
   removeMcpConfig,
@@ -1527,6 +1528,128 @@ const withInstructions = (
     prompt: Array.isArray(given.prompt)
       ? [...given.prompt, block]
       : `${given.prompt}\n\n${block}`,
+  };
+};
+
+/**
+ * The MCP servers a session starting in `workdir` would read: the user scope
+ * of `claudeJson`, and its folder's own map over that (where a project's
+ * placed servers go).
+ */
+const configuredMcp = async (
+  claudeJson: string,
+  workdir: string
+): Promise<Record<string, McpServerConfig>> => {
+  let root: {
+    mcpServers?: Record<string, McpServerConfig>;
+    projects?: Record<string, { mcpServers?: Record<string, McpServerConfig> }>;
+  };
+  try {
+    root = JSON.parse(await readFile(claudeJson, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+    root = {};
+  }
+  const projects = root.projects ?? {};
+  let folder: string | undefined;
+  for (let dir = workdir; ; dir = dirname(dir)) {
+    if (projects[dir]) {
+      folder = dir;
+      break;
+    }
+    if (dirname(dir) === dir) {
+      break;
+    }
+  }
+  return {
+    ...root.mcpServers,
+    ...(folder ? projects[folder]?.mcpServers : {}),
+  };
+};
+
+/**
+ * The fleet's chrome-devtools as this session launches it: the entry its
+ * config files hold, through its browser's gate ({@link throughGate}). The
+ * launch's server takes the place of the config files' one of that name, so
+ * no session's browser tool starts a Chromium of its own. A session whose
+ * door could not be made launches with that tool denied: chrome-devtools-mcp
+ * reaches for a browser only at a tool's call. Nothing when the files hold
+ * no local chrome-devtools.
+ */
+const gatedBrowserMcp = async (
+  ctx: HarnessContext,
+  claudeJson: string
+): Promise<{
+  disallowedTools?: string[];
+  mcpServers?: Record<string, McpServerConfig>;
+}> => {
+  const entry: McpServerConfig | undefined = (
+    await configuredMcp(claudeJson, ctx.cwd)
+  )[CHROME_DEVTOOLS];
+  if (!(entry && "command" in entry)) {
+    return {};
+  }
+  const door = await ctx.browserDoor?.().catch((error: unknown) => {
+    console.warn(
+      `[claude] ${ctx.instanceId}: its browser's door could not be made, so it launches without chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  return door
+    ? {
+        mcpServers: {
+          [CHROME_DEVTOOLS]: {
+            ...entry,
+            args: throughGate(entry.args ?? [], door),
+          },
+        },
+      }
+    : { disallowedTools: [`mcp__${CHROME_DEVTOOLS}`] };
+};
+
+/**
+ * The caller's options a session launches with: its account's config dir in
+ * its env, and the fleet's chrome-devtools through its browser's gate
+ * ({@link gatedBrowserMcp}). A fenced session reads no config file's server,
+ * so it launches none.
+ */
+const launchOptions = async (
+  spec: SpawnPayload,
+  ctx: HarnessContext,
+  account: string | undefined
+): Promise<Record<string, unknown>> => {
+  const options = spec.options as
+    | {
+        disallowedTools?: string[];
+        env?: Record<string, string | undefined>;
+        mcpServers?: Record<string, McpServerConfig>;
+      }
+    | undefined;
+  const env = {
+    ...options?.env,
+    ...(account
+      ? accountEnv(account)
+      : {
+          CLAUDE_CONFIG_DIR: undefined,
+          CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
+        }),
+  };
+  const browser =
+    spec.fence === true
+      ? {}
+      : await gatedBrowserMcp(
+          ctx,
+          configDirClaudeJson(sessionEnv(env, ctx).CLAUDE_CONFIG_DIR)
+        );
+  return {
+    ...options,
+    env,
+    mcpServers: { ...options?.mcpServers, ...browser.mcpServers },
+    disallowedTools: [
+      ...(options?.disallowedTools ?? []),
+      ...(browser.disallowedTools ?? []),
+    ],
   };
 };
 
@@ -3019,42 +3142,12 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * The MCP servers a session starting here now would read: the user scope
-   * of its `.claude.json`, and its folder's own map over that (where a
-   * project's placed servers go). The fleet sync has written both before a
+   * The MCP servers a session starting here now would read
+   * ({@link configuredMcp}). The fleet sync has written both scopes before a
    * change reaches the session.
    */
-  async #configuredMcp(): Promise<Record<string, McpServerConfig>> {
-    let root: {
-      mcpServers?: Record<string, McpServerConfig>;
-      projects?: Record<
-        string,
-        { mcpServers?: Record<string, McpServerConfig> }
-      >;
-    };
-    try {
-      root = JSON.parse(await readFile(this.#claudeJson, "utf8"));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
-      }
-      root = {};
-    }
-    const projects = root.projects ?? {};
-    let folder: string | undefined;
-    for (let dir = this.#workdir; ; dir = dirname(dir)) {
-      if (projects[dir]) {
-        folder = dir;
-        break;
-      }
-      if (dirname(dir) === dir) {
-        break;
-      }
-    }
-    return {
-      ...root.mcpServers,
-      ...(folder ? projects[folder]?.mcpServers : {}),
-    };
+  #configuredMcp(): Promise<Record<string, McpServerConfig>> {
+    return configuredMcp(this.#claudeJson, this.#workdir);
   }
 
   /**
@@ -3998,8 +4091,6 @@ export class ClaudeHarness implements Harness {
       account_id: place.accountId,
     } as NeutralMessage);
     const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
-    const options = spec.options as
-      { env?: Record<string, string | undefined> } | undefined;
     // What this process has scheduled is known from its start: nothing until
     // a turn of it ends and says otherwise. Kept, so an agent that attaches
     // to it later knows too, though no turn of it has ended since (one its
@@ -4011,18 +4102,7 @@ export class ClaudeHarness implements Harness {
       ctx.instanceId,
       ctx,
       ctx.cwd,
-      {
-        ...options,
-        env: {
-          ...options?.env,
-          ...(account
-            ? accountEnv(account)
-            : {
-                CLAUDE_CONFIG_DIR: undefined,
-                CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
-              }),
-        },
-      },
+      await launchOptions(spec, ctx, account),
       spec.permissionMode,
       spec.model,
       spec.effort,

@@ -1219,7 +1219,10 @@ export function handoffTools(deps: HandoffDeps) {
       artifactShow.input,
       async ({ id }) =>
         json(
-          await actions.artifactCall("POST", `/${encodeURIComponent(id)}/show`)
+          await actions.artifactCall(
+            "POST",
+            `/${encodeURIComponent(id)}/show?by=agent`
+          )
         )
     ),
     tool(
@@ -1245,7 +1248,12 @@ export function handoffTools(deps: HandoffDeps) {
       artifactDelete.description,
       artifactDelete.input,
       async ({ id }) =>
-        json(await actions.artifactCall("DELETE", `/${encodeURIComponent(id)}`))
+        json(
+          await actions.artifactCall(
+            "DELETE",
+            `/${encodeURIComponent(id)}?by=agent`
+          )
+        )
     ),
     tool(
       commentRead.name,

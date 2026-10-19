@@ -72,12 +72,17 @@ import type { CarrySessionRequest } from "./harness";
  *    runtime forwards to a browser's media port (`udp+tcp`, `tcp` or
  *    `none`), in place of `udp`. No page reads it; a page built for 13
  *    reloads first all the same.
+ * 15: the stream relay listens on one port, 443: its frame's `ports` says
+ *    `udp443`, `tcp443` and `tls`, where it said `udp3478`, `tcp3478`,
+ *    `tcp443` and `tls`, and its health chips are `udp 443`, `tcp 443` and
+ *    `tls`. A page built for 14 would draw the 3478 chips, so it reloads
+ *    first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 14;
+export const WIRE_PROTOCOL = 15;
 
 /**
  * What a session's stream carries: the changes each frame made to its

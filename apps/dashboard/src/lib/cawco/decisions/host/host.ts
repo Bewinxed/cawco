@@ -1,9 +1,9 @@
 /**
  * A decision page's host entry (core decision-host.ts bundles it; hub
  * decision-program.ts serves the page around it): the kit's tokens and card
- * recipe, then the program drawn by Host.svelte. The tokens go in as written:
- * Bun's CSS bundler lowers `light-dark()` into the OS's scheme, and the page
- * follows the host's (the overlay sets `color-scheme` from it).
+ * recipe, then the program drawn by Host.svelte. The tokens go in as written
+ * (text imports, which no CSS compiler touches), and the page follows the
+ * host's scheme (the overlay sets `color-scheme` from it).
  */
 
 import { mount } from "svelte";

@@ -2121,7 +2121,7 @@
     data-slot="comments"
     aria-expanded={listOpen}
     aria-haspopup="dialog"
-    aria-label={`Comments, ${openCount} open${pinsShown ? "" : ", pins hidden"}`}
+    aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}`}
     class="comments mark-line touch-hit"
     onclick={() => showList(!listOpen)}
     title={pinsShown
@@ -2130,7 +2130,9 @@
     type="button"
   >
     <IconChat /><span class="comments-label">Comments</span>
-    <span data-slot="count" class="count">{openCount}</span>
+    {#if openCount > 0}
+      <span data-slot="count" class="count">{openCount}</span>
+    {/if}
     {#if !pinsShown}
       <!-- ⇧C hid the pins: said where the person looks for them. -->
       <IconEyeClosed class="pins-hidden" />
@@ -2139,7 +2141,9 @@
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
-    <IconChat /><span>Comments</span><span class="menu-count">{openCount}</span>
+    <IconChat /><span>Comments</span>{#if openCount > 0}<span class="menu-count"
+        >{openCount}</span
+      >{/if}
   </DropdownMenu.Item>
 {/snippet}
 

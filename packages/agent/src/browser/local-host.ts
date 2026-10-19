@@ -64,15 +64,15 @@ const installChromium = async (): Promise<void> => {
 };
 
 /** The Chromium this machine runs, or why it has none. */
-export type Chromium =
+type Chromium =
   { executable: string } | { unavailable: string } | { failure: string };
 
 /**
- * The Chromium the local host (and, until the gate, each session's browser
- * tool) runs: a standalone install uses the browser the person installed;
+ * The Chromium the local host runs, the one Chromium the agent starts for
+ * any session: a standalone install uses the browser the person installed;
  * a source install its pinned Playwright revision, installed when missing.
  */
-export const chromiumExecutable = async (): Promise<Chromium> => {
+const chromiumExecutable = async (): Promise<Chromium> => {
   if (standalone) {
     const executable = browserExecutable();
     return executable
@@ -82,7 +82,7 @@ export const chromiumExecutable = async (): Promise<Chromium> => {
             "Install a Chromium browser with the command in this machine's capability report.",
         };
   }
-  // Standalone never evaluates this import: playwright-core is external to the binary.
+  // Standalone runs the person's own Chromium; only a source install installs Playwright's.
   const { chromium } = await import("playwright-core");
   const executable = chromium.executablePath();
   try {

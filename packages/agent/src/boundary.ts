@@ -71,6 +71,7 @@ import {
   copyFile,
   lstat,
   mkdir,
+  open as openFile,
   readdir,
   readFile,
   readlink,
@@ -124,6 +125,7 @@ import {
   workspacePolicyFile,
   workspaceProjectFile,
   workspaceReadOnlyDir,
+  workspaceRuntimeDir,
   workspaceScratchDir,
   workspaceSpillsFile,
   workspaceStateDir,
@@ -4497,6 +4499,7 @@ export const makeDirs = async (id: string): Promise<void> => {
       ...workspaceCaches(),
     ].map((path) => mkdir(path, { recursive: true }))
   );
+  await makeRuntimeDir(id);
   if (!planted.includes(xdg.config)) {
     await linkGitConfig(xdg.config);
     await writeBunConfig(xdg.config);
@@ -4507,6 +4510,43 @@ export const makeDirs = async (id: string): Promise<void> => {
   }
   // Its `TMPDIR`'s short name on macOS, made again after a restart cleared it.
   linkWorkspaceTmp(id);
+};
+
+/**
+ * The runtime dir every command runs with (paths.ts `workspaceRuntimeDir`),
+ * mode 0700 whatever the umask: pnpm takes no other for its store locks, and
+ * one other users can write to it ignores. Every workspace writes the cache,
+ * so it is opened without following a link (a link a workspace planted
+ * there is never changed through, and the log says so) and changed through
+ * that handle.
+ */
+const makeRuntimeDir = async (id: string): Promise<void> => {
+  const dir = workspaceRuntimeDir();
+  await mkdir(dir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "EEXIST") {
+      throw error;
+    }
+  });
+  const handle = await openFile(
+    dir,
+    // biome-ignore lint/suspicious/noBitwiseOperators: open(2) takes its flags as one bit set
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+  ).catch((error: NodeJS.ErrnoException) => {
+    console.warn(
+      `[workspace] ${id}: ${dir} is not a folder of its own (${error.code}), so pnpm's store locks have no runtime dir there`
+    );
+  });
+  if (!handle) {
+    return;
+  }
+  try {
+    // biome-ignore lint/suspicious/noBitwiseOperators: a mode's permission bits
+    if (((await handle.stat()).mode & 0o777) !== 0o700) {
+      await handle.chmod(0o700);
+    }
+  } finally {
+    await handle.close();
+  }
 };
 
 /**
@@ -4603,7 +4643,8 @@ const pnpmStore = (): string => join(workspaceCacheDir(), "pnpm", "store");
  * copy took 119 MB, 2026-10-18. On macOS Seatbelt lets a command read and
  * write the cache (workspace-policy.ts `workspacePolicy`, `workspaceCaches` in
  * its reads and writes) and judges each link by where it lands, so the same
- * links work there.
+ * links work there. pnpm 12 locks the store from outside it, in the
+ * runtime dir every workspace shares ({@link makeRuntimeDir}).
  *
  * Two files, one for each config pnpm has had. pnpm 11 and later read
  * `$XDG_CONFIG_HOME/pnpm/config.yaml` and take only auth and registry

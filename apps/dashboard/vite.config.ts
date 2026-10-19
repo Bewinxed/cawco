@@ -1,12 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import type http from "node:http";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   BROWSER_HEADERS,
   crossSiteRefusal,
   PAGE_ORIGIN_HEADER,
 } from "@cawco/core/browser-gate";
+import { CSS_TARGET } from "@cawco/core/css-target";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -16,6 +17,7 @@ import {
   defineConfig,
   type Plugin,
   type PreviewServer,
+  searchForWorkspaceRoot,
   type ViteDevServer,
 } from "vite";
 import { publicOrigin } from "./public-origin.js";
@@ -67,6 +69,30 @@ const devHub = (): URL => {
  */
 export const INLINE_FACES =
   /\/(?:figtree-latin-wght-normal|jetbrains-mono-latin-wght-normal)\.woff2$/;
+
+/**
+ * The folders `vite dev` serves files from: the workspace root Vite finds by
+ * itself, and the package store the dependencies really live in when that is
+ * outside it. Vite serves `/@fs/` only from `server.fs.allow` ("accessing
+ * files outside this directory list that aren't imported from an allowed file
+ * will result in a 403", vite.dev/config/server-options#server-fs-allow), and
+ * a stylesheet's `url()` is not an import. In a CawCo workspace bun links every
+ * package from one shared store (`…/links/<pkg>@<version>-<hash>/node_modules/
+ * <pkg>`), outside the clone, so the faces app.css names answered 403 and the
+ * page drew in the fallback face. The store is read off where the dashboard's
+ * own face package resolves; in a normal checkout that is `node_modules/.bun`
+ * under the workspace root, already allowed, and nothing is added.
+ */
+const SERVED_DIRS = (() => {
+  const workspaceRoot = searchForWorkspaceRoot(process.cwd());
+  const face = realpathSync(
+    join(import.meta.dirname, "node_modules/@fontsource-variable/figtree")
+  );
+  const linkDir = face.slice(0, face.lastIndexOf("/node_modules/"));
+  const store = dirname(linkDir);
+  const inside = !relative(workspaceRoot, store).startsWith("..");
+  return inside ? [workspaceRoot] : [workspaceRoot, store];
+})();
 
 /**
  * The vite servers' (`vite dev`, and `vite preview`, the built dashboard the
@@ -299,15 +325,6 @@ export const proseNotByClass = (): Plugin => ({
   },
 });
 
-/** The CSS floor, for the minifier (`build.cssTarget` below says why). */
-export const CSS_TARGET = [
-  "chrome131",
-  "edge131",
-  "firefox146",
-  "safari18",
-  "ios18",
-];
-
 export default defineConfig(({ command }) => {
   // A build talks to no hub; only a vite server does, and only to the dev hub.
   if (command === "serve" && DEV_HUB) {
@@ -347,6 +364,7 @@ export default defineConfig(({ command }) => {
       // named here; `.ts.net` covers this tailnet's MagicDNS names without
       // pinning the machine's own hostname into the repo.
       allowedHosts: [".ts.net", "localhost"],
+      fs: { allow: SERVED_DIRS },
       // The hub's live socket. REST /api is handled by SvelteKit's own route
       // (routes/api/[...path]).
       proxy: DEV_HUB
@@ -360,14 +378,10 @@ export default defineConfig(({ command }) => {
         : undefined,
     },
     /**
-     * The CSS floor, for the minifier. Vite's own default target predates
-     * light-dark(), and Lightning CSS lowers what a target lacks: light-dark()
-     * would become variables keyed on a `prefers-color-scheme` media query,
-     * which ignores the app's theme class and breaks every relative colour
-     * built on a token. These are the releases where the stylesheet's newest
-     * features ship natively: @scope (Firefox 146) and a relative colour whose
-     * origin is light-dark() or currentColor (Chrome 131, Safari 18). The JS
-     * target stays Vite's default.
+     * The CSS floor, for the minifier: the product's one (core
+     * css-target.ts says why), which the hub's runtime pages are compiled at
+     * too. Vite's own default target predates light-dark(). The JS target
+     * stays Vite's default.
      */
     build: {
       cssTarget: CSS_TARGET,

@@ -12,9 +12,9 @@
  *   capability (its first global IPv4), or the public address the hub sees
  *   its agent connect from where that differs (then coturn's `external-ip`
  *   maps it), makes the secret (32 random bytes) and sends `relay.start`.
- * - **Health**: every 60 s one STUN binding request per port, UDP and TCP
- *   3478, TCP 443, and TLS on 5349 while a certificate stands; each answered
- *   within 3 s is up, with the request's error kept otherwise.
+ * - **Health**: every 60 s one STUN binding request per transport on the
+ *   relay's one port, 443: UDP, TCP, and TLS while a certificate stands; each
+ *   answered within 3 s is up, with the request's error kept otherwise.
  * - **Renewal** (`stream-relay-renew`): with a DNS name, `relay.renew` once a
  *   day, and certbot renews only when the certificate is due. A fixed 60 days
  *   would not hold: Let's Encrypt moves to 64-day certificates on 2027-02-10
@@ -40,6 +40,7 @@ import {
   type RelayPortName,
   type RelayRenewed,
   type RelayStartArgs,
+  STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
   type StreamRelayAnswer,
   type StreamRelayView,
@@ -172,19 +173,19 @@ const bind = (url: string): Promise<{ up: boolean; error?: string }> =>
     }
   });
 
-/** Each of the relay's ports asked once, all at once. */
+/** The relay's listener asked once on each transport, all at once: UDP, TCP, and TLS with a name. */
 export const probeRelay = (
   address: string,
   tlsName: string | null
 ): Promise<RelayPortHealth[]> => {
   const host = address.includes(":") ? `[${address}]` : address;
+  const on = STREAM_RELAY_PORT;
   const ports: [RelayPortName, string][] = [
-    ["udp 3478", `stun:${host}:3478?transport=udp`],
-    ["tcp 3478", `stun:${host}:3478?transport=tcp`],
-    ["tcp 443", `stun:${host}:443?transport=tcp`],
+    ["udp 443", `stun:${host}:${on}?transport=udp`],
+    ["tcp 443", `stun:${host}:${on}?transport=tcp`],
     ...(tlsName
       ? [
-          ["tls", `stuns:${tlsName}:5349?transport=tcp`] as [
+          ["tls", `stuns:${tlsName}:${on}?transport=tcp`] as [
             RelayPortName,
             string,
           ],

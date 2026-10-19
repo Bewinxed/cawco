@@ -113,9 +113,9 @@ export async function fetchDelegateTypes(
 /**
  * What a type the caller named adds to a started session. Denied tools come
  * only with a named type: the default type picks what runs, but its deny
- * list is a delegate's (browser checks in isolated chrome-devtools, not the
- * owner's Chrome); a started session is not a delegate and keeps Claude in
- * Chrome. And its toolset (§5.3): the type's `role:`, kept on the row.
+ * list is a delegate's (browser checks in chrome-devtools, through the
+ * DevTools gate to the project's browser, never the owner's Chrome); a
+ * started session is not a delegate and keeps Claude in Chrome. And its toolset (§5.3): the type's `role:`, kept on the row.
  */
 const namedTypeSettings = (
   type: DelegateType | undefined,
@@ -621,7 +621,10 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * waits for the reset, a move, or its continuation from a summary (`limit`);
  * or Claude Code refused its account's credential and no other account can
  * take it, so it waits for a sign-in or a free account (`signin`); or the
- * owner paused its machine until a time (`paused`, machine-pause.ts); or an
+ * owner paused its machine until a time (`paused`, machine-pause.ts); or its
+ * work item is finishing (`finishing`: its landing gate runs, or the turn
+ * that called `finish_item` is still ending, work-items.ts `finishingFor`),
+ * so the send goes as its next turn and reopens the item if it landed; or an
  * interrupt holds its work item and only its parent, its lead or the person
  * wakes it (`held`); or its workspace retired once its work was over and the
  * hub is cutting its clone again at the same path (`recut`, work-items.ts
@@ -631,6 +634,7 @@ export type SendHold =
   | "agent"
   | "behind"
   | "build"
+  | "finishing"
   | "held"
   | "hub"
   | "limit"
@@ -658,6 +662,8 @@ export interface SendDelivery {
 
 /** Each hold, in the words `handoff` answers with: queued at the hub, and until when. */
 const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
+  finishing:
+    "It called finish_item, and its turn ends with that call, so the message is kept at the hub until the call answers: if the landing gate sends the work back, the message joins the turn that goes on; if the work lands, it goes as the session's next turn once that turn is over, and reopens the item.",
   held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
   recut:
     "Its workspace retired once its work was over, so the hub is cutting its clone again at the same path, at the commit its clone was on when it retired, its own commits with it; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",

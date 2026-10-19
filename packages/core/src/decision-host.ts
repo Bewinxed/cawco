@@ -5,10 +5,11 @@
  * own and the app's web view. Its code is the dashboard's
  * `lib/cawco/decisions/host/`: the one OpenUI renderer (OpenUiRenderer.svelte)
  * with the decision library's Svelte components on the kit's card recipe,
- * bundled by Bun with Svelte's compiler (bun-plugin-svelte) as the canvas
- * host is bundled (canvas-host.ts): the standalone binary carries it
- * prebuilt under `decision/` (`build-binary.ts`), and a source checkout
- * bundles it on first request.
+ * its JS bundled by Bun with Svelte's compiler (bun-plugin-svelte) and the
+ * components' styles compiled by Lightning CSS (page-css.ts), as the canvas
+ * host is built (canvas-host.ts): the standalone binary carries it prebuilt
+ * under `decision/` (`build-binary.ts`), and a source checkout builds it on
+ * first request.
  *
  * Paths, on every preview origin: `/__cawco/decision/<file>`, the bundle's
  * entry (`host.js`, `host.css`), its chunks (Pele's diagram types, each
@@ -16,11 +17,12 @@
  * faces from the dashboard's font packages); `dials.js` and `dials.css`,
  * DialKit with the kit's dials.js, loaded only by a page that has Dials.
  */
-import { readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { join, normalize } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
 import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
+import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
 const HOST_DIR = new URL(
@@ -32,20 +34,126 @@ const KIT_DIR = new URL("../../hub/skills/decision-page/kit/", import.meta.url)
 /** Where the page loads the bundle's chunks and files from, on any preview origin. */
 const PUBLIC_PATH = "/__cawco/decision/";
 
+/** bun-plugin-svelte's namespace for a component's styles: `import "bun-svelte:<name>.css"`, which it appends to the component's JS. */
+const SVELTE_STYLES = "bun-svelte";
+
 /**
- * Bundles the host: written to `outdir` for a release build, else kept in
- * memory. Svelte compiled for the browser in production mode, its styles
- * into `host.css`.
+ * bun-plugin-svelte, with each component's styles kept out of Bun's CSS
+ * bundler: the plugin's loader of a component's styles answers the CSS it
+ * compiled, which is put in `styles` under its import's path as the build's
+ * metafile names it, and Bun gets an empty module in its place. Pinned to
+ * the plugin version it was read in (0.0.6, src/index.ts); one that loads
+ * them otherwise fails the build here.
  */
-export async function buildDecisionHost(outdir?: string) {
+function svelteStylesApart(styles: Map<string, string>): Bun.BunPlugin {
+  const plugin = SveltePlugin({ development: false });
+  return {
+    name: `${plugin.name}, styles apart`,
+    setup(build) {
+      let taken = false;
+      const builder: Bun.PluginBuilder = new Proxy(build, {
+        get(target, key, receiver) {
+          if (key === "onLoad") {
+            return (
+              options: Bun.PluginConstraints,
+              load: Parameters<Bun.PluginBuilder["onLoad"]>[1]
+            ) => {
+              if (options.namespace !== SVELTE_STYLES) {
+                target.onLoad(options, load);
+                return builder;
+              }
+              taken = true;
+              target.onLoad(options, async (args) => {
+                const loaded = await load(args);
+                if (
+                  !(loaded && "contents" in loaded) ||
+                  typeof loaded.contents !== "string"
+                ) {
+                  throw new Error(
+                    `bun-plugin-svelte loaded ${args.path} without its CSS as text: read its src/index.ts again`
+                  );
+                }
+                styles.set(`${args.namespace}:${args.path}`, loaded.contents);
+                return { contents: "", loader: "js" };
+              });
+              return builder;
+            };
+          }
+          const value = Reflect.get(target, key, receiver);
+          return typeof value === "function"
+            ? (...args: unknown[]) => {
+                const returned = value.apply(target, args);
+                return returned === target ? builder : returned;
+              }
+            : value;
+        },
+      });
+      plugin.setup(builder);
+      if (!taken) {
+        throw new Error(
+          `bun-plugin-svelte registered no loader in the "${SVELTE_STYLES}" namespace: read its src/index.ts again`
+        );
+      }
+    },
+  };
+}
+
+/**
+ * The paths of `styles`' modules in the order Bun's CSS bundler put them in
+ * one sheet: depth first from the entry, each import in source order, a
+ * module where it is first reached. Each component imports its styles last,
+ * so a component's sheet stands after its children's.
+ */
+function stylesInImportOrder(
+  metafile: Bun.BuildMetafile,
+  styles: ReadonlyMap<string, string>
+): string[] {
+  const entry = Object.values(metafile.outputs).find(
+    (output) => output.entryPoint
+  )?.entryPoint;
+  if (!entry) {
+    throw new Error("The decision host's metafile names no entry point");
+  }
+  const seen = new Set<string>();
+  const order: string[] = [];
+  const visit = (path: string) => {
+    if (seen.has(path)) {
+      return;
+    }
+    seen.add(path);
+    if (styles.has(path)) {
+      order.push(path);
+    }
+    for (const imported of metafile.inputs[path]?.imports ?? []) {
+      visit(imported.entryPoint ?? imported.path);
+    }
+  };
+  visit(entry);
+  const missed = [...styles.keys()].filter((path) => !seen.has(path));
+  if (missed.length > 0) {
+    throw new Error(
+      `The decision host's import graph reaches none of these components' styles: ${missed.join(", ")}`
+    );
+  }
+  return order;
+}
+
+/**
+ * Builds the host's files, by name: Bun's bundle of its JS, Svelte
+ * compiled for the browser in production mode, and its components' styles
+ * as `host.css`, in the order Bun's CSS bundler gave them.
+ */
+export async function buildDecisionHost(): Promise<Map<string, Blob>> {
+  const styles = new Map<string, string>();
   const result = await Bun.build({
     entrypoints: [join(HOST_DIR, "host.ts")],
     target: "browser",
     format: "esm",
     splitting: true,
     minify: true,
+    metafile: true,
     conditions: ["browser", "production"],
-    plugins: [SveltePlugin({ development: false }), agentReact],
+    plugins: [svelteStylesApart(styles), agentReact],
     define: { "process.env.NODE_ENV": '"production"' },
     publicPath: PUBLIC_PATH,
     // Faces and stills as files of their own: fetched by unicode-range as a
@@ -56,13 +164,21 @@ export async function buildDecisionHost(outdir?: string) {
       chunk: "chunk-[hash].[ext]",
       asset: "asset-[hash].[ext]",
     },
-    ...(outdir ? { outdir } : {}),
   });
   if (!result.success) {
     throw new AggregateError(result.logs, "Decision host build failed");
   }
   await refuseSchemeLowering("The decision host", result.outputs);
-  return result.outputs;
+  if (!result.metafile) {
+    throw new Error("The decision host's build gave no metafile");
+  }
+  const css = await compileSheets(
+    stylesInImportOrder(result.metafile, styles).map((name) => ({
+      name,
+      css: styles.get(name) ?? "",
+    }))
+  );
+  return pageFiles("The decision host", result.outputs, css);
 }
 
 /** DialKit (vendored in the decision-page kit) and the kit's bridge to it (dials.js), as one script and one sheet. */
@@ -86,30 +202,26 @@ export async function decisionHostAssets(
   filesUnder: (dir: string, prefix: string) => Promise<[string, string][]>
 ): Promise<[string, string][]> {
   await rm(outdir, { recursive: true, force: true });
-  await buildDecisionHost(outdir);
-  await Promise.all(
-    [...(await dialFiles())].map(([name, text]) =>
-      Bun.write(join(outdir, name), text)
-    )
-  );
+  await mkdir(outdir, { recursive: true });
+  const [files, dials] = await Promise.all([buildDecisionHost(), dialFiles()]);
+  await Promise.all([
+    ...[...files].map(([name, file]) => Bun.write(join(outdir, name), file)),
+    ...[...dials].map(([name, text]) => Bun.write(join(outdir, name), text)),
+  ]);
   return filesUnder(outdir, "decision");
 }
 
-const DOT_SLASH = /^\.\//;
 const LEADING_SLASHES = /^\/+/;
 
 let built: Promise<Map<string, Blob>> | undefined;
 
-/** The bundle's files and DialKit's by name, built once per process; a failure clears the slot so the next request retries. */
+/** The host's files and DialKit's by name, built once per process; a failure clears the slot so the next request retries. */
 const bundle = (): Promise<Map<string, Blob>> => {
   built ??= Promise.all([buildDecisionHost(), dialFiles()])
     .then(
-      ([outputs, dials]) =>
+      ([files, dials]) =>
         new Map<string, Blob>([
-          ...outputs.map(
-            (output) =>
-              [output.path.replace(DOT_SLASH, ""), output as Blob] as const
-          ),
+          ...files,
           ...[...dials].map(
             ([name, text]) => [name, new Blob([text])] as const
           ),

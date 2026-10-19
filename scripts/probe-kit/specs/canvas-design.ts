@@ -42,7 +42,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "playwright-core";
+import type { Locator, Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import type { CanvasSpec } from "../../../packages/core/src/stage";
 import { until } from "../../scratch-fleet";
@@ -52,7 +52,7 @@ const DASHBOARD = join(ROOT, "apps/dashboard");
 /** The artifact's live doc on the dashboard's own origin (artifact-doc.ts `joinArtifact`). */
 const ARTIFACT_SOCKET = /\/ws\/artifact\//;
 /** More's name while it holds Comments: native's words (PreviewController.swift). */
-const MORE_COUNT = /^More, Comments \d+ open$/;
+const MORE_COUNT = /^More, Comments [1-9]\d* open$/;
 const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
 /** A states file of the probe's own, in the stage's git-ignored folder: one story with no doc comment. */
 const UNNAMED_FILE = ".cawco/probe/Unnamed.stories.ts";
@@ -724,10 +724,9 @@ async function headLeg(
   const commentsInMore = read.more.some((one) => one.startsWith("Comments"));
   if (commentsInMore || read.moreLabel) {
     kit.check(
-      `8g: ${leg}: More says Comments' count while it holds Comments, 0 too, in native's words`,
-      commentsInMore
-        ? MORE_COUNT.test(read.moreLabel)
-        : read.moreLabel === "More",
+      `8g: ${leg}: More says Comments' count while it holds Comments, only above 0, in native's words`,
+      read.moreLabel === "More" ||
+        (commentsInMore && MORE_COUNT.test(read.moreLabel)),
       `${read.moreLabel}; More ${read.more.join(" | ")}`
     );
   }
@@ -834,6 +833,12 @@ async function serveDoc(page: Page) {
   };
 }
 
+/** A count element's text, or "none" when it is not drawn (a count of 0 is not). */
+const textOr = async (count: Locator): Promise<string> =>
+  (await count.count()) > 0
+    ? ((await count.first().textContent())?.trim() ?? "")
+    : "none";
+
 /** More, read while it holds Comments: its count, its name, the Comments entry, and the panel that entry opens. */
 async function readMore(page: Page) {
   const head = "[data-bench-pane] [data-slot=side-head]";
@@ -851,7 +856,7 @@ async function readMore(page: Page) {
           .join(", "),
       head
     ),
-    count: (await trigger.locator(".more-count").textContent()) ?? "none",
+    count: await textOr(trigger.locator(".more-count")),
     label: (await trigger.getAttribute("aria-label")) ?? "",
     entry: "",
     opened: false,
@@ -860,7 +865,7 @@ async function readMore(page: Page) {
   const entry = page
     .locator("[data-slot=dropdown-menu-content] [role=menuitem]")
     .filter({ hasText: "Comments" });
-  said.entry = `${(await entry.textContent())?.trim()} (menu-count ${await entry.locator(".menu-count").textContent()})`;
+  said.entry = `${(await entry.textContent())?.trim()} (menu-count ${await textOr(entry.locator(".menu-count"))})`;
   await entry.click();
   said.opened = await page
     .locator("[data-pin-list-pop]")
@@ -902,14 +907,61 @@ async function moreHoldsComments(
       await page.waitForTimeout(1200);
     }
     const said = await readMore(page);
+    const count = open > 0 ? String(open) : "none";
+    const label = open > 0 ? `More, Comments ${open} open` : "More";
     kit.check(
-      `8h: 330 ${theme}, Send picks standing, ${open} open: Comments goes to More, which says "${open}" and "More, Comments ${open} open", its entry says ${open}, and choosing it opens the Comments panel`,
+      `8h: 330 ${theme}, Send picks standing, ${open} open: Comments goes to More, whose count is ${count}, named "${label}", its entry's count ${count}, and choosing it opens the Comments panel`,
       said.standing.includes("send") &&
         !said.standing.includes("comments") &&
-        said.count === String(open) &&
-        said.label === `More, Comments ${open} open` &&
-        said.entry.endsWith(`(menu-count ${open})`) &&
+        said.count === count &&
+        said.label === label &&
+        said.entry.endsWith(`(menu-count ${count})`) &&
         said.opened,
+      JSON.stringify(said)
+    );
+  }
+  await page.close();
+}
+
+/** 8i: Comments itself in the head, at 720, at 0 open pins and at 2: its count drawn only above 0, its name saying it only then. */
+async function commentsCount(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  const page = await kit.page("desk", { theme });
+  await page.setViewportSize({ width: 760, height: 844 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  const doc = await serveDoc(page);
+  await page.goto(
+    `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+  );
+  const button = page.locator(
+    "[data-bench-pane] [data-slot=side-head] button[data-slot=comments]"
+  );
+  await button.waitFor({ timeout: 60_000 });
+  await page.waitForTimeout(2500);
+  for (const open of [0, 2]) {
+    if (open > 0) {
+      doc.pins(open);
+      // biome-ignore lint/performance/noAwaitInLoops: the pins land, then the head is read
+      await page.waitForTimeout(1200);
+    }
+    const said = {
+      count: await textOr(button.locator("[data-slot=count]")),
+      label: (await button.getAttribute("aria-label")) ?? "",
+    };
+    const count = open > 0 ? String(open) : "none";
+    const label = open > 0 ? `Comments, ${open} open` : "Comments";
+    kit.check(
+      `8i: 720 ${theme}, ${open} open: Comments' count is ${count} and its name "${label}"`,
+      said.count === count && said.label === label,
       JSON.stringify(said)
     );
   }
@@ -954,6 +1006,7 @@ const spec: Spec = {
             .join("; ")
         );
         await moreHoldsComments(kit, bench, stage, theme);
+        await commentsCount(kit, bench, stage, theme);
       }
     } finally {
       stage.stop();

@@ -14,7 +14,9 @@
  * - `tailscale` on the hub's PATH: a script whose mode file answers as
  *   Tailscale 1.98 does: live, "Access denied" (no operator), Funnel not
  *   enabled (prints the approval URL and waits), or a private Serve on port
- *   10000. Every call's argv is logged.
+ *   10000. Every call's argv is logged. Only `funnel` is faked: the hub's
+ *   tailnet HTTPS (tailnet-https.ts) reads `status` from boot, and the
+ *   fake's refusal reads to it as no Tailscale on the machine.
  *
  * 1. GitHub: a signed `pull_request` closed+merged lands once; the same
  *    delivery again adds nothing; the poller seeing that merge adds nothing,
@@ -28,7 +30,8 @@
  * 0. The receiver: no listener while no relay exists; the first relay opens
  *    one port the system picks (no CAWCO_RELAY_PORT); the last one off
  *    closes it.
- * 4. Funnel: the apply and off command lines, the target the port the
+ * 4. Funnel: no `tailscale funnel` before the first relay; the apply and
+ *    off command lines, the target the port the
  *    receiver bound; status read back into the public URL; needs-owner for
  *    "no operator" and "Funnel not enabled" with their remedies; a Serve on
  *    10000 is refused; a hub restart re-points the one /hooks/ mount at the
@@ -559,10 +562,14 @@ try {
   // The poller's first poll only sets its mark.
   await pollNow();
 
+  // The relay's Tailscale is `tailscale funnel` alone (funnel.ts). The hub's
+  // HTTPS on its tailnet name (tailnet-https.ts) reads `tailscale status`
+  // from boot, relay or none, and the fake answers it as no Tailscale here.
+  const beforeRelay = await tsCalls();
   check(
-    "4: with no relay ever made, the hub never runs tailscale",
-    (await tsCalls()).length === 0,
-    `${(await tsCalls()).length} calls`
+    "4: with no relay ever made, the hub runs no `tailscale funnel`",
+    !beforeRelay.some((call) => call.startsWith("funnel")),
+    `calls ${JSON.stringify(beforeRelay)}`
   );
   const relayFree = await listeningPorts(hub);
   check(

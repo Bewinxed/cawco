@@ -1,7 +1,10 @@
 /**
- * The runtime bundles Bun builds for a browser (the canvas host, the
- * decision host, the preview overlay, the stage host) refuse any
- * `light-dark()` Bun's CSS bundler lowered.
+ * The backstop against a stylesheet reaching Bun's CSS bundler again: the
+ * runtime bundles Bun builds for a browser (the canvas host, the decision
+ * host, the preview overlay, the stage host) refuse any `light-dark()` it
+ * lowered. Bun bundles their JS only. The pages' stylesheets are compiled
+ * by Lightning CSS at the product's one CSS floor (page-css.ts,
+ * css-target.ts); the overlay and the stage take theirs as text.
  *
  * Bun lowers `light-dark(a, b)` for its default browser targets to
  * `var(--buncss-light, a) var(--buncss-dark, b)`, and sets those two switch
@@ -17,13 +20,10 @@
  * way to opt out". Bun's src/css/targets.zig `forBundlerTarget` picks the
  * targets from the bundle's runtime alone: `.node, .bun => runtimeDefault(),
  * .browser, .bun_macro, .bake_server_components_ssr => browserDefault()`.
- * Once oven-sh/bun#40368 ships (`Bun.build({ cssTarget })`, "An override
- * with no browser entries (for example only "esnext") disables
- * downleveling entirely"), set it on these builds from the dashboard's
- * `CSS_TARGET` (apps/dashboard/vite.config.ts) and keep this guard. Until
- * then the build stops instead, naming each rule. A colour that changes
- * with the scheme is a token (design/tokens, DESIGN.md), used as
- * `var(--token)`.
+ * So no stylesheet goes to it: a sheet a page's code imports goes in the
+ * page's sheet list instead (canvas-host.ts `SHEETS`; page-css.ts
+ * `pageFiles` refuses a sheet Bun emitted for those two). Should one reach
+ * it anyway, the build stops here, naming each lowered rule.
  */
 
 /** A bundle's emitted file: a `Bun.BuildArtifact`, or anything with its path and text. */
