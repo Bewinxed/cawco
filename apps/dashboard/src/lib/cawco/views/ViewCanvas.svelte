@@ -202,7 +202,7 @@
 
 <section
   aria-label="Task graph"
-  class="relative h-full min-h-(--c-canvas-min-h) min-w-0 overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
+  class="relative h-full min-h-c-canvas-min-h min-w-0 overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
   data-settled={eased || undefined}
   data-slot="view-canvas"
   bind:clientHeight={canvasHeight}

@@ -959,7 +959,7 @@
 {#snippet sourcesBody()}
   {#if sourceCount === 0}
     <p
-      class="m-0 max-w-(--c-prose-measure) p-space-3 type-meta text-pretty text-ink-muted"
+      class="m-0 max-w-c-measure p-space-3 type-meta text-pretty text-ink-muted"
     >
       {words.noSources}
     </p>
@@ -1112,7 +1112,7 @@
 {#snippet actionsBody()}
   {#if actions.length === 0}
     <p
-      class="m-0 max-w-(--c-prose-measure) p-space-3 type-meta text-pretty text-ink-muted"
+      class="m-0 max-w-c-measure p-space-3 type-meta text-pretty text-ink-muted"
     >
       {words.noActions}
     </p>
@@ -1126,7 +1126,7 @@
 <!-- Held as a skeleton until the hub's first read. -->
 <div bind:this={place} class="flex min-h-0 flex-auto flex-col">
   {#if page === null && problem !== null}
-    <div class="max-w-(--c-prose-measure)">
+    <div class="max-w-c-measure">
       <EmptyState
         icon={IconClock}
         line={words.unavailableLine(project.name, problem)}
