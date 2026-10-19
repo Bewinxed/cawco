@@ -284,7 +284,18 @@ const nekoAs = async (key: BrowserKey, as: "admin" | "viewer") => {
     (await fetch(`${base}${path}`, {
       headers: { Authorization: `Bearer ${login.token}` },
     }).then((response) => response.json())) as Record<string, unknown>;
-  return { id: login.id, get };
+  const send = async (path: string, body?: object) => {
+    const response = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${login.token}`,
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    return { status: response.status, text: await response.text() };
+  };
+  return { id: login.id, get, post: send };
 };
 
 /** The local host's take-over transport on page `targetId`: frames read and a tap sent (check C11). */
@@ -435,12 +446,34 @@ const leg = async (
     JSON.stringify(reopened)
   );
 
+  // What the person copied while they held it: the hand-back empties it.
+  const copied =
+    host === "container"
+      ? await (
+          await nekoAs(key, "viewer")
+        ).post("/room/clipboard", {
+          text: "probe-secret",
+        })
+      : undefined;
   const back = await post(
     fleet,
     `/api/browsers/${encodeURIComponent(key)}/handback`,
     { machineId: "scratch-fleet" }
   );
-  rawA = await rawAt(doorA);
+  // Admitted the moment /handback answered: no wait between the two.
+  const admitted = await rawAt(doorA).then(
+    (raw) => ({ raw, refused: null }),
+    (error: unknown) => ({ raw: undefined, refused: String(error) })
+  );
+  kit.check(
+    `${host}: POST /handback answers ${back.status} and A's gate admits at once`,
+    back.status === 200 && !!admitted.raw,
+    JSON.stringify({ back, refused: admitted.refused, copied })
+  );
+  if (!admitted.raw) {
+    return;
+  }
+  rawA = admitted.raw;
   const attached = await rawA.send("Target.attachToTarget", {
     targetId: page.targetId,
     flatten: true,
@@ -457,7 +490,11 @@ const leg = async (
   if (host === "container") {
     const admin = await nekoAs(key, "admin");
     reset = (await admin.get("/room/control")).has_host !== true;
-    clipboard = (await admin.get("/room/clipboard")).text ?? "";
+    // neko serves the clipboard to its host alone: read as the admin hosting
+    // for a moment, then left with no host again.
+    await admin.post("/room/control/take");
+    clipboard = (await admin.get("/room/clipboard")).text;
+    await admin.post("/room/control/reset");
   }
   kit.check(
     `${host}: POST /handback → control reset, clipboard "", page loaded again by GET, gate open`,

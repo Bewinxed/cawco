@@ -654,8 +654,12 @@ const tick = async (): Promise<void> => {
  */
 export const watchBrowsers = async (): Promise<void> => {
   servingGates = true;
-  listenGates();
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
+  // Every kept browser's gate made before the port answers, so a connection
+  // as the agent starts meets its gate as its record says: closed under a
+  // take-over the daemon restarted in (`gateFor`), never the no-browser 404.
+  await gatesNow();
+  listenGates();
   watch(browsersDir(), { recursive: true }, (_event, name) => {
     if (name?.endsWith("record.json")) {
       gatesAsWritten();

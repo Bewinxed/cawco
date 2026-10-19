@@ -5,8 +5,10 @@
  * with one sentence), brings the asking workspace's page to the front, and
  * gives the person control: neko's `control/give` to their view's session on
  * the container host, a {@link CdpTakeover} of that page on the local host.
- * Hand back takes control away, loads the front page again by GET (nothing
- * typed survives in a field), empties neko's clipboard on the container host
+ * Hand back takes control away (neko's `control/take` by the daemon's admin,
+ * then `control/reset` once the clipboard is emptied as host), loads the
+ * front page again by GET (nothing typed survives in a field), empties
+ * neko's clipboard on the container host
  * (the local host's headless Chromium has no clipboard the person could
  * fill), opens the gate, and answers the page's origin and nothing else.
  *
@@ -331,6 +333,13 @@ const reloadFront = async (
 /**
  * Hand back: control taken from the person, the front page loaded again by
  * GET, the clipboard emptied, the gate open; answers the page's origin.
+ *
+ * On the container host the daemon's admin takes control first (neko
+ * `control/take`): the person's input stops reaching the browser, and the
+ * admin is the host neko serves the clipboard to (its room routes are
+ * `HostsOnly`), so it can empty it; `control/reset` then leaves nobody
+ * hosting. A step that fails is said in the log and answered to the hub,
+ * and the gate stays closed: the private period ends only whole.
  */
 export const handBackBrowser = async (
   key: BrowserKey
@@ -342,18 +351,43 @@ export const handBackBrowser = async (
   const record = await readBrowser(key);
   let origin: string | null = null;
   if (record && take) {
+    const step = async <T>(
+      what: string,
+      work: () => Promise<T>
+    ): Promise<T> => {
+      try {
+        return await work();
+      } catch (error) {
+        const said = `${key} was not handed back: ${what} failed (${why(error)}); its gate stays closed.`;
+        console.warn(`[browser] ${said}`);
+        throw new Error(said, { cause: error });
+      }
+    };
     if (record.host === "container") {
-      await neko(record, "/room/control/reset");
+      await step("taking control from the person", () =>
+        neko(record, "/room/control/take")
+      );
     } else {
-      await take.cdp?.stop();
+      await step("ending the page's view", async () => {
+        await take.cdp?.stop();
+      });
     }
-    origin = await reloadFront(record, take.targetId);
+    origin = await step("loading the page again", () =>
+      reloadFront(record, take.targetId)
+    );
     if (record.host === "container") {
-      await neko(record, "/room/clipboard", { text: "" });
+      await step("emptying the clipboard", () =>
+        neko(record, "/room/clipboard", { text: "" })
+      );
+      await step("leaving the browser with no host", () =>
+        neko(record, "/room/control/reset")
+      );
     }
   }
   await release(key);
-  console.info(`[browser] ${key} handed back${origin ? ` on ${origin}` : ""}`);
+  console.info(
+    `[browser] ${key} handed back${origin ? ` on ${origin}` : ""}, its gate open`
+  );
   return {
     key,
     origin,
@@ -457,16 +491,12 @@ const watchOnce = async (): Promise<void> => {
       console.info(
         `[browser] ${key}: no view of its take-over for ${TAKEOVER_UNWATCHED_MS / 60_000} minutes: handed back`
       );
-      const answer = await handBackBrowser(key).catch(
-        async (error: unknown) => {
-          console.warn(
-            `[browser] ${key} was not handed back cleanly: ${why(error)}`
-          );
-          await release(key);
-          return { key, origin: null, requestId: take.requestId };
-        }
-      );
-      tellHub(answer, "unwatched");
+      // A step that fails leaves the gate closed (handBackBrowser says
+      // which); the next count tries the hand-back again.
+      const answer = await handBackBrowser(key).catch(() => undefined);
+      if (answer) {
+        tellHub(answer, "unwatched");
+      }
     }
   }
 };
