@@ -447,6 +447,7 @@
 </script>
 
 {#snippet field_()}
+  <!-- biome-ignore lint/a11y/useAriaActivedescendantWithTabindex: FindField renders a native input, which is tabbable already -->
   <FindField
     aria-activedescendant={activeKey ? idOf(activeKey) : undefined}
     aria-autocomplete="list"
@@ -463,7 +464,6 @@
     placeholder="Find a session, or a task, preview, decision…"
     role="combobox"
     spellcheck="false"
-    tabindex={0}
     type="text"
     value={finder.text}
     bind:input={field}

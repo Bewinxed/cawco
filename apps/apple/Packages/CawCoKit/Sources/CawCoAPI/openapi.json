@@ -19943,16 +19943,6 @@
               }
             }
           },
-          "404": {
-            "description": "getApiInstancesByIdTranscript 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
           "409": {
             "description": "getApiInstancesByIdTranscript 409",
             "content": {
@@ -19972,9 +19962,36 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/attachments": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdAttachments",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdAttachments 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdAttachments200"
+                }
+              }
+            }
           },
-          "500": {
-            "description": "getApiInstancesByIdTranscript 500",
+          "404": {
+            "description": "getApiInstancesByIdAttachments 404",
             "content": {
               "text/plain": {
                 "schema": {
@@ -19983,8 +20000,8 @@
               }
             }
           },
-          "504": {
-            "description": "getApiInstancesByIdTranscript 504",
+          "409": {
+            "description": "getApiInstancesByIdAttachments 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -28380,6 +28397,24 @@
           "name",
           "ref",
           "size"
+        ]
+      },
+      "getApiInstancesByIdAttachments200": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionAttachment"
+            }
+          }
+        },
+        "required": [
+          "attachments",
+          "harness"
         ]
       },
       "postApiSeen200": {
@@ -37627,7 +37662,7 @@
             "type": "string"
           },
           "by": {
-            "$ref": "#/components/schemas/ThreadEntryBy"
+            "$ref": "#/components/schemas/SessionAttachmentWho"
           },
           "files": {
             "description": "Files an agent's reply names as changed.",
@@ -46947,6 +46982,61 @@
           "harness",
           "machineId",
           "sessionKey"
+        ]
+      },
+      "SessionAttachment": {
+        "description": "One attachment a session's conversation carried, as Files lists them\n(`GET /api/instances/:id/attachments`, newest first): a text pasted at\nlength, a file the hub stores, or a picture, read off the whole\ntranscript on the hub, whatever pages a reader has loaded.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When its message was, ISO-8601; null when the harness gave no time.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "content": {
+            "description": "A text's words, for reading it in place.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SessionAttachmentKind"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "messageId": {
+            "description": "The message it rode, for Show in conversation (`?at=`).",
+            "type": "string"
+          },
+          "name": {
+            "description": "A file's or text's name; a picture's is its place among the conversation's pictures (\"Picture 3\").",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Where the hub serves a file (`/api/files/<sha256>`); absent when the harness's copy names only part of its hash.",
+            "type": "string"
+          },
+          "size": {
+            "description": "A file's length in bytes.",
+            "type": "number"
+          },
+          "src": {
+            "description": "A picture's address.",
+            "type": "string"
+          },
+          "who": {
+            "$ref": "#/components/schemas/SessionAttachmentWho",
+            "description": "Who sent it: the person, or the session's agent."
+          }
+        },
+        "required": [
+          "at",
+          "kind",
+          "mediaType",
+          "messageId",
+          "name",
+          "who"
         ]
       },
       "Verb": {
@@ -57251,6 +57341,21 @@
           "silent"
         ]
       },
+      "SessionAttachmentKind": {
+        "type": "string",
+        "enum": [
+          "file",
+          "image",
+          "text"
+        ]
+      },
+      "SessionAttachmentWho": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "person"
+        ]
+      },
       "SessionPulseActivity": {
         "type": "string",
         "enum": [
@@ -57311,13 +57416,6 @@
           "routine",
           "session",
           "you"
-        ]
-      },
-      "ThreadEntryBy": {
-        "type": "string",
-        "enum": [
-          "agent",
-          "person"
         ]
       },
       "TranscriptBlockState": {

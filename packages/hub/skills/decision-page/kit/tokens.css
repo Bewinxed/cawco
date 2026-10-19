@@ -783,6 +783,10 @@
     --c-starters-w: calc(var(--c-starter-w) * 4 + var(--space-2) * 3);
     /* A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after. */
     --c-row-lead: 28px;
+    /* A section's head inside a floating panel (Files' Artifacts and Attachments, as Caw's panel heads his): its glyph, its name in the label role and its count, one line. */
+    --c-section-head-h: 32px;
+    /* A list row's inline inset inside a floating panel (Files' rows and heads, as the menu item's 10px padding): its lead column's glyph stands this far in from the row's edge. */
+    --c-row-inset: 10px;
     /* A routines-page row's pitch: the whole row is its own 44px opener on every pointer. */
     --c-row-h: 44px;
     /* The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and "23h ago", or "Tomorrow 13:30", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say. */

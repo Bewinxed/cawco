@@ -74,6 +74,7 @@ import type {
   SendRefusal,
   SentMessage,
   SessionAddress,
+  SessionAttachments,
   SessionCredentialInstall,
   SessionCustody,
   SessionEndIntent,
@@ -88,6 +89,7 @@ import type {
   ToolState,
   ToolStatus,
   TranscriptAnswer,
+  TranscriptPage,
   TranscriptWhere,
   UpdateReport,
   UsageBucket,
@@ -699,6 +701,11 @@ import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRepoPublish } from "./repo-publish";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
+import {
+  ATTACHMENT_PAGE_LIMIT,
+  ATTACHMENT_PAGES,
+  attachmentsOfPages,
+} from "./session-attachments";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
@@ -18082,6 +18089,39 @@ export const createServer = (
     });
   };
 
+  /**
+   * A stored transcript's read that failed, as its routes answer it. An
+   * away machine is named, so a reader can say which one is away and hear
+   * it come back, and whether it is on its way back: then `Retry-After` is
+   * when this hub stops reading it so (whole seconds, rounded up, so a read
+   * then finds it offline).
+   */
+  const historyFault = (fault: HistoryFault): Response => {
+    switch (fault.fault) {
+      case "offline": {
+        const left = fault.machineId ? reconnectingFor(fault.machineId) : 0;
+        return new Response(fault.message, {
+          status: 503,
+          headers: {
+            "X-Cawco-Machine": fault.machineId ?? "",
+            ...(left > 0
+              ? {
+                  "X-Cawco-Machine-State": "reconnecting",
+                  "Retry-After": String(Math.ceil(left / 1000)),
+                }
+              : {}),
+          },
+        });
+      }
+      case "missing":
+        return new Response(fault.message, { status: 404 });
+      case "timeout":
+        return new Response(fault.message, { status: 504 });
+      default:
+        return new Response(fault.message, { status: 500 });
+    }
+  };
+
   /** Every session's blocks, built here once, whether or not anyone watches. */
   const transcripts = createTranscripts({
     lifetime,
@@ -23924,35 +23964,48 @@ export const createServer = (
           if (!("fault" in page)) {
             return page;
           }
-          switch (page.fault) {
-            // Named with the machine, so a reader can say which one is away
-            // and hear it come back, and whether it is on its way back: then
-            // `Retry-After` is when this hub stops reading it so (whole
-            // seconds, rounded up, so a read then finds it offline).
-            case "offline": {
-              const left = page.machineId ? reconnectingFor(page.machineId) : 0;
-              return new Response(page.message, {
-                status: 503,
-                headers: {
-                  "X-Cawco-Machine": page.machineId ?? "",
-                  ...(left > 0
-                    ? {
-                        "X-Cawco-Machine-State": "reconnecting",
-                        "Retry-After": String(Math.ceil(left / 1000)),
-                      }
-                    : {}),
-                },
-              });
-            }
-            case "missing":
-              return status(404, page.message);
-            case "timeout":
-              return status(504, page.message);
-            default:
-              return status(500, page.message);
-          }
+          return historyFault(page);
         }
       )
+      // Files' Attachments: every text, file and picture the session's
+      // conversation carried, read off its whole transcript here, newest
+      // first, so the list never depends on the pages a reader has loaded.
+      // A transcript that can't be read answers as its page would.
+      .get("/api/instances/:id/attachments", async ({ params, status }) => {
+        const id = db.instanceIdOf(params.id);
+        const pages: TranscriptPage[] = [];
+        let before: string | undefined;
+        for (let read = 0; read < ATTACHMENT_PAGES; read += 1) {
+          // biome-ignore lint/performance/noAwaitInLoops: each page names the cursor of the next
+          const page = await transcripts.page(
+            id,
+            ATTACHMENT_PAGE_LIMIT,
+            before
+          );
+          if ("gone" in page) {
+            return status(
+              409,
+              `the transcript no longer holds block ${page.gone}`
+            );
+          }
+          if ("fault" in page) {
+            return historyFault(page);
+          }
+          pages.push(page);
+          if (page.cursor === null) {
+            break;
+          }
+          before = page.cursor;
+        }
+        const harness = pages[0]?.where.harness;
+        if (!harness) {
+          return status(404, `no session ${params.id}`);
+        }
+        return {
+          harness,
+          attachments: attachmentsOfPages(pages),
+        } satisfies SessionAttachments;
+      })
       .patch(
         "/api/instances/:id",
         {

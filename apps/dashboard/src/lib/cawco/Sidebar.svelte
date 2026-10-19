@@ -34,6 +34,7 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconBox,
+    IconFiles,
     IconPlus,
     IconSearch,
     IconSettings,
@@ -42,7 +43,6 @@
   } from "#lib/icons.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import IconFolder from "~icons/solar/folder-2-bold-duotone";
   import type { Activity } from "./activity";
   import {
     type BoardRow,
@@ -893,7 +893,7 @@
                   type="button"
                 >
                   <span class={SLOT} data-box
-                    ><IconFolder class={SLOT_GLYPH} /></span
+                    ><IconFiles class={SLOT_GLYPH} /></span
                   ><span>Files</span>
                 </button>
               {/snippet}

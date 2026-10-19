@@ -144,6 +144,8 @@ typeOverrides:
     RuleWatch: OpenEnums.RuleWatch
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
+    SessionAttachmentKind: OpenEnums.SessionAttachmentKind
+    SessionAttachmentWho: OpenEnums.SessionAttachmentWho
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState
@@ -164,7 +166,6 @@ typeOverrides:
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
-    ThreadEntryBy: OpenEnums.ThreadEntryBy
     ThreadStatus: OpenEnums.ThreadStatus
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState

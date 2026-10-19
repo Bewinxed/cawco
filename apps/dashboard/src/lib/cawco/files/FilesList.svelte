@@ -10,6 +10,12 @@
    * shows, a sign at its foot says how many more, and a press scrolls them
    * into view.
    *
+   * Both lists are the hub's (files.svelte.ts): until one answers it claims
+   * nothing (no count, no "nothing" line); past `--dur-wait-grace` its
+   * skeleton stands at the real layout's size, and the read arrives over one
+   * `--dur-fade` cross-fade. A read refused says so in its region's place
+   * (RowFault), with Try again and the hub's own words.
+   *
    * The artifacts are a masonry of their thumbnails (ArtifactCards). An
    * attachment row leads with its picture or its file's glyph, its name over
    * "kind · who · age", and ends on Show in conversation. The search is the
@@ -27,6 +33,7 @@
   import type { ArtifactSummary } from "@cawco/core";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { fade } from "svelte/transition";
   import { Button } from "#lib/components/ui/button/index.js";
   import EmptyState from "#lib/components/ui/empty/empty-state.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -34,20 +41,21 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
-    IconAlert,
     IconChevronDown,
     IconChevronRight,
     IconDocument,
+    IconFiles,
     IconLayers,
     IconPaperclip,
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
-  import IconFolder from "~icons/solar/folder-2-bold-duotone";
   import { searchArtifacts } from "../artifact-api";
   import FindField from "../find/FindField.svelte";
   import { excerptParts } from "../find/find-rows";
   import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
+  import { dur } from "../motion/curves.svelte";
+  import RowFault from "../RowFault.svelte";
   import ArtifactCards from "./ArtifactCards.svelte";
   import {
     type ArtifactCard,
@@ -55,6 +63,7 @@
     artifactsOf,
     attachmentsOf,
     readArtifacts,
+    readAttachments,
     searchAttachments,
   } from "./files.svelte";
 
@@ -81,22 +90,70 @@
   let words = $state("");
   /** The list the segmented control shows. */
   let list = $state("artifacts");
-  /** The refusal's words are unfolded under it. */
-  let details = $state(false);
 
-  // Read again each time Files opens: the pictures the pane kept since.
+  // Read again each time Files opens: what the session made and was sent
+  // since, and the pictures the pane kept.
   $effect(() => {
     const id = instanceId;
-    untrack(() => readArtifacts(id));
+    untrack(() => {
+      readArtifacts(id);
+      readAttachments(id);
+    });
   });
-  const read = $derived(artifactsOf(instanceId));
-  const artifacts = $derived(read?.list ?? null);
-  const loading = $derived(artifacts === null && !read?.failed);
-  const failed = $derived(artifacts === null ? (read?.failed ?? null) : null);
-  const attachments = $derived(attachmentsOf(instanceId));
-  const nothing = $derived(
-    artifacts !== null && artifacts.length === 0 && attachments.length === 0
+  const artifactsRead = $derived(artifactsOf(instanceId));
+  const attachmentsRead = $derived(attachmentsOf(instanceId));
+  const artifacts = $derived(artifactsRead?.list ?? null);
+  const attachments = $derived(attachmentsRead?.list ?? null);
+  const artifactsFailed = $derived(
+    artifacts === null ? (artifactsRead?.failed ?? null) : null
   );
+  const attachmentsFailed = $derived(
+    attachments === null ? (attachmentsRead?.failed ?? null) : null
+  );
+  const nothing = $derived(
+    artifacts?.length === 0 && attachments?.length === 0
+  );
+
+  /**
+   * The Claim Of Nothing Rule: inside `--dur-wait-grace` a list still read
+   * shows nothing of its own; past it, its skeleton stands. A list that
+   * arrives after its skeleton stood cross-fades in over `--dur-fade`.
+   */
+  let waited = $state(false);
+  $effect(() => {
+    const timer = setTimeout(() => {
+      waited = true;
+    }, dur("--dur-wait-grace"));
+    return () => clearTimeout(timer);
+  });
+  const artifactsGhost = $derived(
+    waited && artifacts === null && !artifactsFailed
+  );
+  const attachmentsGhost = $derived(
+    waited && attachments === null && !attachmentsFailed
+  );
+  /** Each region's skeleton stood, so its read fades in. */
+  let ghostStood = $state({ artifacts: false, attachments: false });
+  $effect(() => {
+    if (artifactsGhost) {
+      untrack(() => {
+        ghostStood.artifacts = true;
+      });
+    }
+  });
+  $effect(() => {
+    if (attachmentsGhost) {
+      untrack(() => {
+        ghostStood.attachments = true;
+      });
+    }
+  });
+  const arrive = (_node: Element, stood: boolean) =>
+    fade(_node, { duration: stood ? dur("--dur-fade") : 0 });
+  const leave = (node: Element) => fade(node, { duration: dur("--dur-fade") });
+  /** How many skeleton cards stand for the masonry. */
+  const GHOST_CARDS = 6;
+
   const asked = $derived(words.trim());
 
   /* ── The search ─────────────────────────────────────────────────── */
@@ -107,11 +164,15 @@
     within: Map<string, string>;
   } | null>(null);
   let searchFault = $state<string | null>(null);
+  /** Try again on a refused search: the ask goes again. */
+  let searchTry = $state(0);
   /** As the words settle, the hub is asked; a later ask supersedes. */
   const SETTLE_MS = 120;
   $effect(() => {
     const q = asked;
     const id = instanceId;
+    // Try again asks the same words again, at once.
+    const settle = searchTry > 0 ? 0 : SETTLE_MS;
     if (!q) {
       hits = null;
       searchFault = null;
@@ -138,21 +199,20 @@
           }
         }
       );
-    }, SETTLE_MS);
+    }, settle);
     return () => {
       clearTimeout(timer);
       stop.abort();
     };
   });
+  /** The hub has answered the words as they stand: the cards and counts are its hits. */
+  const answered = $derived(!!asked && hits?.q === asked);
   const cards = $derived.by<ArtifactCard[]>(() => {
     if (!artifacts) {
       return [];
     }
-    if (!asked) {
+    if (!(answered && hits)) {
       return artifacts.map((artifact) => ({ artifact, within: null }));
-    }
-    if (!hits) {
-      return [];
     }
     const byId = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
     return hits.ids.flatMap((id) => {
@@ -163,12 +223,23 @@
         : [];
     });
   });
-  /** The hub has not answered the words as they stand yet. */
-  const searching = $derived(!!asked && hits?.q !== asked && !searchFault);
-  const attachmentHits = $derived(searchAttachments(attachments, words));
-  /** A head's count: the whole, or while searching, how many of the whole match. */
-  const countOf = (shown: number, all: number) =>
-    asked ? `${shown} of ${all}` : `${all}`;
+  const attachmentHits = $derived(
+    attachments ? searchAttachments(attachments, words) : []
+  );
+  /** A count: the whole, or once a search is answered, how many of the whole match. */
+  const countOf = (shown: number, all: number, searched: boolean) =>
+    searched ? `${shown} of ${all}` : `${all}`;
+  /** The Earned Count Rule: a head counts only above 0. */
+  const artifactsCount = $derived(
+    artifacts && artifacts.length > 0
+      ? countOf(cards.length, artifacts.length, answered)
+      : null
+  );
+  const attachmentsCount = $derived(
+    attachments && attachments.length > 0
+      ? countOf(attachmentHits.length, attachments.length, !!asked)
+      : null
+  );
   /** A region's floor: its head and two rows, one, or its own words. */
   const floor = (rows: number) => {
     if (rows >= 2) {
@@ -176,12 +247,14 @@
     }
     return rows === 1 ? "one" : "own";
   };
-  const artifactsFloor = $derived(cards.length > 0 ? "cards" : "own");
-  const attachmentsFloor = $derived(floor(attachmentHits.length));
+  const artifactsFloor = $derived(
+    cards.length > 0 || artifactsGhost ? "cards" : "own"
+  );
+  const attachmentsFloor = $derived(
+    floor(attachmentsGhost ? 2 : attachmentHits.length)
+  );
 
   /* ── Each region's own scroll ───────────────────────────────────── */
-  /** The house fade's least length at a region's foot (app.css). */
-  const FADE_LEAST = 40;
   /** How many of a region's items stand past its foot, by region. */
   const more = $state<Record<string, number>>({});
   /** The same, as last written: read by the measure, which tracks nothing. */
@@ -192,39 +265,17 @@
       more[region] = past;
     }
   };
-  /**
-   * A region's scroll, measured as it scrolls and resizes: how many of its
-   * items stand past its foot (the "N more" sign), and, for the masonry,
-   * where its foot fade starts. The lanes end at different heights, so the
-   * fade (the house edge fade's `--fade-len`) runs from the top of the
-   * highest card the foot cuts: a card cut short fades whole, picture and
-   * name together, never a picture sliced off with no name under it.
-   */
+  /** A region's scroll, measured as it scrolls and resizes: how many of its items stand past its foot (the "N more" sign). */
   const measured =
-    (
-      region: string,
-      items: string,
-      cutWhole: boolean
-    ): Attachment<HTMLElement> =>
+    (region: string, items: string): Attachment<HTMLElement> =>
     (scroller) => {
       const measure = () => {
         const foot = scroller.getBoundingClientRect().bottom;
-        let from = foot;
         let past = 0;
         for (const item of scroller.querySelectorAll(items)) {
-          const box = item.getBoundingClientRect();
-          if (box.bottom > foot + 1) {
+          if (item.getBoundingClientRect().bottom > foot + 1) {
             past += 1;
           }
-          if (cutWhole && box.top < foot - 1 && box.bottom > foot + 1) {
-            from = Math.min(from, box.top);
-          }
-        }
-        if (cutWhole) {
-          scroller.style.setProperty(
-            "--fade-len",
-            `${Math.max(foot - from, FADE_LEAST)}px`
-          );
         }
         writeMore(region, past);
       };
@@ -297,114 +348,120 @@
   };
 </script>
 
-{#if nothing}
-  <EmptyState
-    class="files-empty"
-    data-files-empty
-    icon={IconFolder}
-    line="Pages, canvases, previews and the files you and the agent share collect here."
-    title="Nothing here yet"
-  />
-{:else}
-  <!-- The finder's own field (FindField), as Jump's. -->
-  <div class="files-search" data-files-search>
-    <FindField
-      aria-label="Search this session's files, by name or by what is in them"
-      autocapitalize="off"
-      autocomplete="off"
-      enterkeyhint="search"
-      onclear={() => {
-        words = "";
-      }}
-      oninput={(event) => {
-        words = event.currentTarget.value;
-      }}
-      placeholder="Search names and contents…"
-      spellcheck="false"
-      type="text"
-      value={words}
+<div class="files">
+  {#if nothing}
+    <EmptyState
+      class="files-empty"
+      data-files-empty
+      icon={IconFiles}
+      line="Pages, canvases, previews and the files you and the agent share collect here."
+      title="Nothing here yet"
     />
-  </div>
-  {#if segmented}
-    <!-- One list at a time under the kit's segmented control (Apple HIG,
-         Segmented controls: "switch between closely related subviews"),
-         each segment its noun and its count, equal widths. -->
-    <Tabs.Root bind:value={list} class="files-tabs">
-      <Tabs.List aria-label="Artifacts or attachments" class="files-segments">
-        <Tabs.Trigger data-files-segment="artifacts" value="artifacts">
-          <span>Artifacts</span>
-          {#if artifacts}
-            <span class="files-segment-count num" data-files-head-count
-              >{countOf(cards.length, artifacts.length)}</span
-            >
-          {/if}
-        </Tabs.Trigger>
-        <Tabs.Trigger data-files-segment="attachments" value="attachments">
-          <span>Attachments</span>
-          <span class="files-segment-count num" data-files-head-count
-            >{countOf(attachmentHits.length, attachments.length)}</span
-          >
-        </Tabs.Trigger>
-      </Tabs.List>
-      <Tabs.Content
-        class="files-pane"
-        data-files-region="artifacts"
-        value="artifacts"
-      >
-        {@render artifactsBody()}
-      </Tabs.Content>
-      <Tabs.Content
-        class="files-pane"
-        data-files-region="attachments"
-        value="attachments"
-      >
-        {@render attachmentsBody()}
-      </Tabs.Content>
-    </Tabs.Root>
   {:else}
-    <div
-      class="files-regions"
-      data-artifacts-floor={artifactsFloor}
-      data-attachments-floor={attachmentsFloor}
-    >
-      <section
-        aria-labelledby="{uid}-artifacts"
-        class="files-section"
-        data-files-region="artifacts"
-      >
-        <h3 class="files-head mark-line" id="{uid}-artifacts">
-          <span class="files-head-lead" data-box
-            ><IconLayers aria-hidden="true" /></span
-          >
-          <span class="files-head-name">Artifacts</span>
-          {#if artifacts}
-            <span class="files-head-count num" data-files-head-count
-              >{countOf(cards.length, artifacts.length)}</span
-            >
-          {/if}
-        </h3>
-        {@render artifactsBody()}
-      </section>
-      <section
-        aria-labelledby="{uid}-attachments"
-        class="files-section"
-        data-files-region="attachments"
-        data-files-rule
-      >
-        <h3 class="files-head mark-line" id="{uid}-attachments">
-          <span class="files-head-lead" data-box
-            ><IconPaperclip aria-hidden="true" /></span
-          >
-          <span class="files-head-name">Attachments</span>
-          <span class="files-head-count num" data-files-head-count
-            >{countOf(attachmentHits.length, attachments.length)}</span
-          >
-        </h3>
-        {@render attachmentsBody()}
-      </section>
+    <!-- The finder's own field (FindField), as Jump's. -->
+    <div class="files-search" data-files-search>
+      <FindField
+        aria-label="Search this session's files, by name or by what is in them"
+        autocapitalize="off"
+        autocomplete="off"
+        enterkeyhint="search"
+        onclear={() => {
+          words = "";
+        }}
+        oninput={(event) => {
+          words = event.currentTarget.value;
+        }}
+        placeholder="Search names and contents…"
+        spellcheck="false"
+        type="text"
+        value={words}
+      />
     </div>
+    {#if segmented}
+      <!-- One list at a time under the kit's segmented control (Apple HIG,
+           Segmented controls: "switch between closely related subviews"),
+           each segment its noun and its count, equal widths. -->
+      <Tabs.Root bind:value={list} class="files-tabs">
+        <Tabs.List aria-label="Artifacts or attachments" class="files-segments">
+          <Tabs.Trigger data-files-segment="artifacts" value="artifacts">
+            <span>Artifacts</span>
+            {#if artifactsCount}
+              <span class="files-segment-count num" data-files-head-count
+                >{artifactsCount}</span
+              >
+            {/if}
+          </Tabs.Trigger>
+          <Tabs.Trigger data-files-segment="attachments" value="attachments">
+            <span>Attachments</span>
+            {#if attachmentsCount}
+              <span class="files-segment-count num" data-files-head-count
+                >{attachmentsCount}</span
+              >
+            {/if}
+          </Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content
+          class="files-pane"
+          data-files-region="artifacts"
+          value="artifacts"
+        >
+          {@render artifactsBody()}
+        </Tabs.Content>
+        <Tabs.Content
+          class="files-pane"
+          data-files-region="attachments"
+          value="attachments"
+        >
+          {@render attachmentsBody()}
+        </Tabs.Content>
+      </Tabs.Root>
+    {:else}
+      <div
+        class="files-regions"
+        data-artifacts-floor={artifactsFloor}
+        data-attachments-floor={attachmentsFloor}
+      >
+        <section
+          aria-labelledby="{uid}-artifacts"
+          class="files-section"
+          data-files-region="artifacts"
+        >
+          <h3 class="files-head mark-line" id="{uid}-artifacts">
+            <span class="files-head-lead" data-box
+              ><IconLayers aria-hidden="true" /></span
+            >
+            <span class="files-head-name">Artifacts</span>
+            {#if artifactsCount}
+              <span class="files-head-count num" data-files-head-count
+                >{artifactsCount}</span
+              >
+            {/if}
+          </h3>
+          {@render artifactsBody()}
+        </section>
+        <section
+          aria-labelledby="{uid}-attachments"
+          class="files-section"
+          data-files-region="attachments"
+          data-files-rule
+        >
+          <h3 class="files-head mark-line" id="{uid}-attachments">
+            <span class="files-head-lead" data-box
+              ><IconPaperclip aria-hidden="true" /></span
+            >
+            <span class="files-head-name">Attachments</span>
+            {#if attachmentsCount}
+              <span class="files-head-count num" data-files-head-count
+                >{attachmentsCount}</span
+              >
+            {/if}
+          </h3>
+          {@render attachmentsBody()}
+        </section>
+      </div>
+    {/if}
   {/if}
-{/if}
+</div>
 
 {#snippet moreSign(region: string)}
   {#if (more[region] ?? 0) > 0}
@@ -423,139 +480,150 @@
 {/snippet}
 
 {#snippet artifactsBody()}
-  {#if failed}
-    <!-- mark-line: the mark stands over the words, centred above them -->
-    <div class="files-failed" data-files-failed role="alert">
-      <IconAlert aria-hidden="true" class="files-failed-mark" />
-      <p class="files-failed-title">Couldn't read this session's artifacts</p>
-      <p class="files-failed-line">
-        Nothing is lost: the artifacts are kept on the hub, and the attachments {segmented
-          ? "in Attachments"
-          : "below"} come from the conversation itself.
-      </p>
-      <div class="files-failed-actions">
-        <Button
-          label="Try again"
-          onclick={() => readArtifacts(instanceId)}
-          pending={read?.reading}
-          size="sm"
-        />
-        <Button
-          aria-controls="{uid}-why"
-          aria-expanded={details}
-          label={details ? "Hide details" : "Show details"}
-          onclick={() => {
-            details = !details;
-          }}
-          size="sm"
-          variant="ghost"
-        />
-      </div>
-      {#if details}
-        <pre class="files-failed-why" id="{uid}-why">{failed}</pre>
-      {/if}
-    </div>
-  {:else if loading}
-    <div
-      aria-busy="true"
-      aria-label="Reading artifacts"
-      class="files-wait"
-      role="status"
-    >
-      {#each [0.46, 0.34] as share (share)}
-        <div class="files-ghost-row">
-          <span class="lead" data-box><Skeleton class="ghost-glyph" /></span>
-          <Skeleton class="ghost-name" style="inline-size: {share * 100}%" />
-          <Skeleton class="ghost-age" />
-        </div>
-      {/each}
-    </div>
+  {#if artifactsFailed}
+    <RowFault
+      again={() => readArtifacts(instanceId)}
+      data-files-failed
+      details={artifactsFailed}
+      reason="Couldn't read this session's artifacts"
+    />
+  {:else if asked && searchFault}
+    <RowFault
+      again={() => {
+        searchTry += 1;
+      }}
+      data-files-search-failed
+      details={searchFault}
+      reason="Couldn't search this session's artifacts"
+    />
   {:else if artifacts?.length === 0}
     <p class="files-none">Nothing made yet</p>
-  {:else if asked && searchFault}
-    <p class="files-none" role="alert">
-      Couldn't search the artifacts: {searchFault}
-    </p>
-  {:else if asked && !searching && cards.length === 0}
+  {:else if answered && cards.length === 0}
     <p class="files-none" data-files-none>No artifacts match “{asked}”</p>
-  {:else}
+  {:else if artifacts || artifactsGhost}
     <div class="files-body">
-      <div
-        class="files-scroll kit-edge-fade-block"
-        aria-busy={searching || undefined}
-        data-files-scroll
-        id="{uid}-artifacts-scroll"
-        {@attach measured("artifacts", "[data-files-card]", true)}
-      >
-        <ArtifactCards {cards} {chosen} {onpick} />
-      </div>
-      {@render moreSign("artifacts")}
+      {#if artifacts}
+        <div
+          class="files-scroll kit-edge-fade-block"
+          data-files-scroll
+          id="{uid}-artifacts-scroll"
+          in:arrive={ghostStood.artifacts}
+          {@attach measured("artifacts", "[data-files-card]")}
+        >
+          <ArtifactCards {cards} {chosen} {onpick} />
+        </div>
+        {@render moreSign("artifacts")}
+      {:else}
+        <div
+          aria-busy="true"
+          aria-label="Reading artifacts"
+          class="files-scroll files-wait"
+          data-files-wait="artifacts"
+          role="status"
+          out:leave
+        >
+          <ArtifactCards cards={[]} ghosts={GHOST_CARDS} {onpick} />
+        </div>
+      {/if}
     </div>
   {/if}
 {/snippet}
 
 {#snippet attachmentsBody()}
-  {#if attachments.length === 0}
+  {#if attachmentsFailed}
+    <RowFault
+      again={() => readAttachments(instanceId)}
+      data-files-failed
+      details={attachmentsFailed}
+      reason="Couldn't read this session's attachments"
+    />
+  {:else if attachments?.length === 0}
     <p class="files-none">Nothing attached yet</p>
-  {:else if attachmentHits.length === 0}
+  {:else if attachments && attachmentHits.length === 0}
     <p class="files-none" data-files-none>No attachments match “{asked}”</p>
-  {:else}
+  {:else if attachments || attachmentsGhost}
     <div class="files-body">
-      <div
-        class="files-scroll kit-edge-fade-block"
-        data-files-scroll
-        id="{uid}-attachments-scroll"
-        {@attach measured("attachments", "[data-files-row]", false)}
-      >
-        <ul
-          class="files-list"
-          {@attach highlight({ rows: "[data-files-row]" })}
+      {#if attachments}
+        <div
+          class="files-scroll kit-edge-fade-block"
+          data-files-scroll
+          id="{uid}-attachments-scroll"
+          in:arrive={ghostStood.attachments}
+          {@attach measured("attachments", "[data-files-row]")}
         >
-          {#each attachmentHits as file (file.id)}
-            <li class="files-item attachment" data-files-row>
-              {#if file.open.kind === "file"}
-                {#if file.open.href}
-                  <a
+          <ul
+            class="files-list"
+            {@attach highlight({ rows: "[data-files-row]" })}
+          >
+            {#each attachmentHits as file (file.id)}
+              <li class="files-item attachment" data-files-row>
+                {#if file.open.kind === "file"}
+                  {#if file.open.href}
+                    <a
+                      class="kit-item attachment-row"
+                      download={file.name}
+                      href={file.open.href}
+                      title={file.name}
+                    >
+                      {@render attachmentFace(file)}
+                    </a>
+                  {:else}
+                    <!-- Its harness's copy names only the first characters
+                         of its hash: the hub can't serve it, so it is a
+                         plain row, and Show in conversation still finds
+                         where it was sent. -->
+                    <span class="kit-item attachment-row" title={file.name}>
+                      {@render attachmentFace(file)}
+                    </span>
+                  {/if}
+                {:else}
+                  <button
                     class="kit-item attachment-row"
-                    download={file.name}
-                    href={file.open.href}
+                    onclick={(event) =>
+                      openAttachment(file, event.currentTarget)}
                     title={file.name}
+                    type="button"
                   >
                     {@render attachmentFace(file)}
-                  </a>
-                {:else}
-                  <!-- Its harness's copy names only the first characters of
-                       its hash: the hub can't serve it, the transcript still
-                       shows where it was sent. -->
-                  <span class="kit-item attachment-row" title={file.name}>
-                    {@render attachmentFace(file)}
-                  </span>
+                  </button>
                 {/if}
-              {:else}
-                <button
-                  class="kit-item attachment-row"
-                  onclick={(event) => openAttachment(file, event.currentTarget)}
-                  title={file.name}
-                  type="button"
-                >
-                  {@render attachmentFace(file)}
-                </button>
-              {/if}
-              <button
-                aria-label="Show {file.name} in conversation"
-                class="show touch-hit"
-                data-files-show
-                onclick={() => onshow(file)}
-                title="Show in conversation"
-                type="button"
+                <Button
+                  aria-label="Show {file.name} in conversation"
+                  class="files-show"
+                  data-files-show
+                  icon={IconChevronRight}
+                  onclick={() => onshow(file)}
+                  size="icon-xs"
+                  title="Show in conversation"
+                  variant="ghost"
+                />
+              </li>
+            {/each}
+          </ul>
+        </div>
+        {@render moreSign("attachments")}
+      {:else}
+        <div
+          aria-busy="true"
+          aria-label="Reading attachments"
+          class="files-scroll files-wait"
+          data-files-wait="attachments"
+          role="status"
+          out:leave
+        >
+          {#each [0.46, 0.34] as share (share)}
+            <div class="files-ghost-row">
+              <span class="lead" data-box><Skeleton class="ghost-glyph" /></span
               >
-                <IconChevronRight aria-hidden="true" />
-              </button>
-            </li>
+              <Skeleton
+                class="ghost-name"
+                style="inline-size: {share * 100}%"
+              />
+              <Skeleton class="ghost-age" />
+            </div>
           {/each}
-        </ul>
-      </div>
-      {@render moreSign("attachments")}
+        </div>
+      {/if}
     </div>
   {/if}
 {/snippet}
@@ -584,13 +652,23 @@
 {/snippet}
 
 <style>
+  /* Files' column: the search, then the regions or the segmented list,
+     filling what its card or its drawer gives it. */
+  .files {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-block-size: 0;
+  }
   /* The two regions share the panel's height. Each track starts at its
      floor (its head and a card, two rows, one, or its own words) and grows
      toward what it holds; the room left is shared out evenly between the
      tracks still growing (grid track sizing), so a short region keeps all
-     of itself and a long one takes the rest, and two long ones split it. */
+     of itself and a long one takes the rest, and two long ones split it.
+     On a short window (a landscape phone's, a desk at 200% zoom) the floors
+     are each region's head alone, so both heads stay in sight and the rows
+     scroll under them. */
   .files-regions {
-    --head-h: 32px;
     /* The second region's rule and the space either side of it. */
     --region-seam: calc(1px + 2 * var(--space-2));
     --artifacts-min: min-content;
@@ -603,31 +681,44 @@
       minmax(var(--attachments-min), auto);
     align-content: start;
 
-    /* A card's height: a landscape thumbnail and its two lines. */
-    &[data-artifacts-floor="cards"] {
-      --artifacts-min: calc(var(--head-h) + 4 * var(--c-artifact-row-h));
+    @media (height < 560px) {
+      &[data-artifacts-floor="cards"] {
+        --artifacts-min: var(--c-section-head-h);
+      }
+      &:is([data-attachments-floor="two"], [data-attachments-floor="one"]) {
+        --attachments-min: calc(var(--c-section-head-h) + var(--region-seam));
+      }
     }
-    &[data-attachments-floor="two"] {
-      --attachments-min: calc(
-        var(--head-h) + 2 * var(--c-artifact-row-h) + var(--region-seam)
-      );
-    }
-    &[data-attachments-floor="one"] {
-      --attachments-min: calc(
-        var(--head-h) + var(--c-artifact-row-h) + var(--region-seam)
-      );
+    @media (height >= 560px) {
+      /* A card's height: a landscape thumbnail and its two lines. */
+      &[data-artifacts-floor="cards"] {
+        --artifacts-min: calc(
+          var(--c-section-head-h) + 4 * var(--c-artifact-row-h)
+        );
+      }
+      &[data-attachments-floor="two"] {
+        --attachments-min: calc(
+          var(--c-section-head-h) + 2 * var(--c-artifact-row-h) +
+            var(--region-seam)
+        );
+      }
+      &[data-attachments-floor="one"] {
+        --attachments-min: calc(
+          var(--c-section-head-h) + var(--c-artifact-row-h) + var(--region-seam)
+        );
+      }
     }
   }
   /* The phone's one list: the kit's segmented control under the search,
      the chosen list filling what is left of the drawer with its own scroll. */
-  :global(.files-tabs) {
+  .files :global(.files-tabs) {
     flex: 1;
     min-block-size: 0;
   }
-  :global(.files-segments) {
+  .files :global(.files-segments) {
     margin-block-start: var(--space-1);
   }
-  :global(.files-pane) {
+  .files :global(.files-pane) {
     display: flex;
     flex-direction: column;
     min-block-size: 0;
@@ -655,6 +746,11 @@
     flex: none;
     margin-block-end: var(--space-1);
 
+    /* The field's ring, drawn on the field, not the bare input. */
+    & :global([data-slot="finder-field"]:has(input:focus-visible)) {
+      outline: var(--focus-ring-width) solid var(--focus-ring);
+      outline-offset: var(--focus-ring-inset);
+    }
     /* Under a finger the words stand at 16px, so iOS doesn't zoom. */
     @media (pointer: coarse) {
       & :global(input) {
@@ -662,21 +758,33 @@
       }
     }
   }
-  /* A region's scroll and the "N more" sign standing over its foot. */
+  /* A region's scroll, its read and its skeleton in one place, and the
+     "N more" sign standing over its foot. */
   .files-body {
     position: relative;
-    display: flex;
+    display: grid;
     flex: 1 1 auto;
-    flex-direction: column;
     min-block-size: 0;
+
+    & > :global(*) {
+      grid-area: 1 / 1;
+    }
   }
+  /* Each region's own scroll, with the house fade at its foot while more is
+     below, at its full length on every width as Caw's panel has it; padded
+     at its end so a row's Show in conversation keeps its touch area. */
   .files-scroll {
-    flex: 1 1 auto;
+    --fade-len: 40px;
     min-block-size: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    padding-inline-end: var(--space-3);
+    margin-inline-end: calc(-1 * var(--space-3));
     scrollbar-width: thin;
     scrollbar-color: var(--border-control) transparent;
+  }
+  .files-wait {
+    overflow: hidden;
   }
   /* The sign at the region's trailing foot, over its fade, clear of the
      scrollbar. */
@@ -693,10 +801,13 @@
     flex: none;
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-block-size: var(--head-h, 32px);
+    gap: var(--c-row-inset);
+    min-block-size: var(--c-section-head-h);
     margin: 0;
-    padding-inline: calc(10px - (var(--c-row-lead) - var(--icon-md)) / 2) 10px;
+    padding-inline: calc(
+        var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2
+      )
+      var(--c-row-inset);
     color: var(--ink-strong);
     font: var(--type-label);
   }
@@ -730,7 +841,8 @@
      the head's glyph. */
   .files-scroll > :global([data-files-cards]) {
     padding-inline: calc(
-      (10px - (var(--c-row-lead) - var(--icon-md)) / 2) - var(--space-1)
+      (var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2) -
+        var(--space-1)
     );
     padding-block-end: var(--space-6);
   }
@@ -751,10 +863,12 @@
     position: relative;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--c-row-inset);
     inline-size: 100%;
     min-block-size: var(--c-artifact-row-h);
-    padding-inline: calc(10px - (var(--c-row-lead) - var(--icon-md)) / 2)
+    padding-inline: calc(
+        var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2
+      )
       calc(var(--c-btn-h-xs) + var(--space-2));
     border: 0;
     background: none;
@@ -763,6 +877,11 @@
     text-decoration: none;
     cursor: pointer;
     user-select: none;
+
+    /* Inside its scroller the ring stands within its own edge. */
+    &:focus-visible {
+      outline-offset: var(--focus-ring-inset);
+    }
   }
   span.attachment-row {
     cursor: default;
@@ -815,67 +934,46 @@
       font-variant-numeric: tabular-nums;
     }
   }
-  .show {
+  /* Show in conversation: the kit's ghost icon button at the row's end,
+     shown on the row's hover and focus, and always under a finger. */
+  .files :global(.files-show) {
     position: absolute;
     inset-block-start: 50%;
     inset-inline-end: var(--space-1);
     translate: 0 -50%;
-    display: grid;
-    place-items: center;
-    inline-size: var(--c-btn-h-xs);
-    block-size: var(--c-btn-h-xs);
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
     color: var(--ink-muted);
-    cursor: pointer;
     opacity: 0;
-    transition:
-      opacity var(--dur-control) var(--ease-out),
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
+    transition: opacity var(--dur-control) var(--ease-out);
   }
-  .attachment:is(:hover, :focus-within) .show {
+  .files :global(.attachment:is(:hover, :focus-within) .files-show) {
     opacity: 1;
   }
-  @media (hover: hover) {
-    .show:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
   @media (pointer: coarse) {
-    .show {
+    .files :global(.files-show) {
       opacity: 1;
     }
   }
   .files-none {
     display: flex;
     align-items: center;
-    min-block-size: 32px;
+    min-block-size: var(--c-section-head-h);
     margin: 0;
-    padding-inline: 10px;
+    padding-inline: var(--c-row-inset);
     color: var(--ink-muted);
     font: var(--type-meta);
     overflow-wrap: anywhere;
-  }
-  .files-wait {
-    display: grid;
   }
   /* A row as it will stand (The Claim Of Nothing Rule: the skeleton at the
      real layout's size). */
   .files-ghost-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--c-row-inset);
     min-block-size: var(--c-artifact-row-h);
-    padding-inline: calc(10px - (var(--c-row-lead) - var(--icon-md)) / 2) 10px;
+    padding-inline: calc(
+        var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2
+      )
+      var(--c-row-inset);
   }
   .files-ghost-row :global(.ghost-glyph) {
     inline-size: var(--icon-md);
@@ -892,56 +990,7 @@
     inline-size: 2ch;
     margin-inline-start: auto;
   }
-  :global(.files-empty) {
+  .files :global(.files-empty) {
     flex: 1;
-  }
-  /* The list read failed: the error formula (what happened, what is safe,
-     how to fix it), Try again first, the hub's own words a fold away. */
-  .files-failed {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-6) var(--space-3);
-    text-align: center;
-  }
-  .files-failed :global(.files-failed-mark) {
-    inline-size: var(--icon-lg);
-    block-size: var(--icon-lg);
-    color: var(--status-fail-glyph);
-  }
-  .files-failed-title {
-    margin: 0;
-    color: var(--ink-strong);
-    font: var(--type-label);
-    text-wrap: balance;
-  }
-  .files-failed-line {
-    max-inline-size: 60ch;
-    margin: 0;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    text-wrap: pretty;
-  }
-  .files-failed-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-2);
-    margin-block-start: var(--space-1);
-  }
-  .files-failed-why {
-    align-self: stretch;
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--code-bg);
-    color: var(--ink-strong);
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    text-align: start;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    user-select: text;
   }
 </style>

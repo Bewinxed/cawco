@@ -13,8 +13,10 @@
    *
    * As many columns as the region holds at `--card-min`, each card going to
    * the column whose foot stands highest, in order, so newest-first reads
-   * across the top. Every card's shape is known before its picture loads
-   * (the hub keeps each picture's size), so nothing moves as they arrive.
+   * across the top: one grid of `--space-1` rows, each card spanning its own
+   * height, packed dense, in list order in the DOM. Every card's shape is
+   * known before its picture loads (the hub keeps each picture's size), so
+   * nothing moves as they arrive.
    * The one on show wears the list's selection pill (highlight, its grid
    * axis).
    */
@@ -24,8 +26,10 @@
     artifactWords,
   } from "@cawco/core";
   import type { Component } from "svelte";
-  import { SvelteSet } from "svelte/reactivity";
+  import type { Attachment } from "svelte/attachments";
+  import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";
   import {
     IconArtifactCanvas,
     IconArtifactPage,
@@ -40,11 +44,14 @@
   let {
     cards,
     chosen = null,
+    ghosts = 0,
     onpick,
   }: {
     cards: ArtifactCard[];
     /** The artifact on show beside Files. */
     chosen?: string | null;
+    /** Skeleton cards standing for a list still read. */
+    ghosts?: number;
     onpick: (artifact: ArtifactSummary) => void;
   } = $props();
 
@@ -70,10 +77,13 @@
       ? Math.min(thumbnail.height / thumbnail.width, TALLEST)
       : PANE;
 
+  /** One masonry row's height: a card spans as many as it is tall. */
+  const ROW_UNIT = "--space-1";
   let box = $state<HTMLDivElement>();
   let width = $state(0);
   let cardMin = $state(1);
   let gap = $state(0);
+  let unit = $state(4);
   $effect(() => {
     if (!box) {
       return;
@@ -81,6 +91,7 @@
     const styles = getComputedStyle(box);
     cardMin = Number.parseFloat(styles.getPropertyValue("--card-min")) || 1;
     gap = Number.parseFloat(styles.columnGap) || 0;
+    unit = Number.parseFloat(styles.getPropertyValue(ROW_UNIT)) || 4;
     const seen = new ResizeObserver(([entry]) => {
       ({ width } = entry.contentRect);
     });
@@ -91,18 +102,45 @@
   const count = $derived(
     width > 0 ? Math.max(1, Math.floor((width + gap) / (cardMin + gap))) : 1
   );
-  /** Each card to the column whose foot stands highest, in order. */
-  const columns = $derived.by(() => {
+  const columnWidth = $derived(
+    width > 0 ? (width - gap * (count - 1)) / count : cardMin
+  );
+  /** Each card's height as drawn, by id; until drawn, its shape's. */
+  const drawn = new SvelteMap<string, number>();
+  /** A card's words under its picture, before it is drawn: one line and its meta, two more with a hit. */
+  const WORDS_PX = 44;
+  const WITHIN_PX = 36;
+  const heightOf = (card: ArtifactCard) =>
+    drawn.get(card.artifact.id) ??
+    columnWidth * shape(card.artifact) +
+      WORDS_PX +
+      (card.within ? WITHIN_PX : 0);
+  /**
+   * Each card in list order, to the column whose foot stands highest, with
+   * the rows it spans: drawn once, in one grid, so Tab and a screen reader
+   * read them newest first across the top, as the eye does.
+   */
+  const placed = $derived.by(() => {
     const feet = Array.from({ length: count }, () => 0);
-    const lanes: ArtifactCard[][] = Array.from({ length: count }, () => []);
-    for (const card of cards) {
+    return cards.map((card) => {
       const lane = feet.indexOf(Math.min(...feet));
-      lanes[lane].push(card);
-      // The words count as a share of the width: one line, two with a hit.
-      feet[lane] += shape(card.artifact) + (card.within ? 0.62 : 0.36);
-    }
-    return lanes;
+      const span = Math.ceil((heightOf(card) + gap) / unit);
+      feet[lane] += span;
+      return { card, lane, span };
+    });
   });
+  /** Keeps each card's drawn height, so its span is its own. */
+  const measured: Attachment<HTMLElement> = (node) => {
+    const id = node.dataset.artifact ?? "";
+    const seen = new ResizeObserver(([entry]) => {
+      const height = entry.borderBoxSize[0]?.blockSize ?? 0;
+      if (height > 0 && Math.abs((drawn.get(id) ?? 0) - height) > 0.5) {
+        drawn.set(id, height);
+      }
+    });
+    seen.observe(node);
+    return () => seen.disconnect();
+  };
 </script>
 
 <div
@@ -116,68 +154,80 @@
     axis: "xy",
   })}
 >
-  {#each columns as lane, i (i)}
-    <div class="lane">
-      {#each lane as card (card.artifact.id)}
-        {@const artifact = card.artifact}
-        {@const Glyph = GLYPHS[artifact.kind]}
-        <!-- mark-line: the picture stands over the words; the caption is the card's mark line -->
-        <button
-          aria-current={artifact.id === chosen || undefined}
-          class="card"
-          data-artifact={artifact.id}
-          data-files-card
-          onclick={() => onpick(artifact)}
-          title={artifact.name}
-          type="button"
+  {#if ghosts > 0}
+    <!-- The Claim Of Nothing Rule: cards as they will stand, the pane's
+         well and a caption line, in the masonry's own columns. -->
+    {#each Array.from({ length: ghosts }, (_, i) => i) as i (i)}
+      <div
+        aria-hidden="true"
+        class="card ghost"
+        data-files-ghost
+        style:grid-column={(i % count) + 1}
+        style:grid-row-end="span {Math.ceil(
+          (columnWidth * PANE + WORDS_PX + gap) / unit
+        )}"
+      >
+        <Skeleton class="ghost-well" />
+        <Skeleton class="ghost-name" />
+      </div>
+    {/each}
+  {/if}
+  {#each placed as { card, lane, span } (card.artifact.id)}
+    {@const artifact = card.artifact}
+    {@const Glyph = GLYPHS[artifact.kind]}
+    <!-- mark-line: the picture stands over the words; the caption is the card's mark line -->
+    <button
+      aria-current={artifact.id === chosen || undefined}
+      class="card"
+      data-artifact={artifact.id}
+      data-files-card
+      style:grid-column={lane + 1}
+      style:grid-row-end="span {span}"
+      {@attach measured}
+      onclick={() => onpick(artifact)}
+      title={artifact.name}
+      type="button"
+    >
+      <span
+        class="well"
+        data-files-thumb={pictured(artifact) ? "picture" : "glyph"}
+        style:aspect-ratio="1 / {shape(artifact)}"
+      >
+        {#if artifact.thumbnail && pictured(artifact)}
+          <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a picture that fails to load stands as its kind's glyph. -->
+          <img
+            alt=""
+            decoding="async"
+            loading="lazy"
+            onerror={() => broken.add(artifact.id)}
+            src={thumbnailUrl(artifact.id, artifact.thumbnail, theme.resolved)}
+          />
+        {:else}
+          <Glyph aria-hidden="true" class="well-glyph" />
+        {/if}
+      </span>
+      <span class="caption mark-line">
+        <Glyph aria-hidden="true" class="glyph" />
+        <span class="name">{artifact.name}</span>
+      </span>
+      <span class="meta">
+        <span class="num">{formatAgeShort(Date.parse(artifact.createdAt))}</span
+        >{#if artifact.promoted}<span aria-hidden="true">·</span><span
+            class="promoted"
+            title={artifactWords.promotedTitle(artifact.name)}
+            >{artifactWords.promoted(
+              artifact.promoted.commit.slice(0, 7)
+            )}</span
+          >{/if}
+      </span>
+      {#if card.within}
+        <span class="within" data-files-within
+          >“{#each card.within as part, j (j)}{#if part.matched}<mark
+                >{part.text}</mark
+              >{:else}{part.text}{/if}{/each}”</span
         >
-          <span
-            class="well"
-            data-files-thumb={pictured(artifact) ? "picture" : "glyph"}
-            style:aspect-ratio="1 / {shape(artifact)}"
-          >
-            {#if artifact.thumbnail && pictured(artifact)}
-              <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a picture that fails to load stands as its kind's glyph. -->
-              <img
-                alt=""
-                decoding="async"
-                loading="lazy"
-                onerror={() => broken.add(artifact.id)}
-                src={thumbnailUrl(
-                  artifact.id,
-                  artifact.thumbnail,
-                  theme.resolved
-                )}
-              />
-            {:else}
-              <Glyph aria-hidden="true" class="well-glyph" />
-            {/if}
-          </span>
-          <span class="caption mark-line">
-            <Glyph aria-hidden="true" class="glyph" />
-            <span class="name">{artifact.name}</span>
-          </span>
-          <span class="meta">
-            <span class="num"
-              >{formatAgeShort(Date.parse(artifact.createdAt))}</span
-            >{#if artifact.promoted}<span aria-hidden="true">·</span><span
-                class="promoted"
-                title={artifactWords.promotedTitle(artifact.name)}
-                >{artifactWords.promoted(
-                  artifact.promoted.commit.slice(0, 7)
-                )}</span
-              >{/if}
-          </span>
-          {#if card.within}
-            <span class="within" data-files-within
-              >“{#each card.within as part, j (j)}{#if part.matched}<mark
-                    >{part.text}</mark
-                  >{:else}{part.text}{/if}{/each}”</span
-            >
-          {/if}
-        </button>
-      {/each}
-    </div>
+      {/if}
+    </button>
   {/each}
 </div>
 
@@ -189,13 +239,10 @@
     position: relative;
     display: grid;
     grid-template-columns: repeat(var(--lanes), minmax(0, 1fr));
+    grid-auto-rows: var(--space-1);
+    grid-auto-flow: dense;
     column-gap: var(--space-2);
     align-items: start;
-  }
-  .lane {
-    display: grid;
-    gap: var(--space-2);
-    min-inline-size: 0;
   }
   /* The card: the thumbnail and its words on one surface, a space-1 inset
      so the hover ghost and the pill frame the picture; its corner the
@@ -211,6 +258,28 @@
     color: var(--ink-strong);
     text-align: start;
     cursor: pointer;
+
+    /* Inside its scroller the ring stands within its own edge. */
+    &:focus-visible {
+      outline-offset: var(--focus-ring-inset);
+    }
+  }
+  /* A card as it will stand while the list is read: the pane's well and a
+     caption line. */
+  .ghost {
+    cursor: default;
+
+    & :global(.ghost-well) {
+      inline-size: 100%;
+      aspect-ratio: 16 / 10;
+      border-radius: var(--radius-sm);
+    }
+    & :global(.ghost-name) {
+      inline-size: 60%;
+      block-size: 1ex;
+      margin-block: var(--space-2);
+      border-radius: var(--radius-hair);
+    }
   }
   /* The picture in a well (DESIGN.md, Surfaces: `surface-well` with
      `border-well`, "a content well inside a raised card"): the well's ground

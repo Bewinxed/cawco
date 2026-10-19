@@ -38,6 +38,7 @@
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
+  import { deletePreview } from "./artifact-api";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import { barStrip } from "./bar-strip.svelte";
   import { cawco } from "./client.svelte";
@@ -834,12 +835,20 @@
     followFiles(files.session);
   });
   // Files put away (or another card in its place): the file floating beside
-  // it goes, and the split takes the panel back.
+  // it goes. The split takes the panel back only if it held it before Files
+  // opened it; otherwise the panel closes, so no conversation moves for a
+  // panel the person had shut.
   $effect(() => {
-    if (barGlass.open !== "files" && files.picked) {
+    const { picked } = files;
+    if (barGlass.open !== "files" && picked) {
       untrack(() => {
         files.picked = null;
       });
+      if (!picked.panelWasOpen) {
+        deletePreview(picked.instanceId).catch((error: unknown) => {
+          console.error("The panel Files opened did not close", error);
+        });
+      }
     }
   });
   // Files is a card of the wide bar's glass, and a drawer on a phone: one
@@ -857,6 +866,7 @@
   );
   /** Files' drawer, from the sidebar's row: the sidebar goes as it rises. */
   function openFilesSheet() {
+    files.returnTo = burger;
     railOpen = false;
     files.sheet = true;
   }
@@ -1058,10 +1068,10 @@
           {/if}
         </div>
 
-        <!-- The trailing edge, one glass group (Apple HIG, Toolbars): Jump,
-             the machines, then Caw's head last, at the edge. A phone keeps
-             Jump and the machines in its sidebar, so its group holds Caw
-             alone. -->
+        <!-- The trailing edge, one glass group (Apple HIG, Toolbars): on a
+             conversation Files first, then Jump, the machines, then Caw's
+             head last, at the edge. A phone keeps Files, Jump and the
+             machines in its sidebar, so its group holds Caw alone. -->
         <div class="right">
           <div
             data-slot="tools"
@@ -1071,7 +1081,7 @@
             data-joined={barGlass.joined ? "" : undefined}
           >
             <!-- The glass as one shape with the card hanging from it while
-                 one does (bar-glass: Caw's panel, the machines, Jump). -->
+                 one does (bar-glass: Caw's panel, the machines, Jump, Files). -->
             <span data-slot="join" aria-hidden="true" class="join"></span>
             {#if railed && files.session}
               <!-- Files, the conversation on screen's artifacts and
@@ -1611,6 +1621,27 @@
     color: var(--ink-strong);
     cursor: pointer;
     transition: var(--transition-control);
+  }
+  /* An item with its number (the machines', Files'): a plain item widened
+     by its number, its ink as far inside its edges as a plain item's: the
+     symbol's box the plain item's inset in (the item less its symbol,
+     halved), the number --space-2 past the symbol, and after the number the
+     same inset and the symbol's grid margin (Solar draws on 24 units, 2
+     clear on each side: 1/12 of the box), which a number's glyphs do not
+     keep, so its ink ends where a symbol's would. Every item the group's
+     gap from the next, the group reads at one spacing between its items'
+     ink, its number held closer to its symbol than to the item beside it.
+     With no number it is a plain item. */
+  .tools :global(.bar-item[data-counted]) {
+    --mark-inset: calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2);
+    gap: var(--space-2);
+    padding-inline: var(--mark-inset)
+      calc(var(--mark-inset) + var(--c-bar-symbol) / 12);
+  }
+  .tools :global(.bar-item .num) {
+    font: var(--type-label);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   /* An item's symbol, named so: an item may draw more than its symbol
      (Caw's rim is an SVG too). */

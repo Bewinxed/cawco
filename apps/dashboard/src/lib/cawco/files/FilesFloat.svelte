@@ -5,24 +5,25 @@
    * conversation) floating on Files' leading side, the two tops on one
    * line, its trailing edge `--space-3` clear of Files and never nearer the
    * rail than the same (owner: "selecting a file opens it floating on the
-   * left"). It is the split's share of the page (Split's 45%) at most.
+   * left"), the split's share of the page at most (files `floatPlace`).
    * Neither it nor Files moves the conversation; no scrim. While it stands
-   * the split leaves the panel to it (SideSplit `floatingPanel`); Files put
-   * away, the split takes the panel back. The panel's Close closes it.
+   * the split leaves the panel to it (SideSplit `floatingPanel`).
+   *
+   * A region named for the artifact, placed in the page after Files' card,
+   * so Tab goes on from Files into it. Chosen from the keyboard, the focus
+   * goes to the panel's name; the panel's own Close closes it and gives the
+   * focus back to the artifact's card in Files. It comes and goes as every
+   * floating surface (`kit-pop`'s `data-state`), standing closed for
+   * `--dur-exit` before it leaves the page.
    */
   import { untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
+  import { dur } from "../motion/curves.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
-  import { files } from "./files.svelte";
-
-  /** The place the float stands, read off Files' card and the rail. */
-  let place = $state<{ top: number; right: number; width: number } | null>(
-    null
-  );
-  /** The split's share of the page (Split). */
-  const SHARE = 0.45;
+  import { files, floatPlace } from "./files.svelte";
 
   const picked = $derived(barGlass.open === "files" ? files.picked : null);
   const preview = $derived(
@@ -32,13 +33,57 @@
     !!picked && preview?.state === "open" && preview.artifact.id === picked.id
   );
 
-  // The panel closed (its Close, or the agent's), or showing another: the
-  // float goes, and Files' card keeps standing.
+  /** What stands: the pick on show, kept closed for its exit after it goes. */
+  let standing = $state<{
+    instanceId: string;
+    id: string;
+    name: string;
+    open: boolean;
+  } | null>(null);
+  let place = $state<ReturnType<typeof floatPlace>>(null);
+  let node = $state<HTMLElement | null>(null);
+
+  $effect(() => {
+    if (showing && picked && preview) {
+      const next = {
+        instanceId: picked.instanceId,
+        id: picked.id,
+        name: preview.artifact.name,
+        open: true,
+      };
+      untrack(() => {
+        standing = next;
+      });
+      return;
+    }
+    const was = untrack(() => standing);
+    if (!was?.open) {
+      return;
+    }
+    untrack(() => {
+      standing = { ...was, open: false };
+    });
+    const gone = setTimeout(() => {
+      if (standing && !standing.open) {
+        standing = null;
+      }
+    }, dur("--dur-exit"));
+    return () => clearTimeout(gone);
+  });
+
+  // The panel closed (its Close, or the agent's): the float goes, Files
+  // stays, and the focus goes back to the artifact's card.
   $effect(() => {
     if (picked && preview && preview.state !== "open") {
+      const { id } = picked;
       untrack(() => {
         files.picked = null;
       });
+      document
+        .querySelector<HTMLElement>(
+          `.files-pop [data-files-card][data-artifact="${CSS.escape(id)}"]`
+        )
+        ?.focus({ preventScroll: true });
     }
   });
 
@@ -50,30 +95,25 @@
     }
   });
 
+  // Chosen from the keyboard: the focus goes to the panel's name, once it stands.
   $effect(() => {
-    if (!picked) {
+    const at = node;
+    if (!(at && showing && picked?.byKeyboard)) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      at.querySelector<HTMLElement>("[data-artifact-trigger]")?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+
+  $effect(() => {
+    if (!standing) {
       place = null;
       return;
     }
-    const gap = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--space-3")
-    );
     const measure = () => {
-      const card = document.querySelector<HTMLElement>(".kit-pop.files-pop");
-      if (!card) {
-        return;
-      }
-      const box = card.getBoundingClientRect();
-      const rail =
-        document
-          .querySelector<HTMLElement>("[data-slot='rail']")
-          ?.getBoundingClientRect().right ?? 0;
-      const room = box.left - gap - (rail + gap);
-      place = {
-        top: box.top,
-        right: window.innerWidth - box.left + gap,
-        width: Math.max(0, Math.min((window.innerWidth - rail) * SHARE, room)),
-      };
+      place = floatPlace() ?? place;
     };
     measure();
     const card = document.querySelector<HTMLElement>(".kit-pop.files-pop");
@@ -84,32 +124,43 @@
     seen.observe(document.documentElement);
     return () => seen.disconnect();
   });
+
+  /** Placed after Files' card in the page, so Tab goes on from Files into it. */
+  const afterFiles: Attachment<HTMLElement> = (element) => {
+    document.body.append(element);
+    return () => element.remove();
+  };
 </script>
 
-{#if picked && showing && place}
-  <div
+{#if standing && place}
+  <section
+    bind:this={node}
+    aria-label={standing.name}
     class="kit-pop files-float"
     data-files-float
-    data-state="open"
+    data-side="left"
+    data-state={standing.open ? "open" : "closed"}
+    inert={!standing.open}
     style:--float-top="{place.top}px"
     style:inset-block-start="{place.top}px"
     style:inset-inline-end="{place.right}px"
     style:inline-size="{place.width}px"
+    {@attach afterFiles}
   >
     <RegionBoundary region="preview">
-      <PreviewPane instanceId={picked.instanceId} onScreen />
+      <PreviewPane instanceId={standing.instanceId} onScreen />
     </RegionBoundary>
-  </div>
+  </section>
 {/if}
 
 <style>
-  /* css-scope .files-float: the chosen artifact's floating panel, a kit popover */
-  /* A floating panel: the kit popover (its raised surface, radius and
-     overlay shadow), edge to edge inside, as tall as Caw's panel or the
-     room under the glass less the 11px kept from the screen's foot. Its edge
-     is the row outline's, which holds 3:1 against the raised surface and
-     the recess alike, so it stands clear of the page by day too. */
-  :global(.kit-pop.files-float) {
+  /* A floating panel: the kit popover (its raised surface, radius, overlay
+     shadow, and its open and close on `data-state`), edge to edge inside,
+     as tall as Caw's panel or the room under the glass less the 11px kept
+     from the screen's foot. Its edge is the row outline's, which holds 3:1
+     against the raised surface and the recess alike, so it stands clear of
+     the page by day too. */
+  .files-float {
     position: fixed;
     z-index: 50;
     display: flex;
@@ -122,21 +173,9 @@
     overflow: hidden;
     border-color: var(--border-row-outline);
   }
-  :global(.kit-pop.files-float [data-slot="side-card"]) {
+  .files-float :global([data-slot="side-card"]) {
     flex: 1;
     border-radius: 0;
     box-shadow: none;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.kit-pop.files-float) {
-      transition:
-        opacity var(--dur-panel) var(--ease-drawer),
-        translate var(--dur-panel) var(--ease-drawer);
-
-      @starting-style {
-        opacity: 0;
-        translate: var(--space-3) 0;
-      }
-    }
   }
 </style>

@@ -335,6 +335,8 @@ export type TokenSize =
   | "size.c-starter-h"
   | "size.c-starters-w"
   | "size.c-row-lead"
+  | "size.c-section-head-h"
+  | "size.c-row-inset"
   | "size.c-row-h"
   | "size.c-routine-time-w"
   | "size.c-grid-4"

@@ -62,7 +62,20 @@
   shouldScaleBackground={false}
   snapPoints={SNAPS}
 >
-  <Drawer.Content class="files-drawer" data-files-sheet>
+  <Drawer.Content
+    class="files-drawer"
+    data-files-sheet
+    onCloseAutoFocus={(event: Event) => {
+      // Opened from the sidebar, which went as it rose: the focus goes back
+      // to what invoked the sidebar, the burger.
+      const back = files.returnTo;
+      files.returnTo = null;
+      if (back?.isConnected) {
+        event.preventDefault();
+        back.focus();
+      }
+    }}
+  >
     <Drawer.Header>
       <Drawer.Title>Files</Drawer.Title>
     </Drawer.Header>

@@ -8,6 +8,7 @@ import type {
   ArtifactHit,
   ArtifactSummary,
   ArtifactThumbnail,
+  SessionAttachments,
   ShownFailure,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -31,6 +32,22 @@ export async function listArtifacts(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
   return (await ok(await fetch(artifactsPath(instanceId)))).json();
+}
+
+/**
+ * A session's attachments, read off its whole transcript on the hub, newest
+ * first (core `SessionAttachments`): Files' Attachments.
+ */
+export async function listAttachments(
+  instanceId: string
+): Promise<SessionAttachments> {
+  return (
+    await ok(
+      await fetch(
+        `/api/instances/${encodeURIComponent(instanceId)}/attachments`
+      )
+    )
+  ).json();
 }
 
 /**

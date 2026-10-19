@@ -622,6 +622,10 @@ public enum Size {
     public static let cStartersW: Double = 725
     /// A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after.
     public static let cRowLead: Double = 28
+    /// A section's head inside a floating panel (Files' Artifacts and Attachments, as Caw's panel heads his): its glyph, its name in the label role and its count, one line.
+    public static let cSectionHeadH: Double = 32
+    /// A list row's inline inset inside a floating panel (Files' rows and heads, as the menu item's 10px padding): its lead column's glyph stands this far in from the row's edge.
+    public static let cRowInset: Double = 10
     /// A routines-page row's pitch: the whole row is its own 44px opener on every pointer.
     public static let cRowH: Double = 44
     /// The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and "23h ago", or "Tomorrow 13:30", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say.

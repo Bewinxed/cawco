@@ -1744,6 +1744,39 @@ export interface ArtifactHit {
   id: string;
 }
 
+/**
+ * One attachment a session's conversation carried, as Files lists them
+ * (`GET /api/instances/:id/attachments`, newest first): a text pasted at
+ * length, a file the hub stores, or a picture, read off the whole
+ * transcript on the hub, whatever pages a reader has loaded.
+ */
+export interface SessionAttachment {
+  /** When its message was, ISO-8601; null when the harness gave no time. */
+  at: string | null;
+  /** A text's words, for reading it in place. */
+  content?: string;
+  kind: "text" | "file" | "image";
+  mediaType: string;
+  /** The message it rode, for Show in conversation (`?at=`). */
+  messageId: string;
+  /** A file's or text's name; a picture's is its place among the conversation's pictures ("Picture 3"). */
+  name: string;
+  /** Where the hub serves a file (`/api/files/<sha256>`); absent when the harness's copy names only part of its hash. */
+  ref?: string;
+  /** A file's length in bytes. */
+  size?: number;
+  /** A picture's address. */
+  src?: string;
+  /** Who sent it: the person, or the session's agent. */
+  who: "person" | "agent";
+}
+
+/** A session's attachments as Files reads them: the list, and the harness that speaks as the agent. */
+export interface SessionAttachments {
+  attachments: SessionAttachment[];
+  harness: import("./harness").HarnessKind;
+}
+
 /** An artifact's promote: the project folder's commit that holds it, and when. */
 export interface ArtifactPromotion {
   at: string;

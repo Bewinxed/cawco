@@ -4352,6 +4352,22 @@
       },
       "$description": "A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after."
     },
+    "c-section-head-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
+      "$description": "A section's head inside a floating panel (Files' Artifacts and Attachments, as Caw's panel heads his): its glyph, its name in the label role and its count, one line."
+    },
+    "c-row-inset": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$description": "A list row's inline inset inside a floating panel (Files' rows and heads, as the menu item's 10px padding): its lead column's glyph stands this far in from the row's edge."
+    },
     "c-row-h": {
       "$type": "dimension",
       "$value": {

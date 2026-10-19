@@ -95,6 +95,7 @@ export { default as IconDocument } from "~icons/solar/file-text-bold-duotone";
 /** What narrows a project's tasks (TaskFilterPopover). */
 export { default as IconFilter } from "~icons/solar/filter-bold-duotone";
 export { default as IconFire } from "~icons/solar/fire-bold-duotone";
+export { default as IconFiles } from "~icons/solar/folder-2-bold-duotone";
 export { default as IconFolder } from "~icons/solar/folder-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
 export { default as IconImage } from "~icons/solar/gallery-bold-duotone";

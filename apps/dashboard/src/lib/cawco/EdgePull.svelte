@@ -57,7 +57,9 @@
     inset-inline: 0 auto;
     z-index: 15;
     inline-size: var(--c-edge-pull);
-    touch-action: none;
+    /* A finger that goes down the edge scrolls the page under it; one that
+       goes inward is the pull's. */
+    touch-action: pan-y;
   }
   .edge[data-side="right"] {
     inset-inline: auto 0;

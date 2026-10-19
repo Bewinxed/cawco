@@ -81,7 +81,7 @@
       aria-haspopup="dialog"
       aria-label={label}
       class="bar-item machines mark-line touch-hit press-tint"
-      class:counted={count > 0}
+      data-counted={count > 0 || undefined}
       data-tone={tone}
       type="button"
     >
@@ -94,32 +94,11 @@
 </Tip>
 
 <style>
-  /* An item with its number is a plain item widened by its number, its ink
-     as far inside its edges as a plain item's: the symbol's box the plain
-     item's inset in (the item less its symbol, halved), the number
-     --space-2 past the symbol, and after the number the same inset and the
-     symbol's grid margin (Solar draws on 24 units, 2 clear on each side:
-     1/12 of the box), which a number's glyphs do not keep, so its ink ends
-     where a symbol's would. Every item the group's gap from the next, the
-     group reads at one spacing between its items' ink (Caw's round face
-     standing as much nearer as a round's overshoot), its number held closer
-     to its symbol than to the item beside it. With no number it is a plain
-     item. */
-  .machines.counted {
-    --mark-inset: calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2);
-    gap: var(--space-2);
-    padding-inline: var(--mark-inset)
-      calc(var(--mark-inset) + var(--c-bar-symbol) / 12);
-  }
   /* Named under `.machines` to outrank Shell's `.tools .bar-symbol` ink. */
   .machines[data-tone="attn"] :global(.bar-symbol) {
     color: var(--status-attn-glyph);
   }
   .machines[data-tone="fail"] :global(.bar-symbol) {
     color: var(--status-fail-glyph);
-  }
-  .num {
-    font: var(--type-label);
-    font-variant-numeric: tabular-nums;
   }
 </style>

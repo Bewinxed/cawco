@@ -3,12 +3,14 @@
  * (the owner: "there's currently no way to view all the previous artifacts
  * or files for a session easily").
  *
- * What it holds, per session: its artifacts as the hub lists them
- * (`listArtifacts`, newest first, each with the thumbnail the hub keeps of
- * it), read when Files asks and again when the session's panel frame names
- * an artifact the list has not got; and its attachments, read off the
- * transcript held here (each message's pictures, pasted texts and files,
- * the person's and what the agent sent), newest first.
+ * What it holds, per session, both read from the hub, so neither depends on
+ * the transcript pages this tab has loaded: its artifacts (`listArtifacts`,
+ * newest first, each with the thumbnail the hub keeps of it) and its
+ * attachments (`listAttachments`: every text, file and picture its
+ * conversation carried, the person's and the agent's, newest first). Each
+ * read is read when Files opens, and again once each time the session moves
+ * on (its panel frame names other artifacts, or its newest message
+ * changes). Until a read answers there is no count and no "nothing" line.
  *
  * Where it stands: on a desk, a face of the bar glass's one card (bar-glass
  * `files`, GlassCard); a file chosen there floats on Files' leading side
@@ -16,56 +18,94 @@
  * FilesSheet), opened from the sidebar's Files row or a finger from the
  * screen's right edge.
  */
-import type { ArtifactSummary } from "@cawco/core";
+import type { ArtifactSummary, SessionAttachment } from "@cawco/core";
 import { field, KIND_WORDS, matchOf, parse } from "@cawco/core/find-match";
 import { SvelteMap } from "svelte/reactivity";
-import { listArtifacts } from "../artifact-api";
+import { listArtifacts, listAttachments } from "../artifact-api";
 import { cawco } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { failureWords } from "../hub-read";
 import { extensionOf } from "../lightbox/extension";
 import { speakerName } from "../transcript/speaker";
-import type { Message } from "../types";
 
-/** One session's artifacts as Files last read them. */
-interface ArtifactsRead {
-  /** The last read's refusal, in the hub's words; null once one answered. */
+/** One of a session's lists as Files last read it. */
+export interface ListRead<T> {
+  /** The last read's refusal, in the hub's words, kept while it is read again; null once one answered. */
   failed: string | null;
   /** The list, once read; kept while a read again is on its way. */
-  list: ArtifactSummary[] | null;
+  list: T[] | null;
   reading: boolean;
 }
 
-const reads = new SvelteMap<string, ArtifactsRead>();
+/** A hub read per session, one at a time: what it holds, read, and read again. */
+class SessionReads<T> {
+  readonly #held = new SvelteMap<string, ListRead<T>>();
+  readonly #reading = new Map<string, Promise<void>>();
+  readonly #read: (instanceId: string) => Promise<T[]>;
+
+  constructor(read: (instanceId: string) => Promise<T[]>) {
+    this.#read = read;
+  }
+
+  of(instanceId: string): ListRead<T> | undefined {
+    return this.#held.get(instanceId);
+  }
+
+  /** Reads the session's list; a read on its way is the one answered. */
+  read(instanceId: string): Promise<void> {
+    const going = this.#reading.get(instanceId);
+    if (going) {
+      return going;
+    }
+    const was = this.#held.get(instanceId);
+    this.#held.set(instanceId, {
+      list: was?.list ?? null,
+      failed: was?.failed ?? null,
+      reading: true,
+    });
+    const read = this.#read(instanceId).then(
+      (list) => {
+        this.#held.set(instanceId, { list, failed: null, reading: false });
+      },
+      (error: unknown) => {
+        this.#held.set(instanceId, {
+          list: was?.list ?? null,
+          failed: failureWords(error),
+          reading: false,
+        });
+      }
+    );
+    const done = read.finally(() => {
+      this.#reading.delete(instanceId);
+    });
+    this.#reading.set(instanceId, done);
+    return done;
+  }
+}
+
+const artifactReads = new SessionReads<ArtifactSummary>(listArtifacts);
+/** The harness each session's attachments were read under, for who sent them. */
+const harnessOf = new SvelteMap<string, string>();
+const attachmentReads = new SessionReads<SessionAttachment>(
+  async (instanceId) => {
+    const read = await listAttachments(instanceId);
+    harnessOf.set(instanceId, read.harness);
+    return read.attachments;
+  }
+);
 
 /** The session's artifacts as last read (undefined: never asked). */
-export const artifactsOf = (instanceId: string): ArtifactsRead | undefined =>
-  reads.get(instanceId);
+export const artifactsOf = (
+  instanceId: string
+): ListRead<ArtifactSummary> | undefined => artifactReads.of(instanceId);
 
-/** Reads the session's artifacts; one read at a time per session. */
-export function readArtifacts(instanceId: string): void {
-  const was = reads.get(instanceId);
-  if (was?.reading) {
-    return;
-  }
-  reads.set(instanceId, {
-    list: was?.list ?? null,
-    failed: null,
-    reading: true,
-  });
-  listArtifacts(instanceId).then(
-    (list) => {
-      reads.set(instanceId, { list, failed: null, reading: false });
-    },
-    (error: unknown) => {
-      reads.set(instanceId, {
-        list: was?.list ?? null,
-        failed: failureWords(error),
-        reading: false,
-      });
-    }
-  );
-}
+/** Reads the session's artifacts again; its promise settles once the hub answered. */
+export const readArtifacts = (instanceId: string): Promise<void> =>
+  artifactReads.read(instanceId);
+
+/** Reads the session's attachments again; its promise settles once the hub answered. */
+export const readAttachments = (instanceId: string): Promise<void> =>
+  attachmentReads.read(instanceId);
 
 /** An artifact as Files' cards draw it. */
 export interface ArtifactCard {
@@ -85,7 +125,7 @@ export type AttachmentOpen =
 export interface AttachmentRow {
   /** When its message was, epoch ms; null when the harness gave no time. */
   at: number | null;
-  /** Its message's id and its place in it. */
+  /** Its message's id and its place among the list. */
   id: string;
   /** Its kind in a word: "PNG", "Markdown", "Text". */
   kind: string;
@@ -115,89 +155,65 @@ const KIND_OF_EXTENSION: Record<string, string> = {
   swift: "Swift",
   svelte: "Svelte",
 };
-const kindOf = (name: string, mediaType?: string): string => {
+const kindOf = (name: string, mediaType: string): string => {
   const extension = extensionOf(name);
   if (extension) {
     return KIND_OF_EXTENSION[extension] ?? extension.toUpperCase();
   }
-  const sub = mediaType?.split("/")[1]?.split("+")[0];
+  const sub = mediaType.split("/")[1]?.split("+")[0];
   return sub ? sub.toUpperCase() : "File";
 };
 
-/** A file's hub address from its reference (`/api/files/<sha256>`), when the line named the whole hash. */
+/** A file's hub address (`/api/files/<sha256>`), when its line named the whole hash. */
 const fileHref = (ref: string | undefined): string | null =>
   ref?.startsWith("/api/files/") ? ref : null;
 
-/** Every attachment of one message, in the order it carried them. */
-function attachmentsOfMessage(
-  message: Message,
-  who: string,
-  pictureNumber: () => number
-): AttachmentRow[] {
-  const at = message.timestamp ? Date.parse(message.timestamp) : Number.NaN;
-  const when = Number.isFinite(at) ? at : null;
-  const rows: AttachmentRow[] = [];
-  const carried = message.metadata?.attachments ?? [];
-  for (const [i, attachment] of carried.entries()) {
-    rows.push({
-      id: `${message.id}:a${i}`,
-      messageId: message.id,
-      name: attachment.name,
-      kind:
-        attachment.kind === "text"
-          ? kindOf(attachment.name, "text/plain")
-          : kindOf(attachment.name, attachment.mediaType),
-      who,
-      at: when,
-      picture: null,
-      open:
-        attachment.kind === "text"
-          ? { kind: "text", content: attachment.content }
-          : { kind: "file", href: fileHref(attachment.ref) },
-    });
+/** One attachment as Files' rows draw it. */
+const rowOf = (
+  attachment: SessionAttachment,
+  place: number,
+  agent: string
+): AttachmentRow => {
+  const at = attachment.at ? Date.parse(attachment.at) : Number.NaN;
+  let open: AttachmentOpen = {
+    kind: "file",
+    href: fileHref(attachment.ref),
+  };
+  if (attachment.kind === "image" && attachment.src) {
+    open = { kind: "image", src: attachment.src, alt: attachment.name };
+  } else if (attachment.kind === "text") {
+    open = { kind: "text", content: attachment.content ?? "" };
   }
-  for (const [i, image] of (message.metadata?.images ?? []).entries()) {
-    if (!image.src) {
-      continue;
-    }
-    const name = `Picture ${pictureNumber()}`;
-    rows.push({
-      id: `${message.id}:i${i}`,
-      messageId: message.id,
-      name,
-      kind: kindOf("", image.mediaType),
-      who,
-      at: when,
-      picture: image.src,
-      open: { kind: "image", src: image.src, alt: name },
-    });
-  }
-  return rows;
-}
+  return {
+    id: `${attachment.messageId}:${place}`,
+    messageId: attachment.messageId,
+    name: attachment.name,
+    kind:
+      attachment.kind === "image"
+        ? kindOf("", attachment.mediaType)
+        : kindOf(attachment.name, attachment.mediaType),
+    who: attachment.who === "person" ? "You" : agent,
+    at: Number.isFinite(at) ? at : null,
+    picture: attachment.kind === "image" ? (attachment.src ?? null) : null,
+    open,
+  };
+};
 
-/**
- * The session's attachments, newest first, read off the transcript held
- * here. Pictures carry no name of their own, so each is numbered in the
- * conversation's order, the first "Picture 1".
- */
-export function attachmentsOf(instanceId: string): AttachmentRow[] {
-  const session = cawco.session(instanceId);
-  if (!session) {
-    return [];
+/** The session's attachments as last read (undefined: never asked). */
+export function attachmentsOf(instanceId: string):
+  | (Omit<ListRead<SessionAttachment>, "list"> & {
+      list: AttachmentRow[] | null;
+    })
+  | undefined {
+  const read = attachmentReads.of(instanceId);
+  if (!read) {
+    return;
   }
-  const agent = speakerName(session.harness);
-  let pictures = 0;
-  const rows = session.messages.flatMap((message) =>
-    attachmentsOfMessage(
-      message,
-      message.type === "user" ? "You" : agent,
-      () => {
-        pictures += 1;
-        return pictures;
-      }
-    )
-  );
-  return rows.reverse();
+  const agent = speakerName(harnessOf.get(instanceId));
+  return {
+    ...read,
+    list: read.list?.map((one, place) => rowOf(one, place, agent)) ?? null,
+  };
 }
 
 /**
@@ -234,31 +250,37 @@ export function searchAttachments(
     .map(({ row }) => row);
 }
 
-/** What Files holds for the session, once its artifacts are read: the bar's and the sidebar's count. */
+/** What Files holds for the session, once both its lists are read: the bar's and the sidebar's count. */
 export function filesCount(instanceId: string): number | null {
-  const list = reads.get(instanceId)?.list;
-  return list ? list.length + attachmentsOf(instanceId).length : null;
+  const artifacts = artifactReads.of(instanceId)?.list;
+  const attachments = attachmentReads.of(instanceId)?.list;
+  return artifacts && attachments
+    ? artifacts.length + attachments.length
+    : null;
 }
 
-/** The panel frame's ids each session's list was last read for. */
-const readFor = new Map<string, string>();
+/** Where each session stood when its lists were last read: its panel frame's artifacts and its newest message. */
+const readAt = new Map<string, string>();
 
 /**
- * Files follows the conversation on screen: its artifacts are read once it
- * is, so the count stands, and again each time its panel frame names a
- * different set of artifacts (one made, one removed): once per change, so a
- * list that never agrees with the frame is never read in a loop.
+ * Files follows the conversation on screen: its lists are read once it is,
+ * so the count stands, and again once each time the session moves on (its
+ * panel frame names other artifacts, or its newest message changes), never
+ * in a loop.
  */
 export function followFiles(instanceId: string | null): void {
   if (!instanceId) {
     return;
   }
   const held = cawco.previews[instanceId]?.artifacts?.join(",") ?? "";
-  if (readFor.get(instanceId) === held) {
+  const newest = cawco.session(instanceId)?.messages.at(-1)?.id ?? "";
+  const at = `${held}|${newest}`;
+  if (readAt.get(instanceId) === at) {
     return;
   }
-  readFor.set(instanceId, held);
+  readAt.set(instanceId, at);
   readArtifacts(instanceId);
+  readAttachments(instanceId);
 }
 
 /* ── Where it stands ──────────────────────────────────────────────── */
@@ -269,11 +291,64 @@ class FilesPlace {
   /** The phone's drawer is open. */
   sheet = $state(false);
   /**
+   * What the drawer gives the focus back to when it closes, handed over by
+   * what opened it when the opener itself goes away: the sidebar's Files
+   * row goes with the sidebar, so it hands over the burger (as bar-glass
+   * `invoker` does for Jump).
+   */
+  returnTo: HTMLElement | null = null;
+  /**
    * The artifact chosen in Files on a desk, floating on Files' leading
    * side: the session's panel shows it there rather than in the split
-   * while Files is open (SideSplit reads it).
+   * while Files is open (SideSplit reads it). `panelWasOpen`: the session's
+   * panel stood open before Files opened it, so Files put away gives it
+   * back to the split; otherwise Files closes it, and no conversation moves
+   * for a panel the person had shut.
    */
-  picked = $state<{ instanceId: string; id: string } | null>(null);
+  picked = $state<{
+    instanceId: string;
+    id: string;
+    panelWasOpen: boolean;
+    /** Chosen from the keyboard: the focus goes to the panel's name. */
+    byKeyboard: boolean;
+  } | null>(null);
+}
+
+/** The split's share of the page (Split), the float's widest. */
+const FLOAT_SHARE = 0.45;
+
+/**
+ * Where the file floating beside Files stands, read off Files' card and the
+ * rail: its top on Files' top, its trailing edge `--space-3` clear of
+ * Files' leading one, the split's share of the page at most and never
+ * nearer the rail than the same. Null when Files' card isn't drawn.
+ */
+export function floatPlace(): {
+  top: number;
+  right: number;
+  width: number;
+} | null {
+  const card = document.querySelector<HTMLElement>(".kit-pop.files-pop");
+  if (!card) {
+    return null;
+  }
+  const gap = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--space-3")
+  );
+  const box = card.getBoundingClientRect();
+  const rail =
+    document
+      .querySelector<HTMLElement>("[data-slot='rail']")
+      ?.getBoundingClientRect().right ?? 0;
+  const room = box.left - gap - (rail + gap);
+  return {
+    top: box.top,
+    right: window.innerWidth - box.left + gap,
+    width: Math.max(
+      0,
+      Math.min((window.innerWidth - rail) * FLOAT_SHARE, room)
+    ),
+  };
 }
 
 export const files = new FilesPlace();

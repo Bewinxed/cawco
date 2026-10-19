@@ -63,6 +63,10 @@ const ATTACHMENT_SENDS = 3;
 
 /** The session's artifact list read, which the offline leg refuses. */
 const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts$/;
+/** The session's attachments read. */
+const ATTACHMENT_LIST = /\/api\/instances\/[^/]+\/attachments$/;
+/** How long the slow legs hold each list read back: past the grace, so the skeleton stands. */
+const HELD_MS = 2500;
 /** The sidebar row's name once its count stands. */
 const FILES_COUNTED = /Files, \d+/;
 
@@ -288,6 +292,7 @@ const run = async (kit: Kit) => {
     });
   }
 
+  await reviewLegs(kit, base, { many, one });
   for (const theme of THEMES) {
     await desk(kit, base, theme, { many, one, none });
     for (const view of ["phone", "narrowDesk"] as const) {
@@ -674,6 +679,409 @@ const desk = async (
   await sweep(offline, `offline 1440 ${theme}`);
   errors.delete(offline);
   await offline.close();
+};
+
+/** The active element, said for a check: its tag, its data and its name. */
+const focused = (page: Page) =>
+  page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return el
+      ? {
+          tag: el.tagName,
+          card: el.dataset.artifact ?? null,
+          trigger: el.hasAttribute("data-artifact-trigger"),
+          inFloat: !!el.closest("[data-files-float]"),
+          slot: el.dataset.slot ?? null,
+        }
+      : null;
+  });
+
+/**
+ * The review's legs (one theme, light): the hub reads' states and the
+ * skeleton's timing; the masonry's DOM order; the rings; the earned counts;
+ * the focus moves; the edge strips; 320px, a short window and 200% zoom;
+ * the lightbox.
+ */
+const reviewLegs = async (
+  kit: Kit,
+  base: string,
+  ids: { many: string; one: string }
+) => {
+  // 13. Both reads held back past the grace: nothing, then the skeleton, then the read.
+  const slow = await openSession(
+    kit,
+    base,
+    "desk",
+    "light",
+    ids.many,
+    async (p) => {
+      for (const read of [ARTIFACT_LIST, ATTACHMENT_LIST]) {
+        await p.route(read, async (route) => {
+          await new Promise((done) => setTimeout(done, HELD_MS));
+          await route.continue();
+        });
+      }
+    }
+  );
+  await slow.locator("[data-files-control]").click();
+  await slow.locator(".kit-pop.files-pop").waitFor();
+  const opened = Date.now();
+  const atOpen = await slow.evaluate(() => ({
+    waits: document.querySelectorAll("[data-files-wait]").length,
+    counts: document.querySelectorAll(".files-pop [data-files-head-count]")
+      .length,
+    none: document.querySelectorAll(".files-pop .files-none").length,
+  }));
+  await slow.waitForTimeout(Math.max(0, 1500 - (Date.now() - opened)));
+  const pastGrace = await slow.evaluate(() => ({
+    artifactsWait: !!document.querySelector('[data-files-wait="artifacts"]'),
+    ghostCards: document.querySelectorAll("[data-files-ghost]").length,
+    attachmentsWait: !!document.querySelector(
+      '[data-files-wait="attachments"]'
+    ),
+    counts: document.querySelectorAll(".files-pop [data-files-head-count]")
+      .length,
+  }));
+  await slow.locator("[data-files-card]").first().waitFor({ timeout: 15_000 });
+  const arrival = await slow.evaluate(
+    () =>
+      document
+        .querySelector('[data-files-region="artifacts"] [data-files-scroll]')
+        ?.getAnimations()
+        .map((one) => one.effect?.getTiming().duration as number) ?? []
+  );
+  const fadeMs = Number.parseFloat(
+    await slow.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--dur-fade")
+    )
+  );
+  kit.check(
+    "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read arrives over one --dur-fade",
+    atOpen.waits === 0 &&
+      atOpen.counts === 0 &&
+      atOpen.none === 0 &&
+      pastGrace.artifactsWait &&
+      pastGrace.ghostCards > 0 &&
+      pastGrace.attachmentsWait &&
+      pastGrace.counts === 0 &&
+      arrival.includes(fadeMs),
+    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)} (--dur-fade ${fadeMs})`
+  );
+  await slow.close();
+
+  // 14. The attachments read refused: its region says so, the artifacts stand.
+  const refused = await openSession(kit, base, "desk", "light", ids.many, (p) =>
+    p
+      .route(ATTACHMENT_LIST, (route) => route.abort("internetdisconnected"))
+      .then(() => undefined)
+  );
+  errors.set(refused, []);
+  await refused.locator("[data-files-control]").click();
+  await refused
+    .locator('[data-files-region="attachments"] [data-files-failed]')
+    .waitFor({ timeout: 30_000 });
+  const refusedSaid = await refused.evaluate(() => ({
+    fault: document
+      .querySelector('[data-files-region="attachments"] [data-files-failed]')
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim(),
+    cards: document.querySelectorAll("[data-files-card]").length,
+    count: document.querySelector("[data-files-count]")?.textContent ?? null,
+  }));
+  kit.check(
+    "14: the attachments read refused says so in its region (RowFault, Try again), the artifacts still listed, and the bar claims no count",
+    !!refusedSaid.fault?.includes("Couldn't read this session's attachments") &&
+      !!refusedSaid.fault.includes("Try again") &&
+      refusedSaid.cards > 0 &&
+      refusedSaid.count === null,
+    JSON.stringify(refusedSaid)
+  );
+  errors.delete(refused);
+  await refused.close();
+
+  // 15. The masonry in list order; 16. the rings; 17. the focus moves.
+  const page = await openSession(kit, base, "desk", "light", ids.many);
+  await page.locator("[data-files-control]").focus();
+  await page.keyboard.press("Enter");
+  await page.locator("[data-files-card]").first().waitFor();
+  await page.waitForTimeout(400);
+  const order = await page.evaluate(async (id) => {
+    const listed = (await (
+      await fetch(`/api/instances/${encodeURIComponent(id)}/artifacts`)
+    ).json()) as { id: string }[];
+    const cards = [
+      ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
+    ];
+    const lanes = cards.map((item) => getComputedStyle(item).gridColumnStart);
+    const columns = Number(
+      getComputedStyle(
+        document.querySelector("[data-files-cards]") as Element
+      ).gridTemplateColumns.split(" ").length
+    );
+    return {
+      same:
+        cards.map((item) => item.dataset.artifact).join() ===
+        listed.map((one) => one.id).join(),
+      oneGrid: new Set(cards.map((item) => item.parentElement)).size === 1,
+      topRow: new Set(lanes.slice(0, columns)).size === columns,
+      columns,
+    };
+  }, ids.many);
+  kit.check(
+    "15: the cards are drawn once, in one grid, in the hub's order (newest first), the first row across every column",
+    order.same && order.oneGrid && order.topRow,
+    JSON.stringify(order)
+  );
+  const ring = await page.evaluate(() => {
+    const field = document.querySelector<HTMLElement>(
+      ".files-pop [data-slot='finder-field']"
+    );
+    const swatch = document.createElement("span");
+    swatch.style.color = "var(--focus-ring)";
+    document.body.append(swatch);
+    const want = getComputedStyle(swatch).color;
+    swatch.remove();
+    const style = field ? getComputedStyle(field) : null;
+    return {
+      inputFocused:
+        document.activeElement?.closest("[data-files-search]") !== null,
+      outline: style ? `${style.outlineStyle} ${style.outlineWidth}` : null,
+      color: style?.outlineColor ?? null,
+      want,
+    };
+  });
+  await page.keyboard.press("Tab");
+  let card = await focused(page);
+  for (let i = 0; i < 6 && !card?.card; i += 1) {
+    await page.keyboard.press("Tab");
+    card = await focused(page);
+  }
+  const cardRing = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return el ? getComputedStyle(el).outlineOffset : null;
+  });
+  kit.check(
+    "16: the search field draws the focus ring when its input has keyboard focus, and a card's ring stands inside its own edge (outline-offset = --focus-ring-inset)",
+    ring.inputFocused &&
+      ring.outline === "solid 2px" &&
+      ring.color === ring.want &&
+      !!card?.card &&
+      cardRing === "-2px",
+    `field ${JSON.stringify(ring)}; card ${JSON.stringify(card)} offset ${cardRing}`
+  );
+  // A keyboard pick: the focus goes to the panel's name in the float.
+  const pickedId = card?.card ?? "";
+  await page.keyboard.press("Enter");
+  await page
+    .locator("[data-files-float][data-state='open']")
+    .waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(500);
+  const afterPick = await focused(page);
+  const floatRole = await page.evaluate(() => {
+    const float = document.querySelector<HTMLElement>("[data-files-float]");
+    return {
+      // A named <section> is a region.
+      role:
+        float?.tagName === "SECTION" ? "region" : float?.getAttribute("role"),
+      label: float?.getAttribute("aria-label"),
+      afterFiles:
+        !!float &&
+        !!document.querySelector(".kit-pop.files-pop") &&
+        (
+          document.querySelector(".kit-pop.files-pop") as Element
+        ).compareDocumentPosition(float) === Node.DOCUMENT_POSITION_FOLLOWING,
+    };
+  });
+  await page
+    .locator("[data-files-float] button[title='Close']")
+    .first()
+    .click();
+  await page
+    .locator("[data-files-float]")
+    .waitFor({ state: "detached", timeout: 10_000 });
+  await page.waitForTimeout(200);
+  const afterClose = await focused(page);
+  kit.check(
+    "17: a keyboard pick moves the focus to the panel's name in the float (a region named for the artifact, after Files in the page); its Close gives it back to the artifact's card",
+    afterPick?.trigger === true &&
+      afterPick.inFloat &&
+      floatRole.role === "region" &&
+      !!floatRole.label &&
+      floatRole.afterFiles &&
+      afterClose?.card === pickedId,
+    `after pick ${JSON.stringify(afterPick)} ${JSON.stringify(floatRole)}; after close ${JSON.stringify(afterClose)} (picked ${pickedId})`
+  );
+  // 18. A press inside a picture's lightbox is not outside Files.
+  await page
+    .locator('[data-files-region="attachments"] button.attachment-row')
+    .first()
+    .click();
+  await page.waitForTimeout(800);
+  const lightboxOpen = await page.evaluate(
+    () => !!document.querySelector(".pswp, [role='dialog'] img")
+  );
+  await page.mouse.click(720, 450);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(600);
+  const stillOpen = await page.evaluate(
+    () => !!document.querySelector(".kit-pop.files-pop[data-state='open']")
+  );
+  kit.check(
+    "18: a picture opened from Files shows in the lightbox, and pressing in it and putting it away leaves Files open",
+    lightboxOpen && stillOpen,
+    `lightbox ${lightboxOpen}, Files still open ${stillOpen}`
+  );
+  // 19. A short window: both heads in sight, nothing spills.
+  await page.setViewportSize({ width: 1440, height: 520 });
+  await page.waitForTimeout(400);
+  const short = await page.evaluate(() => {
+    const pop = document
+      .querySelector(".kit-pop.files-pop")
+      ?.getBoundingClientRect();
+    const heads = [...document.querySelectorAll(".files-pop .files-head")].map(
+      (head) => head.getBoundingClientRect()
+    );
+    return {
+      pop: pop ? { top: pop.top, bottom: pop.bottom } : null,
+      heads: heads.map((head) => ({ top: head.top, bottom: head.bottom })),
+      inside:
+        !!pop &&
+        heads.length === 2 &&
+        heads.every((head) => head.top >= pop.top && head.bottom <= pop.bottom),
+    };
+  });
+  await sweep(page, "short window 1440x520");
+  kit.check(
+    "19: on a 1440×520 window Files keeps both heads in sight inside its card",
+    short.inside && !(await pageGrows(page)),
+    JSON.stringify(short)
+  );
+  await page.close();
+
+  // 20. 200% zoom of a 1440×900 desk: a 720×450 window, the drawer.
+  const zoomed = await openSession(kit, base, "narrowDesk", "light", ids.many);
+  await zoomed.setViewportSize({ width: 720, height: 450 });
+  await zoomed.locator('[data-slot="burger"]').click();
+  await zoomed.locator("[data-sidebar-files]").click();
+  await zoomed
+    .locator("[data-files-card]")
+    .first()
+    .waitFor({ timeout: 30_000 });
+  await zoomed.waitForTimeout(600);
+  const zoomSaid = await zoomed.evaluate(() => {
+    const list = document.querySelector(
+      '[data-files-region="artifacts"] [data-files-scroll]'
+    );
+    return {
+      segments: document.querySelectorAll("[data-files-segment]").length,
+      scrolls: list ? list.scrollHeight > list.clientHeight : false,
+      listHeight: list?.clientHeight ?? 0,
+    };
+  });
+  await sweep(zoomed, "200% zoom 720x450 drawer");
+  kit.check(
+    "20: at 200% zoom (720×450) Files is the drawer, its list scrolling within it, the page not growing",
+    zoomSaid.segments === 2 &&
+      zoomSaid.scrolls &&
+      zoomSaid.listHeight > 0 &&
+      !(await pageGrows(zoomed)),
+    JSON.stringify(zoomSaid)
+  );
+  await zoomed.close();
+
+  // 21. The phone: earned counts, the burger's focus, the strips, Send, 320px.
+  const phone = await openSession(kit, base, "phone", "light", ids.one);
+  const strips = await phone.evaluate(() => {
+    const send = document
+      .querySelector<HTMLElement>('[aria-label="Send message"]')
+      ?.getBoundingClientRect();
+    return {
+      strips: [
+        ...document.querySelectorAll<HTMLElement>('[data-slot="edge-pull"]'),
+      ].map((strip) => {
+        const box = strip.getBoundingClientRect();
+        return {
+          side: strip.dataset.side,
+          touchAction: getComputedStyle(strip).touchAction,
+          coversSend:
+            !!send &&
+            box.left < send.right &&
+            box.right > send.left &&
+            box.top < send.bottom &&
+            box.bottom > send.top,
+        };
+      }),
+      send: send ? { left: send.left, right: send.right, top: send.top } : null,
+    };
+  });
+  kit.check(
+    "21a: both edge strips let a finger going down scroll (touch-action pan-y), and neither covers the composer's Send",
+    strips.strips.length === 2 &&
+      strips.strips.every(
+        (strip) => strip.touchAction === "pan-y" && !strip.coversSend
+      ),
+    JSON.stringify(strips)
+  );
+  await phone.locator('[data-slot="burger"]').click();
+  await phone.locator("[data-sidebar-files]").click();
+  await phone.locator("[data-files-sheet]").waitFor();
+  await phone.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
+  const segmentCounts = await phone.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("[data-files-segment]")].map(
+      (segment) => ({
+        segment: segment.dataset.filesSegment,
+        count:
+          segment.querySelector("[data-files-head-count]")?.textContent ?? null,
+      })
+    )
+  );
+  kit.check(
+    "21b: a segment counts only above 0 (one page, no attachments)",
+    segmentCounts.length === 2 &&
+      segmentCounts[0]?.count === "1" &&
+      segmentCounts[1]?.count === null,
+    JSON.stringify(segmentCounts)
+  );
+  await phone.keyboard.press("Escape");
+  await phone
+    .locator("[data-files-sheet]")
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .catch(() => null);
+  await phone.waitForTimeout(400);
+  const burgerFocus = await focused(phone);
+  kit.check(
+    "21c: Files opened from the sidebar's row gives the focus back to the burger when it closes",
+    burgerFocus?.slot === "burger",
+    JSON.stringify(burgerFocus)
+  );
+  await phone.close();
+  const narrow = await openSession(kit, base, "phone", "light", ids.many);
+  await narrow.setViewportSize({ width: 320, height: 640 });
+  await narrow.locator('[data-slot="burger"]').click();
+  await narrow.locator("[data-sidebar-files]").click();
+  await narrow
+    .locator("[data-files-card]")
+    .first()
+    .waitFor({ timeout: 30_000 });
+  await narrow.locator("[data-files-search] input").fill("brief");
+  await narrow.waitForTimeout(500);
+  const fit = await narrow.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("[data-files-segment]")].map(
+      (segment) => ({
+        text: segment.textContent?.replace(/\s+/g, " ").trim(),
+        fits: segment.scrollWidth <= segment.clientWidth,
+      })
+    )
+  );
+  await sweep(narrow, "320 drawer searching");
+  kit.check(
+    '22: at 320px the segments\' words and counts ("Attachments 3 of 9") fit their segments (scrollWidth ≤ clientWidth)',
+    fit.length === 2 &&
+      fit.every((one) => one.fits) &&
+      fit.some((one) => one.text?.includes(" of ")),
+    JSON.stringify(fit)
+  );
+  await narrow.close();
 };
 
 /** The drawer's legs at 390 and 680, in one theme. */
