@@ -575,7 +575,7 @@ const desk = async (
     `6 (${theme}): search finds by the words on a page (marked), by title, and says when nothing matches`,
     byContent.cards[0] === PRICING &&
       byContent.marked.some((word) =>
-        word?.toLowerCase().startsWith("pricing")
+        word?.toLowerCase().startsWith("tiers")
       ) &&
       byTitle.length === 1 &&
       byTitle[0] === "tall-board" &&
