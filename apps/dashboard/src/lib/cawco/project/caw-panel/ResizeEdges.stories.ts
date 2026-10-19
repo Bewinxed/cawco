@@ -9,7 +9,7 @@ export default {
   args: { scene: "thread", form: "desk", resize: "edges" },
 };
 
-/** Desk: at rest, 380 × 640. Try it here. */
+/** Desk: drag the panel's leading edge, its foot or their corner. */
 export const Desk = {
   args: {},
   parameters: { viewport: 820 },

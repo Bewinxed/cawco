@@ -61,7 +61,10 @@
 
 {#if tasks.length > 0}
   <div class="@container min-w-0 pt-(--space-2)" data-filed={form}>
-    <p class="m-0 mb-(--space-2) text-(--ink-muted) text-meta" in:arrive={0}>
+    <p
+      class="m-0 mb-(--space-2) text-(--ink-muted) text-meta"
+      in:arrive|global={0}
+    >
       {head}
     </p>
     <ul
@@ -73,7 +76,7 @@
       ]}
     >
       {#each tasks as task, at (task.id)}
-        <li class="grid min-w-0" in:arrive={at + 1}>
+        <li class="grid min-w-0" in:arrive|global={at + 1}>
           <a
             class={[
               "group/task press-tint flex min-w-0 flex-col gap-(--space-1) text-(--ink-strong) no-underline transition-colors focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-(--focus-ring) focus-visible:outline-solid focus-visible:[outline-offset:calc(var(--focus-ring-width)*-1)]",

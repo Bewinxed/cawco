@@ -9,7 +9,7 @@ export default {
   args: { scene: "thread", form: "desk", resize: "corner" },
 };
 
-/** Desk: at rest, 380 × 640. Try it here. */
+/** Desk: drag the L at the panel's free corner. */
 export const Desk = {
   args: {},
   parameters: { viewport: 820 },

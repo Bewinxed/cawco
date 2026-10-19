@@ -9,7 +9,7 @@ export default {
   args: { scene: "thread", form: "desk", resize: "menu" },
 };
 
-/** Desk: at rest, 380 × 640. Try it here. */
+/** Desk: open More and choose Wide panel. */
 export const Desk = {
   args: {},
   parameters: { viewport: 820 },
