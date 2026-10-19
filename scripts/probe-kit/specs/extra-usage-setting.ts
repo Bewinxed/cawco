@@ -13,10 +13,10 @@
  *
  * - default: A's setting reads `move` before anyone sets it.
  * - keep going: A set to `extra-usage`, a session's turn on A runs on its
- *   extra usage. B is benched for a moment that ends after that, so B coming
- *   back starts a rebalance pass on the machine then (rebalance.ts
- *   `accountsChanged`). Past that pass the session is still on A, and its
- *   next turn runs there.
+ *   extra usage. Its turn's end and the hub's next look (at-limit.ts
+ *   `RECHECK_MS`, armed when A's bench came, its rebalance pass over A's
+ *   sessions) each say it stays; past that look the session is still on A,
+ *   and its next turn runs there.
  * - move: A set back to `move`. The session's next turn on A's extra usage
  *   ends, and within {@link MOVE_WITHIN_MS} it is on B; the turn after runs
  *   there, its conversation with it.
@@ -40,10 +40,10 @@ const TOKEN: Record<string, string> = {
 const MARK = "PROBE-EXTRA-USAGE";
 /** Only the session's first answer carries it: a later request that has it has its earlier turns. */
 const MEMORY = "PROBE-MEMORY-on-credits";
-/** How long B's bench lasts from when it is set: past the keep-going leg's first turn. */
-const BENCH_MS = 40_000;
-/** How long past B's return the keep-going leg looks for a move that should not come. */
-const PAST_PASS_MS = 20_000;
+/** The hub's next look comes within its recheck (at-limit.ts `RECHECK_MS`, 5 minutes); this allows for it. */
+const LOOK_WITHIN_MS = 6 * 60_000;
+/** The words the rebalance pass says a session on an account that keeps going stays in (rebalance.ts `keepsGoing`). */
+const PASS_KEEPS = "keep going on its extra usage, as its setting says";
 /** A session moved off its plan limit runs on B within this of its turn's end. */
 const MOVE_WITHIN_MS = 30_000;
 
@@ -215,14 +215,6 @@ const keepGoingLeg = async (
     set.atPlanLimit === "extra-usage",
     JSON.stringify(set)
   );
-  // B comes back from a bench after A's first turn on its extra usage:
-  // that return starts a rebalance pass on the machine.
-  const benchEnds = Date.now() + BENCH_MS;
-  fleet.write(
-    "INSERT OR REPLACE INTO account_bench (account_id, scope, until) VALUES (?, '', ?)",
-    B,
-    benchEnds
-  );
   const instance = await fleet.spawn("claude", "Extra usage", fleet.workdir);
   const first = await turn(fleet, instance, "first turn");
   const reading = await until(
@@ -236,18 +228,52 @@ const keepGoingLeg = async (
     !!first && onAccount(first, ACCOUNT) && !!reading?.includes('"inUse":true'),
     `first turn on ${first ? accountOfRequest(first) : "nothing"}; A's overage ${reading}`
   );
-  // B is back, a rebalance pass has run over A's sessions, and the turn's
-  // end has been decided.
-  await Bun.sleep(Math.max(0, benchEnds + PAST_PASS_MS - Date.now()));
+  // The hub's next look: its rebalance pass over A's sessions says it keeps
+  // them, or (as without the setting) moves this one off A.
+  const lookedAt = Date.now();
+  await until(
+    "keep going: the hub's next look passed over A's sessions",
+    async () =>
+      (await hubLines(fleet)).some((line) => line.includes(PASS_KEEPS)) ||
+      accountOf(fleet, instance) !== ACCOUNT ||
+      undefined,
+    Boolean,
+    LOOK_WITHIN_MS
+  ).catch(() => undefined);
   const stayed = accountOf(fleet, instance);
   const next = await turn(fleet, instance, "second turn");
   kit.check(
-    `keep going: ${Math.round((BENCH_MS + PAST_PASS_MS) / 1000)} s on, past B's return and a rebalance pass, the session is still on A and its next turn runs there`,
+    "keep going: past the hub's next look, the session is still on A and its next turn runs there",
     stayed === ACCOUNT && !!next && onAccount(next, ACCOUNT),
-    `account ${stayed}; next turn on ${next ? accountOfRequest(next) : "nothing"}`
+    `account ${stayed} ${Math.round((Date.now() - lookedAt) / 1000)} s on; next turn on ${next ? accountOfRequest(next) : "nothing"}`
+  );
+  // Both deciders looked at it and said why it stays: the look's rebalance
+  // pass (rebalance.ts `keepsGoing`) and its turn's end (at-limit.ts
+  // `extraUsageTurn`).
+  const lines = await hubLines(fleet);
+  kit.check(
+    "keep going: the rebalance pass and the turn's end each say it stays on A's extra usage, as A's setting says",
+    lines.some(
+      (line) => line.includes("[rebalance]") && line.includes(PASS_KEEPS)
+    ) &&
+      lines.some(
+        (line) =>
+          line.includes("[at-limit]") &&
+          line.includes("says to keep going on extra usage at a plan limit")
+      ),
+    lines.join(" | ") || "no rebalance or at-limit line in the hub's log"
   );
   return instance;
 };
+
+/** The hub's lines from its rebalance and at-limit deciders, as its log has them. */
+const hubLines = async (fleet: KitFleet): Promise<string[]> =>
+  (await fleet.logs("hub"))
+    .split("\n")
+    .filter(
+      (line) => line.includes("[rebalance]") || line.includes("[at-limit]")
+    )
+    .map((line) => line.slice(0, 400));
 
 const moveLeg = async (
   kit: Kit,
@@ -271,7 +297,11 @@ const moveLeg = async (
   kit.check(
     `move: its turn on A's extra usage ends, and within ${MOVE_WITHIN_MS / 1000} s it is on B`,
     !!onA && onAccount(onA, ACCOUNT) && moved === B,
-    `turn on ${onA ? accountOfRequest(onA) : "nothing"}; account ${moved} ${Date.now() - endedAt} ms on`
+    `turn on ${onA ? accountOfRequest(onA) : "nothing"}; account ${moved} ${Date.now() - endedAt} ms on; ${
+      (await hubLines(fleet))
+        .filter((line) => line.includes("moves whole to"))
+        .join(" | ") || "no at-limit move line"
+    }`
   );
   const onB = await turn(fleet, instance, "fourth turn");
   kit.check(
