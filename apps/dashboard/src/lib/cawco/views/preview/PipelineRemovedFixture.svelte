@@ -5,13 +5,13 @@
    * over the real board, whose column heads already count each stage.
    */
   import { movesFrom, stageLabel } from "#lib/cawco/project-tasks.js";
-  import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import {
     DATES,
     kindOf,
     STAGES,
     TASKS,
   } from "#lib/cawco/tasks/preview/tidewater.js";
+  import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import {
     TabItem,
     Tabs,

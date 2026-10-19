@@ -28,10 +28,7 @@ export function answerTaskReads(): void {
     const id = task?.[1];
     if (id && TASKS.some((each) => each.id === id)) {
       return Promise.resolve(
-        new Response(
-          JSON.stringify(task?.[2] ? historyOf(id) : viewOf(id)),
-          { headers: { "content-type": "application/json" } }
-        )
+        Response.json(task?.[2] ? historyOf(id) : viewOf(id))
       );
     }
     return ownFetch(input, init);

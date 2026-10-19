@@ -6,11 +6,8 @@
  * every line on its start edge; one starter component, every card one
  * size). Desk at the pane's width on a 1440 screen (1180px), then a phone.
  */
-import { decisionsWords } from "@cawco/core";
-import {
-  BOARD_STARTERS,
-  DECISION_STARTERS,
-} from "../tasks/preview/tidewater";
+import { decisionsWords } from "@cawco/core/words/decisions";
+import { BOARD_STARTERS, DECISION_STARTERS } from "../tasks/preview/tidewater";
 import CawPanelFixture from "./preview/CawPanelFixture.svelte";
 import EmptyTodayFixture from "./preview/EmptyTodayFixture.svelte";
 import PageRoom from "./preview/PageRoom.svelte";
@@ -88,7 +85,11 @@ export const Board = {
   parameters: DESK,
 };
 /** Phone · Proposed, the empty board: one column of cards, each the tallest's height. */
-export const BoardPhone = { ...Board, decorators: [phoneRoom], parameters: PHONE };
+export const BoardPhone = {
+  ...Board,
+  decorators: [phoneRoom],
+  parameters: PHONE,
+};
 /** Desk · Proposed, Decisions empty: the same column and the same cards. */
 export const Decisions = {
   args: {
