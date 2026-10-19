@@ -20,7 +20,8 @@
 
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, stat, unlink } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { chmod, mkdir, readFile, stat, unlink } from "node:fs/promises";
 import {
   createConnection,
   createServer,
@@ -137,6 +138,49 @@ interface Watched {
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/** The cgroup v2 path a `/proc/<pid>/cgroup` text names (its `0::` line); undefined where it has none. */
+const cgroupOf = (text: string): string | undefined =>
+  text
+    .split("\n")
+    .find((line) => line.startsWith("0::"))
+    ?.slice(3)
+    .trim();
+
+/**
+ * Of `running`, what is still in `proc`'s cgroup or one below it: the child
+ * itself while it lives, wherever it is, and every other process whose
+ * `/proc/<pid>/cgroup` names the child's group. One gone since the table was
+ * read is dropped too: there is nothing left to signal. Everything is kept
+ * where the child has no cgroup to read (no cgroup v2).
+ */
+const stillIn = async (
+  proc: Proc,
+  running: Map<number, string>
+): Promise<Map<number, string>> => {
+  const own = proc.cgroup;
+  if (own === undefined) {
+    return running;
+  }
+  const read = await Promise.all(
+    [...running].map(async ([pid, started]) => {
+      if (pid === proc.pid && proc.alive) {
+        return [pid, started, true] as const;
+      }
+      const at = cgroupOf(
+        await readFile(`/proc/${pid}/cgroup`, "utf8").catch(() => "")
+      );
+      return [
+        pid,
+        started,
+        at !== undefined && (at === own || at.startsWith(`${own}/`)),
+      ] as const;
+    })
+  );
+  return new Map(
+    read.flatMap(([pid, started, inside]) => (inside ? [[pid, started]] : []))
+  );
+};
+
 /**
  * A child's environment: the spec's over this keeper's own as the child gets
  * it. A session gets it as a session does: its socket, and the embedded pi's
@@ -155,6 +199,12 @@ const childEnvironment = (spec: ProcSpec): Record<string, string> => ({
 interface Proc {
   alive: boolean;
   bytes: number;
+  /**
+   * The cgroup the child started in, as `/proc/<pid>/cgroup` names it: its
+   * own group, or the keeper's where it has none. Undefined where there is
+   * no cgroup v2 (macOS, a v1 or hybrid host), and nothing is read for it.
+   */
+  cgroup?: string;
   child: ChildProcessWithoutNullStreams;
   /** The spec's `cwd`, kept so a reattaching agent learns where this child runs. */
   cwd?: string;
@@ -221,6 +271,8 @@ export class SessiondServer {
   #spawning: Promise<unknown> = Promise.resolve();
   /** Where each child's own cgroup is made, when the keeper has delegation. */
   readonly #children: Children | undefined;
+  /** The keeper's own cgroup, which a child with no group of its own starts in ({@link Proc.cgroup}). */
+  readonly #ownCgroup: string | undefined;
   /** Each child's cgroup still on this machine, by its path. */
   readonly #groups = new Map<string, Watched>();
   /** Names each child's group apart from every other this keeper made. */
@@ -255,6 +307,11 @@ export class SessiondServer {
   constructor(options: SessiondOptions = {}) {
     this.#build = options.build ?? DEFAULT_BUILD;
     this.#children = options.children;
+    this.#ownCgroup = cgroupOf(
+      process.platform === "linux"
+        ? readFileSync("/proc/self/cgroup", "utf8")
+        : ""
+    );
   }
 
   /**
@@ -299,15 +356,15 @@ export class SessiondServer {
       }
       this.#surveyInFlight = true;
       processTable()
-        .then((table) => {
-          // Read at the answer, not at the ask: a child that ended meanwhile
-          // has its tree from this reading only if it is still alive.
-          for (const proc of this.#procs.values()) {
-            if (proc.alive) {
-              this.#survey(proc, table);
-            }
-          }
-        })
+        // Read at the answer, not at the ask: a child that ended meanwhile
+        // has its tree from this reading only if it is still alive.
+        .then((table) =>
+          Promise.all(
+            [...this.#procs.values()]
+              .filter((proc) => proc.alive)
+              .map((proc) => this.#survey(proc, table))
+          )
+        )
         .catch((error: unknown) => {
           console.error(
             `[sessiond] survey: the process table could not be read: ${reasonOf(error)}`
@@ -774,6 +831,7 @@ export class SessiondServer {
       exitCode: null,
       signal: null,
       ...(spec.cwd === undefined ? {} : { cwd: spec.cwd }),
+      ...this.#startsIn(group),
     };
     this.#procs.set(procId, proc);
 
@@ -860,6 +918,12 @@ export class SessiondServer {
     );
   }
 
+  /** The cgroup a child starts in ({@link Proc.cgroup}): its own group, or the keeper's; none without cgroup v2. */
+  #startsIn(group: ChildGroup | undefined): { cgroup?: string } {
+    const cgroup = group?.cgroup ?? this.#ownCgroup;
+    return cgroup === undefined ? {} : { cgroup };
+  }
+
   // ---------------------------------------------------------------- the tree
 
   /**
@@ -877,8 +941,17 @@ export class SessiondServer {
    * Every live child is read on a clock as well ({@link SURVEY_INTERVAL_MS}):
    * one the kernel kills for memory is asked nothing first, and what it had
    * started is known only from the reading before.
+   *
+   * ONLY WHAT IS STILL IN THE CHILD'S CGROUP IS ITS TREE. A process that left
+   * it was put elsewhere on purpose, by itself or by the service manager:
+   * conmon, which podman moves into a `libpod-conmon-<id>.scope` of its own
+   * after its double fork and `setsid()`, or anything a user or CawCo moved
+   * into a scope to outlive the session. It is dropped from the tree, here
+   * and in every later reading, and never signalled: CawCo signals no process
+   * it did not start. The child itself is its own while it lives, wherever it
+   * is.
    */
-  #survey(proc: Proc, table: Listed[]): Pid[] {
+  async #survey(proc: Proc, table: Listed[]): Promise<Pid[]> {
     const root = proc.pid;
     const byParent = new Map<number, Listed[]>();
     for (const row of table) {
@@ -910,8 +983,9 @@ export class SessiondServer {
         take(row);
       }
     }
-    proc.tree = running;
-    return [...running.keys()].map(listedPid);
+    const kept = await stillIn(proc, running);
+    proc.tree = kept;
+    return [...kept.keys()].map(listedPid);
   }
 
   /** {@link #survey} on a fresh reading of the process table. */
@@ -1120,9 +1194,11 @@ export class SessiondServer {
           `[sessiond] drain: the process table could not be read before the children were told to end: ${reasonOf(error)}`
         );
       });
-      for (const proc of table ? alive : []) {
-        this.#survey(proc, table as Listed[]);
-      }
+      await Promise.all(
+        (table ? alive : []).map((proc) =>
+          this.#survey(proc, table as Listed[])
+        )
+      );
     }
     for (const proc of alive) {
       try {
@@ -1149,10 +1225,13 @@ export class SessiondServer {
         `[sessiond] drain: the process table could not be read for the final kill; what the children started may outlive them: ${reasonOf(error)}`
       );
     });
-    for (const proc of table ? this.#procs.values() : []) {
-      for (const pid of this.#survey(proc, table as Listed[])) {
-        signalPid(pid, "SIGKILL");
-      }
+    const trees = await Promise.all(
+      (table ? [...this.#procs.values()] : []).map((proc) =>
+        this.#survey(proc, table as Listed[])
+      )
+    );
+    for (const pid of trees.flat()) {
+      signalPid(pid, "SIGKILL");
     }
   }
 

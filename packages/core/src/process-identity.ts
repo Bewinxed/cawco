@@ -492,6 +492,41 @@ const linuxStat = (
     () => undefined
   );
 
+/** A Linux process's place among others: its parent, group, session and start. */
+export interface ProcessSession {
+  comm: string;
+  pgid: number;
+  pid: number;
+  ppid: number;
+  /** Its session's id: the pid of the process that called setsid(2) to lead it. */
+  sid: number;
+  /** Its start in clock ticks since boot (`/proc/<pid>/stat`'s 22nd field): with the pid, what says it is the same process. */
+  started: number;
+}
+
+/**
+ * Linux: `pid`'s parent, process group, session and start, from
+ * `/proc/<pid>/stat` (proc(5): fields 4 `ppid`, 5 `pgrp`, 6 `session`, 22
+ * `starttime`). Undefined once it is gone.
+ */
+export async function processSession(
+  pid: number
+): Promise<ProcessSession | undefined> {
+  const stat = await linuxStat(pid);
+  const fields = stat?.fields;
+  if (!(stat && fields?.[19])) {
+    return;
+  }
+  return {
+    pid,
+    comm: stat.comm,
+    ppid: Number(fields[1]),
+    pgid: Number(fields[2]),
+    sid: Number(fields[3]),
+    started: Number(fields[19]),
+  };
+}
+
 /**
  * Linux: `/proc/<pid>/stat`'s 22nd field, the start in clock ticks since
  * boot, the identity every Linux marker holds.

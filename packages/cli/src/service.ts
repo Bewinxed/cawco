@@ -12,6 +12,7 @@ import {
 } from "@cawco/core";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import { keepDetached } from "@cawco/core/keep-detached";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
 import {
   forgetLaunchdStart,
@@ -1710,12 +1711,33 @@ const installSystemdUnits = async (
   await lingerHint(note);
 };
 
+/**
+ * Before a keeper's unit is stopped or restarted, what in it has detached
+ * from CawCo's process trees moves into scopes of its own (core
+ * keep-detached.ts), so the stop does not reach it: a container a session's
+ * shell started outlives the keeper. Only the keeper runs other people's
+ * processes; every other unit stops as it is.
+ */
+const keepFromStop = async (
+  id: ServiceId,
+  stopping: string,
+  note: (line: string) => void
+): Promise<void> => {
+  if (id !== "sessiond") {
+    return;
+  }
+  for (const line of await keepDetached(stopping)) {
+    note(line);
+  }
+};
+
 const uninstallSystemdUnits = async (
   specs: ServiceSpec[],
   note: (line: string) => void
 ): Promise<void> => {
   for (const spec of specs) {
     // biome-ignore lint/performance/noAwaitInLoops: units uninstall one at a time so each one's notes print in its own order and a failure is attributable to the unit that caused it.
+    await keepFromStop(spec.id, unitName(spec.name), note);
     await run(["systemctl", "--user", "disable", "--now", unitName(spec.name)]);
     await Bun.file(systemdPath(spec.name))
       .delete()
@@ -2046,6 +2068,7 @@ const restartSystemdUnit = async (
       `${spec.id} is not installed — \`cawco service install ${spec.id}\` first.`
     );
   }
+  await keepFromStop(spec.id, unitName(spec.name), note);
   const restarted = await run([
     "systemctl",
     "--user",
@@ -2060,6 +2083,9 @@ const restartSystemdUnit = async (
 
 /** Stops one installed service and leaves it stopped. */
 export const stopService = async (id: ServiceId): Promise<void> => {
+  if (platform() !== "darwin") {
+    await keepFromStop(id, unitName(id), (line) => console.log(line));
+  }
   const stopped =
     platform() === "darwin"
       ? await run(["launchctl", "bootout", `${guiDomain()}/${label(id)}`])

@@ -14,6 +14,7 @@
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { keepDetached } from "@cawco/core/keep-detached";
 import { type KeeperName, keeperService } from "@cawco/core/keepers";
 import {
   forgetLaunchdStart,
@@ -60,6 +61,18 @@ const must = async (argv: string[]): Promise<Ran> => {
     );
   }
   return ran;
+};
+
+/**
+ * Moves what has detached from CawCo's process trees in keeper unit `unit`
+ * into scopes of its own before the unit is stopped or restarted (core
+ * keep-detached.ts): a container a session's shell started outlives the
+ * keeper. Said in the agent's log, line by line.
+ */
+const keepOut = async (unit: string): Promise<void> => {
+  for (const line of await keepDetached(unit)) {
+    console.log(`[keepers] ${line}`);
+  }
 };
 
 const systemdDir = (): string =>
@@ -167,10 +180,12 @@ const systemdJob = (service: string): KeeperJob => {
     async restart() {
       // The agent's unit is required by the current keeper's, so systemd
       // restarts the agent with it: everything to say is said before this.
+      await keepOut(unit);
       await must(["systemctl", "--user", "restart", unit]);
     },
     async remove() {
       await run(["systemctl", "--user", "disable", unit]);
+      await keepOut(unit);
       await must(["systemctl", "--user", "stop", unit]);
       await rm(file, { force: true });
       await rm(`${file}.d`, { recursive: true, force: true });
