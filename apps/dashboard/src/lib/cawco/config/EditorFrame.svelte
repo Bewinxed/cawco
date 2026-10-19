@@ -146,24 +146,20 @@
     style:--scroll-pb={"calc(var(--c-btn-h-sm) + var(--space-8) + var(--safe-bottom))"}
     bind:this={scroller}
   >
-    <!-- literal: 980px, 8px, 26px -->
     <div
       data-slot="body"
-      class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-(--body-max) py-space-6 px-space-7 rounded-lg bg-surface-raised"
+      class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-(--c-editor-max-w) py-space-6 px-space-7 rounded-lg bg-surface-raised"
       bind:this={body}
-      style:--body-max="980px"
-      style:--head-gap="8px"
-      style:--tile="26px"
       style:min-height={card === null ? undefined : `${card}px`}
       {@attach cawco.hub === "connected" && !settling
         ? rememberCard(page.url.pathname)
         : undefined}
     >
-      <header data-slot="head" class="flex items-start gap-(--head-gap)">
+      <header data-slot="head" class="flex items-start gap-space-2">
         {#if tile}
           <span
             data-slot="tile"
-            class="inline-flex items-center justify-center flex-none size-(--tile) mt-space-row rounded-sm bg-surface-raised shadow-tile"
+            class="inline-flex items-center justify-center flex-none size-c-mark mt-space-row rounded-sm bg-surface-raised shadow-tile"
             data-share="icon:{page.url.pathname}"
             {@attach land(() => `icon:${page.url.pathname}`)}
           >
@@ -172,7 +168,7 @@
         {:else if section}
           <span
             data-slot="tile"
-            class="inline-flex items-center justify-center flex-none size-(--tile) mt-space-row rounded-sm bg-surface-raised shadow-tile"
+            class="inline-flex items-center justify-center flex-none size-c-mark mt-space-row rounded-sm bg-surface-raised shadow-tile"
             data-share="icon:{page.url.pathname}"
             style:color={section.hue}
             {@attach land(() => `icon:${page.url.pathname}`)}
@@ -182,7 +178,7 @@
         {/if}
         <div
           data-slot="lead"
-          class="flex flex-auto flex-col gap-(--head-gap) min-w-0"
+          class="flex flex-auto flex-col gap-space-2 min-w-0"
         >
           {@render header()}
         </div>
@@ -258,10 +254,3 @@
   />
 </form>
 
-<style>
-  /* residual: foreign-dom */
-  [data-slot="tile"] :global(svg) {
-    width: var(--icon-md);
-    height: var(--icon-md);
-  }
-</style>
