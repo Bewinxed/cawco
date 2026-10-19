@@ -2254,15 +2254,21 @@
     outline: none;
     transform-origin: center;
   }
+  /* An entrance ends on the element's own style: it holds its start through
+     a delay (`backwards`) and nothing once it has landed. Held with `both`,
+     a finished entrance kept its last keyframe over the element's own style
+     and kept the card on a compositor layer rastered at a mid-entrance
+     frame, so its text landed 1px off by which frame that was. An exit
+     holds its end until it is gone. */
   @media (prefers-reduced-motion: no-preference) {
     :global(.session-card:not([data-vaul-drawer])[data-state="open"]) {
-      animation: ns-panel var(--dur-panel) var(--ease-out) both;
+      animation: ns-panel var(--dur-panel) var(--ease-out) backwards;
     }
     :global(.session-card:not([data-vaul-drawer])[data-state="closed"]) {
       animation: ns-panel-out var(--dur-exit) var(--ease-out) both;
     }
     :global(.session-scrim:not([data-vaul-overlay])[data-state="open"]) {
-      animation: ns-scrim var(--dur-panel) var(--ease-out) both;
+      animation: ns-scrim var(--dur-panel) var(--ease-out) backwards;
     }
     :global(.session-scrim:not([data-vaul-overlay])[data-state="closed"]) {
       animation: ns-scrim-out var(--dur-exit) var(--ease-out) both;
@@ -2319,7 +2325,7 @@
     display: grid;
     gap: 8px;
     @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in var(--dur-pop) var(--ease-out) both;
+      animation: ns-in var(--dur-pop) var(--ease-out) backwards;
       animation-delay: var(--delay, 0ms);
     }
   }
