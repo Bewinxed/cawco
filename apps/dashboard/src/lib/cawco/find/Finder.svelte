@@ -478,14 +478,14 @@
 {#snippet whoChips()}
   <div
     data-slot="chips"
-    class="flex items-center flex-none flex-wrap gap-space-1 min-h-(--chips-min) px-space-2"
+    class="flex items-center flex-none flex-wrap gap-space-1 min-h-c-btn-h px-space-2"
     data-flip
     role="toolbar"
     aria-label="Who said it"
   >
     {#each WHO as who (who.value)}
       <button
-        class="inline-flex items-center gap-space-row h-(--chip-h) px-(--chip-px) border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
+        class="inline-flex items-center gap-space-row h-c-pill-h px-space-3 border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         aria-pressed={(finder.by ?? "anyone") === who.value}
         onclick={() => {
           if (finder.parsed.me && who.value !== "me") {
@@ -499,10 +499,10 @@
     {/each}
     {#each finder.projectChips as word (word)}
       <span
-        class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
+        class="mark-line inline-flex items-center gap-space-row h-c-pill-h ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
         ><span>{word}</span><button
-          class="grid place-items-center size-(--chipx) border-none border-current rounded-pill bg-transparent"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${word}`}
           data-box
           onclick={() => finder.removeWords([word])}
@@ -513,10 +513,10 @@
     {#if finder.parsed.time}
       {@const time = finder.parsed.time}
       <span
-        class="mark-line inline-flex items-center gap-space-row h-(--chip-h) ps-(--chip-px) pe-(--chip-pe) border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-(--chip-h-phone) group-data-phone/finder:px-(--chip-px-phone) group-data-phone/finder:text-(length:--chip-fs-phone)"
+        class="mark-line inline-flex items-center gap-space-row h-c-pill-h ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
         ><span>{time}</span><button
-          class="grid place-items-center size-(--chipx) border-none border-current rounded-pill bg-transparent"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${time}`}
           data-box
           onclick={() => finder.removeWords(time.split(" "))}
@@ -533,7 +533,7 @@
     {:else if finder.coverage?.asked && !short}
       <span
         data-slot="covered"
-        class="inline-flex items-center gap-(--covered-gap) ms-auto pe-space-1 type-meta text-ink-subtle"
+        class="inline-flex items-center gap-space-1 ms-auto pe-space-1 type-meta text-ink-subtle"
         >{machineCount === 1
           ? "The machine answered"
           : `All ${machineCount} machines answered`}</span
@@ -603,7 +603,7 @@
         {@const k = `${row}#${act}`}
         <button
           id={idOf(k)}
-          class="mark-line flex items-center gap-space-2 w-full h-(--act-h) px-space-2 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill"
+          class="mark-line flex items-center gap-space-2 w-full h-space-8 px-space-2 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill"
           aria-selected={activeKey === k}
           data-active={activeKey === k ? "" : undefined}
           data-find-row
@@ -629,7 +629,7 @@
     <button
       data-slot="fold-row"
       id={idOf(item.key)}
-      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--row1-h) px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--row1-h-phone) group-data-phone/finder:text-(length:--row1-fs-phone)"
+      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--c-find-line-h) px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--c-find-phone-h)"
       aria-label={`${count} ${kindNoun(first, count)} match “${finder.asked}”, ${open ? "shown" : "folded"}`}
       aria-selected={activeKey === item.key}
       data-active={activeKey === item.key ? "" : undefined}
@@ -659,7 +659,7 @@
   {:else if item.t === "waiting"}
     <button
       id={idOf("waiting")}
-      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--row1-h) px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--row1-h-phone) group-data-phone/finder:text-(length:--row1-fs-phone)"
+      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--c-find-line-h) px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--c-find-phone-h)"
       aria-selected={activeKey === "waiting"}
       data-active={activeKey === "waiting" ? "" : undefined}
       data-find-row
@@ -676,7 +676,7 @@
         data-box
       />
       <span class="flex-1 min-w-0 overflow-clip whitespace-nowrap text-ellipsis"
-        >Waiting for you<span class="px-(--sep-pad)">·</span><span
+        >Waiting for you<span class="px-space-1">·</span><span
           data-slot="num"
           class="num">{waitingCount}</span
         ></span
@@ -690,7 +690,7 @@
   {:else if item.t === "head"}
     <div
       data-slot="head"
-      class="flex-none h-(--head-h) px-space-3 type-caps leading-(--head-h) uppercase tracking-caps text-ink-muted truncate"
+      class="flex-none h-(--c-find-head-h) px-space-3 type-caps leading-(--c-find-head-h) uppercase tracking-caps text-ink-muted truncate"
       data-flip
       role="presentation"
     >
@@ -701,20 +701,20 @@
   {:else if item.t === "coverage"}
     <div
       data-slot="coverage"
-      class="flex items-center flex-none h-(--head-h) px-space-3 type-meta text-ink-muted"
+      class="flex items-center flex-none h-(--c-find-head-h) px-space-3 type-meta text-ink-muted"
       data-flip
     >
       {#if finder.missing.length > 0}
         <span data-slot="num" class="num"
           >{answered} of {machines(machineCount)}</span
-        ><span class="px-(--sep-pad)">·</span>{missingNames} didn't<span
-          class="px-(--sep-pad)">·</span
+        ><span class="px-space-1">·</span>{missingNames} didn't<span
+          class="px-space-1">·</span
         >
       {/if}
       {#if finder.indexing.length > 0}
         {indexingNames}
         {finder.indexing.length === 1 ? "is" : "are"} still indexing<span
-          class="px-(--sep-pad)">·</span
+          class="px-space-1">·</span
         >
       {/if}
       <button
@@ -726,19 +726,19 @@
   {:else if item.t === "rule"}
     <hr
       data-slot="rule"
-      class="flex-none my-space-1 mx-(--rule-mx) border-t border-t-border-hairline border-r-none border-b-none border-l-none"
+      class="flex-none my-space-1 -mx-space-1 border-t border-t-border-hairline border-r-none border-b-none border-l-none"
       data-flip
     />
   {:else if item.t === "skeleton"}
     <div
       data-slot="skeleton-slot"
-      class="flex-none px-space-3 py-(--sk-pad)"
+      class="flex-none px-space-3 py-space-2"
       aria-hidden="true"
       data-flip
     >
       <Skeleton
         data-tall={item.tall || undefined}
-        class="h-(--sk-row) data-tall:h-(--sk-tall)"
+        class="h-c-btn-h data-tall:h-(--c-find-skeleton-tall)"
       />
     </div>
   {:else if item.t === "nothing"}
@@ -778,10 +778,10 @@
 
 {#snippet waitingList()}
   <div
-    class="flex items-center gap-space-2 flex-none h-(--field-h) ps-space-1 pe-space-2 border-b border-b-border-hairline"
+    class="flex items-center gap-space-2 flex-none h-c-row-h ps-space-1 pe-space-2 border-b border-b-border-hairline"
   >
     <button
-      class="grid place-items-center size-(--clear-size) border-none border-current rounded-md bg-transparent text-ink-muted active:bg-surface-fill group-data-phone/finder:size-(--clear-size-phone)"
+      class="grid place-items-center size-c-btn-h border-none border-current rounded-md bg-transparent text-ink-muted active:bg-surface-fill group-data-phone/finder:size-c-btn-h-lg"
       aria-label="Back to find"
       onclick={() => finder.showFind()}
       type="button"><ChevronLeft class="size-icon-md" /></button
@@ -789,7 +789,7 @@
     <!-- The back control and the sort are boxes of their own; the title
          stands between them on .mark-text, its x-height on their middle. -->
     <span class="mark-text flex-1 type-label text-ink-strong"
-      >Waiting for you{#if waitingCount > 0}<span class="px-(--sep-pad)">·</span
+      >Waiting for you{#if waitingCount > 0}<span class="px-space-1">·</span
         ><span data-slot="num" class="num">{waitingCount}</span>{/if}</span
     >
     <Segmented
@@ -832,19 +832,19 @@
     {:else if finder.waiting.state === "asking" || finder.waiting.state === "idle"}
       <div
         data-slot="skeleton-slot"
-        class="flex-none px-space-3 py-(--sk-pad)"
+        class="flex-none px-space-3 py-space-2"
         aria-hidden="true"
         data-flip
       >
-        <Skeleton class="h-(--sk-row)" />
+        <Skeleton class="h-c-btn-h" />
       </div>
       <div
         data-slot="skeleton-slot"
-        class="flex-none px-space-3 py-(--sk-pad)"
+        class="flex-none px-space-3 py-space-2"
         aria-hidden="true"
         data-flip
       >
-        <Skeleton class="h-(--sk-row)" />
+        <Skeleton class="h-c-btn-h" />
       </div>
     {:else}
       {#each finder.waitingItems as item (`${item.kind}:${item.id}`)}
@@ -863,7 +863,6 @@
   </div>
 {/snippet}
 
-<!-- literal: 44px, 52px, 16px, 36px, 28px, 24px, 32px, 9px, 12px, 2px, 15px, 20px, 0.25em, 0.35em, 40px, 54px, 8px -->
 <div
   data-slot="finder"
   class={[
@@ -871,32 +870,7 @@
     className,
   ]}
   data-phone={phone || undefined}
-  style:--field-h="44px"
-  style:--field-h-phone="52px"
-  style:--field-fs-phone="16px"
-  style:--clear-size="36px"
-  style:--clear-size-phone="44px"
-  style:--head-h="28px"
-  style:--chips-min="36px"
-  style:--chip-h="24px"
-  style:--chip-h-phone="32px"
-  style:--chip-px="9px"
-  style:--chip-px-phone="12px"
-  style:--chip-pe="2px"
-  style:--chip-fs-phone="15px"
-  style:--chipx="20px"
-  style:--covered-gap="0.25em"
-  style:--sep-pad="0.35em"
-  style:--row1-h="40px"
-  style:--row1-h-phone="52px"
-  style:--row1-fs-phone="16px"
   style:--acts-ms="calc(var(--space-3) + var(--icon-md) + var(--space-2))"
-  style:--act-h="32px"
-  style:--sk-pad="8px"
-  style:--sk-row="36px"
-  style:--sk-tall="54px"
-  style:--hints-h="32px"
-  style:--rule-mx="calc(-1 * var(--space-1))"
 >
   {#if !phone}
     {@render field_()}
@@ -945,7 +919,7 @@
   {:else}
     <div
       data-slot="hints"
-      class="flex items-center gap-space-4 flex-none h-(--hints-h) px-space-3 border-t border-t-border-hairline type-meta text-ink-subtle"
+      class="flex items-center gap-space-4 flex-none h-space-8 px-space-3 border-t border-t-border-hairline type-meta text-ink-subtle"
       aria-hidden="true"
     >
       {#if finder.view === "waiting"}
@@ -965,361 +939,3 @@
   {/if}
   <p class="sr-only" aria-live="polite">{announce}</p>
 </div>
-
-<style>
-  .finder {
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-    max-block-size: 100%;
-    color: var(--ink-strong);
-  }
-  .body {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-block-size: 0;
-  }
-  .view {
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-    flex: 1 1 auto;
-  }
-
-  /* The list: rows on the card's surface, scrolling under the house edge fade. */
-  .list {
-    isolation: isolate;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-block-size: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: var(--space-1);
-    scrollbar-width: none;
-  }
-  .list.phone {
-    justify-content: flex-end;
-  }
-  .rule {
-    flex: none;
-    margin: var(--space-1) calc(-1 * var(--space-1));
-    border: 0;
-    border-block-start: 1px solid var(--border-hairline);
-  }
-
-  /* A group's head: uppercase label (DESIGN.md, the slash and @ menu). */
-  .head {
-    flex: none;
-    block-size: 28px;
-    padding-inline: var(--space-3);
-    font: var(--type-caps);
-    line-height: 28px;
-    text-transform: uppercase;
-    letter-spacing: var(--track-caps);
-    color: var(--ink-muted);
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  /* Who said it: filter chips on a 36px row, coverage at its end. */
-  .chips {
-    display: flex;
-    align-items: center;
-    flex: none;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    min-block-size: 36px;
-    padding-inline: var(--space-2);
-  }
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    block-size: 24px;
-    padding-inline: 9px;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-pill);
-    background: var(--surface-raised);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    transition-property: background-color, color, border-color;
-
-    &[aria-pressed="true"] {
-      border-color: transparent;
-      background: var(--brand-wash);
-      color: var(--brand-ink);
-    }
-    @media (hover: hover) {
-      &:not([aria-pressed="true"]):hover {
-        background: var(--surface-hover);
-      }
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      &:active {
-        scale: var(--press-scale);
-      }
-      transition-property: background-color, color, border-color, scale;
-    }
-  }
-  .chips.phone .chip {
-    block-size: 32px;
-    padding-inline: 12px;
-    font-size: 15px;
-  }
-  .chip.word {
-    border-color: transparent;
-    background: var(--brand-wash);
-    color: var(--brand-ink);
-    padding-inline-end: 2px;
-  }
-  .chip-x {
-    display: grid;
-    place-items: center;
-    inline-size: 20px;
-    block-size: 20px;
-    border: 0;
-    border-radius: var(--radius-pill);
-    background: none;
-    color: inherit;
-
-    & :global(svg) {
-      inline-size: var(--icon-sm);
-      block-size: var(--icon-sm);
-    }
-  }
-  .searching,
-  .covered {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-inline-start: auto;
-    padding-inline-end: var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .covered {
-    gap: 0.25em;
-    color: var(--ink-subtle);
-  }
-  .searching :global(.spin) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-
-  .coverage {
-    display: flex;
-    align-items: center;
-    flex: none;
-    block-size: 28px;
-    padding-inline: var(--space-3);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .sep {
-    padding-inline: 0.35em;
-  }
-  .num {
-    font-variant-numeric: tabular-nums;
-  }
-  .link {
-    border: 0;
-    padding: 0;
-    background: none;
-    font: inherit;
-    color: var(--link-ink);
-    cursor: pointer;
-
-    &:active {
-      opacity: 0.72;
-    }
-  }
-
-  /* A one-line row: Waiting for you, a folded kind. 40px. */
-  .waiting-row,
-  .fold-row,
-  .act {
-    inline-size: 100%;
-    border: 0;
-    background: none;
-    text-align: start;
-  }
-  .waiting-row,
-  .fold-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex: none;
-    block-size: 40px;
-    padding-inline: var(--space-3);
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-row);
-    cursor: default;
-
-    &:active {
-      background: var(--surface-fill);
-    }
-    & :global(svg) {
-      flex: none;
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-  }
-  .waiting-row.phone,
-  .fold-row.phone {
-    block-size: 52px;
-    font-size: 16px;
-  }
-  .waiting-row :global(.waiting-glyph) {
-    color: var(--status-attn-glyph);
-  }
-  .fold-row :global(.fold-glyph) {
-    color: var(--status-idle-glyph);
-  }
-  .waiting-label,
-  .fold-label {
-    flex: 1;
-    min-inline-size: 0;
-    overflow: clip;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .list :global(.fold-chev) {
-    color: var(--ink-muted);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .fold-row :global(.fold-chev) {
-      transition: rotate var(--dur-toggle) var(--ease-in-out);
-    }
-  }
-  .fold-row :global(.fold-chev.open) {
-    rotate: 90deg;
-  }
-  .peek-slot,
-  .skeleton-slot {
-    flex: none;
-  }
-
-  .acts {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    margin-inline-start: calc(var(--space-3) + var(--icon-md) + var(--space-2));
-    padding-inline-start: var(--space-3);
-    border-inline-start: 1px solid var(--border-control);
-    margin-block-end: var(--space-2);
-  }
-  .act {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    block-size: 32px;
-    padding-inline: var(--space-2);
-    border-radius: var(--radius-sm);
-    font: var(--type-label);
-    color: var(--ink-row);
-    cursor: default;
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-      color: var(--ink-muted);
-    }
-    &:active {
-      background: var(--surface-fill);
-    }
-  }
-
-  /* A skeleton at the size of the row it stands for: 52px, or 70px with its reason. */
-  .skeleton-slot {
-    padding: 8px var(--space-3);
-  }
-  .finder :global(.skeleton-row) {
-    block-size: 36px;
-  }
-  .finder :global(.skeleton-row.tall) {
-    block-size: 54px;
-  }
-
-  .nothing {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    padding: var(--space-3) var(--space-3) var(--space-4);
-    font: var(--type-body);
-  }
-  .nothing-line {
-    margin: 0;
-    color: var(--ink-strong);
-  }
-
-  /* Waiting for you, in the card's place. */
-  .waiting-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex: none;
-    block-size: 44px;
-    padding-inline: var(--space-1) var(--space-2);
-    border-block-end: 1px solid var(--border-hairline);
-  }
-  .waiting-title {
-    flex: 1;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .back {
-    display: grid;
-    place-items: center;
-    inline-size: 36px;
-    block-size: 36px;
-    border: 0;
-    border-radius: var(--radius-md);
-    background: none;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-    &:active {
-      background: var(--surface-fill);
-    }
-  }
-  .waiting-head.phone .back {
-    inline-size: 44px;
-    block-size: 44px;
-  }
-
-  .hints {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    flex: none;
-    block-size: 32px;
-    padding-inline: var(--space-3);
-    border-block-start: 1px solid var(--border-hairline);
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-
-    & kbd {
-      font: inherit;
-      color: var(--ink-muted);
-    }
-  }
-
-  .sr-only {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-</style>

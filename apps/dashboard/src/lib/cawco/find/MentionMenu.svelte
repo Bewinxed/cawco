@@ -79,7 +79,6 @@
 
 <!-- Focus never leaves the field: the menu swallows the mousedown that would
      blur it, so a picked row lands its chip where the words were typed. -->
-<!-- literal: 6px, 36px, 8px, 16px, 24px -->
 <!-- biome-ignore lint/a11y/noStaticElementInteractions: the mousedown handler only keeps the focus in the field; the rows are its controls -->
 <div
   data-slot="menu"
@@ -96,12 +95,7 @@
 >
   <div
     {id}
-    class="isolate flex flex-col p-(--rows-pad)"
-    style:--rows-pad="6px"
-    style:--sk-h="36px"
-    style:--sk-my="8px"
-    style:--line-fs="16px"
-    style:--line-lh="24px"
+    class="isolate flex flex-col p-space-2"
     aria-label="Name a session, thread or machine"
     role="listbox"
     {@attach reflow()}
@@ -109,7 +103,7 @@
   >
     {#if mention.answer.state === "unreached"}
       <p
-        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
+        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted"
         data-flip
       >
         Can't reach the hub. Nothing can be named until it's back.
@@ -121,7 +115,7 @@
       </p>
     {:else if mention.answer.state === "refused"}
       <p
-        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
+        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted"
         data-flip
       >
         {mention.answer.detail}
@@ -143,13 +137,13 @@
       {/each}
     {:else if mention.current && mention.answer.state === "ok"}
       <p
-        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted group-data-phone/menu:text-(length:--line-fs) group-data-phone/menu:leading-(--line-lh)"
+        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted"
         data-flip
       >
         No sessions for “{mention.words}”
       </p>
     {:else if late}
-      <Skeleton class="h-(--sk-h) mx-space-3 my-(--sk-my)" />
+      <Skeleton class="h-c-btn-h mx-space-3 my-space-2" />
     {/if}
   </div>
 </div>
