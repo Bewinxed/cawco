@@ -91,8 +91,11 @@ const keyOf = (selector: string): string | null =>
   document.querySelector<HTMLElement>(selector)?.dataset.cawcoKey ?? null;
 
 interface Painted {
+  /** Where it stands on the page, CSS px: what the picture's clip is measured on. */
+  page: { x: number; y: number };
   /** The colour the DOM paints at the point, 0–255 sRGB, or null where it can't be told (an image, a gradient, text on it). */
   rgb: [number, number, number] | null;
+  /** Where it stands in the frame's body, CSS px, for the fault's words. */
   x: number;
   y: number;
 }
@@ -208,7 +211,12 @@ function gridOf(args: { selector: string; grid: number }) {
       ((rect.height - 4) * (Math.floor(at / args.grid) + 0.5)) / args.grid + 2;
     const hit = document.elementFromPoint(rect.left + x, rect.top + y);
     if (hit && body.contains(hit)) {
-      points.push({ x, y, rgb: onText(hit) ? null : paintedAt(hit) });
+      points.push({
+        page: { x: rect.left + x, y: rect.top + y },
+        rgb: onText(hit) ? null : paintedAt(hit),
+        x,
+        y,
+      });
     } else {
       covered.push(`(${Math.round(x)},${Math.round(y)}) is ${name(hit)}`);
     }
@@ -266,9 +274,14 @@ function topShareOf(png: PNG): number {
   return Math.max(...counts.values()) / (data.length / 4);
 }
 
-/** How many of the DOM's painted points the png shows in their colour, of those read. */
+/**
+ * How many of the DOM's painted points the png shows in their colour, of
+ * those read: each found in the png from the clip's own corner, which stands
+ * on a whole device pixel at or before the body's (agent frame-picture.ts).
+ */
 function matchedOf(
   png: PNG,
+  clip: { x: number; y: number },
   scale: number,
   points: Painted[]
 ): { hit: number; read: number; misses: string[] } {
@@ -276,22 +289,21 @@ function matchedOf(
   const misses: string[] = [];
   let hit = 0;
   for (const point of read) {
-    const px = Math.min(png.width - 1, Math.floor(point.x * scale));
-    const py = Math.min(png.height - 1, Math.floor(point.y * scale));
+    const px = Math.floor((point.page.x - clip.x) * scale);
+    const py = Math.floor((point.page.y - clip.y) * scale);
+    const inside = px >= 0 && py >= 0 && px < png.width && py < png.height;
     const at = (py * png.width + px) * 4;
-    const got = [
-      png.data[at] ?? 0,
-      png.data[at + 1] ?? 0,
-      png.data[at + 2] ?? 0,
-    ];
+    const got = inside
+      ? [png.data[at] ?? 0, png.data[at + 1] ?? 0, png.data[at + 2] ?? 0]
+      : null;
     const want = point.rgb as [number, number, number];
     if (
-      got.every((value, c) => Math.abs(value - (want[c] ?? 0)) <= TOLERANCE)
+      got?.every((value, c) => Math.abs(value - (want[c] ?? 0)) <= TOLERANCE)
     ) {
       hit += 1;
     } else if (misses.length < 3) {
       misses.push(
-        `(${Math.round(point.x)},${Math.round(point.y)}) rgb(${got.join(",")}) for rgb(${want.join(",")})`
+        `(${Math.round(point.x)},${Math.round(point.y)}) ${got ? `rgb(${got.join(",")})` : "outside the picture"} for rgb(${want.join(",")})`
       );
     }
   }
@@ -388,7 +400,7 @@ async function shootOne(page: Page, shot: Shot): Promise<ShotRead> {
   if (top >= UNIFORM) {
     faults.push(`one colour: ${(top * 100).toFixed(2)}% of it`);
   }
-  const match = matchedOf(png, picture.read.scale, grid.points);
+  const match = matchedOf(png, picture.clip, picture.read.scale, grid.points);
   if (match.read === 0 || match.hit < match.read * MATCH_SHARE) {
     faults.push(
       `the picture is not its DOM's paint: ${match.hit} of ${match.read} points match (${match.misses.join("; ")})`
