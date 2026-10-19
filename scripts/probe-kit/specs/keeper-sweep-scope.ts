@@ -34,7 +34,6 @@
  *
  *   bun scripts/probe-kit/run.ts keeper-sweep-scope
  */
-import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
@@ -56,8 +55,19 @@ import type { Kit, Spec } from "../kit";
 /** The sweep's grace (sessiond server.ts `SWEEP_GRACE_MS`) and room past it. */
 const AFTER_SWEEP_MS = 5000;
 
-const pidIn = async (file: string): Promise<number> =>
-  Number((await readFile(file, "utf8").catch(() => "")).trim());
+/** What `file` holds, as written so far. */
+const textOf = (file: string): Promise<string> =>
+  readFile(file, "utf8").catch(() => "");
+
+/**
+ * The live process whose pid `file` holds, or undefined while it holds none:
+ * `echo $$ > file` makes the file before it writes the pid, so a file that
+ * is there may still be empty.
+ */
+const pidIn = async (file: string): Promise<number | undefined> => {
+  const pid = Number((await textOf(file)).trim());
+  return pid > 0 && (await startedAt(pid)) !== undefined ? pid : undefined;
+};
 
 const spec: Spec = {
   name: "keeper-sweep-scope",
@@ -104,20 +114,25 @@ const spec: Spec = {
       }
       const both = await until(
         "both background processes running",
-        () => existsSync(movedPid) && existsSync(keptPid),
+        async () => {
+          const [moving, staying] = await Promise.all([
+            pidIn(movedPid),
+            pidIn(keptPid),
+          ]);
+          return moving && staying ? ([moving, staying] as const) : undefined;
+        },
         Boolean,
         30_000
-      ).catch(() => false);
+      ).catch(() => undefined);
       if (!both) {
         kit.check(
           "the child starts both processes",
           false,
-          `moved: ${existsSync(movedPid)}; kept in: ${existsSync(keptPid)}`
+          `moved.pid holds ${JSON.stringify(await textOf(movedPid))}; kept.pid holds ${JSON.stringify(await textOf(keptPid))}; the child said: ${started.lines.join(" | ").slice(-1500) || "nothing"}`
         );
         return;
       }
-      const movedAt = await pidIn(movedPid);
-      const keptAt = await pidIn(keptPid);
+      const [movedAt, keptAt] = both;
       const movedBefore = await startedAt(movedAt);
       const keptBefore = await startedAt(keptAt);
       const movedGroup = await cgroupOf(movedAt);

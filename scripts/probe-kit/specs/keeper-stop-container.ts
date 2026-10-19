@@ -1,7 +1,7 @@
 /**
- * A container a session started outlives the keeper's stop. Host only: it
- * runs keepers as systemd user units and podman, neither of which a
- * workspace reaches.
+ * A keeper's unit is stopped only while it holds nothing but CawCo's own.
+ * Host only: it runs keepers as systemd user units and podman, neither of
+ * which a workspace reaches.
  *
  * On obelisk, 2026-10-19 09:28:30, an agent update retired the keeper
  * `cawco-sessiond-0.1.12-nightly.4034_…service`, and every container started
@@ -14,29 +14,38 @@
  * conmon passes SIGTERM on to the container (conmon ctr_exit.c
  * `on_sig_exit`, 2.1.13).
  *
- * Two legs, each a scratch keeper unit of its own (keeper-unit.ts) whose
+ * The rule now (agent keeper-jobs.ts): `remove()` and `restart()` read the
+ * unit's cgroup and refuse, naming each process, while anything there is
+ * neither the keeper nor in the process tree of a child its register lists;
+ * `force` is the one override. Nothing is moved out at stop time.
+ *
+ * Three legs, each a scratch keeper unit of its own (keeper-unit.ts) whose
  * child runs `podman run -d` as the owner's `podman compose up -d` from a
  * session's shell: storage of the spec's own (`--root`, `--runroot`,
  * `--tmpdir`), a container whose PID 1 is a shell that exits on SIGTERM, on
  * a rootfs of the host's `/usr` read only. The child then stays, as a session
- * does. The keeper is then retired as an agent's update retires one: its job's
- * `remove()` (agent keeper-jobs.ts).
+ * does. The keeper is then retired as an agent's update retires one: its
+ * job's `remove()`, given the live children its register lists. The stopping
+ * process (this spec) has the user bus out of its reach
+ * (`DBUS_SESSION_BUS_ADDRESS` naming no socket; `systemctl --user` reaches
+ * the manager on its private socket all the same), so no stop path can move
+ * a process into a transient unit (0 proves the rig).
  *
- * - fresh: the child's environment as this build gives it (core
- *   session-env.ts gives no child the id).
- *   (a) conmon is outside the keeper's unit before the stop;
- *   (b) 3 s after it, the container's PID 1 is the same process and podman
- *   reads it running.
  * - inherited: the child is given the unit's own `INVOCATION_ID`, as a
- *   session started by a keeper before session-env.ts dropped it still has.
- *   (c) conmon is inside the keeper's unit before the stop: the old
- *   placement;
- *   (d) after the stop, conmon is in a scope of its own outside the unit
- *   (core keep-detached.ts, run by `remove()` before `systemctl stop`);
- *   (e) 3 s after it, the container's PID 1 is the same process and podman
- *   reads it running.
+ *   session started by a keeper before session-env.ts dropped it had.
+ *   (a) conmon starts inside the keeper's unit; `remove()` is refused with
+ *   words naming conmon's pid; 3 s on the unit is still active, and the
+ *   container's PID 1 is the same process and podman reads it running.
+ * - forced: the same, retired with `force`. (b) `remove()` goes ahead and
+ *   the unit is no longer active.
+ * - clean: the child's environment as this build gives it (core
+ *   session-env.ts gives no child the id). (c) conmon starts in a scope of
+ *   its own outside the unit; `remove()` goes ahead and the unit is no
+ *   longer active; 3 s on the container's PID 1 is the same process and
+ *   podman reads it running.
  *
- * Main fails (b) and (e); 3c4793088 fails (e) alone.
+ * Main (2206a0efb, keep-detached) fails (a): with the bus out of reach its
+ * move fails, the stop goes ahead and the container ends.
  *
  * Cleanup removes only what the spec made, by name: each unit (`systemctl
  * --user stop`), each container (`podman rm -f` on the spec's own storage),
@@ -46,7 +55,10 @@
  */
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { keeperJob } from "../../../packages/agent/src/keeper-jobs";
+import {
+  keeperJob,
+  type UnitStop,
+} from "../../../packages/agent/src/keeper-jobs";
 import { until } from "../../scratch-fleet";
 import {
   cgroupOf,
@@ -56,11 +68,13 @@ import {
   type KeeperUnit,
   keeperUnitOf,
   quoted,
+  registerChildren,
   run,
   startChild,
   startedAt,
   startKeeperUnit,
   unitInvocation,
+  unitState,
 } from "../keeper-unit";
 import type { Kit, Spec } from "../kit";
 
@@ -169,37 +183,81 @@ const inUnit = (group: string, unit: string): boolean =>
   group.includes(`/${unit}/`) || group.endsWith(`/${unit}`);
 
 interface Leg {
-  /** The checks this leg makes, by letter: before the stop, after it. */
-  checks: { after?: string; before: string; survives: string };
-  /** Whether the child is given the unit's own INVOCATION_ID (the old behaviour). */
+  /** What the leg proves, as its check says it. */
+  check: string;
+  /** Retired with `force`: the stop goes ahead whatever the unit holds. */
+  forced: boolean;
+  /** Whether the child is given the unit's own INVOCATION_ID (the old placement). */
   inherited: boolean;
   label: string;
 }
 
 const LEGS: readonly Leg[] = [
   {
-    label: "fresh",
-    inherited: false,
-    checks: {
-      before:
-        "(a) fresh: the container's conmon runs outside the keeper's unit",
-      survives:
-        "(b) fresh: once the keeper is retired, the container's PID 1 is the same process and podman reads it running",
-    },
-  },
-  {
     label: "inherited",
     inherited: true,
-    checks: {
-      before:
-        "(c) inherited: with the unit's INVOCATION_ID in the child, the container's conmon starts inside the keeper's unit",
-      after:
-        "(d) inherited: retiring the keeper moves conmon into a scope of its own, outside the unit",
-      survives:
-        "(e) inherited: once the keeper is retired, the container's PID 1 is the same process and podman reads it running",
-    },
+    forced: false,
+    check:
+      "(a) inherited: conmon starts inside the keeper's unit, its retirement is refused naming conmon's pid, the keeper stays, and the container runs on",
+  },
+  {
+    label: "forced",
+    inherited: true,
+    forced: true,
+    check:
+      "(b) forced: with conmon inside the keeper's unit, a retirement with force goes ahead and the unit stops",
+  },
+  {
+    label: "clean",
+    inherited: false,
+    forced: false,
+    check:
+      "(c) clean: conmon starts in a scope of its own, the retirement goes ahead, the unit stops, and the container runs on",
   },
 ];
+
+/** A bus address that names no socket: what the stopping process is given, so nothing it runs reaches the user bus. */
+const noBus = (kit: Kit): string => `unix:path=${join(kit.out, "no-user-bus")}`;
+
+/** `work` with `DBUS_SESSION_BUS_ADDRESS` set to {@link noBus}, put back after. */
+const withoutBus = async <T>(kit: Kit, work: () => Promise<T>): Promise<T> => {
+  const before = process.env.DBUS_SESSION_BUS_ADDRESS;
+  process.env.DBUS_SESSION_BUS_ADDRESS = noBus(kit);
+  try {
+    return await work();
+  } finally {
+    if (before === undefined) {
+      delete process.env.DBUS_SESSION_BUS_ADDRESS;
+    } else {
+      process.env.DBUS_SESSION_BUS_ADDRESS = before;
+    }
+  }
+};
+
+/** 0: with the bus out of reach, busctl cannot reach the user manager and systemctl still can. */
+const rigHolds = async (kit: Kit): Promise<boolean> => {
+  const [bus, manager] = await withoutBus(kit, () =>
+    Promise.all([
+      run([
+        "busctl",
+        "--user",
+        "get-property",
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+        "Version",
+      ]),
+      run(["systemctl", "--user", "show", "-p", "Version", "--value"]),
+    ])
+  );
+  const holds = bus.code !== 0 && manager.code === 0 && manager.out !== "";
+  kit.check(
+    "0: with DBUS_SESSION_BUS_ADDRESS naming no socket, busctl --user fails and systemctl --user still reaches the manager",
+    holds,
+    `busctl exited ${bus.code}: ${bus.err || bus.out}; systemctl exited ${manager.code}: ${manager.out || manager.err}`
+  );
+  return holds;
+};
 
 /** One leg: its keeper, its container, the keeper retired, the container after it. */
 const runLeg = async (kit: Kit, leg: Leg): Promise<void> => {
@@ -213,9 +271,9 @@ const runLeg = async (kit: Kit, leg: Leg): Promise<void> => {
     const refused = await startKeeperUnit(kit, keeper);
     if (refused) {
       kit.check(
-        `${leg.label}: the scratch keeper runs as a user unit`,
+        leg.check,
         false,
-        refused
+        `the scratch keeper did not start: ${refused}`
       );
       return;
     }
@@ -225,41 +283,39 @@ const runLeg = async (kit: Kit, leg: Leg): Promise<void> => {
     const composed = await compose(kit, keeper, podman.argv, rootfs, name, env);
     if (typeof composed === "string") {
       kit.check(
-        `${leg.label}: the keeper's child starts a container with podman run -d`,
+        leg.check,
         false,
-        composed
+        `the keeper's child started no container: ${composed}`
       );
       return;
     }
     const { pid, conmon, inv } = composed;
     const before = await startedAt(pid);
-    const conmonBefore = await cgroupOf(conmon);
-    kit.check(
-      leg.checks.before,
-      conmonBefore !== "unreadable" &&
-        inUnit(conmonBefore, keeper.unit) === leg.inherited,
-      `the child read ${inv}; conmon ${conmon} in ${conmonBefore}`
-    );
-    // Retired as an agent's update retires a keeper: its job's remove().
-    const job = keeperJob(keeper.keeper);
-    const removed = await (
-      job
-        ? job.remove()
-        : Promise.reject(new Error("no keeper job on this platform"))
-    ).then(
-      () => "removed",
-      (error: unknown) =>
-        error instanceof Error ? error.message : String(error)
-    );
-    await Bun.sleep(3000);
-    const conmonAfter = await cgroupOf(conmon);
-    if (leg.checks.after) {
-      kit.check(
-        leg.checks.after,
-        conmonAfter !== "unreadable" && !inUnit(conmonAfter, keeper.unit),
-        `conmon ${conmon} in ${conmonAfter}`
-      );
+    const conmonGroup = await cgroupOf(conmon);
+    const placed =
+      conmonGroup !== "unreadable" &&
+      inUnit(conmonGroup, keeper.unit) === leg.inherited;
+    const children = await registerChildren(keeper);
+    if (typeof children === "string") {
+      kit.check(leg.check, false, children);
+      return;
     }
+    // Retired as an agent's update retires a keeper: its job's remove().
+    const stop: UnitStop = leg.forced ? { force: true } : { children };
+    const job = keeperJob(keeper.keeper);
+    const removed = await withoutBus(kit, async () => {
+      if (!job) {
+        return "no keeper job on this platform";
+      }
+      try {
+        await job.remove(stop);
+        return "removed";
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    });
+    await Bun.sleep(3000);
+    const state = await unitState(keeper);
     const after = await startedAt(pid);
     const status = await run([
       ...podman.argv,
@@ -268,14 +324,33 @@ const runLeg = async (kit: Kit, leg: Leg): Promise<void> => {
       "{{.State.Status}}",
       name,
     ]);
-    kit.check(
-      leg.checks.survives,
-      removed === "removed" &&
-        before !== undefined &&
-        after === before &&
-        status.out === "running",
-      `the keeper's job: ${removed}; PID 1 ${pid} ${fateOf(before, after)}; podman reads ${status.out || status.err}; conmon then in ${conmonAfter}`
-    );
+    const runsOn =
+      before !== undefined && after === before && status.out === "running";
+    const said = `the child read ${inv}; conmon ${conmon} was in ${conmonGroup}; the register listed ${children.join(", ") || "nothing"}; remove(${leg.forced ? "force" : "children"}): ${removed}; the unit is ${state}; PID 1 ${pid} ${fateOf(before, after)}, podman reads ${status.out || status.err}`;
+    if (!leg.inherited) {
+      kit.check(
+        leg.check,
+        placed && removed === "removed" && state !== "active" && runsOn,
+        said
+      );
+    } else if (leg.forced) {
+      kit.check(
+        leg.check,
+        placed && removed === "removed" && state !== "active",
+        said
+      );
+    } else {
+      kit.check(
+        leg.check,
+        placed &&
+          removed !== "removed" &&
+          removed.includes(`pid ${conmon} (`) &&
+          removed.includes("conmon") &&
+          state === "active" &&
+          runsOn,
+        said
+      );
+    }
   } finally {
     await endKeeperUnit(keeper);
     await run([...podman.argv, "rm", "-f", "-t", "0", name]);
@@ -295,6 +370,9 @@ const spec: Spec = {
         false,
         refused
       );
+      return;
+    }
+    if (!(await rigHolds(kit))) {
       return;
     }
     for (const leg of LEGS) {

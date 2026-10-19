@@ -1,8 +1,8 @@
 /**
  * A scratch keeper as a systemd user unit of its own, for the host specs that
- * read what a keeper's stop or sweep does to what its children started
- * (keeper-stop-container, keeper-sweep-scope). Host only: a workspace reaches
- * no service manager.
+ * read what a keeper's stop or sweep does to what its children started, or
+ * whether it is stopped at all (keeper-stop-container, keeper-sweep-scope).
+ * Host only: a workspace reaches no service manager.
  *
  * The unit runs this checkout's sessiond, delegated as the real keeper's unit
  * is (`Delegate=pids memory cpu`, `DelegateSubgroup=keeper`), under a name
@@ -217,6 +217,28 @@ export const startChild = async (
     inherit: "session",
   });
   return { client, exited, lines, procId };
+};
+
+/** The pids of the live children the keeper's register lists, as an agent's update reads them (agent binary-update.ts `readKeepers`). */
+export const registerChildren = async (
+  keeper: KeeperUnit
+): Promise<number[] | string> => {
+  const dialled = await SessiondClient.connect(keeper.socket);
+  if (dialled.kind !== "answered") {
+    return `the scratch keeper did not answer: ${dialled.reason}`;
+  }
+  try {
+    const listed = await dialled.value.list();
+    return listed.procs.filter((proc) => proc.alive).map((proc) => proc.pid);
+  } finally {
+    dialled.value.close();
+  }
+};
+
+/** systemd's word for the unit: `active`, `inactive`, `failed`, … */
+export const unitState = async (keeper: KeeperUnit): Promise<string> => {
+  const shown = await run(["systemctl", "--user", "is-active", keeper.unit]);
+  return shown.out || shown.err;
 };
 
 /** Stops the keeper unit, if it still runs, and removes its socket dir. */

@@ -16,6 +16,12 @@
  * Every keeper on the machine is watched (core keepers.ts): the current one
  * is restarted, and a retiring one, which no new session would ever start on
  * again, is removed.
+ *
+ * Neither while its unit holds a process that is not the keeper's or in one
+ * of its children's trees (keeper-jobs.ts `UnitStop`): a wedged keeper
+ * answers no listing, so its children are its child processes in the process
+ * table. Such a keeper is left as it is, said, and looked at again with its
+ * next run of silent dials.
  */
 
 import { mkdir, readdir, readFile, readlink } from "node:fs/promises";
@@ -36,7 +42,7 @@ import {
 import { hostEnvironment } from "@cawco/core/session-env";
 import { isAlive, listedPid, type Pid, signal } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
-import { type KeeperJob, keeperJob } from "./keeper-jobs";
+import { type KeeperJob, KeeperKept, keeperJob } from "./keeper-jobs";
 import { dialKeeper } from "./sessiond-client";
 
 /**
@@ -383,6 +389,14 @@ export class KeeperWatchdog {
     const table = await processTable();
     const held = table.filter((row) => row.ppid === streak.pid);
     const tree = descendants(table, streak.pid);
+    const stop = { children: held.map((row) => row.pid) };
+    const foreign = await job.foreign(stop.children);
+    if (foreign.length > 0) {
+      this.#log(
+        `session keeper ${streak.pid} (${found.keeper.version}${found.current ? "" : ", retiring"}) is wedged, and is left as it is: ${new KeeperKept(job.name, foreign).message}; diagnostics in ${dir}`
+      );
+      return;
+    }
     const restart: KeeperRestart = {
       at,
       pid: streak.pid,
@@ -394,7 +408,7 @@ export class KeeperWatchdog {
     };
     await this.#record(restart);
     this.#log(wedgedLine(found, job, streak, held, dir, silentForMs));
-    await (found.current ? job.restart() : job.remove());
+    await (found.current ? job.restart(stop) : job.remove(stop));
     // What the dead keeper started is ended here: a keeper killed outright
     // (launchd's SIGKILL after its exit timeout) leaves its children under
     // init, each in its own process group, where nobody can reach them.

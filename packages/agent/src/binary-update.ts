@@ -73,7 +73,7 @@ import {
   removeFinishedHelpers,
 } from "./helper-jobs";
 import { provenFetch } from "./hub-proof";
-import { keeperJob, keeperJobsHere } from "./keeper-jobs";
+import { KeeperKept, keeperJob, keeperJobsHere } from "./keeper-jobs";
 import { withKeepers } from "./keepers";
 import { runBinaryPins } from "./pin-record";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
@@ -166,6 +166,8 @@ export const reportBinaryUpdate = (state: BinaryUpdateState): void => {
 const readKeepers = (): Promise<
   {
     capabilities: readonly string[];
+    /** The pids of its live children, as its register lists them: what its unit's stop may reach besides the keeper. */
+    children: number[];
     current: boolean;
     endpoint: string;
     /** Its sessions: what an update the new agent cannot speak to it would wait on. */
@@ -179,6 +181,9 @@ const readKeepers = (): Promise<
     Promise.resolve(
       keepers.map(({ client, current, endpoint, keeper }) => ({
         capabilities: client.capabilities,
+        children: client.procs
+          .filter((proc) => proc.alive)
+          .map((proc) => proc.pid),
         current,
         endpoint,
         held: heldSessions(client.procs),
@@ -575,6 +580,27 @@ export class BinaryUpdater {
   readonly #emptySince = new Map<string, number>();
   /** Each keeper job's first look at which no keeper ran from it, by its service name. */
   readonly #idleJobSince = new Map<string, number>();
+  /** The last refusal said for each keeper job kept for what its unit holds ({@link KeeperKept}), by its service name: said again only when it changes. */
+  readonly #keptSaid = new Map<string, string>();
+
+  /**
+   * A keeper job's stop that failed: a refusal for what its unit holds is
+   * said once for as long as it holds the same, and tried again on the next
+   * look; any other failure is said every time.
+   */
+  #stopFailed(service: string, error: unknown): void {
+    if (!(error instanceof KeeperKept)) {
+      logFailure(error);
+      return;
+    }
+    if (this.#keptSaid.get(service) === error.message) {
+      return;
+    }
+    this.#keptSaid.set(service, error.message);
+    console.warn(
+      `[update] an old session keeper is kept: ${error.message}; it is tried again on each look`
+    );
+  }
 
   /**
    * THE KEEPERS BESIDE THE CURRENT ONE GO WHEN THEY HOLD NOTHING
@@ -612,7 +638,9 @@ export class BinaryUpdater {
    * Each retiring keeper that has held no live child for
    * {@link RETIRING_EMPTY_MS} is removed (its job ends and leaves the machine;
    * keeper-jobs.ts), and what no process runs any more is pruned. One holding
-   * anything is never signalled. The machine's endpoint is made to name the
+   * anything is never signalled, and neither is one whose unit holds a
+   * process that is not its own: its stop is refused ({@link KeeperKept}),
+   * said, and tried again on the next look. The machine's endpoint is made to name the
    * keeper the `keeper` link names, once that one answers, should a handover
    * have stopped between the two. Only while no update helper runs.
    */
@@ -655,15 +683,16 @@ export class BinaryUpdater {
       }
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one keeper at a time, each removal said in its order
-        await keeperJob(keeper.keeper)?.remove();
+        await keeperJob(keeper.keeper)?.remove({ children: keeper.children });
         await rm(keeper.endpoint, { force: true });
         this.#emptySince.delete(keeper.endpoint);
+        this.#keptSaid.delete(keeperService(keeper.keeper));
         removed = true;
         console.info(
           `[update] the retiring session keeper ${keeper.keeper.version} holds nothing and is gone`
         );
       } catch (error) {
-        logFailure(error);
+        this.#stopFailed(keeperService(keeper.keeper), error);
       }
     }
     // What a keeper that is gone left: a file nothing answers on now. Asked at
@@ -740,14 +769,16 @@ export class BinaryUpdater {
         continue;
       }
       try {
-        await job.remove();
+        // No keeper runs from it: nothing in its unit is a keeper's child.
+        await job.remove({ children: [] });
         this.#idleJobSince.delete(job.service);
+        this.#keptSaid.delete(job.service);
         removed = true;
         console.info(
           `[update] ${job.name}: no session keeper runs from it, and it is removed`
         );
       } catch (error) {
-        logFailure(error);
+        this.#stopFailed(job.service, error);
       }
     }
     return removed;

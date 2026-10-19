@@ -476,8 +476,9 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
     await awaitWelcome(endpoint, job);
   } catch (error) {
     if (!keepJob) {
+      // A keeper that never answered holds no session: nothing in its unit is a child of its.
       await job
-        .remove()
+        .remove({ children: [] })
         .catch((removing: unknown) =>
           say(
             `keeper ${to}: its job could not be removed: ${message(removing)}`
