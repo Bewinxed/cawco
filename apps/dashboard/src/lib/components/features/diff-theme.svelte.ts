@@ -31,21 +31,44 @@ type DiffLayout = Omit<
 const THEMES = { light: CODE_THEME, dark: CODE_THEME };
 
 /**
- * A FileDiff on the house theme. The library's shadow root says
- * `color-scheme: light dark`, which follows the OS; the app's scheme is the
- * theme class (app.css), so the diff is told it, and told again on every
- * switch. Call it inside an effect (an attachment): the switch is followed for
- * as long as that effect lives.
+ * The scheme `where` is drawn in: its own `color-scheme`, which it inherits
+ * from the root's theme class in the app (app.css) and from its frame on a
+ * component canvas, where a dark frame stands on a light page. "light dark"
+ * follows the OS, as the browser does.
  */
-export function houseDiff(layout: DiffLayout): FileDiff<undefined, undefined> {
+function schemeAt(where: HTMLElement): "light" | "dark" {
+  const named = getComputedStyle(where).colorScheme.split(" ");
+  if (named.includes("dark") && !named.includes("light")) {
+    return "dark";
+  }
+  if (named.includes("dark")) {
+    return matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+  return "light";
+}
+
+/**
+ * A FileDiff on the house theme, for drawing into `where`. The library's
+ * shadow root says `color-scheme: light dark`, which follows the OS; the
+ * diff is told the scheme of the box it is drawn in, and told again on every
+ * switch of the app's theme. Call it inside an effect (an attachment): the
+ * switch is followed for as long as that effect lives.
+ */
+export function houseDiff(
+  layout: DiffLayout,
+  where: HTMLElement
+): FileDiff<undefined, undefined> {
   const diff = new FileDiff<undefined, undefined>({
     ...layout,
     overflow: "wrap",
     theme: THEMES,
-    themeType: untrack(() => theme.resolved),
+    themeType: untrack(() => schemeAt(where)),
   });
   $effect(() => {
-    diff.setThemeType(theme.resolved);
+    // Read again after every switch of the app's theme.
+    diff.setThemeType(theme.resolved && schemeAt(where));
   });
   return diff;
 }
