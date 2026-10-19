@@ -30,10 +30,10 @@
   );
 </script>
 
-<!-- literal: 1.5px. xyflow's unlayered .svelte-flow__edge-path outranks utilities, so the paint goes through its own custom properties -->
+<!-- xyflow's unlayered .svelte-flow__edge-path outranks utilities, so the paint goes through its own custom properties -->
 <BaseEdge
   {id}
   markerEnd="url(#{marker})"
   path={route[0]}
-  style="stroke: var(--ink-muted); stroke-width: var(--c-graph-edge)"
+  style="--xy-edge-stroke: var(--ink-muted); --xy-edge-stroke-width: var(--c-graph-edge)"
 />

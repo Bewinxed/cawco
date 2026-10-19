@@ -12,6 +12,7 @@
   import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
   import { untrack } from "svelte";
   import { enterPage, pageSource } from "#lib/cawco/preview/page-source.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { theme } from "#lib/theme.svelte.js";
 
   let {
@@ -154,12 +155,6 @@
   ></iframe>
 {:else}
   <div aria-hidden="true" class="flex-auto p-space-5">
-    <!-- literal: 11px, 42% -->
-    <span
-      data-slot="block"
-      class="kit-skeleton block h-(--skeleton-h) w-(--skeleton-w) rounded-xs"
-      style:--skeleton-h="11px"
-      style:--skeleton-w="42%"
-    ></span>
+    <Skeleton class="h-space-3 w-2/5" data-slot="block" radius="text" />
   </div>
 {/if}
