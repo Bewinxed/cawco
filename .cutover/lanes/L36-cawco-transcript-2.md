@@ -102,22 +102,24 @@ removed: InlineTranscript.svelte:147 the `[data-slot="inner"] :global(*)` rule �
 ## Fixed
 fixed: DelegateTray.svelte:1293 the shelf rows' reason/acts indent was `calc(17px + var(--space-2))` in three places, a copy of the mark's size; one `--sacts-start` on the row now reads `--c-row-mark`, so the indent follows the mark — DESIGN.md "Shapes" (marks), one source for a repeated dimension.
 fixed: DelegateTray.svelte:1315 the failure reason line lost its styles in the merge (class with no rule) — restored as utilities (meta size, fail ink, one line, ellipsis).
+fixed: DelegateTail.svelte:416 the loading skeleton's three line widths were hand-kept pixel numbers in the script (240, 180, 280) applied as inline styles; they are shares of the row (`w-2/3`, `w-1/2`, `w-3/4`) — DESIGN.md "Loading" (a placeholder is sized by its row, not by a number).
 fixed: DelegateTail.svelte:330 the fade run was a 24px literal beside a 24px row; it reads the row (`--row`).
-fixed: DocThumb.svelte:98 the upload ring's stroke width and round cap were a `<style>` block on svg children; they are the SVG's own presentation attributes (`stroke-width`, `stroke-linecap`), so no stylesheet is needed.
-fixed: DocThumb.svelte:121 the file glyph was a 24px literal; it is the 16px icon in a 24px cell (`size-icon-md m-space-1`), the same cell the upload ring draws — DESIGN.md icons are 12/16/20.
+removed: DelegateTail.svelte:326 the `-mx-space-2` on the tail's stack and the `px-space-2` on each of its rows (:344, :414, :420, :426) — a negative margin cancelling the rows' own padding; the rows' text stands where it stood, without either.
+fixed: DocThumb.svelte:100 the upload ring's stroke width and round cap were a `<style>` block on svg children; they are the SVG's own presentation attributes (`stroke-width`, `stroke-linecap`), so no stylesheet is needed.
+fixed: DocThumb.svelte:123 the file glyph was a 24px literal; it is the 16px icon in a 24px cell (`size-icon-md m-space-1`), the same cell the upload ring draws — DESIGN.md icons are 12/16/20.
 fixed: DelegateTray.svelte:1613 `pr-`/`pl-` → `pe-`/`ps-` in the shelf head so it mirrors.
 fixed: DelegateTray.svelte:1171 the running dot is `size-space-1 rounded-pill` (ladder step, the pill radius DESIGN.md gives dots), not 5px / 50%.
 
 ## Gaps
-gap: DelegateTail.svelte:417 the loading skeleton's three line widths (240, 180, 280) are numbers in the script (`[240, 180, 280]`) applied as an inline `style` on the kit Skeleton; the kit has no share-of-row width variant — DESIGN.md "Loading".
-gap: DelegateTray.svelte:485 the script queries the chip's parts by `data-slot` / `data-chip-*` attribute strings; the parts could take one `data-slot` hook each.
-gap: DesignOfferActions.svelte:68 `rail-hang` stays defined in app.css (other files still name it); this file now reads `--x-hang` directly — app.css owns the rail contract.
+gap: apps/dashboard/src/app.css:2137 `.rail-hang` (`margin-inline-start: var(--x-hang)`) stays defined because other files still name it (Subagent.svelte:168, Delegate.svelte:559, QuestionCard.svelte:303 and others); DesignOfferActions.svelte:68 now reads `--x-hang` directly — the class goes when its last user does — DESIGN.md "Layout" (one rail contract).
 
 ## Kit swaps
 kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte:1166 Spinner (default) — `size-icon-md block` dropped, the kit's default is the 16px size — done
 kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte:1404 Input `h-c-btn-h-sm` — the reason field matches a `sm` Button's height (30px); needs an Input height variant, `size="sm"`
 kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte:1681 Input `h-c-btn-h-sm` — the same, in the shelf foot
-kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTail.svelte:417 Skeleton `h-icon-sm` — a text line's bar 12px tall, in a 24px row; needs a Skeleton height variant for the tail row (`height="x-height"` is the nearest, which is set by the type role, not 12px)
+kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTail.svelte:416 Skeleton `h-icon-sm` — a text line's bar 12px tall, in a 24px row; needs a Skeleton height variant for the tail row (`height="x-height"` is the nearest, which is set by the type role, not 12px)
+kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTail.svelte:422 Skeleton `h-icon-sm` — the same
+kit-swap: apps/dashboard/src/lib/cawco/transcript/DelegateTail.svelte:428 Skeleton `h-icon-sm` — the same
 
 ## Contracts
 none
@@ -133,5 +135,4 @@ none
 - Hit areas: the jump link's visible box is the row's mark (18px) and `touch-hit` supplies the target; fixed (see Removed).
 - Motion: arrival is `motion-safe:` on the chip's surface and parts, `motion-reduce:` a plain opacity fade of the chip; the finish pulse is its own `::before` animation; no new motion designed.
 - Tokens: no raw values remain in the seven files; four named `token:` lines for real dimensions.
-- gap: Input and Skeleton sites above are kit variants the kit lane owns.
 - ui-observer: Not verified — no `/motion` bench or stories file renders these components in this workspace, and the theme additions are not in theme.css until integration.

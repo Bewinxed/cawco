@@ -323,7 +323,7 @@
      lifts. The stack stands on the tail's foot and spills over its top, in
      the flow, so the widest row is the tail's width (the panel sizes to it). -->
 <div
-  class="flex flex-col justify-end h-(--tail-h) overflow-hidden -mx-space-2 text-ink-strong data-full:mask-(--tail-fade)"
+  class="flex flex-col justify-end h-(--tail-h) overflow-hidden text-ink-strong data-full:mask-(--tail-fade)"
   style:--row="{ROW}px"
   style:--slots={slots}
   style:--tail-h="calc(var(--row) * var(--slots))"
@@ -341,7 +341,7 @@
         {@const row = dataOf(key)}
         <div
           data-slot="row"
-          class="mark-line flex-none h-(--row) flex items-center gap-space-2 px-space-2 min-w-0 text-size-meta whitespace-nowrap kind-ask:text-status-attn-ink kind-asked:text-ink-muted kind-fail:text-status-fail-ink"
+          class="mark-line flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap kind-ask:text-status-attn-ink kind-asked:text-ink-muted kind-fail:text-status-fail-ink"
           data-delegate-tail-kind={row?.kind}
           data-kind={row?.kind}
         >
@@ -409,14 +409,24 @@
       class="flex-none flex flex-col"
       role="status"
     >
-      {#each [240, 180, 280] as width (width)}
-        <div
-          data-slot="row"
-          class="flex-none h-(--row) flex items-center gap-space-2 px-space-2 min-w-0 text-size-meta whitespace-nowrap"
-        >
-          <Skeleton class="h-icon-sm" style="inline-size: {width}px" />
-        </div>
-      {/each}
+      <div
+        data-slot="row"
+        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
+      >
+        <Skeleton class="h-icon-sm w-2/3" />
+      </div>
+      <div
+        data-slot="row"
+        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
+      >
+        <Skeleton class="h-icon-sm w-1/2" />
+      </div>
+      <div
+        data-slot="row"
+        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
+      >
+        <Skeleton class="h-icon-sm w-3/4" />
+      </div>
     </div>
   {/if}
 </div>
