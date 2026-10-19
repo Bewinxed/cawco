@@ -7,7 +7,7 @@ import WebKit
 
 /// A session's preview (preview/PreviewPane.svelte): its header (the
 /// artifact's name as the title menu (ArtifactMenu.swift) and its path, Send
-/// picks, a sheet's Inspect, the mode, Comments, Reload, Close) over the
+/// picks, a component canvas's view and Inspect, the mode, Comments, Reload, Close) over the
 /// page, which a web view loads from the session's own preview origin (a
 /// port of the hub's, or a host name of its own). The page carries the agent's
 /// overlay, which talks to its host as an iframe talks to the dashboard: the
@@ -26,6 +26,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private weak var menu: ArtifactMenuController?
     /// A sheet's Inspect (PreviewPane.svelte `.inspect`), pressed while its inspector stands.
     private var inspectButton: UIButton!
+    /// A component canvas's view: its frames' scheme, widths, motion and zoom, kept per session.
+    private var canvasView: CanvasViewControl!
     /// The shown sheet's inspector state, one per sheet: another sheet starts with nothing unsaved.
     private var inspection: SheetInspection?
     private var inspector: SheetInspectorView?
@@ -158,6 +160,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     // The pins (Projects spec §5.7; tsk-3).
     private var comments: ArtifactComments = .empty
+    /// The open pins More's count says and the head's fit makes room for.
+    private var openPins: Int {
+        #if DEBUG
+        if let probeOpen { return probeOpen }
+        #endif
+        return comments.open
+    }
     private var reading = false
     private var readAgain = false
     private let card = PinCard()
@@ -350,9 +359,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         modePick.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
             MainActor.assumeIsolated { done(self.map { [$0.modeMenu()] } ?? []) }
         }])
+        // A component canvas's view (CanvasView.svelte), between Open in new tab and Inspect.
+        canvasView = CanvasViewControl(instanceId: instanceId) { [weak self] message in self?.deliver(message) }
         let controls: [(HeadItem, UIView)] = [
             (.send, sendButton), (.newCanvas, newCanvasButton), (.undock, undockButton), (.openTab, openTabButton),
-            (.inspect, inspectButton), (.mode, modes), (.modePick, modePick), (.comments, pinsButton), (.reload, reload),
+            (.view, canvasView.button), (.inspect, inspectButton), (.mode, modes), (.modePick, modePick), (.comments, pinsButton), (.reload, reload),
             (.expand, expandButton),
         ]
         for (item, control) in controls { slots[item] = HeadSlot(control) }
@@ -736,19 +747,19 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     // MARK: The head's room (HIG Toolbars: "Prioritize only the most important items", the rest in a More menu)
 
-    /// The head's controls after the name, in DESIGN.md §5.10's order.
     /// The head's controls after the name, in DESIGN.md §5.10's order;
-    /// `modePick` is the mode where its three segments have no room.
+    /// `view` is a component canvas's view, `modePick` the mode where its
+    /// three segments have no room.
     private enum HeadItem: String, CaseIterable {
-        case send, newCanvas, undock, openTab, inspect, mode, modePick, comments, reload, expand
+        case send, newCanvas, undock, openTab, view, inspect, mode, modePick, comments, reload, expand
     }
 
     /// Who keeps a place in the head when it is short of room, first to last:
     /// the key action, then what a person reaches for on every page (its mode,
     /// its Comments), then the panel's own (Expand, Reload), then what is
-    /// done now and then. The web's head has no such order (its only narrow
-    /// rule is Comments' word going under 640px): it is the app's own.
-    private static let priority: [HeadItem] = [.send, .mode, .comments, .expand, .reload, .inspect, .undock, .openTab, .newCanvas]
+    /// done now and then. The web's head stands by the same order and the
+    /// same rule (side/head.ts `standing()`).
+    private static let priority: [HeadItem] = [.send, .mode, .comments, .expand, .reload, .inspect, .view, .undock, .openTab, .newCanvas]
     /// A touch target's side (HIG Layout: "44x44 pt").
     private static let target = 44.0
     /// The narrowest the artifact's name stands while controls go to More: its glyph and a dozen letters.
@@ -781,7 +792,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         case .send: sendWanted
         case .newCanvas, .openTab: !ownTab
         case .undock: canvasShown && !ownTab
-        case .inspect: inspection != nil
+        case .inspect, .view: inspection != nil
         case .mode, .comments: !canvasShown
         case .modePick: false
         case .reload: true
@@ -789,10 +800,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
     }
 
-    /// Each control the panel wants stands in the head while the name keeps
-    /// its floor, by `priority`; what has no room goes to More, which then
-    /// stands before Close. The mode gives up its segments for its pick
-    /// before it goes. Close and the name always stand.
+    /// Each control the panel wants stands whole while they all fit beside
+    /// the name's floor. Otherwise More's room is kept, and each control by
+    /// `priority`, in its narrowest form (the mode as its pick), stands where
+    /// it fits and is passed over where it doesn't; then the mode takes its
+    /// segments back if the room left holds them, so they never cost another
+    /// control its place. What has no room goes to More, before Close. Close
+    /// and the name always stand. More's room is More as it will be drawn:
+    /// a fit that leaves Comments in More is fitted again with More holding
+    /// Comments' count, and that one stands. Both read only the controls'
+    /// own widths, the name's, the head's and the count, none of which what
+    /// stands changes, so a layout lays out the same again. A count is drawn
+    /// only above 0, so at 0 More keeps its plain width.
     private func placeHeadItems() {
         guard isViewLoaded, let head = dragArea as? UIStackView else { return }
         let width = head.bounds.width
@@ -801,22 +820,32 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let room = { (item: HeadItem) in self.slots[item]?.fittingWidth ?? 0 }
         nameKept = min(Self.nameFloor, titleButton.wholeWidth)
         if nameWidth.constant != nameKept { nameWidth.constant = nameKept }
+        // The count's figures before More's room is read.
+        let count = "\(openPins)"
+        if moreBadge.text != count { moreBadge.text = count }
         // The identity's own trailing margin stands with the name.
         let name = nameKept + 8 - Space.space1
         let close = Self.target
         let all = wanted.reduce(0) { $0 + room($1) }
         var shown = Set(wanted)
-        if name + all + close > width {
-            // First the room More takes, then each control by priority while it fits.
-            var left = width - name - close - Self.target
-            shown = []
-            for item in Self.priority where wanted.contains(item) {
-                let stands = item == .mode && room(.mode) > left ? HeadItem.modePick : item
-                guard room(stands) <= left else { continue }
-                shown.insert(stands)
-                left -= room(stands)
+        var left = width - name - all - close
+        #if DEBUG
+        laidFirst = nil
+        #endif
+        if left < 0 {
+            let beside = width - name - close
+            (shown, left) = Self.fit(beside - moreRoom(counted: false), wanted, room)
+            // A count is drawn only above 0: at 0 More keeps its plain width.
+            if wanted.contains(.comments), !shown.contains(.comments), openPins > 0 {
+                #if DEBUG
+                laidFirst = shown
+                #endif
+                (shown, left) = Self.fit(beside - moreRoom(counted: true), wanted, room)
             }
         }
+        #if DEBUG
+        laidLeft = left
+        #endif
         overflowed = wanted.filter { !shown.contains($0) && !($0 == .mode && shown.contains(.modePick)) }
         for item in HeadItem.allCases {
             let hidden = !shown.contains(item)
@@ -827,12 +856,42 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintMore()
     }
 
+    /// The web's `standing()` past its first case, in `room` (the head's,
+    /// less the name, Close and More): each wanted control by priority, in
+    /// its narrowest form (the mode as its pick), where it fits, one with no
+    /// room passed over; then the mode's segments where the room left holds
+    /// them. What stands, and the room left.
+    private static func fit(_ room: Double, _ wanted: [HeadItem], _ width: (HeadItem) -> Double) -> (shown: Set<HeadItem>, left: Double) {
+        var left = room
+        var shown: Set<HeadItem> = []
+        for item in priority where wanted.contains(item) {
+            let stands = item == .mode ? HeadItem.modePick : item
+            guard width(stands) <= left else { continue }
+            shown.insert(stands)
+            left -= width(stands)
+        }
+        let segments = width(.mode) - width(.modePick)
+        if shown.contains(.modePick), segments <= left {
+            shown.remove(.modePick)
+            shown.insert(.mode)
+            left -= segments
+        }
+        return (shown, left)
+    }
+
+    /// More's room in the head as it will be drawn: its slot, and, while it
+    /// holds Comments with pins open, Comments' count after its dots,
+    /// `space-1` before it.
+    private func moreRoom(counted: Bool) -> Double {
+        moreSlot.fittingWidth + (counted ? Double(moreBadge.intrinsicContentSize.width) + Space.space1 : 0)
+    }
+
     /// More's own words, and Comments' open count on it while it holds Comments.
     private func paintMore() {
         // As on Comments: the count stands always, 0 too.
         // Run on every layout: each is written only when it changed, as a label's words lay the head out again.
         let holds = overflowed.contains(.comments)
-        let count = "\(comments.open)"
+        let count = "\(openPins)"
         if moreBadge.text != count { moreBadge.text = count }
         if moreBadge.isHidden == holds { moreBadge.isHidden = !holds }
         let words = holds ? "More, Comments \(count) open" : "More"
@@ -871,6 +930,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                     guard let self, let id = artifactId else { return }
                     onOpenTab(id)
                 }
+            case .view:
+                return canvasView.submenu()
             case .inspect:
                 return UIAction(title: Words.Artifacts.inspect, image: Glyph.tuning.image, state: inspectOpen ? .on : .off) { [weak self] _ in
                     guard let self else { return }
@@ -1407,6 +1468,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         setMode(mode, place: placing)
         if !pinsShown { deliver(["type": "cawco:pins-shown", "shown": false]) }
         if let openPin { deliver(["type": "cawco:track-pin", "id": openPin]) }
+        // A component canvas's page takes the view kept for this session (CanvasView.svelte's `ready`).
+        if inspection != nil { canvasView.tell() }
         if let revision { word(revision, failure: nil) }
     }
 
@@ -1586,6 +1649,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func deliver(_ message: [String: Any]) {
         guard isViewLoaded, let data = try? JSONSerialization.data(withJSONObject: message),
               let json = String(data: data, encoding: .utf8) else { return }
+        #if DEBUG
+        probeDelivered?(message)
+        #endif
         web.evaluateJavaScript("window.__cawcoDeliver && window.__cawcoDeliver(\(json))")
     }
 
@@ -1755,6 +1821,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         PreviewProbe.say("preview send words=\(picks ? words : "-")")
         #endif
         sendWanted = picks || sending
+        #if DEBUG
+        if probeSends { sendWanted = true }
+        #endif
         placeHeadItems()
         sendButton.isEnabled = connected && picks && !sending
         sendButton.accessibilityHint = "Sends the page's picks to the session"
@@ -2316,6 +2385,72 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Expand's words and centre and Close's centre, for the session's `split` line.
     var probeExpand: String {
         "expand=\(expandButton.accessibilityLabel ?? "?")@\(PreviewProbe.centre(expandButton)) close=\(PreviewProbe.centre(closeButton))"
+    }
+
+    // MARK: The parity probe's head (ParityProbe.swift)
+
+    /// Every message `deliver` hands the page, as it hands it.
+    var probeDelivered: (([String: Any]) -> Void)?
+    /// Send picks stands, as though the page held picks the session has not heard.
+    private var probeSends = false
+    /// The room `placeHeadItems` left once it placed the controls, pt.
+    private var laidLeft = 0.0
+    /// What the first fit stood, when More held Comments' count and the second one was taken; nil otherwise.
+    private var laidFirst: Set<HeadItem>?
+    /// The open pins the head is laid out for, in place of the hub's read.
+    var probeOpen: Int? {
+        didSet { view.setNeedsLayout() }
+    }
+
+    /// The panel as a component canvas's, its page holding picks: the
+    /// inspection `adoptSheet` makes for a `.component` frame, so the head
+    /// wants what it wants for one.
+    func probeAsComponent(name: String) {
+        titleButton.show(kind: .component, name: name)
+        inspection = SheetInspection(post: { [weak self] message in self?.deliver(message) }, write: { _ in })
+        probeSends = true
+        paintSend()
+    }
+
+    var probeCanvasView: CanvasViewControl { canvasView }
+
+    /// The controls standing now, the mode's pick named as the mode.
+    var probeStood: Set<String> {
+        Set(slots.filter { !$0.value.isHidden }.map { $0.key == .modePick ? HeadItem.mode.rawValue : $0.key.rawValue })
+    }
+
+    /// Whether More's count changed what stands: the second fit stood otherwise than the first.
+    var probeRecounted: Bool {
+        laidFirst.map { $0 != Set(slots.filter { !$0.value.isHidden }.map(\.key)) } ?? false
+    }
+    /// More's menu as it would open now.
+    var probeOverflow: [UIMenuElement] { overflowMenu() }
+
+    /// The page said it is ready (`cawco:ready`).
+    func probeReady() { ready() }
+
+    /// The head as it stands: its width, the name's, the room left after
+    /// placing and what the mode's segments cost over its pick, then each
+    /// control standing after the name (its key, its form, its frame in the
+    /// head) and what More holds.
+    func probeStanding() -> String {
+        guard let head = dragArea as? UIStackView else { return "no head" }
+        let room = { (item: HeadItem) in self.slots[item]?.fittingWidth ?? 0 }
+        let shown = head.arrangedSubviews.dropFirst().filter { !$0.isHidden }.map { slot -> String in
+            let key = slots.first { $0.value === slot }?.key
+            let name = key?.rawValue ?? (slot === moreSlot ? "more" : "close")
+            let form = switch key {
+            case .mode: "segments"
+            case .modePick: "pick"
+            case .send, .comments: narrow ? "glyph" : "words"
+            default: "glyph"
+            }
+            let box = slot.frame
+            return "\(name):\(form)@\(Int(box.minX.rounded())),\(Int(box.minY.rounded())),\(Int(box.width.rounded()))x\(Int(box.height.rounded()))"
+        }
+        let more = overflowed.isEmpty ? "-" : overflowed.map(\.rawValue).joined(separator: ",")
+        let first = laidFirst.map { set in HeadItem.allCases.filter(set.contains).map(\.rawValue).joined(separator: ",") } ?? "-"
+        return "width=\(Int(head.bounds.width.rounded())) name=\(Int(titleButton.bounds.width.rounded())) left=\(Int(laidLeft.rounded(.down))) segments=\(Int((room(.mode) - room(.modePick)).rounded(.up))) open=\(openPins) first=\(first.isEmpty ? "none" : first) shown=\(shown.joined(separator: " ")) more=\(more)"
     }
 
     /// The header as last logged on a layout: logged again only when it moved.

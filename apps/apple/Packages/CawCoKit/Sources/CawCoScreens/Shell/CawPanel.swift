@@ -328,7 +328,29 @@ private final class SectionRule: UIView {
     required init?(coder _: NSCoder) {
         fatalError("SectionRule is built in code")
     }
+
+    #if DEBUG
+    /// The rule's fill as each scheme resolves it, beside `brand-solid`'s (ParityProbe).
+    static func probe(_ style: UIUserInterfaceStyle) -> String {
+        let traits = UITraitCollection(userInterfaceStyle: style)
+        let hex = { (color: UIColor?) -> String in
+            var (red, green, blue, alpha) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+            guard color?.resolvedColor(with: traits).getRed(&red, green: &green, blue: &blue, alpha: &alpha) == true else { return "none" }
+            let byte = { (part: CGFloat) in Int((part * 255).rounded()) }
+            return String(format: "#%02x%02x%02x a=%.2f", byte(red), byte(green), byte(blue), Double(alpha))
+        }
+        let rule = SectionRule()
+        return "\(style == .dark ? "dark" : "light") fill=\(hex(rule.backgroundColor)) brand-solid=\(hex(Palette.brandSolid)) height=\(Self.thickness)"
+    }
+    #endif
 }
+
+#if DEBUG
+/// Caw's panel's section rule, as ParityProbe reads it.
+enum CawPanelProbe {
+    static func sectionRule(_ style: UIUserInterfaceStyle) -> String { SectionRule.probe(style) }
+}
+#endif
 
 /// The hairline between two notices: 1pt of `border-hairline` across the rows' width.
 private final class NoticeRule: UIView {

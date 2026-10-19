@@ -319,7 +319,7 @@
     /* Status glyphs: the hue itself, not the near-black text ink, so a row's state reads in colour at a glance. Each holds 3:1 or more (non-text) on raised, page, fill, hover, the selected wash and the needs-you wash, in both themes; idle stays neutral. */
     --status-live-glyph: light-dark(oklch(50% 0.15 252), oklch(74% 0.12 245));
     --status-attn-glyph: light-dark(oklch(57% 0.125 78), oklch(87% 0.14 92));
-    /* A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim in it (tab-rim-mix) cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own. */
+    /* A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim mixed from it cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own. */
     --tab-rim-attn: light-dark(oklch(48% 0.125 78), oklch(87% 0.14 92));
     --status-done-glyph: light-dark(oklch(52% 0.14 140), oklch(76% 0.15 135));
     --status-fail-glyph: light-dark(oklch(53% 0.19 22), oklch(71% 0.16 20));
@@ -906,8 +906,6 @@
     /* Relative tints for rows inside any surface: hover +6%, selected +10% ink. */
     --surface-hover-mix: 6%;
     --surface-selected-mix: 10%;
-    /* A status rim's strength that no component reads: Caw's panel's hairline between its sections is brand-solid whole (CawPanel, web and iOS), and an unchosen session tab's rim wears tab-rim-mix-subtle on both (PaneTabs.svelte, PaneTabsView), a chosen one tab-rim-mix-chosen or tab-rim-mix-idle. At this strength a status rim holds 3:1 against the tab's fill and the shelf in both themes: by day 83% clears the working and failed tones, by night 64% the failed tone, the hardest. */
-    --tab-rim-mix: 83%;
     /* The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle. */
     --tab-rim-mix-chosen: 0.97;
     /* The chosen tab's rim strength when its session is idle or done, in the muted ink: its top holds 3:1 against the shelf (3.2:1 by day, 3.8:1 by night at 1px); its sides taper softer by design. By day 0.32 left its side at 1.4:1, by night at 2.0:1. */
@@ -1007,7 +1005,6 @@
   }
 
   :root.dark {
-    --tab-rim-mix: 64%;
     --tab-rim-mix-chosen: 0.78;
     --tab-rim-mix-idle: 0.54;
     --glyph-duo-status-opacity: 0.46;

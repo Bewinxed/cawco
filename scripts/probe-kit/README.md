@@ -111,6 +111,12 @@ Every other spec (a web spec on the built dashboard, a fleet spec that
 spawns sessions without delegating) runs inside a workspace, and its
 delegate quotes the run's output in its report.
 
+**macOS Safari can't be launched from a workspace** (found by the top-strip
+leaf, 20038062). `open -g -a Safari` fails with LaunchServices -10820, and
+MobileBuildMCP `launch_mac_app` is refused as a write to
+/Applications/Safari.app. A macOS Safari sample runs from a session started
+outside every workspace on the Mac, with the screen unlocked.
+
 ## A spec with its own git and HOME
 
 A spec that stands up its own git repositories, doors or forge sign-ins

@@ -222,7 +222,7 @@ public enum Palette {
     /// Status glyphs: the hue itself, not the near-black text ink, so a row's state reads in colour at a glance. Each holds 3:1 or more (non-text) on raised, page, fill, hover, the selected wash and the needs-you wash, in both themes; idle stays neutral.
     public static let statusLiveGlyph = Palette.named("status-live-glyph")
     public static let statusAttnGlyph = Palette.named("status-attn-glyph")
-    /// A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim in it (tab-rim-mix) cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own.
+    /// A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim mixed from it cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own.
     public static let tabRimAttn = Palette.named("tab-rim-attn")
     public static let statusDoneGlyph = Palette.named("status-done-glyph")
     public static let statusFailGlyph = Palette.named("status-fail-glyph")
@@ -752,9 +752,6 @@ public enum Effect {
     /// Relative tints for rows inside any surface: hover +6%, selected +10% ink.
     public static let surfaceHoverMix: Double = 0.06
     public static let surfaceSelectedMix: Double = 0.1
-    /// A status rim's strength that no component reads: Caw's panel's hairline between its sections is brand-solid whole (CawPanel, web and iOS), and an unchosen session tab's rim wears tab-rim-mix-subtle on both (PaneTabs.svelte, PaneTabsView), a chosen one tab-rim-mix-chosen or tab-rim-mix-idle. At this strength a status rim holds 3:1 against the tab's fill and the shelf in both themes: by day 83% clears the working and failed tones, by night 64% the failed tone, the hardest.
-    /// By day and by night: read it with `value(for:)`.
-    public static let tabRimMix = SchemeValue(light: 0.83, dark: 0.64)
     /// The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle.
     /// By day and by night: read it with `value(for:)`.
     public static let tabRimMixChosen = SchemeValue(light: 0.97, dark: 0.78)
