@@ -610,6 +610,9 @@ public enum Size {
     /// The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line).
     /// At most this, in points: on the web the least of it and a share of its container (min).
     public static let cComposerW: Double = 720
+    /// The Work Column Rule: empty and starter content stands in the column the composer stands in, at most 720px and centred in a wider area, every line on its start edge; in a narrower area the column is the area's own width, from its start edge.
+    /// At most this, in points: on the web the least of it and a share of its container (min).
+    public static let cWorkColumnW: Double = 720
     /// A suggestion chip: its Tab key cap, padding and border.
     public static let cSuggestChip: Double = 30
     public static let cSuggestRow: Double = 52
