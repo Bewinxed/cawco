@@ -38,12 +38,15 @@
   const drawn = (style: "unified" | "split") => (layer: HTMLElement) => {
     const lang = languageOf(filePath) as FileContents["lang"];
     const name = fileName(filePath);
-    const diff = houseDiff({
-      disableFileHeader: true,
-      diffStyle: style,
-      expandUnchanged: !fileDiff?.isPartial,
-      hunkSeparators: "line-info",
-    });
+    const diff = houseDiff(
+      {
+        disableFileHeader: true,
+        diffStyle: style,
+        expandUnchanged: !fileDiff?.isPartial,
+        hunkSeparators: "line-info",
+      },
+      layer
+    );
     diff.render({
       ...(fileDiff
         ? { fileDiff }

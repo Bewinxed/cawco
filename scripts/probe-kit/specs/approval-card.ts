@@ -42,8 +42,14 @@
  *    brings it back whole within the window; a second removal's restore
  *    after the window is refused, in words.
  *
- * One capture per story at 390 and 1440, light and dark, the frame alone,
- * go to the clone's `caps/approval-card/`; this spec never reads them.
+ * 11. Every story of every states file the decision page embeds is
+ *    captured at 390 and 1440, light and dark, into the clone's
+ *    `.probe/approval-card/` for a reviewer (canvas-shots.ts): each the
+ *    frame alone, at zoom 1, whole in the canvas and covered by nothing,
+ *    its story, width and scheme read off the DOM before it is shot,
+ *    settled, never one colour, its pixels its DOM's paint; no light file
+ *    the same bytes as its dark twin, no two files the same bytes; an
+ *    approved removal's frame showing its Undo.
  *
  *   bun scripts/probe-kit/run.ts approval-card
  */
@@ -68,6 +74,12 @@ import type {
   RenderReport,
 } from "../../../packages/core/src/stage";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  checkShots,
+  type Shot,
+  type ShotRead,
+  shootFrames,
+} from "../canvas-shots";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const APP = join(ROOT, "apps/dashboard");
@@ -76,7 +88,11 @@ const WIDTHS = [390, 680, 1440] as const;
 const SCHEMES = ["light", "dark"] as const;
 const SPACES = /\s+/g;
 const RESTORE = /\\?"restore\\?":\s*(\d+)/;
-const CAPS = join(ROOT, "caps/approval-card");
+const CAPS = join(ROOT, ".probe/approval-card");
+/** The widths a reviewer reads each story at: the phone's and the desk's. */
+const SHOT_WIDTHS = [390, 1440] as const;
+/** Stories drawn with an approved removal's Undo, which stands for the minute after their file loads. */
+const UNDOING = ["RemoveApproved"];
 
 /** Each story's ask, and the chips its card should link (report 1, "Where each chip goes"). */
 const STORIES: Record<
@@ -609,24 +625,59 @@ async function undoLeg(kit: Kit, page: Page): Promise<void> {
   );
 }
 
-/** Each story at 390 and 1440, light and dark, the frame alone, for a reviewer. */
-async function captures(kit: Kit, page: Page): Promise<void> {
+/**
+ * Leg 11: every story of every states file the decision page embeds, at 390
+ * and 1440, light and dark, each capture the frame alone and proven so
+ * (canvas-shots.ts), into `.probe/approval-card/` for a reviewer. One page
+ * per file, opened fresh: an approved removal's Undo stands for the minute
+ * from its file's load, so those frames are shot first, and each is held
+ * to show its Undo when shot.
+ */
+async function captureLeg(kit: Kit, base: string): Promise<void> {
+  rmSync(CAPS, { recursive: true, force: true });
   mkdirSync(CAPS, { recursive: true });
-  const shots = Object.keys(STORIES).flatMap((story) =>
-    [390, 1440].flatMap((width) =>
-      SCHEMES.map((scheme) => ({ story, width, scheme }))
-    )
-  );
-  for (const { story, width, scheme } of shots) {
-    const body = page.locator(frameOf(story, width, scheme));
-    // biome-ignore lint/performance/noAwaitInLoops: one capture at a time
-    await body.scrollIntoViewIfNeeded();
-    await body.screenshot({
-      path: join(CAPS, `${story}-${width}-${scheme}.png`),
-      animations: "disabled",
-    });
+  const reads: ShotRead[] = [];
+  const counts: string[] = [];
+  for (const file of PANEL_FILES) {
+    // biome-ignore lint/performance/noAwaitInLoops: one states file a page, its minute its own
+    const page = await kit.page("desk");
+    await page.goto(
+      `${base}/@cawco/canvas?file=${encodeURIComponent(file)}&width=390,1440&scheme=both`,
+      { waitUntil: "load" }
+    );
+    const report = await reportOn(page);
+    const stories = [
+      ...new Set(
+        report.sections.flatMap((one) => one.frames.map((frame) => frame.story))
+      ),
+    ].sort((a, b) => Number(UNDOING.includes(b)) - Number(UNDOING.includes(a)));
+    const stem = file
+      .replace("src/lib/cawco/transcript/", "")
+      .replace(".stories.ts", "")
+      .replaceAll("/", "-");
+    const shots: Shot[] = stories.flatMap((story) =>
+      SHOT_WIDTHS.flatMap((width) =>
+        SCHEMES.map((scheme) => ({
+          file,
+          story,
+          width,
+          scheme,
+          path: join(CAPS, `${stem}-${story}-${width}-${scheme}.png`),
+          ...(UNDOING.includes(story) && !file.includes("/today/")
+            ? { holds: '[data-slot="undo"]' }
+            : {}),
+        }))
+      )
+    );
+    reads.push(...(await shootFrames(page, shots)));
+    counts.push(`${stem} ${shots.length}`);
+    await page.close();
   }
-  kit.note(`captures: ${shots.length} in ${CAPS}`);
+  checkShots(
+    kit,
+    `11: each story of the ${PANEL_FILES.length} states files the decision page embeds, at 390 and 1440 light and dark, is captured as its own frame, settled, in its scheme (${counts.join(", ")})`,
+    reads
+  );
 }
 
 /** Legs 1–9, on the dashboard's stage. */
@@ -641,7 +692,6 @@ async function canvasLegs(kit: Kit, base: string): Promise<void> {
   await cardLegs(kit, page);
   await moveLeg(kit, page);
   await undoLeg(kit, page);
-  await captures(kit, page);
 }
 
 /** The dashboard's stage, started as the daemon starts it; stopped by the returned function. */
@@ -1041,6 +1091,7 @@ const run = async (kit: Kit): Promise<void> => {
   const stage = await stageUp();
   try {
     await panelLeg(kit, stage.base);
+    await captureLeg(kit, stage.base);
     await canvasLegs(kit, stage.base);
   } finally {
     stage.stop();
