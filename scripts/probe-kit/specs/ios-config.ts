@@ -173,18 +173,37 @@ async function safariForms(
   folder: string
 ): Promise<void> {
   const axe = (args: string) => sh(`axe ${args} --udid ${udid}`);
-  const waitFor = async (label: string) => {
-    await until(
-      `Mobile Safari shows "${label}"`,
-      () => axe("describe-ui").catch(() => ""),
-      (tree) => tree.includes(label),
-      60_000
-    );
-  };
   const shot = (name: string) =>
     sh(
       `xcrun simctl io ${udid} screenshot "${join(folder, `safari-${name}.png`)}" >/dev/null`
     );
+  let lastTree = "";
+  const waitFor = async (label: string) => {
+    try {
+      await until(
+        `Mobile Safari shows "${label}"`,
+        async () => {
+          lastTree = await axe("describe-ui").catch(
+            (error: Error) => error.message
+          );
+          return lastTree;
+        },
+        (tree) => tree.includes(label),
+        60_000
+      );
+    } catch (error) {
+      // What the screen held instead: its capture, and the labels AXe read.
+      await shot("failed").catch(() => "");
+      const labels = [...lastTree.matchAll(/"AXLabel"\s*:\s*"([^"]*)"/g)]
+        .map((one) => one[1])
+        .filter(Boolean)
+        .slice(0, 30);
+      throw new Error(
+        `${(error as Error).message}; AXe read: ${labels.join(" | ") || lastTree.slice(0, 300)}`,
+        { cause: error }
+      );
+    }
+  };
   const openForm = async (service: string) => {
     await sh(`xcrun simctl openurl ${udid} "${dashboard}/config/connections"`);
     await waitFor("Sign in to a service");
