@@ -17,6 +17,66 @@ let windowStart = 0;
 let windowCount = 0;
 let total = 0;
 
+/** An `Error` of any realm (a frame's own, a DOMException): it says itself in its message. */
+const isError = (value: unknown): value is Error =>
+  value instanceof Error ||
+  Object.prototype.toString.call(value) === "[object Error]";
+
+/** A value's JSON, cycles cut and bigints written out; undefined where it has none. */
+function jsonOf(value: object): string | undefined {
+  const held = new WeakSet<object>();
+  try {
+    return JSON.stringify(value, (_key, field: unknown) => {
+      if (typeof field === "bigint") {
+        return `${field}n`;
+      }
+      if (typeof field === "object" && field !== null) {
+        if (held.has(field)) {
+          return "[cycle]";
+        }
+        held.add(field);
+      }
+      return field;
+    });
+  } catch {
+    // A getter that throws: no JSON, so its own fields are read instead.
+  }
+}
+
+/**
+ * What a thrown value says in the hub's log. An `Error` by its message;
+ * anything else carries no message or stack of its own (a hub problem body,
+ * a rejected await's object, an event), so it is written as its JSON, or its
+ * own fields where its JSON is empty, after its class's name when it has one.
+ * `String()` of such a value is "[object Object]", all nightly 4343's tabs
+ * crash told the hub.
+ */
+function thrownWords(error: unknown): string {
+  if (isError(error)) {
+    return error.message || String(error);
+  }
+  if (typeof error !== "object" || error === null) {
+    return String(error);
+  }
+  const named = (Object.getPrototypeOf(error) as object | null)?.constructor
+    ?.name;
+  const prefix = named && named !== "Object" ? `${named} ` : "";
+  let words = jsonOf(error);
+  if (words === undefined || words === "{}") {
+    const fields = Object.getOwnPropertyNames(error).map((key) => {
+      let field: unknown;
+      try {
+        field = (error as Record<string, unknown>)[key];
+      } catch {
+        field = "[unreadable]";
+      }
+      return `${key}: ${String(field)}`;
+    });
+    words = fields.length > 0 ? `{ ${fields.join(", ")} }` : (words ?? "{}");
+  }
+  return `${prefix}${words}`;
+}
+
 /** Reporting must never become another uncaught error, including failed delivery. */
 function report(
   error: unknown,
@@ -32,12 +92,11 @@ function report(
     if (total >= 200 || windowCount >= 20) {
       return;
     }
-    const value = error as { message?: unknown; stack?: unknown } | null;
-    const message = (
-      typeof value?.message === "string" ? value.message : String(error)
-    ).slice(0, 1000);
+    const message = thrownWords(error).slice(0, 1000);
     const stack = (
-      typeof value?.stack === "string" ? value.stack : stackHint
+      isError(error) && typeof error.stack === "string"
+        ? error.stack
+        : stackHint
     ).slice(0, 6000);
     const firstFrame =
       stack.split("\n").find((line) => FIRST_FRAME.test(line)) ?? "";
