@@ -2,15 +2,10 @@
  * The two decision pages waiting for the owner, drawn as he will see them,
  * with no hub: the plan grill (.design-foundations/decisions/
  * plan-model-grill/page.oui) and the project screens
- * (.design-foundations/decisions/project-screens/page.oui). The decision
- * host bundle the hub serves (core decision-host.ts) draws each program in
- * the page the hub builds around it (hub decision-program.ts
- * `programHost`); each `Preview("@name")` is the component canvas of the
- * states file its folder's README maps it to, drawn live by the
- * dashboard's own stage (stage-host/host.ts, started here as
- * held-post-row starts it) and embedded through an origin that answers the
- * embed's ping as the hub's preview origin does, its HTTP and HMR socket
- * forwarded to the stage.
+ * (.design-foundations/decisions/project-screens/page.oui), drawn by the
+ * hub's decision host on the dashboard's stage (decision-embeds.ts); each
+ * `Preview("@name")` is the component canvas of the states file its
+ * folder's README maps it to.
  *
  * 1. Each program, its placeholders given artifact ids, passes the hub's
  *    own check (`checkProgram`): ids, `after`s, words, media.
@@ -23,45 +18,43 @@
  *    390 no text past its frame or cut without an ellipsis.
  * 3. Each page at 1440×900 and 390×844, light and dark: its card count and
  *    questions read from the DOM; each card offers 2 to 5 options, each
- *    with a cost line, exactly one Recommended; every embedded canvas
- *    draws what its view holds, no frame failed or empty; nothing
- *    scrolls sideways; no console error.
+ *    with a cost line, exactly one Recommended, which stands over its
+ *    option's label. Every embed, scrolled to as the person would, read in
+ *    its own frame: its pixels painted (not one flat colour), the stories
+ *    its Preview names drawn (every story when it names none), each with
+ *    words in it, none of the canvas's working chrome seen (band, crumb,
+ *    foot, steps, section heads, labels, statuses), its words at 12px or
+ *    more as drawn and every frame inside the embed's width, and the embed
+ *    as tall as what it draws. Each frame it shows is shot where the person
+ *    sees it (canvas-shots.ts `shootEmbedded`): nothing over it, not one
+ *    colour, its pixels its DOM's paint. Each option as
+ *    tall as its own content (a chip no taller than its row's tallest
+ *    content); at 390 the note and Send picks 44px tall (DESIGN.md, The 44
+ *    Touch Rule); the cost line, the state, the count, the note's
+ *    placeholder, the notice, the Recommended tag and an option's line at
+ *    4.5:1 or more on what they stand on; nothing scrolls sideways; no
+ *    console error.
  *
  * Captures and their manifest go to .probe/decision-pages/ for a reviewer.
  *
  *   bun scripts/probe-kit/run.ts web decision-pages-ready
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one states file, one leg at a time
-import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Frame, Page } from "playwright-core";
-import { buildStageHost } from "../../../../packages/agent/src/stage-host/build";
-import { decisionHostFile } from "../../../../packages/core/src/decision-host";
+import type { Page } from "playwright-core";
+import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import {
-  checkProgram,
-  DECISION_ASSETS,
-  programHost,
-  scriptJson,
-} from "../../../../packages/hub/src/decision-program";
-import { until } from "../../../scratch-fleet";
-import { type Kit, ROOT, type Spec, settle, THEMES } from "../../kit";
+  EMBED_FRAME,
+  embedDrawFaults,
+  idOf,
+  readEmbeds,
+  STAGE_START_MS,
+  startDecisionStage,
+} from "../../decision-embeds";
+import { type Kit, ROOT, SCALE, type Spec, settle, THEMES } from "../../kit";
 
-declare global {
-  interface Window {
-    /** The component canvas's state (agent stage-host canvas/runtime.ts `CanvasState`), what this spec reads. */
-    __cawcoCanvas?: {
-      frames: () => { interaction: string; key: string; story: string }[];
-      go: (key: string) => void;
-      swept: boolean;
-      world: () => { x: number; y: number; z: number };
-    };
-  }
-}
-
-const APP = join(ROOT, "apps/dashboard");
 const OUT = join(ROOT, ".probe/decision-pages");
-const STAGE_START_MS = 240_000;
 
 /** Each states file a page embeds, by its placeholder, from apps/dashboard. */
 const FILES: Record<string, string> = {
@@ -70,6 +63,7 @@ const FILES: Record<string, string> = {
   empty: "src/lib/cawco/project/WorkColumnEmpty.stories.ts",
   head: "src/lib/cawco/project/ProjectHeadNewSession.stories.ts",
   "run-order": "src/lib/cawco/views/ViewPipelineRunOrder.stories.ts",
+  removed: "src/lib/cawco/views/preview/PipelineRemovedFixture.stories.ts",
 };
 
 const PAGES = [
@@ -84,118 +78,8 @@ const PAGES = [
 ] as const;
 
 const PLACEHOLDER = /"@([a-z0-9-]+)"/g;
-const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/;
-const TITLE = /Decisions\("([^"]*)"/;
-
-/** A stand-in artifact id for a placeholder, stable across a run. */
-const idOf = (name: string): string => {
-  const hex = Buffer.from(name.padEnd(16, "-").slice(0, 16)).toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-};
-
+const PREVIEW = /\bPreview\(/g;
 const r1 = (n: number) => Math.round(n * 10) / 10;
-
-const freePort = async (): Promise<number> => {
-  const lease = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: () => new Response(null),
-  });
-  const port = lease.port as number;
-  await lease.stop(true);
-  return port;
-};
-
-interface Socket {
-  path: string;
-  protocols?: string[];
-  queue: (string | Uint8Array<ArrayBuffer>)[];
-  up?: WebSocket;
-}
-
-/** The embed origin: the ping the hub answers on a preview origin, and the stage behind it. */
-function embedOrigin(stage: number) {
-  return Bun.serve<Socket>({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request, server) {
-      const url = new URL(request.url);
-      if (url.pathname === "/__cawco/ping") {
-        return new Response("ok", {
-          headers: { "access-control-allow-origin": "*" },
-        });
-      }
-      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-        const offered = request.headers.get("sec-websocket-protocol");
-        const protocols = offered?.split(",").map((one) => one.trim());
-        const upgraded = server.upgrade(request, {
-          data: { path: url.pathname + url.search, protocols, queue: [] },
-          headers: protocols?.[0]
-            ? { "Sec-WebSocket-Protocol": protocols[0] }
-            : undefined,
-        });
-        return upgraded
-          ? undefined
-          : new Response("No upgrade", { status: 400 });
-      }
-      const headers = new Headers(request.headers);
-      headers.set("host", `127.0.0.1:${stage}`);
-      headers.delete("accept-encoding");
-      const answer = await fetch(
-        `http://127.0.0.1:${stage}${url.pathname}${url.search}`,
-        {
-          method: request.method,
-          headers,
-          body: request.body,
-          redirect: "manual",
-        }
-      );
-      const out = new Headers(answer.headers);
-      out.delete("content-encoding");
-      out.delete("content-length");
-      return new Response(answer.body, {
-        status: answer.status,
-        headers: out,
-      });
-    },
-    websocket: {
-      open(ws) {
-        const up = new WebSocket(
-          `ws://127.0.0.1:${stage}${ws.data.path}`,
-          ws.data.protocols
-        );
-        ws.data.up = up;
-        up.binaryType = "arraybuffer";
-        up.onopen = () => {
-          for (const one of ws.data.queue) {
-            up.send(one);
-          }
-          ws.data.queue = [];
-        };
-        up.onmessage = (event) =>
-          ws.send(
-            typeof event.data === "string"
-              ? event.data
-              : new Uint8Array(event.data as ArrayBuffer)
-          );
-        up.onclose = () => ws.close();
-      },
-      message(ws, message) {
-        const { up } = ws.data;
-        const held =
-          typeof message === "string" ? message : new Uint8Array(message);
-        if (up?.readyState === WebSocket.OPEN) {
-          up.send(held);
-        } else {
-          ws.data.queue.push(held);
-        }
-      },
-      close(ws) {
-        ws.data.up?.close();
-      },
-    },
-  });
-}
 
 interface Read {
   arrow?: { off: number; story: string }[];
@@ -513,45 +397,6 @@ function drawn(): boolean {
   );
 }
 
-/**
- * An embedded canvas has drawn what its view holds: a frame drawn, and
- * none failed or empty. Frames past its view are not loaded, so they say
- * nothing yet.
- */
-function embedDrew(): boolean {
-  const states = [
-    ...document.querySelectorAll<HTMLElement>(
-      '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status'
-    ),
-  ].map((one) => one.dataset.state ?? "");
-  return (
-    states.includes("drawn") ||
-    states.includes("failed") ||
-    states.includes("empty") ||
-    document.querySelector(".cawco-section-failed") !== null
-  );
-}
-
-/** What an embedded canvas shows that did not draw: a failed or empty frame, a section that failed. */
-function embedFaults(): string[] {
-  return [
-    ...[
-      ...document.querySelectorAll<HTMLElement>(
-        '.cawco-frame[data-cawco-interaction="rest"]'
-      ),
-    ].flatMap((frame) => {
-      const status = frame.querySelector<HTMLElement>(".cawco-frame-status");
-      const state = status?.dataset.state ?? "";
-      return state === "failed" || state === "empty"
-        ? [`${frame.dataset.cawcoStory}: ${status?.textContent?.trim()}`]
-        : [];
-    }),
-    ...[...document.querySelectorAll(".cawco-section-failed-line")].map(
-      (one) => one.textContent?.trim() ?? ""
-    ),
-  ];
-}
-
 /** Each rest frame's status that is not "drawn"; a phone's frames off its one view say "unshown", stepped to one by one. */
 function undrawn(): string[] {
   return [
@@ -580,11 +425,23 @@ async function sweepFile(
     `http://127.0.0.1:${stage}/@cawco/canvas?file=${encodeURIComponent(file)}&by=stage&scheme=${theme}`,
     { waitUntil: "domcontentloaded" }
   );
-  await page.waitForFunction(drawn, null, { timeout: STAGE_START_MS });
+  // A sweep that never ends is this file's fault, read with the rest, never the run's end.
+  const swept = await page
+    .waitForFunction(drawn, null, { timeout: STAGE_START_MS })
+    .then(
+      () => true,
+      () => false
+    );
   await page.evaluate(() => document.fonts.ready);
   await settle(page, 400);
   const whole = await page.evaluate(measure, { section, phone: false });
-  whole.blank = [...whole.blank, ...(await page.evaluate(undrawn))];
+  whole.blank = [
+    ...whole.blank,
+    ...(swept
+      ? []
+      : [`the stage's sweep didn't end in ${STAGE_START_MS / 1000} s`]),
+    ...(await page.evaluate(undrawn)),
+  ];
   if (!phone) {
     return whole;
   }
@@ -594,7 +451,12 @@ async function sweepFile(
       .map((one) => ({ key: one.key, story: one.story }))
   );
   // A phone shows one frame at a time, so the others have no box: each is read once stepped to.
-  whole.blank = await page.evaluate(undrawn);
+  whole.blank = [
+    ...(swept
+      ? []
+      : [`the stage's sweep didn't end in ${STAGE_START_MS / 1000} s`]),
+    ...(await page.evaluate(undrawn)),
+  ];
   const reads: Read[] = [];
   for (const frame of stories) {
     await page.evaluate((key) => window.__cawcoCanvas?.go(key), frame.key);
@@ -656,6 +518,146 @@ async function sweepFile(
   };
 }
 
+/**
+ * The page's own controls, read from the engine: each option chip's height
+ * against what its row's tallest content needs, the Recommended tag's top
+ * against its label's, the note's and Send picks' heights, and the
+ * contrast of each muted line on what it stands on (every ancestor's fill
+ * and opacity composited, colours as the engine paints them).
+ */
+function readControls() {
+  const paint = document.createElement("canvas");
+  paint.width = 1;
+  paint.height = 1;
+  const ctx = paint.getContext("2d", {
+    willReadFrequently: true,
+  }) as CanvasRenderingContext2D;
+  const rgba = (colour: string): number[] => {
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = "#000";
+    ctx.fillStyle = colour;
+    ctx.fillRect(0, 0, 1, 1);
+    const d = ctx.getImageData(0, 0, 1, 1).data;
+    return [
+      d[0] as number,
+      d[1] as number,
+      d[2] as number,
+      (d[3] as number) / 255,
+    ];
+  };
+  const over = (base: number[], top: number[], a: number) =>
+    base.map((v, i) => v * (1 - a) + (top[i] as number) * a);
+  const lum = (c: number[]) => {
+    const f = (v: number) => {
+      const x = v / 255;
+      return x <= 0.039_28 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    };
+    return (
+      0.2126 * f(c[0] as number) +
+      0.7152 * f(c[1] as number) +
+      0.0722 * f(c[2] as number)
+    );
+  };
+  const ratio = (el: Element | null, pseudo?: string) => {
+    if (!el) {
+      return null;
+    }
+    const chain: Element[] = [];
+    for (let at: Element | null = el; at; at = at.parentElement) {
+      chain.unshift(at);
+    }
+    let base = [255, 255, 255];
+    let opacity = 1;
+    for (const at of chain) {
+      const style = getComputedStyle(at);
+      opacity *= Number(style.opacity);
+      const fill = rgba(style.backgroundColor);
+      base = over(base, fill, (fill[3] as number) * opacity);
+    }
+    const ink = rgba(getComputedStyle(el, pseudo).color);
+    const inked = over(base, ink, (ink[3] as number) * opacity);
+    const [hi, lo] = [lum(inked), lum(base)].sort((a, b) => b - a) as [
+      number,
+      number,
+    ];
+    return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
+  };
+  const shown = (el: Element) => el.getBoundingClientRect().height > 0;
+  const chips = [...document.querySelectorAll<HTMLElement>(".dp-opt")].filter(
+    shown
+  );
+  /** What a chip's content needs: its children's span, its padding and border. */
+  const need = (chip: HTMLElement) => {
+    const kids = [...chip.children]
+      .filter(shown)
+      .map((el) => el.getBoundingClientRect());
+    const style = getComputedStyle(chip);
+    const edge = [
+      "paddingTop",
+      "paddingBottom",
+      "borderTopWidth",
+      "borderBottomWidth",
+    ]
+      .map((key) => Number.parseFloat(style[key as "paddingTop"]))
+      .reduce((a, b) => a + b, 0);
+    return kids.length
+      ? Math.max(...kids.map((r) => r.bottom)) -
+          Math.min(...kids.map((r) => r.top)) +
+          edge
+      : edge;
+  };
+  const rows = new Map<string, HTMLElement[]>();
+  for (const chip of chips) {
+    const key = `${chip.closest(".dp-card")?.id}|${Math.round(chip.getBoundingClientRect().top)}`;
+    rows.set(key, [...(rows.get(key) ?? []), chip]);
+  }
+  const options = [...rows.values()].flatMap((row) => {
+    const most = Math.max(...row.map(need));
+    return row.map((chip) => ({
+      option: `${chip.closest(".dp-card")?.id.replace("decision-", "")}/${chip.dataset.option}`,
+      h: Math.round(chip.getBoundingClientRect().height),
+      need: Math.round(most),
+    }));
+  });
+  const tags = [
+    ...document.querySelectorAll<HTMLElement>(".dp-opt .dp-tag"),
+  ].map((tag) => {
+    const label = tag.closest(".dp-opt")?.querySelector("b");
+    return {
+      option: tag.closest<HTMLElement>(".dp-opt")?.dataset.option ?? "",
+      above:
+        !!label &&
+        tag.getBoundingClientRect().bottom <=
+          label.getBoundingClientRect().top + 0.5,
+      h: Math.round(tag.getBoundingClientRect().height),
+    };
+  });
+  const send = document.querySelector<HTMLButtonElement>(".dp-send");
+  const note = document.querySelector(".dp-note textarea");
+  return {
+    options,
+    tags,
+    send: send
+      ? {
+          h: Math.round(send.getBoundingClientRect().height),
+          disabled: send.disabled,
+          opacity: Number(getComputedStyle(send).opacity),
+          contrast: ratio(send),
+        }
+      : null,
+    note: note ? Math.round(note.getBoundingClientRect().height) : null,
+    contrast: {
+      cost: ratio(document.querySelector(".dp-cost")),
+      state: ratio(document.querySelector(".dp-state:not(.on)")),
+      count: ratio(document.querySelector(".dp-meter > span")),
+      placeholder: ratio(note, "::placeholder"),
+      notice: ratio(document.querySelector(".dp-offline")),
+      tag: ratio(document.querySelector(".dp-tag")),
+      line: ratio(document.querySelector('.dp-opt span[id$="-line"]')),
+    },
+  };
+}
+
 /** What a decision page says, read from its DOM. */
 function readPage() {
   const cards = [...document.querySelectorAll<HTMLElement>(".dp-card")];
@@ -670,17 +672,6 @@ function readPage() {
       previews: card.querySelectorAll("iframe.frame").length,
       diagrams: card.querySelectorAll("svg").length,
     })),
-    figures: document.querySelectorAll(".dp-card .diagram").length,
-    /** The smallest drawn line of text in any diagram, in px: a diagram zoomed to fit a phone can shrink past reading. */
-    diagramText: Math.min(
-      ...[
-        ...document.querySelectorAll(
-          ".dp-card .diagram svg text, .dp-card .diagram svg foreignObject div"
-        ),
-      ]
-        .map((one) => one.getBoundingClientRect().height)
-        .filter((h) => h > 0)
-    ),
     gone: [...document.querySelectorAll(".dp-card .gone")]
       .map((one) => one.textContent?.trim() ?? "")
       .filter(Boolean),
@@ -737,75 +728,14 @@ const spec: Spec = {
       };
     }
 
-    // The stage, and the origin its canvases are embedded through.
-    const host = join(APP, ".cawco/stage/host.mjs");
-    mkdirSync(join(APP, ".cawco/stage"), { recursive: true });
-    writeFileSync(host, await buildStageHost());
-    const stagePort = await freePort();
-    const stage = spawn("bun", [host], {
-      cwd: APP,
-      env: {
-        ...process.env,
-        CAWCO_STAGE: "1",
-        CAWCO_STAGE_PORT: String(stagePort),
-        CAWCO_STAGE_FRAMEWORK: "svelte",
-        CAWCO_STAGE_KIT: "1",
-        CAWCO_STAGE_TOOLCHAIN: "vite",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let words = "";
-    const hear = (chunk: Buffer) => {
-      words += chunk.toString("utf8");
-    };
-    stage.stdout.on("data", hear);
-    stage.stderr.on("data", hear);
-    const embeds = embedOrigin(stagePort);
-    const pages = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      async fetch(request) {
-        const { pathname } = new URL(request.url);
-        if (pathname.startsWith(DECISION_ASSETS)) {
-          return (
-            (await decisionHostFile(pathname.slice(DECISION_ASSETS.length))) ??
-            new Response("Not found", { status: 404 })
-          );
-        }
-        const [, name, theme] = pathname.match(PAGE_PATH) ?? [];
-        const program = name ? programs.get(name) : undefined;
-        if (!(program && theme)) {
-          return new Response("Not found", { status: 404 });
-        }
-        const media = Object.fromEntries(
-          Object.entries(FILES).map(([key, file]) => [
-            idOf(key),
-            {
-              kind: "component",
-              name: file.split("/").at(-1) ?? key,
-              embed: `http://127.0.0.1:${embeds.port}/@cawco/canvas?file=${encodeURIComponent(file)}&scheme=${theme}`,
-            },
-          ])
-        );
-        const title = program.match(TITLE)?.[1] ?? "";
-        const html = programHost(program, title, {}).replace(
-          "</body>",
-          `${scriptJson("cawco-media", media)}\n</body>`
-        );
-        return new Response(html, {
-          headers: { "content-type": "text/html; charset=utf-8" },
-        });
-      },
-    });
+    const stage = await startDecisionStage(
+      programs,
+      Object.fromEntries(
+        Object.entries(FILES).map(([key, file]) => [idOf(key), file])
+      )
+    );
 
     try {
-      await until(
-        "the stage's ready",
-        () => words,
-        (text) => text.includes('"cawco":"ready"'),
-        STAGE_START_MS
-      );
-
       for (const view of ["desk", "phone"] as const) {
         for (const theme of THEMES) {
           const leg = `${view === "desk" ? "1440×900" : "390×844"} ${theme}`;
@@ -825,7 +755,7 @@ const spec: Spec = {
           for (const section of Object.keys(FILES)) {
             read[section] = await sweepFile(
               page,
-              stagePort,
+              stage.stagePort,
               section,
               view === "phone",
               theme
@@ -905,33 +835,34 @@ const spec: Spec = {
 
           // 3. Each page, its canvases embedded live.
           for (const one of PAGES) {
-            await page.goto(
-              `http://127.0.0.1:${pages.port}/page/${one.name}/${theme}/`,
-              { waitUntil: "load" }
-            );
+            await page.goto(stage.pageUrl(one.name, theme), {
+              waitUntil: "load",
+            });
             await page.waitForSelector(".dp-card", { timeout: 30_000 });
-            const embedded = await page.locator("iframe.frame").count();
+            const embedded = (programs.get(one.name) ?? "").match(
+              PREVIEW
+            )?.length;
             await page.waitForFunction(
-              (count) =>
-                document.querySelectorAll("iframe.frame.screen").length ===
-                count,
-              embedded,
+              ({ count, selector }) =>
+                document.querySelectorAll(selector).length === count,
+              { count: embedded ?? 0, selector: EMBED_FRAME },
               { timeout: 60_000 }
             );
-            const canvases = page
-              .frames()
-              .filter((frame: Frame) => frame.url().includes("/@cawco/canvas"));
-            const undrawnIn: string[] = [];
-            for (const frame of canvases) {
-              await frame.waitForFunction(embedDrew, null, {
-                timeout: STAGE_START_MS,
-              });
-              undrawnIn.push(...(await frame.evaluate(embedFaults)));
-            }
+            const { embeds, undrawn: undrawnIn } = await readEmbeds(
+              page,
+              theme,
+              join(OUT, "embeds", `${one.name}-${view}`)
+            );
+            await page.evaluate(() => window.scrollTo(0, 0));
             await page.evaluate(() => document.fonts.ready);
             await settle(page, 600);
             const said = await page.evaluate(readPage);
-            manifest.reads[`${one.name} ${leg}`] = said;
+            const controls = await page.evaluate(readControls);
+            manifest.reads[`${one.name} ${leg}`] = {
+              ...said,
+              embeds,
+              controls,
+            };
             kit.check(
               `${one.name} ${leg}: ${said.cards.length} cards, “${said.cards.map((c) => c.question).join("”, “")}”`,
               said.cards.length > 0 &&
@@ -944,23 +875,75 @@ const spec: Spec = {
                 ),
               JSON.stringify(said.cards)
             );
+            const drawnFaults = embeds.flatMap(embedDrawFaults);
             kit.check(
-              `${one.name} ${leg}: every embedded canvas draws what its view holds, none failed or empty (${canvases.length} of ${embedded} embeds)`,
-              canvases.length === embedded &&
+              `${one.name} ${leg}: every embed draws the component itself, read in its own frame (${embeds.length} of ${embedded ?? 0} embeds: ${embeds.map((e) => `${e.file} ${e.shots.map((shot) => `${shot.story} ${shot.stats.width / SCALE}×${shot.stats.height / SCALE} (${shot.stats.matched} points its paint)`).join(" + ") || "none"}`).join("; ")})`,
+              embeds.length === (embedded ?? 0) &&
+                drawnFaults.length === 0 &&
                 undrawnIn.length === 0 &&
                 said.gone.length === 0,
-              [...undrawnIn, ...said.gone].join("; ")
+              [...drawnFaults, ...undrawnIn, ...said.gone].join("\n    ")
+            );
+            const chromeSeen = embeds.flatMap((e) =>
+              e.chrome.map((part) => `${e.file}: ${part}`)
+            );
+            kit.check(
+              `${one.name} ${leg}: no embed shows the canvas's working chrome`,
+              chromeSeen.length === 0,
+              chromeSeen.slice(0, 12).join("\n    ")
+            );
+            const sizeFaults = embeds.flatMap((e) => [
+              ...e.frames
+                .filter((f) => f.type < 12)
+                .map((f) => `${e.file}/${f.story}: its words at ${f.type}px`),
+              ...e.frames
+                .filter((f) => f.right > e.width + 1)
+                .map(
+                  (f) =>
+                    `${e.file}/${f.story}: ${f.right - e.width}px past the embed`
+                ),
+              ...(Math.abs(e.box.h - e.tall) > 2
+                ? [`${e.file}: ${e.box.h}px tall, drawing ${e.tall}px`]
+                : []),
+            ]);
+            const types = embeds.flatMap((e) => e.frames.map((f) => f.type));
+            kit.check(
+              `${one.name} ${leg}: every embed at a readable size inside its card (words at ${types.length ? Math.min(...types) : 0}px and up, zoom ${[...new Set(embeds.map((e) => e.scale))].join("/") || "none"}, each embed as tall as what it draws)`,
+              sizeFaults.length === 0,
+              sizeFaults.join("\n    ")
+            );
+            const stretched = controls.options.filter((o) => o.h > o.need + 1);
+            kit.check(
+              `${one.name} ${leg}: each option as tall as its own content (${controls.options.map((o) => `${o.option} ${o.h}/${o.need}px`).join(", ")})`,
+              controls.options.length > 0 && stretched.length === 0,
+              JSON.stringify(stretched)
+            );
+            kit.check(
+              `${one.name} ${leg}: Recommended stands over its option's label (${controls.tags.map((t) => `${t.option} ${t.h}px`).join(", ")})`,
+              controls.tags.length === said.cards.length &&
+                controls.tags.every((t) => t.above),
+              JSON.stringify(controls.tags)
+            );
+            if (view === "phone") {
+              kit.check(
+                `${one.name} ${leg}: the note ${controls.note}px and Send picks ${controls.send?.h}px tall, 44px under a finger`,
+                (controls.note ?? 0) >= 44 && (controls.send?.h ?? 0) >= 44
+              );
+            }
+            const inks = Object.entries(controls.contrast);
+            const { send } = controls;
+            kit.check(
+              `${one.name} ${leg}: muted words hold 4.5:1 (${inks.map(([name, ratio]) => `${name} ${ratio}`).join(", ")}; Send picks ${send?.disabled ? `disabled, at ${send.opacity} opacity, DESIGN.md's recipe` : send?.contrast})`,
+              inks.every(([, ratio]) => ratio !== null && ratio >= 4.5) &&
+                (send?.disabled
+                  ? send.opacity === 0.5
+                  : (send?.contrast ?? 0) >= 4.5),
+              JSON.stringify(controls.contrast)
             );
             kit.check(
               `${one.name} ${leg}: nothing scrolls sideways (${said.sideways}px past the window)`,
               said.sideways <= 0
             );
-            if (said.figures > 0) {
-              kit.check(
-                `${one.name} ${leg}: every diagram's text reads at 11px or more (smallest line ${r1(said.diagramText)}px)`,
-                Number.isFinite(said.diagramText) && said.diagramText >= 11
-              );
-            }
             const file = `${one.name}-${view === "desk" ? "1440" : "390"}-${theme}.png`;
             await page.screenshot({
               path: join(OUT, file),
@@ -982,9 +965,7 @@ const spec: Spec = {
         join(OUT, "manifest.json"),
         `${JSON.stringify(manifest, null, 2)}\n`
       );
-      await pages.stop(true);
-      await embeds.stop(true);
-      stage.kill();
+      await stage.stop();
     }
   },
 };
