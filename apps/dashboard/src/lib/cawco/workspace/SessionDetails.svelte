@@ -564,7 +564,10 @@
       in:crossIn
       out:crossOut
     >
-      <IconCheck aria-hidden="true" />
+      <IconCheck
+        aria-hidden="true"
+        class="size-icon-md flex-none text-status-done-glyph"
+      />
       <span>{DONE[slot]()}</span>
     </p>
   {/if}
@@ -601,27 +604,23 @@
           >
             <MorphText text={title} wrap />
           </h2>
-          <!-- literal: 28px -->
           <button
             data-slot="icon-action"
             aria-label="Copy link"
-            class="touch-hit grid size-(--icon-action) flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted hover:bg-surface-hover"
-            style:--icon-action="28px"
+            class="touch-hit grid size-c-details-head-icon flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted hover:bg-surface-hover"
             onclick={() =>
               copyToClipboard("Link", new URL(href, location.origin).href)}
             type="button"
           >
-            <Link />
+            <Link class="size-icon-md" />
           </button>
         </div>
         {#if harness}
           <!-- Level with the title's first line, like the copy button beside
                it. -->
-          <!-- literal: 28px -->
           <span
             aria-label={harnessNames[harness]}
-            class="inline-flex h-(--harness-h) flex-none items-center"
-            style:--harness-h="28px"
+            class="inline-flex h-c-details-head-icon flex-none items-center"
             role="img"
             title={harnessNames[harness]}
           >
@@ -650,7 +649,7 @@
           <button
             data-slot="cwd"
             aria-label={`Copy working directory ${cwd}`}
-            class="min-w-0 cursor-pointer border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label text-left wrap-anywhere text-inherit [@media(hover:hover)]:[&:hover]:text-ink-strong"
+            class="min-w-0 cursor-pointer border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label text-start wrap-anywhere text-inherit hover:text-ink-strong"
             onclick={() => copyToClipboard("Working directory", cwd)}
             title={cwd}
             type="button"
@@ -682,13 +681,16 @@
              wrapping as a unit when the card runs out of row. The model chip
              gives up room first (its name ellipsized) before anything
              wraps. -->
-        <!-- literal: 28px, 44px, 6px -->
+        <!-- The card's width holds the longest names whole ("Opus 5.5 · 1M",
+             "medium", "Accept edits") with the chips' insides drawn in a little;
+             a phone's row is ~350px, so the three chips fit it whole, the
+             model's name included, with the chips' sides and gaps drawn in. A
+             bordered chip already reads as tappable; its chevron is the room
+             the model's name needs. The account chip keeps its own: it is the
+             only hint that it opens anything. -->
         <div
           data-slot="settings"
-          class="flex min-w-0 flex-wrap items-center gap-space-1"
-          style:--chip-h="28px"
-          style:--chip-h-phone="44px"
-          style:--chip-px-phone="6px"
+          class="session-details-chips flex min-w-0 flex-wrap items-center gap-space-1"
         >
           {#if editable || kept}
             <NsPopover
@@ -711,9 +713,10 @@
               {/snippet}
               <!-- The model list, sized to its widest row and scrolled in
                    whole rows: five whole rows, 4px padding, five 44px rows,
-                   four 2px gaps. -->
-              <!-- literal: 232px -->
-              <div data-slot="model-pop" style:--list-max="232px">
+                   four 2px gaps. The search is as wide as what is typed in it
+                   (motion/autosize.svelte.ts autowidth), and tweens there a
+                   character at a time. -->
+              <div data-slot="model-pop" class="session-details-model-pop">
                 <ModelSection
                   harness={shownHarness}
                   installed={kept ? keptHarnesses : [harness]}
@@ -816,11 +819,8 @@
     >
       {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}
         <span class="flex-none whitespace-nowrap text-ink-muted">Context</span>
-        <!-- literal: 48px, 96px -->
         <span
-          class="max-w-(--bar-max) min-w-(--bar-min) flex-1"
-          style:--bar-min="48px"
-          style:--bar-max="96px"
+          class="max-w-c-context-bar-max min-w-c-context-bar-min flex-1"
           title={readAt ? `Read at ${readAt}` : undefined}
         >
           <LimitBar
@@ -863,15 +863,13 @@
   </div>
   <!-- The action row (SessionFooter's): right-aligned, 8px apart, on the
        body's surface under the meters, parted from them by space alone. -->
-  <!-- literal: 8px -->
   <div
     data-slot="footer"
-    class="flex flex-none items-center justify-end gap-(--footer-gap) px-space-5 py-space-4"
-    style:--footer-gap="8px"
+    class="flex flex-none items-center justify-end gap-space-2 px-space-5 py-space-4"
   >
     <button
       data-slot="primary"
-      class="ns-btn cursor-pointer [@media(max-width:640px)]:flex-1"
+      class="ns-btn cursor-pointer max-phone:flex-1"
       data-size="xs"
       data-variant="primary"
       onclick={() => {
@@ -884,74 +882,3 @@
     </button>
   </div>
 </div>
-
-<style>
-  /* residual: foreign-dom — svg the icon components draw; the settings'
-     chips, which NsPopover's trigger (the model chip, by its
-     `triggerClass`), ToolChips and AccountSwitch render: the card's width
-     holds the longest names whole ("Opus 5.5 · 1M", "medium", "Accept
-     edits") with the chips' insides drawn in a little; and ModelSection's
-     list inside the model popover. */
-  [data-slot="icon-action"] :global(svg) {
-    width: var(--icon-md);
-    height: var(--icon-md);
-  }
-  [data-slot="done"] :global(svg) {
-    width: var(--icon-md);
-    height: var(--icon-md);
-    flex: none;
-    color: var(--status-done-glyph);
-  }
-  [data-slot="settings"] :global([data-model-chip]) {
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-  [data-slot="settings"] :global(.tool-chips) {
-    gap: var(--space-1);
-  }
-  [data-slot="settings"] :global(.ns-chip-btn) {
-    gap: var(--space-1);
-    height: var(--chip-h);
-  }
-  [data-slot="model-pop"] :global([data-slot="picker"]) {
-    border: 0;
-    box-shadow: none;
-    background: transparent;
-  }
-  /* The search is as wide as what is typed in it (motion/autosize.svelte.ts
-     autowidth), and tweens there a character at a time. */
-  [data-slot="model-pop"] :global([data-slot="search"] input) {
-    --autowidth: 1;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: width var(--dur-control) var(--ease-out);
-    }
-  }
-  [data-slot="model-pop"] :global([data-slot="list"]) {
-    height: auto;
-    max-height: var(--list-max);
-    overflow: hidden auto;
-    scroll-snap-type: y mandatory;
-    /* The 2px row gap, so a snapped row's neighbour shows none of itself. */
-    scroll-padding: 2px;
-  }
-  [data-slot="model-pop"] :global([data-slot="row"]) {
-    scroll-snap-align: start;
-  }
-  @media (max-width: 640px) {
-    /* A phone's row is ~350px: the three chips fit it whole, the model's
-       name included, with the chips' sides and gaps drawn in. */
-    [data-slot="settings"] :global(.ns-chip-btn) {
-      height: var(--chip-h-phone);
-      padding-inline: var(--chip-px-phone);
-    }
-    /* A bordered chip already reads as tappable; its chevron is the room
-       the model's name needs. The account chip keeps its own: it is the
-       only hint that it opens anything. */
-    [data-slot="settings"]
-      :global(
-        .ns-chip-btn:not([data-account-chip]) > svg[data-slot="chevron"]
-      ) {
-      display: none;
-    }
-  }
-</style>

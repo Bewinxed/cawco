@@ -75,7 +75,7 @@
           <Spinner
             aria-hidden="true"
             role="presentation"
-            class="size-icon-md flex-none"
+            class="flex-none"
           />
         {/if}
       </span>
