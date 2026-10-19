@@ -200,12 +200,18 @@ const DELEGATE = /PROBE-GATE-(A|B):/;
 const SELECTED = /(\d+):[^\n]*\[selected\]/;
 const TEXTBOX = /uid=(\S+) textbox/;
 
+/** Where the spec's npx runs: the person's HOME, and an npm cache of this run's own. */
+interface Npx {
+  cache: string;
+  home: string;
+}
+
 /** chrome-devtools-mcp at the gate as workspace `id`. */
 const mcpAs = async (
   port: number,
   id: string,
   token: string,
-  realHome: string
+  npx: Npx
 ): Promise<McpClient> => {
   const sdk =
     "../../../packages/hub/node_modules/@modelcontextprotocol/sdk/dist/esm/client";
@@ -232,11 +238,18 @@ const mcpAs = async (
   const transport = new StdioClientTransport({
     command: launcher.config.command,
     args: launcher.config.args,
-    // npx's cache is the person's, not the fleet's home.
+    // The person's HOME, not the fleet's, and an npm cache of the run's own.
+    // npx holds `<cache>/_npx/<hash>/concurrency.lock` while it reads its
+    // install, on every start, and waits on it with no end; a holder killed
+    // by SIGKILL never removes it, and the next npx waits until it is 60 s
+    // old (npm 11.19.1 libnpmexec with-lock.js `staleThreshold = 60_000`):
+    // the MCP SDK's own 60 s for `initialize`. A shared cache is shared with
+    // every process on the machine that starts this package.
     env: {
       ...(process.env as Record<string, string>),
       ...launcher.config.env,
-      HOME: realHome,
+      HOME: npx.home,
+      npm_config_cache: npx.cache,
     },
     // Kept: a server that exits ("Connection closed") says why only here.
     stderr: "pipe",
@@ -358,12 +371,12 @@ const gateChecks = async (
   port: number,
   host: string,
   who: Record<"A" | "B", { id: string; token: string }>,
-  realHome: string
+  npx: Npx
 ): Promise<void> => {
   const { check } = kit;
   const words = GATE_WORDS;
-  const A = await mcpAs(port, who.A.id, who.A.token, realHome);
-  const B = await mcpAs(port, who.B.id, who.B.token, realHome);
+  const A = await mcpAs(port, who.A.id, who.A.token, npx);
+  const B = await mcpAs(port, who.B.id, who.B.token, npx);
   try {
     const opened = await called(A, "new_page", { url: "https://example.com" });
     const pageId = selected(opened.text);
@@ -580,6 +593,8 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.accountSignedIn();
 
   const home = fleet.env.HOME as string;
+  // npx's cache for this run alone, gone with the fleet's sandbox (`Npx`).
+  const npx: Npx = { home: realHome, cache: join(fleet.sandbox, "npm") };
   const repo = join(fleet.sandbox, "code");
   await mkdir(repo, { recursive: true });
   await Bun.$`git init -q -b main && echo code > README.md && git -c user.name=O -c user.email=o@probe.test add -A && git -c user.name=O -c user.email=o@probe.test commit -qm 'First commit'`
@@ -713,7 +728,7 @@ const run = async (kit: Kit): Promise<void> => {
       live.host === "container" && ports.devtools > 0,
       JSON.stringify(live)
     );
-    await gateChecks(kit, gateHost, key, gatePort, "container", who, realHome);
+    await gateChecks(kit, gateHost, key, gatePort, "container", who, npx);
     shell.container = { devtools: ports.devtools, socket };
     await shellChecks(kit, "container");
 
@@ -779,7 +794,7 @@ const run = async (kit: Kit): Promise<void> => {
       local.host === "local" && localPorts.devtools > 0,
       JSON.stringify(local)
     );
-    await gateChecks(kit, gateHost, key, gatePort, "local", who, realHome);
+    await gateChecks(kit, gateHost, key, gatePort, "local", who, npx);
     shell.local = { devtools: localPorts.devtools, socket };
     await shellChecks(kit, "local");
   } finally {
