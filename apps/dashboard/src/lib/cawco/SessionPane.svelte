@@ -1266,14 +1266,24 @@
         <!-- The group draws the composer; only the server's first paint,
                  before any group composer exists, draws one here. -->
         {#if continuedTo}
-          <p class="readonly continued" in:crossIn out:crossOut>
-            <span>{CONTINUED_IN}</span>
-            <a class="touch-hit pointer-hit" href={rowHref(continuedTo.id)}
-              ><span>{continuedTo.title}</span></a
+          <p
+            class="mx-auto mt-0 mb-space-4 flex max-w-full justify-center gap-space-1 px-space-3 py-space-2 text-center text-meta text-ink-muted"
+            in:crossIn
+            out:crossOut
+          >
+            <span class="flex-none whitespace-nowrap">{CONTINUED_IN}</span>
+            <a
+              class="touch-hit pointer-hit min-w-0 text-link-ink underline-offset-2 hover:underline"
+              href={rowHref(continuedTo.id)}
+              ><span class="block truncate">{continuedTo.title}</span></a
             >
           </p>
         {:else if !fault && (unaddressable || readOnly)}
-          <p class="readonly" in:crossIn out:crossOut>
+          <p
+            class="mx-auto mt-0 mb-space-4 px-space-3 py-space-2 text-center text-meta text-ink-muted"
+            in:crossIn
+            out:crossOut
+          >
             This transcript is stored; the session isn't reachable from here.
           </p>
         {:else if writable && !browser}
@@ -1321,123 +1331,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .body {
-    min-width: 0;
-  }
-
-  /* The composer's slot, when there is no composer. Sits where the input would,
-     in the muted voice of something stating a fact rather than refusing one. */
-  .readonly {
-    margin: 0 auto var(--space-4);
-    padding: var(--space-2) var(--space-3);
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    text-align: center;
-  }
-  /* Where the work went: its words, then the new session's title as a link
-     that gives way first (DESIGN.md, the Truncate Inside Rule). */
-  .continued {
-    display: flex;
-    justify-content: center;
-    gap: var(--space-1);
-    max-inline-size: 100%;
-  }
-  .continued > span {
-    flex: none;
-    white-space: nowrap;
-  }
-  .continued a {
-    min-inline-size: 0;
-    color: var(--link-ink);
-    text-underline-offset: var(--underline-offset);
-  }
-  @media (hover: hover) {
-    .continued a:hover {
-      text-decoration: underline;
-    }
-  }
-  .continued a > span {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .pane {
-    position: relative;
-    container-type: inline-size;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-width: 0;
-    min-height: 0;
-    background: var(--surface-recess);
-  }
-  .body {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-
-  /* ── Transcript slide ─────────────────────────────────────────────
-     Only the transcript area slides on tab switch. Header and composer
-     stay put. The entering transcript slides in from the tab direction,
-     the exiting one slides out the opposite way. */
-  .transcript-slide {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-    /* The area's own stacking context: the placeholder's z-index below is
-       ranked among the transcript's, never against the group's composer
-       standing over this area's foot. Without it a desk's placeholder
-       painted over the composer and took its clicks until the rows came. */
-    isolation: isolate;
-    /* The transcript's scroll, in reach of its head blur (HeadFade). */
-    timeline-scope: --transcript-head;
-  }
-
-  /* One named state, or the transcript, filling the area. */
-  .state {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  /* The placeholder, laid over the transcript until its rows are drawn:
-     opaque, so fading it is the cross-fade, and above the transcript's own
-     sticky notes, below the composer. */
-  /* A move's wait, over everything the pane holds, opaque: fading it is the
-     cross-fade to the transcript under it. */
-  .move-layer {
-    position: absolute;
-    inset: 0;
-    z-index: 6;
-    display: flex;
-    flex-direction: column;
-  }
-  .veil {
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-recess);
-  }
-
-  /**
-   * The handover. The transcript is IN FLOW the whole time — it is the thing
-   * that stays — so revealing it moves nothing; it is merely unpainted while it
-   * measures. The server's tail is the one lifted out of flow and laid over it,
-   * because both want to be `.body`'s whole box and two in-flow flex children
-   * would take half each.
-   */
-  /* No standin — virtua renders the tail directly via ssrCount. */
-</style>
