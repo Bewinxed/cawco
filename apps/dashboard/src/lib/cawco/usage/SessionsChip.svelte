@@ -217,12 +217,9 @@
       <ul data-slot="list" aria-label={label} class="flex flex-col">
         {#each sessions as session (session.id)}
           <li>
-            <!-- literal: 40px, 44px -->
             <a
               data-slot="item"
-              class="no-hover:h-(--item-h-touch) h-(--item-h) max-phone:h-(--item-h-touch) transition-[background-color] dur-control ease-out flex items-center gap-space-2 px-space-3 py-0 text-ink-strong no-underline hover:bg-surface-hover"
-              style:--item-h="40px"
-              style:--item-h-touch="44px"
+              class="h-c-nav-h transition-[background-color] dur-control ease-out flex items-center gap-space-2 px-space-3 py-0 text-ink-strong no-underline hover:bg-surface-hover"
               data-session-link={session.id}
               href={conversationHref(session.id, cawco.instanceIndex)}
               onclick={opened}

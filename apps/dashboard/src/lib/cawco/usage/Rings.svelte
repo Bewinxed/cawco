@@ -105,7 +105,6 @@
   });
 </script>
 
-<!-- literal: 12px 12px; rotate(-90deg) -->
 <svg
   aria-hidden="true"
   class="group/rings block flex-none overflow-visible"
@@ -120,29 +119,28 @@
   width={size}
   bind:this={svg}
   style:--c={ring.color}
-  style:--ring-origin="12px 12px"
-  style:--ring-turn="rotate(-90deg)"
 >
   <circle
-    class="fill-border-control origin-(--ring-origin) transform-(--ring-turn) data-spent:fill-ring-track-spent"
+    class="fill-border-control origin-center -rotate-90 data-spent:fill-ring-track-spent"
     cx="12"
     cy="12"
     data-spent={ring.limitOn === "5h" || undefined}
     r={geometry.rd.toFixed(3)}
   />
   <circle
-    class="arc fill-none stroke-(--c) origin-(--ring-origin) transform-(--ring-turn) transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
+    class="fill-none stroke-(--c) origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-arc="disc"
     data-full={disc >= 100 || undefined}
     pathLength="100"
     r={(geometry.rd / 2).toFixed(3)}
+    stroke-dasharray={disc >= 100 ? "none" : "100 100"}
     stroke-width={geometry.rd.toFixed(3)}
     style:stroke-dashoffset={off(disc)}
   />
   <circle
-    class="fill-none stroke-border-control origin-(--ring-origin) transform-(--ring-turn) data-spent:stroke-ring-track-spent"
+    class="fill-none stroke-border-control origin-center -rotate-90 data-spent:stroke-ring-track-spent"
     cx="12"
     cy="12"
     data-spent={ring.limitOn === "week" || undefined}
@@ -150,60 +148,37 @@
     stroke-width={geometry.w.toFixed(3)}
   />
   <circle
-    class="arc week fill-none origin-(--ring-origin) transform-(--ring-turn) transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
+    class="fill-none arc-week origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-arc="rim"
     data-full={rim >= 100 || undefined}
     pathLength="100"
     r={geometry.rr.toFixed(3)}
+    stroke-dasharray={rim >= 100 ? "none" : "100 100"}
     stroke-width={geometry.w.toFixed(3)}
     style:stroke-dashoffset={off(rim)}
   />
   <circle
-    class="arc fill-none stroke-account-reserved origin-(--ring-origin) transform-(--ring-turn) transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out not-data-off:group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 motion-reduce:transition-off"
+    class="fill-none stroke-account-reserved origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out not-data-off:group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || Math.min(rim, reserve) <= 0 || undefined}
     pathLength="100"
     r={geometry.rr.toFixed(3)}
+    stroke-dasharray="100 100"
     stroke-width={geometry.w.toFixed(3)}
     style:stroke-dashoffset={off(reserve === null ? 0 : Math.min(rim, reserve))}
   />
   <circle
-    class="notch fill-none origin-(--ring-origin) transform-(--ring-turn) transition-[opacity] dur-toggle ease-out data-off:opacity-0 motion-reduce:transition-off"
+    class="fill-none arc-ground origin-center -rotate-90 transition-[opacity] dur-toggle ease-out data-off:opacity-0 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || undefined}
     pathLength="100"
     r={geometry.rr.toFixed(3)}
+    stroke-dasharray="1.6 98.4"
     stroke-width={geometry.notch.toFixed(3)}
     style:stroke-dashoffset={(-(reserve ?? 0) + 0.8).toFixed(2)}
   />
 </svg>
-
-<style>
-  /* residual: svg-paint — the arcs' dash (its offset inline); a whole window
-     is a whole circle: a dash 100 long on a closed circle leaves a ~2% wedge
-     uncovered at its start (the disc), so it is not dashed. The week's rim
-     in the account's hue toward --account-week-toward, and the notch cut in
-     the ground's paint. */
-  .arc {
-    stroke-dasharray: 100 100;
-    stroke-linecap: butt;
-  }
-  .week {
-    stroke: color-mix(
-      in oklch,
-      var(--c),
-      var(--account-week-toward) calc(var(--account-week-mix) * 100%)
-    );
-  }
-  .arc[data-full] {
-    stroke-dasharray: none;
-  }
-  .notch {
-    stroke: var(--ring-ground, var(--sidebar));
-    stroke-dasharray: 1.6 98.4;
-  }
-</style>

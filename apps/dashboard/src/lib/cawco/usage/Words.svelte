@@ -31,13 +31,10 @@
       {:else if "figure" in part}
         <b class="mono-figure font-medium text-ink-strong">{part.figure}</b>
       {:else}
-        <!-- literal: 6px, 50% -->
         <span
           data-slot="dot"
-          class="me-space-1 inline-block size-(--dot) rounded-(--dot-r) bg-(color:--c) align-middle"
+          class="me-space-1 inline-block size-c-mark-dot rounded-pill bg-(color:--c) align-middle"
           style:--c={part.color}
-          style:--dot="6px"
-          style:--dot-r="50%"
         ></span><b class="font-medium text-ink-strong">{part.account}</b>
       {/if}
     {/each}</span
