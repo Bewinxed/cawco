@@ -633,6 +633,18 @@ export const workspaceReadOnlyDir = (id: string): string =>
   join(workspaceStateDir(id), "ro");
 
 /**
+ * The temp root of every Claude Code CLI a workspace's sessions run
+ * (`CLAUDE_CODE_TMPDIR`), in {@link workspaceReadOnlyDir}: the CLI writes it
+ * on the host, and a command inside the boundary reads it, so a background
+ * task's output (`<root>/claude-<uid>/<project>/<session>/tasks/*.output`)
+ * is there for the session's shell as for its Read. Never the scratch dir:
+ * the CLI also runs git and loads plugins from that root on the host, which
+ * no workspace may write.
+ */
+export const workspaceClaudeTmpDir = (id: string): string =>
+  join(workspaceReadOnlyDir(id), "claude-tmp");
+
+/**
  * macOS's root for every workspace's sockets ({@link workspaceDoorDir}):
  * `/private/tmp/cawco-<uid>`, this user's own (0700, made and checked by the
  * agent before a socket goes in it, tool-door.ts `socketPlace`). A real path,

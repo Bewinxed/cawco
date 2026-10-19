@@ -8,10 +8,16 @@
  * host, outside every boundary.
  *
  * One delegate, in a clone of this repository at the commit under test, runs
- * one command in its boundary, then holds its turn on a long `sleep` there
- * (so no quiet turn fails its item and retires its workspace while the spec
- * looks), and the spec closes the boundary:
+ * a background task and, once its completion notice has come, reads the
+ * task's output file with its shell; then runs one command in its boundary,
+ * then holds its turn on a long `sleep` there (so no quiet turn fails its
+ * item and retires its workspace while the spec looks), and the spec closes
+ * the boundary:
  *
+ * - the shell reads the background task's output after its notice (before
+ *   the fix the CLI wrote it under the host's `/tmp`, which the boundary
+ *   hides: "No such file or directory"; agent claude.ts `sessionEnv`,
+ *   core paths.ts `workspaceClaudeTmpDir`);
  * - a write to `~/.cache/cawco-orchestrator/probe-x`, under the read-denied
  *   home dir, by Node's fs under bun (whose error names the path, where
  *   Ubuntu's uutils `mkdir` says only "mkdir: Read-only file system"), fails
@@ -95,6 +101,20 @@ const COMMAND = [
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
+/** A Bash call, as the delegate's model makes it. */
+const bash = (input: Record<string, unknown>): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name: "Bash", input: { timeout: 600_000, ...input } },
+});
+
+/** The CLI's answer to a Bash call it runs in the background. */
+const BG_STARTED = "Command running in background";
+/** The output file the CLI's completion notice names. */
+const BG_OUTPUT_FILE = /<output-file>([^<]+)<\/output-file>/;
+/** Each line of the output file as the session's shell reads it, after this. */
+const BG_LINE = "READ> ";
+
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
@@ -102,37 +122,37 @@ const respond = (request: Seen): Reply => {
   if (!request.all.includes(`${TAG}:`)) {
     return text("ok");
   }
+  // A background task first, read by the session's shell once its completion
+  // notice has come; then the one command.
+  if (!request.all.includes(BG_STARTED)) {
+    return bash({
+      command: `echo ${apart("BG-PAYLOAD:")}kept`,
+      description: "Write a background task's output",
+      run_in_background: true,
+    });
+  }
+  const notice = BG_OUTPUT_FILE.exec(request.all)?.[1];
+  if (notice === undefined) {
+    return bash({ command: "sleep 2", description: "Wait for the notice" });
+  }
+  if (!request.all.includes("BG-READ:")) {
+    return bash({
+      command: `cat '${notice}' 2>&1 | sed 's/^/${BG_LINE}/'; echo ${apart("BG-READ:")}\${PIPESTATUS[0]}`,
+      description: "Read the background task's output",
+    });
+  }
   if (!request.all.includes(END)) {
-    return {
-      everyMs: 5,
-      words: [],
-      tool: {
-        name: "Bash",
-        input: {
-          command: COMMAND,
-          description: "Write, install and commit inside the boundary",
-          timeout: 600_000,
-        },
-      },
-    };
+    return bash({
+      command: COMMAND,
+      description: "Write, install and commit inside the boundary",
+    });
   }
   // Its turn held in the boundary until the spec has closed it and read the
   // disk: a "Done." would end it, and the third quiet turn in a row fails the
   // item (hub work-items.ts `QUIET_TURNS`), which can close the boundary
   // before the spec looks. Held again after the close, in the boundary the
   // next command starts.
-  return {
-    everyMs: 5,
-    words: [],
-    tool: {
-      name: "Bash",
-      input: {
-        command: "sleep 3600",
-        description: "Hold the turn",
-        timeout: 600_000,
-      },
-    },
-  };
+  return bash({ command: "sleep 3600", description: "Hold the turn" });
 };
 
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
@@ -156,6 +176,21 @@ const after = (said: string, marker: string): string | undefined =>
 /** The command's output, from its first marker on. */
 const outputOf = (said: string): string =>
   said.slice(said.indexOf("HOME-WRITE:"), said.indexOf(END) + END.length);
+
+/** The background task's output, as the session's shell read it after the CLI's completion notice. */
+const checkBackgroundRead = (kit: Kit, said: string): void => {
+  const outputFile = BG_OUTPUT_FILE.exec(said)?.[1];
+  const exit = after(said, "BG-READ:");
+  const read = said
+    .split("\n")
+    .filter((line) => line.startsWith(BG_LINE))
+    .map((line) => line.slice(BG_LINE.length));
+  kit.check(
+    "the session's shell reads a background task's output file after its completion notice",
+    exit === "0" && read.includes("BG-PAYLOAD:kept"),
+    `notice named ${outputFile ?? "no output file"}; cat exit ${exit ?? "unread"}: ${JSON.stringify(read.join(" | ").slice(0, 300))}`
+  );
+};
 
 const run = async (kit: Kit) => {
   const nested =
@@ -300,6 +335,7 @@ const run = async (kit: Kit) => {
     after(said, "COMMITTED:") === "0" && subject === COMMIT_SUBJECT,
     `exit ${after(said, "COMMITTED:")}; the clone's last commit on the host: ${JSON.stringify(subject)}`
   );
+  checkBackgroundRead(kit, said);
   const runtime = after(said, "BUNX-RUNTIME:");
   kit.check(
     "bunx --bun runs a #!/usr/bin/env node bin under Bun, which reads process.versions.bun",

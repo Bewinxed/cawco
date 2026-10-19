@@ -723,6 +723,7 @@ const workspaceAt = async (id: string, dir: string) => {
   );
   await chmod(exec, 0o755);
   const record = {
+    claudeTmp: paths.workspaceClaudeTmpDir(id),
     exec,
     hook: join(state, "hook"),
     pid: process.pid,
