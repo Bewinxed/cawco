@@ -87,10 +87,10 @@ const nekoEnv = (
   record: BrowserRecord,
   passwords: { admin: string; user: string },
   relay: BrowserRelay | undefined,
-  media: MediaPath
+  media: MediaPath,
+  addresses: string[]
 ): string[] => {
   const port = portsOf(record).media;
-  const addresses = machineAddresses();
   return [
     "NEKO_DESKTOP_SCREEN=1280x800@30",
     "NEKO_SERVER_BIND=0.0.0.0:8080",
@@ -333,7 +333,7 @@ export class ContainerHost implements BrowserHost {
       name: containerName(record),
       Image: image,
       Labels: { [BROWSER_LABEL]: record.key },
-      Env: nekoEnv(record, passwords, relay, media),
+      Env: nekoEnv(record, passwords, relay, media, await machineAddresses()),
       ExposedPorts: {
         "8080/tcp": {},
         "9222/tcp": {},

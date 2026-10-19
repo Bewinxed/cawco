@@ -26,6 +26,7 @@ import { homedir, networkInterfaces, platform } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import type { MediaPath } from "@cawco/core/capabilities";
+import { reachableLinks } from "@cawco/core/reachable-links";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   isDamagedRecord,
@@ -292,18 +293,17 @@ export const mediaForwarding = async (
     : promised;
 };
 
-/** Interfaces that are containers' and VMs' own bridges: no screen reaches the machine on them. */
-const BRIDGE = /^(?:docker|br-|cni|podman|veth|virbr|vnet|lima)/;
-
 /**
- * The machine's addresses a screen may reach it on: every IPv4 address
- * that is not loopback (LAN and tailnet), and every global IPv6 one.
+ * The machine's addresses a screen may reach it on: on the links another
+ * device reaches it on (core reachable-links.ts: no container or VM bridge,
+ * veth or bridge port), every IPv4 address (LAN and tailnet) and every
+ * global IPv6 one.
  */
-export const machineAddresses = (): string[] =>
-  Object.entries(networkInterfaces()).flatMap(([name, addresses]) =>
-    BRIDGE.test(name)
-      ? []
-      : (addresses ?? [])
+export const machineAddresses = async (): Promise<string[]> => {
+  const reachable = new Set((await reachableLinks()).map((link) => link.name));
+  return Object.entries(networkInterfaces()).flatMap(([name, addresses]) =>
+    reachable.has(name)
+      ? (addresses ?? [])
           .filter(
             (one) =>
               !one.internal &&
@@ -315,7 +315,9 @@ export const machineAddresses = (): string[] =>
                 ))
           )
           .map((one) => one.address)
+      : []
   );
+};
 
 /**
  * How long a live container's media port has to show up forwarded. Lima's
@@ -429,7 +431,7 @@ const tcpAnswers = (host: string, port: number): Promise<boolean> =>
  * port alike, so a TCP connection taken is UDP forwarded as well.
  */
 const natForwards = async (port: number): Promise<MediaPath> => {
-  const addresses = machineAddresses();
+  const addresses = await machineAddresses();
   const host =
     addresses.find((one) => !one.includes(":")) ?? addresses[0] ?? "127.0.0.1";
   return (await tcpAnswers(host, port)) ? "udp+tcp" : "none";

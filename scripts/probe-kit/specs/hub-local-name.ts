@@ -13,7 +13,9 @@
  *    target, and the agent's own browse (discovery.ts `browseMdns`) still
  *    reads an address off the announcements.
  * 4. Each hub's Connect a machine list (`/api/join`) carries
- *    "On this network · http://<held name>:<port>".
+ *    "On this network · http://<held name>:<port>", and every row named for
+ *    an interface names one another machine reaches this one on (core
+ *    reachable-links.ts): never a container bridge's, a veth's or a port's.
  * 5. A device on the LAN is answered with the LAN's addresses alone (RFC
  *    6762 §14). A third hub runs in a network of its own (`unshare
  *    --map-root-user --net`: a user and network namespace whose root may
@@ -41,6 +43,7 @@ import { join } from "node:path";
 import makeMdns from "multicast-dns";
 import { browseMdns } from "../../../packages/agent/src/discovery";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { reachableLinks } from "../../../packages/core/src/reachable-links";
 import { lanInterfaces } from "../../../packages/hub/src/lan-interfaces";
 import { freePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -54,6 +57,9 @@ const LISTEN_MS = 2000;
 interface Health {
   localName?: string | null;
 }
+
+/** Connect a machine's rows that name no interface (hub join.ts). */
+const OWN_ROWS = new Set(["Tailscale", "Tailscale DNS", "On this network"]);
 
 /** The number a held name carries: `cawco.local` is the first. */
 const numberOf = (name: string): number => Number(HELD.exec(name)?.[1] ?? 1);
@@ -313,6 +319,9 @@ const spec: Spec = {
     // mDNS on, and every interface bound: a loopback hub announces nothing.
     const announcing = { CAWCO_NO_MDNS: "0", HOST: "0.0.0.0" };
     const own = await answerable();
+    const reachable = new Set(
+      (await reachableLinks()).map((link) => link.name)
+    );
     kit.check(
       "lan-interfaces.ts picks an interface here that other devices share",
       own.lan.size > 0,
@@ -408,6 +417,15 @@ const spec: Spec = {
               address.label === "On this network" && address.url === row
           ),
           JSON.stringify(listed)
+        );
+        const unreachable = listed.filter(
+          (address) =>
+            !(OWN_ROWS.has(address.label) || reachable.has(address.label))
+        );
+        kit.check(
+          `Connect a machine on :${port} offers no address on a link no other machine reaches (reachable: ${[...reachable].join(", ")})`,
+          unreachable.length === 0,
+          `not reachable: ${unreachable.map((address) => `${address.label} · ${address.url}`).join(", ") || "none"}; listed ${listed.map((address) => address.label).join(", ")}`
         );
       }
 

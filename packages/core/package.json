@@ -41,6 +41,7 @@
     "./browser-gate": "./src/browser-gate.ts",
     "./stream-relay": "./src/stream-relay.ts",
     "./public-address": "./src/public-address.ts",
+    "./reachable-links": "./src/reachable-links.ts",
     "./hub-auth": "./src/hub-auth.ts",
     "./machine-key": "./src/machine-key.ts",
     "./choices": "./src/choices.ts",

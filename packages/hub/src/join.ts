@@ -47,6 +47,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { generateInstallScript } from "@cawco/core/install-script";
 import { LineSplitter } from "@cawco/core/lines";
+import { reachableLinks } from "@cawco/core/reachable-links";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
@@ -113,7 +114,8 @@ const TRAILING_DOT = /\.$/;
  * its networks (mdns.ts), which keeps working when the hub's address changes
  * but reaches only machines on the same network. The Tailscale IP also shows
  * up as an interface (`tailscale0`, `utun…`); it is listed once, under
- * Tailscale. A machine without the `tailscale` binary simply has no Tailscale
+ * Tailscale. A container's or VM's bridge, a veth and a bridge's port are
+ * never listed (core reachable-links.ts). A machine without the `tailscale` binary simply has no Tailscale
  * rows, and a hub with mDNS off has no `.local` row.
  */
 export const joinAddresses = async (): Promise<JoinAddress[]> => {
@@ -138,7 +140,13 @@ export const joinAddresses = async (): Promise<JoinAddress[]> => {
       url: url(dnsName.replace(TRAILING_DOT, "")),
     });
   }
+  // Only links another machine reaches this one on: a container bridge's
+  // address answers nobody but the containers behind it.
+  const reachable = new Set((await reachableLinks()).map((link) => link.name));
   for (const [name, entries] of Object.entries(networkInterfaces())) {
+    if (!reachable.has(name)) {
+      continue;
+    }
     for (const entry of entries ?? []) {
       if (entry.family !== "IPv4" || entry.internal) {
         continue;

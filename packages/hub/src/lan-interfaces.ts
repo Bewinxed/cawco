@@ -13,8 +13,9 @@
  * and the VPN tunnel's, each with its own address, and a querier that asked
  * for a unicast reply (macOS does) is sent all of them. A client that tries
  * the bridge's address first waits out a connect timeout. So ciao is given
- * only the interfaces other devices sit on, read from what the OS reports
- * about each link, never from its name:
+ * only the links another device reaches this machine on (core
+ * reachable-links.ts: no container or VM bridges, veths or ports), and of
+ * those the ones mDNS runs on, from each link's flags:
  *
  * - No MULTICAST flag: mDNS is multicast, and the link carries none
  *   (netdevice(7): "IFF_MULTICAST Supports multicast",
@@ -22,20 +23,6 @@
  * - POINTOPOINT: the one peer is the tunnel's far end (netdevice(7):
  *   "IFF_POINTOPOINT Interface is a point-to-point link"). Tailscale,
  *   WireGuard, OpenVPN's tun, PPP; macOS `utun`.
- * - A port of a bridge or bond: its frames are its master's, and so are the
- *   addresses that answer for them.
- * - A veth: the other end of the pair is a network namespace on this
- *   machine (veth(4): "They can act as tunnels between network namespaces",
- *   https://man7.org/linux/man-pages/man4/veth.4.html).
- * - A bridge whose every port leads to a guest on this machine (veth to a
- *   container, tap to a VM) or that has no port at all: Podman's and
- *   Docker's networks, libvirt's `virbr0` (Docker: "Bridge networks apply
- *   to containers running on the same Docker daemon host",
- *   https://docs.docker.com/engine/network/drivers/bridge/). A bridge with a
- *   NIC among its ports is the LAN itself. On macOS the same rule reads the
- *   bridge's `member:` lines against the Mac's hardware ports
- *   (`networksetup -listallhardwareports`): the Thunderbolt Bridge has some,
- *   a VM's `bridge100` has none.
  *
  * On Linux the crosstalk runs between the shared interfaces too: with the
  * Ethernet on one network and the Wi-Fi on another, a question from the
@@ -46,131 +33,19 @@
  * comment), so a Mac answers on every shared interface.
  */
 import { networkInterfaces } from "node:os";
+import { reachableLinks } from "@cawco/core/reachable-links";
 
-interface Link {
-  flags: string[];
-  /** Its kind as the kernel reports it (`veth`, `bridge`, `tun` for tun and tap). */
-  kind?: string;
-  /** The bridge or bond this link is a port of. */
-  master?: string;
-  /** What its master is (`bridge`, `bond`, `vrf`). */
-  masterKind?: string;
-  name: string;
-}
-
-/** A port of one of these hands its frames, and their addresses, to its master. */
-const ABSORBING = new Set(["bridge", "bond"]);
-/** Kinds that reach a guest on this machine: a container (veth) or a VM (tap). */
-const GUEST = new Set(["veth", "tun"]);
-
-const isShared = (
-  link: Link,
-  links: Link[],
-  leavesMachine: (port: Link) => boolean
-): boolean => {
-  if (
-    !link.flags.includes("MULTICAST") ||
-    link.flags.includes("LOOPBACK") ||
-    link.flags.includes("POINTOPOINT")
-  ) {
-    return false;
-  }
-  if (link.master && ABSORBING.has(link.masterKind ?? "")) {
-    return false;
-  }
-  if (link.kind === "veth") {
-    return false;
-  }
-  if (link.kind === "bridge") {
-    return links.some(
-      (port) => port.master === link.name && leavesMachine(port)
-    );
-  }
-  return true;
-};
-
-interface IpLink {
-  flags: string[];
-  ifname: string;
-  linkinfo?: { info_kind?: string; info_slave_kind?: string };
-  master?: string;
-}
-
-/** Linux: iproute2's own report of every link in this network namespace. */
-const linuxShared = async (): Promise<string[]> => {
-  const report = (await Bun.$`ip -details -json link show`.quiet()).stdout;
-  const links: Link[] = (JSON.parse(report.toString()) as IpLink[]).map(
-    (link) => ({
-      name: link.ifname,
-      flags: link.flags,
-      master: link.master,
-      kind: link.linkinfo?.info_kind,
-      masterKind: link.linkinfo?.info_slave_kind,
-    })
-  );
-  return links
-    .filter((link) =>
-      isShared(link, links, (port) => !GUEST.has(port.kind ?? ""))
+/**
+ * The reachable links (core reachable-links.ts) mDNS can run on: those that
+ * carry multicast and have more than one peer.
+ */
+const mdnsLinks = async (): Promise<string[]> =>
+  (await reachableLinks())
+    .filter(
+      (link) =>
+        link.flags.includes("MULTICAST") && !link.flags.includes("POINTOPOINT")
     )
     .map((link) => link.name);
-};
-
-/** `networksetup -listallhardwareports`: a hardware port's interface. */
-const HARDWARE_PORT = /^Device: (\S+)$/gm;
-/** `ifconfig -a`: an interface's first line, its name and flags. */
-const IFCONFIG_HEAD = /^(\S+): flags=\w+<([^>]*)>/;
-/** `ifconfig -a`: a bridge's member. */
-const IFCONFIG_MEMBER = /^\s+member: (\S+)/;
-
-/** macOS: `ifconfig -a`'s flags and bridge members, and the Mac's hardware ports. */
-const darwinShared = async (): Promise<string[]> => {
-  const [ifconfig, ports] = await Promise.all([
-    Bun.$`ifconfig -a`.quiet(),
-    Bun.$`networksetup -listallhardwareports`.quiet(),
-  ]);
-  const hardware = new Set(
-    [...ports.stdout.toString().matchAll(HARDWARE_PORT)].map(
-      (match) => match[1]
-    )
-  );
-  const links: Link[] = [];
-  let block: Link | undefined;
-  for (const line of ifconfig.stdout.toString().split("\n")) {
-    const head = IFCONFIG_HEAD.exec(line);
-    if (head?.[1]) {
-      block = { name: head[1], flags: (head[2] ?? "").split(",") };
-      links.push(block);
-      continue;
-    }
-    const member = IFCONFIG_MEMBER.exec(line);
-    const bridge = block;
-    if (member?.[1] && bridge) {
-      bridge.kind = "bridge";
-      links.push({
-        name: member[1],
-        flags: [],
-        master: bridge.name,
-        masterKind: "bridge",
-      });
-    }
-  }
-  // A member's own block comes before or after its bridge's: merge by name.
-  const byName = new Map<string, Link>();
-  for (const link of links) {
-    const known = byName.get(link.name);
-    byName.set(link.name, {
-      name: link.name,
-      flags: link.flags.length > 0 ? link.flags : (known?.flags ?? []),
-      master: link.master ?? known?.master,
-      masterKind: link.masterKind ?? known?.masterKind,
-      kind: link.kind ?? known?.kind,
-    });
-  }
-  const merged = [...byName.values()];
-  return merged
-    .filter((link) => isShared(link, merged, (port) => hardware.has(port.name)))
-    .map((link) => link.name);
-};
 
 /**
  * The network an interface's IPv4 address sits on (`192.168.3.0/255.255.255.0`),
@@ -238,10 +113,7 @@ const oneNetwork = async (shared: string[]): Promise<string[]> => {
  */
 export const lanInterfaces = async (): Promise<string[]> => {
   if (process.platform === "linux") {
-    return oneNetwork(await linuxShared());
+    return oneNetwork(await mdnsLinks());
   }
-  if (process.platform === "darwin") {
-    return darwinShared();
-  }
-  throw new Error(`no reader for ${process.platform}'s network interfaces`);
+  return mdnsLinks();
 };
