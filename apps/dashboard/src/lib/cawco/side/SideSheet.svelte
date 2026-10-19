@@ -363,15 +363,10 @@
       bind:ref={drawer}
     >
       <Drawer.Title class="sr-only">Beside the conversation</Drawer.Title>
-      <!-- literal: 100px, 6px, 44px -->
       <div
         data-slot="sheet"
         class="relative flex flex-1 flex-col min-h-0 pt-space-3 rounded-t-lg bg-surface-raised shadow-drawer"
         style:--sheet-hidden="{hidden}px"
-        style:--grab-left="calc(50% - 50px)"
-        style:--grab-w="100px"
-        style:--grab-h="6px"
-        style:--grab-hit="44px"
         {@attach land(() => share, { mode: "clip" })}
       >
         <Vaul.Handle
@@ -393,63 +388,3 @@
     </Drawer.Content>
   </Drawer.Root>
 {/if}
-
-<style>
-  /* residual: foreign-dom */
-  /* The sheet fills its host (the space above the composer) edge to edge,
-     so the kit content's inset card, its top margin, its height cap, its
-     padding and its drawn grab bar give way to the sheet div, which draws
-     the surface and holds the vaul handle: the one box that comes out of the
-     Preview button. The kit's own classes are utilities in a layer; these
-     stand over them. */
-  /* css-scope: the kit Drawer's content this file renders; only this sheet sets data-preview-sheet on it */
-  :global([data-preview-sheet][data-slot="drawer-content"]) {
-    position: absolute;
-    inset: 0;
-    z-index: 40;
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-    max-height: none;
-    margin: 0;
-    padding: 0;
-    outline: none;
-  }
-  /* css-scope: the same drawer content, closed: the sheet of a tab off screen, kept, never drawn or pressed */
-  :global(
-    [data-preview-sheet][data-slot="drawer-content"][data-state="closed"]
-  ) {
-    visibility: hidden;
-  }
-  /* css-scope: the same drawer content's drawn grab bar and inset card, which the sheet replaces */
-  :global([data-preview-sheet][data-slot="drawer-content"]::before),
-  :global([data-preview-sheet][data-slot="drawer-content"] > div:first-child) {
-    display: none;
-  }
-  /* The vaul handle (its own unlayered styles stand under these). */
-  :global([data-preview-sheet] [data-preview-grab][data-vaul-handle]) {
-    touch-action: none;
-    position: absolute;
-    top: var(--space-1);
-    left: var(--grab-left);
-    width: var(--grab-w);
-    height: var(--grab-h);
-    border-radius: var(--radius-pill);
-    background: var(--border-control);
-    margin: 0;
-    opacity: 1;
-  }
-  :global([data-preview-sheet] [data-vaul-handle-hitarea]) {
-    height: var(--grab-hit);
-  }
-  /* The card is as tall as what the snap shows (`--sheet-hidden` stands
-     below the composer), so its well keeps its foot and radius above it. */
-  /* css-scope: SideSurface's card, held in this sheet's own sheet div */
-  :global([data-preview-sheet] [data-slot="sheet"] > [data-slot="side-card"]) {
-    flex: 1;
-    height: auto;
-    max-block-size: calc(100% - var(--sheet-hidden, 0px));
-    box-shadow: none;
-  }
-</style>
