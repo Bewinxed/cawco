@@ -67,6 +67,7 @@
     glassElement,
     glassPlacement,
   } from "./bar-glass.svelte";
+  import FilesFace from "./files/FilesFace.svelte";
   import FinderCard from "./find/FinderCard.svelte";
   import CawPanel from "./home/CawPanel.svelte";
   import { liveFeed } from "./home/caw-feed.svelte";
@@ -79,9 +80,14 @@
   const phone = $derived(
     browser ? phoneQuery.current : Boolean(page.data.narrow)
   );
-  /** The card asked for. A phone keeps the machines in its sidebar (Shell). */
+  /**
+   * The card asked for. A phone keeps the machines in its sidebar and Files
+   * in its drawer (Shell).
+   */
   const asked = $derived(
-    barGlass.open === "machines" && phone ? null : barGlass.open
+    (barGlass.open === "machines" || barGlass.open === "files") && phone
+      ? null
+      : barGlass.open
   );
 
   let glass = $state<HTMLElement | null>(null);
@@ -102,17 +108,20 @@
     caw: "caw-pop gap-0",
     machines: "machines-pop w-[min(20rem,calc(100vw-16px))] gap-0",
     jump: "jump-pop gap-0",
+    files: "files-pop gap-0",
   } as const satisfies Record<Card, string>;
   const LABEL = {
     caw: "Needs you",
     machines: "Machines",
     jump: "Jump to",
+    files: "Files",
   } as const satisfies Record<Card, string>;
   /** Where each one puts the focus as it comes in. */
   const FOCUS = {
     caw: "a.cover, button, .empty",
     machines: ".row",
     jump: "input",
+    files: "input",
   } as const satisfies Record<Card, string>;
 
   /** Each face's element, and the fade running on it. */
@@ -454,10 +463,11 @@
     }}
     onInteractOutside={(event) => {
       // The glass's own items open, swap or shut it themselves; bits-ui
-      // tells of a press on one after its click has already done so.
+      // tells of a press on one after its click has already done so. The
+      // file floating beside Files is Files' own.
       if (
         event.target instanceof Element &&
-        event.target.closest("[data-bar-group]")
+        event.target.closest("[data-bar-group], [data-files-float]")
       ) {
         event.preventDefault();
         return;
@@ -530,6 +540,8 @@
           <CawPanel feed={liveFeed} onchoose={close} quiet={cawQuiet()} />
         {:else if one.card === "machines"}
           <MachinesList onleave={close} />
+        {:else if one.card === "files"}
+          <FilesFace onclose={close} />
         {:else}
           <FinderCard onclose={close} {phone} />
         {/if}

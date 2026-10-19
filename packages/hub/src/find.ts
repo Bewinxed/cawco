@@ -46,6 +46,14 @@ import {
   type WaitingItem,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import {
+  excerptOf,
+  matchOf,
+  parse,
+  type Query,
+  wordHit,
+  wordsOf,
+} from "@cawco/core/find-match";
 import { status, t } from "elysia";
 import type { DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
@@ -55,22 +63,16 @@ import {
   changesOf,
   conversationEntry,
   type Entry,
-  excerptOf,
   type ItemChanges,
   MOMENT_WEIGHT,
   machineEntry,
-  matchOf,
   ofKinds,
-  parse,
   projectEntry,
-  type Query,
   rankOf,
   routineEntry,
   storedEntry,
   taskEntry,
   threadEntry,
-  wordHit,
-  wordsOf,
 } from "./find-names";
 import { boardTitle, leafOf } from "./labels";
 

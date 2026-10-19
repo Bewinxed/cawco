@@ -4,7 +4,12 @@
  * alike. Its own module, apart from the fleet store, so an artifact's tab
  * reaches them without loading the fleet.
  */
-import type { ArtifactSummary, ShownFailure } from "@cawco/core";
+import type {
+  ArtifactHit,
+  ArtifactSummary,
+  ArtifactThumbnail,
+  ShownFailure,
+} from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { CanvasMap, SheetRead, StoryOp } from "@cawco/core/stage";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
@@ -26,6 +31,51 @@ export async function listArtifacts(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
   return (await ok(await fetch(artifactsPath(instanceId)))).json();
+}
+
+/**
+ * Files' search over a session's artifacts: those a query matches by name
+ * or by the words on their page, best first (core `ArtifactHit`).
+ */
+export async function searchArtifacts(
+  instanceId: string,
+  q: string,
+  signal?: AbortSignal
+): Promise<ArtifactHit[]> {
+  return (
+    await ok(
+      await fetch(
+        `${artifactsPath(instanceId)}/search?q=${encodeURIComponent(q)}`,
+        { signal }
+      )
+    )
+  ).json();
+}
+
+/** Where an artifact's latest picture is served in `scheme`, named by when it was drawn. */
+export const thumbnailUrl = (
+  id: string,
+  thumbnail: ArtifactThumbnail,
+  scheme: "light" | "dark"
+): string =>
+  `/api/artifacts/${encodeURIComponent(id)}/thumbnail/${thumbnail.single ? "light" : scheme}?at=${encodeURIComponent(thumbnail.at)}`;
+
+/**
+ * The pane's thumbnail of the artifact it shows, kept by the hub as the
+ * artifact's latest picture (Files' cards draw it).
+ */
+export async function keepThumbnail(
+  instanceId: string,
+  id: string,
+  shot: { light: string | null; dark: string | null; single: boolean }
+): Promise<void> {
+  await ok(
+    await fetch(`${artifactsPath(instanceId, id)}/thumbnail`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(shot),
+    })
+  );
 }
 
 /** Brings one of a session's artifacts to the front of its panel; the panel follows its frame. */

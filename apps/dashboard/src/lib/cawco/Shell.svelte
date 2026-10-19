@@ -42,6 +42,11 @@
   import { barStrip } from "./bar-strip.svelte";
   import { cawco } from "./client.svelte";
   import { continuing } from "./continue.svelte";
+  import EdgePull from "./EdgePull.svelte";
+  import FilesFloat from "./files/FilesFloat.svelte";
+  import FilesItem from "./files/FilesItem.svelte";
+  import FilesSheet from "./files/FilesSheet.svelte";
+  import { files, filesCount, followFiles } from "./files/files.svelte";
   import GlassCard from "./GlassCard.svelte";
   import HubBand from "./HubBand.svelte";
   import { deviceRatio } from "./home/device-ratio.svelte";
@@ -59,6 +64,7 @@
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
   import { store, stored } from "./storage";
+  import { isThreadTab } from "./thread-tabs";
   import { floor } from "./visible-viewport.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
@@ -804,33 +810,55 @@
   });
 
   /**
-   * A finger from the screen's left edge pulls the sidebar out, as the
-   * toggle does: a press in the edge's strip that travels right, more than
-   * it travels down, opens it.
+   * Files follows the conversation on screen (a session's, not a thread's):
+   * the bar's item and the phone's sidebar row count it, and its card, its
+   * float and its drawer hold it. Another conversation, or none, puts away
+   * the file floating beside Files.
    */
-  function edgeSwipe(event: PointerEvent) {
-    if (event.pointerType === "mouse") {
-      return;
-    }
-    const zone = event.currentTarget as HTMLElement;
-    const x0 = event.clientX;
-    const y0 = event.clientY;
-    zone.setPointerCapture(event.pointerId);
-    const move = (e: PointerEvent) => {
-      const dx = e.clientX - x0;
-      if (dx > 24 && dx > Math.abs(e.clientY - y0)) {
-        railOpen = true;
-        stop();
+  $effect(() => {
+    const id =
+      onSession &&
+      workspace.activeSessionId &&
+      !isThreadTab(workspace.activeSessionId)
+        ? workspace.activeSessionId
+        : null;
+    untrack(() => {
+      if (files.session !== id) {
+        files.picked = null;
+        files.sheet = files.sheet && id !== null;
       }
-    };
-    const stop = () => {
-      zone.removeEventListener("pointermove", move);
-      zone.removeEventListener("pointerup", stop);
-      zone.removeEventListener("pointercancel", stop);
-    };
-    zone.addEventListener("pointermove", move);
-    zone.addEventListener("pointerup", stop);
-    zone.addEventListener("pointercancel", stop);
+      files.session = id;
+    });
+  });
+  $effect(() => {
+    followFiles(files.session);
+  });
+  // Files put away (or another card in its place): the file floating beside
+  // it goes, and the split takes the panel back.
+  $effect(() => {
+    if (barGlass.open !== "files" && files.picked) {
+      untrack(() => {
+        files.picked = null;
+      });
+    }
+  });
+  // Files is a card of the wide bar's glass, and a drawer on a phone: one
+  // asked for across the drawer's line goes where that width keeps it.
+  $effect(() => {
+    if (!railed && barGlass.open === "files") {
+      untrack(() => {
+        barGlass.open = null;
+        files.sheet = true;
+      });
+    }
+  });
+  const filesCounted = $derived(
+    files.session ? filesCount(files.session) : null
+  );
+  /** Files' drawer, from the sidebar's row: the sidebar goes as it rises. */
+  function openFilesSheet() {
+    railOpen = false;
+    files.sheet = true;
   }
 
   /**
@@ -935,7 +963,12 @@
         </Sheet.Header>
         {#if !railed}
           <RegionBoundary region="sidebar">
-            <Sidebar {narrow} onsearch={() => fromSheet("jump")} sheet />
+            <Sidebar
+              {narrow}
+              onfiles={openFilesSheet}
+              onsearch={() => fromSheet("jump")}
+              sheet
+            />
           </RegionBoundary>
         {/if}
       </Sheet.Content>
@@ -1040,6 +1073,11 @@
             <!-- The glass as one shape with the card hanging from it while
                  one does (bar-glass: Caw's panel, the machines, Jump). -->
             <span data-slot="join" aria-hidden="true" class="join"></span>
+            {#if railed && files.session}
+              <!-- Files, the conversation on screen's artifacts and
+                   attachments, leads the group. -->
+              <FilesItem count={filesCounted} />
+            {/if}
             {#if railed}
               <Tip keys="⌘K" label="Jump to session">
                 {#snippet children(tip)}
@@ -1072,8 +1110,23 @@
         </div>
       </header>
       {#if !railed}
-        <!-- The screen's left edge, where a finger pulls the sidebar out. -->
-        <div aria-hidden="true" class="edge" onpointerdown={edgeSwipe}></div>
+        <!-- The screen's left edge, where a finger pulls the sidebar out,
+             and its right edge, where one pulls Files out of a
+             conversation, the same gesture mirrored. -->
+        <EdgePull
+          onpull={() => {
+            railOpen = true;
+          }}
+          side="left"
+        />
+        {#if files.session}
+          <EdgePull
+            onpull={() => {
+              files.sheet = true;
+            }}
+            side="right"
+          />
+        {/if}
       {/if}
 
       <!-- The one place the hub connection is spoken of (HubBand): a row
@@ -1119,8 +1172,15 @@
     </div>
   </div>
 
-  <!-- The glass's one card: Caw's panel, the machines or Jump (bar-glass). -->
+  <!-- The glass's one card: Caw's panel, the machines, Jump or Files (bar-glass). -->
   <GlassCard />
+  <!-- The file chosen in Files, floating on its leading side (a desk). -->
+  {#if railed}
+    <FilesFloat />
+  {:else}
+    <!-- Files on a phone: the house bottom drawer. -->
+    <FilesSheet />
+  {/if}
   <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
   <AddMachineDialog />
   <!-- One New Session dialog for every opener (the rail's rows, the phone's
@@ -1723,16 +1783,6 @@
       pointer-events: auto;
     }
   }
-  /* The screen's left edge under the row: a finger from it pulls the sidebar
-     out, and a press there is not the page's. */
-  .edge {
-    position: absolute;
-    inset: var(--c-top-bar-h) auto 0 0;
-    z-index: 15;
-    inline-size: var(--c-edge-pull);
-    touch-action: none;
-  }
-
   .content {
     flex: 1 1 auto;
     min-height: 0;

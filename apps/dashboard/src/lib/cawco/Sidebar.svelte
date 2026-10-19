@@ -42,6 +42,7 @@
   } from "#lib/icons.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
+  import IconFolder from "~icons/solar/folder-2-bold-duotone";
   import type { Activity } from "./activity";
   import {
     type BoardRow,
@@ -54,6 +55,7 @@
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
   import ForgetProjectTray from "./ForgetProjectTray.svelte";
+  import { files, filesCount } from "./files/files.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { forgetAtRail } from "./forget.svelte";
   import Home from "./home/Home.svelte";
@@ -94,12 +96,15 @@
 
   let {
     onsearch,
+    onfiles,
     narrow,
     sheet = false,
     scroller,
   }: {
     /** Opens Jump, from the phone's Search field (Shell owns the palette). */
     onsearch?: () => void;
+    /** Opens Files for the conversation on screen, from the phone's Files row (Shell owns its drawer). */
+    onfiles?: () => void;
     /** The Shell's live narrow answer: a phone opens Configure on its list. */
     narrow: boolean;
     /**
@@ -868,6 +873,37 @@
           <span>Search sessions, projects, machines</span>
         </button>
       </div>
+    {/if}
+    {#if sheet && onfiles && files.session}
+      {@const count = filesCount(files.session)}
+      <!-- The conversation on screen's Files, where the phone keeps the
+           bar's other items: one row under the search, its count on the
+           row's badge as Fleet's stands. Its drawer is Shell's. -->
+      <Sidebar.Group class={GROUP}>
+        <Sidebar.Menu aria-label="This conversation" class={MENU}>
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
+              {#snippet child({ props })}
+                <button
+                  {...props}
+                  class="{props.class} mark-line"
+                  aria-label={count ? `Files, ${count}` : "Files"}
+                  data-sidebar-files
+                  onclick={() => onfiles()}
+                  type="button"
+                >
+                  <span class={SLOT} data-box
+                    ><IconFolder class={SLOT_GLYPH} /></span
+                  ><span>Files</span>
+                </button>
+              {/snippet}
+            </Sidebar.MenuButton>
+            {#if count}
+              <Sidebar.MenuBadge class={NAV_BADGE}>{count}</Sidebar.MenuBadge>
+            {/if}
+          </Sidebar.MenuItem>
+        </Sidebar.Menu>
+      </Sidebar.Group>
     {/if}
     <!-- On a wide screen the home is the sidebar: what needs you, what is
          working, what finished, and the rest, while the transcripts take the

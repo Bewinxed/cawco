@@ -280,7 +280,19 @@ export const ARTIFACT_PATH =
 export const picturePath = (root: string, artifactId: string): string =>
   join(root, artifactId, "picture.png");
 
-const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+/** Where a page's or preview's latest thumbnail is kept: a PNG per scheme and `thumbnail.json` naming them. */
+export const thumbnailPath = (
+  root: string,
+  artifactId: string,
+  part: "light" | "dark" | "json"
+): string =>
+  join(
+    root,
+    artifactId,
+    part === "json" ? "thumbnail.json" : `thumbnail-${part}.png`
+  );
+
+export const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 /**
  * A canvas's screen posts its picture (`POST …/picture`, a PNG; empty when

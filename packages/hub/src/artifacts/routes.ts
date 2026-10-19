@@ -29,7 +29,9 @@ import {
   type PageChange,
   type SheetChange,
   type SkeletonElement,
+  THUMBNAIL_BYTES,
 } from "./service";
+import { PNG_SIGNATURE } from "./sync";
 import { ARGS_LIMIT, PATCH_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
 
 const INTERACTION_NAMES = ["rest", "hover", "focus", "pressed"];
@@ -66,6 +68,23 @@ const refused = (error: unknown) => {
     return new Response(error.message, { status: error.status });
   }
   throw error;
+};
+
+/** A thumbnail's scheme as the pane sends it: base64 PNG, or null where none was drawn. */
+const thumbnailPng = t.Nullable(
+  t.String({ maxLength: Math.ceil(THUMBNAIL_BYTES / 3) * 4 })
+);
+
+/** A base64 PNG's bytes; refused when it is not a PNG. */
+const pngOf = (base64: string | null): Uint8Array | null => {
+  if (base64 === null) {
+    return null;
+  }
+  const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
+  if (!PNG_SIGNATURE.every((byte, i) => bytes[i] === byte)) {
+    throw new ArtifactRefusal(422, "A thumbnail is a PNG.");
+  }
+  return bytes;
 };
 
 /** Who moves the panel: `by=agent` from the session's own tools; left out, the person. */
@@ -253,6 +272,12 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       if (!(error instanceof ValidationError && path.includes("/artifacts"))) {
         return;
       }
+      // Files' own reads: the validator's word is enough there.
+      if (path.endsWith("/search") || path.includes("/thumbnail")) {
+        return new Response("Files asked in a shape the hub doesn't take.", {
+          status: 422,
+        });
+      }
       let shape = SHAPES.read;
       if (path.endsWith("/design-map")) {
         shape = SHAPES.map;
@@ -270,6 +295,41 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
+    // Files' search: the session's artifacts a query matches by name or by
+    // the words on their page, best first, with the words round a hit.
+    .get(
+      "/api/instances/:id/artifacts/search",
+      { query: t.Object({ q: t.String({ maxLength: 200 }) }) },
+      ({ params, query }) => {
+        try {
+          return artifacts.search(params.id, query.q);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // A screen's thumbnail of a page or preview, kept as its latest picture.
+    .put(
+      "/api/instances/:id/artifacts/:artifact/thumbnail",
+      {
+        body: t.Object({
+          light: thumbnailPng,
+          dark: thumbnailPng,
+          single: t.Boolean(),
+        }),
+      },
+      ({ params, body }) => {
+        try {
+          return artifacts.keepThumbnail(params.id, params.artifact, {
+            light: pngOf(body.light),
+            dark: pngOf(body.dark),
+            single: body.single,
+          });
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // Each artifact with whose move it is (artifact_list).
     .get(
       "/api/instances/:id/artifacts/status",
@@ -709,6 +769,34 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
+    // An artifact's latest picture in a scheme (Files' cards). The list names
+    // it with its `at`, so a new one is a new address and this one never
+    // changes under it.
+    .get(
+      "/api/artifacts/:artifact/thumbnail/:scheme",
+      {
+        params: t.Object({
+          artifact: t.String(),
+          scheme: t.Union([t.Literal("light"), t.Literal("dark")]),
+        }),
+      },
+      ({ params }) => {
+        try {
+          const png = artifacts.thumbnailFile(params.artifact, params.scheme);
+          if (!png) {
+            return new Response("No picture yet.", { status: 404 });
+          }
+          return new Response(new Uint8Array(png), {
+            headers: {
+              "content-type": "image/png",
+              "cache-control": "private, max-age=31536000, immutable",
+            },
+          });
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // A canvas as a send carries it: the .excalidraw file, the outline, the picture.
     .get("/api/artifacts/:artifact/export", ({ params }) => {
       try {

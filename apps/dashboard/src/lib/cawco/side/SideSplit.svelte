@@ -33,6 +33,7 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { cawco } from "../client.svelte";
+  import { floatingPanel } from "../files/files.svelte";
   import { dur, motionOk } from "../motion/curves.svelte";
   import PlanPane, { planShows } from "../plan/PlanPane.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
@@ -105,7 +106,15 @@
   // --- what the surface holds --------------------------------------------------
 
   const previewId = $derived(previewOf ?? viewId);
-  const previewOpen = $derived(cawco.previews[previewId]?.state === "open");
+  /**
+   * The panel is open, and stands here: while Files holds it floating
+   * beside itself on a desk (a file chosen there), the split leaves it to
+   * Files, and takes it back when Files closes.
+   */
+  const previewOpen = $derived(
+    cawco.previews[previewId]?.state === "open" &&
+      (phone || !floatingPanel(previewId))
+  );
   const plan = $derived(planOf ? cawco.planOf(planOf) : undefined);
   const hasPlan = $derived(planShows(plan));
   /** The reader asked for the plan (its ring) and has not closed it. */

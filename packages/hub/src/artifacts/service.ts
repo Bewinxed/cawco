@@ -19,9 +19,11 @@ import {
   type AgentRow,
   ARTIFACT_NAME,
   type ArtifactChoices,
+  type ArtifactHit,
   type ArtifactKind,
   type ArtifactPromotion,
   type ArtifactSummary,
+  type ArtifactThumbnail,
   artifactCommentsNotice,
   artifactErrorsNotice,
   artifactSavesNotice,
@@ -55,6 +57,13 @@ import {
   type ThreadEntry,
 } from "@cawco/core/comments";
 import { type GraphPlace, PLACES_KEY } from "@cawco/core/decisions";
+import {
+  excerptOf,
+  field,
+  KIND_WORDS,
+  matchOf,
+  parse,
+} from "@cawco/core/find-match";
 import type { InkGroup } from "@cawco/core/ink";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
 import {
@@ -123,7 +132,7 @@ import {
   weightSaid,
 } from "./component";
 import type { ArtifactDocs } from "./docs";
-import { picturePath } from "./sync";
+import { picturePath, thumbnailPath } from "./sync";
 
 export class ArtifactRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;
@@ -514,6 +523,43 @@ export interface Promoted {
   /** `artifacts/<name>/`, from the project folder's root. */
   path: string;
 }
+
+const PAGE_HIDDEN = /<(script|style|template|noscript)\b[\s\S]*?<\/\1\s*>/gi;
+const PAGE_TAG = /<[^>]+>/g;
+const PAGE_ENTITY = /&(amp|lt|gt|quot|#39|apos|nbsp);/g;
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  "#39": "'",
+  apos: "'",
+  nbsp: " ",
+};
+const PAGE_SPACES = /\s+/g;
+
+/** The words a page's reader sees: its HTML less scripts, styles and tags, its common entities read. */
+export const pageText = (html: string): string =>
+  html
+    .replace(PAGE_HIDDEN, " ")
+    .replace(PAGE_TAG, " ")
+    .replace(PAGE_ENTITY, (_, name: string) => ENTITIES[name] ?? " ")
+    .replace(PAGE_SPACES, " ")
+    .trim();
+
+/** A PNG's pixels, from its header's IHDR chunk; null when it is too short to say. */
+export const pngSize = (
+  png: Uint8Array
+): { width: number; height: number } | null => {
+  if (png.length < 24) {
+    return null;
+  }
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+};
+
+/** A thumbnail's most bytes in each scheme: the pane's capture of a page, as `previewPng` takes it. */
+export const THUMBNAIL_BYTES = 3 * 1024 * 1024;
 
 /** A promote from a session outside a project. WORDS.md's error formula. */
 export const NO_PROJECT =
@@ -977,6 +1023,52 @@ export interface ArtifactServiceDeps {
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const { db, docs } = deps;
 
+  /**
+   * Each artifact's kept thumbnail (`<root>/<id>/thumbnail.json` beside its
+   * PNGs), read from its file once and kept here as it changes.
+   */
+  const thumbnails = new Map<string, ArtifactThumbnail | null>();
+  const keptThumbnail = (id: string): ArtifactThumbnail | null => {
+    if (!thumbnails.has(id)) {
+      let kept: ArtifactThumbnail | null = null;
+      try {
+        kept = JSON.parse(
+          readFileSync(thumbnailPath(deps.root, id, "json"), "utf8")
+        ) as ArtifactThumbnail;
+      } catch {
+        kept = null;
+      }
+      thumbnails.set(id, kept);
+    }
+    return thumbnails.get(id) ?? null;
+  };
+  /** Each canvas's picture's size, by the moment it was drawn. */
+  const pictureSizes = new Map<
+    string,
+    { at: string; width: number; height: number }
+  >();
+  /** A canvas's own picture, else the thumbnail a screen took. */
+  const thumbnailOf = (row: ArtifactRow): ArtifactThumbnail | null => {
+    if (row.kind !== "canvas") {
+      return keptThumbnail(row.id);
+    }
+    const at = docs.doc(row.id).getMap("meta").get("pictureAt");
+    if (typeof at !== "string") {
+      return null;
+    }
+    let size = pictureSizes.get(row.id);
+    if (size?.at !== at) {
+      const png = pictureBytes(row.id);
+      const read = png ? pngSize(png) : null;
+      if (!read) {
+        return null;
+      }
+      size = { at, ...read };
+      pictureSizes.set(row.id, size);
+    }
+    return { at, single: true, width: size.width, height: size.height };
+  };
+
   const summaryOf = (row: ArtifactRow): ArtifactSummary => ({
     id: row.id,
     kind: row.kind,
@@ -987,7 +1079,38 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     promoted:
       (docs.doc(row.id).getMap("meta").get("promoted") as
         ArtifactPromotion | undefined) ?? null,
+    thumbnail: thumbnailOf(row),
   });
+
+  /**
+   * The words on an artifact's page, for Files' search: a page's text (its
+   * HTML less its scripts, styles and tags), a canvas's outline; a preview
+   * or a component has none of its own. Read once per change of the row.
+   */
+  const wordsKept = new Map<string, { at: number; words: string }>();
+  const wordsOnPage = (row: ArtifactRow): string => {
+    const at = row.updatedAt.getTime();
+    const kept = wordsKept.get(row.id);
+    if (kept?.at === at) {
+      return kept.words;
+    }
+    let words = "";
+    if (row.kind === "page") {
+      try {
+        words = pageText(
+          readFileSync(join(deps.root, row.id, "index.html"), "utf8")
+        );
+      } catch {
+        words = "";
+      }
+    } else if (row.kind === "canvas") {
+      words = canvasOutline(
+        canvasEntries(docs, row.id).map((entry) => entry.el)
+      );
+    }
+    wordsKept.set(row.id, { at, words });
+    return words;
+  };
 
   const sessionOf = (id: string): InstanceRow => {
     const row = deps.instance(id);
@@ -2904,6 +3027,117 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   return {
     list: (instanceId: string): ArtifactSummary[] =>
       db.ofInstance(sessionOf(instanceId).id).map(summaryOf),
+
+    /**
+     * Files' search over the session's artifacts, by the find engine's own
+     * matcher (find-names `matchOf`, what Find and the composer's finder
+     * answer with): every word must match the name, the kind words, or the
+     * words on its page, at the transcript's lower weight. Best match first,
+     * then newest; a page that matched by its words brings the words round
+     * the first hit (`excerptOf`).
+     */
+    search: (instanceId: string, q: string): ArtifactHit[] => {
+      const query = parse(q);
+      const rows = db.ofInstance(sessionOf(instanceId).id);
+      if (query.tokens.length === 0) {
+        return rows.map((row) => ({ id: row.id, excerpt: null }));
+      }
+      return rows
+        .flatMap((row) => {
+          const words = wordsOnPage(row);
+          const match = matchOf(
+            {
+              asked: new Set([...KIND_WORDS.artifact, ...KIND_WORDS[row.kind]]),
+              fields: [
+                ...field("title", row.name),
+                ...field("transcript", words),
+              ],
+            },
+            query
+          );
+          if (match.score <= 0) {
+            return [];
+          }
+          const excerpt =
+            match.fields.includes("transcript") && query.words.length > 0
+              ? excerptOf(words, query.words)
+              : null;
+          return [{ row, score: match.score, excerpt }];
+        })
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            b.row.createdAt.getTime() - a.row.createdAt.getTime()
+        )
+        .map(({ row, excerpt }) => ({ id: row.id, excerpt }));
+    },
+
+    /**
+     * A screen's thumbnail of a page or preview (the dashboard's pane takes
+     * one per revision): kept beside the artifact's files, the latest only,
+     * and named by the list from then on. A canvas keeps its own picture.
+     */
+    keepThumbnail: (
+      instanceId: string,
+      id: string,
+      shot: {
+        light: Uint8Array | null;
+        dark: Uint8Array | null;
+        single: boolean;
+      }
+    ): ArtifactThumbnail => {
+      const row = own(sessionOf(instanceId), id);
+      if (row.kind === "canvas") {
+        throw new ArtifactRefusal(
+          409,
+          `${row.name} is a canvas: it keeps its own picture.`
+        );
+      }
+      const light = shot.light ?? (shot.single ? null : shot.dark);
+      const size = light ? pngSize(light) : null;
+      if (!(light && size)) {
+        throw new ArtifactRefusal(422, "A thumbnail needs a picture.");
+      }
+      writeStateFileSync(thumbnailPath(deps.root, id, "light"), light);
+      if (shot.single || !shot.dark) {
+        rmSync(thumbnailPath(deps.root, id, "dark"), { force: true });
+      } else {
+        writeStateFileSync(thumbnailPath(deps.root, id, "dark"), shot.dark);
+      }
+      const kept: ArtifactThumbnail = {
+        at: new Date().toISOString(),
+        single: shot.single || !shot.dark,
+        ...size,
+      };
+      writeStateFileSync(
+        thumbnailPath(deps.root, id, "json"),
+        JSON.stringify(kept)
+      );
+      thumbnails.set(id, kept);
+      return kept;
+    },
+
+    /** An artifact's latest picture in `scheme` (a single page's one picture in both), or null. */
+    thumbnailFile: (id: string, scheme: "light" | "dark"): Buffer | null => {
+      const row = db.get(id);
+      if (!row) {
+        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+      }
+      if (row.kind === "canvas") {
+        return pictureBytes(id);
+      }
+      const kept = keptThumbnail(id);
+      if (!kept) {
+        return null;
+      }
+      try {
+        return readFileSync(
+          thumbnailPath(deps.root, id, kept.single ? "light" : scheme)
+        );
+      } catch {
+        return null;
+      }
+    },
 
     /**
      * `artifact_list`: the session's artifacts (a project's lead also gets

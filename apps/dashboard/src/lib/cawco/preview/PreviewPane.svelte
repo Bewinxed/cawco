@@ -54,6 +54,7 @@
   import {
     artifactShown,
     createDraftCanvas,
+    keepThumbnail,
     showArtifact,
     verifyArtifact,
     writeSheet,
@@ -1589,6 +1590,15 @@
           preview.thumbnail = shot;
           preview.thumbnailRevision = preview.revision;
           preview.thumbnailWanted = false;
+          // The hub keeps it as the artifact's latest picture: Files' cards
+          // draw it. A canvas keeps its own.
+          if (preview.artifact.kind !== "canvas") {
+            keepThumbnail(instanceId, preview.artifact.id, shot).catch(
+              (error: unknown) => {
+                console.error("The page's thumbnail was not kept", error);
+              }
+            );
+          }
         }
         failure = frameError(previewError(message.error));
         retrying = false;

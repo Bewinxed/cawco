@@ -1,0 +1,102 @@
+<script lang="ts">
+  /**
+   * Files on a phone: the house bottom drawer (the kit Drawer, vaul; owner:
+   * "use the vaul drawer"), its grabber, its one header with Close, its two
+   * stops (the lower one it opens on, the list's first rows in sight, and
+   * the recipe's full height), its scrim. It holds one list at a time under
+   * the kit's segmented control (FilesList `segmented`). Opened from the
+   * sidebar's Files row or a finger from the screen's right edge (Shell,
+   * EdgePull). Choosing an artifact shows it in the session's panel, which
+   * rises as its sheet does on the composer, and puts Files away; Show in
+   * conversation takes the transcript to the message.
+   */
+  import type { ArtifactSummary } from "@cawco/core";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { showArtifact } from "../artifact-api";
+  import { toast } from "../toasts.js";
+  import { askOpenAt } from "../transcript/open-at.svelte";
+  import FilesList from "./FilesList.svelte";
+  import { type AttachmentRow, files } from "./files.svelte";
+
+  /**
+   * vaul's stops, as shares of the screen's height: the lower, where it
+   * opens, then full. vaul-svelte opens a sheet at its first stop whatever
+   * is bound (huntabyte/vaul-svelte#129), so the stop it opens on is first.
+   */
+  const SNAPS = [0.75, 1];
+  const [LOWER] = SNAPS;
+  let snap = $state<number | string | null>(LOWER);
+  $effect(() => {
+    if (files.sheet) {
+      snap = LOWER;
+    }
+  });
+
+  const instanceId = $derived(files.session);
+
+  async function pick(artifact: ArtifactSummary) {
+    const id = instanceId;
+    if (!id) {
+      return;
+    }
+    try {
+      await showArtifact(id, artifact.id);
+      files.sheet = false;
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
+
+  function show(attachment: AttachmentRow) {
+    if (instanceId) {
+      askOpenAt(instanceId, attachment.messageId);
+    }
+    files.sheet = false;
+  }
+</script>
+
+<Drawer.Root
+  bind:open={files.sheet}
+  bind:activeSnapPoint={snap}
+  shouldScaleBackground={false}
+  snapPoints={SNAPS}
+>
+  <Drawer.Content class="files-drawer" data-files-sheet>
+    <Drawer.Header>
+      <Drawer.Title>Files</Drawer.Title>
+    </Drawer.Header>
+    <div
+      class="files-drawer-body"
+      style:--snap={typeof snap === "number" ? snap : 1}
+    >
+      {#if instanceId}
+        {#key instanceId}
+          <FilesList {instanceId} onpick={pick} onshow={show} segmented />
+        {/key}
+      {/if}
+    </div>
+  </Drawer.Content>
+</Drawer.Root>
+
+<style>
+  /* css-scope .files-drawer: Files' drawer, the kit's bottom sheet, named on its content */
+  /* The recipe's height, up to 85vh, from the first frame: vaul's stops are
+     shares of the screen's height, so the sheet holds one height at every
+     stop. */
+  :global([data-slot="drawer-content"].files-drawer) {
+    block-size: min(
+      var(--drawer-max-height, 85vh),
+      var(--visible-height, 100dvh)
+    );
+  }
+  /* At the lower stop the sheet stands that share of the screen lower:
+     what it holds ends where the screen does. */
+  .files-drawer-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-block-size: 0;
+    padding-block-end: calc((1 - var(--snap)) * 100dvh);
+  }
+</style>

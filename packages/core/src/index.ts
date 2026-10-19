@@ -1714,7 +1714,34 @@ export interface ArtifactSummary {
   promoted: ArtifactPromotion | null;
   /** When it was last brought to the front of the panel. */
   shownAt: string | null;
+  /** Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one. */
+  thumbnail: ArtifactThumbnail | null;
   updatedAt: string;
+}
+
+/**
+ * An artifact's latest picture: a page's or preview's thumbnail as the
+ * dashboard's pane took it (both schemes, or one when the page draws the
+ * same in both), a canvas's own picture. `at` changes with every new one.
+ */
+export interface ArtifactThumbnail {
+  at: string;
+  /** Its pixels, as its PNG says: the card is laid out at its shape before it loads. */
+  height: number;
+  /** The page draws the same in both schemes: `light` is its one picture. */
+  single: boolean;
+  width: number;
+}
+
+/**
+ * One of a session's artifacts a Files search matched
+ * (`GET /api/instances/:id/artifacts/search`), best first: what matched,
+ * and where the words on its page did, the words around the first hit with
+ * each hit between 「 and 」 (the finder's excerpt).
+ */
+export interface ArtifactHit {
+  excerpt: string | null;
+  id: string;
 }
 
 /** An artifact's promote: the project folder's commit that holds it, and when. */

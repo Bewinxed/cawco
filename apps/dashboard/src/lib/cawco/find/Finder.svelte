@@ -31,11 +31,11 @@
   import ChevronLeft from "~icons/solar/alt-arrow-left-linear";
   import ChevronRight from "~icons/solar/alt-arrow-right-linear";
   import NeedsYou from "~icons/solar/hand-shake-bold-duotone";
-  import SearchIcon from "~icons/solar/magnifer-bold-duotone";
   import Server from "~icons/solar/server-bold-duotone";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import Segmented from "../spawn/Segmented.svelte";
+  import FindField from "./FindField.svelte";
   import FindPeek from "./FindPeek.svelte";
   import FindRow from "./FindRow.svelte";
   import type { FindMoment, FindResult, WaitingItem } from "./find-client";
@@ -447,38 +447,27 @@
 </script>
 
 {#snippet field_()}
-  <div data-slot="finder-field" class={["field", { phone }]}>
-    <SearchIcon data-finder-lead class="lead" aria-hidden="true" />
-    <input
-      bind:this={field}
-      aria-activedescendant={activeKey ? idOf(activeKey) : undefined}
-      aria-autocomplete="list"
-      aria-controls={listId}
-      aria-expanded="true"
-      aria-label="Find a session, or a task, preview, decision"
-      autocapitalize="off"
-      autocomplete="off"
-      enterkeyhint="go"
-      oninput={typedText}
-      {onkeydown}
-      placeholder="Find a session, or a task, preview, decision…"
-      role="combobox"
-      spellcheck="false"
-      type="text"
-      value={finder.text}
-    />
-    {#if finder.text}
-      <button
-        data-slot="clear"
-        class="clear"
-        aria-label="Clear the words"
-        onclick={clear}
-        type="button"
-      >
-        <IconClose />
-      </button>
-    {/if}
-  </div>
+  <FindField
+    aria-activedescendant={activeKey ? idOf(activeKey) : undefined}
+    aria-autocomplete="list"
+    aria-controls={listId}
+    aria-expanded="true"
+    aria-label="Find a session, or a task, preview, decision"
+    autocapitalize="off"
+    autocomplete="off"
+    enterkeyhint="go"
+    onclear={clear}
+    oninput={typedText}
+    {onkeydown}
+    {phone}
+    placeholder="Find a session, or a task, preview, decision…"
+    role="combobox"
+    spellcheck="false"
+    tabindex={0}
+    type="text"
+    value={finder.text}
+    bind:input={field}
+  />
 {/snippet}
 
 {#snippet whoChips()}
@@ -879,78 +868,6 @@
     flex-direction: column;
     min-block-size: 0;
     flex: 1 1 auto;
-  }
-
-  /* The field: 44px, the search glyph leading, the clear trailing. */
-  .field {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex: none;
-    block-size: 44px;
-    padding-inline: var(--space-3) var(--space-1);
-    border-block-end: 1px solid var(--border-hairline);
-
-    & :global(.lead) {
-      flex: none;
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-      color: var(--ink-muted);
-    }
-    & input {
-      flex: 1;
-      min-inline-size: 0;
-      block-size: 100%;
-      border: 0;
-      padding: 0;
-      background: none;
-      font: var(--type-body);
-      color: var(--ink-strong);
-      caret-color: var(--brand-solid);
-      outline: none;
-
-      &::placeholder {
-        color: var(--ink-subtle);
-        text-overflow: ellipsis;
-      }
-    }
-  }
-  .field.phone {
-    block-size: 52px;
-    border-block-end: 0;
-    border-block-start: 1px solid var(--border-hairline);
-
-    & input {
-      font-size: 16px;
-    }
-  }
-  .clear {
-    display: grid;
-    place-items: center;
-    flex: none;
-    inline-size: 36px;
-    block-size: 36px;
-    border: 0;
-    border-radius: var(--radius-md);
-    background: none;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-    @media (hover: hover) {
-      &:hover {
-        background: var(--surface-hover);
-      }
-    }
-    &:active {
-      background: var(--surface-fill);
-    }
-  }
-  .field.phone .clear {
-    inline-size: 44px;
-    block-size: 44px;
   }
 
   /* The list: rows on the card's surface, scrolling under the house edge fade. */
