@@ -144,6 +144,7 @@ import { activityOf, runningSubagents } from "./activity";
 import { deletePreview } from "./artifact-api";
 import { currentClientId } from "./client-id";
 import { devDebug } from "./dev-debug";
+import { heardFrame, heardSince, readLeaves } from "./heard";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   deadlineIn,
@@ -1010,7 +1011,7 @@ const state = $state({
   older: null as "reloading" | ReloadHold | null,
   /** When the next reconnect attempt fires, so the banner can count it down. */
   retryAt: null as number | null,
-  /** The first REST read of the fleet (machines, sessions, projects) is in. */
+  /** The board's snapshot and the first read of the projects after it are in. */
   fleetRead: false,
   machines: [] as Machine[],
   /**
@@ -2213,6 +2214,7 @@ async function loadWorkItems(instanceId: string): Promise<void> {
     return;
   }
   trayRead.add(instanceId);
+  const mark = readLeaves();
   const items = await load<WorkItemSummary[]>(
     `/api/work-items?parent=${instanceId}`
   );
@@ -2221,6 +2223,13 @@ async function loadWorkItems(instanceId: string): Promise<void> {
     return;
   }
   for (const item of items) {
+    keepWorkItem(item, mark);
+  }
+}
+
+/** A work item as a read that left at `mark` answered it, unless a frame for it came since. */
+function keepWorkItem(item: WorkItemSummary, mark: number): void {
+  if (!heardSince(`work_item:${item.id}`, mark)) {
     state.workItems[item.id] = item;
   }
 }
@@ -2250,6 +2259,7 @@ async function workItemAct(
   body: object | undefined,
   outcome: string
 ): Promise<void> {
+  const mark = readLeaves();
   const response = await fetch(
     `/api/work-items/${encodeURIComponent(id)}/${act}`,
     {
@@ -2265,8 +2275,7 @@ async function workItemAct(
   if (!response.ok) {
     throw await hubRefusal(response, `${outcome}.`);
   }
-  const item = (await response.json()) as WorkItemSummary;
-  state.workItems[item.id] = item;
+  keepWorkItem((await response.json()) as WorkItemSummary, mark);
 }
 
 async function load<T>(path: string): Promise<T | null> {
@@ -2398,7 +2407,12 @@ function adoptSpend(spend: UsageSpend): void {
  * (`spendFailed`); nothing here estimates one.
  */
 export async function readSpend(): Promise<void> {
+  const mark = readLeaves();
   const spend = await load<UsageSpend>("/api/usage/spend");
+  // A `usage` frame since the read left carries a spend at least as new.
+  if (heardSince("usage", mark)) {
+    return;
+  }
   if (spend) {
     adoptSpend(spend);
   } else {
@@ -2719,7 +2733,14 @@ function adoptAskMachine(envelope: Envelope<FramePayload>): void {
 
 /**
  * Registry reads: on connect and again after every reconnect. True once the
- * three reads the board waits on (machines, sessions, projects) all landed.
+ * projects, the one read the board waits on, landed.
+ *
+ * The machines, sessions, hand-offs and continuations are never read here:
+ * the socket's board snapshot carries them, it is the first frame the hub
+ * sends every socket, and this runs only once it is applied (`hubReached`).
+ * A read of them would be taken after that snapshot and could land after a
+ * delta the hub sent later, putting back rows the delta had moved on; the
+ * hub sends a row again only when it next changes, so nothing would correct it.
  */
 async function refresh(): Promise<boolean> {
   // Registry hydration also recovers workflow transitions missed while disconnected.
@@ -2744,43 +2765,25 @@ async function refresh(): Promise<boolean> {
   readThreads();
   // What the socket says about asks from here on is newer than the read.
   const readFrom = askHeard;
-  const [machines, rows, projects, pending, handoffs, usage, continuations] =
-    await Promise.all([
-      load<Machine[]>("/api/agents"),
-      load<InstanceRow[]>("/api/instances"),
-      load<ProjectRow[]>("/api/projects"),
-      load<Envelope<FramePayload>[]>("/api/pending"),
-      // Read on connect, not only broadcast on change: a dashboard opened after
-      // a hand-off went out has missed every broadcast it will ever get.
-      load<Record<string, { from: string; at: number }>>("/api/handoffs"),
-      // Same reason: a dashboard opened between reports has missed the frames.
-      load<UsageLimitsResponse>("/api/usage/limits"),
-      // Same reason: a continuation that moved while this tab was away.
-      load<ContinuationJob[]>("/api/continuations"),
-    ]);
+  const mark = readLeaves();
+  const [projects, pending, usage] = await Promise.all([
+    load<ProjectRow[]>("/api/projects"),
+    load<Envelope<FramePayload>[]>("/api/pending"),
+    // Read on connect, not only broadcast on change: a dashboard opened
+    // between reports has missed the frames.
+    load<UsageLimitsResponse>("/api/usage/limits"),
+  ]);
 
-  if (handoffs && !equal(state.handoffs, handoffs)) {
-    state.handoffs = handoffs;
-  }
-  if (continuations) {
-    adoptContinuations(continuations);
-  }
-  if (machines) {
-    adoptMachines(machines);
-  }
   if (projects) {
-    state.projects = reconcileRows(state.projects, projects, (row) => row.id);
+    keepProjects(projects, mark);
   }
-  if (rows) {
-    adoptInstances(rows);
-  }
-  if (usage) {
+  if (usage && !heardSince("usage", mark)) {
     adoptUsageLimits(usage);
   }
   if (pending) {
     adoptPending(pending, readFrom);
   }
-  if (machines && rows && projects) {
+  if (projects) {
     state.fleetRead = true;
     return true;
   }
@@ -3082,6 +3085,7 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
   if (frame.kind === "preview") {
+    heardFrame(`preview:${frame.instanceId}`);
     const previous = state.previews[frame.instanceId];
     const sameRevision = previous?.revision === frame.revision;
     const next = {
@@ -3106,6 +3110,7 @@ function handleFrame(frame: FramePayload): void {
       );
       for (const [id, preview] of Object.entries(state.previews)) {
         if (!current.has(id) && preview.state !== "closed") {
+          heardFrame(`preview:${id}`);
           state.previews[id] = { ...preview, state: "closed" };
         }
       }
@@ -3184,6 +3189,7 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "usage") {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
+    heardFrame("usage");
     adoptUsageLimits(frame);
     adoptSpend(frame.spend);
     // The hub says this when an account's reading, sign-in or catalog moved.
@@ -3192,6 +3198,7 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "work_item") {
+    heardFrame(`work_item:${frame.item.id}`);
     if (!equal(state.workItems[frame.item.id], frame.item)) {
       state.workItems[frame.item.id] = frame.item;
     }
@@ -3199,6 +3206,7 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "thread.upsert") {
+    heardFrame(`thread:${frame.thread.id}`);
     adoptThread(frame.thread);
     return;
   }
@@ -3209,6 +3217,7 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "project.cap") {
+    heardFrame(`project.cap:${frame.projectId}`);
     const project = state.projects.find((row) => row.id === frame.projectId);
     if (project) {
       project.cap = frame.cap;
@@ -3217,6 +3226,7 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "actions") {
+    heardFrame("actions");
     state.actions = frame.actions;
     return;
   }
@@ -3227,6 +3237,7 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "fleet_watch.notices") {
+    heardFrame("fleet_watch.notices");
     state.watchNotices = frame.notices;
     return;
   }
@@ -3260,6 +3271,7 @@ function handleFrame(frame: FramePayload): void {
 
   // The fleet's upstream answer, given anywhere: Needs you stops asking.
   if (frame.kind === "fleet.upstream") {
+    heardFrame("fleet.upstream");
     state.fleetUpstream = frame.upstream;
     return;
   }
@@ -3272,6 +3284,7 @@ function handleFrame(frame: FramePayload): void {
 
   // HTTPS on the tailnet name changed: Needs you's step moves on, or ticks.
   if (frame.kind === "tailnet.https") {
+    heardFrame("tailnet.https");
     const ticked =
       state.tailnetHttps?.state === "needs" &&
       frame.tailnet.state === "serving";
@@ -3323,6 +3336,7 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "project_offer") {
+    heardFrame(`project_offer:${frame.instanceId}`);
     if (frame.offer) {
       state.projectOffers[frame.instanceId] = frame.offer;
     } else {
@@ -4900,11 +4914,8 @@ export function reconnectNow(): void {
 }
 
 /**
- * Whether this module instance has claimed the socket on `globalThis`. Claiming
- * happens once: the adoption below reads the registry, and reading the registry
- * goes through `waitForHub`, which calls back in here. Without the latch that
- * is not a slow path, it is a loop that re-enters itself for every catalog it
- * loads and never returns.
+ * Whether the socket on `globalThis` is one this module instance opened
+ * (`connect`); one another instance opened is replaced (`ensureConnected`).
  */
 let claimed = false;
 
@@ -4934,8 +4945,8 @@ function connect(): void {
 
   // The hub is reached once its board on this socket is read (`bind`).
   bind(socket);
-  // This module made it, so it already owns it: `ensureConnected` has nothing
-  // left to adopt, and `hubReached` above is what refreshes.
+  // This module made it, so `ensureConnected` keeps it, and `hubReached`
+  // above is what refreshes.
   claimed = true;
   globalThis.__cawcoSocket = socket;
 }
@@ -5204,38 +5215,16 @@ export function ensureConnected(): void {
   }
   const socket = globalThis.__cawcoSocket;
   if (
+    claimed &&
     socket &&
     (socket.readyState === WebSocket.OPEN ||
       socket.readyState === WebSocket.CONNECTING)
   ) {
-    if (claimed) {
-      return;
-    }
-    // Adopt it rather than assume somebody else is still listening: the
-    // `hubReached` it was made with belongs to the module that made it, so
-    // the status has to be read off the socket instead of waited for.
-    claimed = true;
-    bind(socket);
-    if (socket.readyState === WebSocket.OPEN) {
-      state.status = "connected";
-      state.retryAt = null;
-      readFleet();
-      lastSubscriptionKey = "";
-      syncSubscriptions();
-      lastPlanFollowKey = "";
-      syncPlanFollows();
-      resumePendingSends(streamState, streamHost);
-      // As `hubReached` does: the update notice reads the served build and
-      // the policy, so an adopted socket never leaves it unread.
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the update notice says it when the served build is newer
-      void checkServedBuild();
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the settings page and the notice read the policy once it lands
-      void updates.loadPolicy();
-    } else {
-      state.status = "connecting";
-    }
     return;
   }
+  // A socket another instance of this module opened is replaced, not
+  // adopted: its board snapshot went to that instance's state, and this one's
+  // board comes only from a snapshot on a socket of its own (`refresh`).
   // A navigation is a fresh user intent — earlier exhausted retries don't apply.
   globalThis.__cawcoReconnectAttempts = 0;
   connect();
@@ -5845,6 +5834,7 @@ export async function editProject(
     upstreamPosts?: UpstreamPosts | null;
   }
 ): Promise<ProjectRow> {
+  const mark = readLeaves();
   const response = await fetch(`/api/projects/${projectId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -5854,16 +5844,15 @@ export async function editProject(
     throw await hubRefusal(response, "so it was not changed.");
   }
   const row = (await response.json()) as ProjectRow;
-  keepProject(row);
+  keepProject(row, mark);
   return row;
 }
 
-/** A project as the hub just answered it, in the projects at once. */
-function keepProject(row: ProjectRow): void {
-  state.projects = reconcileRows(
-    state.projects,
+/** A project as the hub just answered it to a request that left at `mark`, in the projects at once. */
+function keepProject(row: ProjectRow, mark: number): void {
+  keepProjects(
     state.projects.map((each) => (each.id === row.id ? row : each)),
-    (each) => each.id
+    mark
   );
 }
 
@@ -5877,6 +5866,7 @@ export async function addProjectPlace(
   machineId: string,
   path: string
 ): Promise<ProjectRow> {
+  const mark = readLeaves();
   const response = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/places`,
     {
@@ -5889,7 +5879,7 @@ export async function addProjectPlace(
     throw await hubRefusal(response, "so it was not added.");
   }
   const row = (await response.json()) as ProjectRow;
-  keepProject(row);
+  keepProject(row, mark);
   return row;
 }
 
@@ -5967,10 +5957,16 @@ export function revealPreview(instanceId: string): void {
     (state.previewRequests[instanceId] ?? 0) + 1;
 }
 
+/**
+ * Closes the session's preview. The hub's `closed` frame goes out before its
+ * answer whenever it had one shown; the answer closes it here only when no
+ * preview frame came since, so a preview shown again meanwhile stays.
+ */
 export async function closePreview(instanceId: string): Promise<void> {
+  const mark = readLeaves();
   await deletePreview(instanceId);
   const previous = state.previews[instanceId];
-  if (previous) {
+  if (previous && !heardSince(`preview:${instanceId}`, mark)) {
     state.previews[instanceId] = { ...previous, state: "closed" };
   }
 }
@@ -6038,6 +6034,7 @@ export async function createProject(project: {
   prompt: string;
   promptId: string;
 }): Promise<ProjectRow & { place: ProjectPlace; setupThread?: ThreadSummary }> {
+  const mark = readLeaves();
   const response = await fetch("/api/projects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -6051,7 +6048,7 @@ export async function createProject(project: {
     setupThread?: ThreadSummary;
   };
   if (created.setupThread) {
-    adoptThread(created.setupThread);
+    keepThread(created.setupThread, mark);
   }
   await refresh();
   return created;
@@ -6100,14 +6097,26 @@ export async function planOf(instanceId: string): Promise<SessionPlan> {
   return (await response.json()) as SessionPlan;
 }
 
-/** The standing "make this a project" offers, as the hub holds them now. */
+/**
+ * The standing "make this a project" offers, as the hub holds them now: each
+ * session's as the read answered it, or as a `project_offer` frame since left it.
+ */
 async function readProjectOffers(): Promise<void> {
+  const mark = readLeaves();
   const offers = await load<ProjectOfferSummary[]>("/api/project-offers");
-  if (offers) {
-    state.projectOffers = Object.fromEntries(
-      offers.map((offer) => [offer.instanceId, offer])
-    );
+  if (!offers) {
+    return;
   }
+  const framed = (instanceId: string) =>
+    heardSince(`project_offer:${instanceId}`, mark);
+  state.projectOffers = Object.fromEntries([
+    ...offers
+      .filter((offer) => !framed(offer.instanceId))
+      .map((offer) => [offer.instanceId, offer] as const),
+    ...Object.entries(state.projectOffers).filter(([instanceId]) =>
+      framed(instanceId)
+    ),
+  ]);
 }
 
 /** How long HTTPS's onboarding row stands ticked once its step is taken. Our choice: long enough to read and press its Open. */
@@ -6115,8 +6124,9 @@ const TAILNET_TICK_MS = 12_000;
 
 /** HTTPS on the hub machine's tailnet name, as the hub has it now. */
 async function readTailnetHttps(): Promise<void> {
+  const mark = readLeaves();
   const read = await load<TailnetHttps>("/api/tailnet-https");
-  if (read) {
+  if (read && !heardSince("tailnet.https", mark)) {
     state.tailnetHttps = read;
   }
 }
@@ -6165,10 +6175,11 @@ export function relayTry(): Promise<RelayTry> {
 
 /** The fleet's upstream answer, as the hub holds it now. */
 async function readFleetUpstream(): Promise<void> {
+  const mark = readLeaves();
   const read = await load<{ upstream: UpstreamPosts | null }>(
     "/api/fleet/choices"
   );
-  if (read) {
+  if (read && !heardSince("fleet.upstream", mark)) {
     state.fleetUpstream = read.upstream;
   }
 }
@@ -6180,29 +6191,34 @@ async function readFleetUpstream(): Promise<void> {
  * Throws the refusal, in the hub's words.
  */
 export async function answerFleetUpstream(posts: UpstreamPosts): Promise<void> {
+  const mark = readLeaves();
   const answered = await askHub<{ upstream: UpstreamPosts | null }>(
     "/api/fleet/choices",
     json("PUT", { upstream: posts })
   );
-  state.fleetUpstream = answered.upstream;
+  if (!heardSince("fleet.upstream", mark)) {
+    state.fleetUpstream = answered.upstream;
+  }
 }
 
 /** Fleet watch's needs-you notices, as the hub holds them now. */
 async function readWatchNotices(): Promise<void> {
+  const mark = readLeaves();
   const read = await load<{ notices: FleetWatchNotice[] }>(
     "/api/fleet-watch/notices"
   );
-  if (read) {
+  if (read && !heardSince("fleet_watch.notices", mark)) {
     state.watchNotices = read.notices;
   }
 }
 
 /** The approved actions waiting on you, as the hub holds them now. */
 async function readWaitingActions(): Promise<void> {
+  const mark = readLeaves();
   const read = await load<{ actions: ApprovedActionView[] }>(
     "/api/actions/waiting"
   );
-  if (read) {
+  if (read && !heardSince("actions", mark)) {
     state.actions = read.actions;
   }
 }
@@ -6255,6 +6271,7 @@ export async function answerProjectOffer(
   instanceId: string,
   answer: "accept" | "dismiss"
 ): Promise<ProjectOfferAccepted | null> {
+  const mark = readLeaves();
   const response = await fetch(
     `/api/project-offers/${encodeURIComponent(instanceId)}/${answer}`,
     { method: "POST" }
@@ -6262,18 +6279,23 @@ export async function answerProjectOffer(
   if (!response.ok) {
     throw await hubRefusal(response, "so nothing changed. Try again.");
   }
+  const offerGone = () => {
+    if (!heardSince(`project_offer:${instanceId}`, mark)) {
+      delete state.projectOffers[instanceId];
+    }
+  };
   if (answer === "dismiss") {
-    delete state.projectOffers[instanceId];
+    offerGone();
     return null;
   }
   const accepted = (await response.json()) as ProjectOfferAccepted;
   if (accepted.setupThread) {
-    adoptThread(accepted.setupThread);
+    keepThread(accepted.setupThread, mark);
   } else {
     // In the same change as the offer leaving: its card turns, never blinks.
     state.projectJoins[instanceId] = accepted;
   }
-  delete state.projectOffers[instanceId];
+  offerGone();
   await refresh();
   return accepted;
 }
@@ -6328,12 +6350,36 @@ function adoptThreadMessage(threadId: string, message: ThreadMessage): void {
   }
 }
 
-/** Every project's threads (`GET /api/threads`): the whole truth on each connect. */
-async function readThreads(): Promise<void> {
-  const threads = await load<Record<string, ThreadSummary[]>>("/api/threads");
-  if (threads) {
-    state.threads = threads;
+/** A thread's row as a request that left at `mark` answered it, unless a frame for it came since. */
+function keepThread(thread: ThreadSummary, mark: number): void {
+  if (!heardSince(`thread:${thread.id}`, mark)) {
+    adoptThread(thread);
   }
+}
+
+/**
+ * Every project's threads (`GET /api/threads`): the whole truth on each
+ * connect, but for the rows a `thread.upsert` frame moved since it left.
+ */
+async function readThreads(): Promise<void> {
+  const mark = readLeaves();
+  const threads = await load<Record<string, ThreadSummary[]>>("/api/threads");
+  if (!threads) {
+    return;
+  }
+  const framed = (thread: ThreadSummary) =>
+    heardSince(`thread:${thread.id}`, mark);
+  const next: Record<string, ThreadSummary[]> = {};
+  for (const [projectId, rows] of Object.entries(threads)) {
+    next[projectId] = rows.filter((thread) => !framed(thread));
+  }
+  for (const thread of Object.values(state.threads).flat().filter(framed)) {
+    next[thread.projectId] = [...(next[thread.projectId] ?? []), thread];
+  }
+  for (const rows of Object.values(next)) {
+    rows.sort(byLastAt);
+  }
+  state.threads = next;
 }
 
 /** A project's Caw: on or off, its harness, its session, why it cannot start, its spend. */
@@ -6430,6 +6476,7 @@ export async function readThread(
   const reading = heardWhileReading.get(threadId) ?? { heard: [], reads: 0 };
   reading.reads += 1;
   heardWhileReading.set(threadId, reading);
+  const mark = readLeaves();
   try {
     const read = await askHub<ThreadRead>(
       `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}`
@@ -6439,7 +6486,7 @@ export async function readThread(
       (message) => !ids.has(message.id) && ids.add(message.id)
     );
     state.threadMessages[threadId] = [...read.messages, ...after];
-    adoptThread(read.thread);
+    keepThread(read.thread, mark);
     return read;
   } finally {
     reading.reads -= 1;
@@ -6461,13 +6508,14 @@ export async function startThread(
   id?: string,
   extras: SendExtras = {}
 ): Promise<ThreadSaid> {
+  const mark = readLeaves();
   const said = await askHub<ThreadSaid>(
     `${projectPath(projectId)}/threads`,
     json("POST", { body, ...(id ? { id } : {}), ...carriedOf(extras) })
   );
   state.threadMessages[said.thread.id] ??= [];
   adoptThreadMessage(said.thread.id, said.message);
-  adoptThread(said.thread);
+  keepThread(said.thread, mark);
   return said;
 }
 
@@ -6488,12 +6536,13 @@ export async function sayInThread(
   id?: string,
   extras: SendExtras = {}
 ): Promise<ThreadSaid> {
+  const mark = readLeaves();
   const said = await askHub<ThreadSaid>(
     `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/messages`,
     json("POST", { body, ...(id ? { id } : {}), ...carriedOf(extras) })
   );
   adoptThreadMessage(threadId, said.message);
-  adoptThread(said.thread);
+  keepThread(said.thread, mark);
   return said;
 }
 
@@ -6520,13 +6569,14 @@ export async function requestView(
   /** The ask's id: the hub takes the same id again as the same ask. */
   id: string
 ): Promise<ThreadSaid> {
+  const mark = readLeaves();
   const said = await askHub<ThreadSaid>(
     `${projectPath(projectId)}/view-requests`,
     json("POST", { text, id })
   );
   state.threadMessages[said.thread.id] ??= [];
   adoptThreadMessage(said.thread.id, said.message);
-  adoptThread(said.thread);
+  keepThread(said.thread, mark);
   return said;
 }
 
@@ -6582,10 +6632,27 @@ export async function deleteProject(id: string): Promise<void> {
 
 /** Reads the projects again, as the hub has them now. */
 export async function readProjects(): Promise<void> {
+  const mark = readLeaves();
   const projects = await load<ProjectRow[]>("/api/projects");
   if (projects) {
-    state.projects = reconcileRows(state.projects, projects, (row) => row.id);
+    keepProjects(projects, mark);
   }
+}
+
+/**
+ * The projects as a read that left at `mark` answered them. Each one's cap
+ * is the `project.cap` frame's when one came for it since: the hub tells a
+ * cap only when it moves, so an older one put back would stand.
+ */
+function keepProjects(projects: ProjectRow[], mark: number): void {
+  const held = new Map(state.projects.map((row) => [row.id, row]));
+  const answered = projects.map((row) => {
+    const kept = held.get(row.id);
+    return kept && heardSince(`project.cap:${row.id}`, mark)
+      ? { ...row, cap: kept.cap }
+      : row;
+  });
+  state.projects = reconcileRows(state.projects, answered, (row) => row.id);
 }
 
 /**
@@ -8564,7 +8631,7 @@ export const cawco = {
   get fleetMcp() {
     return state.fleetMcp;
   },
-  /** The first REST read of machines, sessions and projects is in. */
+  /** The board's snapshot and the first read of the projects after it are in. */
   get fleetRead() {
     return state.fleetRead;
   },

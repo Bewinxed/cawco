@@ -22,6 +22,7 @@ import type {
   PairingStart,
   WaitingMachine,
 } from "@cawco/core";
+import { heardFrame, heardSince, readLeaves } from "./heard";
 import { failureWords, hubRefusal } from "./hub-read";
 import { leaveThePage } from "./leaving";
 
@@ -62,9 +63,14 @@ export const hubAuth = $state<{
 export const mustPair = (): boolean =>
   hubAuth.known && hubAuth.mode === "pairing" && hubAuth.caller !== "owner";
 
-/** What the hub said this request is, taken whole. */
-export function takeAuth(state: HubAuthState): void {
-  hubAuth.mode = state.mode;
+/**
+ * What the hub said this request is, read when `mark` was heard: the mode
+ * only while no `hub_auth` frame came since ({@link heardSince}).
+ */
+function takeAuth(state: HubAuthState, mark: number): void {
+  if (!heardSince("hub_auth", mark)) {
+    hubAuth.mode = state.mode;
+  }
   hubAuth.caller = state.caller;
   hubAuth.device = state.device;
   hubAuth.known = true;
@@ -72,6 +78,7 @@ export function takeAuth(state: HubAuthState): void {
 
 /** The hub's frame: the mode, the pairings and machines waiting on the person. */
 export function takeAuthFrame(frame: HubAuthFrame): void {
+  heardFrame("hub_auth");
   hubAuth.mode = frame.mode;
   hubAuth.requests = frame.requests;
   hubAuth.waiting = frame.waiting;
@@ -83,9 +90,10 @@ let reading: Promise<void> | null = null;
 export function readAuth(): Promise<void> {
   reading ??= (async () => {
     try {
+      const mark = readLeaves();
       const response = await fetch("/api/auth");
       if (response.ok) {
-        takeAuth((await response.json()) as HubAuthState);
+        takeAuth((await response.json()) as HubAuthState, mark);
       }
     } catch {
       // The hub out of reach: the connection band says so, and the next close reads again.
