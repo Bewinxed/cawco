@@ -12,12 +12,17 @@
 # builds only the proof's images (host and machine) into the proof cache's store, prints their tags, and exits 0, or
 # with the build's error; it needs podman and bun, and no binaries. Its recipes go in OUTPUT (default: image-only in the
 # proof cache).
+#   bash scripts/binary/prove-stage2.sh --tags-only OUTPUT
+# writes the images' recipes into OUTPUT and prints the tags they carry (`NAME=TAG`), building nothing: it needs bun,
+# and no podman (proof-cache-prune.sh keeps the images they name).
 set -uo pipefail
 IMAGE_ONLY=
-if [[ ${1:-} == --image-only ]]; then
+TAGS_ONLY=
+if [[ ${1:-} == --image-only || ${1:-} == --tags-only ]]; then
   IMAGE_ONLY=1
+  [[ $1 == --tags-only ]] && TAGS_ONLY=1
   shift
-  (( $# <= 1 )) || { echo "usage: $0 --image-only [output]" >&2; exit 2; }
+  (( $# <= 1 )) || { echo "usage: $0 --image-only|--tags-only [output]" >&2; exit 2; }
   set -- "${1:-${CAWCO_PROOF_CACHE:-$HOME/.cache/cawco-proof}/image-only}"
 else
   [[ $# == 2 && "$1" = /* && "$2" = /* ]] || { echo "usage: $0 /absolute/fresh/output /absolute/binaries" >&2; exit 2; }
@@ -486,6 +491,10 @@ if [[ -n $IMAGE_ONLY ]]; then
   command -v flock > /dev/null || { echo "flock (util-linux) is needed: one proof at a time builds into the image store" >&2; exit 2; }
   trap 'rm -f "$TMPDIR"' EXIT
   write_images || exit 1
+  if [[ -n $TAGS_ONLY ]]; then
+    for name in host machine; do echo "$name=$(proof_image_tag "$out/images" "$name")"; done
+    exit 0
+  fi
   proof_images "$out/images" host machine || { echo "the images failed to build" >&2; exit 1; }
   exit 0
 fi

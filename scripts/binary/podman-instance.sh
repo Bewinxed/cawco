@@ -112,6 +112,26 @@ proof_store_database() {
   esac
 }
 
+# proof_image_tag CONTEXT NAME: the tag the image of CONTEXT/NAME.Containerfile carries in the image store, named by its
+# recipe and the base image's id. The one rule an image's tag comes from: proof_images builds under it, and
+# proof-cache-prune.sh keeps the images it names for the tree's recipes (each proof's `--tags-only`).
+proof_image_tag() {
+  echo "localhost/cawco-proof-$2:$(cat "$1/$2.Containerfile" <(echo "$BASE_IMAGE_ID") | sha256sum | cut -c1-16)"
+}
+
+# proof_superseded_images CURRENT...: of the image names on stdin (`REPOSITORY:TAG`, one a line), the proof images
+# (`localhost/cawco-proof-*`) no recipe of this tree names, its CURRENT tags (proof_image_tag), and that are not the
+# base image every recipe builds FROM.
+proof_superseded_images() {
+  local name keep
+  while IFS= read -r name; do
+    [[ $name == localhost/cawco-proof-* && $name != "$BASE_LOCAL" ]] || continue
+    keep=
+    for current in "$@"; do [[ $name == "$current" ]] && keep=1; done
+    [[ -n $keep ]] || echo "$name"
+  done
+}
+
 # proof_images CONTEXT NAME...: each image whose recipe is CONTEXT/NAME.Containerfile, in the image store, built
 # there unless it is already; prints `NAME=TAG` for each.
 proof_images() {
@@ -126,7 +146,7 @@ proof_images() {
     trap 'podman_instance_closed "$PROOF_STORE_INSTANCE" "$PROOF_STORE"' EXIT
     $p image exists "$BASE_LOCAL" || seed_base_image "$context/base-image.tar" $p >&2 || exit 1
     for name in "$@"; do
-      tag="localhost/cawco-proof-$name:$(cat "$context/$name.Containerfile" <(echo "$BASE_IMAGE_ID") | sha256sum | cut -c1-16)"
+      tag=$(proof_image_tag "$context" "$name")
       $p image exists "$tag" || $p build --pull=never -t "$tag" -f "$context/$name.Containerfile" "$context" >&2 || exit 1
       echo "$name=$tag"
     done

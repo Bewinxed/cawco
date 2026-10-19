@@ -7,12 +7,17 @@
 # per recipe; this run's podman is an instance of its own (scripts/binary/podman-instance.sh).
 # --image-only builds those two images alone, as a run does, prints their tags and exits 0, or with the build's error;
 # it needs podman and bun, and no binary. Its recipes go in OUTPUT (default: stage1-image-only in the proof cache).
+#        prove-stage1.sh --tags-only OUTPUT
+# writes the two images' recipes into OUTPUT and prints the tags they carry (`NAME=TAG`), building nothing: it needs
+# bun, and no podman (proof-cache-prune.sh keeps the images they name).
 set -euo pipefail
 image_only=
-if [[ ${1:-} == --image-only ]]; then
+tags_only=
+if [[ ${1:-} == --image-only || ${1:-} == --tags-only ]]; then
   image_only=1
+  [[ $1 == --tags-only ]] && tags_only=1
   shift
-  (( $# <= 1 )) || { echo "Usage: prove-stage1.sh --image-only [output]" >&2; exit 2; }
+  (( $# <= 1 )) || { echo "Usage: prove-stage1.sh --image-only|--tags-only [output]" >&2; exit 2; }
   set -- "${1:-${CAWCO_PROOF_CACHE:-$HOME/.cache/cawco-proof}/stage1-image-only}"
 else
   [[ $# == 2 && "$1" = /* && "$2" = /* ]] || { echo "Usage: prove-stage1.sh /absolute/fresh/output /absolute/cawco-proof" >&2; exit 2; }
@@ -118,6 +123,10 @@ RUN printf '%s\n' '[Unit]' 'Description=CawCo binary proof held socket' '[Socket
  && printf '%s\n' '[Unit]' 'Description=CawCo binary proof dashboard' 'Requires=cawco-binary-dashboard.socket' 'After=cawco-binary-dashboard.socket' '[Service]' 'ExecStartPre=/bin/sleep 1' 'ExecStart=/cawco dashboard' 'Environment=HOME=/output/systemd-binary HOST=127.0.0.1 CAWCO_HUB_PORT=43456 CAWCO_HUB_URL=http://127.0.0.1:43456 CAWCO_MCP_PORT=43459 CAWCO_SESSIOND_ENDPOINT=/output/systemd-binary/sessiond.sock CAWCO_DB_PATH=/output/systemd-binary/hub.db' 'TimeoutStopSec=10' > /etc/systemd/system/cawco-binary-dashboard.service
 EOF
 claude_copied >> "$out/images/stage1-systemd.Containerfile"
+if [[ -n $tags_only ]]; then
+  for name in stage1-clean stage1-systemd; do echo "$name=$(proof_image_tag "$out/images" "$name")"; done
+  exit 0
+fi
 run_step "the images, from the proof cache's store" "$out/images.log" proof_images "$out/images" stage1-clean stage1-systemd
 if [[ -n $image_only ]]; then
   grep -E '^stage1-(clean|systemd)=' "$out/images.log"

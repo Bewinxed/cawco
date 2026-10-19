@@ -5,9 +5,13 @@
  * session keeper still runs from stays until that keeper ends.
  *
  * A scratch machine (its own `XDG_DATA_HOME` and hub database path) installs
- * six builds one after another, as the update helper confirms each: the
- * build staged under `versions/`, its archive in the hub's cache, `current`
- * moved to it, then the helper's confirm (core `recordInstall`, `prune`).
+ * six builds one after another: the first as the installer's
+ * `binary-install` records it (core `recordInstall` with no build before
+ * it), each after it as the update helper confirms it: the build staged
+ * under `versions/`, its archive in the hub's cache, `current` moved to it,
+ * then the confirm (`recordInstall` naming the build it replaced, `prune`).
+ * After the first install and two updates the install order is exactly
+ * those three.
  * The names sort apart from the order they went on (`0.9.0` is the first,
  * and sorts last). The second build's keeper runs from its folder (a real
  * process started as `versions/0.10.0/cawco`) through every install after
@@ -32,6 +36,7 @@ import {
   binaryRoot,
   currentDirectory,
   hubReleasesDir,
+  installOrderPath,
   prune,
   recordInstall,
   versionDirectory,
@@ -99,10 +104,16 @@ const spec: Spec = {
             `exited ${keeper.exitCode}`
           );
         }
-        if (previous) {
-          await recordInstall(version, previous);
-        }
+        await recordInstall(version, previous);
         await prune();
+        if (version === BUILDS[2]) {
+          const order = (await Bun.file(installOrderPath()).json()) as string[];
+          kit.check(
+            "a first install, then two updates: the install order is exactly those three, in order",
+            order.join(" ") === BUILDS.slice(0, 3).join(" "),
+            order.join(" ")
+          );
+        }
         kit.note(
           `installed ${version}: versions/ holds ${await listed(versions)}; binary-releases/ holds ${await listed(releases)}`
         );

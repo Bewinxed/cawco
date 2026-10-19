@@ -209,7 +209,8 @@ export const KEPT_INSTALLS = 3;
 /**
  * The builds this machine installed, in the order it installed them, newest
  * last, at most {@link KEPT_INSTALLS}: what {@link prune} keeps by install
- * order. Written only by {@link recordInstall}, when an update helper
+ * order. Written only by {@link recordInstall}: by the installer's
+ * `binary-install` for the build it installs, and by an update helper when it
  * confirms a build. Never read from version names: a nightly's and a
  * stable's do not sort by when they went on.
  */
@@ -219,21 +220,21 @@ const readInstallOrder = async (): Promise<string[]> =>
   (await readRecord<string[]>(installOrderPath())) ?? [];
 
 /**
- * A confirmed build goes to the end of the install order, the build it
- * replaced before it (the first update on a machine has no order yet, and
- * the build it ran is the one installed before), and the order keeps its
- * newest {@link KEPT_INSTALLS}.
+ * `version` goes to the end of the install order, and the order keeps its
+ * newest {@link KEPT_INSTALLS}. An update names the build it replaced
+ * (`previous`), which goes just before it: the build that ran is the one
+ * installed before, whether or not this machine's order holds it yet.
  */
 export async function recordInstall(
   version: string,
-  previous: string
+  previous?: string
 ): Promise<void> {
   const before = (await readInstallOrder()).filter(
     (name) => name !== version && name !== previous
   );
   await writeJsonAtomic(
     installOrderPath(),
-    [...before, previous, version].slice(-KEPT_INSTALLS)
+    [...before, ...(previous ? [previous] : []), version].slice(-KEPT_INSTALLS)
   );
 }
 
