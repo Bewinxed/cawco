@@ -47049,6 +47049,10 @@
             "description": "A text's words, for reading it in place.",
             "type": "string"
           },
+          "id": {
+            "description": "Its message's id and its place within that message: the same however the list grows.",
+            "type": "string"
+          },
           "kind": {
             "$ref": "#/components/schemas/SessionAttachmentKind"
           },
@@ -47082,6 +47086,7 @@
         },
         "required": [
           "at",
+          "id",
           "kind",
           "mediaType",
           "messageId",

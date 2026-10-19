@@ -21,6 +21,15 @@
 
   let input = $state<HTMLInputElement>();
 
+  // Asked for from outside the composer (Files' Attach a file): the picker
+  // opens as Attach's own press opens it, inside the press's activation.
+  $effect(() => {
+    if (draft.pickWanted && input) {
+      draft.pickWanted = false;
+      input.click();
+    }
+  });
+
   function onpick(event: Event): void {
     const picker = event.currentTarget as HTMLInputElement;
     if (picker.files?.length) {

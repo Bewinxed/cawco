@@ -126,7 +126,7 @@ export type AttachmentOpen =
 export interface AttachmentRow {
   /** When its message was, epoch ms; null when the harness gave no time. */
   at: number | null;
-  /** Its message's id and its place among the list. */
+  /** Its message's id and its place within that message (the hub's): the same however the list grows. */
   id: string;
   /** Its kind in a word: "PNG", "Markdown", "Text". */
   kind: string;
@@ -170,11 +170,7 @@ const fileHref = (ref: string | undefined): string | null =>
   ref?.startsWith("/api/files/") ? ref : null;
 
 /** One attachment as Files' rows draw it. */
-const rowOf = (
-  attachment: SessionAttachment,
-  place: number,
-  agent: string
-): AttachmentRow => {
+const rowOf = (attachment: SessionAttachment, agent: string): AttachmentRow => {
   const at = attachment.at ? Date.parse(attachment.at) : Number.NaN;
   let open: AttachmentOpen = {
     kind: "file",
@@ -186,7 +182,7 @@ const rowOf = (
     open = { kind: "text", content: attachment.content ?? "" };
   }
   return {
-    id: `${attachment.messageId}:${place}`,
+    id: attachment.id,
     messageId: attachment.messageId,
     name: attachment.name,
     kind:
@@ -213,7 +209,7 @@ export function attachmentsOf(instanceId: string):
   const agent = speakerName(harnessOf.get(instanceId));
   return {
     ...read,
-    list: read.list?.map((one, place) => rowOf(one, place, agent)) ?? null,
+    list: read.list?.map((one) => rowOf(one, agent)) ?? null,
   };
 }
 
@@ -260,28 +256,47 @@ export function filesCount(instanceId: string): number | null {
     : null;
 }
 
-/** Where each session stood when its lists were last read: its panel frame's artifacts and its newest message. */
-const readAt = new Map<string, string>();
+/** Where each session stood when each of its lists was last read. */
+const artifactsReadAt = new Map<string, string>();
+const attachmentsReadAt = new Map<string, string>();
+
+/** The newest of the session's loaded messages that carried an attachment, by its id; "" for none. */
+const newestCarrying = (instanceId: string): string => {
+  const messages = cawco.session(instanceId)?.messages ?? [];
+  for (let at = messages.length - 1; at >= 0; at -= 1) {
+    const message = messages[at];
+    if (
+      message &&
+      ((message.metadata?.attachments?.length ?? 0) > 0 ||
+        (message.metadata?.images?.length ?? 0) > 0)
+    ) {
+      return message.id;
+    }
+  }
+  return "";
+};
 
 /**
  * Files follows the conversation on screen: its lists are read once it is,
- * so the count stands, and again once each time the session moves on (its
- * panel frame names other artifacts, or its newest message changes), never
- * in a loop.
+ * so the count stands, and each again only when it can have changed: the
+ * artifacts when its panel frame names other artifacts (one made, one
+ * removed), the attachments when a new message carries one. A reply that
+ * carries none reads nothing again.
  */
 export function followFiles(instanceId: string | null): void {
   if (!instanceId) {
     return;
   }
   const held = cawco.previews[instanceId]?.artifacts?.join(",") ?? "";
-  const newest = cawco.session(instanceId)?.messages.at(-1)?.id ?? "";
-  const at = `${held}|${newest}`;
-  if (readAt.get(instanceId) === at) {
-    return;
+  if (artifactsReadAt.get(instanceId) !== held) {
+    artifactsReadAt.set(instanceId, held);
+    readArtifacts(instanceId);
   }
-  readAt.set(instanceId, at);
-  readArtifacts(instanceId);
-  readAttachments(instanceId);
+  const carrying = newestCarrying(instanceId);
+  if (attachmentsReadAt.get(instanceId) !== carrying) {
+    attachmentsReadAt.set(instanceId, carrying);
+    readAttachments(instanceId);
+  }
 }
 
 /**
@@ -298,6 +313,16 @@ export function askForAPage(instanceId: string): boolean {
     return false;
   }
   draft.ask(ASK_FOR_A_PAGE);
+  return true;
+}
+
+/** Opens the session's composer's own attach picker; false when its pane isn't standing. */
+export function attachToSession(instanceId: string): boolean {
+  const draft = paneDrafts.get(instanceId);
+  if (!draft) {
+    return false;
+  }
+  draft.pickFiles();
   return true;
 }
 

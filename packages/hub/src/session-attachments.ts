@@ -12,9 +12,7 @@ import type {
   TranscriptPage,
 } from "@cawco/core";
 
-/** The most pages one read walks back through: a conversation past it lists its newest. Our call. */
-export const ATTACHMENT_PAGES = 200;
-/** Blocks per page the walk asks for. */
+/** Blocks per page the walk asks for, back to the conversation's start. */
 export const ATTACHMENT_PAGE_LIMIT = 500;
 
 /** One block's attachments, in the order it carried them. */
@@ -25,10 +23,13 @@ const ofBlock = (
   const who = block.type === "user" ? "person" : "agent";
   const at = block.timestamp ?? null;
   const rows: SessionAttachment[] = [];
+  /** Its id: its message's id and its place within that message, the same however the list grows. */
+  const idOf = () => `${block.id}:${rows.length}`;
   for (const attachment of block.metadata?.attachments ?? []) {
     rows.push(
       attachment.kind === "text"
         ? {
+            id: idOf(),
             kind: "text",
             name: attachment.name,
             mediaType: "text/plain",
@@ -38,6 +39,7 @@ const ofBlock = (
             at,
           }
         : {
+            id: idOf(),
             kind: "file",
             name: attachment.name,
             mediaType: attachment.mediaType,
@@ -54,6 +56,7 @@ const ofBlock = (
       continue;
     }
     rows.push({
+      id: idOf(),
       kind: "image",
       name: `Picture ${pictureNumber()}`,
       mediaType: image.mediaType,

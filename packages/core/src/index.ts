@@ -1755,6 +1755,8 @@ export interface SessionAttachment {
   at: string | null;
   /** A text's words, for reading it in place. */
   content?: string;
+  /** Its message's id and its place within that message: the same however the list grows. */
+  id: string;
   kind: "text" | "file" | "image";
   mediaType: string;
   /** The message it rode, for Show in conversation (`?at=`). */

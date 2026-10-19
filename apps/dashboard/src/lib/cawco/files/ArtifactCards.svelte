@@ -13,8 +13,8 @@
    *
    * As many columns as the region holds at `--card-min`, each card going to
    * the column whose foot stands highest, in order, so newest-first reads
-   * across the top: one grid of `--space-1` rows, each card spanning its own
-   * height, packed dense, in list order in the DOM. Every card's shape is
+   * across the top: one grid of 1px rows, each card spanning its own height
+   * and the column gap, packed dense, in list order in the DOM. Every card's shape is
    * known before its picture loads (the hub keeps each picture's size), so
    * nothing moves as they arrive.
    * The one on show wears the list's selection pill (highlight, its grid
@@ -77,13 +77,10 @@
       ? Math.min(thumbnail.height / thumbnail.width, TALLEST)
       : PANE;
 
-  /** One masonry row's height: a card spans as many as it is tall. */
-  const ROW_UNIT = "--space-1";
   let box = $state<HTMLDivElement>();
   let width = $state(0);
   let cardMin = $state(1);
   let gap = $state(0);
-  let unit = $state(4);
   $effect(() => {
     if (!box) {
       return;
@@ -91,7 +88,6 @@
     const styles = getComputedStyle(box);
     cardMin = Number.parseFloat(styles.getPropertyValue("--card-min")) || 1;
     gap = Number.parseFloat(styles.columnGap) || 0;
-    unit = Number.parseFloat(styles.getPropertyValue(ROW_UNIT)) || 4;
     const seen = new ResizeObserver(([entry]) => {
       ({ width } = entry.contentRect);
     });
@@ -124,7 +120,9 @@
     const feet = Array.from({ length: count }, () => 0);
     return cards.map((card) => {
       const lane = feet.indexOf(Math.min(...feet));
-      const span = Math.ceil((heightOf(card) + gap) / unit);
+      // Rows are 1px: a card spans its height and the gap under it, so the
+      // gap between cards is the column gap, every time.
+      const span = Math.ceil(heightOf(card) + gap);
       feet[lane] += span;
       return { card, lane, span };
     });
@@ -164,7 +162,7 @@
         data-files-ghost
         style:grid-column={(i % count) + 1}
         style:grid-row-end="span {Math.ceil(
-          (columnWidth * PANE + WORDS_PX + gap) / unit
+          columnWidth * PANE + WORDS_PX + gap
         )}"
       >
         <Skeleton class="ghost-well" />
@@ -239,7 +237,7 @@
     position: relative;
     display: grid;
     grid-template-columns: repeat(var(--lanes), minmax(0, 1fr));
-    grid-auto-rows: var(--space-1);
+    grid-auto-rows: 1px;
     grid-auto-flow: dense;
     column-gap: var(--space-2);
     align-items: start;

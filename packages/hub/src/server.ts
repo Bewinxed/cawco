@@ -703,7 +703,6 @@ import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import {
   ATTACHMENT_PAGE_LIMIT,
-  ATTACHMENT_PAGES,
   attachmentsOfPages,
 } from "./session-attachments";
 import { createSessionIdentities } from "./session-identity";
@@ -23974,7 +23973,9 @@ export const createServer = (
         const id = db.instanceIdOf(params.id);
         const pages: TranscriptPage[] = [];
         let before: string | undefined;
-        for (let read = 0; read < ATTACHMENT_PAGES; read += 1) {
+        // Back to the conversation's start: the pages are the in-memory
+        // builder's (transcripts.ts), so the whole walk reads no disk twice.
+        for (;;) {
           // biome-ignore lint/performance/noAwaitInLoops: each page names the cursor of the next
           const page = await transcripts.page(
             id,
@@ -24001,18 +24002,13 @@ export const createServer = (
           }
           pages.push(page);
           if (page.cursor === null) {
-            break;
+            return {
+              harness: page.where.harness,
+              attachments: attachmentsOfPages(pages),
+            } satisfies SessionAttachments;
           }
           before = page.cursor;
         }
-        const harness = pages[0]?.where.harness;
-        if (!harness) {
-          return status(404, `no session ${params.id}`);
-        }
-        return {
-          harness,
-          attachments: attachmentsOfPages(pages),
-        } satisfies SessionAttachments;
       })
       .patch(
         "/api/instances/:id",

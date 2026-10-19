@@ -825,7 +825,7 @@
         : null;
     untrack(() => {
       if (files.session !== id) {
-        files.picked = null;
+        putPickAway();
         files.sheet = files.sheet && id !== null;
       }
       files.session = id;
@@ -834,21 +834,28 @@
   $effect(() => {
     followFiles(files.session);
   });
-  // Files put away (or another card in its place): the file floating beside
-  // it goes. The split takes the panel back only if it held it before Files
-  // opened it; otherwise the panel closes, so no conversation moves for a
-  // panel the person had shut.
-  $effect(() => {
+  /**
+   * The file floating beside Files goes. The split takes the panel back only
+   * if it held it before Files opened it; otherwise the panel closes, so no
+   * conversation moves for a panel the person had shut.
+   */
+  function putPickAway() {
     const { picked } = files;
-    if (barGlass.open !== "files" && picked) {
-      untrack(() => {
-        files.picked = null;
+    if (!picked) {
+      return;
+    }
+    files.picked = null;
+    if (!picked.panelWasOpen) {
+      deletePreview(picked.instanceId).catch((error: unknown) => {
+        console.error("The panel Files opened did not close", error);
       });
-      if (!picked.panelWasOpen) {
-        deletePreview(picked.instanceId).catch((error: unknown) => {
-          console.error("The panel Files opened did not close", error);
-        });
-      }
+    }
+  }
+  // Files put away (or another card in its place), or another conversation
+  // in front: the pick is put away.
+  $effect(() => {
+    if (barGlass.open !== "files" && files.picked) {
+      untrack(putPickAway);
     }
   });
   // Files is a card of the wide bar's glass, and a drawer on a phone: one

@@ -33,7 +33,6 @@
   import type { ArtifactSummary } from "@cawco/core";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { fade } from "svelte/transition";
   import { Button } from "#lib/components/ui/button/index.js";
   import EmptyState from "#lib/components/ui/empty/empty-state.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -55,7 +54,7 @@
   import { excerptParts } from "../find/find-rows";
   import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
-  import { dur } from "../motion/curves.svelte";
+  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
   import RowFault from "../RowFault.svelte";
   import { speakerName } from "../transcript/speaker";
   import ArtifactCards from "./ArtifactCards.svelte";
@@ -76,6 +75,7 @@
     onpick,
     onshow,
     onask,
+    onattach,
   }: {
     /** The session whose files these are. */
     instanceId: string;
@@ -89,6 +89,8 @@
     onshow: (attachment: AttachmentRow) => void;
     /** The empty state's one action pressed: the ask is in the composer. */
     onask: () => void;
+    /** Attach a file pressed: the composer's own attach picker opens. */
+    onattach: () => void;
   } = $props();
 
   /**
@@ -129,11 +131,17 @@
 
   /**
    * The Claim Of Nothing Rule: inside `--dur-wait-grace` a list still read
-   * shows nothing of its own; past it, its skeleton stands. A list that
-   * arrives after its skeleton stood cross-fades in over `--dur-fade`.
+   * shows nothing of its own; past it, its skeleton stands, and what the
+   * read brings (the list, or its "nothing" line) takes its place in one
+   * cross-fade (motion/curves `crossIn`, `crossOut`). Started again for each
+   * session Files shows.
    */
   let waited = $state(false);
   $effect(() => {
+    if (!instanceId) {
+      return;
+    }
+    waited = false;
     const timer = setTimeout(() => {
       waited = true;
     }, dur("--dur-wait-grace"));
@@ -145,25 +153,6 @@
   const attachmentsGhost = $derived(
     waited && attachments === null && !attachmentsFailed
   );
-  /** Each region's skeleton stood, so its read fades in. */
-  let ghostStood = $state({ artifacts: false, attachments: false });
-  $effect(() => {
-    if (artifactsGhost) {
-      untrack(() => {
-        ghostStood.artifacts = true;
-      });
-    }
-  });
-  $effect(() => {
-    if (attachmentsGhost) {
-      untrack(() => {
-        ghostStood.attachments = true;
-      });
-    }
-  });
-  const arrive = (_node: Element, stood: boolean) =>
-    fade(_node, { duration: stood ? dur("--dur-fade") : 0 });
-  const leave = (node: Element) => fade(node, { duration: dur("--dur-fade") });
   /** How many skeleton cards stand for the masonry. */
   const GHOST_CARDS = 6;
 
@@ -177,60 +166,85 @@
     within: Map<string, string>;
   } | null>(null);
   let searchFault = $state<string | null>(null);
-  /** Try again on a refused search: the ask goes again. */
+  /** Try again on a refused search: the ask goes again, at once. */
   let searchTry = $state(0);
+  /** The Try again last asked for, read as plain: only a new one skips the settle. */
+  let triedAt = 0;
+  /** Try again's own promise: settled once the hub answers the words again. */
+  let retried: (() => void) | null = null;
+  const searchAgain = () =>
+    new Promise<void>((settled) => {
+      retried = settled;
+      searchTry += 1;
+    });
   /** As the words settle, the hub is asked; a later ask supersedes. */
   const SETTLE_MS = 120;
   $effect(() => {
     const q = asked;
     const id = instanceId;
-    // Try again asks the same words again, at once.
-    const settle = searchTry > 0 ? 0 : SETTLE_MS;
+    const again = searchTry !== triedAt;
+    triedAt = searchTry;
     if (!q) {
       hits = null;
       searchFault = null;
       return;
     }
     const stop = new AbortController();
-    const timer = setTimeout(() => {
-      searchArtifacts(id, q, stop.signal).then(
-        (answer) => {
-          hits = {
-            q,
-            ids: answer.map((hit) => hit.id),
-            within: new Map(
-              answer.flatMap((hit) =>
-                hit.excerpt ? [[hit.id, hit.excerpt] as const] : []
-              )
-            ),
-          };
-          searchFault = null;
-        },
-        (error: unknown) => {
-          if (!stop.signal.aborted) {
-            searchFault = failureWords(error);
+    const done = () => {
+      retried?.();
+      retried = null;
+    };
+    const timer = setTimeout(
+      () => {
+        searchArtifacts(id, q, stop.signal).then(
+          (answer) => {
+            hits = {
+              q,
+              ids: answer.map((hit) => hit.id),
+              within: new Map(
+                answer.flatMap((hit) =>
+                  hit.excerpt ? [[hit.id, hit.excerpt] as const] : []
+                )
+              ),
+            };
+            searchFault = null;
+            done();
+          },
+          (error: unknown) => {
+            if (!stop.signal.aborted) {
+              searchFault = failureWords(error);
+              done();
+            }
           }
-        }
-      );
-    }, settle);
+        );
+      },
+      again ? 0 : SETTLE_MS
+    );
     return () => {
       clearTimeout(timer);
       stop.abort();
     };
   });
-  /** The hub has answered the words as they stand: the cards and counts are its hits. */
-  const answered = $derived(!!asked && hits?.q === asked);
+  /**
+   * What the cards show while a search stands: before the hub's first
+   * answer to it, every artifact; after, its last answer and its "N of M",
+   * standing until the next answer replaces them, so a keystroke never
+   * flashes the whole grid back.
+   */
+  const shownHits = $derived(asked ? hits : null);
+  /** The hub has not answered the words as they stand yet. */
+  const searching = $derived(!!asked && hits?.q !== asked && !searchFault);
   const cards = $derived.by<ArtifactCard[]>(() => {
     if (!artifacts) {
       return [];
     }
-    if (!(answered && hits)) {
+    if (!shownHits) {
       return artifacts.map((artifact) => ({ artifact, within: null }));
     }
     const byId = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
-    return hits.ids.flatMap((id) => {
+    return shownHits.ids.flatMap((id) => {
       const artifact = byId.get(id);
-      const excerpt = hits?.within.get(id);
+      const excerpt = shownHits.within.get(id);
       return artifact
         ? [{ artifact, within: excerpt ? excerptParts(excerpt) : null }]
         : [];
@@ -245,7 +259,7 @@
   /** The Earned Count Rule: a head counts only above 0. */
   const artifactsCount = $derived(
     artifacts && artifacts.length > 0
-      ? countOf(cards.length, artifacts.length, answered)
+      ? countOf(cards.length, artifacts.length, !!shownHits)
       : null
   );
   const attachmentsCount = $derived(
@@ -363,126 +377,134 @@
 
 <div class="files">
   {#if nothing}
-    <EmptyState
-      class="files-empty"
-      data-files-empty
-      icon={IconFiles}
-      line="Pages, canvases, previews and the files you and the agent share collect here."
-      title="Nothing here yet"
-    >
-      {#snippet action()}
-        <Button
-          data-files-ask
-          label={askLabel}
-          onclick={onask}
-          size="sm"
-          variant="outline"
-        />
-      {/snippet}
-    </EmptyState>
-  {:else}
-    <!-- The finder's own field (FindField), as Jump's. -->
-    <div class="files-search" data-files-search>
-      <FindField
-        aria-label="Search this session's files, by name or by what is in them"
-        autocapitalize="off"
-        autocomplete="off"
-        enterkeyhint="search"
-        onclear={() => {
-          words = "";
-        }}
-        oninput={(event) => {
-          words = event.currentTarget.value;
-        }}
-        placeholder="Search names and contents…"
-        spellcheck="false"
-        type="text"
-        value={words}
-      />
+    <!-- What the skeleton stood in for, in one cross-fade (crossIn). -->
+    <div class="files-empty-place" in:crossIn>
+      <EmptyState
+        class="files-empty"
+        data-files-empty
+        icon={IconFiles}
+        line="Pages, canvases, previews and the files you and the agent share collect here."
+        title="Nothing here yet"
+      >
+        {#snippet action()}
+          <Button
+            data-files-ask
+            label={askLabel}
+            onclick={onask}
+            size="sm"
+            variant="outline"
+          />
+        {/snippet}
+      </EmptyState>
     </div>
-    {#if segmented}
-      <!-- One list at a time under the kit's segmented control (Apple HIG,
+  {:else}
+    <div class="files-main" out:crossOut>
+      <!-- The finder's own field (FindField), as Jump's. -->
+      <div class="files-search" data-files-search>
+        <FindField
+          aria-label="Search this session's files, by name or by what is in them"
+          autocapitalize="off"
+          autocomplete="off"
+          enterkeyhint="search"
+          onclear={() => {
+            words = "";
+          }}
+          oninput={(event) => {
+            words = event.currentTarget.value;
+          }}
+          placeholder="Search names and contents…"
+          spellcheck="false"
+          type="text"
+          value={words}
+        />
+      </div>
+      {#if segmented}
+        <!-- One list at a time under the kit's segmented control (Apple HIG,
            Segmented controls: "switch between closely related subviews"),
            each segment its noun and its count, equal widths. -->
-      <Tabs.Root bind:value={list} class="files-tabs">
-        <Tabs.List aria-label="Artifacts or attachments" class="files-segments">
-          <Tabs.Trigger data-files-segment="artifacts" value="artifacts">
-            <span>Artifacts</span>
-            {#if artifactsCount}
-              <span class="files-segment-count num" data-files-head-count
-                >{artifactsCount}</span
-              >
-            {/if}
-          </Tabs.Trigger>
-          <Tabs.Trigger data-files-segment="attachments" value="attachments">
-            <span>Attachments</span>
-            {#if attachmentsCount}
-              <span class="files-segment-count num" data-files-head-count
-                >{attachmentsCount}</span
-              >
-            {/if}
-          </Tabs.Trigger>
-        </Tabs.List>
-        <Tabs.Content
-          class="files-pane"
-          data-files-region="artifacts"
-          value="artifacts"
+        <Tabs.Root bind:value={list} class="files-tabs">
+          <Tabs.List
+            aria-label="Artifacts or attachments"
+            class="files-segments"
+          >
+            <Tabs.Trigger data-files-segment="artifacts" value="artifacts">
+              <span>Artifacts</span>
+              {#if artifactsCount}
+                <span class="files-segment-count num" data-files-head-count
+                  >{artifactsCount}</span
+                >
+              {/if}
+            </Tabs.Trigger>
+            <Tabs.Trigger data-files-segment="attachments" value="attachments">
+              <span>Attachments</span>
+              {#if attachmentsCount}
+                <span class="files-segment-count num" data-files-head-count
+                  >{attachmentsCount}</span
+                >
+              {/if}
+            </Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.Content
+            class="files-pane"
+            data-files-region="artifacts"
+            value="artifacts"
+          >
+            {@render artifactsBody()}
+          </Tabs.Content>
+          <Tabs.Content
+            class="files-pane"
+            data-files-region="attachments"
+            value="attachments"
+          >
+            {@render attachmentsBody()}
+          </Tabs.Content>
+        </Tabs.Root>
+      {:else}
+        <div
+          class="files-regions"
+          data-artifacts-floor={artifactsFloor}
+          data-attachments-floor={attachmentsFloor}
         >
-          {@render artifactsBody()}
-        </Tabs.Content>
-        <Tabs.Content
-          class="files-pane"
-          data-files-region="attachments"
-          value="attachments"
-        >
-          {@render attachmentsBody()}
-        </Tabs.Content>
-      </Tabs.Root>
-    {:else}
-      <div
-        class="files-regions"
-        data-artifacts-floor={artifactsFloor}
-        data-attachments-floor={attachmentsFloor}
-      >
-        <section
-          aria-labelledby="{uid}-artifacts"
-          class="files-section"
-          data-files-region="artifacts"
-        >
-          <h3 class="files-head mark-line" id="{uid}-artifacts">
-            <span class="files-head-lead" data-box
-              ><IconLayers aria-hidden="true" /></span
-            >
-            <span class="files-head-name">Artifacts</span>
-            {#if artifactsCount}
-              <span class="files-head-count num" data-files-head-count
-                >{artifactsCount}</span
+          <section
+            aria-labelledby="{uid}-artifacts"
+            class="files-section"
+            data-files-region="artifacts"
+          >
+            <h3 class="files-head mark-line" id="{uid}-artifacts">
+              <span class="files-head-lead" data-box
+                ><IconLayers aria-hidden="true" /></span
               >
-            {/if}
-          </h3>
-          {@render artifactsBody()}
-        </section>
-        <section
-          aria-labelledby="{uid}-attachments"
-          class="files-section"
-          data-files-region="attachments"
-          data-files-rule
-        >
-          <h3 class="files-head mark-line" id="{uid}-attachments">
-            <span class="files-head-lead" data-box
-              ><IconPaperclip aria-hidden="true" /></span
-            >
-            <span class="files-head-name">Attachments</span>
-            {#if attachmentsCount}
-              <span class="files-head-count num" data-files-head-count
-                >{attachmentsCount}</span
+              <span class="files-head-name">Artifacts</span>
+              {#if artifactsCount}
+                <span class="files-head-count num" data-files-head-count
+                  >{artifactsCount}</span
+                >
+              {/if}
+            </h3>
+            {@render artifactsBody()}
+          </section>
+          <section
+            aria-labelledby="{uid}-attachments"
+            class="files-section"
+            data-files-region="attachments"
+            data-files-rule
+          >
+            <h3 class="files-head mark-line" id="{uid}-attachments">
+              <span class="files-head-lead" data-box
+                ><IconPaperclip aria-hidden="true" /></span
               >
-            {/if}
-          </h3>
-          {@render attachmentsBody()}
-        </section>
-      </div>
-    {/if}
+              <span class="files-head-name">Attachments</span>
+              {#if attachmentsCount}
+                <span class="files-head-count num" data-files-head-count
+                  >{attachmentsCount}</span
+                >
+              {/if}
+            </h3>
+            {@render attachmentsBody()}
+          </section>
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -512,50 +534,55 @@
     />
   {:else if asked && searchFault}
     <RowFault
-      again={() => {
-        searchTry += 1;
-      }}
+      again={searchAgain}
       data-files-search-failed
       details={searchFault}
       reason="Couldn't search this session's artifacts"
     />
-  {:else if artifacts?.length === 0}
-    <div class="files-none files-none-ask">
-      <span>Nothing made yet</span>
-      <Button
-        data-files-ask
-        label={askLabel}
-        onclick={onask}
-        size="xs"
-        variant="ghost"
-      />
-    </div>
-  {:else if answered && cards.length === 0}
-    <p class="files-none" data-files-none>No artifacts match “{asked}”</p>
-  {:else if artifacts || artifactsGhost}
+  {:else}
+    <!-- The region's one place: its skeleton, then what the read brought,
+         one handing its place to the next (crossIn, crossOut). -->
     <div class="files-body">
-      {#if artifacts}
+      {#if artifacts === null}
+        {#if artifactsGhost}
+          <div
+            aria-busy="true"
+            aria-label="Reading artifacts"
+            class="files-scroll files-wait"
+            data-files-wait="artifacts"
+            role="status"
+            out:crossOut
+          >
+            <ArtifactCards cards={[]} ghosts={GHOST_CARDS} {onpick} />
+          </div>
+        {/if}
+      {:else if artifacts.length === 0}
+        <div class="files-none files-none-ask" in:crossIn>
+          <span>Nothing made yet</span>
+          <Button
+            data-files-ask
+            label={askLabel}
+            onclick={onask}
+            size="xs"
+            variant="ghost"
+          />
+        </div>
+      {:else if shownHits && cards.length === 0}
+        <p class="files-none" data-files-none in:crossIn>
+          No artifacts match “{shownHits.q}”
+        </p>
+      {:else}
         <div
+          aria-busy={searching || undefined}
           class="files-scroll kit-edge-fade-block"
           data-files-scroll
           id="{uid}-artifacts-scroll"
-          in:arrive={ghostStood.artifacts}
+          in:crossIn
           {@attach measured("artifacts", "[data-files-card]")}
         >
           <ArtifactCards {cards} {chosen} {onpick} />
         </div>
         {@render moreSign("artifacts")}
-      {:else}
-        <div
-          aria-busy="true"
-          aria-label="Reading artifacts"
-          class="files-scroll files-wait"
-          data-files-wait="artifacts"
-          role="status"
-          out:leave
-        >
-          <ArtifactCards cards={[]} ghosts={GHOST_CARDS} {onpick} />
-        </div>
       {/if}
     </div>
   {/if}
@@ -569,18 +596,55 @@
       details={attachmentsFailed}
       reason="Couldn't read this session's attachments"
     />
-  {:else if attachments?.length === 0}
-    <p class="files-none">Nothing attached yet</p>
-  {:else if attachments && attachmentHits.length === 0}
-    <p class="files-none" data-files-none>No attachments match “{asked}”</p>
-  {:else if attachments || attachmentsGhost}
+  {:else}
     <div class="files-body">
-      {#if attachments}
+      {#if attachments === null}
+        {#if attachmentsGhost}
+          <div
+            aria-busy="true"
+            aria-label="Reading attachments"
+            class="files-scroll files-wait"
+            data-files-wait="attachments"
+            role="status"
+            out:crossOut
+          >
+            {#each [0.46, 0.34] as share (share)}
+              <div class="files-ghost-row">
+                <span class="lead" data-box
+                  ><Skeleton class="ghost-glyph" /></span
+                >
+                <Skeleton
+                  class="ghost-name"
+                  style="inline-size: {share * 100}%"
+                />
+                <Skeleton class="ghost-age" />
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {:else if attachments.length === 0}
+        <!-- The Empty Starts Work Rule's by-hand way: a person sends
+             attachments, so the composer's own Attach is offered. -->
+        <div class="files-none files-none-ask" in:crossIn>
+          <span>Nothing attached yet</span>
+          <Button
+            data-files-attach
+            label="Attach a file"
+            onclick={onattach}
+            size="xs"
+            variant="ghost"
+          />
+        </div>
+      {:else if attachmentHits.length === 0}
+        <p class="files-none" data-files-none in:crossIn>
+          No attachments match “{asked}”
+        </p>
+      {:else}
         <div
           class="files-scroll kit-edge-fade-block"
           data-files-scroll
           id="{uid}-attachments-scroll"
-          in:arrive={ghostStood.attachments}
+          in:crossIn
           {@attach measured("attachments", "[data-files-row]")}
         >
           <ul
@@ -634,27 +698,6 @@
           </ul>
         </div>
         {@render moreSign("attachments")}
-      {:else}
-        <div
-          aria-busy="true"
-          aria-label="Reading attachments"
-          class="files-scroll files-wait"
-          data-files-wait="attachments"
-          role="status"
-          out:leave
-        >
-          {#each [0.46, 0.34] as share (share)}
-            <div class="files-ghost-row">
-              <span class="lead" data-box><Skeleton class="ghost-glyph" /></span
-              >
-              <Skeleton
-                class="ghost-name"
-                style="inline-size: {share * 100}%"
-              />
-              <Skeleton class="ghost-age" />
-            </div>
-          {/each}
-        </div>
       {/if}
     </div>
   {/if}
@@ -687,6 +730,15 @@
   /* Files' column: the search, then the regions or the segmented list,
      filling what its card or its drawer gives it. */
   .files {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+  /* The whole, or the empty state in its place: each fills the column. */
+  .files-main,
+  .files-empty-place {
     display: flex;
     flex: 1;
     flex-direction: column;
@@ -750,11 +802,12 @@
   .files :global(.files-segments) {
     margin-block-start: var(--space-1);
   }
+  /* A region's only overflow is its scroller (The 44 Touch Rule: nothing
+     around it clips its scrollbar or its rows' touch areas). */
   .files :global(.files-pane) {
     display: flex;
     flex-direction: column;
     min-block-size: 0;
-    overflow: hidden;
   }
   .files-segment-count {
     color: var(--ink-muted);
@@ -764,7 +817,6 @@
     display: flex;
     flex-direction: column;
     min-block-size: 0;
-    overflow: hidden;
   }
   /* The regions part on Caw's panel's vermillion hairline: 1px of
      `brand-solid`, whole (tokens: "Caw's panel's hairline between its
@@ -778,11 +830,6 @@
     flex: none;
     margin-block-end: var(--space-1);
 
-    /* The field's ring, drawn on the field, not the bare input. */
-    & :global([data-slot="finder-field"]:has(input:focus-visible)) {
-      outline: var(--focus-ring-width) solid var(--focus-ring);
-      outline-offset: var(--focus-ring-inset);
-    }
     /* Under a finger the words stand at 16px, so iOS doesn't zoom. */
     @media (pointer: coarse) {
       & :global(input) {
@@ -790,28 +837,27 @@
       }
     }
   }
-  /* A region's scroll, its read and its skeleton in one place, and the
-     "N more" sign standing over its foot. */
+  /* A region's one place: its skeleton, its read, and the "N more" sign
+     over its foot. `position: relative` pins the view leaving (crossOut). */
   .files-body {
     position: relative;
-    display: grid;
+    display: flex;
     flex: 1 1 auto;
+    flex-direction: column;
     min-block-size: 0;
-
-    & > :global(*) {
-      grid-area: 1 / 1;
-    }
   }
   /* Each region's own scroll, with the house fade at its foot while more is
-     below, at its full length on every width as Caw's panel has it; padded
-     at its end so a row's Show in conversation keeps its touch area. */
+     below, at its full length on every width as Caw's panel has it. Padded
+     at its end, inside the region, so a row's Show in conversation keeps
+     its touch area in the scroller's own box, and its scrollbar stands in
+     the region. */
   .files-scroll {
     --fade-len: 40px;
+    flex: 1 1 auto;
     min-block-size: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-inline-end: var(--space-3);
-    margin-inline-end: calc(-1 * var(--space-3));
     scrollbar-width: thin;
     scrollbar-color: var(--border-control) transparent;
   }

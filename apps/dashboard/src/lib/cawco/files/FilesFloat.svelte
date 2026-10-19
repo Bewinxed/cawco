@@ -6,6 +6,8 @@
    * line, its trailing edge `--space-3` clear of Files and never nearer the
    * rail than the same (owner: "selecting a file opens it floating on the
    * left"), the split's share of the page at most (files `floatPlace`).
+   * Narrowed past the panel's least width (SIDE_FLOOR_PX), never a sliver:
+   * the pick goes to the session's panel, which keeps it, and Files goes.
    * Neither it nor Files moves the conversation; no scrim. While it stands
    * the split leaves the panel to it (SideSplit `floatingPanel`).
    *
@@ -23,6 +25,7 @@
   import { dur } from "../motion/curves.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
+  import { SIDE_FLOOR_PX } from "../side/floor";
   import { files, floatPlace } from "./files.svelte";
 
   const picked = $derived(barGlass.open === "files" ? files.picked : null);
@@ -113,7 +116,19 @@
       return;
     }
     const measure = () => {
-      place = floatPlace() ?? place;
+      const next = floatPlace();
+      // Never a sliver: narrowed past the panel's least width, the pick
+      // goes to the session's panel, which keeps it, and Files goes.
+      if (next && next.width < SIDE_FLOOR_PX) {
+        untrack(() => {
+          if (files.picked) {
+            files.picked = { ...files.picked, panelWasOpen: true };
+          }
+          barGlass.open = null;
+        });
+        return;
+      }
+      place = next ?? place;
     };
     measure();
     const card = document.querySelector<HTMLElement>(".kit-pop.files-pop");

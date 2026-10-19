@@ -21,6 +21,7 @@
   import {
     type AttachmentRow,
     askForAPage,
+    attachToSession,
     files,
     floatPlace,
   } from "./files.svelte";
@@ -66,6 +67,13 @@
     }
   }
 
+  /** Attach a file: the composer's own attach picker opens, and Files goes. */
+  function attach() {
+    if (instanceId && attachToSession(instanceId)) {
+      onclose();
+    }
+  }
+
   function show(attachment: AttachmentRow) {
     if (instanceId) {
       askOpenAt(instanceId, attachment.messageId);
@@ -83,6 +91,7 @@
           : null}
         {instanceId}
         onask={ask}
+        onattach={attach}
         onpick={pick}
         onshow={show}
       />

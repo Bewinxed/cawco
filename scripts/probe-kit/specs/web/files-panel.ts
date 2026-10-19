@@ -64,6 +64,8 @@ const ATTACHMENT_SENDS = 3;
 
 /** The session's artifact list read, which the offline leg refuses. */
 const ARTIFACT_LIST = /\/api\/instances\/[^/]+\/artifacts$/;
+/** Files' search of a session's artifacts. */
+const SEARCH_READ = /\/artifacts\/search\?/;
 /** The session's attachments read. */
 const ATTACHMENT_LIST = /\/api\/instances\/[^/]+\/attachments$/;
 /** How long the slow legs hold each list read back: past the grace, so the skeleton stands. */
@@ -295,6 +297,7 @@ const run = async (kit: Kit) => {
 
   await reviewLegs(kit, base, { many, one });
   await askLegs(kit, base, none);
+  await roundThree(kit, base, fleet, { many, one, none });
   for (const theme of THEMES) {
     await desk(kit, base, theme, { many, one, none });
     for (const view of ["phone", "narrowDesk"] as const) {
@@ -726,6 +729,10 @@ const reviewLegs = async (
       }
     }
   );
+  await recordIntros(
+    slow,
+    '[data-files-region="artifacts"] [data-files-scroll]'
+  );
   await slow.locator("[data-files-control]").click();
   await slow.locator(".kit-pop.files-pop").waitFor();
   const opened = Date.now();
@@ -746,24 +753,11 @@ const reviewLegs = async (
       .length,
   }));
   await slow.locator("[data-files-card]").first().waitFor({ timeout: 15_000 });
-  const arrival = await slow.evaluate(
-    () =>
-      document
-        .querySelector('[data-files-region="artifacts"] [data-files-scroll]')
-        ?.getAnimations()
-        .map((one) => one.effect?.getTiming().duration as number) ?? []
-  );
-  const fadeSaid = await slow.evaluate(() =>
-    getComputedStyle(document.documentElement)
-      .getPropertyValue("--dur-fade")
-      .trim()
-  );
-  // A duration as the token is written: "200ms" or "0.2s".
-  const fadeMs = fadeSaid.endsWith("ms")
-    ? Number.parseFloat(fadeSaid)
-    : Number.parseFloat(fadeSaid) * 1000;
+  await slow.waitForTimeout(400);
+  const arrival = await introsOf(slow);
+  const crossMs = await durationOf(slow, "--dur-control");
   kit.check(
-    "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read arrives over one --dur-fade",
+    "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read takes the skeleton's place in one cross-fade over --dur-control (crossIn)",
     atOpen.waits === 0 &&
       atOpen.counts === 0 &&
       atOpen.none === 0 &&
@@ -771,8 +765,8 @@ const reviewLegs = async (
       pastGrace.ghostCards > 0 &&
       pastGrace.attachmentsWait &&
       pastGrace.counts === 0 &&
-      arrival.includes(fadeMs),
-    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)} (--dur-fade ${fadeMs})`
+      arrival.includes(crossMs),
+    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)} (--dur-control ${crossMs})`
   );
   await slow.close();
 
@@ -1224,6 +1218,346 @@ const askLegs = async (kit: Kit, base: string, none: string) => {
     `touch area ${JSON.stringify(hit)}; composer ${JSON.stringify(phoneSaid)}; sent ${phoneSent}`
   );
   await phone.close();
+};
+
+/** A duration token in ms, as it is written ("120ms" or "0.12s"). */
+const durationOf = async (page: Page, token: string): Promise<number> => {
+  const said = await page.evaluate(
+    (name) =>
+      getComputedStyle(document.documentElement).getPropertyValue(name).trim(),
+    token
+  );
+  return said.endsWith("ms")
+    ? Number.parseFloat(said)
+    : Number.parseFloat(said) * 1000;
+};
+
+/**
+ * Records the durations of the animations each element matching `selector`
+ * runs as it mounts, read a frame after it is added (a 120ms intro is
+ * gone before a later read).
+ */
+const recordIntros = (page: Page, selector: string) =>
+  page.evaluate((sel) => {
+    const seen: number[] = [];
+    (window as unknown as { __intros: number[] }).__intros = seen;
+    new MutationObserver(() => {
+      for (const el of document.querySelectorAll(sel)) {
+        if ((el as HTMLElement).dataset.introRead) {
+          continue;
+        }
+        (el as HTMLElement).dataset.introRead = "1";
+        requestAnimationFrame(() => {
+          for (const one of el.getAnimations()) {
+            seen.push(one.effect?.getTiming().duration as number);
+          }
+        });
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  }, selector);
+
+const introsOf = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __intros: number[] }).__intros);
+
+/**
+ * The third review round's legs (light):
+ *  24. D: each region's scrollbar and Show's touch area stand inside the
+ *      region, with a mouse and under a finger;
+ *  25. B: a keystroke never flashes the whole grid back while the hub's
+ *      answer is held;
+ *  26. C: a streamed reply with no attachment reads no attachments again;
+ *  27. A: a new attachment keeps the focus on the row it was on;
+ *  28. Attach a file opens the composer's own picker, and Files goes;
+ *  29. E: narrowed under the panel's least width, the float hands the pick
+ *      to the session's panel and Files goes;
+ *  30. Jump's field draws the house ring (FindField);
+ *  31. the skeleton gives its place to the empty state in one cross-fade.
+ */
+const roundThree = async (
+  kit: Kit,
+  base: string,
+  fleet: Awaited<ReturnType<Kit["fleet"]>>,
+  ids: { many: string; one: string; none: string }
+) => {
+  // 24. D, with a mouse (desk) and under a finger (an iPad's regular width).
+  for (const view of ["desk", "ipadWide"] as const) {
+    const page = await openSession(kit, base, view, "light", ids.many);
+    await page.locator("[data-files-control]").click();
+    await page.locator("[data-files-row]").first().waitFor({ timeout: 30_000 });
+    await page.waitForTimeout(400);
+    const inside = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          ".files-pop [data-files-region]"
+        ),
+      ].map((region) => {
+        const box = region.getBoundingClientRect();
+        const scroller = region.querySelector<HTMLElement>(
+          "[data-files-scroll]"
+        );
+        const rect = scroller?.getBoundingClientRect();
+        const show = region.querySelector<HTMLElement>("[data-files-show]");
+        let showRight: number | null = null;
+        if (show) {
+          const after = getComputedStyle(show, "::after");
+          const r = show.getBoundingClientRect();
+          const inset = Number.parseFloat(after.right);
+          showRight =
+            after.content === "none" || Number.isNaN(inset)
+              ? r.right
+              : r.right - inset;
+        }
+        return {
+          region: region.dataset.filesRegion,
+          regionRight: box.right,
+          scrollbar: scroller ? scroller.offsetWidth - scroller.clientWidth : 0,
+          scrollerRight: rect?.right ?? 0,
+          showRight,
+        };
+      })
+    );
+    kit.check(
+      `24 (${view}): each region's scroller, its scrollbar and Show's touch area stand inside the region (nothing clips them)`,
+      inside.length === 2 &&
+        inside.every(
+          (one) =>
+            one.scrollerRight <= one.regionRight + 0.5 &&
+            (one.showRight === null || one.showRight <= one.regionRight + 0.5)
+        ) &&
+        (view !== "desk" || inside.every((one) => one.scrollbar > 0)),
+      JSON.stringify(inside)
+    );
+    await page.close();
+  }
+
+  // 25. B: the answer to the second keystroke held; the grid never returns whole.
+  const search = await openSession(kit, base, "desk", "light", ids.many);
+  /** Holds the search's answers once the first is in. */
+  const holding = new Set<"answers">();
+  await search.route(SEARCH_READ, async (route) => {
+    if (holding.has("answers")) {
+      await new Promise((done) => setTimeout(done, 2000));
+    }
+    await route.continue();
+  });
+  await search.locator("[data-files-control]").click();
+  await search.locator("[data-files-card]").first().waitFor();
+  const field = search.locator("[data-files-search] input");
+  await field.type("pr");
+  await until(
+    "the first answer",
+    () => search.locator("[data-files-card]").count(),
+    (n) => n < 42,
+    15_000
+  ).catch(() => 0);
+  holding.add("answers");
+  await field.type("i");
+  const counts: number[] = [];
+  let busy = false;
+  for (let i = 0; i < 15; i += 1) {
+    counts.push(await search.locator("[data-files-card]").count());
+    busy ||= await search.evaluate(
+      () =>
+        document
+          .querySelector('[data-files-region="artifacts"] [data-files-scroll]')
+          ?.getAttribute("aria-busy") === "true"
+    );
+    await search.waitForTimeout(100);
+  }
+  kit.check(
+    "25: while the hub's answer to the next keystroke is held, the last answer's cards stand (never the whole grid back) and the scroller says it is busy",
+    counts.every((n) => n < 42) && busy,
+    `counts ${JSON.stringify(counts)}, busy ${busy}`
+  );
+  await search.close();
+
+  // 26. C: a streamed reply with no attachment reads no attachments again.
+  const quiet = await openSession(kit, base, "desk", "light", ids.many);
+  let reads = 0;
+  quiet.on("request", (request) => {
+    if (ATTACHMENT_LIST.test(new URL(request.url()).pathname)) {
+      reads += 1;
+    }
+  });
+  await quiet.waitForTimeout(2000);
+  const before = reads;
+  await fleet.send(ids.many, "A word with nothing attached");
+  await quiet.waitForTimeout(5000);
+  kit.check(
+    "26: a message and its streamed reply that carry no attachment read the session's attachments 0 times",
+    reads - before === 0,
+    `attachments reads before ${before}, after ${reads}`
+  );
+  await quiet.close();
+
+  // 27. A: focus on a row, a new attachment arrives above it, the focus stays.
+  const steady = await openSession(kit, base, "desk", "light", ids.many);
+  await steady.locator("[data-files-control]").click();
+  await steady.locator("[data-files-row]").first().waitFor({ timeout: 30_000 });
+  const rowsBefore = await steady.locator("[data-files-row]").count();
+  const held = steady.locator("[data-files-row] .attachment-row").first();
+  const heldName = await held.getAttribute("title");
+  await held.focus();
+  await fleet.post({
+    type: "command",
+    commandId: crypto.randomUUID(),
+    kind: "send",
+    machineId: MACHINE,
+    sessionId: ids.many,
+    payload: {
+      instanceId: ids.many,
+      attachments: [
+        { kind: "text", name: "arrived-later.md", content: "Later." },
+      ],
+      message: {
+        type: "user",
+        uuid: crypto.randomUUID(),
+        message: { role: "user", content: "One more file" },
+        parent_tool_use_id: null,
+        origin: { kind: "human" },
+      },
+    },
+  });
+  await until(
+    "the new attachment listed",
+    () => steady.locator("[data-files-row]").count(),
+    (n) => n > rowsBefore,
+    30_000
+  ).catch(() => 0);
+  const stillOn = await steady.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return el?.closest("[data-files-row]") ? el.getAttribute("title") : null;
+  });
+  kit.check(
+    "27: a new attachment listed above the focused row keeps the focus on that row (rows keyed by the hub's own ids)",
+    (await steady.locator("[data-files-row]").count()) > rowsBefore &&
+      stillOn === heldName,
+    `focused ${JSON.stringify(stillOn)}, was ${JSON.stringify(heldName)}`
+  );
+  await steady.close();
+
+  // 28. Attach a file: the composer's own picker, and Files goes.
+  const attach = await openSession(kit, base, "desk", "light", ids.one);
+  await attach.locator("[data-files-control]").click();
+  const attachButton = attach.locator("[data-files-attach]");
+  await attachButton.waitFor({ timeout: 30_000 });
+  const [chooser] = await Promise.all([
+    attach.waitForEvent("filechooser", { timeout: 10_000 }).catch(() => null),
+    attachButton.click(),
+  ]);
+  await attach.waitForTimeout(600);
+  const attachSaid = await attach.evaluate(() => ({
+    filesOpen: !!document.querySelector(
+      ".kit-pop.files-pop[data-state='open']"
+    ),
+    composerInput: !!document.querySelector(
+      'form[data-slot="cin"] input[type="file"]'
+    ),
+  }));
+  kit.check(
+    "28: an empty Attachments offers Attach a file; pressed, the session composer's own file picker opens and Files goes",
+    !!chooser &&
+      !!(await chooser
+        .element()
+        .evaluate(
+          (input) => !!(input as Element).closest('form[data-slot="cin"]')
+        )) &&
+      !attachSaid.filesOpen,
+    `chooser ${!!chooser}; ${JSON.stringify(attachSaid)}`
+  );
+  await attach.close();
+
+  // 29. E: the float narrowed past the panel's least width.
+  const narrowing = await openSession(kit, base, "desk", "light", ids.many);
+  await narrowing.locator("[data-files-control]").click();
+  await narrowing.locator(`[data-files-card][title="${PRICING}"]`).click();
+  await narrowing
+    .locator("[data-files-float][data-state='open']")
+    .waitFor({ timeout: 30_000 });
+  await narrowing.setViewportSize({ width: 1000, height: 900 });
+  await narrowing.waitForTimeout(1200);
+  const narrowed = await narrowing.evaluate(() => ({
+    float: !!document.querySelector("[data-files-float]"),
+    filesOpen: !!document.querySelector(
+      ".kit-pop.files-pop[data-state='open']"
+    ),
+    panel: [...document.querySelectorAll('iframe[title="Preview"]')].some(
+      (frame) => !frame.closest("[data-files-float]")
+    ),
+  }));
+  kit.check(
+    "29: narrowed under the panel's least width, the float hands the pick to the session's panel (open beside the conversation) and Files goes: never a sliver",
+    !(narrowed.float || narrowed.filesOpen) && narrowed.panel,
+    JSON.stringify(narrowed)
+  );
+  await narrowing.close();
+
+  // 30. Jump's field draws the house ring.
+  const jump = await openSession(kit, base, "desk", "light", ids.many);
+  await jump.waitForTimeout(1500);
+  await jump.keyboard.press("Control+KeyK");
+  await jump
+    .locator(".jump-pop [data-slot='finder-field'] input")
+    .waitFor({ timeout: 10_000 });
+  await jump.waitForTimeout(300);
+  const jumpRing = await jump.evaluate(() => {
+    const ringed = document.querySelector<HTMLElement>(
+      ".jump-pop [data-slot='finder-field']"
+    );
+    const style = ringed ? getComputedStyle(ringed) : null;
+    const swatch = document.createElement("span");
+    swatch.style.color = "var(--focus-ring)";
+    document.body.append(swatch);
+    const want = getComputedStyle(swatch).color;
+    swatch.remove();
+    return {
+      outline: style ? `${style.outlineStyle} ${style.outlineWidth}` : null,
+      color: style?.outlineColor ?? null,
+      want,
+      focused: !!document.activeElement?.closest("[data-slot='finder-field']"),
+    };
+  });
+  kit.check(
+    "30: Jump's field draws the house focus ring when its input has keyboard focus (the ring lives in FindField)",
+    jumpRing.focused &&
+      jumpRing.outline === "solid 2px" &&
+      jumpRing.color === jumpRing.want,
+    JSON.stringify(jumpRing)
+  );
+  await jump.close();
+
+  // 31. The skeleton gives its place to the empty state in one cross-fade.
+  const emptied = await openSession(
+    kit,
+    base,
+    "desk",
+    "light",
+    ids.none,
+    async (p) => {
+      for (const read of [ARTIFACT_LIST, ATTACHMENT_LIST]) {
+        await p.route(read, async (route) => {
+          await new Promise((done) => setTimeout(done, HELD_MS));
+          await route.continue();
+        });
+      }
+    }
+  );
+  await recordIntros(emptied, ".files-empty-place");
+  await emptied.locator("[data-files-control]").click();
+  await emptied
+    .locator("[data-files-wait]")
+    .first()
+    .waitFor({ timeout: 10_000 });
+  await emptied.locator("[data-files-empty]").waitFor({ timeout: 15_000 });
+  await emptied.waitForTimeout(400);
+  const emptyIntro = await introsOf(emptied);
+  const emptyCross = await durationOf(emptied, "--dur-control");
+  kit.check(
+    "31: the skeleton gives its place to the empty state in one cross-fade over --dur-control",
+    emptyIntro.includes(emptyCross),
+    `intros ${JSON.stringify(emptyIntro)} (--dur-control ${emptyCross})`
+  );
+  await emptied.close();
 };
 
 /** The drawer's legs at 390 and 680, in one theme. */

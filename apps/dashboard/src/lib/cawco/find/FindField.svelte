@@ -46,8 +46,14 @@
 </div>
 
 <style>
-  /* The field: 44px, the search glyph leading, the clear trailing. */
+  /* The field: 44px, the search glyph leading, the clear trailing. Its
+     input draws no ring of its own: the field draws the house ring when
+     the input has keyboard focus (The One Ring Rule), for every caller. */
   .field {
+    &:has(input:focus-visible) {
+      outline: var(--focus-ring-width) solid var(--focus-ring);
+      outline-offset: var(--focus-ring-inset);
+    }
     display: flex;
     align-items: center;
     gap: var(--space-2);

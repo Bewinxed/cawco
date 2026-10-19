@@ -17,7 +17,12 @@
   import { toast } from "../toasts.js";
   import { askOpenAt } from "../transcript/open-at.svelte";
   import FilesList from "./FilesList.svelte";
-  import { type AttachmentRow, askForAPage, files } from "./files.svelte";
+  import {
+    type AttachmentRow,
+    askForAPage,
+    attachToSession,
+    files,
+  } from "./files.svelte";
 
   /**
    * vaul's stops, as shares of the screen's height: the lower, where it
@@ -51,6 +56,14 @@
   /** The empty state's ask into the session's composer; the drawer goes, so the composer has the focus. */
   function ask() {
     if (instanceId && askForAPage(instanceId)) {
+      files.returnTo = null;
+      files.sheet = false;
+    }
+  }
+
+  /** Attach a file: the composer's own attach picker opens, and Files goes. */
+  function attach() {
+    if (instanceId && attachToSession(instanceId)) {
       files.returnTo = null;
       files.sheet = false;
     }
@@ -106,6 +119,7 @@
           <FilesList
             {instanceId}
             onask={ask}
+            onattach={attach}
             onpick={pick}
             onshow={show}
             segmented

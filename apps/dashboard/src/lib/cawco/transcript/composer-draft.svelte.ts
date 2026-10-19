@@ -170,6 +170,18 @@ export class ComposerDraft {
     this.focusWanted = true;
   }
 
+  /**
+   * The composer's own attach picker, asked for from outside it (Files'
+   * empty Attachments): the composer drawing this draft opens it and clears
+   * the flag.
+   */
+  pickWanted = $state(false);
+
+  /** Opens this composer's attach picker, as its own Attach does. */
+  pickFiles(): void {
+    this.pickWanted = true;
+  }
+
   /** A starter's words into the field, the caret after them: nothing is sent. */
   press(words: string, place: StarterPlace): void {
     this.text = words;

@@ -20,7 +20,7 @@
   let {
     count,
   }: {
-    /** Its artifacts and attachments, once the artifacts are read. */
+    /** Its artifacts and attachments, once both lists are read. */
     count: number | null;
   } = $props();
 
