@@ -11,7 +11,7 @@
   import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import StateLine from "./TaskStateLine.svelte";
-  import { type NameOf, stateLineOf } from "./task-state-line";
+  import { type NameOf, type PlaceOf, stateLineOf } from "./task-state-line";
 
   let {
     task,
@@ -21,6 +21,7 @@
     asks = false,
     open = false,
     nameOf,
+    placeOf,
   }: {
     task: TaskSummary;
     href: string;
@@ -32,11 +33,13 @@
     asks?: boolean;
     /** It is the one open in the pane beside the board. */
     open?: boolean;
-    /** A session's name; the fleet's when left out. */
-    nameOf?: NameOf;
+    /** A session's name: the fleet's (session-name.ts) or a sheet's fixture. */
+    nameOf: NameOf;
+    /** Where a session works: the fleet's (session-name.ts) or a sheet's fixture. */
+    placeOf: PlaceOf;
   } = $props();
 
-  const line = $derived(stateLineOf(task, { date, asks, nameOf }));
+  const line = $derived(stateLineOf(task, { date, asks, nameOf, placeOf }));
 </script>
 
 <a

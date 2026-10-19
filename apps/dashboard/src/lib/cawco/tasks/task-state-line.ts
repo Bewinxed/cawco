@@ -2,12 +2,13 @@
  * PROPOSED (project-screens page): the one line a task says past its
  * title (taskpane advisor §2's table), shared by the board card and the
  * run order: its session's state with the session's name, a refusal, what
- * it waits on, its date, or nothing (The Idle Has No Fill Rule).
+ * it waits on, its date, or nothing (The Idle Has No Fill Rule). Pure: the
+ * session's name and place come in (`NameOf`, `PlaceOf`), the fleet's from
+ * session-name.ts or a sheet's fixture.
  */
-import { cawco } from "../client.svelte";
-import { isRetry, type TaskSummary } from "../project-tasks";
+import type { TaskSummary } from "../project-tasks";
 import type { MarkStatus } from "../TreeMark.svelte";
-import { sessionName } from "./session-name";
+import { isRetry } from "./retry";
 
 export type StateLine =
   | {
@@ -23,29 +24,33 @@ export type StateLine =
 
 /** A session's name: the fleet's, or what a sheet feeds. */
 export type NameOf = (instanceId: string) => string;
+/** Where a session works, its mark's hue: the fleet's, or what a sheet feeds. */
+export type PlaceOf = (instanceId: string) => string;
 
 const FULL_STOP = /\.$/;
 const FIRST = /^./;
 const lower = (words: string): string =>
   words.replace(FULL_STOP, "").replace(FIRST, (c) => c.toLowerCase());
 
-/** Where a session works, as the fleet's index has it; its id while unknown. */
-export const placeOf = (instanceId: string): string =>
-  cawco.instanceIndex.byId.get(instanceId)?.cwd ?? instanceId;
-
 export function stateLineOf(
   task: TaskSummary,
   {
     date = null,
     asks = false,
-    nameOf = sessionName,
-  }: { asks?: boolean; date?: string | null; nameOf?: NameOf } = {}
+    nameOf,
+    placeOf,
+  }: {
+    asks?: boolean;
+    date?: string | null;
+    nameOf: NameOf;
+    placeOf: PlaceOf;
+  }
 ): StateLine | null {
   const [newest] = task.attempts;
   if (task.startProblem && !task.liveAttempt) {
     return {
       kind: "cant",
-      word: "Couldn't start",
+      word: "Can't start",
       rest: lower(task.startProblem),
     };
   }

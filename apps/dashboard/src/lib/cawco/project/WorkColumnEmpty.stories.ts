@@ -43,7 +43,7 @@ export const Decisions = {
   decorators: [room],
   parameters: { viewport: 1180 },
 };
-/** Desk · Routines empty: the head says Routines once; its line and the cards on the card's own edge. */
+/** Desk · Routines empty: the head says Routines once; its line, then its starters and Ask Caw for a routine, each opening Caw with its words. */
 export const Routines = {
   component: RoutinesBlockFixture,
   parameters: { viewport: 1180 },

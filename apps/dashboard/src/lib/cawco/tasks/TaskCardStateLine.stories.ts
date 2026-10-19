@@ -6,7 +6,12 @@
  */
 
 import CardStackFixture from "./preview/CardStackFixture.svelte";
-import { DATES, sessionNameOf, taskOf } from "./preview/tidewater";
+import {
+  DATES,
+  sessionNameOf,
+  sessionPlaceOf,
+  taskOf,
+} from "./preview/tidewater";
 import TaskCardStateLine from "./TaskCardStateLine.svelte";
 
 const card = (id: string, asks = false) => ({
@@ -16,35 +21,39 @@ const card = (id: string, asks = false) => ({
     date: DATES[id] ?? null,
     asks,
   },
-  parameters: { viewport: 272 },
 });
 
 export default {
   title: "Board card/One state line",
   component: TaskCardStateLine,
-  args: { nameOf: sessionNameOf },
+  args: { nameOf: sessionNameOf, placeOf: sessionPlaceOf },
 };
 
+// Each viewport is a literal on the export itself: the canvas reads it from the source.
+
 /** Desk · Working: the session's mark echoes, "Working" and the session's name. */
-export const Working = card("tsk-14");
+export const Working = { ...card("tsk-14"), parameters: { viewport: 272 } };
 /** Desk · Its session asks you: the mark's dot pings, "Asks you". */
-export const AsksYou = card("tsk-14", true);
+export const AsksYou = {
+  ...card("tsk-14", true),
+  parameters: { viewport: 272 },
+};
 /** Desk · Retrying, and which attempt. */
-export const Retrying = card("tsk-18");
+export const Retrying = { ...card("tsk-18"), parameters: { viewport: 272 } };
 /** Desk · Failed, and why, in a word. */
-export const Failed = card("tsk-21");
+export const Failed = { ...card("tsk-21"), parameters: { viewport: 272 } };
 /** Desk · The hub couldn't start it, and why. */
-export const CantStart = card("tsk-20");
+export const CantStart = { ...card("tsk-20"), parameters: { viewport: 272 } };
 /** Desk · Waits on other tasks. */
-export const Waits = card("tsk-17");
+export const Waits = { ...card("tsk-17"), parameters: { viewport: 272 } };
 /** Desk · Set for a date. */
-export const Dated = card("tsk-15");
+export const Dated = { ...card("tsk-15"), parameters: { viewport: 272 } };
 /** Desk · To do, nothing to say: no state line at all. */
-export const Quiet = card("tsk-19");
+export const Quiet = { ...card("tsk-19"), parameters: { viewport: 272 } };
 /** Desk · In Review: no line; the tinted column says it. */
-export const Review = card("tsk-16");
+export const Review = { ...card("tsk-16"), parameters: { viewport: 272 } };
 /** Desk · Done: no line; the finished ring says it. */
-export const Done = card("tsk-12");
+export const Done = { ...card("tsk-12"), parameters: { viewport: 272 } };
 /** Phone · Every state in one column. */
 export const Phone = {
   component: CardStackFixture,

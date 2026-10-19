@@ -4,6 +4,7 @@
  * one per state a card or the task pane can be in. Times are relative to
  * the page's load, so "2h ago" reads true whenever it is opened.
  */
+import type { DecisionCard } from "@cawco/core/decisions";
 import type { ComponentProps } from "svelte";
 import type ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
 import type {
@@ -127,6 +128,10 @@ export const SESSIONS: Record<string, SessionFixture> = {
 /** The fixture's name for a session, by its id. */
 export const sessionNameOf = (id: string): string =>
   Object.values(SESSIONS).find((one) => one.id === id)?.name ?? "Its session";
+
+/** Where the fixture's session works, its mark's hue, by its id; its id while unknown. */
+export const sessionPlaceOf = (id: string): string =>
+  Object.values(SESSIONS).find((one) => one.id === id)?.place ?? id;
 
 const attempt = (
   session: SessionFixture,
@@ -453,9 +458,53 @@ export const CARD_STATES = [
   { id: "retrying", label: "Retrying", task: "tsk-18" },
   { id: "review", label: "In review", task: "tsk-16" },
   { id: "failed", label: "Failed", task: "tsk-21" },
-  { id: "cant-start", label: "Couldn't start", task: "tsk-20" },
+  { id: "cant-start", label: "Can't start", task: "tsk-20" },
   { id: "done", label: "Done", task: "tsk-12" },
 ] as const;
+
+/**
+ * The decision tsk-16's agent asks with its review: the open card of the
+ * decision page its attempt handed in. Its options are the agent's own
+ * next moves, beside Approve and Send back.
+ */
+export const ASKED: Record<string, DecisionCard> = {
+  "tsk-16": {
+    id: "stored-times",
+    question:
+      "The tide times stored before the fix are still an hour out from late March. What should I do with them?",
+    options: [
+      {
+        id: "correct",
+        keycap: 1,
+        label: "Correct them in place",
+        line: "",
+        cost: "",
+        recommended: true,
+      },
+      {
+        id: "refetch",
+        keycap: 2,
+        label: "Fetch the whole season again",
+        line: "",
+        cost: "",
+        recommended: false,
+      },
+      {
+        id: "leave",
+        keycap: 3,
+        label: "Leave them, and say so on the page",
+        line: "",
+        cost: "",
+        recommended: false,
+      },
+    ],
+    why: "",
+    after: [],
+    mockup: null,
+    multiple: false,
+    section: null,
+  },
+};
 
 /** What each task's newest session said last, flat: the Session tab's tail. */
 export const TAILS: Record<string, string[]> = {

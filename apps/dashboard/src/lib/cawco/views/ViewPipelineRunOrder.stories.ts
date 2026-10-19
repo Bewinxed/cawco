@@ -4,7 +4,12 @@
  * pane's width on a desk, and on a phone.
  */
 import PageRoom from "../project/preview/PageRoom.svelte";
-import { DATES, sessionNameOf, TASKS } from "../tasks/preview/tidewater";
+import {
+  DATES,
+  sessionNameOf,
+  sessionPlaceOf,
+  TASKS,
+} from "../tasks/preview/tidewater";
 import ViewPipelineRunOrder from "./ViewPipelineRunOrder.svelte";
 
 export default {
@@ -15,6 +20,7 @@ export default {
     dateOf: (id: string) => DATES[id] ?? null,
     hrefOf: (id: string) => `?task=${id}`,
     nameOf: sessionNameOf,
+    placeOf: sessionPlaceOf,
   },
 };
 

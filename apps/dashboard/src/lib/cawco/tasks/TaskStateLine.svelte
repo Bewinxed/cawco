@@ -1,12 +1,22 @@
 <script lang="ts">
   /**
    * PROPOSED: a task's state line drawn: led by the session's 18px tree
-   * mark (it echoes while it works) or a 16px Solar duotone mark, then the
-   * word in the label role in its status ink, then what it adds, muted,
-   * clipped at the line's end (the pane says it whole).
+   * mark (it echoes while it works) or a 16px mark, then the word in the
+   * label role in its status ink, then what it adds, muted, clipped at the
+   * line's end (the pane says it whole).
+   *
+   * Its status marks are solid Solar bold, never duotone (the failure-mark
+   * ruling, DESIGN.md's Solar icons line): a failure is `danger-circle` in
+   * the fail pair; a task that cannot go on is `forbidden-circle`, in the
+   * attn pair when it waits on you (Can't start) and muted when it waits on
+   * other tasks. A date is no status: its clock stays duotone.
    */
   import SessionMark from "#lib/cawco/SessionMark.svelte";
-  import { IconClock, IconLock, IconWarningTriangle } from "#lib/icons.js";
+  // Each glyph straight from Solar, as TreeMark takes its own: the icon
+  // registry is one module of every glyph, too heavy for a line's three.
+  import IconClock from "~icons/solar/clock-circle-bold-duotone";
+  import IconFailed from "~icons/solar/danger-circle-bold";
+  import IconBlocked from "~icons/solar/forbidden-circle-bold";
   import type { StateLine } from "./task-state-line";
 
   let {
@@ -26,12 +36,14 @@
 >
   {#if bare}
     <!-- The row's lead holds the mark. -->
+  {:else if line.kind === "session" && line.status === "fail"}
+    <IconFailed aria-hidden="true" class="mark fail" />
   {:else if line.kind === "session"}
     <SessionMark id={line.session} place={line.place} status={line.status} />
   {:else if line.kind === "cant"}
-    <IconWarningTriangle aria-hidden="true" class="mark attn" />
+    <IconBlocked aria-hidden="true" class="mark attn" />
   {:else if line.kind === "after"}
-    <IconLock aria-hidden="true" class="mark" />
+    <IconBlocked aria-hidden="true" class="mark" />
   {:else}
     <IconClock aria-hidden="true" class="mark" />
   {/if}
@@ -58,6 +70,9 @@
   }
   .state :global(.mark.attn) {
     color: var(--status-attn-glyph);
+  }
+  .state :global(.mark.fail) {
+    color: var(--status-fail-glyph);
   }
   .word {
     flex: none;
