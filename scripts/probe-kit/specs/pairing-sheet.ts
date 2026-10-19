@@ -28,6 +28,15 @@ import { type Kit, open, type Spec, settle } from "../kit";
 
 const STORIES = "src/lib/cawco/pairing/Pairing.stories.ts";
 const WIDTHS = [390, 680, 1440] as const;
+
+/**
+ * Every story of the sheet as a decision page's Preview draws it: the
+ * component canvas `by=embed` (stage-host canvas/runtime.ts), each story at
+ * rest, one under another at its own size up to the page's width, with
+ * none of the canvas's chrome, every frame under `scheme`.
+ */
+const drawn = (stage: string, scheme: "light" | "dark"): string =>
+  `${stage}/@cawco/canvas?file=${encodeURIComponent(STORIES)}&by=embed&scheme=${scheme}`;
 /** The fixtures' `verificationUriComplete`, as the hub makes one. */
 const PAYLOAD =
   "https://cawco.local/config/devices?code=JWK-HDQ&hub=7c1e9a52-4b3d-4f08-9d2e-61a0c8b5e3f4";
@@ -239,17 +248,11 @@ const spec: Spec = {
       kit.check("PROBE_STAGE names the workspace's stage", false);
       return;
     }
-    const url = `${stage}/@cawco/sheet?file=${encodeURIComponent(STORIES)}`;
     let total = 0;
     for (const theme of ["light", "dark"] as const) {
       // biome-ignore lint/performance/noAwaitInLoops: one theme at a time, each its own page
       const page = await kit.page("desk", { theme });
-      await open(page, url, READY);
-      // The stage drops the app's inline scripts; the theme is the root's class.
-      await page.evaluate(
-        (dark) => document.documentElement.classList.toggle("dark", dark),
-        theme === "dark"
-      );
+      await open(page, drawn(stage, theme), READY);
       for (const width of WIDTHS) {
         // biome-ignore lint/performance/noAwaitInLoops: one viewport at a time on one page
         await fit(page, width);
@@ -386,9 +389,7 @@ const IMPORT =
  * rest (node_modules, Vite's prebundles).
  */
 async function weigh(kit: Kit, stage: string): Promise<void> {
-  const page = await (
-    await fetch(`${stage}/@cawco/sheet?file=${encodeURIComponent(STORIES)}`)
-  ).text();
+  const page = await (await fetch(drawn(stage, "light"))).text();
   const queue = [...page.matchAll(/<script type="module" src="([^"]+)"/g)].map(
     (m) => m[1] as string
   );
