@@ -295,7 +295,7 @@
   data-sheet={sheet || undefined}
   data-slot="pin-card"
   aria-label={`Pin ${pin.number}`}
-  class="group/pin absolute z-2 flex flex-col gap-space-2 w-(--card-w) max-h-(--card-max) overflow-y-auto overscroll-contain p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline not-data-sheet:not-data-placed:top-space-2 not-data-sheet:not-data-placed:right-space-2 not-data-placed:data-sheet:start-0 data-sheet:end-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-(--sheet-max) data-sheet:border-x-0 data-sheet:border-b-0 data-sheet:rounded-b-none data-sheet:pb-(--sheet-pb)"
+  class="group/pin pointer-events-auto absolute z-2 motion-safe:animate-pin-card-in flex flex-col gap-space-2 w-(--card-w) max-h-(--card-max) overflow-y-auto overscroll-contain p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline not-data-sheet:not-data-placed:top-space-2 not-data-sheet:not-data-placed:right-space-2 not-data-placed:data-sheet:start-0 data-sheet:end-0 data-sheet:bottom-0 data-sheet:w-full data-sheet:max-h-7/10 data-sheet:border-x-0 data-sheet:border-b-0 data-sheet:rounded-b-none data-sheet:pb-(--sheet-pb)"
   data-pin-card={pin.number}
   data-placed={place ? "" : undefined}
   role="dialog"
@@ -305,11 +305,8 @@
   style:max-width={sheet ? undefined : `${Math.max(0, room.w - 2 * EDGE)}px`}
   style:--card-w="min(var(--c-pin-card-w), calc(100% - 16px))"
   style:--card-max="calc(100% - 16px)"
-  style:--sheet-max="70%"
   style:--sheet-pb="calc(var(--space-3) + env(safe-area-inset-bottom, 0px))"
-  style:--live-dot="8px"
-  style:--lh-normal="normal"
-  style:--field-fs="16px"
+  style:--field-fs="var(--text-input)"
   bind:offsetHeight={height}
   bind:offsetWidth={width}
 >
@@ -331,7 +328,7 @@
         <!-- Cut from its start, so the file's name and line stay. -->
         <span
           data-slot="source"
-          class="dir-rtl truncate text-left text-ink-muted font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal)"
+          class="dir-rtl truncate text-left text-ink-muted type-code"
           ><bdi>{source}</bdi></span
         >
       {/if}
@@ -426,7 +423,7 @@
               <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
                 {#each entry.files as file (file)}
                   <code
-                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg font-mono text-size-meta font-normal leading-(--lh-normal)"
+                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
                     >{file}</code
                   >
                 {/each}
@@ -479,112 +476,3 @@
     <AskHere asker={asks} at="delete" />
   </div>
 </div>
-
-<style>
-  /* residual: keyframes */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="pin-card"] {
-      animation: pin-card-in var(--dur-pop) var(--ease-out);
-    }
-  }
-  @keyframes pin-card-in {
-    from {
-      opacity: 0;
-      transform: translateY(var(--pop-rise)) scale(0.96);
-    }
-  }
-  .head {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  /* The one scroller: past the card's cap it gives up height, never the
-     head or the foot. The card itself scrolls only when the head and foot
-     alone outgrow its room (a phone's keyboard over a short well). It holds
-     what the rows place absolutely (a grouped speaker line's name, kept for
-     a screen reader), which otherwise stood on the card and made it scroll. */
-  .room {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  /* Squeezed (the head and foot alone outgrow the card): the thread keeps
-     its whole height inside the card's own scroll, never shrinking away. */
-  .room.whole {
-    flex-shrink: 0;
-  }
-  .foot {
-    display: flex;
-    flex-shrink: 0;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .anchor {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    flex-direction: column;
-  }
-  .name,
-  .source {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .name {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .source {
-    /* rtl only to put the ellipsis at the start; the line stays at the left. */
-    direction: rtl;
-    text-align: left;
-    color: var(--ink-muted);
-    font: var(--text-meta) var(--font-mono);
-  }
-  /* The rows keep the transcript's rhythm: a turn --space-4 under the one
-     before, its speaker line --space-2 over its words. The first turn starts
-     at the room's own top. */
-  .thread {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .entry:first-child > :global(.turn) {
-    margin-block-start: 0;
-  }
-  .files {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    margin: var(--space-1) 0 0;
-
-    & code {
-      min-width: 0;
-      overflow-wrap: anywhere;
-      padding: 0 var(--space-1);
-      border-radius: var(--radius-xs);
-      background: var(--code-bg);
-      font: var(--text-meta) var(--font-mono);
-    }
-  }
-  /* 16px on a phone, so iOS does not zoom the page into the field. */
-  .sheet :global(.field) {
-    font-size: 16px;
-  }
-  .error {
-    margin: 0;
-    color: var(--data-bad);
-    font-size: var(--text-meta);
-  }
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-</style>

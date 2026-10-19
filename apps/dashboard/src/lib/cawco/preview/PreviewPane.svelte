@@ -2079,13 +2079,15 @@
     data-slot="send"
     aria-busy={sending || undefined}
     aria-disabled={sending || undefined}
-    class="send touch-hit"
+    class="touch-hit"
     onclick={whileIdle(() => sending, sendPicks)}
     title="Send the page's picks to the session"
     type="button"
   >
     <PendingContent icon={IconSend} pending={sending} />
-    <span data-slot="send-label" class="send-label">Send picks</span>
+    <span data-slot="send-label" class="in-form-compact:hidden"
+      >Send picks</span
+    >
   </button>
 {/snippet}
 {#snippet sendMenu()}
@@ -2123,7 +2125,8 @@
   <button
     data-slot="other"
     aria-label="Undock"
-    class="other touch-hit"
+    class="touch-hit data-dimmed:opacity-50"
+    data-dimmed={(mode !== "interact" && !isCanvas) || undefined}
     disabled={!stage}
     onclick={() => giveBack(false)}
     title="Undock"
@@ -2186,7 +2189,7 @@
   <button
     aria-label={artifactWords.inspect}
     aria-pressed={inspectOpen}
-    class="inspect touch-hit"
+    class="touch-hit"
     onclick={() => showInspector(!inspectOpen)}
     title={artifactWords.inspectTitle}
     type="button"
@@ -2205,7 +2208,7 @@
 {#snippet modeBar()}
   <!-- The mode: Interact, Comment, Draw (V, C, D; Esc back to Interact),
        the kit's segmented control, its indicator on the chosen one. -->
-  <div class="modes">
+  <div data-slot="modes">
     <Tabs
       onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
       size="compact"
@@ -2275,7 +2278,7 @@
     >
       <Glyph />
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-48">
+    <DropdownMenu.Content align="end" width="compact">
       {@render modeMenu()}
     </DropdownMenu.Content>
   </DropdownMenu.Root>
@@ -2288,26 +2291,28 @@
     aria-expanded={listOpen}
     aria-haspopup="dialog"
     aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}`}
-    class="comments mark-line touch-hit"
+    class="mark-line touch-hit aria-expanded:bg-surface-pressed"
     onclick={() => showList(!listOpen)}
     title={pinsShown
       ? "Comments (⇧C hides the pins)"
       : "Comments (⇧C shows the pins)"}
     type="button"
   >
-    <IconChat /><span class="comments-label">Comments</span>
+    <IconChat /><span class="in-form-compact:hidden">Comments</span>
     {#if openCount > 0}
-      <span data-slot="count" class="count">{openCount}</span>
+      <span data-slot="count" class="min-w-(--c-count-digit)"
+        >{openCount}</span
+      >
     {/if}
     {#if !pinsShown}
       <!-- ⇧C hid the pins: said where the person looks for them. -->
-      <IconEyeClosed class="pins-hidden" />
+      <IconEyeClosed />
     {/if}
   </button>
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
-    <IconChat /><span>Comments</span>{#if openCount > 0}<span class="menu-count"
+    <IconChat /><span>Comments</span>{#if openCount > 0}<span class="ms-auto text-ink-muted num"
         >{openCount}</span
       >{/if}
   </DropdownMenu.Item>
@@ -2317,7 +2322,8 @@
   <button
     data-slot="other"
     aria-label="Reload"
-    class="other touch-hit"
+    class="touch-hit data-dimmed:opacity-50"
+    data-dimmed={(mode !== "interact" && !isCanvas) || undefined}
     onclick={reloadPage}
     title="Reload"
     type="button"
@@ -2400,7 +2406,7 @@
     data-slot="preview-pane"
     data-preview-inset
     aria-label={artifact?.name ?? "Preview"}
-    class="flex flex-col flex-1 min-h-0"
+    class="@container flex flex-col flex-1 min-h-0"
     bind:this={section}
   >
     <div
@@ -2412,9 +2418,6 @@
   </section>
 {:else}
   <SideSurface
-    class={["preview-pane", mode !== "interact" && !isCanvas && `mode-${mode}`]
-      .filter(Boolean)
-      .join(" ")}
     closeFailed={failure?.again === "close"}
     {closing}
     items={headItems}
@@ -2492,8 +2495,7 @@
         data-ready={!current || loaded || undefined}
         data-panel-inspector={(inspecting && inspectorLayout === "panel") ||
           undefined}
-        class="absolute inset-0 scheme-light data-[scheme=dark]:scheme-dark bg-(color:--frame-bg) block size-full border-none border-current opacity-0 transition-[opacity] dur-control ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
-        style:--frame-bg="Canvas"
+        class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-(color:--frame-ground) block size-full border-none border-current opacity-0 transition-[opacity] dur-control ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
         allow="clipboard-write"
         inert={!current}
@@ -2530,19 +2532,18 @@
       data-ready={((loaded || standing !== null) && !stageWaiting) || undefined}
       data-slot="cover"
       aria-hidden={stageWaiting ? undefined : "true"}
-      class="absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] dur-control ease-out data-ready:opacity-0 data-ready:[&_*]:animation-paused"
+      class="group/cover absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] dur-control ease-out data-ready:opacity-0"
       role={stageWaiting ? "status" : undefined}
     >
-      <!-- literal: 11px, 42% -->
       <span
         data-slot="block"
-        class="kit-skeleton block h-(--sk-h) w-(--sk-w) rounded-xs"
-        style:--sk-h="11px"
-        style:--sk-w="42%"
+        class="kit-skeleton block h-space-3 w-2/5 rounded-xs animate-wait-grace-in group-data-ready/cover:animation-held"
       ></span>
       {#if stageWaiting}
         <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
-        <p class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta">
+        <p
+          class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta animate-wait-grace-in group-data-ready/cover:animation-held"
+        >
           {stageWaiting}
         </p>
       {/if}
@@ -2568,8 +2569,7 @@
       ></div>
       <div
         data-slot="sheet-error"
-        class="absolute inset-x-space-3 bottom-space-3 grid gap-space-2 max-h-(--err-max) overflow-auto p-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-tile"
-        style:--err-max="60%"
+        class="absolute inset-x-space-3 bottom-space-3 grid gap-space-2 max-h-3/5 overflow-auto p-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-tile"
         role="alert"
         transition:appear
       >
@@ -2610,7 +2610,7 @@
             : sheetWords.serverDownLine}
         {/snippet}
         {#snippet action()}
-          <div class="down-actions">
+          <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
               label={sheetWords.tryAgain}
@@ -2636,7 +2636,11 @@
             {/if}
           </div>
           {#if staged.message && stageDetails}
-            <p id={stageDetailsId} data-slot="details" class="down-details">
+            <p
+              id={stageDetailsId}
+              data-slot="details"
+              class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
+            >
               {staged.message}
             </p>
           {/if}
@@ -2648,7 +2652,7 @@
     <!-- On its way past the time its stage is given: never an endless cover. -->
     <div
       data-slot="down"
-      class="down"
+      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
       data-never-drawn
       role="alert"
       transition:appear
@@ -2660,7 +2664,7 @@
           )}
         {/snippet}
         {#snippet action()}
-          <div class="down-actions">
+          <div class="flex flex-wrap items-center gap-space-2">
             <Button
               icon={IconRefresh}
               label={sheetWords.tryAgain}
@@ -2693,7 +2697,11 @@
             {/if}
           </div>
           {#if stageSaid && stageDetails}
-            <p id={stageDetailsId} data-slot="details" class="down-details">
+            <p
+              id={stageDetailsId}
+              data-slot="details"
+              class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
+            >
               {stageSaid}
             </p>
           {/if}
@@ -2780,6 +2788,7 @@
   <div
     data-slot="pin-room"
     class="absolute inset-0 pointer-events-none"
+    data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     bind:this={pinRoom}
     bind:clientHeight={roomH}
     bind:clientWidth={roomW}
@@ -2815,7 +2824,7 @@
   </div>
   {#if failure}
     <div
-      class="absolute inset-x-0 bottom-0 flex items-center gap-space-3 px-space-3 py-space-2 bg-surface-raised border-t border-t-border-hairline"
+      class="absolute inset-x-0 bottom-0 flex items-center gap-space-3 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
       role="alert"
       transition:appear
     >
@@ -2844,288 +2853,3 @@
     </div>
   {/if}
 {/snippet}
-
-<style>
-  /* Inset: the host's surface around it; the well is the panel's own
-     (SideSurface `.side-well`): the recess inside its hairline. */
-  /* A size container, as the side card is: what stands in its well keys on
-     the pane's width (the head's narrow line, a canvas's map). */
-  .preview-inset {
-    container-type: inline-size;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-block-size: 0;
-  }
-  .inset-well {
-    position: relative;
-    flex: 1;
-    min-block-size: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border-well);
-    border-radius: var(--radius-sm);
-    background: var(--surface-well);
-  }
-  /* The header's controls are the card's (SideSurface); in Comment and
-     Draw the ones that would leave the page wait. */
-  :global(.preview-pane:is(.mode-comment, .mode-draw) .other) {
-    opacity: 0.5;
-  }
-  /* The well is the card's (SideSurface). Comment and Draw turn the well's
-     own border the accent, 2px, inside its box: never a second ring round
-     it. Interact leaves it as the page's own. The ring eases in and out,
-     except while the split slides with motion: then the well's edges take
-     the slide's transition (SideSurface's own utilities), which this
-     rule's would otherwise outrank. The well is named by its own attribute,
-     and the slide reads it inside `:not()` (`:where()` keeps the weight of
-     `[data-split-sliding] *`): a mode or a slide coming or going restyles
-     the elements its rule's subject names, and `[data-slot="side-well"]`,
-     or a `*`, named every element of the pane. */
-  :global(.preview-pane [data-side-well]) {
-    outline: var(--focus-ring-width) solid transparent;
-    outline-offset: var(--focus-ring-inset);
-  }
-  :global(
-    .preview-pane
-      [data-side-well]:not(:where([data-split-sliding]) [data-side-well])
-  ) {
-    transition: outline-color var(--dur-control) var(--ease-in-out);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    :global(.preview-pane [data-side-well]) {
-      transition: outline-color var(--dur-control) var(--ease-in-out);
-    }
-  }
-  :global(.preview-pane:is(.mode-comment, .mode-draw) [data-side-well]) {
-    outline-color: var(--accent);
-    cursor: crosshair;
-  }
-  /* The mode's segmented control keeps its segments to their glyphs: each
-     name stays its accessible name and its title, never drawn. */
-  [data-slot="modes"]
-    :global([data-slot="ff-tab"] [data-slot="tab-item-label"]) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  /* The room the open pin's card stands in lets every press through to the
-     page but the card's own. */
-  [data-slot="pin-room"] > :global(*) {
-    pointer-events: auto;
-  }
-  .comments[aria-expanded="true"],
-  .inspect[aria-pressed="true"] {
-    /* The kit Toggle's on state: by day a step past the hover. */
-    background: var(--surface-pressed);
-  }
-  .count,
-  .comments :global(.pins-hidden) {
-    min-width: 1ch;
-    color: var(--ink-muted);
-  }
-  /* The Comments panel: the kit's popover surface, about a fifth of the
-     pane wide, at most the well's height less its gutter, the rows
-     scrolling inside it. */
-  :global(.pin-list-pop) {
-    inline-size: clamp(
-      var(--c-pin-list-min),
-      calc(var(--pin-list-pane) * var(--c-pin-list-share)),
-      min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))
-    );
-    max-block-size: min(
-      calc(var(--pin-list-room) - var(--space-4)),
-      var(--bits-popover-content-available-height, 100dvh)
-    );
-    padding: var(--space-2);
-    gap: 0;
-  }
-  /* The room the open pin's card stands in: the well's box, letting every
-     press through to the page but the card's own. */
-  .pin-room {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-
-    & > :global(*) {
-      pointer-events: auto;
-    }
-  }
-  /* The replacement's load releases the old paint independently of the overlay.
-     A frame's `prefers-color-scheme` follows its element's `color-scheme`: a
-     page or sheet hears the dashboard's theme (`data-scheme`), a preview
-     the light it always had. */
-  iframe {
-    position: absolute;
-    inset: 0;
-    color-scheme: light;
-    background: Canvas;
-    display: block;
-    width: 100%;
-    height: 100%;
-    border: 0;
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-
-    &[data-scheme="dark"] {
-      color-scheme: dark;
-    }
-  }
-  iframe.ready {
-    opacity: 1;
-  }
-  /* The canvas's stage (canvas/) stands over the well's whole box. */
-  .canvas-slot {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-  /* Covers the frame until it connects, holding one kit skeleton line. */
-  .cover {
-    position: absolute;
-    inset: 0;
-    padding: var(--space-5);
-    background: var(--surface-recess);
-    pointer-events: none;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  .cover.ready {
-    opacity: 0;
-  }
-  /* Nothing until the wait has lasted the grace (DESIGN.md's Real Wait
-     Rule): then the skeleton line and what the stage is doing fade up. */
-  .cover > * {
-    animation: kit-fade-in 1ms var(--dur-wait-grace) both;
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation-duration: var(--dur-fade);
-      animation-timing-function: var(--ease-out);
-    }
-  }
-  /* What a sheet's stage is doing while its page is on its way, under the cover's line. */
-  .cover-state {
-    margin: var(--space-3) 0 0;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-  /* A sheet that doesn't compile: its last render dimmed under the scrim,
-     the error's card at the well's foot, as the failure band stands. */
-  .sheet-dim {
-    position: absolute;
-    inset: 0;
-    background: var(--scrim);
-    pointer-events: none;
-  }
-  .sheet-error {
-    position: absolute;
-    inset-inline: var(--space-3);
-    bottom: var(--space-3);
-    display: grid;
-    gap: var(--space-2);
-    max-block-size: 60%;
-    overflow: auto;
-    padding: var(--space-3);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-
-    & p {
-      margin: 0;
-    }
-  }
-  .sheet-error-title {
-    color: var(--data-bad);
-    font-size: var(--text-body);
-    font-weight: var(--weight-strong);
-
-    & code {
-      font: var(--type-code);
-    }
-  }
-  .sheet-error-line,
-  .sheet-error-next {
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-  .sheet-error-frame {
-    margin: 0;
-    overflow-x: auto;
-    padding: var(--space-2);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-    font: var(--type-code);
-  }
-  /* A cover faded away is not loading: its sweep holds still. */
-  .cover.ready :global(*),
-  .cover.ready :global(*::after) {
-    animation-play-state: paused;
-  }
-  /* Nothing serves the page: the kit's empty state stands over the well, on
-     the well's own ground, at the column the page would have started on. */
-  .down {
-    position: absolute;
-    inset: 0;
-    overflow: auto;
-    padding-inline: var(--space-6);
-    background: var(--surface-well);
-  }
-  /* Try again, and beside it the session that serves the page; under it
-     when the pane is too narrow for both. */
-  .down-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  /* What the stage said, word for word, under its Show details: the figure
-     face in muted ink, a long machine path wrapping anywhere. */
-  .down-details {
-    margin: var(--space-2) 0 0;
-    color: var(--ink-muted);
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  /* What went wrong, over the foot of the frame, and the one thing to do
-     about it. */
-  .error {
-    position: absolute;
-    inset-inline: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-3);
-    background: var(--surface-raised);
-    border-top: 1px solid var(--border-hairline);
-
-    & p {
-      flex: 1;
-      min-width: 0;
-      margin: 0;
-      color: var(--data-bad);
-      font-size: var(--text-body);
-      font-weight: var(--weight-body);
-    }
-  }
-  /* Send picks and Comments in their narrowest form keep their glyphs (and
-     the count) and let their words go: the head's fit decides (side/head.ts,
-     words only on a 640px pane and only where they fit). */
-  :global([data-head-item][data-form="compact"]) .comments-label,
-  :global([data-head-item][data-form="compact"]) .send-label {
-    display: none;
-  }
-  /* Comments in More says its open count at the entry's end. */
-  .menu-count {
-    margin-inline-start: auto;
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-</style>
