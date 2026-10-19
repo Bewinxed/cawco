@@ -6,9 +6,9 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { agentReact } from "../packages/core/src/agent-react";
-import { refuseSchemeLowering } from "../packages/core/src/bundle-css-guard";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
 import { decisionHostAssets } from "../packages/core/src/decision-host";
+import { bundleOverlay } from "../packages/core/src/preview-proxy";
 
 export const PINNED_BUN = "1.4.3";
 export const TARGETS = [
@@ -102,19 +102,7 @@ export async function buildBinary(options: {
       "@cawco/dashboard",
       "build",
     ]);
-    const overlay = await Bun.build({
-      entrypoints: [
-        join(ROOT, "packages/agent/src/preview-overlay/overlay.ts"),
-      ],
-      target: "browser",
-      format: "iife",
-      minify: true,
-      outdir: work,
-    });
-    if (!overlay.success) {
-      throw new AggregateError(overlay.logs, "Overlay build failed");
-    }
-    await refuseSchemeLowering("The preview overlay", overlay.outputs);
+    await writeFile(join(work, "overlay.js"), await bundleOverlay());
   }
   const pi = packageDir("@earendil-works/pi-coding-agent", requireAgent);
   const requirePi = createRequire(join(pi, "package.json"));

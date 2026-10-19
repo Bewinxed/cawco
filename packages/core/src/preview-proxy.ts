@@ -19,10 +19,19 @@ let overlay: Promise<string> | undefined;
  * standalone binary carries it prebuilt (`build-binary.ts`); a source
  * checkout bundles the agent's overlay on first request.
  */
-async function buildOverlay(): Promise<string> {
+function buildOverlay(): Promise<string> {
   if (standalone) {
     return Bun.file(embeddedFile("preview/overlay.js")).text();
   }
+  return bundleOverlay();
+}
+
+/**
+ * The overlay's one build: the agent's overlay.ts as a minified browser IIFE,
+ * refused if it lowers `light-dark()`. A source checkout serves it in memory
+ * ({@link buildOverlay}); `build-binary.ts` writes it out to embed.
+ */
+export async function bundleOverlay(): Promise<string> {
   const result = await Bun.build({
     entrypoints: [
       new URL("../../agent/src/preview-overlay/overlay.ts", import.meta.url)
