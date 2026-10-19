@@ -1345,11 +1345,6 @@
     max-block-size: var(--ask-max, none);
     padding: var(--space-3) var(--space-3) var(--space-2);
   }
-  /* The card sizes its own parts: the settings well turns into a grid
-     only where the card itself has room for it. */
-  .hitl {
-    container: ask / inline-size;
-  }
 
   /* The head: Caw's face, who asks and where. The asker gives way first
      (The Truncate Inside Rule); the place or the clock keeps its words. */
@@ -1367,8 +1362,11 @@
     font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
+  /* Flex shares a shortfall by each item's width times its shrink: at one
+     each, the project chip and the place gave up room beside a long asker,
+     "2 of 3" a word a line. The asker's weight makes it give way first. */
   .head > :global(.asker) {
-    flex: 0 1 auto;
+    flex: 0 100 auto;
     min-inline-size: 0;
   }
   .head > :global(.project) {
@@ -1715,7 +1713,9 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Where it stands among the asks keeps its words on one line. */
   h2 :global(.place) {
+    flex: none;
     margin-inline-start: auto;
   }
   /* The minimize chevron ends the title row, in the title's muted ink; it
@@ -1810,7 +1810,13 @@
   /* The settings, shown rather than disclosed: each key over its value,
      side by side where the card has room. Before in muted ink, after in
      strong; the card's own scroll is the one scroller. */
+  /* The well is the size container its rows read, not the card: size
+     containment gives a box no width of its own, so on the card it let any
+     parent that sets the card at its own width (a canvas frame for a story
+     with no form) draw it at nothing, a sentence a word a line. The well is
+     a block in the card's body and always fills it. */
   .well {
+    container: well / inline-size;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -1825,7 +1831,10 @@
     gap: var(--space-1);
     min-inline-size: 0;
 
-    @container ask (inline-size >= 560px) {
+    /* Side by side where the card is 560px or wider (report 1): the well's
+       content box is the card's less the card's and the well's inline
+       padding, --space-3 (11px) a side each: 560 − 4 × 11. */
+    @container well (inline-size >= 516px) {
       display: grid;
       grid-template-columns: 12ch minmax(0, 1fr);
       gap: var(--space-3);

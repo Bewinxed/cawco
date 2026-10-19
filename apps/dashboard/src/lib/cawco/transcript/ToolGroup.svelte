@@ -71,6 +71,8 @@
     isVideo(path) ? machineMedia(machineId, sidecarOf(path)) : undefined;
   /** A captions file sent with no video of its own: a file, not a picture. */
   const CAPTIONS_FILE = /\.vtt$/i;
+  /** The hub's own MCP server, as a tool's name carries it (`mcp__cawco__…`). */
+  const HUB_SERVER = "cawco";
   /** A lone captions file's text, read once per URL, for its file row. */
   const captionTexts = new Map<string, Promise<string>>();
   const captionText = (url: string): Promise<string> => {
@@ -231,9 +233,12 @@
       (meta.toolInput ?? undefined) as Record<string, unknown> | undefined,
       asString(meta.toolResult),
       (meta.toolStatus ?? "pending") as ToolCallStatus,
+      // The hub's own server is no fleet server: it has no host to look up.
       (server) =>
-        mcpServerHost(cawco.session(m.instanceId)?.mcp ?? null, server) ??
-        mcpServerHost(fleetMcpServers(), server),
+        server === HUB_SERVER
+          ? undefined
+          : (mcpServerHost(cawco.session(m.instanceId)?.mcp ?? null, server) ??
+            mcpServerHost(fleetMcpServers(), server)),
       meta.toolDiff
     );
   }
