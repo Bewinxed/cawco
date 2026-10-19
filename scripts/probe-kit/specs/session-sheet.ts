@@ -87,7 +87,8 @@
  * emulation off so a frame hears its element's `color-scheme`:
  *
  * 18. The panel head (side/head.ts `standing`, DESIGN.md Artifact panel):
- *     at the desk every control stands whole, in head order, with no More;
+ *     at the desk, the canvas's name short of the 120px it keeps, every
+ *     control stands whole, in head order, with no More;
  *     at 390 the mode stands as its one button, More stands before Close,
  *     and More's menu holds the controls that went to it, in head order.
  * 19. The sidebar's theme switch, with no reload, turns the canvas frame's
@@ -538,10 +539,14 @@ const HEAD_ORDER = [
 const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
 const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/;
 
-/** The head as drawn: each control's key, whether it stands, its form, its name; then whether More and Close stand, More before Close. */
+/** The head as drawn: its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, its name; then whether More and Close stand, More before Close. */
 const headOf = (page: Page) =>
   page.evaluate((pane) => {
-    const head = document.querySelector(`${pane} [data-slot="side-head"]`);
+    const head = document.querySelector<HTMLElement>(
+      `${pane} [data-slot="side-head"]`
+    );
+    const style = head ? getComputedStyle(head) : null;
+    const lead = head?.querySelector(":scope > .identity > *");
     const items = [
       ...(head?.querySelectorAll<HTMLElement>(":scope > [data-head-item]") ??
         []),
@@ -564,6 +569,13 @@ const headOf = (page: Page) =>
       ':scope > [data-slot="close"]'
     );
     return {
+      room:
+        head && style
+          ? head.clientWidth -
+            Number.parseFloat(style.paddingInlineStart) -
+            Number.parseFloat(style.paddingInlineEnd)
+          : null,
+      name: lead ? Math.round(lead.getBoundingClientRect().width) : null,
       items,
       more: !!more,
       moreBeforeClose:
@@ -640,21 +652,32 @@ const scaled = (transform: string, to: number) => {
   return Math.abs(Number(x) - to) < 0.001 && Math.abs(Number(y) - to) < 0.001;
 };
 
-/** The canvas's name and `about` in leg 23: words no other text in the panel holds. */
-const PANEL_NAME = "probe-panel-card";
-const PANEL_ABOUT = "The card in its panel, at every width";
+/**
+ * The canvas's name and description in legs 18 and 23: words no other text
+ * in the panel holds. The name is short on purpose: its trigger (glyph, name,
+ * chevron) stays under side/head.ts `NAME_KEEPS` (120px), the room leg 18's
+ * desk claim stands on. At a 523px pane the head's room is 509px; every
+ * control whole needs the name's width + 392px, so a name at the cap leaves
+ * the mode 3px short (1ab897290's "probe-panel-card" did), and "pcard"'s
+ * 92px leaves 25px to spare.
+ */
+const PANEL_NAME = "pcard";
+/** The description the panel's artifact is made with: the head's line under the name reads it (leg 23). */
+const PANEL_DESCRIPTION = "The card in its panel, at every width";
 
-/** Leg 23's read: the head's line under the name and where it stands, and the name and any route across the panel and its canvas page. */
+/** Leg 23's read: the head's line under the name and where it stands, and the name and any route across the rendered text of the panel and its canvas page. */
 async function describedOf(page: Page) {
   const outer = await page
     .locator(PANE)
     .first()
     .evaluate((pane, name) => {
-      const card = pane.closest('[data-slot="side-card"]') ?? pane;
+      const card = (pane.closest('[data-slot="side-card"]') ??
+        pane) as HTMLElement;
       const line = card.querySelector<HTMLElement>('[data-slot="subtitle"]');
       const box = line?.getBoundingClientRect();
       const edge = card.getBoundingClientRect();
-      const text = card.textContent ?? "";
+      // What is drawn, not what is hidden (a control in More, a band's hidden name).
+      const text = card.innerText;
       return {
         line: line?.textContent ?? null,
         tooltip: line?.title ?? null,
@@ -674,7 +697,19 @@ async function describedOf(page: Page) {
   )?.contentFrame();
   const inner = frame
     ? await frame.evaluate((name) => {
-        const text = `${document.body.innerText}\n${document.getElementById("cawco-chrome")?.shadowRoot?.textContent ?? ""}`;
+        // The chrome's shadow root has no innerText: its drawn text nodes, so
+        // the band's name and about, hidden in a frame (chrome.ts), count none.
+        const root = document.getElementById("cawco-chrome")?.shadowRoot;
+        const shown: string[] = [];
+        if (root) {
+          const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+            if (node.parentElement?.checkVisibility()) {
+              shown.push(node.textContent ?? "");
+            }
+          }
+        }
+        const text = `${document.body.innerText}\n${shown.join("\n")}`;
         return {
           names: text.split(name).length - 1,
           route: text.includes("/@cawco/"),
@@ -684,15 +719,25 @@ async function describedOf(page: Page) {
   return { ...outer, frame: inner };
 }
 
-/** Leg 23 holds for one read: the about under the name, one line inside the panel, the name once, no route. */
-const describedWell = (read: Awaited<ReturnType<typeof describedOf>>) =>
-  read.line === PANEL_ABOUT &&
-  read.tooltip === PANEL_ABOUT &&
-  read.inside &&
-  read.oneLine &&
-  read.names + (read.frame?.names ?? 1) === 1 &&
-  !read.route &&
-  read.frame?.route === false;
+/** What leg 23 finds wrong in one read, each as what it compared (none: it holds): the description under the name, one line inside the panel, the name once across panel and page, no route. */
+const describedWrong = (read: Awaited<ReturnType<typeof describedOf>>) => {
+  const names = read.names + (read.frame?.names ?? 0);
+  return [
+    read.line === PANEL_DESCRIPTION
+      ? ""
+      : `line ${JSON.stringify(read.line)} is not ${JSON.stringify(PANEL_DESCRIPTION)}`,
+    read.tooltip === PANEL_DESCRIPTION
+      ? ""
+      : `tooltip ${JSON.stringify(read.tooltip)} is not ${JSON.stringify(PANEL_DESCRIPTION)}`,
+    read.inside ? "" : "line outside the panel",
+    read.oneLine ? "" : "line on more than one line",
+    read.frame ? "" : "no canvas frame to read",
+    names === 1
+      ? ""
+      : `name ${read.names} in the panel + ${read.frame?.names ?? "?"} in the page = ${names}, not 1`,
+    read.route || read.frame?.route ? "a route stands" : "",
+  ].filter(Boolean);
+};
 
 /** Legs 18 to 24: the first session's card in its panel on the dashboard. */
 async function panelLegs(
@@ -707,7 +752,7 @@ async function panelLegs(
     kind: "component",
     name: PANEL_NAME,
     file: STORY,
-    about: PANEL_ABOUT,
+    about: PANEL_DESCRIPTION,
   });
   await desk
     .locator(`${FRAME}[data-ready]`)
@@ -835,8 +880,17 @@ async function panelLegs(
   kit.check(
     "23: at the desk and at 390 the line under the name is the canvas's about, one line inside the panel and whole in its tooltip; the name stands once across the panel and its page, and no text holds /@cawco/",
     Object.keys(described).length === 3 &&
-      Object.values(described).every(describedWell),
-    JSON.stringify(described)
+      Object.values(described).every(
+        (read) => describedWrong(read).length === 0
+      ),
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries(described).map(([at, read]) => [
+          at,
+          { wrong: describedWrong(read), ...read },
+        ])
+      )
+    )
   );
 
   // 24. The hub's map of the canvas, read as the panel's Map reads it.
