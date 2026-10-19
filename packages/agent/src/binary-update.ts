@@ -40,6 +40,7 @@ import {
 import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
+  type KeptProcess,
   mergeHolds,
   type RestartHold,
   type RestartReadiness,
@@ -62,6 +63,7 @@ import {
 import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { leaveRetiringKeepers } from "./boundary";
 import {
@@ -72,8 +74,13 @@ import {
   removeFinishedHelpers,
 } from "./helper-jobs";
 import { provenFetch } from "./hub-proof";
-import { keeperJob, keeperJobsHere } from "./keeper-jobs";
-import { withKeepers } from "./keepers";
+import { KeeperKept, keeperJob, keeperJobsHere } from "./keeper-jobs";
+import {
+  type KeeperConnection,
+  type UnansweredKeeper,
+  withEachKeeper,
+  withKeepers,
+} from "./keepers";
 import { runBinaryPins } from "./pin-record";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions } from "./sessiond-client";
@@ -161,30 +168,49 @@ export const reportBinaryUpdate = (state: BinaryUpdateState): void => {
   latest = state;
 };
 
-/** Each session keeper there, current and retiring: its held sessions, what it speaks, and every live child it holds. */
-const readKeepers = (): Promise<
-  {
-    capabilities: readonly string[];
-    current: boolean;
-    endpoint: string;
-    /** Its sessions: what an update the new agent cannot speak to it would wait on. */
-    held: number;
-    keeper: KeeperName;
-    /** Every live child, a session, a workspace's boundary or an OpenCode server: what it must be rid of before it goes. */
-    live: number;
-  }[]
-> =>
-  withKeepers((keepers) =>
-    Promise.resolve(
-      keepers.map(({ client, current, endpoint, keeper }) => ({
-        capabilities: client.capabilities,
-        current,
-        endpoint,
-        held: heldSessions(client.procs),
-        keeper,
-        live: client.procs.filter((proc) => proc.alive).length,
-      }))
-    )
+/** One session keeper as it answered: its held sessions, what it speaks, and every live child it holds. */
+interface KeeperReading {
+  capabilities: readonly string[];
+  /** The pids of its live children, as its register lists them: what its unit's stop may reach besides the keeper. */
+  children: number[];
+  current: boolean;
+  endpoint: string;
+  /** Its sessions: what an update the new agent cannot speak to it would wait on. */
+  held: number;
+  keeper: KeeperName;
+  /** Every live child, a session, a workspace's boundary or an OpenCode server: what it must be rid of before it goes. */
+  live: number;
+}
+
+const readingOf = ({
+  client,
+  current,
+  endpoint,
+  keeper,
+}: KeeperConnection): KeeperReading => ({
+  capabilities: client.capabilities,
+  children: client.procs.filter((proc) => proc.alive).map((proc) => proc.pid),
+  current,
+  endpoint,
+  held: heldSessions(client.procs),
+  keeper,
+  live: client.procs.filter((proc) => proc.alive).length,
+});
+
+/** Every session keeper there, current and retiring, as each answered; one that could not be read makes it unknown ({@link withKeepers}). */
+const readKeepers = (): Promise<KeeperReading[]> =>
+  withKeepers((keepers) => Promise.resolve(keepers.map(readingOf)));
+
+/**
+ * Each session keeper there by its own reading ({@link withEachKeeper}):
+ * those that answered, and those that could not be read, each left as it is.
+ */
+const readEachKeeper = (): Promise<{
+  answered: KeeperReading[];
+  unanswered: UnansweredKeeper[];
+}> =>
+  withEachKeeper((answered, unanswered) =>
+    Promise.resolve({ answered: answered.map(readingOf), unanswered })
   );
 
 /**
@@ -497,6 +523,42 @@ export class BinaryUpdater {
   }
 
   /**
+   * The keeper watchdog leaves wedged keeper `version` as it is while its
+   * unit holds `kept` (agent keeper-watchdog.ts), or (`kept` undefined) no
+   * longer does: it answers again, or its restart goes ahead. Written to the
+   * state at once, not at the updater's next look (#tendKeepers, which names
+   * a keeper that gives no welcome `notAnswering`): the current keeper's as
+   * `sessiondKept`, a retiring one's on its `retiringKeepers` entry,
+   * `sessions` the children it held when it went quiet.
+   */
+  async noteKeeperKept(
+    version: string,
+    current: boolean,
+    sessions: number,
+    kept: KeptProcess[] | undefined
+  ): Promise<void> {
+    if (kept) {
+      this.#wedgedKept.set(version, { current, kept, sessions });
+    } else if (!this.#wedgedKept.delete(version)) {
+      return;
+    }
+    const said = (this.#state.retiringKeepers ?? []).map(
+      ({ version: name, sessions: held, notAnswering }) => ({
+        version: name,
+        sessions: held,
+        ...(notAnswering ? { notAnswering } : {}),
+      })
+    );
+    const unsaid = [...this.#wedgedKept]
+      .filter(
+        ([name, wedged]) =>
+          !(wedged.current || said.some((one) => one.version === name))
+      )
+      .map(([name, wedged]) => ({ version: name, sessions: wedged.sessions }));
+    await this.#setChanged(this.#keepersSaid([...said, ...unsaid]));
+  }
+
+  /**
    * Every ten seconds: take up what the helper wrote, so the hub learns the
    * phase has moved on; see that an open trial has a decider; on a build no
    * trial is deciding, keep the service wrapper as this build writes it; hand
@@ -574,6 +636,59 @@ export class BinaryUpdater {
   readonly #emptySince = new Map<string, number>();
   /** Each keeper job's first look at which no keeper ran from it, by its service name. */
   readonly #idleJobSince = new Map<string, number>();
+  /** The last refusal said for each keeper job kept for what its unit holds ({@link KeeperKept}), by its service name: said again only when it changes. */
+  readonly #keptSaid = new Map<string, string>();
+  /** What keeps each retiring keeper whose removal was refused ({@link KeeperKept}), by its build. */
+  readonly #retireKept = new Map<string, KeptProcess[]>();
+  /** What keeps each wedged keeper the watchdog leaves as it is ({@link noteKeeperKept}), by its build. */
+  readonly #wedgedKept = new Map<
+    string,
+    { current: boolean; kept: KeptProcess[]; sessions: number }
+  >();
+
+  /**
+   * The keepers' part of the state: each retiring keeper with what keeps it,
+   * when anything does (the watchdog's word first: a wedged keeper is not
+   * retired either), and what keeps the current keeper, wedged.
+   */
+  #keepersSaid(
+    retiring: Omit<RetiringKeeper, "kept">[]
+  ): Pick<BinaryUpdateState, "retiringKeepers" | "sessiondKept"> {
+    const current = [...this.#wedgedKept.values()].find(
+      (wedged) => wedged.current
+    );
+    return {
+      retiringKeepers:
+        retiring.length > 0
+          ? retiring.map((keeper): RetiringKeeper => {
+              const kept =
+                this.#wedgedKept.get(keeper.version)?.kept ??
+                this.#retireKept.get(keeper.version);
+              return kept ? { ...keeper, kept } : keeper;
+            })
+          : undefined,
+      sessiondKept: current?.kept,
+    };
+  }
+
+  /**
+   * A keeper job's stop that failed: a refusal for what its unit holds is
+   * said once for as long as it holds the same, and tried again on the next
+   * look; any other failure is said every time.
+   */
+  #stopFailed(service: string, error: unknown): void {
+    if (!(error instanceof KeeperKept)) {
+      logFailure(error);
+      return;
+    }
+    if (this.#keptSaid.get(service) === error.message) {
+      return;
+    }
+    this.#keptSaid.set(service, error.message);
+    console.warn(
+      `[update] an old session keeper is kept: ${error.message}; it is tried again on each look`
+    );
+  }
 
   /**
    * THE KEEPERS BESIDE THE CURRENT ONE GO WHEN THEY HOLD NOTHING
@@ -591,41 +706,73 @@ export class BinaryUpdater {
     if (!helper) {
       await this.#retireKeepers();
     }
-    await this.#sayRetiring(
-      (await readKeepers())
-        .filter(
-          ({ current, keeper }) =>
-            !(
-              current ||
-              (keeper.kind === "build" && keeper.version === helper?.version)
-            )
-        )
-        .map(({ keeper, live }) => ({
-          version: keeper.version,
-          sessions: live,
-        }))
-    );
+    const { answered, unanswered } = await readEachKeeper();
+    const retiring = ({
+      current,
+      keeper,
+    }: {
+      current: boolean;
+      keeper: KeeperName;
+    }) =>
+      !(
+        current ||
+        (keeper.kind === "build" && keeper.version === helper?.version)
+      );
+    for (const { endpoint, live } of answered) {
+      this.#lastLive.set(endpoint, live);
+    }
+    await this.#sayKeepers([
+      ...answered.filter(retiring).map(({ keeper, live }) => ({
+        version: keeper.version,
+        sessions: live,
+      })),
+      ...unanswered.filter(retiring).map(({ endpoint, keeper }) => ({
+        version: keeper.version,
+        sessions: this.#lastLive.get(endpoint) ?? 0,
+        notAnswering: true as const,
+      })),
+    ]);
   }
+
+  /** Each keeper's live children as it last answered, by its endpoint: what the state says of it while it does not. */
+  readonly #lastLive = new Map<string, number>();
 
   /**
    * Each retiring keeper that has held no live child for
    * {@link RETIRING_EMPTY_MS} is removed (its job ends and leaves the machine;
    * keeper-jobs.ts), and what no process runs any more is pruned. One holding
-   * anything is never signalled. The machine's endpoint is made to name the
+   * anything is never signalled, and neither is one whose unit holds a
+   * process that is not its own: its stop is refused ({@link KeeperKept}),
+   * said, and tried again on the next look. The machine's endpoint is made to name the
    * keeper the `keeper` link names, once that one answers, should a handover
    * have stopped between the two. Only while no update helper runs.
+   *
+   * EACH KEEPER IS TENDED BY ITS OWN READING ({@link readEachKeeper}). A
+   * keeper that gives no welcome is left exactly as it is, never read as
+   * holding nothing, and the state names it not answering; every other is
+   * removed on what it alone says. One reading of every keeper at once held
+   * all of them: while any one was not read, none was removed, and a keeper
+   * the watchdog leaves wedged (keeper-watchdog.ts, its unit holding a
+   * process not its own) kept every other old keeper for good.
    */
   async #retireKeepers(): Promise<void> {
-    const keepers = await readKeepers();
+    const { answered: keepers, unanswered } = await readEachKeeper();
     const link = await readKeeperVersion();
     const named = keepers.find(
       ({ keeper }) => keeper.kind === "build" && keeper.version === link
     );
-    // The machine's endpoint names no keeper that answers (a symlink left
+    for (const { endpoint } of unanswered) {
+      this.#emptySince.delete(endpoint);
+    }
+    // The machine's endpoint names no keeper that is there (a symlink left
     // dangling, a path removed): it names the link's again. One that names a
-    // live keeper is left alone, even ahead of the link: that is a handover
-    // half-done, which the next one finishes (#advanceKeeper).
-    if (named && !keepers.some((keeper) => keeper.current)) {
+    // keeper that is there, answering or not, is left alone, even ahead of
+    // the link: that is a handover half-done, which the next one finishes
+    // (#advanceKeeper), or a keeper the watchdog's to tend.
+    if (
+      named &&
+      ![...keepers, ...unanswered].some((keeper) => keeper.current)
+    ) {
       await publishKeeper(named.endpoint).then(
         () =>
           console.info(
@@ -642,9 +789,19 @@ export class BinaryUpdater {
       await leaveRetiringKeepers().catch(logFailure);
     }
     let removed = false;
+    for (const kept of this.#retireKept.keys()) {
+      if (
+        ![...retiring, ...unanswered].some(
+          ({ keeper }) => keeper.version === kept
+        )
+      ) {
+        this.#retireKept.delete(kept);
+      }
+    }
     for (const keeper of retiring) {
       if (keeper.live > 0) {
         this.#emptySince.delete(keeper.endpoint);
+        this.#retireKept.delete(keeper.keeper.version);
         continue;
       }
       const since = this.#emptySince.get(keeper.endpoint) ?? Date.now();
@@ -654,15 +811,20 @@ export class BinaryUpdater {
       }
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one keeper at a time, each removal said in its order
-        await keeperJob(keeper.keeper)?.remove();
+        await keeperJob(keeper.keeper)?.remove({ children: keeper.children });
         await rm(keeper.endpoint, { force: true });
         this.#emptySince.delete(keeper.endpoint);
+        this.#keptSaid.delete(keeperService(keeper.keeper));
+        this.#retireKept.delete(keeper.keeper.version);
         removed = true;
         console.info(
           `[update] the retiring session keeper ${keeper.keeper.version} holds nothing and is gone`
         );
       } catch (error) {
-        logFailure(error);
+        if (error instanceof KeeperKept) {
+          this.#retireKept.set(keeper.keeper.version, [...error.foreign]);
+        }
+        this.#stopFailed(keeperService(keeper.keeper), error);
       }
     }
     // What a keeper that is gone left: a file nothing answers on now. Asked at
@@ -693,7 +855,7 @@ export class BinaryUpdater {
     );
     if (
       await this.#removeIdleJobs(
-        keepers.map(({ keeper }) => keeper),
+        [...keepers, ...unanswered].map(({ keeper }) => keeper),
         link
       )
     ) {
@@ -710,18 +872,18 @@ export class BinaryUpdater {
    * update helper wrote (`cawco binary-units`) for a keeper it then left where
    * it was, a handover's whose keeper never started, or one whose keeper ended
    * by itself. It is removed once it has been so for {@link RETIRING_EMPTY_MS}.
-   * Kept: every keeper that answers (`answering`), the build the `keeper` link
-   * names, and the keeper the machine's endpoint names, answering or not (one
-   * its service manager is starting again). Whether anything was removed.
+   * Kept: every keeper there, answering or not (`there`), the build the
+   * `keeper` link names, and the keeper the machine's endpoint names (one its
+   * service manager is starting again). Whether anything was removed.
    */
   async #removeIdleJobs(
-    answering: KeeperName[],
+    there: KeeperName[],
     link: string | undefined
   ): Promise<boolean> {
     const machine = await currentKeeper();
     const kept = new Set(
       [
-        ...answering,
+        ...there,
         ...(link ? [{ kind: "build", version: link } as const] : []),
         ...(machine ? [machine.keeper] : []),
       ].map(keeperService)
@@ -739,39 +901,38 @@ export class BinaryUpdater {
         continue;
       }
       try {
-        await job.remove();
+        // No keeper runs from it: nothing in its unit is a keeper's child.
+        await job.remove({ children: [] });
         this.#idleJobSince.delete(job.service);
+        this.#keptSaid.delete(job.service);
         removed = true;
         console.info(
           `[update] ${job.name}: no session keeper runs from it, and it is removed`
         );
       } catch (error) {
-        logFailure(error);
+        this.#stopFailed(job.service, error);
       }
     }
     return removed;
   }
 
   /**
-   * The retiring keepers in the state, written only when they changed, and
-   * never over a pass's state that only memory holds. Laid over the state as
-   * the file holds it at the write: an update helper writes the file while it
-   * hands a keeper over and decides its trial (its `installed` among it), and
-   * what it wrote is never written back over.
+   * The retiring keepers in the state, each with what keeps it, and what
+   * keeps the current one ({@link #keepersSaid}): written only when they
+   * changed, and never over a pass's state that only memory holds. Laid over
+   * the state as the file holds it at the write: an update helper writes the
+   * file while it hands a keeper over and decides its trial (its `installed`
+   * among it), and what it wrote is never written back over.
    */
-  async #sayRetiring(retiring: RetiringKeeper[]): Promise<void> {
-    const next = retiring.length > 0 ? retiring : undefined;
+  async #sayKeepers(retiring: Omit<RetiringKeeper, "kept">[]): Promise<void> {
     if (this.#running) {
       return;
     }
     await this.#load();
-    if (
-      this.#running ||
-      JSON.stringify(next) === JSON.stringify(this.#state.retiringKeepers)
-    ) {
+    if (this.#running) {
       return;
     }
-    await this.#set({ retiringKeepers: next });
+    await this.#setChanged(this.#keepersSaid(retiring));
   }
 
   /**
@@ -1093,7 +1254,9 @@ export class BinaryUpdater {
     try {
       await writeStateFile(archive, bytes);
       // On macOS the signed CawCo Agent.app, exactly as the release signed it.
-      await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} ${ARCHIVE_ENTRY}`.quiet();
+      await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} ${ARCHIVE_ENTRY}`
+        .env(hostEnvironment())
+        .quiet();
       const binary = join(work, EXECUTABLE_IN_VERSION);
       const extracted = await Bun.file(binary).bytes();
       if (
@@ -1105,7 +1268,7 @@ export class BinaryUpdater {
           "The extracted binary does not match the signed manifest"
         );
       }
-      await Bun.$`chmod 700 ${binary}`.quiet();
+      await Bun.$`chmod 700 ${binary}`.env(hostEnvironment()).quiet();
       await writeJsonAtomic(join(work, "release.json"), manifest);
       await writeJsonAtomic(join(work, "release.signature.json"), {
         signature: release.signature,

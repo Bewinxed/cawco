@@ -15,15 +15,21 @@
    *   session's to continue or discard, never yours (hub work-items.ts
    *   `heldNotice`).
    * - Repository: read from the folder's remote, said so.
+   * - Large files: each origin's own LFS, or where the project declared
+   *   they live, bound to a connection with a key (hub project-edit.ts).
    * - Work lands: where its attempts land when their task says nothing.
    * - Landing checks: the steps the hub runs before work lands, read from
    *   the project folder's gate.md (`GET /api/projects/:id/gate`), with a
    *   link to edit the file.
    * - Tasks: where they live (WORDS.md: tracker). CawCo's files alone, or
    *   GitHub Issues or Linear through a connection, on one repository or
-   *   team: picked, then bound with Use. Bound, it names the target, the
-   *   connection, how many tasks are linked and how its sync stands, the
-   *   tracker's refusal in its words with Try again.
+   *   team: picked, then bound with Use. With GitHub, a GitHub Project too
+   *   (the one linked to the repository first), and each stage's option of
+   *   its Status field (the one named as the stage first): its open stages
+   *   then show on GitHub, which an issue's open and closed cannot carry.
+   *   Bound, it names the target, the connection, how many tasks are linked
+   *   and how its sync stands, the tracker's refusal in its words with Try
+   *   again, and the GitHub Project, or GitHub's words for why there is none.
    * - Caw: his lead switch (CawLeadSwitch), its ways off with it.
    * - Review before done.
    *
@@ -36,11 +42,14 @@
   import {
     type ConnectionView,
     type DeclaredStep,
+    type GithubProjectChoice,
     type IssueTracker,
     LANDS_MODES,
     type LandsMode,
+    lfsWords,
     machineLabel,
     type ProjectGate,
+    statusOptionFor,
     TRACKER_NAMES,
     type Tracker,
     type TrackerBindingView,
@@ -54,6 +63,7 @@
     editProject,
     type Machine,
     type ProjectRow,
+    readConnections,
     removeProjectPlace,
   } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -61,7 +71,9 @@
   import OsMark from "#lib/cawco/OsMark.svelte";
   import {
     folderFileHref,
+    githubProjects,
     readGate,
+    readStages,
     readTracker,
     send,
     setTracker,
@@ -223,6 +235,21 @@
     picking ?? tracker?.tracker ?? "cawco"
   );
 
+  /** GitHub: the Projects the connection reaches for the repository picked; null while they are read. */
+  let ghProjects = $state<GithubProjectChoice[] | null>(null);
+  /** GitHub's words when the connection may not read the owner's Projects. */
+  let ghRefused = $state<string | null>(null);
+  let ghFault = $state<string | null>(null);
+  /** The Project picked: its id, or "" for none. */
+  let pickProject = $state("");
+  /** The project's stages, by name, in its order: each takes a Status option. */
+  let stageNames = $state<string[]>([]);
+  /** Each stage's Status option picked; null leaves Status alone. */
+  let statusMap = $state<Record<string, string | null>>({});
+  const chosenProject = $derived(
+    ghProjects?.find((each) => each.id === pickProject)
+  );
+
   onMount(() => {
     readTracker(project.id).then(
       (read) => {
@@ -265,6 +292,63 @@
         "";
     } catch (error) {
       targetsFault = failureWords(error);
+      return;
+    }
+    await readProjects(connection, pickTarget);
+  }
+
+  /** Each stage's Status option for a Project: as bound when it is the bound one, else the option named as the stage. */
+  function mapFor(id: string): void {
+    const choice = ghProjects?.find((each) => each.id === id);
+    const bound =
+      tracker?.binding?.githubProject?.id === id
+        ? tracker.binding.githubProject.map
+        : {};
+    statusMap = choice
+      ? Object.fromEntries(
+          stageNames.map((name) => [
+            name,
+            statusOptionFor(name, { map: bound, options: choice.options }),
+          ])
+        )
+      : {};
+  }
+
+  /**
+   * GitHub: the repository's Projects and the project's stages, the bound
+   * Project chosen (none, when it was bound with none), else the first
+   * linked to the repository; GitHub's words when it may not read them.
+   */
+  async function readProjects(connection: string, repo: string) {
+    ghProjects = null;
+    ghRefused = null;
+    ghFault = null;
+    pickProject = "";
+    if (picking !== "github" || !(connection && repo)) {
+      return;
+    }
+    try {
+      const [read, stages] = await Promise.all([
+        githubProjects(connection, repo),
+        readStages(project.id),
+      ]);
+      if (pickConnection !== connection || pickTarget !== repo) {
+        return;
+      }
+      stageNames = stages.stages.map((stage) => stage.name);
+      ghRefused = read.refused;
+      ghProjects = read.projects;
+      const was =
+        tracker?.binding?.provider === "github" &&
+        tracker.binding.target === repo
+          ? tracker.binding
+          : null;
+      pickProject = was
+        ? (was.githubProject?.id ?? "")
+        : (read.projects.find((each) => each.linked)?.id ?? "");
+      mapFor(pickProject);
+    } catch (error) {
+      ghFault = failureWords(error);
     }
   }
 
@@ -303,7 +387,15 @@
   async function bind(
     asked:
       | { tracker: "cawco" }
-      | { connection: string; target: string; tracker: IssueTracker }
+      | {
+          connection: string;
+          githubProject?: {
+            id: string;
+            map: Record<string, string | null>;
+          } | null;
+          target: string;
+          tracker: IssueTracker;
+        }
   ): Promise<void> {
     binding = true;
     bindFault = null;
@@ -351,6 +443,65 @@
       reviewFault = failureWords(error);
     } finally {
       reviewAsked = null;
+    }
+  }
+
+  /* ── Large files ────────────────────────────────────────────────── */
+
+  type LfsAsk = { connection: string; url: string } | null;
+
+  let lfsEditing = $state(false);
+  let lfsUrl = $state("");
+  let lfsConnection = $state("");
+  let lfsPending = $state(false);
+  let lfsFault = $state<string | null>(null);
+  /** The fleet's connections, read once the form opens; only one with a key signs in to an LFS server. */
+  let connections = $state<ConnectionView[]>([]);
+  let lfsListed = $state(false);
+  const lfsKeyed = $derived(
+    connections.filter(
+      (each) =>
+        each.hasSecret && (each.auth === "bearer" || each.auth === "header")
+    )
+  );
+
+  async function startLfs(): Promise<void> {
+    lfsEditing = true;
+    lfsFault = null;
+    lfsUrl = project.lfsUrl ?? "";
+    lfsConnection = project.lfsConnection ?? "";
+    try {
+      connections = await readConnections();
+      lfsListed = true;
+      lfsConnection ||= lfsKeyed[0]?.name ?? "";
+    } catch (error) {
+      lfsFault = failureWords(error);
+    }
+  }
+
+  function stopLfs(): void {
+    lfsEditing = false;
+    lfsFault = null;
+  }
+
+  /** Try again: the last setting asked, once more. */
+  let lfsTried: LfsAsk | undefined;
+
+  async function saveLfs(next: LfsAsk): Promise<void> {
+    if (lfsPending) {
+      return;
+    }
+    lfsTried = next;
+    lfsPending = true;
+    lfsFault = null;
+    try {
+      await editProject(project.id, { lfs: next });
+      lfsEditing = false;
+    } catch (error) {
+      // The typed URL stays, the hub's words under it.
+      lfsFault = failureWords(error);
+    } finally {
+      lfsPending = false;
     }
   }
 
@@ -450,10 +601,73 @@
   }
 </script>
 
-<!-- Under the head, from where its words start, as the forget tray stands
-     (`.head-forget`): the head's own leading padding, as wide as the
-     dialog it replaces. A phone's head pads by --space-5. -->
-<!-- literal: 32rem, 6.5rem, 10rem, 30px, 14px -->
+<!-- GitHub: the Project whose Status carries the stages, and each stage's option. -->
+{#snippet projectPick()}
+  {#if ghRefused}
+    <p data-slot="note" class="note" data-projects-refused>{ghRefused}</p>
+  {:else if ghProjects}
+    <NativeSelect.Root
+      aria-label="GitHub Project"
+      class="bind-project"
+      size="sm"
+      bind:value={
+        () => pickProject,
+        (next) => {
+          pickProject = next;
+          mapFor(next);
+        }
+      }
+    >
+      <NativeSelect.Option value="">No GitHub Project</NativeSelect.Option>
+      {#each ghProjects as each (each.id)}
+        <NativeSelect.Option value={each.id}>{each.title}</NativeSelect.Option>
+      {/each}
+    </NativeSelect.Root>
+    {#if chosenProject && chosenProject.options.length === 0}
+      <p data-slot="note" class="note" data-no-status>
+        {chosenProject.title} has no single-select field named Status: stages show
+        on GitHub only as open and closed.
+      </p>
+    {:else if chosenProject}
+      {@const options = chosenProject.options}
+      <fieldset class="status-map" data-status-map>
+        <legend data-slot="note" class="note">
+          Each stage's Status on {chosenProject.title}
+        </legend>
+        {#each stageNames as stage, at (stage)}
+          <label class="status-stage" for="{uid}-status-{at}"
+            ><bdi>{stage}</bdi></label
+          >
+          <NativeSelect.Root
+            class="status-pick"
+            id="{uid}-status-{at}"
+            size="sm"
+            bind:value={
+              () => statusMap[stage] ?? "",
+              (next) => {
+                statusMap = { ...statusMap, [stage]: next || null };
+              }
+            }
+          >
+            <NativeSelect.Option value=""
+              >Leave Status alone</NativeSelect.Option
+            >
+            {#each options as option (option.id)}
+              <NativeSelect.Option value={option.id}
+                >{option.name}</NativeSelect.Option
+              >
+            {/each}
+          </NativeSelect.Root>
+        {/each}
+      </fieldset>
+    {/if}
+  {:else if !ghFault}
+    <p data-slot="note" class="note">
+      Reading the GitHub Projects {pickConnection} reaches…
+    </p>
+  {/if}
+{/snippet}
+
 <section
   aria-label="Project details"
   class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pr-space-6 pb-space-3 pl-space-7 max-[900px]:max-w-none max-[900px]:pr-space-5 max-[900px]:pl-space-5"
@@ -618,7 +832,7 @@
             <Input
               aria-label="Folder on that machine"
               autocomplete="off"
-              class="h-(--field-h)"
+              class="add-path h-(--c-btn-h-sm) text-label"
               placeholder="/absolute/path on that machine"
               spellcheck="false"
               text="label"
@@ -678,6 +892,107 @@
             here.
           </p>
         {/if}
+      </div>
+    </div>
+
+    <!-- Large files: each origin's own LFS, or where the project declared
+         they live, bound to a connection with a key. -->
+    <div data-slot="row" class="row" data-detail="lfs">
+      <p data-slot="project-details-label" class="label">{lfsWords.label}</p>
+      <div data-slot="value" class="value">
+        {#if project.lfsUrl}
+          <p class="fact" data-lfs-url><bdi>{project.lfsUrl}</bdi></p>
+          <p data-slot="note" class="note">
+            {lfsWords.declared(project.lfsConnection ?? "")}
+            {lfsWords.pinned}
+          </p>
+        {:else}
+          <p data-slot="note" class="note">{lfsWords.own}</p>
+        {/if}
+        {#if lfsEditing}
+          <form
+            data-slot="add"
+            class="add"
+            data-lfs-form
+            onsubmit={(event) => {
+              event.preventDefault();
+              saveLfs({ url: lfsUrl.trim(), connection: lfsConnection });
+            }}
+            transition:unfold
+          >
+            <NativeSelect.Root
+              aria-label={lfsWords.connection}
+              class="add-machine"
+              disabled={lfsKeyed.length === 0}
+              size="sm"
+              bind:value={lfsConnection}
+            >
+              {#each lfsKeyed as each (each.name)}
+                <NativeSelect.Option value={each.name}
+                  >{each.name}</NativeSelect.Option
+                >
+              {/each}
+            </NativeSelect.Root>
+            <Input
+              aria-label={lfsWords.url}
+              autocomplete="off"
+              class="add-path h-(--c-btn-h-sm) text-label"
+              placeholder={lfsWords.urlPlaceholder}
+              spellcheck="false"
+              type="url"
+              bind:value={lfsUrl}
+            />
+            {#if lfsKeyed.length === 0 && lfsListed}
+              <p data-slot="note" class="note lfs-none">
+                {lfsWords.noConnections}
+                <a href="/config/connections">{lfsWords.connectionsLink}</a>.
+              </p>
+            {/if}
+            <div class="add-acts">
+              <Button
+                label={lfsWords.cancel}
+                onclick={stopLfs}
+                size="sm"
+                type="button"
+                variant="ghost"
+              />
+              <Button
+                disabled={!(lfsConnection && lfsUrl.trim())}
+                label={lfsWords.save}
+                pending={lfsPending}
+                pendingLabel={lfsWords.saving}
+                size="sm"
+                type="submit"
+              />
+            </div>
+          </form>
+        {:else}
+          <div class="lfs-acts">
+            <Button
+              data-lfs-declare
+              label={project.lfsUrl ? lfsWords.change : lfsWords.declare}
+              onclick={startLfs}
+              size="xs"
+              variant="ghost"
+            />
+            {#if project.lfsUrl}
+              <Button
+                data-lfs-clear
+                label={lfsWords.clear}
+                onclick={() => saveLfs(null)}
+                pending={lfsPending}
+                pendingLabel={lfsWords.clearing}
+                size="xs"
+                variant="ghost"
+              />
+            {/if}
+          </div>
+        {/if}
+        <RowFault
+          again={() => (lfsTried === undefined ? undefined : saveLfs(lfsTried))}
+          data-lfs-fault
+          reason={lfsFault}
+        />
       </div>
     </div>
 
@@ -862,6 +1177,14 @@
                   tracker: picking,
                   connection: pickConnection,
                   target: pickTarget,
+                  // Read and not refused: the Project picked, or none.
+                  ...(picking === "github" && ghProjects && !ghRefused
+                    ? {
+                        githubProject: chosenProject
+                          ? { id: chosenProject.id, map: statusMap }
+                          : null,
+                      }
+                    : {}),
                 });
               }
             }}
@@ -914,7 +1237,13 @@
                   class="w-full"
                   data-bind-target
                   size="sm"
-                  bind:value={pickTarget}
+                  bind:value={
+                    () => pickTarget,
+                    (next) => {
+                      pickTarget = next;
+                      readProjects(pickConnection, next);
+                    }
+                  }
                 >
                   {#each targets as each (each.id)}
                     <NativeSelect.Option value={each.id}
@@ -922,6 +1251,9 @@
                     >
                   {/each}
                 </NativeSelect.Root>
+                {#if picking === "github"}
+                  {@render projectPick()}
+                {/if}
               {:else if !targetsFault}
                 <p
                   data-slot="note"
@@ -957,7 +1289,12 @@
             data-targets-fault
             reason={targetsFault}
           />
-          <p data-slot="note" class="type-meta text-ink-muted">
+          <RowFault
+            again={() => readProjects(pickConnection, pickTarget)}
+            data-projects-fault
+            reason={ghFault}
+          />
+          <p data-slot="note" class="note">
             New issues there become tasks here, and new tasks become issues.
             Each task's title, description, labels, stage and comments stay one
             with its issue.
@@ -1000,6 +1337,20 @@
             Through {bound.connection} · {bound.linked}
             {bound.linked === 1 ? "task" : "tasks"} linked · {syncWords(bound)}
           </p>
+          {#if bound.githubProject}
+            <p data-slot="note" class="note" data-github-project>
+              Stages show on <a
+                href={bound.githubProject.url}
+                rel="noreferrer"
+                target="_blank">{bound.githubProject.title}</a
+              >, in its Status.
+            </p>
+          {/if}
+          {#if bound.githubProjectReason}
+            <p data-slot="note" class="note" data-github-project-reason>
+              {bound.githubProjectReason}
+            </p>
+          {/if}
           <RowFault
             again={syncNow}
             againLabel="Sync now"
@@ -1101,14 +1452,208 @@
     font: var(--type-label);
     color: var(--ink-strong);
   }
-  /* residual: keyframes */
-  /* Asked, not yet answered: the thumb breathes on the live-work loop. */
-  [data-slot="value"] :global(.kit-segmented[data-pending] .kit-thumb) {
-    animation: details-breath var(--breath) var(--ease-in-out) infinite;
+  .path {
+    overflow: hidden;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: start;
   }
-  @keyframes -global-details-breath {
-    50% {
-      opacity: 0.45;
+  .kept {
+    font: var(--type-meta);
+    color: var(--ink-subtle);
+  }
+  .add {
+    display: grid;
+    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
+    gap: var(--space-2);
+    padding-block-start: var(--space-2);
+  }
+  .add :global(.add-machine) {
+    inline-size: 100%;
+  }
+  .lfs-none {
+    grid-column: 1 / -1;
+  }
+  .note a {
+    color: var(--link-ink);
+  }
+  .lfs-acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding-block-start: var(--space-1);
+  }
+  .add-acts {
+    display: flex;
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+  @container details (width < 30rem) {
+    .add {
+      grid-template-columns: minmax(0, 1fr);
     }
+  }
+  .value :global(.kit-segmented.lands),
+  .value :global(.kit-segmented.trackers) {
+    flex-wrap: wrap;
+    align-self: flex-start;
+    max-inline-size: 100%;
+  }
+  /* Asked, not yet answered: the thumb breathes on the live-work loop. */
+  .value :global(.kit-segmented.lands[data-pending] .kit-thumb),
+  .value :global(.kit-segmented.trackers[data-pending] .kit-thumb) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: breath var(--breath) var(--ease-in-out) infinite;
+    }
+  }
+  /* The binding's form: its connection and its repository or team, then Use. */
+  .bind {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    padding-block-start: var(--space-2);
+  }
+  .bind > .note {
+    grid-column: 1 / -1;
+    overflow-wrap: anywhere;
+  }
+  .bind :global(.bind-connection),
+  .bind :global(.bind-target) {
+    inline-size: 100%;
+  }
+  /* The GitHub Project under the repository, as wide as the form. */
+  .bind :global(.bind-project) {
+    grid-column: 1 / -1;
+    inline-size: 100%;
+  }
+  /* Each stage beside its Status option; on a narrow tray, over it. */
+  .status-map {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: var(--space-1) var(--space-2);
+    align-items: center;
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .status-map > legend {
+    padding: 0 0 var(--space-1);
+  }
+  .status-stage {
+    min-inline-size: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .status-map :global(.status-pick) {
+    inline-size: 100%;
+  }
+  @container details (width < 30rem) {
+    .status-map {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @container details (width < 30rem) {
+    .bind {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .note a,
+  .bound-target {
+    color: var(--link-ink);
+  }
+  /* The bound repository or team and its Change, as the places' head stands
+     their count and Add a place. */
+  .bound-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+  /* Its mark on the first line of a name that wraps; as the head's flex
+     item it shrinks, so a long unbroken name never pushes Change off. */
+  .bound {
+    align-items: flex-start;
+    min-inline-size: 0;
+  }
+  .bound-target {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+  @media (hover: hover) {
+    .bound-target:hover {
+      text-decoration: underline;
+      text-underline-offset: 4px;
+    }
+  }
+  .bound :global(svg) {
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+  }
+  /* Landing checks: one entry per step, in gate.md's order; every line
+     wraps, a command or path breaking anywhere rather than overflowing. */
+  .gate-steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* A step's lines stand on their own line heights: one entry, set apart
+     from the next by the list's gap. */
+  .gate-check {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+  .gate-name {
+    min-inline-size: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .gate-command {
+    min-inline-size: 0;
+    font: var(--type-meta);
+    font-family: var(--font-mono);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .gate-facts {
+    min-inline-size: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+  }
+  /* A text link: its words start on the value column with the rest. */
+  .value :global(.gate-edit) {
+    align-self: flex-start;
+    padding-inline: 0;
+  }
+  .switch-line {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font: var(--type-label);
+    color: var(--ink-strong);
+    cursor: pointer;
+  }
+  .value :global(.lead-switch) {
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .foot {
+    display: flex;
+    justify-content: flex-end;
   }
 </style>

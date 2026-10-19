@@ -5,10 +5,10 @@
  * nothing here names one.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { platform } from "node:os";
-import { delimiter, dirname, join, sep } from "node:path";
+import { basename, delimiter, dirname, join, sep } from "node:path";
 import type {
   ToolFootprint,
   ToolInstallMethod,
@@ -67,9 +67,48 @@ export const claudeHomeEnv = (): Record<string, string | undefined> => {
   return rest;
 };
 
-/** A binary's absolute path, searched wherever this daemon can install one. */
+/** npm, which installs the packages a fleet MCP's command names (mcp-install.ts) and the catalog's npm tools. */
+const NPM = "npm";
+
+/** What Bun's own binary is called, under whatever name a link gives it. */
+const BUN_BINARIES = new Set(["bun", "bun.exe"]);
+
+/** Every `name` on {@link toolPath}, in its order. */
+const everyBin = (name: string): string[] =>
+  toolPath()
+    .split(delimiter)
+    .filter(Boolean)
+    .flatMap((dir) => Bun.which(name, { PATH: dir }) ?? []);
+
+/**
+ * Whether `path` is Bun's binary under another name, its real path's
+ * basename `bun`: on the Mac `~/.bun/bin/npx` → `bunx` → `bun` came first on
+ * the agent's launchd PATH and ran Bun's own CLI, which refuses npm's options
+ * (`error: Invalid Argument '-y'`).
+ */
+const isBunBinary = (path: string): boolean => {
+  try {
+    return BUN_BINARIES.has(basename(realpathSync(path)));
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * A binary's absolute path, searched wherever this daemon can install one.
+ * `npm` is npm's alone: the first on the PATH that isn't Bun's binary, so a
+ * Bun alias ahead of npm's never runs an install it can't take.
+ */
 export const resolveBin = (name: string): string | undefined =>
-  Bun.which(name, { PATH: toolPath() }) ?? undefined;
+  name === NPM
+    ? everyBin(NPM).find((path) => !isBunBinary(path))
+    : (Bun.which(name, { PATH: toolPath() }) ?? undefined);
+
+/** The `npm` on the PATH that is Bun's binary, when that is the only kind there is ({@link resolveBin} finds none). */
+export const bunOnlyNpm = (): string | undefined => {
+  const found = everyBin(NPM);
+  return found.every(isBunBinary) ? found[0] : undefined;
+};
 
 /** The first `x.y.z` a version command says is the version. */
 const VERSION_PATTERN = /\d+\.\d+\.\d+/;

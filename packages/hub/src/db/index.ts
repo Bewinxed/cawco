@@ -106,12 +106,14 @@ import { type ActionsDb, actionsDb } from "./actions";
 import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
+import { type BrowsersDb, browsersDb } from "./browsers";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import { type FindDb, findDb } from "./find";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
+import { type LfsOffersDb, lfsOffersDb } from "./lfs-offers";
 import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
@@ -647,6 +649,8 @@ export interface DbShape {
   }) => void;
   /** The briefer documents a session has been handed, path → the hash it read (briefings.ts). */
   readonly briefingsHanded: (instanceId: string) => Map<string, string>;
+  /** The fleet's browsers, per machine (browsers.ts). */
+  readonly browsers: BrowsersDb;
   /** Whether nothing has been counted yet — the backfill's cue. */
   readonly capabilityUsageEmpty: () => boolean;
   /** Every usage row on or after `day` (`YYYY-MM-DD`). */
@@ -1029,6 +1033,8 @@ export interface DbShape {
   readonly leadSends: (projectId: string, after: Date) => SentMessageRow[];
   /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
   readonly leadTurns: () => LeadTurnRow[];
+  /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
+  readonly lfsOffers: LfsOffersDb;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -1204,7 +1210,7 @@ export interface DbShape {
     instances: (typeof instances.$inferSelect)[];
     runs: WorkflowRunRow[];
   };
-  /** A project's fact uses and its sessions' prose cut (memory.ts, session-prose.ts). */
+  /** A project's fact uses and declined rewrites (memory.ts). */
   readonly memoryFacts: MemoryFactsDb;
   /**
    * What each harness on the machine can do, as its daemon's report beat
@@ -1464,6 +1470,8 @@ export interface DbShape {
       accountId?: string | null;
       threadId?: string;
       projectId?: string;
+      /** The continuation its work item moved to: it never runs again. */
+      continuedInto?: string;
     }
   ) => PublicInstanceRow | undefined;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
@@ -1595,7 +1603,8 @@ export interface DbShape {
    * Upsert. `projectId` binds it to one project (placed at each of its
    * checkouts and workspaces), null makes it every machine's, and left out
    * keeps what it was. `platforms` the same way: the platforms it runs on,
-   * null every platform, left out as it was.
+   * null every platform, left out as it was. `shared`, one instance per
+   * machine started at its first call, left out as it was.
    */
   readonly putMcpServer: (server: {
     name: string;
@@ -1603,6 +1612,7 @@ export interface DbShape {
     enabled?: boolean;
     projectId?: string | null;
     platforms?: McpPlatform[] | null;
+    shared?: boolean;
   }) => FleetMcpServer;
   /** A fleet MCP relay session opened: its `initialize` params, kept across hub restarts. */
   readonly putMcpSession: (row: {
@@ -1892,14 +1902,6 @@ export interface DbShape {
   readonly ruleStatesFor: (ruleId: string) => RuleState[];
   /** Per-rule totals for the list, aggregated in SQL rather than per row. */
   readonly ruleStats: () => RuleStats[];
-  /**
-   * The listed Claude sessions that are running, as the accounts read them:
-   * two columns, so asking which accounts a session runs on reads no row whole.
-   */
-  readonly runningClaudeSessions: () => {
-    accountId: string | null;
-    machineId: string;
-  }[];
   readonly runningDelegateCounts: () => Map<string, number>;
   /** The listed sessions of one harness that are running. */
   readonly runningInstancesOf: (harness: HarnessKind) => PublicInstanceRow[];
@@ -1996,7 +1998,12 @@ export interface DbShape {
   /** The project's name, its Review before done and its upstream choice, as project-edit.ts checked them. */
   readonly setProjectDetails: (
     id: string,
-    change: Partial<Pick<ProjectRow, "name" | "review" | "upstreamPosts">>
+    change: Partial<
+      Pick<
+        ProjectRow,
+        "lfsConnection" | "lfsUrl" | "name" | "review" | "upstreamPosts"
+      >
+    >
   ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
   readonly setProjectDispatch: (
@@ -5750,6 +5757,7 @@ const make = async (path: string): Promise<DbShape> => {
               authError,
               projectId,
               platforms,
+              shared,
             }) => {
               const signedIn =
                 authMode === "direct" ||
@@ -5772,6 +5780,7 @@ const make = async (path: string): Promise<DbShape> => {
                 enabled,
                 ...(projectId ? { projectId, scope: "local" as const } : {}),
                 ...(platforms ? { platforms } : {}),
+                ...(shared ? { shared } : {}),
                 auth: {
                   mode: authMode,
                   state,
@@ -5924,7 +5933,7 @@ const make = async (path: string): Promise<DbShape> => {
         cawcoTodos: supervisorChoices().cawcoTodos,
       };
     },
-    putMcpServer: ({ name, config, enabled, projectId, platforms }) => {
+    putMcpServer: ({ name, config, enabled, projectId, platforms, shared }) => {
       const previous = db
         .select()
         .from(mcpServers)
@@ -5940,6 +5949,7 @@ const make = async (path: string): Promise<DbShape> => {
       const asked = platforms?.length ? platforms : null;
       const runsOn =
         platforms === undefined ? (previous?.platforms ?? null) : asked;
+      const one = shared ?? previous?.shared ?? false;
       // A new or changed config is unsettled — failed, so never synced — until
       // the hub hears from the server (fleet-mcp.ts `#probe`).
       const unsettled = {
@@ -5952,6 +5962,7 @@ const make = async (path: string): Promise<DbShape> => {
           config,
           enabled: enabled ?? true,
           platforms: runsOn,
+          shared: one,
           ...placement,
           ...unsettled,
         })
@@ -5961,6 +5972,7 @@ const make = async (path: string): Promise<DbShape> => {
             config,
             enabled: enabled ?? true,
             platforms: runsOn,
+            shared: one,
             ...placement,
             ...(changed ? unsettled : {}),
           },
@@ -5972,6 +5984,7 @@ const make = async (path: string): Promise<DbShape> => {
         enabled: enabled ?? true,
         ...(bound ? { projectId: bound, scope: "local" as const } : {}),
         ...(runsOn ? { platforms: runsOn } : {}),
+        ...(one ? { shared: one } : {}),
       };
     },
     putMarketplace: ({ name, source }) => {
@@ -8393,7 +8406,7 @@ const make = async (path: string): Promise<DbShape> => {
     noteMachineLine: (id, kind, note) =>
       keepLine(id, kind, note, LIMIT_NOTES_KEPT),
     machineLinesOf: (id) =>
-      (["limit", "outdated"] as const).flatMap((kind) =>
+      (["limit", "outdated", "room"] as const).flatMap((kind) =>
         linesOf(id, kind).map(({ id: lineId, at, content }) => ({
           kind,
           id: lineId,
@@ -8543,21 +8556,6 @@ const make = async (path: string): Promise<DbShape> => {
       }
       return counts;
     },
-    runningClaudeSessions: () =>
-      db
-        .select({
-          accountId: instances.accountId,
-          machineId: instances.machineId,
-        })
-        .from(instances)
-        .where(
-          and(
-            listedInstances(),
-            eq(instances.status, "running"),
-            eq(instances.harness, "claude")
-          )
-        )
-        .all(),
     liveWorkItems: () =>
       db
         .select()
@@ -9012,6 +9010,7 @@ const make = async (path: string): Promise<DbShape> => {
     atLimit: atLimitDb(db),
     designChecks: designChecksDb(db),
     designOffers: designOffersDb(db),
+    lfsOffers: lfsOffersDb(db),
     blocks: blocksDb(db),
     starters: startersDb(db),
     routines: routinesDb(db),
@@ -9026,6 +9025,7 @@ const make = async (path: string): Promise<DbShape> => {
     find: findDb(db),
     previews: previewsDb(db),
     streamRelay: streamRelayDb(db),
+    browsers: browsersDb(db),
     actions: actionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>

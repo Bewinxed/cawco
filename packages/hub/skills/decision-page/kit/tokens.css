@@ -186,6 +186,8 @@
     --surface-fill-strong: light-dark(var(--neutral-6), var(--neutral-7));
     /* A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill. */
     --press-fill: light-dark(var(--surface-fill-strong), var(--surface-fill));
+    /* The kit Toggle's on step, where a pressed or chosen control stands (a chosen canvas tool, a pressed head button, a held tab): by day the surface-fill-strong step, a step past the hover; at night the surface-fill step, so it never reads as hovered. */
+    --surface-pressed: light-dark(var(--neutral-6), var(--neutral-5));
     /* Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike. */
     --surface-hover: light-dark(var(--neutral-4), var(--neutral-4));
     /* The reader's well edge: darker than the well by day, the ink at 8% at night. */
@@ -349,7 +351,7 @@
     /* Status glyphs: the hue itself, not the near-black text ink, so a row's state reads in colour at a glance. Each holds 3:1 or more (non-text) on raised, page, fill, hover, the selected wash and the needs-you wash, in both themes; idle stays neutral. */
     --status-live-glyph: light-dark(oklch(50% 0.15 252), oklch(74% 0.12 245));
     --status-attn-glyph: light-dark(oklch(57% 0.125 78), oklch(87% 0.14 92));
-    /* A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim in it (tab-rim-mix) cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own. */
+    /* A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim mixed from it cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own. */
     --tab-rim-attn: light-dark(oklch(48% 0.125 78), oklch(87% 0.14 92));
     --status-done-glyph: light-dark(oklch(52% 0.14 140), oklch(76% 0.15 135));
     --status-fail-glyph: light-dark(oklch(53% 0.19 22), oklch(71% 0.16 20));
@@ -635,6 +637,8 @@
     --track-caps: 0.06em;
     /* A menu item's keyboard shortcut (the kit's command, dropdown and context menu shortcuts, Tailwind's widest). */
     --track-widest: 0.1em;
+    /* How far under its words a text link's underline stands, when it is drawn (its hover). */
+    --underline-offset: 3px;
     /* Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric. */
     --type-meta: 400 var(--text-meta) / 1.35 var(--font-body);
     --type-label: 500 var(--text-label) / 1.3 var(--font-body);
@@ -707,6 +711,14 @@
     --c-sheet-inspector-w: 296px;
     /* The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink). */
     --c-sheet-inspector-head-h: 44px;
+    /* A component canvas's frame on its way, where its story names no form width: the skeleton's width, a button-to-card component's own (DESIGN.md Artifact panel, canvas and ink; Skeleton). */
+    --c-canvas-skeleton-w: 240px;
+    /* A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (DESIGN.md Artifact panel, canvas and ink; Skeleton). */
+    --c-canvas-skeleton-h: 96px;
+    /* An edge's stroke on a graph canvas: the decision graph's and a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink). */
+    --c-graph-edge: 1.5px;
+    /* A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink). */
+    --c-map-node-w: 264px;
     /* The preview's Comments panel, floating over the page's top-right: its share of the pane's width (Magnific's floating panel, about 22%), held between c-pin-list-min and c-pin-list-max. */
     --c-pin-list-share: 0.22;
     /* The Comments panel at its narrowest: a row's disc, anchor line and last reply's first line. */
@@ -811,6 +823,10 @@
     --c-starters-w: calc(var(--c-starter-w) * 4 + var(--space-2) * 3);
     /* A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after. */
     --c-row-lead: 28px;
+    /* A section's head inside a floating panel (Files' Artifacts and Attachments, as Caw's panel heads his): its glyph, its name in the label role and its count, one line. */
+    --c-section-head-h: 32px;
+    /* A list row's inline inset inside a floating panel (Files' rows and heads, as the menu item's 10px padding): its lead column's glyph stands this far in from the row's edge. */
+    --c-row-inset: 10px;
     /* A routines-page row's pitch: the whole row is its own 44px opener on every pointer. */
     --c-row-h: 44px;
     /* The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and "23h ago", or "Tomorrow 13:30", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say. */
@@ -940,8 +956,6 @@
     /* Relative tints for rows inside any surface: hover +6%, selected +10% ink. */
     --surface-hover-mix: 6%;
     --surface-selected-mix: 10%;
-    /* The strength of Caw's panel's vermillion hairline between its sections (CawPanel, web and iOS), and of an unchosen session tab's rim in the iOS app (PaneTabsView); the dashboard's unchosen tabs wear tab-rim-mix-subtle. At this strength a status rim holds 3:1 against the tab's fill and the shelf in both themes: by day 83% clears the working and failed tones, by night 64% the failed tone, the hardest. */
-    --tab-rim-mix: 83%;
     /* The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle. */
     --tab-rim-mix-chosen: 0.97;
     /* The chosen tab's rim strength when its session is idle or done, in the muted ink: its top holds 3:1 against the shelf (3.2:1 by day, 3.8:1 by night at 1px); its sides taper softer by design. By day 0.32 left its side at 1.4:1, by night at 2.0:1. */
@@ -1025,6 +1039,8 @@
     --echo-scale: 1.45;
     /* A working session's echo as it leaves the tile. */
     --echo-opacity: 0.45;
+    /* The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1). */
+    --breath-floor: 0.8;
     /* The duotone second layer (the disc) of a status glyph in an alert row (join/JoinedRow), drawn in ink-strong, status-done-ink or status-attn-ink. It holds two conditions in both schemes: the disc 3:1 or more on the recess, and the glyph's full layer (the check, the strokes) 3:1 or more on the disc, so the glyph reads as a mark on a disc, not a solid one. The two multiply to the ink's own contrast on the recess, so the ink needs about 9:1 there and no hue glyph ink holds it by day. By day 0.57 (the attn ink's disc the floor, 3.18:1); at night 0.46 (the done ink's check the floor, 3.24:1). Every other Solar glyph keeps 0.5. */
     --glyph-duo-status-opacity: 0.57;
     /* How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track. */
@@ -1173,9 +1189,9 @@
   }
 
   :root.dark {
-    --tab-rim-mix: 64%;
     --tab-rim-mix-chosen: 0.78;
     --tab-rim-mix-idle: 0.54;
+    --breath-floor: 0.58;
     --glyph-duo-status-opacity: 0.46;
     --account-week-mix: 0.63;
   }

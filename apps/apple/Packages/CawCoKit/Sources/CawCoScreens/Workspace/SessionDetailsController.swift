@@ -253,11 +253,13 @@ public final class SessionDetailsController: ObservedViewController {
 
     private var shownPermission: String? { relaunching ? permissionBeforeRelaunch : permissionMode }
 
-    /// This session's provider limit: the window that stops its provider first.
+    /// This session's provider limit: the window that stops its provider
+    /// first, its own account's for a Claude session (none on one that runs
+    /// on no CawCo account).
     private var providerLimit: Usage.Row? {
         let now = Date().timeIntervalSince1970 * 1000
         if harness == "claude" {
-            guard let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: \.stale, windows: \.windows) else { return nil }
+            guard let accountId = row?.accountId, let claude = fleet.claudeLimits[accountId] else { return nil }
             return Usage.firstToStop(Usage.rows(provider: "Claude", windows: claude.windows, stale: claude.stale, now: now))
         }
         if harness == "opencode", model?.hasPrefix("opencode-go/") == true {

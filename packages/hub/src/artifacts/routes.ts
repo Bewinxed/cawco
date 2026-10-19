@@ -2,11 +2,17 @@
  * The artifact routes (Projects spec §5.10), on the session that made the
  * artifact: the panel's list, its Show and Remove, what the six tools call, and the
  * lookup an artifact's own tab opens with. A session reaches only its own
- * artifacts, and those it put in its parent's panel (update, read, show);
+ * artifacts, and those it handed to its parent (update, read);
  * any other id is 404. The person's Send is on the preview
  * listener, beside the doc's socket (sync.ts `artifactSend`).
  */
-import { ARTIFACT_NAME, PREVIEW_START_PATH, SHOWN_FAILURES } from "@cawco/core";
+import {
+  ARTIFACT_DOES,
+  ARTIFACT_NAME,
+  ASK_LIMIT,
+  PREVIEW_START_PATH,
+  SHOWN_FAILURES,
+} from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import {
@@ -21,7 +27,7 @@ import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
 import type { StateAsk } from "./component";
-import { COMPONENT_EXAMPLE } from "./component";
+import { COMPONENT_EXAMPLE, CREATE_SHAPE } from "./component";
 import {
   ArtifactRefusal,
   type Artifacts,
@@ -29,7 +35,9 @@ import {
   type PageChange,
   type SheetChange,
   type SkeletonElement,
+  THUMBNAIL_BYTES,
 } from "./service";
+import { PNG_SIGNATURE } from "./sync";
 import { ARGS_LIMIT, PATCH_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
 
 const INTERACTION_NAMES = ["rest", "hover", "focus", "pressed"];
@@ -67,6 +75,26 @@ const refused = (error: unknown) => {
   }
   throw error;
 };
+
+/** A thumbnail's scheme as the pane sends it: base64 PNG, or null where none was drawn. */
+const thumbnailPng = t.Nullable(
+  t.String({ maxLength: Math.ceil(THUMBNAIL_BYTES / 3) * 4 })
+);
+
+/** A base64 PNG's bytes; refused when it is not a PNG. */
+const pngOf = (base64: string | null): Uint8Array | null => {
+  if (base64 === null) {
+    return null;
+  }
+  const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
+  if (!PNG_SIGNATURE.every((byte, i) => bytes[i] === byte)) {
+    throw new ArtifactRefusal(422, "A thumbnail is a PNG.");
+  }
+  return bytes;
+};
+
+/** Who moves the panel: `by=agent` from the session's own tools; left out, the person. */
+const handQuery = t.Object({ by: t.Optional(t.Literal("agent")) });
 
 /** A canvas's skeleton elements: a type, an optional id, and Excalidraw's own fields. */
 const skeletons = t.Array(
@@ -115,11 +143,12 @@ const statesFile = t.String({
 /** A story on a canvas: `Story`, or `file:Story` across sections. */
 const storyRef = t.String({ minLength: 1, maxLength: 1100 });
 
-/** A component canvas's about, edges, groups and dials (core `CanvasSpec`), as create and update take them. */
+/** What the person does on an artifact, and its one line in the panel's head. */
+const doesField = t.Union(ARTIFACT_DOES.map((one) => t.Literal(one)));
+const askField = t.String({ minLength: 1, maxLength: ASK_LIMIT });
+
+/** A component canvas's edges, groups and dials (core `CanvasSpec`), as create and update take them. */
 const canvasFields = {
-  about: t.Optional(
-    t.String({ minLength: 1, maxLength: CANVAS_SPEC_LIMITS.about })
-  ),
   edges: t.Optional(
     t.Array(
       t.Object({
@@ -167,9 +196,9 @@ const canvasFields = {
 
 /** What a malformed body was refused for, in the tool's words with its valid shape: never the validator's own text (component canvas G3). */
 const SHAPES: Record<string, string> = {
-  create: `artifact_create takes kind, name and that kind's fields. A component canvas: { kind: "component", name, file, about, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle", min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`,
+  create: CREATE_SHAPE,
   update:
-    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or about, edges, group, dials (the canvas itself). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
+    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
   read: 'artifact_read takes id?, since?, png?, detail ("summary" | "story"), story, state { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? }, render. Example: { id, state: { story: "Waiting", interaction: "hover" } }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
@@ -225,7 +254,7 @@ const changeOf = (body: {
   if (named.length !== 1) {
     throw new ArtifactRefusal(
       400,
-      "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements and a component's args, story, about, edges, group or dials go through their own routes."
+      "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group or dials go through their own routes."
     );
   }
   if (body.html !== undefined) {
@@ -250,6 +279,12 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       if (!(error instanceof ValidationError && path.includes("/artifacts"))) {
         return;
       }
+      // Files' own reads: the validator's word is enough there.
+      if (path.endsWith("/search") || path.includes("/thumbnail")) {
+        return new Response("Files asked in a shape the hub doesn't take.", {
+          status: 422,
+        });
+      }
       let shape = SHAPES.read;
       if (path.endsWith("/design-map")) {
         shape = SHAPES.map;
@@ -267,6 +302,41 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
+    // Files' search: the session's artifacts a query matches by name or by
+    // the words on their page, best first, with the words round a hit.
+    .get(
+      "/api/instances/:id/artifacts/search",
+      { query: t.Object({ q: t.String({ maxLength: 200 }) }) },
+      ({ params, query }) => {
+        try {
+          return artifacts.search(params.id, query.q);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // A screen's thumbnail of a page or preview, kept as its latest picture.
+    .put(
+      "/api/instances/:id/artifacts/:artifact/thumbnail",
+      {
+        body: t.Object({
+          light: thumbnailPng,
+          dark: thumbnailPng,
+          single: t.Boolean(),
+        }),
+      },
+      ({ params, body }) => {
+        try {
+          return artifacts.keepThumbnail(params.id, params.artifact, {
+            light: pngOf(body.light),
+            dark: pngOf(body.dark),
+            single: body.single,
+          });
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // Each artifact with whose move it is (artifact_list).
     .get(
       "/api/instances/:id/artifacts/status",
@@ -291,6 +361,9 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             // Shipped apps' generated client still lists it (the wire guard): refused with the new shape.
             t.Literal("sheet"),
           ]),
+          // Every create names both but the person's own composer canvas (draft), which shipped apps make without them: refused with the tool's shape when missing (service.ts `askedOf`).
+          does: t.Optional(doesField),
+          ask: t.Optional(askField),
           ...canvasFields,
           elements: t.Optional(skeletons),
           mermaid: t.Optional(mermaid),
@@ -327,7 +400,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             })
           ),
           draft: t.Optional(t.Boolean()),
-          // A delegate puts it in its parent's panel.
+          // A delegate hands it to its parent, unopened.
           to: t.Optional(t.Literal("parent")),
         }),
       },
@@ -337,7 +410,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           if (kind === "sheet") {
             throw new ArtifactRefusal(
               400,
-              `A component's states are a component canvas now: kind "component", with about. Example: ${COMPONENT_EXAMPLE}.`
+              `A component's states are a component canvas now: kind "component", with does and ask. Example: ${COMPONENT_EXAMPLE}.`
             );
           }
           if (body.draft && kind !== "canvas") {
@@ -362,6 +435,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           // A frame: JSON { story, interaction?, scheme?, width? }.
           state: t.Optional(t.String({ maxLength: 400 })),
           render: t.Optional(t.BooleanString()),
+          verify: t.Optional(t.BooleanString()),
         }),
       },
       ({ params, query }) => {
@@ -376,6 +450,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
               ...(query.story ? { story: query.story } : {}),
               ...(query.state ? { state: stateOf(query.state) } : {}),
               ...(query.render ? { render: true } : {}),
+              ...(query.verify ? { verify: true } : {}),
             }
           );
         } catch (error) {
@@ -413,25 +488,26 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // A component canvas's change by its session (artifact_update): a states file's story args or op, or the canvas's own about, edges, groups or dials.
+    // A component canvas's change by its session (artifact_update): a states file's story args or op, or the canvas's own edges, groups or dials.
     .patch(
       "/api/instances/:id/artifacts/:artifact/component",
-      { body: t.Object({ ...sheetChange, ...canvasFields }) },
+      // The agent's tool alone calls it: no dashboard or app reads its answer.
+      {
+        body: t.Object({ ...sheetChange, ...canvasFields }),
+        detail: { hide: true },
+      },
       async ({ params, body }) => {
         try {
-          const { about, edges, group, dials, args, story } = body;
-          const canvas = [about, edges, group, dials].some(
-            (one) => one !== undefined
-          );
+          const { edges, group, dials, args, story } = body;
+          const canvas = [edges, group, dials].some((one) => one !== undefined);
           if (canvas && (args !== undefined || story !== undefined)) {
             throw new ArtifactRefusal(
               400,
-              "about, edges, group and dials change the canvas itself: send them apart from a states file's args or story."
+              "edges, group and dials change the canvas itself: send them apart from a states file's args or story."
             );
           }
           return canvas
             ? await artifacts.canvasUpdate(params.id, params.artifact, {
-                about,
                 edges,
                 group,
                 dials,
@@ -441,6 +517,18 @@ export const artifactRoutes = (artifacts: Artifacts) =>
                 params.artifact,
                 sheetChangeOf({ args, story })
               );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // Any kind's head line (artifact_update's ask): checked as a create's is, then every open view's head morphs to it.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/ask",
+      { body: t.Object({ ask: askField }), detail: { hide: true } },
+      ({ params, body }) => {
+        try {
+          return artifacts.askUpdate(params.id, params.artifact, body.ask);
         } catch (error) {
           return refused(error);
         }
@@ -482,6 +570,27 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
+    // A component canvas's map for its panel: its component, what renders it and what it renders.
+    .get("/api/instances/:id/artifacts/:artifact/map", async ({ params }) => {
+      try {
+        return await artifacts.mapOf(params.id, params.artifact);
+      } catch (error) {
+        return refused(error);
+      }
+    })
+    // The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/verify",
+      async ({ params }) => {
+        try {
+          return {
+            verify: await artifacts.verifyFor(params.id, params.artifact),
+          };
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // The library of the session's workspace: its components, paged, or one's card (design_map).
     .get(
       "/api/instances/:id/artifacts/design-map",
@@ -514,14 +623,24 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // Removes the artifact; the panel that showed it shows the next newest, or nothing (artifact_delete, the panel's Remove).
-    .delete("/api/instances/:id/artifacts/:artifact", async ({ params }) => {
-      try {
-        return await artifacts.remove(params.id, params.artifact);
-      } catch (error) {
-        return refused(error);
+    // Removes the artifact (the panel's Remove; artifact_delete with by=agent).
+    // The panel that showed it shows the next newest after the person's
+    // Remove, what the person had before after the agent's, or nothing.
+    .delete(
+      "/api/instances/:id/artifacts/:artifact",
+      { query: handQuery },
+      async ({ params, query }) => {
+        try {
+          return await artifacts.remove(
+            params.id,
+            params.artifact,
+            query.by ?? "person"
+          );
+        } catch (error) {
+          return refused(error);
+        }
       }
-    })
+    )
     // The person's pins on the session's artifacts, with their threads (comment_read).
     .get(
       "/api/instances/:id/artifacts/comments",
@@ -598,14 +717,23 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // Whether a view has it on screen within 10 s, or why not; 503 when its server could not start.
-    .post("/api/instances/:id/artifacts/:artifact/show", async ({ params }) => {
-      try {
-        return await artifacts.show(params.id, params.artifact);
-      } catch (error) {
-        return refused(error);
+    // Whether a view has it on screen within 10 s, or why not; 503 when its
+    // server could not start. The person's show unless by=agent (artifact_show).
+    .post(
+      "/api/instances/:id/artifacts/:artifact/show",
+      { query: handQuery },
+      async ({ params, query }) => {
+        try {
+          return await artifacts.show(
+            params.id,
+            params.artifact,
+            query.by ?? "person"
+          );
+        } catch (error) {
+          return refused(error);
+        }
       }
-    })
+    )
     // A view (a dashboard tab, the app) has the artifact on screen at the
     // open frame's revision, or could not load it: the waiting show answers.
     .post(
@@ -664,6 +792,34 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
+    // An artifact's latest picture in a scheme (Files' cards). The list names
+    // it with its `at`, so a new one is a new address and this one never
+    // changes under it.
+    .get(
+      "/api/artifacts/:artifact/thumbnail/:scheme",
+      {
+        params: t.Object({
+          artifact: t.String(),
+          scheme: t.Union([t.Literal("light"), t.Literal("dark")]),
+        }),
+      },
+      ({ params }) => {
+        try {
+          const png = artifacts.thumbnailFile(params.artifact, params.scheme);
+          if (!png) {
+            return new Response("No picture yet.", { status: 404 });
+          }
+          return new Response(new Uint8Array(png), {
+            headers: {
+              "content-type": "image/png",
+              "cache-control": "private, max-age=31536000, immutable",
+            },
+          });
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // A canvas as a send carries it: the .excalidraw file, the outline, the picture.
     .get("/api/artifacts/:artifact/export", ({ params }) => {
       try {

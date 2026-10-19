@@ -250,6 +250,20 @@ const socketHeldOn = new WeakMap<Page, (url: string) => boolean>();
 const DASHBOARD_SOCKET = "/ws/dashboard";
 
 /**
+ * A state's failure as the walk says it: the error's first line, and for an
+ * action that waited out its timeout, the last thing Playwright's call log
+ * saw in its way (an element not visible, another taking the pointer).
+ */
+const saidOf = (error: unknown): string => {
+  const lines = String(error).split("\n");
+  const seen = lines
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
+    .at(-1);
+  return seen ? `${lines[0]} (${seen.slice(2)})` : (lines[0] ?? "");
+};
+
+/**
  * `PROBE_TRACE="<surface>/<state> <key>[ | <key>…]"` (`<surface>/*` for
  * every state of it): each key's element
  * (read.ts `elementAt`: its box and its opening tag, inline style and all)
@@ -921,7 +935,7 @@ export async function walk(
             await trace(page, "read");
             await visit({ page, pass, scene, state, surface });
           } catch (error) {
-            failed(what, String(error).split("\n")[0] ?? "");
+            failed(what, saidOf(error));
           }
         }
       } finally {

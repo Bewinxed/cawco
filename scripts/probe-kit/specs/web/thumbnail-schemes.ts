@@ -330,8 +330,20 @@ const run = async (kit: Kit) => {
       name: CREATE,
       input:
         typeof made === "string"
-          ? { kind: "page", name, html: made }
-          : { kind: "preview", name, dir: made.dir },
+          ? {
+              kind: "page",
+              does: "judge",
+              ask: "Judge this page: pin anything that reads wrong",
+              name,
+              html: made,
+            }
+          : {
+              kind: "preview",
+              does: "try",
+              ask: "Try this page and say whether it works",
+              name,
+              dir: made.dir,
+            },
     });
     await fleet.send(id, `PROBE-CALL:${marker}`);
     await until("the page made", () => answered.get(marker), Boolean, 180_000);

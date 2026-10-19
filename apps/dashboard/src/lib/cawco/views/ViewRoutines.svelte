@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { routinesWords as words } from "@cawco/core";
   import { untrack } from "svelte";
   import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
   import BlockPage, {
@@ -240,20 +241,20 @@
       return {
         count: routines.length,
         needs: failingRoutines,
-        said: `${failingRoutines} failing`,
+        said: words.failing(failingRoutines),
       };
     }
     if (id === "sources") {
       return {
         count: sourceCount,
         needs: failingSources,
-        said: `${failingSources} failing`,
+        said: words.failing(failingSources),
       };
     }
     return {
       count: actions.length,
       needs: waitingActions,
-      said: `${waitingActions} waiting on you`,
+      said: words.waiting(waitingActions),
     };
   }
 
@@ -332,10 +333,10 @@
   /** A route's event in words: its service, its kinds, and what it filters on. */
   const eventOf = (route: (typeof routes)[number]): string =>
     [
-      `${route.source} ${route.kinds.join(", ") || "events"}`,
+      `${route.source} ${route.kinds.join(", ") || words.events}`,
       route.label,
-      route.branch && `on ${route.branch}`,
-      route.author && `by ${route.author}`,
+      route.branch && words.onBranch(route.branch),
+      route.author && words.byAuthor(route.author),
       route.regex,
     ]
       .filter(Boolean)
@@ -353,13 +354,10 @@
     return routesTo.has(routine.id) ? "event" : "on";
   }
   const LEAD = {
-    on: { glyph: IconClock, said: "On, on a schedule" },
-    event: {
-      glyph: IconHook,
-      said: "On, on a schedule and when an event comes",
-    },
-    paused: { glyph: IconPauseCircle, said: "Paused" },
-    expiring: { glyph: IconHourglass, said: "On, turning itself off" },
+    on: { glyph: IconClock, said: words.leadOn },
+    event: { glyph: IconHook, said: words.leadEvent },
+    paused: { glyph: IconPauseCircle, said: words.leadPaused },
+    expiring: { glyph: IconHourglass, said: words.leadExpiring },
   } as const;
   const DAY = 86_400_000;
 
@@ -380,7 +378,7 @@
               1,
               Math.round((routine.expiresAt - Date.now()) / DAY)
             );
-            return `Off in ${days} ${days === 1 ? "day" : "days"}`;
+            return words.offIn(days);
           })()
         : null;
     const schedule = scheduleOf(
@@ -388,9 +386,9 @@
       routine.timeZone,
       routine.nextSlot
     );
-    const next = `next ${exactOf(routine.nextSlot)}`;
-    const events = (routesTo.get(routine.id) ?? []).map(
-      (route) => `also when ${eventOf(route)}`
+    const next = words.next(exactOf(routine.nextSlot));
+    const events = (routesTo.get(routine.id) ?? []).map((route) =>
+      words.alsoWhen(eventOf(route))
     );
     return {
       words: schedule.words,
@@ -410,8 +408,8 @@
     if (!run) {
       return {
         status: "neutral",
-        text: "Never",
-        title: "Not run yet",
+        text: words.never,
+        title: words.notRunYet,
         said: null,
       };
     }
@@ -419,40 +417,36 @@
     if (going(routine)) {
       return {
         status: "running",
-        text: "Running",
-        title: `Running since ${at}`,
+        text: words.running,
+        title: words.runningSince(at),
         said: null,
       };
     }
     const ago = since(run.endedAt ?? run.startedAt);
     if (run.state === "queued") {
-      return { status: "neutral", text: "Queued", title: at, said: null };
+      return { status: "neutral", text: words.queued, title: at, said: null };
     }
-    const word = (() => {
+    const [word, status] = ((): [string, Status] => {
       if (run.state === "skipped") {
-        return "Skipped";
+        return [words.skipped, "neutral"];
       }
       if (run.outcome === "failed") {
-        return "Failed";
+        return [words.failed, "failed"];
       }
       if (run.outcome === "cancelled") {
-        return "Stopped";
+        return [words.stopped, "neutral"];
       }
-      return run.outcome === "silent" ? "Nothing to report" : "Delivered";
+      return run.outcome === "silent"
+        ? [words.silent, "done"]
+        : [words.delivered, "done"];
     })();
-    const STATUS: Record<string, Status> = {
-      Failed: "failed",
-      Delivered: "done",
-      "Nothing to report": "done",
-    };
-    const status = STATUS[word] ?? "neutral";
-    return { status, text: ago, title: `${word} · ${at}`, said: word };
+    return { status, text: ago, title: words.wordAt(word, at), said: word };
   }
 
   /** The Next run cell. */
   function nextOf(routine: Routine): { text: string; title: string | null } {
     if (!routine.enabled) {
-      return { text: "Paused", title: routine.disabledReason };
+      return { text: words.paused, title: routine.disabledReason };
     }
     return { text: whenOf(routine.nextSlot), title: exactOf(routine.nextSlot) };
   }
@@ -484,21 +478,21 @@
   function menuOf(routine: Routine): RowAction[] {
     return [
       {
-        label: "Run now",
+        label: words.runNow,
         icon: IconPlay,
         disabled: going(routine) || queued(routine),
         onselect: () => runNow(routine),
       },
       {
-        label: routine.enabled ? "Pause" : "Resume",
+        label: routine.enabled ? words.pause : words.resume,
         icon: routine.enabled ? IconPause : IconPlay,
         onselect: () => pause(routine),
       },
       ...(routine.expiresAt !== null && !routine.keep
-        ? [{ label: "Keep", icon: IconPin, onselect: () => keep(routine) }]
+        ? [{ label: words.keep, icon: IconPin, onselect: () => keep(routine) }]
         : []),
       {
-        label: "Delete routine…",
+        label: words.remove,
         icon: IconTrash,
         destructive: true,
         onselect: () => {
@@ -566,22 +560,20 @@
   /** How often a poll reads, in words. */
   function everyOf(poll: Poll): string {
     if (poll.everyS === null) {
-      return "Read by the hub";
+      return words.readByHub;
     }
     const minutes = Math.round(poll.everyS / 60);
     if (minutes < 60) {
-      return minutes <= 1
-        ? "Read every minute"
-        : `Read every ${minutes} minutes`;
+      return minutes <= 1 ? words.everyMinute : words.everyMinutes(minutes);
     }
     const hours = Math.round(minutes / 60);
-    return hours === 1 ? "Read hourly" : `Read every ${hours} hours`;
+    return hours === 1 ? words.hourly : words.everyHours(hours);
   }
 
   /** The page's blocks: its three, then the views placed on it. */
   const items = $derived<Record<string, BlockItem>>({
     routines: {
-      title: "Routines",
+      title: words.tab,
       glyph: IconClock,
       meta: routinesMeta,
       action: routinesAction,
@@ -592,7 +584,7 @@
       card: true,
     },
     sources: {
-      title: "Event sources",
+      title: words.sources,
       glyph: IconHook,
       meta: sourcesMeta,
       action: sourcesAction,
@@ -603,7 +595,7 @@
       card: true,
     },
     actions: {
-      title: "Approved actions",
+      title: words.actions,
       glyph: IconShield,
       meta: actionsMeta,
       content: actionsBody,
@@ -654,7 +646,7 @@
         askDraft.focusWanted = asking;
       }}
       size="sm"
-      variant="outline">New routine</Button
+      variant="outline">{words.newRoutine}</Button
     >
   {/if}
 {/snippet}
@@ -663,9 +655,9 @@
     <Badge
       title={relayLive
         ? undefined
-        : (page.relays[0]?.inbound ?? "Only polled events arrive")}
+        : (page.relays[0]?.inbound ?? words.polledOnly)}
       variant={relayLive ? "live" : "default"}
-      ><span>Relay {relayLive ? "live" : "off"}</span></Badge
+      ><span>{relayLive ? words.relayLive : words.relayOff}</span></Badge
     >
   {/if}
 {/snippet}
@@ -690,7 +682,7 @@
         // biome-ignore lint/complexity/noVoid: the ask's own state is the composer's sending and its refusal
         void ask(text, id);
       }}
-      placeholder="Every weekday at 09:00, triage…"
+      placeholder={words.placeholder}
       sendAgain={askAgain}
       sendError={askRefused}
       sending={askSending}
@@ -760,17 +752,15 @@
                 <span class="text-status-attn-ink">· {line.off}</span>
               {/if}
               <!-- On a narrow ledger, Last and Next in the same order. -->
-              <span
-                data-slot="folded"
-                class="hidden @max-routines-ledger-34rem/routines-ledger:inline"
-              >
-                · Last <RunStatus
+              <span data-slot="folded" class="folded">
+                · {words.lastShort}
+                <RunStatus
                   said={last.said}
                   status={last.status}
                   text={last.text}
                   title={last.title}
                 />
-                · Next
+                · {words.nextShort}
                 <span
                   data-slot="num"
                   class="num"
@@ -818,18 +808,15 @@
             <td class="p-0 group-state-open:bg-surface-well" colspan="5">
               <fieldset
                 data-slot="row-ask"
-                aria-label="Delete {routine.name}"
-                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none border-current px-space-3 pt-0 pb-space-2 type-meta text-ink-strong"
+                aria-label={words.removeLabel(routine.name)}
+                class="row-ask"
               >
-                <span
-                  >Delete {routine.name}? It stops now; its past runs stay in
-                  the project's history.</span
-                >
+                <span>{words.removeAsk(routine.name)}</span>
                 <Button
-                  label="Delete routine"
+                  label={words.removeConfirm}
                   onclick={() => remove(routine)}
                   pending={deletePending}
-                  pendingLabel="Deleting…"
+                  pendingLabel={words.removing}
                   size="xs"
                   variant="destructive"
                 />
@@ -838,7 +825,7 @@
                     deleting = null;
                   }}
                   size="xs"
-                  variant="ghost">Cancel</Button
+                  variant="ghost">{words.cancel}</Button
                 >
               </fieldset>
             </td>
@@ -862,8 +849,8 @@
       {#if canTalk}
         <EmptyState
           icon={IconClock}
-          line="Caw runs work for {project.name} on a schedule, or when something happens. Say what, and when."
-          title="No routines yet"
+          line={words.emptyCaw(project.name)}
+          title={words.empty}
         >
           {#snippet action()}
             <!-- The starters as the kit's option chips,
@@ -871,9 +858,8 @@
             {#if starters.length > 0}
               <ul
                 data-slot="routine-starters"
-                aria-label="Routines to ask Caw for"
-                class="kit-chips m-0 list-none p-0 px-(--starters-px) max-desk:px-space-3"
-                style:--starters-px="calc((100% - var(--c-composer-w)) / 2)"
+                aria-label={words.startersLabel}
+                class="routine-starters kit-chips"
               >
                 {#each starters as starter (starter.text)}
                   {@const Glyph = GLYPHS[starter.glyph]}
@@ -900,9 +886,8 @@
       {:else}
         <EmptyState
           icon={IconClock}
-          line="Caw makes routines, and he can't start: {cawProblem ??
-            'his machine is away'}."
-          title="No routines yet"
+          line={words.emptyOff(cawProblem ?? words.away)}
+          title={words.empty}
         />
       {/if}
     </div>
@@ -922,10 +907,9 @@
     >
       <Table.Root
         data-routines
-        aria-label="Routines"
-        class="table-fixed border-separate"
-        ghostRows="tr[data-view-routines-row]"
-        spacing="flush"
+        aria-label={words.tab}
+        class="routines table-fixed"
+        ghostRows="tr.row"
       >
         <Table.Header>
           <Table.Row variant="band">
@@ -933,26 +917,28 @@
             <Table.Head
               class="h-c-toolbar-ctl w-(--col-state)"
               scope="col"
-              variant="caps"><span class="sr-only">State</span></Table.Head
+              variant="caps"
+              ><span class="sr-only">{words.columnState}</span></Table.Head
             >
             <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
-              >Routine</Table.Head
+              >{words.columnRoutine}</Table.Head
             >
             <Table.Head
               data-col-last
               class="h-c-toolbar-ctl w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
               scope="col"
-              variant="caps">Last run</Table.Head
+              variant="caps">{words.columnLastRun}</Table.Head
             >
             <Table.Head
               class="h-c-toolbar-ctl w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
               scope="col"
-              variant="caps">Next run</Table.Head
+              variant="caps">{words.columnNextRun}</Table.Head
             >
             <Table.Head
               class="h-c-toolbar-ctl w-(--col-menu)"
               scope="col"
-              variant="caps"><span class="sr-only">Actions</span></Table.Head
+              variant="caps"
+              ><span class="sr-only">{words.columnActions}</span></Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
           </Table.Row>
@@ -967,43 +953,27 @@
 
 {#snippet sourcesBody()}
   {#if sourceCount === 0}
-    <!-- literal: 72ch -->
-    <p
-      class="m-0 max-w-(--measure) p-space-3 type-meta text-pretty text-ink-muted"
-      style:--measure="72ch"
-    >
-      No event sources yet. Caw connects one when a routine should start on an
-      event, like a merged pull request.
-    </p>
+    <p class="purpose">{words.noSources}</p>
   {:else}
-    <!-- literal: calc(var(--c-row-lead) + var(--space-3)); 0 -->
-    <div
-      data-slot="ledger"
-      class="@container/routines-ledger"
-      style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
-      style:--none="0"
-    >
-      <Table.Root
-        aria-label="Event sources"
-        class="table-fixed border-separate"
-        spacing="flush"
-      >
+    <div data-slot="ledger" class="ledger">
+      <Table.Root aria-label={words.sources} class="quiet table-fixed">
         <Table.Header>
           <Table.Row variant="band">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               class="h-c-toolbar-ctl w-(--col-state)"
               scope="col"
-              variant="caps"><span class="sr-only">Service</span></Table.Head
+              variant="caps"
+              ><span class="sr-only">{words.columnService}</span></Table.Head
             >
             <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
-              >Source</Table.Head
+              >{words.columnSource}</Table.Head
             >
             <Table.Head
               data-col-last
               class="h-c-toolbar-ctl w-c-routine-time-w"
               scope="col"
-              variant="caps">Last read</Table.Head
+              variant="caps">{words.columnLastRead}</Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
           </Table.Row>
@@ -1048,10 +1018,10 @@
                 variant="list"
               >
                 {#if route.lastDeliveryAt === null}
-                  <RunStatus status="neutral" text="No events yet" />
+                  <RunStatus status="neutral" text={words.noEvents} />
                 {:else}
                   <RunStatus
-                    said="Delivered"
+                    said={words.delivered}
                     status="done"
                     text={since(route.lastDeliveryAt)}
                     title={exactOf(route.lastDeliveryAt)}
@@ -1100,20 +1070,20 @@
                 variant="list"
               >
                 {#if poll.polledAt === null}
-                  <RunStatus status="neutral" text="Not read yet" />
+                  <RunStatus status="neutral" text={words.notReadYet} />
                 {:else if poll.failure === null}
                   <RunStatus
-                    said="Read"
+                    said={words.read}
                     status="done"
                     text={since(poll.polledAt)}
                     title={exactOf(poll.polledAt)}
                   />
                 {:else}
                   <RunStatus
-                    said="Failed"
+                    said={words.failed}
                     status="failed"
                     text={since(poll.polledAt)}
-                    title="{poll.failure} · {exactOf(poll.polledAt)}"
+                    title={words.wordAt(poll.failure, exactOf(poll.polledAt))}
                   />
                 {/if}
               </Table.Cell>
@@ -1127,22 +1097,10 @@
 
 {#snippet actionsBody()}
   {#if actions.length === 0}
-    <!-- literal: 72ch -->
-    <p
-      class="m-0 max-w-(--measure) p-space-3 type-meta text-pretty text-ink-muted"
-      style:--measure="72ch"
-    >
-      Nothing yet. Caw asks you before a routine posts, emails or closes
-      anything, and what you decide is kept here.
-    </p>
+    <p class="purpose">{words.noActions}</p>
   {:else}
-    <!-- literal: 6rem -->
-    <div
-      data-slot="ledger"
-      class="@container/routines-ledger"
-      style:--col-when="6rem"
-    >
-      <ActionsTable {actions} label="Approved actions" {routineNames} />
+    <div data-slot="ledger" class="ledger">
+      <ActionsTable {actions} label={words.actions} {routineNames} />
     </div>
   {/if}
 {/snippet}
@@ -1154,11 +1112,11 @@
     <div class="max-w-(--measure)" style:--measure="72ch">
       <EmptyState
         icon={IconClock}
-        line="The routines for {project.name} could not be read: {problem} Nothing was changed."
-        title="Routines are not available"
+        line={words.unavailableLine(project.name, problem)}
+        title={words.unavailable}
       >
         {#snippet action()}
-          <Button onclick={read} variant="outline">Retry</Button>
+          <Button onclick={read} variant="outline">{words.retry}</Button>
         {/snippet}
       </EmptyState>
     </div>

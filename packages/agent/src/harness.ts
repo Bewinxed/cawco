@@ -87,7 +87,7 @@ export class KeeperRefused extends Error {
   readonly reason: string;
   constructor(procId: string, reason: string, pid?: number) {
     super(
-      `This session's process could not be reached: the machine's session keeper refused its input (${reason}).`
+      `This session's process could not be reached: the process that keeps this machine's sessions running refused its input (${reason}).`
     );
     this.procId = procId;
     this.reason = reason;
@@ -103,6 +103,13 @@ export interface HarnessContext {
    * commands as it always has.
    */
   readonly boundary?: import("./boundary").Boundary;
+  /**
+   * The door its browser tool (the fleet's chrome-devtools) is launched
+   * through (browser/door.ts): its workspace's, else its own. Made when
+   * asked, starting no browser. Absent on a fenced session and on an attach,
+   * which launch none.
+   */
+  readonly browserDoor?: () => Promise<import("./browser/door").BrowserDoor>;
   /** Whether a turn is in flight — the supervisor's busy set and drain read this. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   busy(active: boolean): void;

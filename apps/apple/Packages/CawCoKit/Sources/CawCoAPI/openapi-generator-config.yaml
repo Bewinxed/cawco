@@ -13,6 +13,7 @@ typeOverrides:
     AccountKind: OpenEnums.AccountKind
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
+    ArtifactDoes: OpenEnums.ArtifactDoes
     ArtifactKind: OpenEnums.ArtifactKind
     ArtifactStatusWaitingOn: OpenEnums.ArtifactStatusWaitingOn
     AskAnswerBehavior: OpenEnums.AskAnswerBehavior
@@ -30,11 +31,11 @@ typeOverrides:
     BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
     BlockPage: OpenEnums.BlockPage
     BlockWidth: OpenEnums.BlockWidth
+    BrowserHandedBackFrameWhy: OpenEnums.BrowserHandedBackFrameWhy
     BrowserHostKind: OpenEnums.BrowserHostKind
     BrowserRuntimeKind: OpenEnums.BrowserRuntimeKind
     BrowserState: OpenEnums.BrowserState
     CallerKind: OpenEnums.CallerKind
-    CanvasDialKind: OpenEnums.CanvasDialKind
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawHarness: OpenEnums.CawHarness
@@ -58,7 +59,6 @@ typeOverrides:
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus
     DelegateTypeRole: OpenEnums.DelegateTypeRole
-    DelegateWork: OpenEnums.DelegateWork
     DeleteApiJevTypesafeKey200Route: OpenEnums.DeleteApiJevTypesafeKey200Route
     DesignOfferStateAnswer: OpenEnums.DesignOfferStateAnswer
     DeviceKind: OpenEnums.DeviceKind
@@ -101,6 +101,7 @@ typeOverrides:
     KeepAliveTtl: OpenEnums.KeepAliveTtl
     LandsMode: OpenEnums.LandsMode
     Law: OpenEnums.Law
+    LfsOfferStateAnswer: OpenEnums.LfsOfferStateAnswer
     MachineCapabilityId: OpenEnums.MachineCapabilityId
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
     MemoryScopeRole: OpenEnums.MemoryScopeRole
@@ -134,8 +135,8 @@ typeOverrides:
     RelayPortName: OpenEnums.RelayPortName
     RelayProvider: OpenEnums.RelayProvider
     RelayState: OpenEnums.RelayState
-    RepoInfoVisibility: OpenEnums.RepoInfoVisibility
-    ReposResultError: OpenEnums.ReposResultError
+    RelayStepFinding: OpenEnums.RelayStepFinding
+    RelayStepHow: OpenEnums.RelayStepHow
     RestartHoldReason: OpenEnums.RestartHoldReason
     RoutineMadeEventBy: OpenEnums.RoutineMadeEventBy
     RoutineRunState: OpenEnums.RoutineRunState
@@ -146,6 +147,8 @@ typeOverrides:
     RuleWatch: OpenEnums.RuleWatch
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
+    SessionAttachmentKind: OpenEnums.SessionAttachmentKind
+    SessionAttachmentWho: OpenEnums.SessionAttachmentWho
     SessionPulseActivity: OpenEnums.SessionPulseActivity
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState
@@ -166,7 +169,6 @@ typeOverrides:
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
-    ThreadEntryBy: OpenEnums.ThreadEntryBy
     ThreadStatus: OpenEnums.ThreadStatus
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState

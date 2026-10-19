@@ -1,0 +1,11 @@
+apps/dashboard/src/lib/components/features/workflows/WorkflowLaunch.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowNodeCard.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowProgram.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowRunView.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowStatus.svelte
+
+# apps/dashboard/src/lib/components/features/workflows/WorkflowLaunch.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/components/features/workflows/WorkflowNodeCard.svelte: relic: literal ×1; relic: style-var ×3; relic: style-reason ×1
+# apps/dashboard/src/lib/components/features/workflows/WorkflowProgram.svelte: relic: literal ×2; relic: style-var ×2
+# apps/dashboard/src/lib/components/features/workflows/WorkflowRunView.svelte: relic: literal ×4; relic: style-var ×6; relic: style-reason ×1
+# apps/dashboard/src/lib/components/features/workflows/WorkflowStatus.svelte: relic: literal ×1; relic: style-var ×1

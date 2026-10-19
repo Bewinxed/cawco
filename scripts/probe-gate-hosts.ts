@@ -3,8 +3,10 @@
  * a pi host and an OpenCode server started on an older gate form are
  * relaunched onto the current one the first moment they are idle, never
  * mid-turn, and then refuse what the workspace's policy denies; a
- * workspace session's chrome-devtools-mcp writes captures to the workspace's
- * scratch and refuses a path outside the clone and the scratch; two
+ * workspace session's chrome-devtools-mcp, reaching the machine's browser
+ * through its workspace's door and the DevTools gate (a local Chromium:
+ * the runtime is hidden), writes captures to the workspace's scratch and
+ * refuses a path outside the clone and the scratch; two
  * workspaces' sessions on one OpenCode server each read back the output it
  * was told it saved and are refused the other's; a session in a directory
  * inside a clone is judged and bounded as that clone's; the opencode.jsonc
@@ -16,71 +18,118 @@
  *
  * Runs on a private HOME, a private sessiond, a local mock model and fake
  * keys only; it never reaches fleet services or a real provider. The real
- * pi host, the real `opencode` binary and the real chrome-devtools-mcp run
- * here, driven through the agent's own harness code. The hub's part of a pi
+ * pi host, the real `opencode` binary, the real chrome-devtools-mcp and the
+ * agent's own browser registry and gate run here, driven through the
+ * agent's own harness code. The hub's part of a pi
  * relaunch — stop the session at its turn boundary, spawn it again on its
  * conversation — is played here as the hub's `relaunchOntoHook` plays it.
  */
 import { chmod, copyFile, mkdir, readdir, rm, symlink } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { readWithin } from "../packages/core/src/bounded";
 
 const ROOT = join(import.meta.dir, "..");
 
+/**
+ * The chrome-devtools-mcp the door launches: 1.11.0 reads `--config`
+ * (browser/door.ts), as the browser-gate and browser-cutover specs pin it.
+ */
+const DEVTOOLS_MCP = "chrome-devtools-mcp@1.11.0";
+
+/**
+ * It, with `args`, as the fleet's sync resolves a fleet MCP's `npx -y`
+ * (mcp-launcher.ts): installed once under the private HOME's data dir and
+ * launched from there with node.
+ */
+const devtoolsLaunch = async (args: string[]) => {
+  const { resolveMcpLauncher } =
+    await import("../packages/agent/src/mcp-launcher");
+  const launcher = await resolveMcpLauncher({
+    command: "npx",
+    args: ["-y", DEVTOOLS_MCP, ...args],
+  });
+  if (!("config" in launcher)) {
+    throw new Error(
+      `${DEVTOOLS_MCP}: ${"failed" in launcher ? launcher.failed : launcher.unavailable}`
+    );
+  }
+  if (!("command" in launcher.config)) {
+    throw new Error(`${DEVTOOLS_MCP}: not a command`);
+  }
+  return {
+    command: launcher.config.command,
+    args: launcher.config.args ?? [],
+    env: launcher.config.env ?? {},
+  };
+};
+
 // ── The private machine ────────────────────────────────────────────────
 // On disk under ~/.cache, not /tmp: chrome-devtools-mcp always lets a capture
 // into its own temp dir, so the "outside" path must not lie under /tmp.
+// `GATE_PROBE_ROOT` names another dir to hold it, for a run whose ~/.cache
+// is not writable; never one under the temp dir.
+const sandboxRoot = process.env.GATE_PROBE_ROOT ?? join(homedir(), ".cache");
+if (!process.env.GATE_PROBE_SANDBOX && sandboxRoot.startsWith(tmpdir())) {
+  throw new Error(
+    `GATE_PROBE_ROOT ${sandboxRoot} is under the temp dir (${tmpdir()}), which chrome-devtools-mcp always writes.`
+  );
+}
 const sandbox =
   process.env.GATE_PROBE_SANDBOX ??
-  join(
-    homedir(),
-    ".cache",
-    `gate-hosts-probe-${crypto.randomUUID().slice(0, 8)}`
-  );
+  join(sandboxRoot, `gate-hosts-probe-${crypto.randomUUID().slice(0, 8)}`);
 if (!process.env.GATE_PROBE_SANDBOX) {
-  // What the private HOME cannot find for itself: the fleet's pinned
-  // chrome-devtools-mcp and the Chromium it drives, from the real caches.
-  const npx = join(homedir(), ".npm", "_npx");
-  const devtools = (
-    await Array.fromAsync(
-      new Bun.Glob("*/node_modules/chrome-devtools-mcp/package.json").scan({
-        cwd: npx,
-      })
-    )
-  ).map((file) => join(npx, file, ".."));
-  const browsers = join(homedir(), ".cache", "ms-playwright");
-  const chrome = (
-    await Array.fromAsync(
-      new Bun.Glob("chromium-*/chrome-linux*/chrome").scan({ cwd: browsers })
-    )
-  )
-    .sort()
-    .map((file) => join(browsers, file))
-    .at(-1);
-  if (!(devtools[0] && chrome)) {
+  // What the private HOME cannot find for itself: npm's cache, from which the
+  // run installs the pinned chrome-devtools-mcp as the fleet's sync does
+  // (`devtoolsLaunch`), and Playwright's Chromium, which the agent's local
+  // browser runs.
+  const { resolveBin } = await import("../packages/agent/src/tools");
+  const npm = resolveBin("npm");
+  if (!npm) {
     throw new Error(
-      `chrome-devtools-mcp (${devtools[0] ?? "not in ~/.npm/_npx"}) and Playwright's Chromium (${chrome ?? "not in ~/.cache/ms-playwright"}) are required.`
+      "npm is required: the fleet installs chrome-devtools-mcp with it."
     );
   }
+  const npmCache = (await Bun.$`${npm} config get cache`.text()).trim();
+  const browsers = join(homedir(), ".cache", "ms-playwright");
+  // The machine's own agent holds the default gate port: this one is free.
+  const probe = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: { data: () => undefined },
+  });
+  const gatePort = probe.port;
+  probe.stop(true);
   await mkdir(sandbox, { recursive: true });
   const home = join(sandbox, "home");
+  const runtimeDir = join(sandbox, "run");
+  await mkdir(runtimeDir, { recursive: true, mode: 0o700 });
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     GATE_PROBE_SANDBOX: sandbox,
-    GATE_PROBE_DEVTOOLS: devtools[0],
-    GATE_PROBE_CHROME: chrome,
+    npm_config_cache: npmCache,
+    PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? browsers,
+    CAWCO_BROWSER_GATE_PORT: String(gatePort),
+    // The local host: a Chromium of the agent's, behind the gate.
+    DOCKER_HOST: "unix:///nonexistent",
     HOME: home,
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_DATA_HOME: join(home, ".local", "share"),
     XDG_CACHE_HOME: join(home, ".cache"),
     XDG_STATE_HOME: join(home, ".local", "state"),
     CAWCO_SESSIOND_ENDPOINT: join(sandbox, "sessiond.sock"),
+    // Its own runtime dir: the live agent keeps its sockets in the real one
+    // (core paths.ts `hubCredentialSocket`).
+    XDG_RUNTIME_DIR: runtimeDir,
   };
   env.INVOCATION_ID = undefined;
   env.CAWCO_SERVICE_MODE = undefined;
   env.XPC_SERVICE_NAME = undefined;
+  // git's own template, as a delegate's workspace is cut with: a caller's
+  // (a boundary names one of its own) can leave a clone without
+  // `.git/info/exclude`, which the probe reads back.
+  env.GIT_TEMPLATE_DIR = undefined;
   const child = Bun.spawn(
     [process.execPath, import.meta.path, ...process.argv.slice(2)],
     { env, stdout: "inherit", stderr: "inherit" }
@@ -98,8 +147,6 @@ if (homedir() !== home) {
   throw new Error("Probe HOME isolation did not take effect.");
 }
 const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT as string;
-const devtoolsDir = process.env.GATE_PROBE_DEVTOOLS as string;
-const chrome = process.env.GATE_PROBE_CHROME as string;
 
 // ── What the agent says, kept for the checks ───────────────────────────
 const said: string[] = [];
@@ -124,6 +171,7 @@ for (const level of ["log", "info", "warn"] as const) {
 interface Item {
   content?: unknown;
   role?: string;
+  tool_calls?: { function?: { arguments?: string; name?: string } }[];
 }
 interface Tool {
   function?: {
@@ -210,23 +258,236 @@ const answer = (
     headers: { "content-type": "text/event-stream" },
   });
 };
-const PAGE_ID = /(\d+): /;
-// A tool's path as the description writes its namespace: callable whether or
-// not the bounded catalog shows that tool.
-const SCREENSHOT_PATH = /(tools\["chrome-devtools"\])\./;
+/** The page new_page selected, in its answer as JSON (a line ends at a JSON-escaped newline). */
+const SELECTED_PAGE = /(\d+): [^\\"]*\[selected\]/;
+/** take_screenshot's namespace path as code mode writes it: `tools["x"]` or `tools.x`, nested or not, then the tool. */
+const SCREENSHOT_PATH =
+  /(tools(?:\["[^"]+"\]|\.[A-Za-z_$][\w$]*)*?)(?:\.take_screenshot|\["take_screenshot"\])/;
+const SCREENSHOT_NAME = "take_screenshot";
+/** The page new_page selected, in its answer as text. */
+const SELECTED_LINE = /(\d+):[^\n]*\[selected\]/;
+/** Where 2.0.29's Code Mode catalog (`Xl`/`Yi`) starts listing. */
+const CATALOG = "## Available tools";
+/** A Code Mode `search` call, as 2.0.29 names its input (`search({ query })`, synchronous). */
+const SEARCH_CALL = "search({ query: ";
 const HOLD = /HOLD (\S+)/;
 const PI_LINE = /\[pi\] .* relaunched between turns/;
 const GATE_LINE = /\[opencode\] gate: .* relaunched from gate form/;
 const READ = /READ (\S+)/;
 const SHOT = /SHOT (\S+)/;
 const LONG = /\bLONG\b/;
-/** OpenCode's hint naming the file it saved a cut output to (tool/truncate.ts at 1.18.34), as a tool result's JSON text carries it. */
-const SAVED = /Full output saved to: ([^\s"\\]+)/;
-/** 5000 lines: past OpenCode's 2000-line cut (tool/truncate.ts MAX_LINES), under the bash tool's own 30000 characters. */
+/**
+ * OpenCode's hint naming the file it saved a cut output to, as a tool
+ * result's JSON text carries it. 2.0.29 (the installed binary's ToolOutput:
+ * `maxLines:2000, maxBytes:51200`) writes `[showing lines 1-N of M; full
+ * output saved to <path>]`; 1.18.34 wrote `Full output saved to: <path>`.
+ */
+const SAVED = /full output saved to:? ([^\s"\\\]]+)/i;
+/** 5000 lines: past OpenCode's 2000-line cut, under CawCo's shell's own 30000 characters. */
 const LONG_COMMAND = "seq 1 5000";
 const BOUNDED = /\bBOUNDED\b/;
 /** What the probe's boundary runner sets; OpenCode's own bash never has it. */
 const BOUNDED_COMMAND = 'echo "boundary=$CAWCO_PROBE_BOUNDARY pwd=$PWD"';
+const PATH_PARAM = /path/i;
+/** A tool's parameter names: required first, then the rest. */
+const paramsOf = (tool: Tool): string[] => {
+  const required = tool.function?.parameters?.required ?? [];
+  const all = Object.keys(tool.function?.parameters?.properties ?? {});
+  return [...required, ...all.filter((name) => !required.includes(name))];
+};
+/** The parameter a file tool takes its path by, as its schema names it (OpenCode's `read` took `filePath`, now `path`). */
+const pathKeyOf = (tool: Tool): string | undefined =>
+  paramsOf(tool).find((name) => PATH_PARAM.test(name));
+/** The tool that runs a shell command, by what it offers: a `command` parameter. */
+const shellOf = (offered: Tool[]): { name: string; tool: Tool } | undefined => {
+  const tool = offered.find((one) => paramsOf(one).includes("command"));
+  const name = tool?.function?.name;
+  return tool && name ? { name, tool } : undefined;
+};
+/** Of `values`, those `tool`'s schema names. */
+const argsFor = (tool: Tool, values: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(values).filter(([name]) => paramsOf(tool).includes(name))
+  );
+/**
+ * The namespace path whose tools hold `take_screenshot`, as the text a
+ * model reads names it: a catalog line's signature, or a `search` result
+ * (its JSON's escaped quotes read back as quotes). 2.0.29's `execute`
+ * says "Call tools through `tools` using only exact paths and signatures
+ * from the catalog … preserve bracket notation".
+ */
+const screenshotPathOf = (text: string): string | undefined =>
+  text.replaceAll('\\"', '"').match(SCREENSHOT_PATH)?.[1];
+/** Parsed while it is JSON text: a Code Mode program's value comes back as JSON inside the tool's text. */
+const unwrapped = (text: string): unknown => {
+  let value: unknown = text;
+  while (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+};
+/** The namespace path a `search` program's result names for take_screenshot: the item whose `path` ends in it. */
+const searchedPathOf = (text: string): string | undefined =>
+  (
+    (unwrapped(text) as { found?: { items?: { path?: string }[] } } | null)
+      ?.found?.items ?? []
+  )
+    .map((one) => one.path ?? "")
+    .find((path) => path.endsWith(`.${SCREENSHOT_NAME}`))
+    ?.slice(0, -(SCREENSHOT_NAME.length + 1));
+/**
+ * The Code Mode catalog the request carries, wherever 2.0.29 put it (the
+ * newest message holding `## Available tools`, of any role); none when the
+ * request has none.
+ */
+const catalogOf = (items: Item[]): string | undefined =>
+  items
+    .map((one) => textOf(one.content))
+    .findLast((one) => one.includes(CATALOG))
+    ?.split(CATALOG)
+    .at(-1);
+/** `execute`'s one input, as its schema names it. */
+const programKeyOf = (execute: Tool["function"]) =>
+  execute?.parameters?.required?.[0] ??
+  Object.keys(execute?.parameters?.properties ?? {})[0];
+/**
+ * The capture, through the namespace at `path`: through the gate the
+ * workspace sees its own pages alone, so it opens one and captures it by
+ * the id new_page selected.
+ */
+const captureCall = (key: string, path: string, shot: string) =>
+  answer("", {
+    name: "execute",
+    args: {
+      [key]: [
+        `const opened = await ${path}.new_page({ url: "about:blank" });`,
+        String.raw`const pageId = Number(JSON.stringify(opened).match(/(\d+): [^\\"]*\[selected\]/)?.[1]);`,
+        `return await ${path}.take_screenshot({ filePath: ${JSON.stringify(shot)}, pageId });`,
+      ].join("\n"),
+    },
+  });
+/** Whether the last assistant turn ran `search` (its program, as the request echoes it). */
+const searched = (items: Item[]) =>
+  items
+    .findLast((one) => one.role === "assistant")
+    ?.tool_calls?.some((call) =>
+      call.function?.arguments?.includes(SEARCH_CALL)
+    ) ?? false;
+/**
+ * A `SHOT` turn under OpenCode's code mode, as a model takes it: MCP tools
+ * are reached only through `execute`, by the path the catalog lists, else
+ * by the path a `search` program returns (2.0.29: "The catalog is partial.
+ * Inside `execute`, use `search(...)` to find a tool, then call it by the
+ * `path` in the result").
+ */
+const shotCall = (
+  body: { messages?: Item[]; tools?: Tool[] },
+  shot: string
+) => {
+  const items = body.messages ?? [];
+  const offered = body.tools ?? [];
+  const names = offered.map((one) => one.function?.name ?? "");
+  if (!loggedCatalog) {
+    loggedCatalog = true;
+    const codeMode = items
+      .map((one) => `${one.role}: ${textOf(one.content)}`)
+      .filter((one) => one.includes("Code Mode") || one.includes("chrome"))
+      .map((one) => one.slice(0, 1500));
+    console.log(
+      `[gate-probe] code-mode request: keys ${Object.keys(body).join(", ")}; roles ${items.map((one) => one.role).join(", ")}; tools ${names.join(", ")}; messages naming Code Mode or chrome:\n${codeMode.join("\n---\n") || "(none)"}`
+    );
+  }
+  // Offered directly (a server outside Code Mode): its own tools, by name.
+  const direct = names.find((name) => name.endsWith(SCREENSHOT_NAME));
+  if (direct) {
+    return directShot(items, direct.slice(0, -SCREENSHOT_NAME.length), shot);
+  }
+  const execute = offered.find(
+    (one) => one.function?.name === "execute"
+  )?.function;
+  const key = programKeyOf(execute);
+  if (!key) {
+    return answer(`no execute tool among: ${names.join(", ")}`);
+  }
+  if (items.at(-1)?.role === "tool") {
+    const found = textOf(items.at(-1)?.content);
+    const path = searched(items) ? searchedPathOf(found) : undefined;
+    return path
+      ? captureCall(key, path, shot)
+      : answer(`tool said: ${found.slice(0, 2000)}`);
+  }
+  const path = screenshotPathOf(catalogOf(items) ?? "");
+  // Beside the search, the runtime's namespaces and their tools: OpenCode's
+  // own pointer for names ("Use Object.keys(tools) for names").
+  return path
+    ? captureCall(key, path, shot)
+    : answer("", {
+        name: "execute",
+        args: {
+          [key]: [
+            `const found = ${SEARCH_CALL}"take_screenshot" });`,
+            "const spaces = Object.keys(tools);",
+            "return { found, spaces: Object.fromEntries(spaces.map((space) => [space, Object.keys(tools[space])])) };",
+          ].join("\n"),
+        },
+      });
+};
+/** The tool the last assistant turn called, by name. */
+const lastCalled = (items: Item[]) =>
+  items.findLast((one) => one.role === "assistant")?.tool_calls?.at(-1)
+    ?.function?.name;
+/** A `SHOT` turn through a server's own tools, `prefix` naming them: new_page, then take_screenshot of the page it selected. */
+const directShot = (items: Item[], prefix: string, shot: string) => {
+  if (items.at(-1)?.role !== "tool") {
+    return answer("", {
+      name: `${prefix}new_page`,
+      args: { url: "about:blank" },
+    });
+  }
+  const result = textOf(items.at(-1)?.content);
+  if (lastCalled(items) !== `${prefix}new_page`) {
+    return answer(`tool said: ${result.slice(0, 2000)}`);
+  }
+  const pageId = Number(result.match(SELECTED_LINE)?.[1]);
+  return answer("", {
+    name: `${prefix}${SCREENSHOT_NAME}`,
+    args: { filePath: shot, pageId },
+  });
+};
+let loggedCatalog = false;
+/** A turn's `BOUNDED`, `LONG` or `READ`, as the tools it offers take it; none for any other. */
+const shellOrReadCall = (
+  text: string,
+  offered: Tool[]
+): Response | undefined => {
+  const names = offered.map((one) => one.function?.name ?? "").join(", ");
+  if (BOUNDED.test(text) || LONG.test(text)) {
+    const command = BOUNDED.test(text) ? BOUNDED_COMMAND : LONG_COMMAND;
+    const shell = shellOf(offered);
+    return shell
+      ? answer("", {
+          name: shell.name,
+          args: argsFor(shell.tool, {
+            command,
+            description: "Run the probe's command",
+          }),
+        })
+      : answer(`no shell tool among: ${names}`);
+  }
+  const read = text.match(READ)?.[1];
+  if (!read) {
+    return;
+  }
+  const tool = offered.find((one) => one.function?.name === "read");
+  const key = tool ? pathKeyOf(tool) : undefined;
+  return key
+    ? answer("", { name: "read", args: { [key]: read } })
+    : answer(`no read tool with a path among: ${names}`);
+};
 const mock = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -247,6 +508,10 @@ const mock = Bun.serve({
     if (body.model === "title-mock") {
       return answer("A title");
     }
+    const shot = text.match(SHOT)?.[1];
+    if (shot) {
+      return shotCall(body, shot);
+    }
     if (toolTurn) {
       return answer(
         `tool said: ${textOf(items.at(-1)?.content).slice(0, 400)}`
@@ -256,50 +521,9 @@ const mock = Bun.serve({
     if (holding) {
       return answer(`released ${holding}`, undefined, hold(holding));
     }
-    if (BOUNDED.test(text)) {
-      return answer("", {
-        name: "bash",
-        args: { command: BOUNDED_COMMAND, description: "Name the boundary" },
-      });
-    }
-    if (LONG.test(text)) {
-      return answer("", {
-        name: "bash",
-        args: { command: LONG_COMMAND, description: "Count to five thousand" },
-      });
-    }
-    const read = text.match(READ)?.[1];
-    if (read) {
-      const pi = tools.includes("ls");
-      return answer("", {
-        name: "read",
-        args: pi ? { path: read } : { filePath: read },
-      });
-    }
-    const shot = text.match(SHOT)?.[1];
-    if (shot) {
-      // OpenCode's code mode: MCP tools are reached through one `execute`
-      // tool running a program, its description listing each tool's path
-      // (`tools.<namespace>.<tool>(input)`). The fleet runs chrome-devtools
-      // with page-id routing (its default): a fresh isolated browser's one
-      // page is page 1.
-      const execute = (body.tools ?? []).find(
-        (one) => one.function?.name === "execute"
-      )?.function;
-      const path = execute?.description?.match(SCREENSHOT_PATH)?.[1];
-      const key =
-        execute?.parameters?.required?.[0] ??
-        Object.keys(execute?.parameters?.properties ?? {})[0];
-      return path && key
-        ? answer("", {
-            name: "execute",
-            args: {
-              [key]: `return await ${path}.take_screenshot(${JSON.stringify({ filePath: shot, pageId: 1 })})`,
-            },
-          })
-        : answer(
-            `no take_screenshot among: ${execute?.description?.slice(0, 2000) ?? tools.join(", ")}`
-          );
+    const shellOrRead = shellOrReadCall(text, body.tools ?? []);
+    if (shellOrRead) {
+      return shellOrRead;
     }
     return answer("ok");
   },
@@ -314,6 +538,11 @@ const hub = Bun.serve({
     const url = new URL(request.url);
     if (url.pathname === "/api/delegation/tools") {
       return Response.json({ tools: [] });
+    }
+    // A session's credential, acknowledged as the hub holds it
+    // (session-identity.ts `acknowledgeSessionCredential`).
+    if (url.pathname === "/api/session-identities/ack") {
+      return Response.json({ installed: true });
     }
     if (!url.pathname.startsWith("/mcp/") || request.method !== "POST") {
       return new Response(null, { status: 404 });
@@ -338,6 +567,10 @@ const hub = Bun.serve({
   },
 });
 process.env.CAWCO_HUB_URL = `${hub.url.origin}/ws`;
+// Its own MCP gateway: the harnesses' CawCo tools (`harnessMcpUrl`) are this
+// server's, never the live agent's on the default port. Read once per
+// process (core `CAWCO_ENV.mcpPort`), so named before anything reads it.
+process.env.CAWCO_MCP_PORT = String(hub.port);
 await Bun.write(
   join(home, ".config", "cawco", "config.json"),
   JSON.stringify({ hubUrl: `${hub.url.origin}/ws` })
@@ -346,16 +579,11 @@ process.env.OPENCODE_DISABLE_MODELS_FETCH = "1";
 
 // The machine's harness config: one fake-keyed provider at the mock, and the
 // fleet's chrome-devtools-mcp as the agent's sync writes it for OpenCode.
-const devtoolsCommand = [
-  Bun.which("node") ?? "node",
-  join(devtoolsDir, "build", "src", "bin", "chrome-devtools-mcp.js"),
-  "--headless",
-  "--isolated",
-  `--executablePath=${chrome}`,
-  "--chromeArg=--no-sandbox",
+const devtools = await devtoolsLaunch([
   "--no-usage-statistics",
   "--no-performance-crux",
-];
+]);
+const devtoolsCommand = [devtools.command, ...devtools.args];
 await Bun.write(
   join(home, ".config", "opencode", "opencode.json"),
   JSON.stringify({
@@ -380,6 +608,7 @@ await Bun.write(
         type: "local",
         enabled: true,
         command: devtoolsCommand,
+        environment: devtools.env,
       },
     },
   })
@@ -398,37 +627,100 @@ await Bun.write(
   })
 );
 
+// ── The machine's first fleet sync ──────────────────────────────────────
+// A fleet with nothing in it, converged by the agent's own sync before any
+// spawn: it writes the sidecar a spawn reads the fleet's denials from
+// (denied-tools.ts `resolvedFleetDenials`), so no spawn waits for a hub
+// this probe does not run.
+const { syncFleetConfig } = await import("../packages/agent/src/fleet");
+await syncFleetConfig({
+  cawcoTodos: false,
+  deniedTools: [],
+  hooks: [],
+  hubOnlyMarketplaces: [],
+  marketplaces: [],
+  mcp: [],
+  memory: null,
+  placedMcp: [],
+  placedMemory: [],
+  placedSkills: [],
+  pluginPayloads: [],
+  plugins: [],
+  skills: [],
+});
+
 // ── The workspaces: each a clone, its policy, judge and boundary record ─
 // Each clone is a `git clone --shared` of this repository, as a delegate's
 // workspace is cut.
 const paths = await import("../packages/core/src/paths");
 const { workspacePolicy } =
   await import("../packages/core/src/workspace-policy");
-const { JUDGE_SCRIPT } = await import("../packages/agent/src/boundary");
+const { JUDGE_SCRIPT, addSpill } =
+  await import("../packages/agent/src/boundary");
 await mkdir(paths.workspaceCacheDir(), { recursive: true });
-const workspaceAt = async (id: string, dir: string) => {
-  await Bun.$`git clone -q --shared ${ROOT} ${dir}`.quiet();
-  const state = paths.workspaceStateDir(id);
-  const tmp = paths.workspaceScratchDir(id);
-  await mkdir(tmp, { recursive: true });
+/** Workspace `id`'s policy, as its boundary writes it from its records. */
+const writePolicy = async (id: string, dir: string) => {
   const policy = paths.workspacePolicyFile(id);
   await Bun.write(
     policy,
     JSON.stringify(await workspacePolicy({ id, path: dir }), null, 2)
   );
+  return policy;
+};
+/**
+ * A workspace session's launch, as session.ts plays it before the
+ * harness's spawn: its harness names the folder it saves cut outputs in
+ * (`Harness.spill`), the boundary adds it (boundary.ts `boundaryFor` →
+ * `addSpill`), and the policy reads it from then on.
+ */
+const launched = async <S extends { cwd: string; instanceId: string }>(
+  adapter: {
+    spill?: (
+      spec: S,
+      cwd: string,
+      workspace: string
+    ) => Promise<{ dir: string; spec: S }>;
+  },
+  spec: S,
+  at: { id: string; clone: string }
+): Promise<S> => {
+  const spill = await adapter.spill?.(spec, spec.cwd, at.id);
+  if (!spill) {
+    return spec;
+  }
+  await addSpill(at.id, spill.dir);
+  await writePolicy(at.id, at.clone);
+  return spill.spec;
+};
+const workspaceAt = async (id: string, dir: string) => {
+  await Bun.$`git clone -q --shared ${ROOT} ${dir}`.quiet();
+  const state = paths.workspaceStateDir(id);
+  const tmp = paths.workspaceScratchDir(id);
+  await mkdir(tmp, { recursive: true });
+  const policy = await writePolicy(id, dir);
   await copyFile(
     join(ROOT, "packages", "core", "src", "workspace-judge.ts"),
     join(state, JUDGE_SCRIPT)
   );
   const exec = join(state, "exec");
-  // The probe's boundary runner: it tags the command's environment with its
-  // workspace, so a command's output says which boundary ran it.
+  // The probe's boundary runner, on the real one's contract (boundary.ts
+  // `execScript`: `exec [--session] [--cwd-out FILE] COMMAND`, FILE getting
+  // the directory COMMAND ended in): it tags the command's environment with
+  // its workspace, so a command's output says which boundary ran it.
   await Bun.write(
     exec,
-    `#!/bin/sh\nCAWCO_PROBE_BOUNDARY=${id} exec /bin/sh -c "$1"\n`
+    [
+      "#!/bin/sh",
+      'if [ "$1" = --session ]; then shift; fi',
+      "cwd_out=",
+      'if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi',
+      `CAWCO_PROBE_BOUNDARY=${id} /bin/sh -c "$1\nstatus=\\$?; pwd -P > \\"\\$0\\"; exit \\$status" "\${cwd_out:-/dev/null}"`,
+      "",
+    ].join("\n")
   );
   await chmod(exec, 0o755);
   const record = {
+    claudeTmp: paths.workspaceClaudeTmpDir(id),
     exec,
     hook: join(state, "hook"),
     pid: process.pid,
@@ -446,8 +738,14 @@ const workspaceAt = async (id: string, dir: string) => {
   );
   return { id, clone: dir, scratch: tmp, policyFile: policy, boundary: record };
 };
-const WS = "gate-probe-ws";
-const other = await workspaceAt("gate-probe-ws-b", join(sandbox, "clone-b"));
+// UUIDs, as the agent mints a workspace's id: its scratch dir is named by
+// the first 8 characters (core paths.ts `workspaceScratchDir`), so two ids
+// sharing those would share one scratch.
+const WS = "0a7e0c41-6a1d-4c2e-9f3b-5d8e7a6b4c01";
+const other = await workspaceAt(
+  "0b7e0c42-6a1d-4c2e-9f3b-5d8e7a6b4c02",
+  join(sandbox, "clone-b")
+);
 const { clone, scratch, policyFile, boundary } = await workspaceAt(
   WS,
   join(sandbox, "clone")
@@ -473,6 +771,27 @@ const { OpencodeHarness } =
 type Neutral = import("../packages/core/src/index").NeutralMessage;
 type Context = import("../packages/agent/src/harness").HarnessContext;
 type Session = import("../packages/agent/src/harness").HarnessSession;
+const { INSTALL_SESSION_CREDENTIAL } =
+  await import("../packages/core/src/harness");
+/**
+ * The hub's part of a spawn after the session opens: it hands the session
+ * the credential it minted for it (`INSTALL_SESSION_CREDENTIAL`), which the
+ * harness records by its OpenCode session id, the record CawCo's plugin
+ * finds a session's instance by. A made-up one: this hub is the probe's.
+ */
+const credentialed = async (session: Session, instanceId: string) => {
+  await session.control?.(INSTALL_SESSION_CREDENTIAL, [
+    `gate-probe-credential-${instanceId}`,
+  ]);
+};
+
+// The agent's browser registry and its gate, as the daemon runs them: each
+// workspace session's chrome-devtools reaches the machine's browser through
+// its workspace's door alone.
+const browsers = await import("../packages/agent/src/browser/browsers");
+const { browserDoor, throughGate } =
+  await import("../packages/agent/src/browser/door");
+await browsers.watchBrowsers();
 
 const sessiond = new SessiondServer();
 await sessiond.listen(endpoint);
@@ -521,7 +840,11 @@ interface Watch {
 }
 const watch = (
   instanceId: string,
-  at: { boundary: typeof boundary; clone: string } = { boundary, clone }
+  at: { boundary: typeof boundary; clone: string; id: string } = {
+    boundary,
+    clone,
+    id: WS,
+  }
 ): Watch => {
   const seen: Watch = {
     busy: false,
@@ -530,6 +853,7 @@ const watch = (
       instanceId,
       cwd: at.clone,
       boundary: at.boundary,
+      browserDoor: () => browserDoor(at.id),
       busy: (active) => {
         seen.busy = active;
         wake();
@@ -711,8 +1035,12 @@ try {
   earlier = new OpencodeHarness();
   earlier.setCustodyReadiness(() => true);
   const first = watch(OC);
-  const ocFirst = await earlier.spawn(ocSpec, first.ctx);
+  const ocFirst = await earlier.spawn(
+    await launched(earlier, ocSpec, { id: WS, clone }),
+    first.ctx
+  );
   ocFirst.attached?.();
+  await credentialed(ocFirst, OC);
   ocFirst.send(message("HOLD oc-turn") as never, {});
   await until(
     () => sawRequest("HOLD oc-turn"),
@@ -732,7 +1060,28 @@ try {
   if (!recordName) {
     throw new Error("The machine's OpenCode server record was not written.");
   }
-  const record = JSON.parse(await Bun.file(join(cawco, recordName)).text()) as {
+  // The record as the previous agent left it, once nothing of it writes it
+  // any more: a write of its in-memory record landing after the old form is
+  // planted would put the current form back, and this build's agent would
+  // then find a server on its own form (its `#verifyApply` passes), and
+  // relaunch nothing.
+  const recordFile = join(cawco, recordName);
+  const settled = async () => {
+    let last = "";
+    let quietSince = Date.now();
+    const deadline = Date.now() + 30_000;
+    while (Date.now() - quietSince < 3000 && Date.now() < deadline) {
+      // biome-ignore lint/performance/noAwaitInLoops: polling the file until it stops changing
+      const read = await Bun.file(recordFile).text();
+      if (read !== last) {
+        last = read;
+        quietSince = Date.now();
+      }
+      await Bun.sleep(250);
+    }
+  };
+  await settled();
+  const record = JSON.parse(await Bun.file(recordFile).text()) as {
     active: { launch?: string; pid: number; procId: string };
   };
   const launch = JSON.parse(record.active.launch ?? "[]") as [string, string][];
@@ -741,7 +1090,23 @@ try {
       name === "CAWCO_GATE_FORM" ? [name, OLD_FORM] : [name, value]
     )
   );
-  await Bun.write(join(cawco, recordName), JSON.stringify(record));
+  await Bun.write(recordFile, JSON.stringify(record));
+  await settled();
+  // What this build's agent reads: the old form, or this probe says what
+  // took its place instead of waiting out a relaunch that cannot come.
+  const planted = (
+    JSON.parse(await Bun.file(recordFile).text()) as {
+      active: { launch?: string };
+    }
+  ).active.launch;
+  const plantedForm = (JSON.parse(planted ?? "[]") as [string, string][]).find(
+    ([name]) => name === "CAWCO_GATE_FORM"
+  )?.[1];
+  if (plantedForm !== OLD_FORM) {
+    throw new Error(
+      `The server record's gate form is ${plantedForm ?? "none"} after the probe planted ${OLD_FORM}: something wrote the record over it.`
+    );
+  }
   const oldServer = record.active;
 
   // This build's agent takes the session back mid-turn.
@@ -754,6 +1119,12 @@ try {
     throw new Error("OpenCode found no session to reattach.");
   }
   ocSession.attached?.();
+  // The daemon's own start step on every connection (daemon.ts reannounce:
+  // each harness's report, `readHarness` → `adapter.detect()`): OpenCode's
+  // `detect` runs `#ensure`, which verifies the server's gate form and
+  // schedules its relaunch. A busy reattach does not (`#reattachOnce` ensures
+  // only for a session at rest), so the probe takes the step the daemon does.
+  await opencode.detect();
   const gateLine = await until(
     () => saidLine(GATE_LINE),
     180_000,
@@ -830,6 +1201,7 @@ try {
       inScratch: ocShot,
       outside: ocOutside,
       inTmp: ocTmp,
+      codeMode: said.find((line) => line.includes("code-mode request")),
       lastAnswers: back.frames
         .filter((frame) => frame.type === "assistant")
         .slice(-2)
@@ -872,15 +1244,20 @@ try {
   const B = "gate-probe-opencode-b";
   const seenB = watch(B, other);
   const sessionB = await opencode.spawn(
-    {
-      ...ocSpec,
-      instanceId: B,
-      cwd: other.clone,
-      workspace: { id: other.id, path: other.clone },
-    },
+    await launched(
+      opencode,
+      {
+        ...ocSpec,
+        instanceId: B,
+        cwd: other.clone,
+        workspace: { id: other.id, path: other.clone },
+      },
+      other
+    ),
     seenB.ctx
   );
   sessionB.attached?.();
+  await credentialed(sessionB, B);
   const longA = await turn(ocSession, back, "LONG");
   const longB = await turn(sessionB, seenB, "LONG");
   const savedIn = (results: { text: string }[]) =>
@@ -933,7 +1310,7 @@ try {
   // and the clone whose path extends this one's (`clone` and `clone-b`).
   const inside = join(clone, "packages", "agent");
   const SUB = "gate-probe-opencode-sub";
-  const seenSub = watch(SUB, { boundary, clone: inside });
+  const seenSub = watch(SUB, { boundary, clone: inside, id: WS });
   const { workspace: _named, ...unnamed } = ocSpec;
   const sub = await opencode.spawn(
     { ...unnamed, instanceId: SUB, cwd: inside },
@@ -1005,6 +1382,14 @@ try {
     a: await Bun.file(excludeOf(clone)).text(),
     b: await Bun.file(excludeOf(other.clone)).text(),
   };
+  // Clone A's lines outside CawCo's stand-ins block: the block is the
+  // agent's own (`listStandIns` writes it on Linux, as a boundary's host
+  // does before its first sandbox), and these clones never ran one.
+  const { readExclude } =
+    await import("../packages/agent/src/checkout-exclude");
+  const othersOf = async (dir: string) =>
+    (await readExclude(excludeOf(dir))).rest.join("\n");
+  const pristineOthersA = await othersOf(clone);
   const written = [
     {
       file: join(clone, "opencode.jsonc"),
@@ -1054,7 +1439,7 @@ try {
   check(
     "agent start: the opencode.jsonc CawCo wrote is removed with its exclude line; any other is left",
     left.every((one) => one.present === !one.ours) &&
-      excludeA === pristine.a &&
+      (await othersOf(clone)) === pristineOthersA &&
       excludeB.includes("\n/opencode.jsonc\n") &&
       excludeB.includes("\n/packages/core/opencode.jsonc\n") &&
       startLine?.includes("removed 2 ") === true,
@@ -1086,6 +1471,10 @@ try {
 } finally {
   await earlier?.dispose();
   await opencode.dispose();
+  for (const row of await browsers.browserRows()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
+    await browsers.removeBrowser(row.key);
+  }
   await sessiond.drain(5000);
   keeper.close();
   await sessiond.close();
@@ -1106,14 +1495,21 @@ async function claudeCaptures(
   inScratch: boolean;
   outsideRefused: boolean;
   outsideAnswer: string;
+  opened: string;
+  stderr: string;
 }> {
-  const [command, ...args] = devtoolsCommand;
+  // As Claude Code launches it for a workspace session: through its
+  // workspace's door (claude.ts `gatedBrowserMcp`).
+  const door = await browserDoor(WS);
+  const [command, ...args] = throughGate(devtoolsCommand, door);
   const server = Bun.spawn([command as string, ...args], {
     cwd: clone,
     stdin: "pipe",
     stdout: "pipe",
-    stderr: "ignore",
+    // Kept: a server that answers no page says why only here.
+    stderr: "pipe",
   });
+  const stderr = new Response(server.stderr).text();
   const pending = new Map<number, (value: unknown) => void>();
   let id = 0;
   const send = (body: object) =>
@@ -1159,6 +1555,7 @@ async function claudeCaptures(
       }
     }
   })().catch(() => undefined);
+  let seen: Omit<Awaited<ReturnType<typeof claudeCaptures>>, "stderr">;
   try {
     await call("initialize", {
       protocolVersion: "2025-06-18",
@@ -1166,12 +1563,16 @@ async function claudeCaptures(
       clientInfo: { name: "claude-code", version: "probe" },
     });
     send({ method: "notifications/initialized" });
-    // Page-id routing is on (the fleet's launch keeps its default): the
-    // screenshot names the page `list_pages` reports.
-    const pages = JSON.stringify(
-      await call("tools/call", { name: "list_pages", arguments: {} })
+    // Page-id routing is on (the fleet's launch keeps its default), and
+    // through the gate the workspace sees its own pages alone: it opens one,
+    // and the screenshot names the page new_page selected.
+    const opened = JSON.stringify(
+      await call("tools/call", {
+        name: "new_page",
+        arguments: { url: "about:blank" },
+      })
     );
-    const pageId = Number(pages.match(PAGE_ID)?.[1] ?? 1);
+    const pageId = Number(opened.match(SELECTED_PAGE)?.[1]);
     const shoot = (filePath: string) =>
       call("tools/call", {
         name: "take_screenshot",
@@ -1179,17 +1580,19 @@ async function claudeCaptures(
       });
     await shoot(inScratch);
     const refused = JSON.stringify(await shoot(outside));
-    return {
+    seen = {
       inScratch: await Bun.file(inScratch).exists(),
       outsideRefused:
         !(await Bun.file(outside).exists()) &&
         refused.includes("is not within any of the configured workspace roots"),
       outsideAnswer: refused.slice(0, 300),
+      opened: opened.slice(0, 600),
     };
   } finally {
     server.kill();
     await server.exited;
   }
+  return { ...seen, stderr: (await stderr).trim().slice(-1500) };
 }
 
 const failed = checks.filter((one) => !one.ok);

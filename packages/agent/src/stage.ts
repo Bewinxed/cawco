@@ -128,7 +128,8 @@ const SERVE_LET_GO_MS = (SERVE_BEAT_S + 7) * 1000;
  * the stage host's beat finds), ends its whole process group, the server
  * with it: the group the runner's launch made the command's shell lead,
  * named by that shell's own pid (`$$`, which a subshell keeps), never by
- * `kill 0`. Otherwise it waits on the server and ends with its status, which
+ * `kill 0`, and after the signal with no `--`, which dash's `kill` refuses
+ * (the runner's shell is bash today; the text holds for any `sh`). Otherwise it waits on the server and ends with its status, which
  * the daemon reads as a crash. SIGPIPE is ignored only after the server
  * started, so the server keeps its own.
  */
@@ -139,7 +140,7 @@ const serveScript = (command: string): string =>
     "} &",
     "s=$!",
     "trap '' PIPE",
-    `(while sleep ${SERVE_BEAT_S}; do echo 2>/dev/null || { [ "$$" -gt 1 ] && kill -TERM -- "-$$"; exit; }; done) &`,
+    `(while sleep ${SERVE_BEAT_S}; do echo 2>/dev/null || { [ "$$" -gt 1 ] && kill -TERM "-$$"; exit; }; done) &`,
     "b=$!",
     'wait "$s"',
     "r=$?",
@@ -1327,6 +1328,7 @@ export async function stageComponents(
     cursor: ask.cursor,
     limit: ask.limit === undefined ? undefined : String(ask.limit),
     detailed: ask.detailed ? "1" : undefined,
+    thumbs: ask.thumbs ? "1" : undefined,
   })) {
     if (value) {
       query.set(key, value);
@@ -1346,6 +1348,9 @@ export async function stageComponents(
           ...one,
           file: fromClone(one.file),
           at: one.at && fromClone(one.at),
+          ...(one.statesFiles
+            ? { statesFiles: one.statesFiles.map(fromClone) }
+            : {}),
         }))
       : value;
   return {

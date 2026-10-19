@@ -283,7 +283,13 @@ const probe = async (kit: Kit) => {
 
   asks.set("1", {
     name: CREATE,
-    input: { kind: "page", name: "touch", html: PAGE },
+    input: {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "touch",
+      html: PAGE,
+    },
   });
   await fleet.send(session, "PROBE-CALL:1");
   await until("the page made", () => answered.get("1"), Boolean, 180_000);
@@ -372,7 +378,7 @@ const probe = async (kit: Kit) => {
 const layoutOf = (page: Page, id: string) =>
   page.evaluate((paneId) => {
     const pane = document.querySelector<HTMLElement>(
-      `[data-pane="${CSS.escape(paneId)}"]`
+      `[data-slot="pane"][data-pane="${CSS.escape(paneId)}"]`
     );
     const shown = (root: ParentNode | null, selector: string) =>
       [...(root?.querySelectorAll<HTMLElement>(selector) ?? [])].some((el) =>

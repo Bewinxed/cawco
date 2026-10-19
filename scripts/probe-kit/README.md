@@ -7,11 +7,12 @@ the clock (`anim.ts`), regressions by pixel diff against an approved baseline
 
 ```sh
 bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]   # specs/web/
-bun scripts/probe-kit/run.ts <spec>                                                        # specs/<spec>.ts
+bun scripts/probe-kit/run.ts <spec>…                                                       # specs/<spec>.ts, each in order
 ```
 
 Each assertion prints `PASS <spec>: …` or `FAIL <spec>: …`; the run ends with
-`ALL PASS` or `N FAILED` and exits 0 only when every assertion passed. A spec
+one line over every spec it ran, `ALL PASS (N specs, …)` or `N FAILED: <spec>, …`,
+and exits 0 only when every assertion passed. A spec
 that needs a hub gets a scratch fleet (`kit.fleet`, `scripts/scratch-fleet.ts`):
 a real hub, agent and sessiond with their own HOME, against a mock model.
 
@@ -141,6 +142,40 @@ exact command, for that session to run.
 Every other spec (a web spec on the built dashboard, a fleet spec that
 spawns sessions without delegating) runs inside a workspace, and its
 delegate quotes the run's output in its report.
+
+**macOS Safari can't be launched from a workspace** (found by the top-strip
+leaf, 20038062). `open -g -a Safari` fails with LaunchServices -10820, and
+MobileBuildMCP `launch_mac_app` is refused as a write to
+/Applications/Safari.app. A macOS Safari sample runs from a session started
+outside every workspace on the Mac, with the screen unlocked.
+
+An iOS Simulator booted from a workspace (`xcrun simctl boot`) runs Safari
+as one booted outside it does: on iOS 27.2 both loaded example.com, its web
+process launched and the page painted.
+
+The iOS 26.3 simulator runtime (23D8133) is not a Safari probe's runtime on
+a macOS 27 host: its JavaScriptCore crashes the web process (SIGBUS,
+`KERN_PROTECTION_FAILURE`) a second or two into JS-heavy pages, the
+dashboard and public sites alike (react.dev and figma.com 2 of 2 loads),
+while 26.0, 18.5 and 27.2 load the same pages clean. Older runtimes on
+macOS 27 crash the same way
+(https://blog.rinsuki.net/articles/old-ios-simulators-on-xcode-27/). A page
+that never painted there, and a Safari that started no load after it, was
+this crash. `ios-safari-load` runs on the newest runtime and on 26.0.
+
+## A spec with its own git and HOME
+
+A spec that stands up its own git repositories, doors or forge sign-ins
+under a HOME of its own says so with `ownHome` (its reason), and `run.ts`
+runs it in a process of its own: a scratch HOME set as that process starts,
+and none of an enclosing workspace's git or gh settings (`GIT_CONFIG_*`,
+`CAWCO_GIT_*`, `GIT_SSH_COMMAND`, `GIT_LFS_SKIP_PUSH`, `GIT_TEMPLATE_DIR`,
+`GH_CONFIG_DIR`, kit.ts `ENCLOSING_GIT_ENV`). Bun's `os.homedir()` reads HOME
+once, as the process starts, so a HOME a spec sets later moves nothing
+CawCo's paths read; and a workspace's `pushInsteadOf` would send the spec's
+own setup pushes through that workspace's git door. So `git-door` and
+`forge-adapters` run as `bun scripts/probe-kit/run.ts <spec>` alike inside a
+workspace and on the host, with no wrapper.
 
 ## Files a delegate cannot read
 

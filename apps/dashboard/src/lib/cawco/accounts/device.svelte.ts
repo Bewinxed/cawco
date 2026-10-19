@@ -6,7 +6,11 @@
  * a press: nothing starts on open. The setup's machine rows and the account
  * page's popover both draw this (DevicePanel).
  */
-import { accountsWords, type ProviderSigninChallenge } from "@cawco/core";
+import {
+  type AccountJoined,
+  accountsWords,
+  type ProviderSigninChallenge,
+} from "@cawco/core";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { awaitDeviceSignin, beginDeviceSignin } from "../client.svelte";
 
@@ -26,6 +30,8 @@ export class DeviceFlow {
   expiresAt = $state(0);
   /** Who the machine signed in as, once it has. */
   email = $state<string | null>(null);
+  /** The sign-in came out as an account the hub already had: it is that account's now. */
+  joined = $state<AccountJoined | null>(null);
   /** The hub's refusal, in its own words. */
   problem = $state<string | null>(null);
   /** The clock the countdown reads, ticking each second while a code waits. */
@@ -94,6 +100,9 @@ export class DeviceFlow {
       }
       if (result.state === "signed-in" || result.state === "mismatch") {
         this.email = result.email;
+      }
+      if (result.state === "signed-in") {
+        this.joined = result.joined ?? null;
       }
       this.#end(result.state);
       return;

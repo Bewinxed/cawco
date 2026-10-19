@@ -566,6 +566,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// The wide screen's toggle: the rail's column steps aside, or back, as
     /// the split view moves its columns.
     private func toggleRail() {
+        // Under the rail's breakpoint the sidebar comes over the page as the sheet, as the web's burger brings it.
+        if railNarrow == true {
+            showRailSheet()
+            return
+        }
         let hidden = displayMode == .secondaryOnly
         preferredDisplayMode = hidden ? .oneBesideSecondary : .secondaryOnly
         railToggle.label = hidden ? "Hide sidebar" : "Show sidebar"
@@ -620,6 +625,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             accountsProbed = true
             AccountsProbe.start(shell: self)
         }
+        if ConfigProbe.on, !configProbed {
+            configProbed = true
+            ConfigProbe.start(shell: self)
+        }
         #endif
     }
 
@@ -629,6 +638,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private var askProbed = false
     private var parityProbed = false
     private var accountsProbed = false
+    private var configProbed = false
 
     /// The split's rail, the panes' screens, and whether the width is a phone's.
     var probeRail: SidebarViewController { rail }
@@ -1201,6 +1211,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         #if targetEnvironment(macCatalyst)
         placeMacBar()
         #endif
+        fitRail()
         barTabs.relayout()
         placeGrip()
         // The split view lays its columns over what else is in its view on
@@ -1213,6 +1224,25 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     }
 
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
+
+    /// Which side of the rail's breakpoint the window stood on at the last pass.
+    private var railNarrow: Bool?
+
+    /// The web's rail breakpoint (design.json `rail`, `max-width: 900px`): at
+    /// or under it the sidebar's column stands aside and its toggle brings
+    /// the sidebar over the page as the sheet, as the web's burger does;
+    /// over it the column stands beside the page. The Mac keeps its column
+    /// at every width, as Configure keeps its rail there (ConfigSections.listed).
+    private func fitRail() {
+        #if !targetEnvironment(macCatalyst)
+        guard !compact, view.bounds.width > 0 else { return }
+        let narrow = view.bounds.width <= 900
+        guard narrow != railNarrow else { return }
+        railNarrow = narrow
+        preferredDisplayMode = narrow ? .secondaryOnly : .oneBesideSecondary
+        railToggle.label = narrow ? "Show sidebar" : "Hide sidebar"
+        #endif
+    }
 
     private var compact: Bool { traitCollection.horizontalSizeClass == .compact }
 
@@ -1248,7 +1278,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             if compactUnder != nil {
                 // Fleet asked for while another place is under the conversations: the board takes its place.
                 compactUnder = nil
-                compactCrumb.set(next.crumb, animated: true)
+                compactCrumb.set(crumb(next), animated: true)
                 TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
                 compactNav.setViewControllers([board], animated: true)
             } else {
@@ -1261,7 +1291,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // The last place outside a project home, where forgetting one goes back to (route.svelte.ts `spoke`).
         if case .project = destination {} else { spoke = destination }
         destination = next
-        mainCrumb.set(next.crumb, animated: true)
+        mainCrumb.set(crumb(next), animated: true)
         let regularPage = next == .fleet ? detail : page(for: next)
         // The bar's toggle, crumb and cluster move with the place, so they stay one bar.
         installMainBar(on: regularPage)
@@ -1277,7 +1307,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         } else {
             compactUnder = nil
             let compactPage = next == .fleet ? board : page(for: next, compact: true)
-            compactCrumb.set(next.crumb, animated: animated)
+            compactCrumb.set(crumb(next), animated: animated)
             TopBar.install(on: compactPage.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: next != .fleet)
             compactNav.setViewControllers([compactPage], animated: animated && compact)
         }
@@ -1296,7 +1326,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         compactUnder = nil
         guard under != destination else { return }
         destination = under
-        mainCrumb.set(under.crumb, animated: false)
+        mainCrumb.set(crumb(under), animated: false)
         let regularPage = under == .fleet ? detail : page(for: under)
         installMainBar(on: regularPage)
         mainNav.setViewControllers([regularPage], animated: false)
@@ -1559,7 +1589,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 if compactUnder != nil {
                     // The wide screen is on Fleet with the conversations: the compact stack rests on the board.
                     compactUnder = nil
-                    compactCrumb.set(destination.crumb, animated: false)
+                    compactCrumb.set(crumb(destination), animated: false)
                     TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
                     compactNav.setViewControllers([board], animated: false)
                 } else {
@@ -1861,10 +1891,20 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         return top
     }
 
+    /// What the bar names (Shell.svelte `crumb`): a project's own name, once
+    /// the fleet's projects are read, else the place's section.
+    private func crumb(_ place: ShellDestination) -> String {
+        if case let .project(id) = place, let name = hub.fleet.projects.first(where: { $0.id == id })?.name { return name }
+        return place.crumb
+    }
+
     /// The bar's facts, from the hub's word.
     private func refreshBars() {
         defer { barTabs.relayout() }
         let fleet = hub.fleet
+        // A project's name arrives with the fleet, and changes when it is renamed.
+        mainCrumb.set(crumb(destination), animated: false)
+        compactCrumb.set(crumb(compactUnder ?? destination), animated: false)
         // The rim counts what needs the operator, never the notices.
         let needs = home.needs
         let notices = home.notices

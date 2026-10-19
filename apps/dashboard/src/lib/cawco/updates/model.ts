@@ -7,7 +7,9 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
   holdPhrases,
+  type KeptProcess,
   RESTART_WAIT_CAP_MS,
+  type RetiringKeeper,
 } from "@cawco/core/binary-updates";
 
 /** The part of a machine row these functions read. */
@@ -163,18 +165,37 @@ const channelName = (channel: BinaryUpdatePolicy["channel"]): string =>
 const words = (...parts: string[]): string =>
   parts.filter((part) => part !== "").join(" ");
 
+/** A kept process as a row names it, in parentheses after the words: its program, without its path or arguments, and its pid. */
+const processWords = ({ command, pid }: KeptProcess): string => {
+  const [program = ""] = command.split(" ");
+  return `${program.slice(program.lastIndexOf("/") + 1)}, pid ${pid}`;
+};
+
+/** What holds a keeper, in words: `a process CawCo didn't start (conmon, pid 1234)`, `2 processes … (conmon, pid 1234; sleep, pid 88)`. */
+const heldBy = (kept: readonly KeptProcess[]): string =>
+  `${kept.length === 1 ? "a process" : `${kept.length} processes`} CawCo didn't start (${kept.map(processWords).join("; ")})`;
+
+/** One earlier build still running, in words: what keeps it, that it isn't answering, or the sessions left on it. */
+function retiringWords(keeper: RetiringKeeper): string {
+  const v = displayVersion(keeper.version);
+  if (keeper.kept) {
+    return `${v} is still running: ${heldBy(keeper.kept)} ${keeper.kept.length === 1 ? "runs" : "run"} inside it, and CawCo doesn't end ${keeper.kept.length === 1 ? "a process" : "processes"} it didn't start. ${v} ends once ${keeper.kept.length === 1 ? "that process ends" : "they end"}.`;
+  }
+  if (keeper.notAnswering) {
+    return `${v} isn't answering.${keeper.sessions > 0 ? ` It had ${plural(keeper.sessions, "session")} running when it last answered.` : ""} CawCo leaves it as it is until it answers again.`;
+  }
+  return `${plural(keeper.sessions, "session")} still running on ${v}`;
+}
+
 /**
- * A keeper handover still under way, in words: `Session keeper handing over:
- * 3 sessions left on nightly 2229`. Empty when no earlier keeper holds
- * anything. Nothing waits on it: new sessions start on the current keeper.
+ * A hand-over still under way, in words: `3 sessions still running on
+ * nightly 2229`, or, for a keeper whose unit holds a process CawCo didn't
+ * start, what keeps it and what lets it go, or, for one that gave no answer,
+ * that it isn't answering. Empty when no earlier keeper holds anything.
+ * Nothing waits on it: new sessions start on the current build.
  */
 const handingOver = (u: BinaryUpdateState): string =>
-  (u.retiringKeepers ?? [])
-    .map(
-      (keeper) =>
-        `Session keeper handing over: ${plural(keeper.sessions, "session")} left on ${displayVersion(keeper.version)}`
-    )
-    .join(" · ");
+  (u.retiringKeepers ?? []).map(retiringWords).join(" · ");
 
 /**
  * What a ready build waits for, in words: the work in flight its restart
@@ -195,6 +216,18 @@ export function cellFor(
   if (!u) {
     return { ...EMPTY(2), plain: true, text: "Runs from source" };
   }
+  return u.sessiondKept ? keptCell(u.sessiondKept) : phaseCell(u, policy);
+}
+
+/** Row 13: the current sessiond isn't answering, and isn't restarted while processes CawCo didn't start hold it. */
+const keptCell = (kept: readonly KeptProcess[]): Cell => ({
+  ...EMPTY(13),
+  fail: true,
+  text: `No session can start on this machine: the process that keeps its sessions running stopped answering. CawCo can't restart it while ${heldBy(kept)} ${kept.length === 1 ? "runs" : "run"} inside it. Handoff: end ${kept.length === 1 ? "that process" : "them"}. The restart follows, and sessions start again.`,
+});
+
+/** Rows 3 to 12: the cell by the update's phase. */
+function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
   const v = u.availableVersion ? displayVersion(u.availableVersion) : "";
   const cur = displayVersion(u.installedVersion);
   switch (u.phase) {
@@ -293,14 +326,16 @@ export function runningOf(machine: UpdateMachine): string {
   return machine.build?.commit ? machine.build.commit.slice(0, 7) : "—";
 }
 
-/** Machines waiting on the operator: a failed update, or (auto-update off) one to install. */
+/** Machines waiting on the operator: a failed update, a sessiond kept from its restart, or (auto-update off) one to install. */
 export function attention(
   machines: UpdateMachine[],
   policy: BinaryUpdatePolicy
 ): number {
   return machines.filter((machine) => {
     const { row } = cellFor(machine, policy);
-    return row === 3 || row === 4 || (row === 11 && !policy.autoUpdate);
+    return (
+      row === 3 || row === 4 || row === 13 || (row === 11 && !policy.autoUpdate)
+    );
   }).length;
 }
 
@@ -444,7 +479,7 @@ export const keeperRestartId = (machineId: string, at: number): string =>
   `keeper:${machineId}:${at}`;
 
 /**
- * 8. A machine's session keeper stopped answering and the agent restarted it,
+ * 8. A machine's sessiond stopped answering and the agent restarted it,
  * or, an earlier build's keeper still holding sessions after a handover,
  * removed it (agent keeper-watchdog.ts). Every session it held ended with it,
  * which is why it is said even though nothing is left to do.
@@ -468,14 +503,14 @@ function keeperRestarted({ input, machines, name }: Ctx): Notice | null {
     acks: [keeperRestartId(machine.machineId, restart.at)],
     kind: 8,
     title: restart.retiring
-      ? `An earlier session keeper on ${name(machine)} was removed`
-      : `The session keeper on ${name(machine)} was restarted`,
+      ? `An earlier build on ${name(machine)} was removed`
+      : `CawCo restarted the process that keeps ${name(machine)}'s sessions running`,
     failed: true,
     lines: [
       {
         state: "plain",
         text: restart.retiring
-          ? `${silent}. It was the keeper of an earlier build, still holding sessions after an update; new sessions were already starting on the current keeper, and still do.`
+          ? `${silent}. It was still running from before the update, holding the sessions started on it. New sessions were already starting on the current build, and still do.`
           : `${silent}, so no session could start there. It was restarted and sessions start there again.`,
       },
       {

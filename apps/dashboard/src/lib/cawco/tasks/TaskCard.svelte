@@ -245,8 +245,8 @@
 <style>
   /* residual: keyframes — the live dot's pulse. */
   @media (prefers-reduced-motion: no-preference) {
-    [data-slot="dot"] {
-      animation: pulse var(--breath) var(--ease-in-out) infinite;
+    .dot.live {
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
 </style>

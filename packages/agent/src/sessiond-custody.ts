@@ -74,18 +74,45 @@ export class ChildActivity {
 
 type ProcLineListener = Parameters<SessiondClient["subscribe"]>[1];
 
-/** Read a fixed ring snapshot, reopening at its oldest retained line after a reset. */
+/**
+ * What a read of a ring came to: read through `head` (or as far as the ring
+ * still went, from `oldest`, or to the child's end), or `gone`: its keeper no
+ * longer holds the child, which ended and was let go by another follower
+ * (an update's old agent and new one follow the same children), so there is
+ * no end left here to read.
+ */
+export type RingRead = { kind: "read"; oldest: number } | { kind: "gone" };
+
+/**
+ * Read a fixed ring snapshot, reopening at its oldest retained line after a
+ * reset. NEVER WAITS ON A CHILD THE KEEPER NO LONGER HOLDS. A subscribe for an
+ * id it does not hold is answered `{ type: "proc.backlog", events: [] }`
+ * (from 0) or `{ type: "proc.reset", nextSeq: 1 }` with no `oldest` (from a
+ * seq), sessiond server.ts `#subscribe`; a live child can be answered either
+ * way too, so neither decides it. The listing behind the subscribe does
+ * ({@link ProcLineListener.gone}): without it, the reset reopened at 0, its
+ * empty backlog came, and the read waited for a line or an exit no keeper
+ * would ever send.
+ */
 export const readRing = (
   client: SessiondClient,
   procId: string,
   afterSeq: number,
   head: number,
   line: NonNullable<ProcLineListener["line"]>
-): Promise<number> => {
+): Promise<RingRead> => {
   let oldest = afterSeq + 1;
-  return new Promise<number>((done) => {
+  return new Promise<RingRead>((settle) => {
+    // This read's own subscription, ended with the read: every other one to
+    // the child on this connection goes on.
+    let stop = (): void => undefined;
+    const finish = (read: RingRead): void => {
+      stop();
+      settle(read);
+    };
+    const done = (): void => finish({ kind: "read", oldest });
     if (head <= afterSeq) {
-      done(oldest);
+      done();
       return;
     }
     let reopened = false;
@@ -96,20 +123,22 @@ export const readRing = (
         }
         line(event);
         if (event.seq === head) {
-          done(oldest);
+          done();
         }
       },
-      exit: () => done(oldest),
+      exit: () => done(),
+      gone: () => finish({ kind: "gone" }),
       reset: (nextSeq, from) => {
         oldest = from ?? nextSeq;
         if (reopened || oldest > head) {
-          done(oldest);
+          done();
           return;
         }
         reopened = true;
-        client.subscribe(procId, listener, oldest - 1);
+        stop();
+        stop = client.subscribe(procId, listener, oldest - 1);
       },
     };
-    client.subscribe(procId, listener, afterSeq);
+    stop = client.subscribe(procId, listener, afterSeq);
   });
 };

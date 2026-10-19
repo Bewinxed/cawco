@@ -8,6 +8,8 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
+import { bundled } from "@cawco/core/bundled";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 
 const HOST = new URL("./host.ts", import.meta.url).pathname;
@@ -22,6 +24,7 @@ const BUNDLED: [name: string, home: string][] = [
     "react-docgen-typescript",
     "https://github.com/styleguidist/react-docgen-typescript",
   ],
+  ["@jridgewell/trace-mapping", "https://github.com/jridgewell/sourcemaps"],
 ];
 const LICENCE_FILES = ["LICENSE", "LICENSE.md", "license", "LICENCE"];
 
@@ -108,29 +111,93 @@ const DIALKIT = join(
   "packages/hub/skills/decision-page/kit/vendor/dialkit"
 );
 
+/** The house faces the canvas's chrome is set in (DESIGN.md's type), each package's latin and latin-ext files, from the dashboard's own font packages. */
+const FACES: [pkg: string, files: string[]][] = [
+  [
+    "@fontsource-variable/figtree",
+    ["figtree-latin-wght-normal.woff2", "figtree-latin-ext-wght-normal.woff2"],
+  ],
+  [
+    "@fontsource-variable/jetbrains-mono",
+    [
+      "jetbrains-mono-latin-wght-normal.woff2",
+      "jetbrains-mono-latin-ext-wght-normal.woff2",
+    ],
+  ],
+];
+const FACE_RULE = /@font-face\s*\{[^}]*\}/g;
+const FACE_FILE = /url\(\.\/files\/([^)]+)\)/;
+
+/**
+ * The faces as the decision host takes them (dashboard decisions/host
+ * faces.ts): each package's own `@font-face` rules for the files in
+ * {@link FACES}, pointed at `faces/<file>` beside the canvas page (the host
+ * serves them there), and each file's bytes in base64.
+ */
+async function canvasFaces(): Promise<{
+  css: string;
+  files: Record<string, string>;
+}> {
+  const packages = await Promise.all(
+    FACES.map(async ([pkg, names]) => {
+      const dir = join(
+        Bun.resolveSync(`${pkg}/package.json`, join(REPO, "apps/dashboard")),
+        ".."
+      );
+      const css = await readFile(join(dir, "index.css"), "utf8");
+      const bytes = await Promise.all(
+        names.map(
+          async (name) =>
+            [
+              name,
+              (await readFile(join(dir, "files", name))).toString("base64"),
+            ] as const
+        )
+      );
+      return { css, names, bytes };
+    })
+  );
+  const rules = packages.flatMap(({ css, names }) =>
+    [...css.matchAll(FACE_RULE)].flatMap(([rule]) => {
+      const file = FACE_FILE.exec(rule)?.[1];
+      return file && names.includes(file)
+        ? [rule.replace(FACE_FILE, `url(faces/${file})`)]
+        : [];
+    })
+  );
+  const files: Record<string, string> = Object.fromEntries(
+    packages.flatMap(({ bytes }) => bytes)
+  );
+  if (rules.length !== Object.keys(files).length) {
+    throw new Error(
+      `The font packages wrote ${rules.length} rules for ${Object.keys(files).length} files: read their index.css again.`
+    );
+  }
+  return { css: rules.join("\n"), files };
+}
+
 /** The canvas's browser runtime (canvas/runtime.ts), bundled: an ES module the stage serves as `cawco:stage/runtime.js`. */
 async function canvasRuntime(): Promise<string> {
-  const result = await Bun.build({
+  const result = await bundled("The canvas runtime", {
     entrypoints: [CANVAS],
     target: "browser",
     format: "esm",
     minify: true,
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "The canvas runtime's build failed");
-  }
+  await refuseSchemeLowering("The stage's canvas runtime", result.outputs);
   return await (result.outputs[0] as Bun.BuildArtifact).text();
 }
 
 /** The host, bundled: its text. */
 export async function buildStageHost(): Promise<string> {
-  const [runtime, tokens, dialkitJs, dialkitCss] = await Promise.all([
+  const [runtime, tokens, dialkitJs, dialkitCss, faces] = await Promise.all([
     canvasRuntime(),
     readFile(TOKENS, "utf8"),
     readFile(join(DIALKIT, "browser.global.js"), "utf8"),
     readFile(join(DIALKIT, "styles.css"), "utf8"),
+    canvasFaces(),
   ]);
-  const result = await Bun.build({
+  const result = await bundled("The stage host", {
     entrypoints: [HOST],
     target: "node",
     format: "esm",
@@ -144,11 +211,11 @@ export async function buildStageHost(): Promise<string> {
       __CANVAS_TOKENS__: JSON.stringify(tokens),
       __DIALKIT_JS__: JSON.stringify(dialkitJs),
       __DIALKIT_CSS__: JSON.stringify(dialkitCss),
+      __CANVAS_FACES__: JSON.stringify(faces.css),
+      __CANVAS_FACE_FILES__: JSON.stringify(faces.files),
     },
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "The stage host's build failed");
-  }
+  await refuseSchemeLowering("The stage host", result.outputs);
   return await (result.outputs[0] as Bun.BuildArtifact).text();
 }
 

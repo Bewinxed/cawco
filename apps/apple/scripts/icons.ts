@@ -123,6 +123,7 @@ const SOLAR_ICONS = [
   // The new-session dialog (spawn/*.svelte).
   "chat-round-line-bold-duotone", // First prompt
   "folder-open-bold-duotone", // LocationChip
+  "folder-git-bold-duotone", // LocationSection, LocationChip: Clone a repository
   "database-bold-duotone", // LifetimeChip: Persistent
   "tuning-2-bold-duotone", // ToolChips: effort
   "notes-bold-duotone", // permission-look: plan
@@ -169,6 +170,17 @@ const SOLAR_ICONS = [
   // The task sheet's result kinds (tasks/ResultView.svelte).
   "layers-bold-duotone", // IconLayers: data
   "clipboard-list-bold-duotone", // IconFileTable: table
+  // A project's pages: the Routines ledger, blocks and Caw's starters
+  // (views/ViewRoutines.svelte, blocks/Block.svelte, project/StarterCards.svelte).
+  "hourglass-bold-duotone", // IconHourglass: a routine turning itself off
+  "arrow-down-linear", // IconArrowDown: Move down
+  "calendar-bold-duotone", // IconCalendar
+  "widget-2-bold-duotone", // IconColumns
+  "ruler-cross-pen-bold-duotone", // IconRulerPen
+  "microphone-bold-duotone", // IconMic
+  "minus-circle-bold-duotone", // IconMinusCircle: a run that never ran, skipped or stopped
+  "shop-bold-duotone", // IconShop: Configure › Skills' marketplaces
+  "history-bold-duotone", // IconHistory: a skill's previous versions
 ];
 
 /**
@@ -205,6 +217,10 @@ const BRANDS: Record<string, [set: string, name: string]> = {
   "logo-kimi": ["thesvg-color", "kimi"],
   "logo-vercel": ["thesvg-color", "vercel-light"],
   "logo-xiaomi": ["thesvg-color", "xiaomi"],
+  // A service a routine's source or an approved action names (ProviderLogo.svelte's LOGOS).
+  "logo-linear": ["logos", "linear-icon"],
+  "logo-slack": ["logos", "slack-icon"],
+  "logo-gmail": ["thesvg-color", "gmail"],
 };
 
 /** OpenCodeLogo.svelte's official favicon geometry, in its own colours. */

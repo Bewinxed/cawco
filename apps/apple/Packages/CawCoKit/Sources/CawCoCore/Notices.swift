@@ -382,14 +382,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
 
     // MARK: Moved logins (MovedLogins.svelte)
 
-    private nonisolated struct Account: Decodable {
-        let id: String
-        let provider: String
-        let hue: String
-        let kind: String?
-        let label: String?
-        let email: String?
-    }
+    private typealias Account = FleetAccounts.Account
 
     private nonisolated struct Signin: Decodable {
         let accountId: String
@@ -402,24 +395,18 @@ public struct Notice: Identifiable, Equatable, Sendable {
     /// The Claude provider's id (core `CLAUDE_PROVIDER`).
     private static let claudeProvider = "anthropic"
 
-    /// An account as the operator knows it (accounts/model.svelte.ts `nameOf`).
-    private static func name(_ account: Account) -> String {
-        if account.kind == "api_key", account.label == nil, let email = account.email {
-            return "••••" + String(email.replacingOccurrences(of: "…", with: "").suffix(4))
-        }
-        return account.label ?? account.email ?? "an account not signed in yet"
-    }
-
     /// What a provider is called: its first picker row's name, "Claude" for Anthropic (model.svelte.ts `providerName`).
     private static func providerName(_ provider: String, _ providers: [Components.Schemas.ProviderChoice]) -> String {
         providers.first { $0.provider == provider }?.name ?? (provider == claudeProvider ? "Claude" : provider)
     }
 
     /// An account's name where nothing around it says what it is: a key with
-    /// no nickname leads with its provider and "key" (model.svelte.ts `namedForNotice`).
-    private static func namedForNotice(_ account: Account, _ providers: [Components.Schemas.ProviderChoice]) -> String {
-        guard account.kind == "api_key", account.label == nil else { return name(account) }
-        return "\(account.provider == claudeProvider ? "Anthropic" : providerName(account.provider, providers)) key \(name(account))"
+    /// no nickname leads with its provider and "key" (model.svelte.ts
+    /// `namedForNotice`); each named beside `accounts`.
+    private static func namedForNotice(_ account: Account, among accounts: [Account], _ providers: [Components.Schemas.ProviderChoice]) -> String {
+        let name = FleetAccounts.name(account, among: accounts)
+        guard account.kind == "api_key", account.label == nil else { return name }
+        return "\(account.provider == claudeProvider ? "Anthropic" : providerName(account.provider, providers)) key \(name)"
     }
 
     /// The harnesses that use an account of a provider (model.svelte.ts `providerHarnesses`).
@@ -449,7 +436,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
                     && (machine.harnesses ?? []).contains { uses.contains($0.harness.rawValue) }
                     && signins.first { $0.accountId == account.id && $0.machineId == machine.machineId }?.state != "signed-in"
             }.count
-            return (movedAt, Member(id: id, title: namedForNotice(account, providers), lines: ["from \(store) on \(Naming.unbroken(from.name))"],
+            return (movedAt, Member(id: id, title: namedForNotice(account, among: accounts, providers), lines: ["from \(store) on \(Naming.unbroken(from.name))"],
                                     tile: Tile(provider: account.provider, hue: account.hue),
                                     todo: missing > 0 ? .signIn(machines: missing) : .everywhere))
         }.sorted { $0.at > $1.at }.map(\.member)

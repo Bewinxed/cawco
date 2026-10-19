@@ -53,6 +53,7 @@ import {
   readRunningManifest,
   readTrial,
   readUpdateState,
+  recordInstall,
   type TrialMarker,
   trialPath,
   trialUnits,
@@ -475,8 +476,9 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
     await awaitWelcome(endpoint, job);
   } catch (error) {
     if (!keepJob) {
+      // A keeper that never answered holds no session: nothing in its unit is a child of its.
       await job
-        .remove()
+        .remove({ children: [] })
         .catch((removing: unknown) =>
           say(
             `keeper ${to}: its job could not be removed: ${message(removing)}`
@@ -485,7 +487,7 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
     }
     return {
       outcome: "failed",
-      error: `The session keeper of ${to} did not start: ${message(error)}`,
+      error: `${to}'s process that keeps this machine's sessions running did not start: ${message(error)}`,
     };
   }
   await say(
@@ -871,9 +873,14 @@ class TrialWatch {
 
 /**
  * The build stays: its landing and its keeper's outcome were written when it
- * answered ({@link settle}); the trial ends, and what nothing needs is pruned.
+ * answered ({@link settle}); it joins the install order, the trial ends, and
+ * the prune keeps it and the two installed before it (and on the hub's
+ * machine, their archives), with every build a live process still runs from.
  */
 async function confirm(trial: TrialMarker): Promise<void> {
+  // In the install order before the trial goes: a helper that stops between
+  // the two resumes the confirm and records it again, to the same order.
+  await recordInstall(trial.version, trial.previous);
   await rm(trialPath(), { force: true });
   await say(`confirmed ${trial.version}`);
   // What went on for it before the swap stays on.

@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { FleetMcpConfig, FleetMcpServer } from "@cawco/core";
+  import {
+    type FleetMcpConfig,
+    type FleetMcpServer,
+    mcpWords as words,
+  } from "@cawco/core";
   import { untrack } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import {
@@ -14,6 +18,7 @@
   import { IconKey, IconMapPoint, IconPlay } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import Coded from "../../Coded.svelte";
   import { cawco } from "../../client.svelte";
   import {
     isRemoteMcp,
@@ -50,9 +55,9 @@
 
   type Mode = "bunx" | "command" | "remote";
   const HOW: Record<Mode, string> = {
-    bunx: "Every machine runs the package with bunx. Nothing to install first.",
-    command: "Runs a command the machines already have on their PATH.",
-    remote: "Calls an endpoint. No process runs on the machines.",
+    bunx: words.howBunx,
+    command: words.howCommand,
+    remote: words.howRemote,
   };
 
   const remote = untrack(() =>
@@ -233,15 +238,15 @@
 
 <EditorFrame
   canSave={filled && nameProblem === undefined}
-  deleteLabel={server ? "Remove everywhere" : undefined}
+  deleteLabel={server ? words.remove : undefined}
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
   ondelete={server ? remove : undefined}
   onsubmit={save}
-  saveLabel={server ? "Save changes" : "Add server"}
+  saveLabel={server ? words.save : words.add}
   saving={busy}
-  title={server ? server.name : "New MCP server"}
+  title={server ? server.name : words.newTitle}
 >
   {#snippet result()}
     {#if server}
@@ -256,35 +261,21 @@
   {#snippet header()}
     <TitleInput
       invalid={serverName !== "" && nameProblem !== undefined}
-      label="Server name"
+      label={words.nameLabel}
       mono
-      placeholder="Name this server"
+      placeholder={words.namePlaceholder}
       bind:value={serverName}
     />
     {#if serverName !== "" && nameProblem}
       <p class="type-meta text-status-fail-ink" in:appear>{nameProblem}</p>
     {:else if server && serverName.trim() !== "" && serverName.trim() !== server.name}
       <!-- Said before Save, where the name is changed: that is its consequence. -->
-      <!-- literal: 72ch -->
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--measure) text-ink-muted"
-        style:--measure="72ch"
-        in:appear
-      >
-        A new name makes a new server; {server.name} stays as it is.
+      <p data-slot="note" class="note" in:appear>
+        {words.renamed(server.name)}
       </p>
     {:else}
-      <!-- literal: 72ch -->
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--measure) text-ink-muted"
-        style:--measure="72ch"
-      >
-        What sessions call its tools —
-        <span class="font-mono">mcp__{serverName || "name"}__…</span>. New
-        sessions pick it up; a running session keeps the servers it started
-        with.
+      <p data-slot="note" class="note">
+        <Coded text={words.callsAs(serverName || "name")} />
       </p>
     {/if}
     {#if failed}
@@ -302,16 +293,16 @@
     {/if}
   {/snippet}
 
-  <EditorSection hue={HUE} icon={IconPlay} label="How machines run it">
+  <EditorSection hue={HUE} icon={IconPlay} label={words.howItRuns}>
     <Choice
-      label="Kind"
+      label={words.kind}
       onchange={(next) => {
         mode = next as Mode;
       }}
       options={[
-        { value: "bunx", label: "bunx package" },
-        { value: "command", label: "Command" },
-        { value: "remote", label: "Remote" },
+        { value: "bunx", label: words.kindBunx },
+        { value: "command", label: words.kindCommand },
+        { value: "remote", label: words.kindRemote },
       ]}
       value={mode}
     />
@@ -324,23 +315,9 @@
       {@attach morph({ ms: dur("--dur-pop") })}
     >
       {#if mode === "bunx"}
-        <!-- literal: 8px -->
-        <div
-          data-slot="fold"
-          class="flex flex-col gap-(--fold-gap)"
-          style:--fold-gap="8px"
-          in:crossIn
-          out:crossOut
-        >
-          <!-- literal: 72ch -->
-          <p
-            data-slot="note"
-            class="type-meta max-w-(--measure) text-ink-muted"
-            style:--measure="72ch"
-          >
-            {HOW.bunx}
-          </p>
-          <Field id="mcp-package" label="Package">
+        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
+          <p data-slot="note" class="note">{HOW.bunx}</p>
+          <Field id="mcp-package" label={words.package}>
             <Input
               autocomplete="off"
               face="mono"
@@ -350,99 +327,67 @@
                   serverName = suggestMcpName(pkg);
                 }
               }}
-              placeholder="@modelcontextprotocol/server-filesystem"
+              placeholder={words.packagePlaceholder}
               spellcheck="false"
               bind:value={pkg}
             />
           </Field>
-          <Field id="mcp-package-args" label="Arguments (optional)">
+          <Field id="mcp-package-args" label={words.packageArgs}>
             <Input
               autocomplete="off"
               face="mono"
               id="mcp-package-args"
-              placeholder="/home/you/projects"
+              placeholder={words.packageArgsPlaceholder}
               spellcheck="false"
               bind:value={pkgArgs}
             />
           </Field>
         </div>
       {:else if mode === "command"}
-        <!-- literal: 8px -->
-        <div
-          data-slot="fold"
-          class="flex flex-col gap-(--fold-gap)"
-          style:--fold-gap="8px"
-          in:crossIn
-          out:crossOut
-        >
-          <!-- literal: 72ch -->
-          <p
-            data-slot="note"
-            class="type-meta max-w-(--measure) text-ink-muted"
-            style:--measure="72ch"
-          >
-            {HOW.command}
-          </p>
-          <Field id="mcp-command" label="Command">
+        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
+          <p data-slot="note" class="note">{HOW.command}</p>
+          <Field id="mcp-command" label={words.command}>
             <Input
               autocomplete="off"
               face="mono"
               id="mcp-command"
-              placeholder="uvx"
+              placeholder={words.commandPlaceholder}
               spellcheck="false"
               bind:value={command}
             />
           </Field>
-          <Field
-            hint="Split on spaces. Quotes are not honoured."
-            id="mcp-args"
-            label="Arguments"
-          >
+          <Field hint={words.argsHint} id="mcp-args" label={words.args}>
             <Input
               autocomplete="off"
               face="mono"
               id="mcp-args"
-              placeholder="mcp-server-git --repository /home/you/repo"
+              placeholder={words.argsPlaceholder}
               spellcheck="false"
               bind:value={argsLine}
             />
           </Field>
         </div>
       {:else}
-        <!-- literal: 8px -->
-        <div
-          data-slot="fold"
-          class="flex flex-col gap-(--fold-gap)"
-          style:--fold-gap="8px"
-          in:crossIn
-          out:crossOut
-        >
-          <!-- literal: 72ch -->
-          <p
-            data-slot="note"
-            class="type-meta max-w-(--measure) text-ink-muted"
-            style:--measure="72ch"
-          >
-            {HOW.remote}
-          </p>
-          <Field id="mcp-url" label="URL">
+        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
+          <p data-slot="note" class="note">{HOW.remote}</p>
+          <Field id="mcp-url" label={words.url}>
             <Input
               autocomplete="off"
               face="mono"
               id="mcp-url"
-              placeholder="https://mcp.example.com/sse"
+              placeholder={words.urlPlaceholder}
               spellcheck="false"
               bind:value={url}
             />
           </Field>
           <Choice
-            label="Transport"
+            label={words.transport}
             onchange={(next) => {
               transport = next as "http" | "sse";
             }}
             options={[
-              { value: "http", label: "HTTP" },
-              { value: "sse", label: "SSE · deprecated" },
+              { value: "http", label: words.transportHttp },
+              { value: "sse", label: words.transportSse },
             ]}
             value={transport}
           />
@@ -458,18 +403,9 @@
       <EditorSection
         hue={HUE}
         icon={IconKey}
-        label={mode === "remote" ? "Headers" : "Environment"}
+        label={mode === "remote" ? words.headers : words.environment}
       >
-        <!-- literal: 72ch -->
-        <p
-          data-slot="note"
-          class="type-meta max-w-(--measure) text-ink-muted"
-          style:--measure="72ch"
-        >
-          <span class="font-mono">&#36;&#123;VAR&#125;</span>
-          is expanded on each machine, from that machine's own environment — secrets
-          never pass through the hub.
-        </p>
+        <p data-slot="note" class="note"><Coded text={words.expanded} /></p>
         <div
           data-slot="kind"
           class="relative flex flex-col"
@@ -478,18 +414,18 @@
           {#if mode === "remote"}
             <div in:crossIn out:crossOut>
               <KeyValueRows
-                keyPlaceholder="Authorization"
-                legend="Headers"
-                valuePlaceholder="Bearer &#36;&#123;MY_TOKEN&#125;"
+                keyPlaceholder={words.headerKey}
+                legend={words.headers}
+                valuePlaceholder={words.headerValue}
                 bind:rows={headers}
               />
             </div>
           {:else}
             <div in:crossIn out:crossOut>
               <KeyValueRows
-                keyPlaceholder="API_KEY"
-                legend="Environment"
-                valuePlaceholder="&#36;&#123;MY_API_KEY&#125;"
+                keyPlaceholder={words.envKey}
+                legend={words.environment}
+                valuePlaceholder={words.envValue}
                 bind:rows={env}
               />
             </div>
@@ -499,24 +435,16 @@
     </div>
   {/if}
 
-  <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <!-- literal: 72ch -->
-    <p
-      data-slot="note"
-      class="type-meta max-w-(--measure) text-ink-muted"
-      style:--measure="72ch"
-    >
-      Every machine in the fleet unless you narrow it to one project. A
-      project's server reaches each of its checkouts and delegate workspaces.
-    </p>
+  <EditorSection hue={HUE} icon={IconMapPoint} label={words.where}>
+    <p data-slot="note" class="note">{words.whereNote}</p>
     <div>
       <PickerChip
-        label="Scope"
+        label={words.scope}
         onpick={(next) => {
           projectId = next;
         }}
         options={[
-          { value: "", label: "Every machine in the fleet" },
+          { value: "", label: words.everyMachine },
           ...cawco.projects.map((project) => ({
             value: project.id,
             label: project.name,

@@ -43,7 +43,7 @@
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
    */
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel, viewsWords } from "@cawco/core";
   import type { UpstreamPosts } from "@cawco/core/upstream-guard";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -538,7 +538,7 @@
               }}
             >
               <IconSparkles />
-              <span>Ask Caw for a view</span>
+              <span>{viewsWords.ask}</span>
             </DropdownMenu.Item>
           {/if}
           <DropdownMenu.Separator />

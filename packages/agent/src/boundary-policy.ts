@@ -11,7 +11,24 @@ import type {
   FilesystemPathEntry,
   SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
+import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
 import type { Policy } from "@cawco/core/workspace-judge";
+
+/**
+ * Every port of {@link BROWSER_PORTS} (the machine's DevTools gate, and the
+ * browsers' neko, DevTools and media ports), and the gate's port where a
+ * second agent on the host moved it: none of them is dialled by a command of
+ * a workspace on this machine.
+ */
+const browserPorts = (): number[] => [
+  ...new Set([
+    ...Array.from(
+      { length: BROWSER_PORTS.last - BROWSER_PORTS.first + 1 },
+      (_, at) => BROWSER_PORTS.first + at
+    ),
+    browserGatePort(),
+  ]),
+];
 
 const within = (path: string, root: string): boolean =>
   root === "/" || path === root || path.startsWith(`${root}/`);
@@ -39,6 +56,22 @@ export const DENIED_RESOLVED_ADDRESSES = [
 
 /** Where srt runs for one Linux workspace: what its settings name besides the policy. */
 export interface SrtPlace {
+  /**
+   * Bun's `--bun` node shim dir, made on the host (bun-node-shim.ts), read
+   * back into the sandbox's denied `/tmp`, where Bun looks for it.
+   */
+  readonly bunNode: string | undefined;
+  /** The bwrap srt runs (its `bwrapPath`): {@link readOnlyDeniesBwrap}, as the workspace's boundary writes it. */
+  readonly bwrap: string;
+  /**
+   * The container runtimes' sockets on this machine (boundary.ts
+   * `containerSockets`): their own dirs, and every socket the runtime
+   * registry may dial, each as named and as the file it names.
+   */
+  readonly containerSockets: {
+    readonly dirs: readonly string[];
+    readonly sockets: readonly string[];
+  };
   /** The ripgrep srt scans the clone for its protected names with. */
   readonly rg: string;
   /**
@@ -51,6 +84,34 @@ export interface SrtPlace {
 }
 
 /**
+ * What a Linux workspace's srt hides of the container runtimes' sockets
+ * ({@link SrtPlace.containerSockets}): each runtime dir whole, and each
+ * endpoint's own dir whole when the policy reads and writes nothing in it
+ * or above it (`DOCKER_HOST` at `/srv/docker/docker.sock`), so a socket the
+ * runtime makes again behind a running sandbox is hidden too; else the
+ * endpoint itself. `/run`, `/var/run`, `/tmp` and the home dir are hidden
+ * already (core `LINUX_HOST_PRIVATE`, the policy's home deny): this is for
+ * a socket outside them, or under a path the policy allows.
+ */
+const runtimeSocketDenies = (
+  policy: Policy,
+  found: SrtPlace["containerSockets"]
+): string[] => {
+  const opened = [...policy.allowRead, ...policy.allowWrite];
+  return [
+    ...new Set([
+      ...found.dirs,
+      ...found.sockets.map((socket) => {
+        const dir = dirname(socket);
+        return opened.some((path) => within(path, dir) || within(dir, path))
+          ? socket
+          : dir;
+      }),
+    ]),
+  ];
+};
+
+/**
  * The srt settings of a Linux workspace's sandbox. The network reaches any
  * public host (the host process's ask callback allows every name and refuses
  * an address literal in private space) and no name that resolves into
@@ -59,13 +120,26 @@ export interface SrtPlace {
  * loopback services (REPORT.md §5l). A dev server a command starts is reached
  * inside the sandbox's own network namespace.
  *
+ * Every read-denied dir (the home dir, `/tmp`, `/run`) is an empty tmpfs that
+ * srt mounts writable (srt #149), and that the bwrap srt runs
+ * ({@link SrtPlace.bwrap}, {@link readOnlyDeniesBwrap}) remounts read-only once
+ * what is bound back into it is in place: a write there fails at once with
+ * EROFS naming its path, never lands in the sandbox's memory to vanish with
+ * it. What a command writes is the policy's `allowWrite` alone:
+ * the clone, its scratch dir (`TMPDIR`, its XDG config, data and state homes)
+ * and the workspaces' cache (every tool's cache, `XDG_CACHE_HOME`,
+ * `XDG_RUNTIME_DIR`).
+ *
  * Besides the policy:
  * - `/tmp` is read-denied: the host's `/tmp` holds other sessions' files and
  *   sockets; a command's `TMPDIR` is its scratch dir. srt cannot give a
  *   sandbox a private `/tmp` (srt #294).
  * - `/tmp/claude`, which srt always grants and every sandbox of the user
  *   shares, is write-denied (srt #654).
- * - srt's own temp dir and the resolver files under `/run` are read back.
+ * - srt's own temp dir and the resolver files under `/run` are read back, and
+ *   Bun's `--bun` node shim dir under `/tmp` ({@link SrtPlace.bunNode}), which
+ *   Bun only ever looks for there: read-only, so the shim the host's own bun
+ *   runs through is never a workspace's to write.
  * - `allowAllUnixSockets`: the seccomp helper that would refuse every unix
  *   socket cannot start under Ubuntu's AppArmor profile for bwrap (srt #429);
  *   the sockets are hidden by path, and abstract ones are cut off by the
@@ -73,6 +147,11 @@ export interface SrtPlace {
  * - `allowGitConfig`, with the clone's own `.git/config` denied by name in the
  *   policy: srt's built-in `**\/.git/config` deny would refuse every repository
  *   a command clones inside the workspace (REPORT.md §5g).
+ *
+ * The browsers' ports ({@link BROWSER_PORTS}) need nothing here: `127.0.0.1`
+ * inside the sandbox is its own network namespace's, and its proxy refuses
+ * loopback; the container runtimes' sockets are under the denied home dir and
+ * `/run` (workspace-policy.ts `LINUX_HOST_PRIVATE`).
  * - A write deny reaches srt only where the policy allows writes: everywhere
  *   else writes are refused anyway, and srt would make a mount point for each
  *   that does not exist yet.
@@ -89,10 +168,15 @@ export const srtSettings = (
     allowAllUnixSockets: true,
   },
   filesystem: {
-    denyRead: literal([...policy.denyRead, "/tmp"]),
+    denyRead: literal([
+      ...policy.denyRead,
+      "/tmp",
+      ...runtimeSocketDenies(policy, place.containerSockets),
+    ]),
     allowRead: literal([
       ...policy.allowRead,
       place.srtTmp,
+      ...(place.bunNode ? [place.bunNode] : []),
       "/run/systemd/resolve/stub-resolv.conf",
       "/run/systemd/resolve/resolv.conf",
     ]),
@@ -107,7 +191,87 @@ export const srtSettings = (
   },
   ripgrep: { command: place.rg },
   mandatoryDenySearchDepth: 3,
+  bwrapPath: place.bwrap,
 });
+
+/** `text` as one bash word. */
+const bashWord = (text: string): string => `'${text.replaceAll("'", "'\\''")}'`;
+
+/**
+ * The bwrap a Linux workspace's srt runs, by srt's own `bwrapPath` setting
+ * ("absolute path to the bwrap (bubblewrap) binary", sandbox-config.js): the
+ * host's bwrap `real`, with `--remount-ro` on each tmpfs srt mounts. srt
+ * mounts a tmpfs only over a read-denied dir (`--tmpfs`, linux-sandbox-utils.js
+ * `pushReadDenyDirMounts` at 0.0.79), and a tmpfs is writable: "inside the
+ * sandbox it is an EMPTY WRITABLE directory" (srt's README; srt #149). Each
+ * remount goes after all of srt's mounts, just before the command, which srt
+ * always ends its words with (`-- SHELL -c COMMAND`), so every mount point
+ * inside a tmpfs is made first; bwrap's `--remount-ro` "works only on the
+ * specified mount point, without changing any other mount point under the
+ * specified path" (bwrap(1)), so what srt binds back into it, the clone and
+ * the scratch dir among them, keeps its own flags. srt moves its mounts into
+ * a file bwrap reads through `--args FD` when the line would be too long; the
+ * launcher reads them from that fd by its own open (`/proc/self/fd/FD`), so
+ * bwrap still reads the file from its start. What srt runs with no tmpfs (its
+ * namespace probe, `--version`) runs as it is. A command whose words this
+ * cannot read starts no sandbox, in its own words.
+ */
+export const readOnlyDeniesBwrap = (real: string): string => `#!/bin/bash
+set -u
+real=${bashWord(real)}
+words=("$@")
+count=$#
+head=("$@")
+tail=()
+if (( count >= 4 )) && [[ \${words[count-4]} == -- && \${words[count-2]} == -c ]]; then
+  head=("\${words[@]:0:count-4}")
+  tail=("\${words[@]:count-4}")
+fi
+landings=()
+scan() {
+  local all=("$@") at=0 fd word
+  while (( at < \${#all[@]} )); do
+    case \${all[at]} in
+      --tmpfs)
+        landings+=("\${all[at+1]}")
+        at=$((at + 2))
+        ;;
+      --args)
+        fd=\${all[at+1]}
+        local file=()
+        while IFS= read -r -d '' word || [[ -n $word ]]; do
+          file+=("$word")
+        done < "/proc/self/fd/$fd" || {
+          echo "cawco: srt's bwrap mounts on fd $fd could not be read, so its read-denied dirs cannot be made read-only and no sandbox starts" >&2
+          exit 125
+        }
+        scan "\${file[@]}"
+        at=$((at + 2))
+        ;;
+      *)
+        at=$((at + 1))
+        ;;
+    esac
+  done
+}
+scan "\${head[@]}"
+if (( \${#landings[@]} == 0 )); then
+  exec "$real" "$@"
+fi
+if (( \${#tail[@]} == 0 )); then
+  echo "cawco: srt's bwrap words do not end in '-- SHELL -c COMMAND', so its read-denied dirs cannot be made read-only and no sandbox starts" >&2
+  exit 125
+fi
+declare -A seen=()
+remounts=()
+for landing in "\${landings[@]}"; do
+  if [[ -z \${seen[$landing]:-} ]]; then
+    seen[$landing]=1
+    remounts+=(--remount-ro "$landing")
+  fi
+done
+exec "$real" "\${head[@]}" "\${remounts[@]}" "\${tail[@]}"
+`;
 
 /** A path as a Seatbelt string. */
 const sbString = (path: string): string =>
@@ -192,7 +356,13 @@ export interface SeatbeltPlace {
  * are reached, each by its whole path. Allows come after denies, as srt writes its `allowUnixSockets`
  * (`(allow network-outbound (remote unix-socket (subpath …)))`,
  * macos-sandbox-utils.ts). The network is the host's: Seatbelt cannot judge a
- * destination by the name it resolves.
+ * destination by the name it resolves. Of it, every port of the browsers
+ * ({@link BROWSER_PORTS}) is refused on this machine's loopback: a project's
+ * Chromium answers its DevTools port to anyone who reaches it, and agents
+ * reach a browser through its gate alone, from outside every boundary.
+ * Seatbelt filters loopback by port only ("The only valid input for IP is
+ * localhost or *, meaning that you can only filter by port", Apple's
+ * Sandbox Guide), so it is one rule per port.
  */
 export const seatbeltProfile = (
   policy: Policy,
@@ -266,6 +436,9 @@ export const seatbeltProfile = (
     ...place.reachedHostSockets.map(
       (pattern) =>
         `(allow network-outbound (remote unix-socket (path-regex #"${pattern}")))`
+    ),
+    ...browserPorts().map(
+      (port) => `(deny network-outbound (remote ip "localhost:${port}"))`
     ),
     "",
   ].join("\n");

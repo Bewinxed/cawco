@@ -166,6 +166,10 @@ export interface SearchOptions {
   limit?: number;
   /** Only documents by this author: `owner` is "said by me". */
   author?: DocAuthor;
+  /** Only documents of these conversations, by session id. */
+  sessions?: readonly string[];
+  /** Only documents written at or before this ISO time; one with no time is left out. */
+  before?: string;
 }
 
 /** One place in a conversation that matched: where to open it, and why it matched. */
@@ -669,10 +673,10 @@ export class TranscriptIndex {
 
   /**
    * The best `scan` documents `match` finds among the rowids `within` says
-   * (by author when `byAuthor` says), as ids and scores only: BM25 weighed
+   * (by author and conversation when `filters` say), as ids and scores only: BM25 weighed
    * by whose words they are, read off ids, never the strings table.
    */
-  #ranked(pass: Pass, byAuthor: string, params: (string | number)[], scan: number): Ranked[] {
+  #ranked(pass: Pass, filters: string, params: (string | number)[], scan: number): Ranked[] {
     const weight = Object.entries(AUTHOR_WEIGHT)
       .flatMap(([author, w]) => {
         const id = this.#strings.get(author);
@@ -685,7 +689,7 @@ export class TranscriptIndex {
                 -bm25(docs_fts, ${COLUMN_WEIGHTS}) * (CASE d.author ${weight} ELSE 1 END) AS score
          FROM docs_fts
          JOIN docs d ON d.id = docs_fts.rowid
-         WHERE docs_fts MATCH ? ${byAuthor} AND ${pass.within}
+         WHERE docs_fts MATCH ? ${filters} AND ${pass.within}
          ORDER BY score DESC
          LIMIT ?`,
       )
@@ -752,17 +756,36 @@ export class TranscriptIndex {
     }
     const limit = options.limit ?? 20;
     const params: (string | number)[] = [];
-    let byAuthor = "";
+    let filters = "";
     if (options.author !== undefined) {
       // An author no row names has no id, and no hits.
       const id = this.#strings.get(options.author);
       if (id === undefined) {
         return [];
       }
-      byAuthor = "AND d.author = ?";
+      filters = "AND d.author = ?";
       params.push(id);
     }
-    const ranked = this.#rankedPasses(whole, typing, byAuthor, params, limit);
+    if (options.sessions !== undefined) {
+      // Filtered after the FTS match, as the author is: a session no row
+      // names has no id, and none of them leaves no hits.
+      const ids = options.sessions.flatMap((session) => {
+        const id = this.#strings.get(session);
+        return id === undefined ? [] : [id];
+      });
+      if (ids.length === 0) {
+        return [];
+      }
+      filters += " AND d.session IN (SELECT value FROM json_each(?))";
+      params.push(JSON.stringify(ids));
+    }
+    if (options.before !== undefined) {
+      // Filtered after the FTS match, as the author is; ISO times compare
+      // as text.
+      filters += " AND d.ts <= ?";
+      params.push(options.before);
+    }
+    const ranked = this.#rankedPasses(whole, typing, filters, params, limit);
     const described = this.#described(ranked.map((row) => row.id));
     const kept = this.#moments(ranked, described);
     const excerpts = new Map<number, string>();
@@ -805,7 +828,7 @@ export class TranscriptIndex {
   #rankedPasses(
     whole: string,
     typing: string | null,
-    byAuthor: string,
+    filters: string,
     params: (string | number)[],
     limit: number,
   ): Ranked[] {
@@ -831,7 +854,7 @@ export class TranscriptIndex {
       if (conversations.size >= limit) {
         break;
       }
-      for (const row of this.#ranked(pass, byAuthor, params, limit * SCAN_PER_CONVERSATION)) {
+      for (const row of this.#ranked(pass, filters, params, limit * SCAN_PER_CONVERSATION)) {
         if (!rows.has(row.id)) {
           rows.set(row.id, row);
           conversations.add(`${row.harness}:${row.session}`);
@@ -892,6 +915,28 @@ export class TranscriptIndex {
         moments,
       }))
       .toSorted((a, b) => b.hit.score - a.hit.score);
+  }
+
+  /**
+   * Forget a conversation whose transcript was deleted (a purge): every
+   * document of `sessionId`, and the checkpoint of its transcript file, so
+   * no search finds its words and no hit points at a file that is gone.
+   * Synchronous, one transaction: run it between syncs, never inside one.
+   * Answers how many documents went.
+   */
+  forgetSession(sessionId: string): number {
+    const id = this.#strings.get(sessionId);
+    const forget = this.db.transaction(() => {
+      const gone =
+        id === undefined
+          ? 0
+          : this.db.prepare("DELETE FROM docs WHERE session = ?").run(id).changes;
+      this.db
+        .prepare("DELETE FROM files WHERE path LIKE ? ESCAPE '\\'")
+        .run(`%/${sessionId.replace(/[\\%_]/g, (c) => `\\${c}`)}.jsonl`);
+      return gone;
+    });
+    return forget();
   }
 
   /** Document count in the index. */

@@ -16,12 +16,24 @@
  * Every keeper on the machine is watched (core keepers.ts): the current one
  * is restarted, and a retiring one, which no new session would ever start on
  * again, is removed.
+ *
+ * Neither while its unit holds a process that is not the keeper's or in one
+ * of its children's trees (keeper-jobs.ts `UnitStop`): a wedged keeper
+ * answers no listing, so its children are its child processes in the process
+ * table. Such a keeper is left as it is, said in the log and in the
+ * machine's state the dashboard reads (`sessiondKept`, or its
+ * `retiringKeepers` entry's `kept`), and looked at again with its next run
+ * of silent dials. The state says it no longer once it answers, is gone, or
+ * its restart goes ahead.
  */
 
 import { mkdir, readdir, readFile, readlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+import type {
+  BinaryUpdateState,
+  KeptProcess,
+} from "@cawco/core/binary-updates";
 import {
   type FoundKeeper,
   keeperEndpoints,
@@ -36,8 +48,8 @@ import {
 import { hostEnvironment } from "@cawco/core/session-env";
 import { isAlive, listedPid, type Pid, signal } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
-import { type KeeperJob, keeperJob } from "./keeper-jobs";
-import { dialKeeper } from "./sessiond-client";
+import { type KeeperJob, KeeperKept, keeperJob } from "./keeper-jobs";
+import { dialKeeper, KEEPER_WELCOME_MS } from "./sessiond-client";
 
 /**
  * How often the keeper is dialled. Ours: a dial is one local socket open,
@@ -45,15 +57,6 @@ import { dialKeeper } from "./sessiond-client";
  * enough that the wedge is ended within minutes of it starting.
  */
 export const KEEPER_PROBE_MS = 60_000;
-
-/**
- * How long one dial waits for the welcome. Five times the two seconds every
- * other dial of the keeper allows (`DIAL_TIMEOUT_MS`): the keeper writes the welcome in the
- * same turn of its loop as the accept, so a healthy one answers in
- * microseconds, and a keeper that is merely loaded (a GC pause, a machine in
- * swap) answers inside ten seconds.
- */
-export const KEEPER_WELCOME_MS = 10_000;
 
 /**
  * Dials in a row without a welcome, from the same live keeper, before it is
@@ -272,6 +275,17 @@ const wedgedLine = (
 export interface KeeperWatchdogOptions {
   /** Where each recovery's diagnostics go, one folder per recovery. */
   diagnosticsRoot?: string;
+  /**
+   * Records, where the dashboard reads it, that wedged keeper `version` is
+   * left as it is while its unit holds `kept`, with the `sessions` it held;
+   * `kept` undefined: it no longer is.
+   */
+  kept: (
+    version: string,
+    current: boolean,
+    sessions: number,
+    kept: KeptProcess[] | undefined
+  ) => Promise<void>;
   log: (line: string) => void;
   /** Records the restart (or a retiring keeper's removal) where the dashboard reads it, before it runs. */
   record: (restart: KeeperRestart) => Promise<void>;
@@ -282,6 +296,9 @@ export class KeeperWatchdog {
   readonly #diagnosticsRoot: string;
   readonly #log: (line: string) => void;
   readonly #record: (restart: KeeperRestart) => Promise<void>;
+  readonly #kept: KeeperWatchdogOptions["kept"];
+  /** Each keeper left as it is for what its unit holds, by its endpoint: its build and whether it is the current one. */
+  readonly #leftAsIs = new Map<string, { current: boolean; version: string }>();
   /** Each keeper's run of silent dials, by its endpoint. */
   readonly #streaks = new Map<string, Streak>();
   #timer: ReturnType<typeof setInterval> | undefined;
@@ -292,6 +309,16 @@ export class KeeperWatchdog {
       options.diagnosticsRoot ?? join(homedir(), ".cawco", "diagnostics");
     this.#log = options.log;
     this.#record = options.record;
+    this.#kept = options.kept;
+  }
+
+  /** The state no longer says keeper `endpoint` is left as it is, if it did. */
+  async #notKept(endpoint: string): Promise<void> {
+    const left = this.#leftAsIs.get(endpoint);
+    if (left) {
+      this.#leftAsIs.delete(endpoint);
+      await this.#kept(left.version, left.current, 0, undefined);
+    }
   }
 
   start(intervalMs = KEEPER_PROBE_MS): void {
@@ -321,6 +348,11 @@ export class KeeperWatchdog {
         this.#streaks.delete(endpoint);
       }
     }
+    await Promise.all(
+      [...this.#leftAsIs.keys()]
+        .filter((endpoint) => !found.some((one) => one.endpoint === endpoint))
+        .map((endpoint) => this.#notKept(endpoint))
+    );
     await Promise.all(found.map((keeper) => this.#probeOne(keeper, welcomeMs)));
   }
 
@@ -330,6 +362,7 @@ export class KeeperWatchdog {
     // Not running is the service manager's to start, not a wedge.
     if (!(job && pid && isAlive(pid))) {
       this.#streaks.delete(found.endpoint);
+      await this.#notKept(found.endpoint);
       return;
     }
     const { dial, accepted } = await dialKeeper(found.endpoint, welcomeMs);
@@ -338,6 +371,7 @@ export class KeeperWatchdog {
       case "answered":
         if (dial.value.welcomed) {
           this.#streaks.delete(found.endpoint);
+          await this.#notKept(found.endpoint);
           return;
         }
         ({ detail } = dial.value);
@@ -383,6 +417,25 @@ export class KeeperWatchdog {
     const table = await processTable();
     const held = table.filter((row) => row.ppid === streak.pid);
     const tree = descendants(table, streak.pid);
+    const stop = { children: held.map((row) => row.pid) };
+    const foreign = await job.foreign(stop.children);
+    if (foreign.length > 0) {
+      this.#log(
+        `session keeper ${streak.pid} (${found.keeper.version}${found.current ? "" : ", retiring"}) is wedged, and is left as it is: ${new KeeperKept(job.name, foreign).message}; diagnostics in ${dir}`
+      );
+      this.#leftAsIs.set(found.endpoint, {
+        current: found.current,
+        version: found.keeper.version,
+      });
+      await this.#kept(
+        found.keeper.version,
+        found.current,
+        held.length,
+        foreign
+      );
+      return;
+    }
+    await this.#notKept(found.endpoint);
     const restart: KeeperRestart = {
       at,
       pid: streak.pid,
@@ -394,7 +447,7 @@ export class KeeperWatchdog {
     };
     await this.#record(restart);
     this.#log(wedgedLine(found, job, streak, held, dir, silentForMs));
-    await (found.current ? job.restart() : job.remove());
+    await (found.current ? job.restart(stop) : job.remove(stop));
     // What the dead keeper started is ended here: a keeper killed outright
     // (launchd's SIGKILL after its exit timeout) leaves its children under
     // init, each in its own process group, where nobody can reach them.

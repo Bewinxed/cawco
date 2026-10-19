@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { HarnessKind, PermissionResult } from "@cawco/core";
+  import {
+    CONTINUED_IN,
+    type HarnessKind,
+    type PermissionResult,
+  } from "@cawco/core";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer, grown into any parked permission
@@ -51,7 +55,7 @@
   import { cleanDetail } from "./command-detail";
   import { instanceTitle, projectOfRow } from "./home/home-state.svelte";
   import { deadlineIn } from "./hub-read";
-  import { delegateHandle } from "./links";
+  import { delegateHandle, rowHref } from "./links";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
@@ -72,7 +76,10 @@
   import TaskPane from "./tasks/TaskPane.svelte";
   import { inLists, threadIdOf, threadTabId } from "./thread-tabs";
   import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
-  import { ComposerDraft } from "./transcript/composer-draft.svelte";
+  import {
+    ComposerDraft,
+    paneDrafts,
+  } from "./transcript/composer-draft.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
@@ -197,8 +204,6 @@
    * read (`servedFault`) no longer speaks for it.
    */
   let readAnswered = $state(false);
-  /** The read finished, cleanly, with nothing in it — a transcript with no turns yet. */
-  let empty = $state(false);
   /** Bumped by Retry: the one thing that re-runs the read after it has failed. */
   let attempt = $state(0);
   /**
@@ -302,16 +307,11 @@
       return;
     }
     // Skipped means another read already holds this view; its outcome is the
-    // one that counts, and this one has nothing to say.
+    // one that counts (the store's, `blank`), and this one has nothing to say.
     if (outcome.skipped) {
       return;
     }
     missing = false;
-    // A clean read of nothing is known to be empty, running or stored, and
-    // says so (DESIGN.md, the Claim of Nothing): a session that has not
-    // started yet shows its blank state, never a skeleton waiting for turns.
-    // Its first turn, streamed in, replaces the blank state with the rows.
-    empty = (cawco.session(id)?.messages.length ?? 0) === 0;
   }
 
   // Bring the conversation into being: a stored session reads its transcript
@@ -372,7 +372,6 @@
       // The transcript is in hand, which answers any earlier failed read.
       untrack(() => {
         missing = false;
-        empty = false;
       });
       return;
     }
@@ -528,6 +527,25 @@
   );
 
   /**
+   * The session a continuation took this one's work item on in (core
+   * `InstanceRow.continuedInto`): this one never runs again, so its page
+   * says where its work went in its composer's place, a link to it, and the
+   * hub refuses a person's message to it in the same words.
+   */
+  const continuedTo = $derived.by((): { id: string; title: string } | null => {
+    // The rows while the board lists them; else its newest page's word.
+    const next = cawco.instances.find(
+      (one) => one.id === viewId
+    )?.continuedInto;
+    const to = next && cawco.instances.find((one) => one.id === next);
+    if (to) {
+      return { id: to.id, title: instanceTitle(to) };
+    }
+    const said = session?.continuedTo;
+    return said ? { id: said.instanceId, title: said.title } : null;
+  });
+
+  /**
    * What stopped the transcript arriving: the newest read's word, whoever
    * made it (this pane, a socket backfill, a peek, a read again at its
    * machine's reconnecting deadline), as the session's `readFault`; the
@@ -541,13 +559,25 @@
   );
 
   /**
-   * The read finished and there is nothing in it: a named state, not a list.
-   * Only once the conversation's start is in hand: a newest page with no
-   * blocks and a page still before it is a transcript being read, and the
-   * list asks for that page (`Transcript`).
+   * A read of the transcript landed and there is nothing in it, running or
+   * stored: a named state, not a list (DESIGN.md, the Claim of Nothing). A
+   * session nothing has been said in yet shows its blank state, never a
+   * skeleton waiting for turns; its first turn, streamed in, replaces it
+   * with the rows. Whoever made the read: the store counts every newest
+   * page it takes (`reads`). A read only this pane's own outcome set left
+   * the skeleton up for good wherever another read landed first (the
+   * surface's reads behind the active tab, SessionSurface `drainHistory`):
+   * that read subscribed the stream, so this pane's `open` read was
+   * answered `skipped` and said nothing (tab-return, leg 3). Only once the
+   * conversation's start is in hand: a newest page with no blocks and a page
+   * still before it is a transcript being read, and the list asks for that
+   * page (`Transcript`).
    */
   const blank = $derived(
-    empty && session?.messages.length === 0 && session.cursor === null
+    !!session &&
+      session.reads > 0 &&
+      session.messages.length === 0 &&
+      session.cursor === null
   );
   /** Nothing to draw yet: the history is still on its way. */
   const waiting = $derived(
@@ -851,6 +881,17 @@
   // fixed for its life, and the draft is written once more as it closes.
   keepDraft(draft, () => viewId);
 
+  // Reachable from outside the composer while the pane stands (Files' Ask).
+  $effect(() => {
+    const id = viewId;
+    paneDrafts.set(id, draft);
+    return () => {
+      if (paneDrafts.get(id) === draft) {
+        paneDrafts.delete(id);
+      }
+    };
+  });
+
   // A queued message being edited here goes back as it was when the
   // conversation closes: its bubble is whole wherever it is next drawn.
   $effect(() => () => {
@@ -953,7 +994,7 @@
   /** Whether this conversation takes messages from here at all. */
   const writable = $derived(
     !!session &&
-      !(prestart || unaddressable || readOnly) &&
+      !(prestart || unaddressable || readOnly || continuedTo) &&
       // An ask alone has a composer only while the ask stands: it is the card.
       (asking || !askAlone) &&
       // A transcript that could not be read leaves the conversation as
@@ -1224,12 +1265,15 @@
 
         <!-- The group draws the composer; only the server's first paint,
                  before any group composer exists, draws one here. -->
-        {#if !fault && (unaddressable || readOnly)}
-          <p
-            class="mx-auto mt-0 mb-space-4 px-space-3 py-space-2 text-center text-size-meta font-normal text-ink-muted"
-            in:crossIn
-            out:crossOut
-          >
+        {#if continuedTo}
+          <p class="readonly continued" in:crossIn out:crossOut>
+            <span>{CONTINUED_IN}</span>
+            <a class="touch-hit pointer-hit" href={rowHref(continuedTo.id)}
+              ><span>{continuedTo.title}</span></a
+            >
+          </p>
+        {:else if !fault && (unaddressable || readOnly)}
+          <p class="readonly" in:crossIn out:crossOut>
             This transcript is stored; the session isn't reachable from here.
           </p>
         {:else if writable && !browser}
@@ -1277,3 +1321,123 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .body {
+    min-width: 0;
+  }
+
+  /* The composer's slot, when there is no composer. Sits where the input would,
+     in the muted voice of something stating a fact rather than refusing one. */
+  .readonly {
+    margin: 0 auto var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    color: var(--ink-muted);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    text-align: center;
+  }
+  /* Where the work went: its words, then the new session's title as a link
+     that gives way first (DESIGN.md, the Truncate Inside Rule). */
+  .continued {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-1);
+    max-inline-size: 100%;
+  }
+  .continued > span {
+    flex: none;
+    white-space: nowrap;
+  }
+  .continued a {
+    min-inline-size: 0;
+    color: var(--link-ink);
+    text-underline-offset: var(--underline-offset);
+  }
+  @media (hover: hover) {
+    .continued a:hover {
+      text-decoration: underline;
+    }
+  }
+  .continued a > span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pane {
+    position: relative;
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    background: var(--surface-recess);
+  }
+  .body {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  /* ── Transcript slide ─────────────────────────────────────────────
+     Only the transcript area slides on tab switch. Header and composer
+     stay put. The entering transcript slides in from the tab direction,
+     the exiting one slides out the opposite way. */
+  .transcript-slide {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    /* The area's own stacking context: the placeholder's z-index below is
+       ranked among the transcript's, never against the group's composer
+       standing over this area's foot. Without it a desk's placeholder
+       painted over the composer and took its clicks until the rows came. */
+    isolation: isolate;
+    /* The transcript's scroll, in reach of its head blur (HeadFade). */
+    timeline-scope: --transcript-head;
+  }
+
+  /* One named state, or the transcript, filling the area. */
+  .state {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  /* The placeholder, laid over the transcript until its rows are drawn:
+     opaque, so fading it is the cross-fade, and above the transcript's own
+     sticky notes, below the composer. */
+  /* A move's wait, over everything the pane holds, opaque: fading it is the
+     cross-fade to the transcript under it. */
+  .move-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+  }
+  .veil {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-recess);
+  }
+
+  /**
+   * The handover. The transcript is IN FLOW the whole time — it is the thing
+   * that stays — so revealing it moves nothing; it is merely unpainted while it
+   * measures. The server's tail is the one lifted out of flow and laid over it,
+   * because both want to be `.body`'s whole box and two in-flow flex children
+   * would take half each.
+   */
+  /* No standin — virtua renders the tail directly via ssrCount. */
+</style>

@@ -17,6 +17,18 @@ export const artifactWords = {
   promotedTitle: (name: string) =>
     `Promoted into the project's folder at artifacts/${name}/`,
   notRemoved: (name: string, why: string) => `${name} wasn't removed: ${why}`,
+  /** The head's line under the name once the person's Send is in and the session has not changed it since. */
+  sentTo: (session: string) => `Sent to ${session}`,
+  /** A row's dot, for a screen reader: the person has something to do on it. */
+  waitingOnYou: "Waiting on you",
+
+  // ── The Comments list (preview/PinList.svelte; the app's PinListController) ──
+  /** Its skeleton rows, for a screen reader, while the pins are read past the wait's grace. */
+  readingComments: "Reading the comments",
+  /** The pins couldn't be read; `why` is its own sentence (the hub's reason). */
+  commentsNotRead: (why: string) => `The comments couldn't be read. ${why}`,
+  /** A moved pin's last line: what it stood on is gone. */
+  pinElementGone: "Its element is gone from the page",
 
   // ── A sheet's inspector (preview/SheetInspector.svelte) ──
   inspect: "Inspect",

@@ -12,6 +12,7 @@
  * exist (so a put says whether it adds or replaces).
  */
 import { type MemoryScope, scopeWords } from "./fleet";
+import { BROWSER_ASK_TOOL } from "./frames";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 import { UPSTREAM_POST_TOOL } from "./upstream-post";
@@ -51,6 +52,12 @@ export interface PermissionPresentation {
   detail?: string;
   /** The rest of the input worth reading, secrets hidden. What the summary and the diffs already say is left out. */
   fields: PermissionField[];
+  /**
+   * A post to another person's repository held for the person: Needs you
+   * names it by its own title (a comment's, its body's first line) over
+   * where it goes (`owner/repo#12`). Absent for any other ask.
+   */
+  post?: HeldPostNaming;
   /** The project the asker works in, by name; absent for a session in none. The card's head reads "Caw · cockpit". */
   project?: string;
   /**
@@ -59,6 +66,14 @@ export interface PermissionPresentation {
    * two commits are on origin/main"), its command under it in `command`.
    */
   summary: string;
+}
+
+/** A held post as Needs you names it: what it is, and where it goes. */
+export interface HeldPostNaming {
+  /** `owner/repo`, the host too off GitHub, with `#n` for the issue or pull request it is on. */
+  target: string;
+  /** The post's own title; a comment's first line. */
+  title: string;
 }
 
 /** Who asks and where, as an ask's head names them: "Caw · cockpit". */
@@ -1156,7 +1171,8 @@ const withArticle = (kind: string): string =>
 /**
  * A post to another person's repository held for the person (core
  * upstream-post.ts `UpstreamAskInput`): where it lands and what it is as the
- * summary, the account it posts as under it, its title and body as fields,
+ * summary, the account it posts as and its host under it, its title and
+ * body as fields,
  * and the post itself, whole, as the command CawCo makes once approved.
  */
 function upstreamPost(input: Record<string, unknown>): Presented {
@@ -1166,9 +1182,21 @@ function upstreamPost(input: Record<string, unknown>): Presented {
   const title = typeof input.title === "string" ? input.title : undefined;
   const body = typeof input.body === "string" ? input.body : undefined;
   const command = text(input.command);
+  const host = text(input.repo)?.split("/")[0];
+  const where = host === "github.com" ? "GitHub" : host;
+  const summary = `Post ${withArticle(kind)} on ${repo}`;
+  const named =
+    title?.trim() ||
+    body
+      ?.split("\n")
+      .map((line) => line.trim())
+      .find(Boolean);
   return {
-    summary: `Post ${withArticle(kind)} on ${repo}`,
-    ...(account ? { detail: `As ${account} on GitHub` } : {}),
+    summary,
+    post: { title: named ?? summary, target: text(input.target) ?? repo },
+    ...(account
+      ? { detail: where ? `As ${account} on ${where}` : `As ${account}` }
+      : {}),
     changes: [],
     ...(command ? { command } : {}),
     fields: [
@@ -1438,7 +1466,7 @@ function builtIn(
  * every time).
  */
 const BOUNDED =
-  /^'[^']+' --cwd-out '[^']+' '((?:[^']|'\\'')*)'; __cawco_status=\$\?; /;
+  /^'[^']+' --session --cwd-out '[^']+' '((?:[^']|'\\'')*)'; __cawco_status=\$\?; /;
 
 /**
  * The command a shell call runs, out of the boundary's rewrite once when it
@@ -1509,6 +1537,18 @@ export function presentPermission(
   }
   if (toolName === UPSTREAM_POST_TOOL) {
     return { ...who, ...upstreamPost(input) };
+  }
+  // A browser ask reads as its reason, the page's origin under it.
+  if (toolName === BROWSER_ASK_TOOL) {
+    return {
+      ...who,
+      summary: typeof input.reason === "string" ? input.reason : "",
+      changes: [],
+      fields:
+        typeof input.origin === "string"
+          ? [{ key: "origin", value: input.origin }]
+          : [],
+    };
   }
   const admin = CAWCO_ADMIN_WRITE.exec(toolName);
   // An MCP tool is never a harness's own, whatever it is called.

@@ -11,9 +11,10 @@ import { spawn } from "node:child_process";
 import { accessSync, closeSync, constants, openSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { BrowserRelay } from "@cawco/core/browser";
+import { BROWSER_SCREEN, type BrowserRelay } from "@cawco/core/browser";
 import { bootId, processStart } from "@cawco/core/process-identity";
 import { standalone } from "@cawco/core/runtime";
+import { hostEnvironment } from "@cawco/core/session-env";
 import {
   identifiedPid,
   isAlive,
@@ -64,15 +65,15 @@ const installChromium = async (): Promise<void> => {
 };
 
 /** The Chromium this machine runs, or why it has none. */
-export type Chromium =
+type Chromium =
   { executable: string } | { unavailable: string } | { failure: string };
 
 /**
- * The Chromium the local host (and, until the gate, each session's browser
- * tool) runs: a standalone install uses the browser the person installed;
+ * The Chromium the local host runs, the one Chromium the agent starts for
+ * any session: a standalone install uses the browser the person installed;
  * a source install its pinned Playwright revision, installed when missing.
  */
-export const chromiumExecutable = async (): Promise<Chromium> => {
+const chromiumExecutable = async (): Promise<Chromium> => {
   if (standalone) {
     const executable = browserExecutable();
     return executable
@@ -82,7 +83,7 @@ export const chromiumExecutable = async (): Promise<Chromium> => {
             "Install a Chromium browser with the command in this machine's capability report.",
         };
   }
-  // Standalone never evaluates this import: playwright-core is external to the binary.
+  // Standalone runs the person's own Chromium; only a source install installs Playwright's.
   const { chromium } = await import("playwright-core");
   const executable = chromium.executablePath();
   try {
@@ -214,13 +215,26 @@ export class LocalHost implements BrowserHost {
         `--user-data-dir=${profile}`,
         "--no-first-run",
         "--no-default-browser-check",
+        // Its own secrets kept in its profile, never the system's store:
+        // Linux's keyring (`--password-store=basic`) and the person's macOS
+        // login Keychain, whose access can wait on a prompt no one sees
+        // (`--use-mock-keychain`), the pair Playwright and Puppeteer launch
+        // Chromium with (playwright-core 1.64.1 `chromiumSwitches`).
         "--password-store=basic",
+        "--use-mock-keychain",
         "--disable-sync",
         "--disable-background-networking",
-        "--window-size=1280,800",
+        // The container host's screen (core `BROWSER_SCREEN`): Chromium's
+        // headless screen is a virtual 800x600 one unless `--screen-info`
+        // names it (components/headless/screen_info/README.md), and a window
+        // is kept within it. A window's page is smaller by the browser's own
+        // UI, as on neko's desktop; the take-over lays the page it shows out
+        // at the whole screen (cdp-takeover.ts).
+        `--screen-info={${BROWSER_SCREEN.width}x${BROWSER_SCREEN.height}}`,
+        `--window-size=${BROWSER_SCREEN.width},${BROWSER_SCREEN.height}`,
         "about:blank",
       ],
-      { detached: true, stdio: ["ignore", log, log] }
+      { detached: true, env: hostEnvironment(), stdio: ["ignore", log, log] }
     );
     closeSync(log);
     child.unref();

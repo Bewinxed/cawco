@@ -21,15 +21,27 @@ export const sheetWords = {
   downTitle: (dir: string) => `The stage for ${dir} didn't start`,
   /** Each dev toolchain a sheet's stage runs (core stage.ts `StageToolchain`), by its own name. */
   toolchains: { vite: "Vite", astro: "Astro", nuxt: "Nuxt" },
-  /** The line under it: the stage's own reason, or, when it gave none, that its toolchain (its name in `toolchains`) ended. */
-  downLine: (message: string | null, toolchain: string) =>
-    `${message ?? `${toolchain} ended before it served the sheet.`} Try again starts it again.`,
+  /** The line under it, in plain words, its toolchain by its name in `toolchains`; the stage's own words stand under Show details. */
+  downLine: (toolchain: string) =>
+    `${toolchain} stopped before it served the canvas. Try again starts it again.`,
   /** A workspace preview's server (`serve`), run the same way: the cover's line while it starts. */
   serverStarting: "Starting the server…",
   /** Where its page would be, when the server did not start or stopped. */
   serverDownTitle: (port: number) => `The server on port ${port} isn't running`,
-  serverDownLine: (message: string | null) =>
-    `${message ?? "It ended before it answered."} Try again starts it again.`,
+  /** The line under it, in plain words; the server's own words stand under Show details. */
+  serverDownLine: "It stopped before it answered. Try again starts it again.",
+  /** Where the page would be, when the stage stood on its way past the time it is given to serve (core `STAGE_READY_MS`) and the canvas never drew. */
+  neverDrawnTitle: "The canvas couldn't be drawn",
+  /** The line under it, in plain words: how long it was given, then the two ways out; the stage's own words stand under Show details. */
+  neverDrawnLine: (seconds: number) =>
+    `The stage never answered within ${seconds}s. Try again starts it again, or remove the canvas.`,
+  /** The way out besides Try again: the canvas leaves the panel, once asked in place. */
+  remove: "Remove",
+  removeTitle: (name: string) => `Remove ${name}?`,
+  removeBody:
+    "It leaves the panel, with its pins. Its states file stays, and the session can open it again.",
+  removeConfirm: "Remove canvas",
+  removing: "Removing…",
   tryAgain: "Try again",
   /** Try again's words while the stage starts again. */
   tryingAgain: "Starting…",

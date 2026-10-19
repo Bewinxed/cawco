@@ -79,7 +79,7 @@
 
   /* The marks drawn in a single ink. Upstream they carry a fixed dark fill
      (the GitHub mark) or none at all, which paints black. */
-  const INK = new Set(["openai", "xai", "moonshot", "github"]);
+  const INK = new Set(["openai", "xai", "moonshot", "github", "linear"]);
 
   let {
     model = "",

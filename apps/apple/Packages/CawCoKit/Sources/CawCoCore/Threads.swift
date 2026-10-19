@@ -389,6 +389,23 @@ public final class ThreadsStore {
         return said.thread
     }
 
+    /// Ask Caw for a view (client.svelte.ts `requestView`): your words go to
+    /// him in a thread of their own, and he drafts the view there. `id` is
+    /// the ask's: the hub takes the same id again as the same ask. Answers
+    /// the thread they went to.
+    @discardableResult
+    public func requestView(projectId: String, text: String, id: String) async throws -> ThreadSummary {
+        guard let client = hub.client else { throw TaskRefusal(message: Self.noHub) }
+        let output = try await client.postApiProjectsByIdViewRequests(path: .init(id: projectId), body: .json(.init(text: text, id: id)))
+        guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
+        let said = try ok.body.json
+        if messages[said.thread.id] == nil { messages[said.thread.id] = [] }
+        if let note = ThreadNote.read(said.message) { adopt(note) }
+        adopt(said.thread)
+        log.notice("asked for a view in thread \(said.thread.id, privacy: .public) as message \(id, privacy: .public)")
+        return said.thread
+    }
+
     /// His ask in this thread ended with no answer from this device, withdrawn
     /// or answered elsewhere (AskEnd): its quiet line, where it was asked.
     func ended(_ ask: ParkedAsk, line: String) {

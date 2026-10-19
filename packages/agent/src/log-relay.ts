@@ -14,6 +14,7 @@
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { constants } from "node:os";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { LOG_FRAME, logFrame, logRefusal } from "./boundary-log-protocol";
 
 /** Where the shims reach the agent. */
@@ -115,6 +116,7 @@ const start = (): LogRelay => {
       // `log stream` may say nothing for a long while.
       served.timeout(request, 0);
       const proc = Bun.spawn([LOG, ...argv], {
+        env: hostEnvironment(),
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",

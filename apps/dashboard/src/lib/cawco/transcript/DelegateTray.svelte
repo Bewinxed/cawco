@@ -1,11 +1,14 @@
 <script lang="ts">
   /**
-   * The delegate tray: one compact chip per delegate this session has working,
-   * in a row standing on the composer, so the reader scrolled far from a
-   * delegate's card still sees what it is doing. A chip enters the first time
-   * its card leaves the view (tray.svelte.ts), shows what the delegate is
-   * doing in words and one mark, opens a panel with the detail on hover or
-   * press, and leaves on its own once the work is done.
+   * The delegate tray: one compact chip per child this session has working
+   * (its delegates, and the sessions it started with `start_session`,
+   * client.svelte.ts `trayOf`), in a row standing on the composer, so the
+   * reader scrolled far from a child's card still sees what it is doing. A
+   * chip enters the first time its card leaves the view (tray.svelte.ts),
+   * shows what the child is doing in words and one mark, opens a panel with
+   * the detail on hover or press, and leaves on its own once the work is
+   * done: a delegate's work item, a started session's turn. A started
+   * session's next turn brings its chip back.
    *
    * The row has two zones. Working delegates stand at its start in the order
    * they were made, never reordered as their state changes, and those that
@@ -20,9 +23,10 @@
    * drawn over the log. Folded delegates are listed there; each failure is
    * a row that ends one of three ways: Retry (the same item runs again, and
    * its chip goes back to its place in the row), Replaced by (a later item
-   * of this session took its work over) or Dismiss with a reason.
+   * of this session took its work over) or Dismiss with a reason. Those are
+   * a work item's: a started session that failed runs none, so its chip
+   * stays in the work zone, says "failed", and leaves as a finished one does.
    */
-  import type { WorkItemSummary } from "@cawco/core";
   import { tick, untrack } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -41,7 +45,12 @@
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
-  import { cawco, dismissWorkItem, retryWorkItem } from "../client.svelte";
+  import {
+    cawco,
+    dismissWorkItem,
+    retryWorkItem,
+    type TrayChild,
+  } from "../client.svelte";
   import { age } from "../find/find-rows";
   import HoverPanel from "../HoverPanel.svelte";
   import { conversationHref } from "../links";
@@ -130,7 +139,7 @@
     | "failed";
   interface Chip {
     entry: Entry;
-    item: WorkItemSummary;
+    item: TrayChild;
     /** The pending question: the delegate's own (needs you), or the one it put to this session. */
     question: string;
     questions: number;
@@ -142,9 +151,9 @@
   /** Delegates that existed before this tray: their chips are simply there. */
   const mountedAt = Date.now();
 
-  const items = $derived(cawco.workItemsOf(parentId));
+  const items = $derived(cawco.trayOf(parentId));
 
-  const toChip = (item: WorkItemSummary): Chip => {
+  const toChip = (item: TrayChild): Chip => {
     const pending = cawco.session(item.instanceId)?.pending ?? [];
     const own = pending.filter((each) => !each.routedTo);
     const routed = pending.filter((each) => each.routedTo === "parent");
@@ -189,9 +198,12 @@
       )
       .map(toChip)
   );
+  /** A failed work item: owed a decision (a started session's failure owes none). */
+  const owed = (chip: Chip) =>
+    chip.tone === "failed" && chip.item.work !== null;
   /** The row's two zones: the work in creation order, and the failures owed a decision. */
-  const working = $derived(chips.filter((chip) => chip.tone !== "failed"));
-  const failures = $derived(chips.filter((chip) => chip.tone === "failed"));
+  const working = $derived(chips.filter((chip) => !owed(chip)));
+  const failures = $derived(chips.filter(owed));
   /** The one failure drawn as its own chip, when it is the only one. */
   const lone = $derived(failures.length === 1 ? failures[0] : null);
   /** The failure chip's key: the lone failure's id, or "failed" for the count. */
@@ -201,11 +213,11 @@
 
   /** When the tray first heard of each item. */
   const known = new Map<string, number>();
-  const candidate = (item: WorkItemSummary, now: number): boolean =>
+  const candidate = (item: TrayChild, now: number): boolean =>
     item.dismissedAt === null &&
     (item.state === "starting" ||
       item.state === "running" ||
-      item.state === "failed" ||
+      (item.state === "failed" && item.work !== null) ||
       (item.endedAt !== null && now - item.endedAt < HOLD));
 
   /* ---- the finished chip's hold -------------------------------------- */
@@ -228,6 +240,16 @@
   function admitWaiting(now: number): void {
     for (const item of items) {
       known.set(item.id, known.get(item.id) ?? now);
+      // A started session at work again after its chip had its hold: the
+      // chip comes back, its hold counted afresh when this turn ends.
+      if (
+        item.work === null &&
+        left.has(item.id) &&
+        (item.state === "starting" || item.state === "running")
+      ) {
+        left.delete(item.id);
+        shownFor.delete(item.id);
+      }
       const waiting =
         !(entered.has(item.instanceId) || left.has(item.id)) &&
         candidate(item, now) &&
@@ -248,7 +270,8 @@
     const paused =
       document.hidden || hovering || openKey !== null || shelf !== null;
     for (const { item, tone, entry } of working) {
-      if (!(tone === "done" || tone === "cancelled")) {
+      // A started session's failure owes no decision: it holds as a finish does.
+      if (!(tone === "done" || tone === "cancelled" || tone === "failed")) {
         continue;
       }
       // At load, one that finished moments ago shows for what is left.
@@ -280,7 +303,7 @@
   const LIFT = 1000;
 
   /** The delegate's newest report in this session's transcript. */
-  const reportOf = (item: WorkItemSummary) =>
+  const reportOf = (item: TrayChild) =>
     (cawco.session(parentId)?.messages ?? []).findLast(
       (m) =>
         m.type === "user.peer" &&
@@ -289,7 +312,7 @@
     );
 
   /** The report's row, when it is drawn inside its transcript's view, above the composer. */
-  function reportInView(item: WorkItemSummary): HTMLElement | null {
+  function reportInView(item: TrayChild): HTMLElement | null {
     const id = reportOf(item)?.id;
     if (!(id && root)) {
       return null;
@@ -318,7 +341,7 @@
    * (translate and scale on one clock) while the chip's slot closes, then
    * fades as the row, held clear while it flew, fades in.
    */
-  function fly(item: WorkItemSummary, target: HTMLElement): void {
+  function fly(item: TrayChild, target: HTMLElement): void {
     const chip = chipEl(item.id);
     // A chip folded away behind "+N" has nowhere to lift off from.
     const seen = chip?.checkVisibility({ visibilityProperty: true });
@@ -525,7 +548,7 @@
   /** An age that is a span ("2h"), not a date ("Oct 3"). */
   const SPAN = /^\d/;
   /** When it failed, as a failure row says it: "failed 2h ago". */
-  const failedWhen = (item: WorkItemSummary): string => {
+  const failedWhen = (item: TrayChild): string => {
     const at = age(item.endedAt ?? item.createdAt, minute);
     if (at === "now") {
       return "failed just now";
@@ -533,7 +556,7 @@
     return SPAN.test(at) ? `failed ${at} ago` : `failed ${at}`;
   };
   /** Why a queued delegate waits, as its chip says it: its machine's pause, or the files it owns. */
-  const queuedWords = (item: WorkItemSummary): string => {
+  const queuedWords = (item: TrayChild): string => {
     if (!item.queued) {
       return "";
     }
@@ -542,7 +565,7 @@
       : `queued: owns ${item.queued.owns.join(", ")}`;
   };
   /** What its landing waits for (a shared machine slot, its turn to land), as its chip says it, with how long. */
-  const checkQueueWords = (item: WorkItemSummary): string =>
+  const checkQueueWords = (item: TrayChild): string =>
     item.checkQueue
       ? `${item.checkQueue.words}, ${span(item.checkQueue.since, minute)}`
       : "";
@@ -556,6 +579,10 @@
     // Its machine is paused: it runs no turn until the pause ends.
     if (chip.item.machinePaused) {
       return chip.item.machinePaused;
+    }
+    // Its account's limit stopped it: where or when it continues, by itself.
+    if (chip.item.stalled) {
+      return chip.item.stalled;
     }
     switch (chip.tone) {
       case "needs":
@@ -573,7 +600,7 @@
   };
   const questionWords = (n: number) =>
     n === 1 ? "1 question" : `${n} questions`;
-  const hrefOf = (item: WorkItemSummary) =>
+  const hrefOf = (item: TrayChild) =>
     conversationHref(item.instanceId, cawco.instanceIndex);
 
   /* ---- what the tray says out loud ------------------------------------ */
@@ -865,10 +892,13 @@
         (a.item.endedAt ?? a.item.createdAt)
     )
   );
-  /** The items of this tray made after `item`: what can have replaced it. */
-  const laterThan = (item: WorkItemSummary) =>
+  /** The work items of this tray made after `item`: what can have replaced it. */
+  const laterThan = (item: TrayChild) =>
     items.filter(
-      (other) => other.id !== item.id && other.createdAt > item.createdAt
+      (other) =>
+        other.work !== null &&
+        other.id !== item.id &&
+        other.createdAt > item.createdAt
     );
 
   /* ---- a failure's three ways out ------------------------------------- */
@@ -885,7 +915,7 @@
   const reasons = new SvelteMap<string, string>();
 
   async function act(
-    item: WorkItemSummary,
+    item: TrayChild,
     kind: Act,
     call: () => Promise<void>
   ): Promise<void> {
@@ -906,11 +936,11 @@
       acting.delete(item.id);
     }
   }
-  const retry = (item: WorkItemSummary) =>
+  const retry = (item: TrayChild) =>
     act(item, "retry", () => retryWorkItem(item.id));
-  const replace = (item: WorkItemSummary, by: string) =>
+  const replace = (item: TrayChild, by: string) =>
     act(item, "replace", () => dismissWorkItem(item.id, { replacedBy: by }));
-  function dismiss(item: WorkItemSummary): void {
+  function dismiss(item: TrayChild): void {
     const reason = (reasons.get(item.id) ?? "").trim();
     if (reason) {
       // biome-ignore lint/complexity/noVoid: the row says how it went.
@@ -1109,15 +1139,14 @@
       return {
         key: "fail",
         kind: "fail",
-        text: item.firstLines.error || "It failed without saying why.",
+        text: item.error || "It failed without saying why.",
       };
     }
     return null;
   };
 </script>
 
-<!-- The delegate card's mark, at its size. -->
-{#snippet mark(item: WorkItemSummary, flies: boolean)}
+{#snippet mark(item: TrayChild, flies: boolean)}
   {@const Sprite = sessionSprite(item.instanceId)}
   <!-- literal: 17px -->
   <span
@@ -1169,15 +1198,7 @@
 {#snippet chipButton(chip: Chip, at: number)}
   {@const { item, tone, entry } = chip}
   {@const flies = entry === "fly"}
-  {@const failed = tone === "failed"}
-  <!-- A chip: the tray row's (app.css .kit-tray-chip), its surface on a
-       layer of its own so it can arrive after a mark that flew in. Its
-       floor is measured (`measureFloor`); the failure chip stands at the
-       row's end, next to the plan. Its least floor and its cap are classes:
-       fly() clones the chip and rewrites the copy's inline style, so the
-       copy keeps them, under the live chip's measured floor (inline).
-       A delegate that needs you is in the ask ink wherever its state shows:
-       its chip, its folded row's words, its state cell. -->
+  {@const failed = owed(chip)}
   <button
     data-end={failed || undefined}
     aria-controls={failed ? shelfId : panelId}
@@ -1304,12 +1325,8 @@
         <IconExternal class="size-icon-sm block" />
       </a>
     </div>
-    <!-- literal: 17px -->
-    <p
-      class="m-0 ps-(--serror-start) text-size-meta text-status-fail-ink overflow-clip text-ellipsis whitespace-nowrap"
-      style:--serror-start="calc(17px + var(--space-2))"
-    >
-      {item.firstLines.error || "It failed without saying why."}
+    <p class="serror">
+      {item.error || "It failed without saying why."}
     </p>
     {#if reason === undefined}
       <!-- literal: 17px -->

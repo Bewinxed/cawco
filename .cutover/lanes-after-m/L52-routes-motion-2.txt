@@ -1,0 +1,17 @@
+apps/dashboard/src/routes/(app)/motion/head-tint/+page.svelte
+apps/dashboard/src/routes/(app)/motion/lift/+page.svelte
+apps/dashboard/src/routes/(app)/motion/prompt-head/+page.svelte
+apps/dashboard/src/routes/(app)/motion/session-limit/+page.svelte
+apps/dashboard/src/routes/(app)/motion/side-head/+page.svelte
+apps/dashboard/src/routes/(app)/motion/updates/+page.svelte
+apps/dashboard/src/routes/(app)/motion/usage-limits/+page.svelte
+apps/dashboard/src/routes/(app)/motion/usage-relay/+page.svelte
+
+# apps/dashboard/src/routes/(app)/motion/head-tint/+page.svelte: relic: literal ×1; relic: style-reason ×1; relic: important ×1
+# apps/dashboard/src/routes/(app)/motion/lift/+page.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/routes/(app)/motion/prompt-head/+page.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; relic: style-reason ×1
+# apps/dashboard/src/routes/(app)/motion/session-limit/+page.svelte: relic: literal ×2; relic: style-var ×3
+# apps/dashboard/src/routes/(app)/motion/side-head/+page.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; relic: style-reason ×1
+# apps/dashboard/src/routes/(app)/motion/updates/+page.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×2; lint: shadcn/no-unknown-classes ×1
+# apps/dashboard/src/routes/(app)/motion/usage-limits/+page.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/routes/(app)/motion/usage-relay/+page.svelte: relic: literal ×2; relic: style-var ×3

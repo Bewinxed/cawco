@@ -8,16 +8,12 @@
  * it. Claude's figure (the API price of work the plan covers) and opencode's
  * (real money) stay in their own columns, never one.
  */
-import { machineLabel, type UsageSummaryRow } from "@cawco/core";
+import { accountsWords, machineLabel, type UsageSummaryRow } from "@cawco/core";
 import { cawco, isFailed } from "./client.svelte";
 import { instanceTitle, lastAt } from "./home/home-state.svelte";
 import { catalogTitle } from "./links";
 
-const HARNESS: Record<string, string> = {
-  claude: "Claude Code",
-  opencode: "OpenCode",
-  pi: "pi",
-};
+const HARNESS: Record<string, string> = accountsWords.harnesses;
 
 const machineName = (machineId: string): string => {
   const machine = cawco.machines.find((m) => m.machineId === machineId);

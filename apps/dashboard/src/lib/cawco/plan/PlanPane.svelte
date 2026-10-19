@@ -165,6 +165,7 @@
     {onclose}
     recessed={false}
     subtitle={onlyTodos ? (plan?.taskId ?? undefined) : undefined}
+    subtitleCode
     {switcher}
     title={switcher ? undefined : cardTitle}
   >

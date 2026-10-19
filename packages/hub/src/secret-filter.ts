@@ -1,8 +1,10 @@
 /**
- * No secret reaches a project's memory. Every message the prose cut keeps
- * (session-prose.ts, live and backfilled alike) passes {@link redactSecrets}
- * first, and each match is stored as {@link REDACTED_SECRET}. Two kinds of
- * match:
+ * No secret reaches an agent through the hub's own words about what was
+ * said, nor a project's git. Every text an agent's `find` answers with
+ * (find-tool.ts: excerpts, detailed turns, `around`'s turns) and every
+ * `memory_note` before it is written (memory.ts) pass {@link redactSecrets}
+ * first; each match is said as {@link REDACTED_SECRET}. The dashboard's own
+ * Find, the person's, is not filtered. Two kinds of match:
  *
  * - **Credentials by shape**: secretlint's recommended preset
  *   (@secretlint/secretlint-rule-preset-recommend: AWS, GCP, private keys,
@@ -17,6 +19,12 @@
  *   upper and lower case, and a digit or a symbol). Nothing in secretlint's
  *   preset catches "my sudo password is …", which is how a person types one
  *   to an agent.
+ * - **A credential set to a value**: `password=…`, `token: …`, `secret`,
+ *   `passwd`, `api_key` or `apikey` followed by `:` or `=` and a value of six
+ *   characters or more, and `Bearer <token>`: the shapes core's
+ *   `CREDENTIAL_PATTERNS` caught in notes before this filter, which neither
+ *   rule above does when the value is all lower case. The value is cut, the
+ *   key kept.
  */
 import { lintSource } from "@secretlint/core";
 import { creator as recommended } from "@secretlint/secretlint-rule-preset-recommend";
@@ -49,6 +57,21 @@ export const passwordShaped = (word: string): boolean =>
 
 type Range = readonly [start: number, end: number];
 
+/** A credential's key and its value; the value (group 1) is what is cut. */
+const SET_TO_VALUE = [
+  /\b(?:password|passwd|secret|token|api[-_]?key)\s*[:=]\s*(\S{6,})/dgi,
+  /\bbearer\s+([A-Za-z0-9._~+/-]{16,}=*)/dgi,
+];
+
+/** Every value a credential's key is set to ({@link SET_TO_VALUE}). */
+const setCredentials = (text: string): Range[] =>
+  SET_TO_VALUE.flatMap((pattern) =>
+    [...text.matchAll(pattern)].flatMap((match): Range[] => {
+      const value = match.indices?.[1];
+      return value ? [[value[0], value[1]]] : [];
+    })
+  );
+
 /** Every password-shaped word of a sentence that talks about a credential. */
 const typedCredentials = (text: string): Range[] =>
   [...text.matchAll(SENTENCE)]
@@ -68,7 +91,7 @@ const shapedCredentials = async (text: string): Promise<Range[]> => {
   const { messages } = await lintSource({
     source: {
       content: text,
-      filePath: "/session-prose.txt",
+      filePath: "/said.txt",
       ext: ".txt",
       contentType: "text",
     },
@@ -79,7 +102,14 @@ const shapedCredentials = async (text: string): Promise<Range[]> => {
 
 /** `text` with every secret found (module header) replaced by {@link REDACTED_SECRET}, overlapping finds as one. */
 export const redactSecrets = async (text: string): Promise<string> => {
-  const ranges = [...(await shapedCredentials(text)), ...typedCredentials(text)]
+  if (!text.trim()) {
+    return text;
+  }
+  const ranges = [
+    ...(await shapedCredentials(text)),
+    ...typedCredentials(text),
+    ...setCredentials(text),
+  ]
     .filter(([start, end]) => end > start)
     .sort((a, b) => a[0] - b[0]);
   const merged: [number, number][] = [];

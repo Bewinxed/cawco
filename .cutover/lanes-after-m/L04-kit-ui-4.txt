@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/components/ui/skeleton/skeleton.svelte
+apps/dashboard/src/lib/components/ui/sonner/sonner.svelte
+apps/dashboard/src/lib/components/ui/spinner/spinner.svelte
+apps/dashboard/src/lib/components/ui/table/table-head.svelte
+apps/dashboard/src/lib/components/ui/table/table-row.svelte
+apps/dashboard/src/lib/components/ui/table/table.svelte
+apps/dashboard/src/lib/components/ui/tabs/tabs-content.svelte
+apps/dashboard/src/lib/components/ui/tabs/tabs-list.svelte
+
+# apps/dashboard/src/lib/components/ui/skeleton/skeleton.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/sonner/sonner.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1; relic: important ×2
+# apps/dashboard/src/lib/components/ui/spinner/spinner.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/table/table-head.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/table/table-row.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/table/table.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/tabs/tabs-content.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/tabs/tabs-list.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here

@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/cawco/RunSteps.svelte
+apps/dashboard/src/lib/cawco/ScreenEdges.svelte
+apps/dashboard/src/lib/cawco/SessionHover.svelte
+apps/dashboard/src/lib/cawco/SessionPane.svelte
+apps/dashboard/src/lib/cawco/SessionRow.svelte
+apps/dashboard/src/lib/cawco/Shell.svelte
+apps/dashboard/src/lib/cawco/Sidebar.svelte
+apps/dashboard/src/lib/cawco/StatTile.svelte
+
+# apps/dashboard/src/lib/cawco/RunSteps.svelte: relic: literal ×4; relic: style-var ×7
+# apps/dashboard/src/lib/cawco/ScreenEdges.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/SessionHover.svelte: relic: literal ×3; relic: style-var ×4; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/SessionPane.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/SessionRow.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×2; relic: style-var ×4; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/Shell.svelte: after-M: markup naming a scoped class; after-M: a Tailwind class with a raw value; after-M: a scoped <style> rule; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×6; relic: style-var ×7; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×3
+# apps/dashboard/src/lib/cawco/Sidebar.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×2; relic: style-var ×3; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/StatTile.svelte: relic: literal ×1

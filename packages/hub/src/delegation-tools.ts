@@ -3,6 +3,7 @@ import {
   LANDS_MODES,
   type LandsMode,
 } from "@cawco/core";
+import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
@@ -48,6 +49,37 @@ const accountParameter = () =>
     .describe(
       "The account the session runs on, by its label or id. Name one only when the user asks for that account; omitted, the hub places it by the fleet's routing."
     );
+
+/** `forge_post`'s arguments as the one write they name, or a refusal saying what the kind needs. */
+const forgeWriteOf = (asked: {
+  base?: string;
+  body: string;
+  head?: string;
+  kind: "issue" | "pull_request" | "comment";
+  number?: number;
+  on?: "issue" | "pull_request";
+  title?: string;
+}): ForgeWrite => {
+  const { kind, body, title, head, base, number } = asked;
+  if (kind === "issue" && title) {
+    return { op: "issue", title, body };
+  }
+  if (kind === "pull_request" && title && head && base) {
+    return { op: "pull_request", title, body, head, base };
+  }
+  if (kind === "comment" && number && body.trim()) {
+    return { op: "comment", body, number, on: asked.on ?? "issue" };
+  }
+  throw new Error(
+    {
+      issue: "An issue needs its title.",
+      pull_request:
+        "A pull or merge request needs its title, head (the pushed branch) and base.",
+      comment:
+        "A comment needs its body and the number of the issue or pull request it is on.",
+    }[kind]
+  );
+};
 
 function tool<T extends z.ZodRawShape>(
   name: string,
@@ -409,6 +441,61 @@ export function handoffTools(deps: HandoffDeps) {
       }
     ),
     tool(
+      "forge_post",
+      "Open an issue, a pull/merge request or a comment on a repository's forge (GitHub, GitLab, Gitea, Forgejo), with your machine's own sign-in there. " +
+        "Defaults to this project's repository; one elsewhere may be refused or held for the owner (you are told; never repeat it). Push the head branch first.",
+      {
+        kind: z
+          .enum(["issue", "pull_request", "comment"])
+          .describe(
+            "issue: title, body. pull_request: title, body, head, base. comment: body, number, on."
+          ),
+        repo: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Git URL or host/path; omitted, this project's."),
+        title: z.string().trim().min(1).optional(),
+        body: z.string().optional(),
+        head: z.string().trim().min(1).optional(),
+        base: z.string().trim().min(1).optional(),
+        number: z.number().int().positive().optional(),
+        on: z
+          .enum(["issue", "pull_request"])
+          .optional()
+          .describe("What number names; default issue."),
+      },
+      async ({ kind, repo, title, body, head, base, number, on }) => {
+        const write = forgeWriteOf({
+          kind,
+          body: body ?? "",
+          ...(title ? { title } : {}),
+          ...(head ? { head } : {}),
+          ...(base ? { base } : {}),
+          ...(number ? { number } : {}),
+          ...(on ? { on } : {}),
+        });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: await actions.forgePost({
+                write,
+                ...(repo ? { repo } : {}),
+              }),
+            },
+          ],
+        };
+      },
+      {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      }
+    ),
+    tool(
       "list_delegate_types",
       "The live delegate catalog, the one a named delegate's dispatch reads: each type's task description, harness, model, effort, skills, denied tools and whether it may delegate. " +
         "In a project its own types (source 'project') come first and replace fleet types of the same name. " +
@@ -736,7 +823,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate_list",
-      "Your delegation tree: each delegate you started, theirs nested, with its work item's state, last activity, cache warmth, queued messages, what it waits on, and plan progress; and under queued, your delegates still waiting for owned files (state queued), each with when it was queued and the live item and globs holding it; and under held, workspaces whose items ended with unlanded work. Read it before handing off to a delegate or calling one stuck.",
+      "Your delegation tree: each delegate you started, theirs nested, with its work item's state (stalled: its account's limit stopped it; it goes on by itself, as stalled says), last activity, cache warmth, queued messages, what it waits on, and plan progress; under queued, delegates waiting for owned files, with when queued and the live item and globs holding them; under held, workspaces whose items ended with unlanded work. Read it before handing off or calling one stuck.",
       {
         include: z
           .enum(["live", "all"])
@@ -823,8 +910,8 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "continue_session",
-      "Continue another session (a stuck delegate) in a new one, from a summary by a model you choose; the " +
-        "named one is only read. Never this session: if your context is too big, say so. " +
+      "Continue another session (a stuck delegate) in a new one, summarised by a model you pick; " +
+        "its work item moves there; it never runs again. Never this session: if your context is too big, say so. " +
         "The new session answers tool permissions in `target_permission_mode`, this session's own mode when omitted; " +
         "when this session has none (pi) and the target harness has modes, it must be named, or nothing starts.",
       {
@@ -1093,7 +1180,7 @@ export function handoffTools(deps: HandoffDeps) {
         openWorldHint: false,
       }
     ),
-    // A delegate may put it in its parent's panel instead (`to`).
+    // A delegate may hand it to its parent instead (`to`), unopened.
     deps.hasParent
       ? tool(
           artifactCreate.name,
@@ -1111,31 +1198,39 @@ export function handoffTools(deps: HandoffDeps) {
       artifactUpdate.name,
       artifactUpdate.description,
       artifactUpdate.input,
-      async ({ id, statements, ...change }) => {
-        if (statements === undefined) {
-          // A component canvas's states file and its own spec have their own route.
-          const component = (
-            ["args", "story", "about", "edges", "group", "dials"] as const
-          ).some((key) => change[key] !== undefined);
-          return json(
-            await actions.artifactCall(
-              "PATCH",
-              `/${encodeURIComponent(id)}${component ? "/component" : ""}`,
-              change
-            )
-          );
-        }
-        if (Object.values(change).some((value) => value !== undefined)) {
+      async ({ id, statements, ask, ...change }) => {
+        const at = `/${encodeURIComponent(id)}`;
+        const changes = Object.values(change).some(
+          (value) => value !== undefined
+        );
+        if (statements !== undefined && changes) {
           throw new Error(
             "statements revises a decision page alone: pass it without html, patch, elements, delete, mermaid, args or story."
           );
         }
+        // A new ask is checked and written first, so a refused one changes nothing.
+        const asked =
+          ask === undefined
+            ? undefined
+            : await actions.artifactCall("POST", `${at}/ask`, { ask });
+        if (statements === undefined) {
+          if (!changes && asked !== undefined) {
+            return json(asked);
+          }
+          // A component canvas's states file and its own spec have their own route.
+          const component = (
+            ["args", "story", "edges", "group", "dials"] as const
+          ).some((key) => change[key] !== undefined);
+          return json(
+            await actions.artifactCall(
+              "PATCH",
+              `${at}${component ? "/component" : ""}`,
+              change
+            )
+          );
+        }
         return json(
-          await actions.artifactCall(
-            "POST",
-            `/${encodeURIComponent(id)}/statements`,
-            { statements }
-          )
+          await actions.artifactCall("POST", `${at}/statements`, { statements })
         );
       }
     ),
@@ -1144,7 +1239,7 @@ export function handoffTools(deps: HandoffDeps) {
       artifactRead.description,
       artifactRead.input,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each optional read field into the query, and a picture into an image block
-      async ({ id, since, png, detail, story, state, render }) => {
+      async ({ id, since, png, detail, story, state, render, verify }) => {
         const query = new URLSearchParams({
           ...(since === undefined ? {} : { since: String(since) }),
           ...(png ? { png: "true" } : {}),
@@ -1152,6 +1247,7 @@ export function handoffTools(deps: HandoffDeps) {
           ...(story ? { story } : {}),
           ...(state ? { state: JSON.stringify(state) } : {}),
           ...(render ? { render: "true" } : {}),
+          ...(verify ? { verify: "true" } : {}),
         }).toString();
         let target = id;
         if (target === undefined) {
@@ -1219,7 +1315,10 @@ export function handoffTools(deps: HandoffDeps) {
       artifactShow.input,
       async ({ id }) =>
         json(
-          await actions.artifactCall("POST", `/${encodeURIComponent(id)}/show`)
+          await actions.artifactCall(
+            "POST",
+            `/${encodeURIComponent(id)}/show?by=agent`
+          )
         )
     ),
     tool(
@@ -1245,7 +1344,12 @@ export function handoffTools(deps: HandoffDeps) {
       artifactDelete.description,
       artifactDelete.input,
       async ({ id }) =>
-        json(await actions.artifactCall("DELETE", `/${encodeURIComponent(id)}`))
+        json(
+          await actions.artifactCall(
+            "DELETE",
+            `/${encodeURIComponent(id)}?by=agent`
+          )
+        )
     ),
     tool(
       commentRead.name,
@@ -1315,7 +1419,7 @@ export function handoffTools(deps: HandoffDeps) {
  * non-deferred so Claude can call them without searching first"
  * (platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool).
  */
-export const ALWAYS_LOAD: ReadonlySet<string> = new Set([
+const ALWAYS_LOAD: ReadonlySet<string> = new Set([
   "delegate",
   "handoff",
   "finish_item",
@@ -1324,12 +1428,27 @@ export const ALWAYS_LOAD: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * `find` (find-tool.ts) loads upfront too for the sessions that search most,
+ * an orchestrator and a project's Caw (roles.ts `memoryRoleOf`): the owner
+ * saw the orchestrator grep transcripts and query the hub's database for
+ * what a session said, with the dashboard's own search a tool away
+ * (2026-10-19). Every other session finds it by the deferred groups' first
+ * line ({@link DEFERRED_GROUPS}).
+ */
+export const loadsUpfront = (name: string, searcher: boolean): boolean =>
+  ALWAYS_LOAD.has(name) || (searcher && name === "find");
+
+/**
  * The deferred groups by prefix, as the server's instructions name them:
  * "Use consistent namespacing … so one search matches the whole group" and
  * "Add a system prompt section describing available tool categories"
  * (tool-search-tool docs).
  */
 const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
+  {
+    prefixes: ["find"],
+    what: "anything said or made, as the dashboard's Find finds it; search it before reading transcripts, files or the database",
+  },
   { prefixes: ["admin_"], what: "fleet configuration" },
   { prefixes: ["task_"], what: "project tasks" },
   {
@@ -1349,7 +1468,7 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
   { prefixes: ["workflow_", "submit_result"], what: "workflows" },
   {
     prefixes: ["artifact_", "comment_", "design_map"],
-    what: "artifacts you show, the person's pins on them; the components and their states on a canvas you build on and the person pins, design_map the library",
+    what: "what you open in the person's panel for them to pick, judge, try or draw on (show skill first), their pins on it; design_map the component library",
   },
   { prefixes: ["memory_"], what: "project memory" },
   { prefixes: ["thread_"], what: "your threads with the person" },
@@ -1370,6 +1489,8 @@ export interface Listable {
   inProject: ReadonlySet<string>;
   names: readonly string[];
   outsideProject: ReadonlySet<string>;
+  /** The names Claude loads upfront for this session ({@link loadsUpfront}). */
+  upfront: ReadonlySet<string>;
 }
 
 /** Where a name, or a group of them, is listed, when only on one side. */
@@ -1390,8 +1511,8 @@ const sideOf = (members: readonly string[], listable: Listable): string => {
  */
 const loadingLine = (listable: Listable): string => {
   const { names } = listable;
-  const upfront = names.filter((name) => ALWAYS_LOAD.has(name));
-  const deferred = names.filter((name) => !ALWAYS_LOAD.has(name));
+  const upfront = names.filter((name) => listable.upfront.has(name));
+  const deferred = names.filter((name) => !listable.upfront.has(name));
   const grouped = new Set<string>();
   const groups = DEFERRED_GROUPS.flatMap(({ prefixes, what }) => {
     const members = deferred.filter((name) =>

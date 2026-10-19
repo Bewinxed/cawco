@@ -60,18 +60,20 @@
   import { outlineLayer } from "./hang-outline.js";
 
   /** The glass card's faces (GlassCard's `Card`). */
-  type Frame = "caw" | "machines" | "jump";
+  type Frame = "caw" | "machines" | "jump" | "files";
   /**
    * Each face's frame, read off what its custom properties hold (on the card,
    * below): Caw's panel `c-panel-w` wide with its rows 7px in; the machines
    * 20rem; Jump `c-find-w` wide and its foot clear of the screen's, a full
-   * sheet on a phone. On a phone each keeps the phone's 12px margin on its
+   * sheet on a phone; Files as Caw's panel, its rows `--space-2` in, as tall
+   * as what it holds up to his panel's height or the room under the glass. On a phone each keeps the phone's 12px margin on its
    * leading side (app.css `.glass-card` squares the trailing one).
    */
   const FRAMES: Record<Frame, string> = {
     caw: "w-(--frame-w) max-[900px]:w-(--frame-w-narrow) gap-0 p-space-2",
     machines: "w-(--frame-w) gap-0",
     jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 max-[900px]:h-(--frame-h) max-[900px]:w-(--frame-w-narrow)",
+    files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
   };
   /** The numbers each face's frame reads (`--frame-w`, `--frame-w-narrow`, `--frame-h`). */
   const FRAME_SIZES: Record<Frame, { w: string; narrow?: string; h?: string }> =
@@ -86,6 +88,10 @@
         w: "min(var(--c-find-w), calc(100vw - 24px))",
         narrow: "calc(100vw - 12px - env(safe-area-inset-right, 0px))",
         h: "calc(100dvh - var(--c-top-bar-h) - 24px)",
+      },
+      files: {
+        w: "min(var(--c-panel-w), calc(100vw - 24px))",
+        h: "min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
       },
     };
 

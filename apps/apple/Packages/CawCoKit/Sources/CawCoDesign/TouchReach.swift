@@ -46,12 +46,13 @@ public enum TouchReach {
     }
 
     /// A touch already on a control, or on text (a field, a text view, a
-    /// web page's content), is that view's.
+    /// web page's content), is that view's; on a surface that yields
+    /// (`YieldsReach`), it is the surface's only when no control reaches it.
     @MainActor
     private static func owned(_ view: UIView) -> Bool {
         var current: UIView? = view
         while let at = current, !(at is UIWindow) {
-            if at is UIControl || at is UITextInput { return true }
+            if (at is UIControl && !(at is YieldsReach)) || at is UITextInput { return true }
             current = at.superview
         }
         return false
@@ -67,7 +68,7 @@ public enum TouchReach {
         for child in view.subviews where !child.isHidden && child.alpha > 0.01 && child.isUserInteractionEnabled {
             let box = child.convert(child.bounds, to: window)
             guard box.insetBy(dx: -slack, dy: -slack).intersects(clip) else { continue }
-            if let control = child as? UIControl, control.isEnabled, !(control is KeepsDrawnBox), reach(box).contains(point) {
+            if let control = child as? UIControl, control.isEnabled, !(control is KeepsDrawnBox), !(control is YieldsReach), reach(box).contains(point) {
                 found.append((control, box, distance(point, box)))
             }
             if child.clipsToBounds {
@@ -94,9 +95,29 @@ public final class ReachWindow: UIWindow {
             super.hitTest(at, with: event)
         }
     }
+
+    #if DEBUG
+    /// Under a probe, each touch as the window sends it on: where it went.
+    public static var touched: ((UITouch) -> Void)?
+
+    override public func sendEvent(_ event: UIEvent) {
+        if let touched = Self.touched, event.type == .touches {
+            for touch in event.allTouches ?? [] where touch.phase == .began || touch.phase == .ended || touch.phase == .cancelled {
+                touched(touch)
+            }
+        }
+        super.sendEvent(event)
+    }
+    #endif
 }
 
 /// A control that answers only its drawn box, where its reach would take a
 /// neighbour that is not a control (a tab's details chevron and the tab's
 /// own title).
 public protocol KeepsDrawnBox: UIControl {}
+
+/// A control drawn as the surface under smaller ones (a whole row that opens
+/// its editor, under its ⋯ and its switch): a touch on it that a smaller
+/// control's 44pt reach holds goes to that control, the web's `.touch-hit`
+/// standing over the row's link; anywhere else the surface takes it.
+public protocol YieldsReach: UIControl {}

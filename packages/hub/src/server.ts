@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { hostname as osHostname } from "node:os";
+import { networkInterfaces, hostname as osHostname } from "node:os";
 import { join, posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
@@ -26,6 +26,7 @@ import type {
   FleetHook,
   FleetMcpConfig,
   FleetPlugin,
+  FleetReportFrame,
   FleetSkillMeta,
   FleetSyncReport,
   FleetWatchNotice,
@@ -74,6 +75,7 @@ import type {
   SendRefusal,
   SentMessage,
   SessionAddress,
+  SessionAttachments,
   SessionCredentialInstall,
   SessionCustody,
   SessionEndIntent,
@@ -88,6 +90,7 @@ import type {
   ToolState,
   ToolStatus,
   TranscriptAnswer,
+  TranscriptPage,
   TranscriptWhere,
   UpdateReport,
   UsageBucket,
@@ -122,7 +125,7 @@ import {
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
   accountMoveSentence,
-  accountName,
+  accountNameAmong,
   accountProvidersOf,
   agentProblem,
   archiveRefusal,
@@ -168,6 +171,7 @@ import {
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PI_DEFAULT_MODEL,
+  CONTROL_PLACE_LFS,
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_PROBE_ACCOUNT,
@@ -197,8 +201,8 @@ import {
   CUSTODY_HELD,
   clockWords,
   contextFitRefusal,
+  continuedInWords,
   DEFAULT_AT_LIMIT,
-  DELEGATE_WORK,
   delegateAskText,
   deriveTitleFromFirstMessage,
   EFFORT_NONE,
@@ -243,6 +247,7 @@ import {
   MOVED_HERE,
   machineCalled,
   machineFaultWords,
+  machineLabel,
   mcpRunsOn,
   memoryDocProblem,
   memoryScopeProblem,
@@ -281,6 +286,7 @@ import {
   RESOLVE_PERMISSION,
   type RebalanceNotice,
   type Relaunch,
+  ROOM_HELD,
   RULE_TEMPLATES,
   type RunKind,
   readProvenance,
@@ -310,7 +316,6 @@ import {
   validateWorkflow,
   WIRE_PROTOCOL,
   WITHDRAW_PERMISSION,
-  WORK_ITEM_ORIGIN,
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core";
 import {
@@ -324,7 +329,13 @@ import {
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { BrowserFrame, BrowserHandedBackFrame } from "@cawco/core/browser";
 import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
+import {
+  CANVAS_LIMITS,
+  CANVAS_SCREEN_CLOSE,
+  CANVAS_SCREEN_OPEN,
+} from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -338,7 +349,12 @@ import {
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
-import { DOWN_WORDS, type FolderWeight } from "@cawco/core/preview-proxy";
+import {
+  DOWN_WORDS,
+  downOf,
+  type FolderWeight,
+  RELAY_HEADER,
+} from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import {
   type DesignMap,
@@ -361,15 +377,14 @@ import {
   type StageStatus,
 } from "@cawco/core/stage";
 import type { RelayFrame } from "@cawco/core/stream-relay";
+import { decideWrite, type UpstreamRules } from "@cawco/core/upstream-guard";
 import {
-  otherWrite,
-  type UpstreamRules,
-  writeRefusal,
-} from "@cawco/core/upstream-guard";
-import {
+  CONTROL_FORGE_POST,
   CONTROL_UPSTREAM_POST,
+  type ForgeVerdict,
   isUpstreamPost,
   type PostMade,
+  readForgeAsk,
 } from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { isPlace } from "@cawco/core/workspace-policy";
@@ -379,13 +394,17 @@ import {
   type AccountProber,
   accountOfIdentity,
   claudeCredentialRefused,
+  confirmReading,
   keepProbe,
   machineAccount,
-  machineReadings,
   noteProviderReading,
   noteRateLimit,
   reconcileAccounts,
   sessionLimitsReader,
+  uncompared,
+  usageFrameLimits,
+  usageLimits,
+  withOrgIdFrom,
 } from "./accounts";
 import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
@@ -402,6 +421,7 @@ import {
   type MarksDelivery,
   type MarksOutcome,
   type PageFrom,
+  SHOWN_WAIT_MS,
   type StageAt,
 } from "./artifacts/service";
 import {
@@ -420,11 +440,15 @@ import {
   createAtLimit,
   type Kept,
   refusedUntil,
+  type Stall,
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { bodyLimitRefusal } from "./body-limits";
 import { briefingsObserve } from "./briefings";
+import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
+import { createBrowserAsks } from "./browser-tools";
+import { BrowserRefusal, browserRoutes, createBrowsers } from "./browsers";
 import {
   attemptTry,
   type Caw,
@@ -446,6 +470,7 @@ import {
   PREVIEW_PORTS,
   SPAWN_START_TIMEOUT_MS,
 } from "./config";
+import { connectionWrite } from "./connection-writes";
 import { connectionRoutes, createConnections } from "./connections";
 import {
   asksOpening,
@@ -525,6 +550,7 @@ import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
 import { answerFind, createFind, FIND_QUERY } from "./find";
+import { createFindTool } from "./find-tool";
 import {
   type FleetChoicesStore,
   fleetChoicesRoutes,
@@ -536,11 +562,12 @@ import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
+import { createForgePosts } from "./forge-posts";
 import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
-import { addressOf, createHubAuth } from "./hub-auth";
+import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
@@ -563,7 +590,8 @@ import {
 import { type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { createLaws } from "./laws";
 import { createLeadGate, reviewProblem } from "./lead-gate";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
+import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import {
   type CommandOptions,
@@ -633,7 +661,7 @@ import {
 import {
   createPreviewListeners,
   embedKey,
-  isEmbed,
+  embedTargets,
   noteParent,
   type PreviewListenerDeps,
   type PreviewReach,
@@ -642,6 +670,8 @@ import {
   previewFrame,
   previewSourceKey,
   previewTargets,
+  shownArtifact,
+  targetsOf,
 } from "./preview";
 import { mintTicket } from "./preview-access";
 import { previewRoutes } from "./preview-routes";
@@ -690,13 +720,23 @@ import {
 } from "./rebalance";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
+import {
+  askedFrom,
+  browserKey,
+  createRelayJourney,
+  domainOf,
+  relayJourneyRoutes,
+} from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
+import {
+  ATTACHMENT_PAGE_LIMIT,
+  attachmentsOfPages,
+} from "./session-attachments";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
-import { createSessionProse } from "./session-prose";
 import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
@@ -705,7 +745,7 @@ import { createSshDoor } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
 import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
-import { createStreamRelay, streamRelayRoutes } from "./stream-relay";
+import { createStreamRelay } from "./stream-relay";
 import { suggest } from "./suggest";
 import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
@@ -1474,6 +1514,7 @@ const registerAck = (
   delivered: Record<string, DeliveryMark>,
   unknownAccounts: string[] | undefined,
   sessions: CarrySessionRequest[],
+  instances: string[],
   machineCredential: string,
   sessionLimits: SessionLimits,
   upstream: UpstreamRules,
@@ -1496,6 +1537,7 @@ const registerAck = (
     previewPorts: PREVIEW_PORTS,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
+    instances,
   },
 });
 
@@ -1919,6 +1961,7 @@ const custodyLine = (
 const MACHINE_LINE_SUBTYPE: Record<MachineLineKind, string> = {
   limit: LIMIT_REACHED,
   outdated: CLI_OUTDATED,
+  room: ROOM_HELD,
 };
 
 /** Which line its machine said, by the frame's subtype; none for any other frame. */
@@ -2912,6 +2955,88 @@ export const createServer = (
       },
     });
   };
+  // The fleet's browsers and the browser asks that wait on the person
+  // (browsers.ts, browser-tools.ts). Made before the settlement listener
+  // below, which withdraws the asks of sessions that ended.
+  const browsers = createBrowsers({
+    asks: () => browserAsks,
+    call: (machineId, method, args, timeoutMs) =>
+      callAgent(machineId, method, args, timeoutMs),
+    db: { artifacts: db.artifacts, browsers: db.browsers },
+    instance: (id) => db.getInstancesByIds([id])[0],
+    liveSessions: (machineId, projectId) =>
+      db
+        .listInstances()
+        .filter(
+          (row) =>
+            row.machineId === machineId &&
+            (row.projectId ?? null) === projectId &&
+            (row.status === "running" || row.status === "sleeping")
+        ),
+    machineName: (machineId) => machineName(machineId),
+    mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
+    open: async (artifact) => {
+      const opened = await openPreview(
+        artifact.instanceId,
+        artifact.machineId ?? "",
+        artifact.source,
+        { id: artifact.id, kind: artifact.kind, name: artifact.name }
+      );
+      return opened.ok ? { ok: true } : { ok: false, error: opened.error };
+    },
+    tell: (instanceId, text) => tellSession(instanceId, text, "browser"),
+    // The gate id its browser door is (agent door.ts): its workspace's,
+    // else the session's own.
+    workspaceOf: (row) => sessionWorkspace(row)?.id ?? row.id,
+  });
+  // The person's view of a browser, on the hub's own origin
+  // (browser-routes.ts): relayed to its machine's browser listener.
+  const browserStream = createBrowserStream({
+    artifact: (id) => db.artifacts.get(id),
+    call: (machineId, method, args, timeoutMs) =>
+      callAgent(machineId, method, args, timeoutMs),
+    callerOf: (request) => hubAuth.callerOf(request, null),
+    classify: (header, method, path, address) =>
+      hubAuth.classify(header, method, path, address),
+    keysOf: (machineId) =>
+      db.browsers
+        .list()
+        .filter((row) => row.machineId === machineId)
+        .map((row) => row.key),
+    machineName: (machineId) => machineName(machineId),
+    mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
+    // As a preview's listener is reached (`startListener`): at the address
+    // its agent connected from, or carried over its SSH connection.
+    reach: async (machineId, port) => {
+      const address = registry.address(machineId);
+      if (!address) {
+        throw new BrowserRefusal(
+          503,
+          `${machineName(machineId)} is not connected, so its browser could not be reached. Try again once it is back.`
+        );
+      }
+      return sshTunnels.holds(machineId)
+        ? {
+            address: "127.0.0.1",
+            port: await sshTunnels.carry(machineId, port),
+          }
+        : { address, port };
+    },
+  });
+  const browserAsks = createBrowserAsks({
+    browserFor: (actor) => browsers.browserFor(actor),
+    // Not kept across a restart: the call that waits on it ends with the hub.
+    park: (envelope) => parkForPerson(envelope),
+    settle: (requestId) => {
+      pending.resolve(requestId);
+    },
+    takeOver: async (requestId) => {
+      const ask = browserAsks.get(requestId);
+      if (ask) {
+        await browsers.takeover(ask.key, { requestId });
+      }
+    },
+  });
   /**
    * The session a workspace's held post is its ask: a project's Caw for his
    * place (caw.ts `leadPlaceRef`), else the session of the workspace's
@@ -2992,6 +3117,37 @@ export const createServer = (
     tell: (instanceId, text) => tellSession(instanceId, text, UPSTREAM_ORIGIN),
     threadOf: (actor) => lead?.askThread(actor),
   });
+  // A session's forge_post (forge-posts.ts): decided and made on its
+  // machine with the machine's own sign-in, or held as the person's ask.
+  const forgePosts = createForgePosts({
+    ask: (actor, held, account) => upstreamAsks.ask(actor, held, account),
+    remoteOf: (projectId) =>
+      (projectId ? db.project(projectId)?.remote : undefined) ?? undefined,
+    ruleOf: (projectId) => upstreamRuleOf(db, projectId),
+    call: async (machineId, rule, ask) => {
+      const answer = await callAgent(
+        machineId,
+        CONTROL_FORGE_POST,
+        [rule, ask],
+        UPSTREAM_POST_MS
+      );
+      if (answer.kind === "unanswered") {
+        return {
+          kind: "failed",
+          why:
+            answer.reason === "dead"
+              ? `${machineName(machineId)} is not connected, so nothing was posted.`
+              : `${machineName(machineId)} did not say how the post went in time; it may or may not be there.`,
+        };
+      }
+      return answer.value.ok
+        ? { kind: "answered", verdict: answer.value.result as ForgeVerdict }
+        : {
+            kind: "failed",
+            why: answer.value.error ?? "The machine refused the post.",
+          };
+    },
+  });
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
   let lead: Caw | undefined;
@@ -3018,15 +3174,6 @@ export const createServer = (
     put: (row) => db.putSessionTaint(row),
   });
   /**
-   * The prose cut of every project session (session-prose.ts): the person's
-   * words its harness read and its own text, for memory_recall.
-   */
-  const sessionProse = createSessionProse({
-    db,
-    // Made further down; a backfill reads only once a machine registers.
-    readHistory: (instanceId) => readHistory(instanceId),
-  });
-  /**
    * The gate on a project's Caw's shell and edit calls (lead-gate.ts): each
    * of his asks is decided here before it parks, his wake's source read from
    * the sends his harness reads and the web content his turn reads.
@@ -3042,10 +3189,6 @@ export const createServer = (
     note: (instanceId, note) => lead?.noteCall(instanceId, note),
     shared: (row) => sharedPlace(row),
     thread: (row) => lead?.askThread(row),
-    upstream: (row) => {
-      const rules = upstreamRules(db);
-      return (row.projectId && rules.projects[row.projectId]) || rules.fleet;
-    },
     webContext: () => ({
       fleet: new Set(
         [
@@ -3105,6 +3248,7 @@ export const createServer = (
     // An admin write whose ask left unanswered (its session ended) is refused.
     if (outcome === "cancelled") {
       adminAsks.withdrawn(parked.requestId);
+      browserAsks.withdrawn(parked.requestId);
     }
     registry.broadcast({
       verb: "frames",
@@ -3561,6 +3705,7 @@ export const createServer = (
    * whose launch is on its way ({@link launches}): the send goes behind it.
    */
   const wakesForSend = (row: {
+    continuedInto: string | null;
     id: string;
     lastErrorKind: LastErrorKind | null;
     sessionId: string | null;
@@ -3978,7 +4123,9 @@ export const createServer = (
       return { accountId };
     }
     const account = db.accounts.get(accountId);
-    const named = account ? accountName(account) : accountId;
+    const named = account
+      ? accountNameAmong(account, db.accounts.list())
+      : accountId;
     return {
       refusal: `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in Configure → Accounts, or continue the session on another account.`,
       cause: { kind: "account-signed-out", accountId, machineId },
@@ -4271,6 +4418,38 @@ export const createServer = (
    * puts its provider's sessions on the move. Set once the controller exists.
    */
   let accountsMoved = (): void => undefined;
+  /**
+   * A session stopped at its account's limit, in words (the at-limit
+   * controller's `stall`), for its tray chip and `delegate_list`. Set once
+   * the controller exists.
+   */
+  let stallOf = (_instanceId: string): Stall | undefined => undefined;
+  /** Every session the controller has stopped at its limit now. Set once it exists. */
+  let stalledNow = (): string[] => [];
+  /** The words each stopped session's work item last went out with ({@link publishStalls}). */
+  const stallsShown = new Map<string, string>();
+  /**
+   * Each work item whose session's stop at its limit began, changed its
+   * words or ended since it last went out goes out again (work-items
+   * `stallChanged`): its tray chip says it at once.
+   */
+  const publishStalls = (): void => {
+    for (const instanceId of new Set([
+      ...stallsShown.keys(),
+      ...stalledNow(),
+    ])) {
+      const words = stallOf(instanceId)?.words;
+      if (words === stallsShown.get(instanceId)) {
+        continue;
+      }
+      if (words === undefined) {
+        stallsShown.delete(instanceId);
+      } else {
+        stallsShown.set(instanceId, words);
+      }
+      workItems.stallChanged(instanceId);
+    }
+  };
   /** What adding an account set moving, newest first, for the Accounts page (core `RebalanceNotice`). */
   const rebalanceNotices: RebalanceNotice[] = [];
   const REBALANCE_NOTICES_KEPT = 20;
@@ -4281,7 +4460,7 @@ export const createServer = (
       machineId,
       payload: {
         kind: "usage",
-        limits: machineReadings(db),
+        ...usageFrameLimits(db),
         spend: spendNow(),
       },
     });
@@ -4319,6 +4498,17 @@ export const createServer = (
     origin: NeutralOrigin
   ): { gone?: true; reason: string; refusal?: SendRefusal } | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
+    // A person's words to a session a continuation took the work item of
+    // are refused, in the words its page says in its composer's place: they
+    // never go on to the new session unseen ({@link toContinuation}).
+    if (row?.continuedInto && origin.kind === "human") {
+      const [now] = db.getInstancesByIds([continuationNow(row.id)]);
+      return {
+        reason: continuedInWords(
+          now ? sessionName(now) : row.continuedInto.slice(0, 8)
+        ),
+      };
+    }
     if (row?.lastErrorKind === "conversation-gone") {
       return { reason: CLAUDE_CONVERSATION_GONE, gone: true };
     }
@@ -4390,6 +4580,11 @@ export const createServer = (
     // Nor is it doing anything any more: a pulse outliving its process is the
     // same stale-liveness lie in memory instead of in a column.
     pulses.delete(instanceId);
+    // A turn that called finish_item ends with its process: what waited out
+    // that turn is the next process's to read.
+    if (!outlived) {
+      workItems.turnOver(instanceId);
+    }
     // A lead's turn ends with its process: its thread is no longer working.
     lead?.sessionEnded(instanceId);
     // And whatever its turn had read or started with it (memory.ts).
@@ -5418,6 +5613,59 @@ export const createServer = (
     return "started";
   };
 
+  /**
+   * A delegate called finish_item, which ends its turn (work-items.ts
+   * `lastTurn`): each send it was handed and has not read, from one the
+   * item's finishing hold keeps (work-items.ts `finishingFor`), is withdrawn
+   * from its harness and owed again at the hub, kept there until that turn
+   * is over. Claude's CLI holds a send handed mid-turn in a queue it drains
+   * after the tool call under way: one handed as the model called
+   * finish_item joined the turn after the call's answer and was read after
+   * the item ended, which reopens nothing (work-items.ts `reopen`), and the
+   * turn ended on it. The CLI's withdrawal is atomic with its read, so one
+   * read first ("started") reached the model before it called finish_item,
+   * and stands. OpenCode and pi store a send as they are handed it, and
+   * take no withdrawal. A withdrawal its machine leaves unanswered leaves
+   * the send as it was. Never throws.
+   */
+  const reclaimUnread = async (instanceId: string): Promise<void> => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (row?.harness !== "claude") {
+      return;
+    }
+    const unread = db.sendsIn(instanceId, ["pending"]).filter((send) => {
+      const origin = (send.body as SentMessage | null)?.origin;
+      return (
+        send.owed === null &&
+        !isKeepAlive(send.body) &&
+        !!origin &&
+        workItems.finishingFor(instanceId, origin)
+      );
+    });
+    const takeBackOne = async (send: SentMessageRow): Promise<void> => {
+      const reply = await callAgent(
+        row.machineId,
+        "withdrawSend",
+        [send.uuid],
+        READ_TIMEOUT_MS,
+        undefined,
+        instanceId
+      );
+      if (
+        reply.kind === "answered" &&
+        reply.value.ok &&
+        reply.value.result === "withdrawn" &&
+        db.oweAgain(send.uuid)
+      ) {
+        console.log(
+          `[hub] send ${send.uuid} to ${instanceId} taken back as it called finish_item: it goes as its next turn`
+        );
+        publishSend(db.sendRecord(send.uuid) ?? send);
+      }
+    };
+    await Promise.all(unread.map(takeBackOne));
+  };
+
   /** A retry or queued edit has superseded a send the harness no longer holds. */
   const replaceSend = (replaced: string, by: string): void => {
     const row = db.sendRecord(replaced);
@@ -5536,13 +5784,6 @@ export const createServer = (
       }
       // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
       memoryWatch.read(instanceId, row.body?.origin);
-      // The person's words, into the project session's prose (session-prose.ts).
-      sessionProse.heard(
-        instanceId,
-        row.body?.origin,
-        row.body?.message?.content,
-        row.acceptedAt
-      );
       // Whose a lead's wake is: your words alone, or outside text (lead-gate.ts).
       if (reader && !isKeepAlive(row.body)) {
         leadGate.read(reader, row.uuid, row.body?.origin);
@@ -6496,24 +6737,43 @@ export const createServer = (
       ...spawn
     } = payload;
     const rest = { ...spawn, ...paths };
+    const settled = modeOf(machineId, harness, asked, fallback);
+    if ("refusal" in settled) {
+      return settled;
+    }
+    const { mode } = settled;
+    return mode === null
+      ? { payload: rest, permissionMode: null }
+      : {
+          payload: { ...rest, permissionMode: mode as PermissionMode },
+          permissionMode: mode,
+        };
+  };
+
+  /**
+   * {@link settleMode}'s rule for the mode alone: the mode a `harness`
+   * session on `machineId` runs in (null for a harness with none), or the
+   * refusal. A move asks it of its target before it moves anything.
+   */
+  const modeOf = (
+    machineId: string,
+    harness: string,
+    asked: string | undefined,
+    fallback?: string | null
+  ): { mode: string | null } | { refusal: string } => {
     if (harnessModes(machineId, harness)?.length === 0) {
       return asked
         ? {
             refusal: `${modeRefusal(machineId, harness, asked)} Start it without one. Nothing was started.`,
           }
-        : { payload: rest, permissionMode: null };
+        : { mode: null };
     }
     const mode = asked ?? fallback;
     if (!mode) {
       return { refusal: unchosenMode(machineId, harness) };
     }
     const unfit = modeRefusal(machineId, harness, mode);
-    return unfit
-      ? { refusal: `${unfit} Nothing was started.` }
-      : {
-          payload: { ...rest, permissionMode: mode as PermissionMode },
-          permissionMode: mode,
-        };
+    return unfit ? { refusal: `${unfit} Nothing was started.` } : { mode };
   };
 
   /** Why a spawn that names no permission mode does not start ({@link settleMode}). */
@@ -6967,7 +7227,7 @@ export const createServer = (
   /** Why an account's lender cannot lend it now, in a sentence. */
   const lenderAway = (accountId: string, lender: string): string => {
     const account = db.accounts.get(accountId);
-    return `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which is offline.`;
+    return `${account ? accountNameAmong(account, db.accounts.list()) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which is offline.`;
   };
 
   /**
@@ -7097,7 +7357,7 @@ export const createServer = (
     );
     const account = db.accounts.get(accountId);
     const refused = (why: string) => ({
-      error: `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which did not lend it: ${why}.`,
+      error: `${account ? accountNameAmong(account, db.accounts.list()) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which did not lend it: ${why}.`,
     });
     switch (lent.kind) {
       case "unanswered":
@@ -7516,7 +7776,8 @@ export const createServer = (
    * start held while its machine installs an update ({@link holdingStarts}),
    * its machine's agent away within its reconnecting window
    * ({@link machinePresence}), its account at its limit or its compaction
-   * after a move under way ({@link heldAtLimit}), and a send owed before it
+   * after a move under way ({@link heldAtLimit}), its item finishing against
+   * one who may reopen it (work-items.ts `finishingFor`), and a send owed before it
    * to the same session, which it never overtakes — but that compaction's
    * own steps (`ahead`), which go first ({@link compactionSend}).
    */
@@ -7524,12 +7785,113 @@ export const createServer = (
     asked: Envelope<SendPayload>,
     ahead = false
   ): SentMessageRow | undefined => {
-    const envelope = byIdNow(asked);
-    if (toCawThread(envelope)) {
+    const envelope = toContinuation(byIdNow(asked), "refused");
+    if (!envelope || toCawThread(envelope)) {
       return;
     }
     tellForkFirst(envelope);
     return deliverToSession(envelope, ahead);
+  };
+
+  /**
+   * The session `instanceId`'s work goes on in now: the last of its
+   * continuations ({@link retireContinued}), or itself. A chain is followed
+   * to its end; one that loops ends where it started.
+   */
+  const continuationNow = (instanceId: string): string => {
+    const seen = new Set<string>([instanceId]);
+    let now = instanceId;
+    for (;;) {
+      const next = db.getInstancesByIds([now])[0]?.continuedInto;
+      if (!next || seen.has(next)) {
+        return now;
+      }
+      seen.add(next);
+      now = next;
+    }
+  };
+
+  /**
+   * Whether a message is the hub's word to one process about itself: its
+   * keep-alive ping, its carry-on at its account's reset, its filing turn
+   * or `/compact`. Such words go to no other session.
+   */
+  const aboutItsProcess = (message: SentMessage): boolean =>
+    isKeepAlive(message) ||
+    (message.origin.kind === "system" &&
+      (message.origin.name === LIMIT_ORIGIN ||
+        message.origin.name === COMPACTION_ORIGIN));
+
+  /**
+   * THE RULE FOR A CONTINUED SESSION'S MAIL: a send to a session a
+   * continuation took the work item of never reaches it, and never wakes it
+   * (core `relaunchOf` refuses it). It goes to the session its work goes on
+   * in ({@link continuationNow}), from whoever sent it, as `byIdNow` does
+   * for a former id; but the hub's word to its process alone
+   * ({@link aboutItsProcess}) is dropped, as that process is gone. A
+   * person's words sent now (`person: "refused"`) stay addressed to it, and
+   * {@link inputRefusal} refuses them with where its work went, as its page
+   * says in its composer's place: a person's message is never moved to
+   * another session unseen. Only what was queued for it before the move
+   * (`"carried"`, {@link moveOwedSend}) goes on, the person's too, its row
+   * there saying it was replaced. Undefined when dropped; unchanged for any
+   * other session.
+   */
+  const toContinuation = (
+    envelope: Envelope<SendPayload>,
+    person: "refused" | "carried"
+  ): Envelope<SendPayload> | undefined => {
+    const named = envelope.payload.instanceId;
+    const now = continuationNow(named);
+    if (now === named) {
+      return envelope;
+    }
+    const { message } = envelope.payload;
+    if (person === "refused" && message.origin.kind === "human") {
+      return envelope;
+    }
+    if (aboutItsProcess(message)) {
+      console.info(
+        `[continuation] ${named.slice(0, 8)} was continued in ${now.slice(0, 8)}: the hub's ${isKeepAlive(message) ? "keep-alive ping" : `${message.origin.kind === "system" ? message.origin.name : ""} word`} to its process is dropped, as that process never runs again.`
+      );
+      return undefined;
+    }
+    const [row] = db.getInstancesByIds([now]);
+    console.info(
+      `[continuation] A send to ${named.slice(0, 8)} goes to ${now.slice(0, 8)}, the session it was continued in (send ${message.uuid}).`
+    );
+    return {
+      ...envelope,
+      instanceId: now,
+      machineId: row?.machineId ?? envelope.machineId,
+      payload: { ...envelope.payload, instanceId: now },
+    };
+  };
+
+  /**
+   * An owed send to a continued session ({@link toContinuation}), handed on
+   * as the rule says: its record says what replaced it, and the same message
+   * goes to the session the work goes on in under a fresh uuid, behind what
+   * that session was owed; the hub's word to the old process is cancelled.
+   */
+  const moveOwedSend = (send: SentMessageRow): void => {
+    const owed = db.takeOwedSend(send.uuid);
+    if (owed === undefined) {
+      return;
+    }
+    const envelope = JSON.parse(owed) as Envelope<SendPayload>;
+    const moved = toContinuation(envelope, "carried");
+    if (!moved) {
+      changeSend(send, { state: "cancelled" });
+      return;
+    }
+    const uuid = crypto.randomUUID();
+    changeSend(send, { state: "replaced", replacedBy: uuid });
+    const { delivery: _delivery, ...payload } = moved.payload;
+    deliverSend({
+      ...moved,
+      payload: { ...payload, message: { ...payload.message, uuid } },
+    });
   };
 
   /**
@@ -7691,6 +8053,12 @@ export const createServer = (
     if (held) {
       workItems.recutFor(instanceId);
     }
+    // Kept while its item finishes: its landing runs, or the turn that
+    // called finish_item is still ending. Handed now, it would join that
+    // turn and reopen nothing; it goes as the session's next turn.
+    const finishing =
+      !(refused || keepAlive) &&
+      workItems.finishingFor(instanceId, message.origin);
     const agent = refused ? undefined : registry.agent(machineId);
     // Held for a machine inside its window, never failed there (core
     // handover.ts `send`).
@@ -7700,7 +8068,8 @@ export const createServer = (
         (command) =>
           command.kind === "send-verdict" && command.verdict === "hold"
       );
-    const accepted = Boolean(agent) || away || kept || paused || held;
+    const accepted =
+      Boolean(agent) || away || kept || paused || held || finishing;
     const from =
       message.origin.kind === "peer" ? message.origin.fromSession : undefined;
     const waitSummary =
@@ -7712,7 +8081,7 @@ export const createServer = (
           ? `${content}${waitSummary}`
           : [...content, { type: "text", text: waitSummary }];
     }
-    if (agent && !(kept || limited || paused || held)) {
+    if (agent && !(kept || limited || paused || held || finishing)) {
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
@@ -7724,6 +8093,7 @@ export const createServer = (
       kept ||
       paused ||
       held ||
+      finishing ||
       (agent !== undefined &&
         !keepAlive &&
         (limited || (!ahead && sendWaits(instanceId))));
@@ -7736,8 +8106,9 @@ export const createServer = (
     if (agent && !owed) {
       sendFrame(agent, envelope);
     }
-    // Kept for its machine alone, not for its session or an interrupt's hold.
-    if (owed && !agent && !(kept || held)) {
+    // Kept for its machine alone, not for its session, an interrupt's hold
+    // or its item's finish.
+    if (owed && !agent && !(kept || held || finishing)) {
       owedForMachine(machineId, message.uuid);
     }
     // Built after the send has gone: the machine is handed the image bytes,
@@ -7778,7 +8149,11 @@ export const createServer = (
     }
     publishSend(record);
     // A send that woke its session goes out behind what was kept for it.
-    if (agent && owed && !(kept || away || limited || paused || held)) {
+    if (
+      agent &&
+      owed &&
+      !(kept || away || limited || paused || held || finishing)
+    ) {
       releaseOwed({ instanceId });
     }
     // Kept at its account's limit: the move it owes, or one another account
@@ -7878,16 +8253,19 @@ export const createServer = (
    * owed before it. Undefined for a send its machine has.
    */
   /**
-   * A send kept for its machine's pause, for an interrupt's hold on its
-   * session's item against this sender, or while its retired workspace is
-   * cut again ({@link deliverToSession}).
+   * A send kept for its machine's pause, while its session's item finishes,
+   * for an interrupt's hold on that item against this sender, or while its
+   * retired workspace is cut again ({@link deliverToSession}).
    */
   const pausedOrHeld = (
     row: InstanceRow,
     origin: SentMessage["origin"] | undefined
-  ): "paused" | "held" | "recut" | undefined => {
+  ): "paused" | "finishing" | "held" | "recut" | undefined => {
     if (machinePause.until(row.machineId) !== undefined) {
       return "paused";
+    }
+    if (origin && workItems.finishingFor(row.id, origin)) {
+      return "finishing";
     }
     if (!(origin && workItems.heldFor(row.id, origin))) {
       return;
@@ -8006,7 +8384,8 @@ export const createServer = (
 
   /**
    * Whether an owed send stays kept for its session's account limit, its
-   * machine's pause, or its item's hold ({@link WorkItems.heldFor}). Held for
+   * machine's pause, its item's finish (work-items.ts `finishingFor`), or
+   * its item's hold ({@link WorkItems.heldFor}). Held for
    * its workspace's turn or cut, the wait that releases it is asked for
    * here too, as the send path asks for it.
    */
@@ -8021,6 +8400,9 @@ export const createServer = (
     ) {
       return true;
     }
+    if (workItems.finishingFor(instanceId, origin)) {
+      return true;
+    }
     if (!workItems.heldFor(instanceId, origin)) {
       return false;
     }
@@ -8033,6 +8415,11 @@ export const createServer = (
   /** One owed send, as {@link releaseOwed} hands it over. */
   const releaseOne = (send: SentMessageRow): void => {
     const [row] = db.getInstancesByIds([send.instanceId]);
+    // Owed to a session whose work a continuation took on: it goes there.
+    if (row?.continuedInto) {
+      moveOwedSend(send);
+      return;
+    }
     const agent = row ? registry.agent(row.machineId) : undefined;
     // Kept for a session nothing owed may wake: it waits for a send that may.
     // Handed back by a machine with no process for it: it waits for the
@@ -8361,6 +8748,43 @@ export const createServer = (
         })
     );
 
+  /**
+   * A session's start, waited on as {@link awaitReply} does, and on past
+   * {@link SPAWN_START_TIMEOUT_MS} for as long as its machine has said the
+   * start waits for memory since it was sent (a `room` line, core
+   * `ROOM_HELD`): a start is never refused for the machine's room. The spawn
+   * is sent once; a later wait listens for the same answer.
+   */
+  const awaitStart = async (
+    machineId: string,
+    instanceId: string,
+    requestId: string,
+    send: () => void
+  ): Promise<Bounded<ControlResult>> => {
+    const sentAt = Date.now();
+    let reply = await awaitReply(
+      machineId,
+      requestId,
+      SPAWN_START_TIMEOUT_MS,
+      send
+    );
+    while (
+      reply.kind === "unanswered" &&
+      db
+        .machineLinesOf(instanceId)
+        .some((line) => line.kind === "room" && line.at >= sentAt)
+    ) {
+      // biome-ignore lint/performance/noAwaitInLoops: one wait at a time, on the same answer
+      reply = await awaitReply(
+        machineId,
+        requestId,
+        SPAWN_START_TIMEOUT_MS,
+        () => undefined
+      );
+    }
+    return reply;
+  };
+
   /** How long a machine gets to carry sessions' data: a few folders moved within one disk. */
   const CARRY_TIMEOUT_MS = 120_000;
 
@@ -8621,7 +9045,9 @@ export const createServer = (
       return "the machine's own Claude Code login";
     }
     const account = db.accounts.get(accountId);
-    return account ? accountName(account) : "an account this hub no longer has";
+    return account
+      ? accountNameAmong(account, db.accounts.list())
+      : "an account this hub no longer has";
   };
 
   /** The machine's word on each carry asked of it; one it never gave is a failure with its reason. */
@@ -9054,7 +9480,7 @@ export const createServer = (
     ) {
       return {
         status: 409,
-        error: `${accountName(account)} is already signed in on ${machine} in CawCo; nothing was moved.`,
+        error: `${accountNameAmong(account, db.accounts.list())} is already signed in on ${machine} in CawCo; nothing was moved.`,
       };
     }
     if (
@@ -9064,7 +9490,7 @@ export const createServer = (
     ) {
       return {
         status: 409,
-        error: `Another of ${machine}'s own stores is already moving ${accountName(account)} into CawCo.`,
+        error: `Another of ${machine}'s own stores is already moving ${accountNameAmong(account, db.accounts.list())} into CawCo.`,
       };
     }
     const move: LoginMove = {
@@ -9149,6 +9575,15 @@ export const createServer = (
   const joinedInto = new Map<string, string>();
 
   /**
+   * The account an id names: its own, or the one a join made it
+   * ({@link joinedInto}). Every route that takes an account id reads it so,
+   * so an id a sign-in joined away (still held by the screen that added it)
+   * reaches the account it is now, never "There is no account".
+   */
+  const accountOf = (id: string): Account | undefined =>
+    db.accounts.get(id) ?? db.accounts.get(joinedInto.get(id) ?? "");
+
+  /**
    * Of the account stores a connecting machine named (`accountStores` on its
    * register), the ones this hub deliberately removed (or joined away): the
    * machine forgets each ({@link RegisterAckPayload.unknownAccounts}). A
@@ -9184,12 +9619,24 @@ export const createServer = (
     return removed;
   };
 
-  /** The other account of `account`'s provider that already is `identity`. */
+  /**
+   * The other account of `account`'s provider that already is `identity`.
+   * None when the identity names no organization id: it can't be compared,
+   * and the sign-in stays an account of its own (said in the log).
+   */
   const existingAs = (
     account: Account,
     identity: AccountIdentity
-  ): Account | undefined =>
-    db.accounts.byIdentity(account.provider, identity, account.id);
+  ): Account | undefined => {
+    if (!identity.orgId) {
+      uncompared(
+        identity,
+        `A new sign-in into ${accountNameAmong(account, db.accounts.list())}`
+      );
+      return undefined;
+    }
+    return db.accounts.byIdentity(account.provider, identity, account.id);
+  };
 
   /**
    * One identity is one account. A sign-in on `machineId` into `account`,
@@ -9233,14 +9680,15 @@ export const createServer = (
         throw unreachable(asked);
     }
     const answer = asked.value;
+    const existingName = accountNameAmong(existing, db.accounts.list());
     if (!answer.ok) {
       return {
-        error: `${machineName(machineId)} signed in as ${identity.email}, already ${accountName(existing)}, but could not make it that account's: ${answer.error ?? "it gave no reason"}`,
+        error: `${machineName(machineId)} signed in as ${identity.email}, already ${existingName}, but could not make it that account's: ${answer.error ?? "it gave no reason"}`,
       };
     }
     const joined = answer.result as AccountJoinedOn;
     console.log(
-      `[accounts] A new sign-in on ${machineName(machineId)} is ${identity.email}, which this hub already has as ${accountName(existing)}, so the two are one account there: ${joined.outcome === "kept" ? `${accountName(existing)}'s login on ${machineName(machineId)} is kept, and the new one is dropped` : `the new login is ${accountName(existing)}'s on ${machineName(machineId)} from now on`}.`
+      `[accounts] A new sign-in on ${machineName(machineId)} is ${identity.email}, which this hub already has as ${existingName}, so the two are one account there: ${joined.outcome === "kept" ? `${existingName}'s login on ${machineName(machineId)} is kept, and the new one is dropped` : `the new login is ${existingName}'s on ${machineName(machineId)} from now on`}.`
     );
     db.accounts.putSignin({
       accountId: existing.id,
@@ -9297,19 +9745,33 @@ export const createServer = (
       : undefined;
   };
 
-  /** What a Claude sign-in came to, kept, with the models its probe read. */
+  /**
+   * What a Claude sign-in came to, kept, with the models its probe read. An
+   * account named before organization ids were read was not compared on
+   * the machine ({@link expectedOf}): its id is filled from this login, and
+   * a login of someone else is `mismatch` here.
+   */
   const settleClaudeSignin = async (
     account: Account,
     machineId: string,
-    result: AccountSigninResult
+    answered: AccountSigninResult
   ): Promise<AccountSigninResult | { error: string }> => {
     const joined =
-      result.state === "signed-in"
-        ? await joinIfTaken(account, machineId, result.probe?.identity)
+      answered.state === "signed-in"
+        ? await joinIfTaken(account, machineId, answered.probe?.identity)
         : undefined;
     if (joined) {
-      return "error" in joined ? joined : { ...result, joined };
+      return "error" in joined ? joined : { ...answered, joined };
     }
+    const signedAs = answered.probe?.identity;
+    const held =
+      answered.state === "signed-in" && signedAs
+        ? withOrgIdFrom(db, account, signedAs).identity
+        : null;
+    const result: AccountSigninResult =
+      held && signedAs && !sameIdentity(held, signedAs)
+        ? { ...answered, state: "mismatch" }
+        : answered;
     if (result.state === "signed-in" && result.probe) {
       if (result.probe.identity && !account.identity) {
         db.accounts.setIdentity(account.id, result.probe.identity);
@@ -9367,9 +9829,19 @@ export const createServer = (
   };
 
   /**
+   * The identity a machine holds a sign-in into `account` to: its own, when
+   * it names its organization's id. One that names none (a Claude account
+   * named before ids were read) can't be compared there, so none is sent and
+   * the hub compares the answer once its id is filled ({@link
+   * settleClaudeSignin}).
+   */
+  const expectedOf = (account: Account): AccountIdentity | null =>
+    account.identity?.orgId ? account.identity : null;
+
+  /**
    * Finishes a machine's sign-in, which runs under the id it was begun with
    * (`signinId`), as the account it now finishes into: it must come out as
-   * that account's identity.
+   * that account's identity ({@link expectedOf}).
    */
   const completeOn = (
     account: Account,
@@ -9381,14 +9853,14 @@ export const createServer = (
       ? callAgent(
           machineId,
           CONTROL_COMPLETE_ACCOUNT_LOGIN,
-          [code, signinId, account.identity],
+          [code, signinId, expectedOf(account)],
           SIGNIN_TIMEOUT_MS,
           "claude"
         )
       : callAgent(
           machineId,
           CONTROL_COMPLETE_PROVIDER_LOGIN,
-          [code ?? null, signinId, account.identity],
+          [code ?? null, signinId, expectedOf(account)],
           SIGNIN_TIMEOUT_MS
         );
 
@@ -9523,11 +9995,6 @@ export const createServer = (
     state: "open" | "closed",
     target: Pick<PreviewTarget, "artifact" | "revision" | "source">
   ) => {
-    // An embedded preview is a decision page's, never a session's panel: no
-    // view follows it, and it has no session port to name.
-    if (isEmbed(instanceId)) {
-      return previewFrame(instanceId, state, target, null, [], null);
-    }
     const frame = previewFrame(
       instanceId,
       state,
@@ -9547,6 +10014,14 @@ export const createServer = (
     return frame;
   };
 
+  /**
+   * What the person last opened in each session's panel themselves (a press
+   * in the panel, the artifact menu, a pin's link), until the panel closes:
+   * what an agent's delete of something it showed over it goes back to
+   * (artifacts/service.ts `remove`). An agent's show never changes it.
+   */
+  const personShown = new Map<string, string>();
+
   const closePreview = async (
     instanceId: string
   ): Promise<
@@ -9558,6 +10033,7 @@ export const createServer = (
       closed: { instanceId, state: "closed" },
     } as const;
     nextPreviewGeneration(instanceId);
+    personShown.delete(instanceId);
     const target = previewTargets.get(instanceId);
     if (!target) {
       return closed;
@@ -9599,8 +10075,8 @@ export const createServer = (
     // Its decision pages' embedded previews go with it, their machines'
     // listeners too.
     for (const key of previewListeners.releaseEmbeds(instanceId)) {
-      const target = previewTargets.get(key);
-      previewTargets.delete(key);
+      const target = embedTargets.get(key);
+      embedTargets.delete(key);
       if (target && !("page" in target.source)) {
         detach(
           callAgent(
@@ -9649,7 +10125,7 @@ export const createServer = (
     const token = crypto.randomUUID();
     const stopLate = () => {
       // Not when a register has since pointed the target at this very listener.
-      if (previewTargets.get(instanceId)?.upstream?.token === token) {
+      if (targetsOf(instanceId).get(instanceId)?.upstream?.token === token) {
         return;
       }
       detach(
@@ -9881,7 +10357,8 @@ export const createServer = (
     if (inFlight?.generation === generation) {
       return inFlight.reach;
     }
-    const target = previewTargets.get(instanceId);
+    const targets = targetsOf(instanceId);
+    const target = targets.get(instanceId);
     if (!target) {
       return Promise.resolve({
         ok: false,
@@ -9908,7 +10385,7 @@ export const createServer = (
         target.source,
         generation
       );
-      const now = previewTargets.get(instanceId);
+      const now = targets.get(instanceId);
       if (!now) {
         return {
           ok: false,
@@ -9922,7 +10399,7 @@ export const createServer = (
       if (!started.ok) {
         return started;
       }
-      previewTargets.set(instanceId, { ...now, upstream: started.upstream });
+      targets.set(instanceId, { ...now, upstream: started.upstream });
       return started;
     })().finally(() => {
       if (reaching.get(instanceId)?.reach === reach) {
@@ -9942,12 +10419,13 @@ export const createServer = (
     instanceId: string,
     upstream: NonNullable<PreviewTarget["upstream"]>
   ): void => {
-    const target = previewTargets.get(instanceId);
+    const targets = targetsOf(instanceId);
+    const target = targets.get(instanceId);
     if (
       target?.upstream?.address === upstream.address &&
       target.upstream.port === upstream.port
     ) {
-      previewTargets.set(instanceId, {
+      targets.set(instanceId, {
         artifact: target.artifact,
         machineId: target.machineId,
         source: target.source,
@@ -10331,24 +10809,86 @@ export const createServer = (
    * The fleet's stream relay (stream-relay.ts): coturn on a machine with a
    * public address, its secret kept here, its health asked every minute.
    */
+  const relayMachines = () =>
+    db.listAgents().map((agent) => {
+      const seen = registry.address(agent.machineId);
+      return {
+        machineId: agent.machineId,
+        name: machineName(agent.machineId),
+        online: registry.agent(agent.machineId) !== undefined,
+        ...(agent.machineCapabilities
+          ? { capabilities: agent.machineCapabilities }
+          : {}),
+        ...(seen ? { seen } : {}),
+      };
+    });
   const streamRelay = createStreamRelay({
     db: db.streamRelay,
     call: callAgent,
-    machines: () =>
-      db.listAgents().map((agent) => {
-        const seen = registry.address(agent.machineId);
-        return {
-          machineId: agent.machineId,
-          name: machineName(agent.machineId),
-          online: registry.agent(agent.machineId) !== undefined,
-          ...(agent.machineCapabilities
-            ? { capabilities: agent.machineCapabilities }
-            : {}),
-          ...(seen ? { seen } : {}),
-        };
-      }),
+    lifetime,
+    machines: relayMachines,
+    changed: () => relayJourney.changed(),
+    cloudflareToken: () => relayJourney.token(),
+    renewed: (expiresAt) =>
+      db.streamRelay.journeyUpdate({ certificateEndsAt: expiresAt }),
   });
   streamRelay.watch();
+  /**
+   * The stream relay's guided journey (relay-journey.ts): every step
+   * computed from its record, the fleet and the relay, and pushed to every
+   * dashboard on each change (`stream_relay.journey`). Its tick starts once
+   * the hub's own machine is read (below).
+   */
+  const relayJourney = createRelayJourney({
+    db: db.streamRelay,
+    relay: streamRelay,
+    call: callAgent,
+    machines: relayMachines,
+    hubMachineId: () => ownMachineIdRead ?? null,
+    lifetime,
+    publish: (journey) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "stream_relay.journey", journey },
+      }),
+  });
+  /** The names and addresses the hub's own machine answers by: a page on one of them came in by no domain. */
+  const hubOwnNames = (): string[] => {
+    const host = osHostname().toLowerCase();
+    const tailnet = tailnetHttps.state().name?.toLowerCase();
+    return [
+      "localhost",
+      host,
+      `${host}.local`,
+      ...(tailnet ? [tailnet, tailnet.split(".")[0] ?? tailnet] : []),
+      ...Object.values(networkInterfaces())
+        .flatMap((addresses) => addresses ?? [])
+        .map((one) => one.address.toLowerCase()),
+    ];
+  };
+  /**
+   * The domain a page last reached CawCo through (every dashboard reads the
+   * journey as it loads): the setup card recommends Set up with it.
+   */
+  let lastRelayDomain: string | null = null;
+  /** Who asks of the relay's journey: the paired device (a browser's own key on a trusted hub), where from, and through what domain. */
+  const relayAsker = (request: Request, socket: string | null) => {
+    const caller = hubAuth.callerOf(request, socket);
+    const agent = request.headers.get("user-agent");
+    const domain = domainOf(request.headers, hubOwnNames());
+    if (domain) {
+      lastRelayDomain = domain;
+    }
+    return {
+      device:
+        caller.kind === "owner" && caller.device
+          ? caller.device
+          : { id: browserKey(agent), name: browserName(agent) },
+      address: askedFrom(request.headers, socket),
+      domain,
+    };
+  };
 
   /**
    * Another checkout of a project's repository: named by hand
@@ -10378,19 +10918,26 @@ export const createServer = (
       path,
       kind: "checkout",
     });
-    if (added) {
-      placesChanged(machineId, project.id);
+    // The place's repo step is held from here, so a move planned while its
+    // remote is read waits for the folder to settle (place-repo.ts `hold`).
+    const step = placeRepos.hold(machineId, path);
+    try {
+      if (added) {
+        placesChanged(machineId, project.id);
+      }
+      if (!project.remote) {
+        await learnRemote(project.id, machineId, path);
+      }
+      // A plain folder is made a git repository now, off the request: a
+      // machine away, or a place that cannot be one, is tried again, and
+      // refused in its words, when a workspace is first cut from it.
+      detach(
+        step.ensure({ projectId: project.id, machineId, path }),
+        "place-repo"
+      );
+    } finally {
+      step.release();
     }
-    if (!project.remote) {
-      await learnRemote(project.id, machineId, path);
-    }
-    // A plain folder is made a git repository now, off the request: a
-    // machine away, or a place that cannot be one, is tried again, and
-    // refused in its words, when a workspace is first cut from it.
-    detach(
-      placeRepos.ensure({ projectId: project.id, machineId, path }),
-      "place-repo"
-    );
     return {
       ...projectOut(db.project(project.id) ?? project),
       place,
@@ -10563,8 +11110,8 @@ export const createServer = (
     );
   };
   /**
-   * A delegate put an artifact in its parent's panel (artifacts/service.ts
-   * `handUp`): the parent hears it once, on the channel the person's picks
+   * A delegate handed its parent an artifact, not opened (artifacts/service.ts
+   * `handOver`): the parent hears it once per hand-off, on the channel the person's picks
    * take, which wakes it as their words do. One the parent didn't take is
    * kept in its transcript as not sent, with why.
    */
@@ -10584,7 +11131,7 @@ export const createServer = (
         const record = sendArtifactEvent(parent, text, [], undefined);
         if (record?.state === "failed") {
           console.warn(
-            `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate put it in its panel: ${record.reason ?? "the send failed"}`
+            `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate handed it up: ${record.reason ?? "the send failed"}`
           );
         }
       } catch (error) {
@@ -10736,21 +11283,21 @@ export const createServer = (
    * is told once per {@link DECISIONS_TOLD_MS}.
    */
   const DECISIONS_TOLD_MS = 400;
-  const decisionsTelling = new Map<string, ReturnType<typeof setTimeout>>();
+  const decisionsTelling = new Map<string, HubTimer>();
   const decisionsChanged = (projectId: string): void => {
     if (decisionsTelling.has(projectId)) {
       return;
     }
     decisionsTelling.set(
       projectId,
-      setTimeout(() => {
+      lifetime.after(DECISIONS_TOLD_MS, () => {
         decisionsTelling.delete(projectId);
         registry.broadcast({
           verb: "frames",
           machineId: "hub",
           payload: { kind: "decisions.changed", projectId },
         });
-      }, DECISIONS_TOLD_MS)
+      })
     );
   };
 
@@ -10759,6 +11306,7 @@ export const createServer = (
   // their marks go to it by themselves (artifacts/).
   const artifactDocs = createArtifactDocs({
     db: db.artifacts,
+    lifetime,
     // A pick or a note on a project's page moves its Decisions tab.
     changed: (id) => {
       const row = db.artifacts.get(id);
@@ -10881,6 +11429,7 @@ export const createServer = (
     },
     db: db.artifacts,
     docs: artifactDocs,
+    lifetime,
     root: ARTIFACTS_ROOT,
     // Your picks on a session's own page reach that session as the page's
     // word for its tools to read (artifact_read), never as your message:
@@ -10890,7 +11439,7 @@ export const createServer = (
     // Your pins, replies, resolves and ink go by themselves once quiet.
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
-    // A delegate's artifact in its parent's panel: the parent hears it once.
+    // A delegate's artifact handed to its parent unopened: the parent hears it once.
     handedUp: (parent, maker, artifact) =>
       handArtifactUp(parent, maker, artifact),
     instance: (id) => db.getInstancesByIds([id])[0],
@@ -10905,46 +11454,62 @@ export const createServer = (
         .map((project) => project.id),
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
-    open: async (artifact) => {
+    open: async (artifact, by) => {
       const opened = await openPreview(
         artifact.instanceId,
         artifact.machineId ?? "",
         artifact.source,
-        { id: artifact.id, kind: artifact.kind, name: artifact.name }
+        shownArtifact(artifact)
       );
-      return opened.ok
-        ? { ok: true, revision: opened.frame.revision }
-        : { ok: false, error: opened.error };
+      if (!opened.ok) {
+        return { ok: false, error: opened.error };
+      }
+      if (by === "person") {
+        personShown.set(artifact.instanceId, artifact.id);
+      }
+      return { ok: true, revision: opened.frame.revision };
     },
+    personShown: (instanceId) => personShown.get(instanceId),
     page: buildArtifactPage,
     sending: (instance, artifact, state) =>
       applySetupPicks(artifact, instance.projectId, state, {
         fleet: (choices) => setFleetChoices(fleetChoices, choices),
-        // The relay's own record says how its start went (Settings › Browsers).
-        relay: (pick) => {
-          db.streamRelay.asked();
-          if (pick === "later") {
-            return;
-          }
-          streamRelay
-            .setup(pick)
+        // Set up opens the relay's journey, and its row stands in Needs you;
+        // Later only answers the card.
+        relay: (pick) =>
+          relayJourney
+            .act(
+              { act: pick },
+              {
+                device: { id: "setup", name: "the setup page" },
+                address: null,
+                // The send carries no page's headers: the domain a page last
+                // reached CawCo through stands for it, for the name's
+                // suggestion.
+                domain: lastRelayDomain,
+              }
+            )
             .catch((error: unknown) =>
               console.warn(
-                `[stream-relay] the setup page's relay on ${machineName(pick.machineId)} did not start: ${error instanceof Error ? error.message : String(error)}`
+                `[relay-journey] the setup page's ${pick} was not taken: ${error instanceof Error ? error.message : String(error)}`
               )
-            );
-        },
+            ),
         // A refusal is an ArtifactRefusal too: the send answers it.
         place: async (projectId, place) => {
           await addProjectPlace(projectId, place.machineId, place.path);
         },
       }),
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
+    listing: (instance) => browsers.listed(instance),
     // The same open, its list without what went: no pane reloads.
     relist: (instanceId) => {
       const target = previewTargets.get(instanceId);
       if (target) {
-        publishPreview(instanceId, "open", target);
+        // Its ask as the row holds it now: an artifact_update may have changed it.
+        const row = db.artifacts.get(target.artifact.id);
+        const now = row ? { ...target, artifact: shownArtifact(row) } : target;
+        previewTargets.set(instanceId, now);
+        publishPreview(instanceId, "open", now);
       }
     },
     // A preview gone holds the workspace it showed no longer.
@@ -10986,6 +11551,8 @@ export const createServer = (
       );
       return { machineId, workspace, opened: result as StageOpened };
     },
+    // A design system round asked of a component canvas in a chat; its verdict reaches the asker.
+    verify: (requester, artifact) => designVerify.ask(requester, artifact),
     // A component canvas drawn by its workspace's daemon in the machine's own Chromium.
     stageRender: async (at, ask) =>
       (await onStage(at, STAGE_RENDER, ask)).result as {
@@ -10994,9 +11561,127 @@ export const createServer = (
       },
     stageWrite: async (at, write) =>
       (await onStage(at, STAGE_WRITE, write)).result as SheetWritten,
-    stageComponents: async (instance, ask) =>
-      (await onStage({ session: instance }, STAGE_COMPONENTS, ask))
-        .result as DesignMap,
+    stageComponents: async (at, ask) =>
+      (await onStage(at, STAGE_COMPONENTS, ask)).result as DesignMap,
+    // A preview no panel shows, loaded once through a listener of its own
+    // (keyed by no session, so no panel's listener moves), then let go.
+    reachable: async (machineId, source) => {
+      const key = `handed-${crypto.randomUUID()}`;
+      const started = await startListener(
+        key,
+        machineId,
+        source,
+        previewGenerationOf(key)
+      );
+      if (!started.ok) {
+        return { failure: started.down, why: started.error };
+      }
+      const { address, port, token } = started.upstream;
+      const host = address.includes(":") ? `[${address}]` : address;
+      try {
+        const read = await readWithin(SHOWN_WAIT_MS, (signal) =>
+          fetch(`http://${host}:${port}${source.path ?? "/"}`, {
+            // A pane's load: a sleeping stage or served server wakes for it.
+            headers: { [RELAY_HEADER]: token, "sec-fetch-mode": "navigate" },
+            redirect: "manual",
+            signal,
+          })
+        );
+        if (read.kind !== "answered") {
+          return {
+            failure: "machine",
+            why: `its listener didn't answer within ${Math.round(read.after / 1000)} s`,
+          };
+        }
+        const down = downOf(await read.value.text());
+        return down ? { failure: down.down, why: down.why } : null;
+      } catch (error) {
+        return {
+          failure: "machine",
+          why: error instanceof Error ? error.message : String(error),
+        };
+      } finally {
+        detach(
+          callAgent(
+            machineId,
+            PREVIEW_STOP,
+            [{ instanceId: key, token }],
+            BUSY_TIMEOUT_MS
+          ),
+          "handed preview check stop"
+        );
+      }
+    },
+    // A canvas no person's screen shows, drawn headless by the hub machine's
+    // daemon on the canvas's own origin, which answers there on loopback.
+    screen: async (artifact, sync) => {
+      const machineId = await ownMachineId;
+      if (!registry.agent(machineId)) {
+        throw new ArtifactRefusal(
+          503,
+          `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
+        );
+      }
+      const token = crypto.randomUUID();
+      const open = {
+        canvas: { id: artifact.id, name: artifact.name, sync },
+        token,
+        url: `${previewListeners.local(artifact.instanceId)}/__cawco/canvas/${artifact.id}/`,
+      };
+      const asked = await callAgent(
+        machineId,
+        CANVAS_SCREEN_OPEN,
+        [open],
+        CANVAS_LIMITS.screenOpenMs
+      );
+      switch (asked.kind) {
+        case "unanswered":
+          if (asked.reason !== "dead") {
+            // It may still open after this gave up: told to close.
+            detach(
+              callAgent(
+                machineId,
+                CANVAS_SCREEN_CLOSE,
+                [{ token }],
+                BUSY_TIMEOUT_MS
+              ),
+              "late canvas screen close"
+            );
+          }
+          throw new ArtifactRefusal(
+            503,
+            `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${Math.round(asked.after / 1000)} s`}.`
+          );
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
+      }
+      if (!asked.value.ok) {
+        throw new ArtifactRefusal(
+          503,
+          `The canvas ${artifact.name} wasn't drawn: ${asked.value.error ?? "the hub's machine couldn't open it."}`
+        );
+      }
+      return {
+        // The same open again holds the page on (agent canvas-screen.ts).
+        hold: () =>
+          detach(
+            callAgent(machineId, CANVAS_SCREEN_OPEN, [open], BUSY_TIMEOUT_MS),
+            "canvas screen hold"
+          ),
+        release: () =>
+          detach(
+            callAgent(
+              machineId,
+              CANVAS_SCREEN_CLOSE,
+              [{ token }],
+              BUSY_TIMEOUT_MS
+            ),
+            "canvas screen close"
+          ),
+      };
+    },
     // A workspace preview's server, run and kept up on the workspace's machine.
     serve: async (machineId, workspace, serve) => {
       const asked = await callAgent(
@@ -11030,12 +11715,12 @@ export const createServer = (
       }
       return answer.result as StageState;
     },
-    // A folder preview's weight, from its folder on the machine that serves it.
-    folderWeight: async (machineId, dir) => {
+    // A folder preview's weight and its start page's desk captures, from its folder on the machine that serves it.
+    folderWeight: async (machineId, dir, path) => {
       const asked = await callAgent(
         machineId,
         PREVIEW_WEIGHT,
-        [dir],
+        [dir, path],
         BUSY_TIMEOUT_MS
       );
       switch (asked.kind) {
@@ -11078,11 +11763,7 @@ export const createServer = (
   const restoreShownPreviews = (): void => {
     for (const { instanceId, artifact } of db.artifacts.shown()) {
       previewTargets.set(instanceId, {
-        artifact: {
-          id: artifact.id,
-          kind: artifact.kind,
-          name: artifact.name,
-        },
+        artifact: shownArtifact(artifact),
         machineId: artifact.machineId ?? "",
         source: artifact.source,
         revision: crypto.randomUUID(),
@@ -11137,6 +11818,8 @@ export const createServer = (
       const made = await artifacts.create(instanceId, {
         kind: "canvas",
         name,
+        does: "draw",
+        ask: "Draw over the diagram",
         mermaid: body.mermaid,
       });
       return Response.json({ id: made.id, name: made.name }, { status: 201 });
@@ -11163,13 +11846,13 @@ export const createServer = (
       return {};
     }
     const key = embedKey(artifactId);
-    const now = previewTargets.get(key);
+    const now = embedTargets.get(key);
     if (
       !now ||
       previewSourceKey(now.source) !== previewSourceKey(row.source) ||
       now.machineId !== row.machineId
     ) {
-      previewTargets.set(key, {
+      embedTargets.set(key, {
         artifact: { id: row.id, kind: row.kind, name: row.name },
         machineId: row.machineId,
         source: row.source,
@@ -11238,7 +11921,9 @@ export const createServer = (
         });
       }
       try {
-        return Response.json(await artifacts.show(instanceId, artifactId));
+        return Response.json(
+          await artifacts.show(instanceId, artifactId, "person")
+        );
       } catch (error) {
         if (error instanceof ArtifactRefusal) {
           return new Response(error.message, { status: error.status });
@@ -11256,7 +11941,10 @@ export const createServer = (
    * row), and sends each shown preview's address again, its tailnet origin
    * come or gone.
    */
-  const tailnetHttps = createTailnetHttps({ dashboardPort: DASHBOARD_PORT });
+  const tailnetHttps = createTailnetHttps({
+    dashboardPort: DASHBOARD_PORT,
+    lifetime,
+  });
   tailnetHttps.beside(DASHBOARD_PORT, dashboardRelay(DASHBOARD_PORT));
   tailnetHttps.onChange((tailnet) => {
     noteTailnetDashboard(tailnetHttps.dashboard());
@@ -11302,18 +11990,21 @@ export const createServer = (
     const listeners = new Map(
       serving.map((listener) => [listener.instanceId, listener])
     );
-    for (const [instanceId, target] of previewTargets) {
+    // A session's panel and a decision page's embed alike: the machine keys
+    // its listeners by either.
+    for (const [key, target] of [...previewTargets, ...embedTargets]) {
       if (target.machineId !== machineId || "page" in target.source) {
         continue;
       }
-      nextPreviewGeneration(instanceId);
+      const targets = targetsOf(key);
+      nextPreviewGeneration(key);
       const held: PreviewTarget = {
         artifact: target.artifact,
         machineId,
         source: target.source,
         revision: target.revision,
       };
-      const listener = listeners.get(instanceId);
+      const listener = listeners.get(key);
       if (
         listener &&
         previewSourceKey(listener.source) === previewSourceKey(target.source) &&
@@ -11321,17 +12012,17 @@ export const createServer = (
       ) {
         // Through the hub's SSH connection to the machine, carried anew on
         // this connection: until it is, a request starts the listener again.
-        previewTargets.set(instanceId, held);
-        const generation = previewGenerationOf(instanceId);
+        targets.set(key, held);
+        const generation = previewGenerationOf(key);
         sshTunnels.carry(machineId, listener.port).then(
           (port) => {
-            const now = previewTargets.get(instanceId);
+            const now = targets.get(key);
             if (
               now &&
               !now.upstream &&
-              previewGenerationOf(instanceId) === generation
+              previewGenerationOf(key) === generation
             ) {
-              previewTargets.set(instanceId, {
+              targets.set(key, {
                 ...now,
                 upstream: { address: "127.0.0.1", port, token: listener.token },
               });
@@ -11339,7 +12030,7 @@ export const createServer = (
           },
           (error: unknown) =>
             console.warn(
-              `[hub] preview for ${instanceId} is not pointed at its listener again: ${error instanceof Error ? error.message : String(error)}`
+              `[hub] preview for ${key} is not pointed at its listener again: ${error instanceof Error ? error.message : String(error)}`
             )
         );
         continue;
@@ -11348,7 +12039,7 @@ export const createServer = (
         listener &&
         previewSourceKey(listener.source) === previewSourceKey(target.source)
       ) {
-        previewTargets.set(instanceId, {
+        targets.set(key, {
           ...held,
           upstream: {
             address,
@@ -11358,30 +12049,35 @@ export const createServer = (
         });
         continue;
       }
-      previewTargets.set(instanceId, held);
-      reachPreview(instanceId)
+      targets.set(key, held);
+      reachPreview(key)
         .then((reached) => {
           if (!reached.ok) {
             // Closed meanwhile: nothing is owed. Gone again: its next
             // register tries again.
             if (reached.down !== "closed" && registry.agent(machineId)) {
               console.warn(
-                `[hub] preview for ${instanceId} did not restart (${reached.down}): ${reached.error}`
+                `[hub] preview for ${key} did not restart (${reached.down}): ${reached.error}`
               );
             }
             return;
           }
-          const now = previewTargets.get(instanceId);
+          // A session's panel reloads onto the new listener; an embed has
+          // no panel, and its next request is relayed to the new one.
+          const now = previewTargets.get(key);
           if (now) {
             const moved = { ...now, revision: crypto.randomUUID() };
-            previewTargets.set(instanceId, moved);
-            publishPreview(instanceId, "open", moved);
+            previewTargets.set(key, moved);
+            publishPreview(key, "open", moved);
           }
         })
         .catch(console.error);
     }
     for (const listener of serving) {
-      if (previewTargets.get(listener.instanceId)?.machineId === machineId) {
+      if (
+        targetsOf(listener.instanceId).get(listener.instanceId)?.machineId ===
+        machineId
+      ) {
         continue;
       }
       callAgent(
@@ -12126,10 +12822,10 @@ export const createServer = (
       issueSpawn(machineId, payload, undefined, fallbackMode);
       return;
     }
-    const reply = await awaitReply(
+    const reply = await awaitStart(
       machineId,
+      payload.instanceId,
       requestId,
-      SPAWN_START_TIMEOUT_MS,
       () => issueSpawn(machineId, payload, undefined, fallbackMode)
     );
     switch (reply.kind) {
@@ -12245,10 +12941,10 @@ export const createServer = (
       ...forkedFromOf(payload),
     });
     publishInstances(machineId);
-    const reply = await awaitReply(
+    const reply = await awaitStart(
       machineId,
+      payload.instanceId,
       requestId,
-      SPAWN_START_TIMEOUT_MS,
       () =>
         sendFrame(agent, {
           verb: "spawn",
@@ -13914,12 +14610,51 @@ export const createServer = (
     // The source's own work item goes on in the new session, whoever asked:
     // its opening is the item's (its row has named the item since its
     // start, {@link spawnTarget}, so it lists finish_item from its first turn).
+    // The source never runs again in that workspace.
     if (source?.workItemId) {
       workItems.continuedIn(source.workItemId, row.targetInstanceId);
+      retireContinued(source.id, row.targetInstanceId);
     }
     adoptChildren(prepared.source.instanceId, row.targetInstanceId);
     sendOpening(ready);
+    // What was owed to the source goes behind the opening ({@link releaseOne}).
+    releaseOwed({ instanceId: prepared.source.instanceId });
     return true;
+  };
+
+  /**
+   * A session whose work item a continuation moved to `to` never runs again
+   * (the item's workspace has one session from here): its row names `to`
+   * ({@link InstanceRow.continuedInto}), so core `relaunchOf` refuses every
+   * wake of it (a send's, a revive's, a relaunch on another account) and
+   * every send to it goes to `to` ({@link toContinuation}); its at-limit
+   * hold and the resume at its reset go, and a move owed at its turn's end;
+   * and its process is stopped, the wake-ups it scheduled inside it with
+   * it. What it was owed goes to `to` once the opening has gone
+   * ({@link releaseOne}). Idempotent: a job resumed after a restart does it
+   * again to the same end.
+   */
+  const retireContinued = (from: string, to: string): void => {
+    const [row] = db.getInstancesByIds([from]);
+    if (!row || from === to) {
+      return;
+    }
+    if (row.continuedInto !== to) {
+      db.patchInstance(from, { continuedInto: to });
+    }
+    atLimit.forget(from);
+    relaunchAtTurnEnd.delete(from);
+    const live = !["stopped", "discarded"].includes(row.status);
+    console.info(
+      `[continuation] ${sessionName(row)} (${from.slice(0, 8)}) was continued in ${to.slice(0, 8)}, which carries its work item on: it never runs again${live ? ", and its process is stopped" : ""}. What is sent to it goes to ${to.slice(0, 8)}.`
+    );
+    if (live) {
+      endSession(from, "stop", {
+        kind: "hub",
+        why: `it was continued in ${to.slice(0, 8)}`,
+      });
+    }
+    publishInstances(row.machineId);
   };
 
   /**
@@ -14857,6 +15592,11 @@ export const createServer = (
     },
     online: (machineId) => registry.agent(machineId) !== undefined,
     machineName,
+    // A move starts a new session: its mode is the one its request names.
+    modeRefusal: (machineId, harness, mode) => {
+      const settled = modeOf(machineId, harness, mode);
+      return "refusal" in settled ? settled.refusal : undefined;
+    },
     movedHere: (instanceId, line) => noteMovedHere(instanceId, line),
     asks: () => pending.list(),
     park: (envelope) => parkForPerson(envelope, true),
@@ -14868,6 +15608,8 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
     rowsChanged: (machineId) => publishInstances(machineId),
     placesChanged,
+    // The place-repo steps, made further down; no move is planned before the hub is up.
+    settled: (machineId, path) => placeRepos.settled(machineId, path),
     // A move is a New session the person started on another place: its mode
     // is the one the form chose.
     spawn: async (machineId, payload) => {
@@ -15479,6 +16221,7 @@ export const createServer = (
     }),
     "own machine id"
   );
+  relayJourney.watch();
 
   /** The fleet content a machine holds on its disk now; nothing when it cannot say. */
   const readHoldings = async (machineId: string): Promise<FleetHoldings> => {
@@ -15714,7 +16457,24 @@ export const createServer = (
     }
   };
 
-  const sendFleetSync = (machineId: string, agent: HubSocket): void => {
+  /** The harnesses installed on a machine that converge the fleet, as its reports say. */
+  const fleetHarnesses = (machineId: string): string =>
+    (
+      db.listAgents().find((row) => row.machineId === machineId)?.harnesses ??
+      []
+    )
+      .filter((report) => report.installed && report.capabilities.fleet)
+      .map((report) => report.harness)
+      .sort()
+      .join(",");
+  /** Each machine's connection a fleet sync last went out on, by its id ({@link sendFleetSync}). */
+  const fleetSyncedLinks = new Map<string, string>();
+
+  const sendFleetSync = (
+    machineId: string,
+    agent: HubSocket,
+    why: string
+  ): void => {
     // Fleet sync converges each harness's own files. The register's sync goes
     // before the machine's harnesses have reported (they follow on its first
     // beat); only a report with no fleet-capable harness is a machine with
@@ -15732,6 +16492,8 @@ export const createServer = (
 
     // Always sent, a fleet with no rows too: it carries the denied tools, and
     // a machine spawns nothing until it has heard them.
+    console.info(`[fleet] sync → ${machineName(machineId)}: ${why}`);
+    fleetSyncedLinks.set(machineId, agent.id);
     pushFleetConfig(machineId, agent, db.fleetConfig());
   };
 
@@ -16072,7 +16834,7 @@ export const createServer = (
       if (!agent) {
         continue;
       }
-      sendFleetSync(machineId, agent);
+      sendFleetSync(machineId, agent, "the fleet changed");
       publishInstances(machineId);
     }
   };
@@ -16404,6 +17166,66 @@ export const createServer = (
     return (placeId) => paths.get(placeId);
   };
 
+  /**
+   * A machine's own account of what it has of the fleet, kept as its
+   * `agents.fleet`: a sync's answer or a status read's, whoever asked, or
+   * one it sent unasked when a reading moved with no fleet change
+   * (`fleet_report`). What the sync carried rides with it (`riding`).
+   */
+  const keepFleetReport = (
+    machineId: string,
+    agent: HubSocket,
+    peeked: FleetSyncReport,
+    riding: RidingChanges | undefined
+  ): void => {
+    // A project-bound hook, MCP server or skill went out once per place; the
+    // hub keeps one state per row, the worst of its places.
+    const pathOf = placePathById();
+    const report = {
+      ...peeked,
+      mcp: foldPlacedStates(peeked.mcp, pathOf) ?? peeked.mcp,
+      ...(peeked.skills
+        ? { skills: foldPlacedStates(peeked.skills, pathOf) }
+        : {}),
+      ...(peeked.hooks
+        ? { hooks: foldPlacedStates(peeked.hooks, pathOf) }
+        : {}),
+      ...(peeked.memoryDocs
+        ? { memoryDocs: foldPlacedStates(peeked.memoryDocs, pathOf) }
+        : {}),
+    };
+    // Compare the machine's persisted content before overwriting its report;
+    // timestamps and insertion order cannot cause a reload.
+    const previous = db
+      .listAgents()
+      .find((row) => row.machineId === machineId)?.fleet;
+    const sameHashes = (
+      before: Record<string, string> = {},
+      after: Record<string, string> = {}
+    ): boolean =>
+      Object.keys(before).length === Object.keys(after).length &&
+      Object.entries(before).every(([key, hash]) => after[key] === hash);
+    const skillsChanged = !sameHashes(
+      previous?.have?.skills,
+      report.have?.skills
+    );
+    const pluginsChanged = !sameHashes(
+      previous?.have?.plugins,
+      report.have?.plugins
+    );
+    const hooksChanged =
+      JSON.stringify(previous?.hooks ?? {}) !==
+      JSON.stringify(report.hooks ?? {});
+    db.setAgentFleet(machineId, report);
+    publishInstances(machineId);
+    refreshSessions(machineId, agent, [
+      ...(pluginsChanged ? ["reloadPlugins"] : []),
+      ...(skillsChanged && !pluginsChanged ? [CONTROL_RELOAD_SKILLS] : []),
+      ...(hooksChanged ? ["reinitialize"] : []),
+    ]);
+    sendMcpChanges(machineId, agent, riding);
+  };
+
   /** Why a fleet row cannot be bound to `projectId`, or nothing when it can (null and left out always can). */
   const boundProblem = (
     projectId: string | null | undefined
@@ -16411,6 +17233,33 @@ export const createServer = (
     projectId && !db.project(projectId)
       ? `There is no project ${projectId} on this hub.`
       : undefined;
+
+  /**
+   * Why a fleet row cannot be shared, or nothing when it can: a shared server
+   * is one each machine's agent starts once for every session, so it is a
+   * command, and the whole fleet's (a project's runs in each of its places).
+   */
+  const sharedProblem = (
+    name: string,
+    config: Record<string, unknown>,
+    projectId: string | null | undefined,
+    shared: boolean
+  ): string | undefined => {
+    if (!shared) {
+      return;
+    }
+    if (typeof config.command !== "string") {
+      return "Only a server CawCo starts from a command can be shared; a server reached by URL is one instance already.";
+    }
+    // Each session's chrome-devtools reaches its own browser door (the
+    // agent's browser/door.ts `CHROME_DEVTOOLS`), its page state its own.
+    if (name === "chrome-devtools") {
+      return "chrome-devtools reaches each session's own browser door, so it cannot be shared.";
+    }
+    return projectId
+      ? "A project's server runs in each of its places, so it cannot be shared. Share it as a fleet server, or keep it per session."
+      : undefined;
+  };
 
   /** Tells every dashboard the projects changed: each reads them again. */
   const projectsChanged = (): void =>
@@ -16444,9 +17293,25 @@ export const createServer = (
     ) {
       return;
     }
-    sendFleetSync(machineId, agent);
+    sendFleetSync(machineId, agent, "a place changed");
     publishInstances(machineId);
   });
+
+  /**
+   * A project's folder was moved away (its delete, a merge): every machine is
+   * sent its fleet config again, and its agent checks each workspace
+   * boundary there for an access its policy no longer grants (agent
+   * boundary.ts `recheckNarrowed`): a workspace of that project read the
+   * folder, and its boundary must not go on reading it.
+   */
+  const projectFolderMoved = (): void => {
+    for (const { machineId } of db.listAgents()) {
+      const agent = registry.agent(machineId);
+      if (agent) {
+        sendFleetSync(machineId, agent, "a project folder moved");
+      }
+    }
+  };
 
   const mcpChanges = new FleetMcpChanges(db.fleetConfig().mcp);
   /**
@@ -16535,8 +17400,11 @@ export const createServer = (
     try {
       // A memory proposal (memory.ts): applied or rejected here, its ask
       // settled once that is done; one that no longer applies stays parked.
+      // It reads the person's own answer: the files they edited in the
+      // card's diff (`updatedInput.edits`) are theirs, the proposal itself
+      // the hub's kept file, never the client's copy.
       if (projectMemory.owns(requestId)) {
-        await projectMemory.answer(requestId, result);
+        await projectMemory.answer(requestId, answer);
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
         }
@@ -16546,6 +17414,16 @@ export const createServer = (
       // declined, its session told either way.
       if (designSystem.owns(requestId)) {
         await designSystem.answer(requestId, result);
+        if (receipt.outcome !== "answered") {
+          throw new Error("That request is no longer pending.");
+        }
+        return;
+      }
+      // A browser ask (browser-tools.ts): a Decline answers its call; an
+      // Approve is the take-over, settled once it has started (the ask
+      // taken off every screen), its refusal the hub's own words.
+      if (browserAsks.owns(requestId)) {
+        await browserAsks.answer(requestId, result);
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
         }
@@ -16782,10 +17660,11 @@ export const createServer = (
       id === CLAUDE_PROVIDER
         ? "Claude"
         : (knownProviders().find((one) => one.id === id)?.name ?? id);
+    const called = accountNameAmong(account, db.accounts.list());
     if (provider !== account.provider) {
       return provider
-        ? `${sessionName(row)} runs on a ${named(provider)} account; ${accountName(account)} is a ${named(account.provider)} account.`
-        : `${sessionName(row)}'s model is no account's, so it can't run on ${accountName(account)}.`;
+        ? `${sessionName(row)} runs on a ${named(provider)} account; ${called} is a ${named(account.provider)} account.`
+        : `${sessionName(row)}'s model is no account's, so it can't run on ${called}.`;
     }
     const signedIn = db.accounts
       .signins()
@@ -16800,7 +17679,7 @@ export const createServer = (
     }
     // An account never signed in has no name of its own yet.
     return account.label || account.email
-      ? `${accountName(account)} isn't signed in on ${machineName(row.machineId)}; sign it in there first.`
+      ? `${called} isn't signed in on ${machineName(row.machineId)}; sign it in there first.`
       : `That ${named(account.provider)} account has never been signed in; sign it in on ${machineName(row.machineId)} first.`;
   };
 
@@ -16856,12 +17735,13 @@ export const createServer = (
     | { refusal: string }
   > => {
     const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
+    const accounts = db.accounts.list();
     const move: AccountMove | null = from
       ? {
           kind: "moved",
           asked: true,
-          from: namedAccount(from),
-          to: namedAccount(account),
+          from: namedAccount(from, accounts),
+          to: namedAccount(account, accounts),
           sameOrganization: cacheCarries(from, account),
           tokens: row.contextTokens,
           window: null,
@@ -16873,7 +17753,7 @@ export const createServer = (
     );
     const title = sessionName(row);
     const fromName = accountWords(row.accountId);
-    const toName = accountName(account);
+    const toName = accountNameAmong(account, db.accounts.list());
     const owe = (words: string) => {
       relaunchAtTurnEnd.set(row.id, { byHand: true, to: account.id, move });
       return { state: "pending" as const, accountId: account.id, why: words };
@@ -17116,7 +17996,7 @@ export const createServer = (
       return false;
     }
     console.info(
-      `[at-limit] ${sessionName(row)}'s turn was refused: ${accountWords(row.accountId)} is at its limit. It already owed a move to ${accountName(to)}, which has room, so it moves there now and carries on there.`
+      `[at-limit] ${sessionName(row)}'s turn was refused: ${accountWords(row.accountId)} is at its limit. It already owed a move to ${accountNameAmong(to, db.accounts.list())}, which has room, so it moves there now and carries on there.`
     );
     relaunchOnAccount(row.id, "limit");
     return true;
@@ -17272,6 +18152,18 @@ export const createServer = (
       const rows = db
         .sessionOwnership(message.machineId)
         .filter((row) => row.sessionId === deleted);
+      // The person purges the session: an agent's find no longer answers
+      // with it, and every note it wrote is proposed withdrawn (memory.ts
+      // `purged`), whether or not the hub held it.
+      db.find.purge(message.machineId, [deleted]);
+      for (const row of rows) {
+        if (row.projectId) {
+          detach(
+            projectMemory.purged(row.projectId, row.id),
+            `memory: notes of purged session ${row.id}`
+          );
+        }
+      }
       if (rows.length > 0) {
         for (const row of rows) {
           endSession(row.id, "delete-transcript", { kind: "person" });
@@ -17793,6 +18685,29 @@ export const createServer = (
       parent_agent_id: null,
       message: freshStartLine(row, fresh),
       timestamp: new Date(fresh).toISOString(),
+    });
+  };
+
+  /**
+   * A stored transcript's machine is away, as its routes answer it: named,
+   * so a reader can say which one is away and hear it come back, and
+   * whether it is on its way back: then `Retry-After` is when this hub stops
+   * reading it so (whole seconds, rounded up, so a read then finds it
+   * offline).
+   */
+  const machineAway = (fault: HistoryFault): Response => {
+    const left = fault.machineId ? reconnectingFor(fault.machineId) : 0;
+    return new Response(fault.message, {
+      status: 503,
+      headers: {
+        "X-Cawco-Machine": fault.machineId ?? "",
+        ...(left > 0
+          ? {
+              "X-Cawco-Machine-State": "reconnecting",
+              "Retry-After": String(Math.ceil(left / 1000)),
+            }
+          : {}),
+      },
     });
   };
 
@@ -18416,6 +19331,7 @@ export const createServer = (
       method === CONTROL_INPUTS_READ ||
       method === CONTROL_INPUTS_WRITE ||
       method === CONTROL_PLACE_REPO ||
+      method === CONTROL_PLACE_LFS ||
       method === CONTROL_PLACE_PUSH
         ? WORKSPACE_CREATE_TIMEOUT_MS
         : WORKSPACE_TIMEOUT_MS;
@@ -18449,9 +19365,8 @@ export const createServer = (
   const placeRepos = createPlaceRepos({
     call: callMachine,
     db,
-    notice: (projectId, threadId, note) => {
-      lead?.notice(projectId, threadId, note);
-    },
+    notice: (projectId, threadId, note) =>
+      lead?.notice(projectId, threadId, note) ?? null,
   });
   /** Each place's sheet stages as their machines last said, by port, and when: what holds its stage clone (work-items.ts `stageRuns`). */
   const placeStages = new Map<
@@ -18537,7 +19452,7 @@ export const createServer = (
     // An attempt at a task ended: the dispatcher moves the task. Deferred: the
     // boot sweep below ends items before the dispatcher exists.
     itemEnded: (item) =>
-      queueMicrotask(() => {
+      soon(() => {
         dispatcher.itemEnded(item);
         push.itemEnded(item);
         caw.itemEnded(item);
@@ -18547,6 +19462,7 @@ export const createServer = (
       }),
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),
+    stalled: (instanceId) => stallOf(instanceId)?.words,
     machineFree: (machineId) => machinePause.free(machineId),
     // The sweep's wake of work asleep asks the same gate every sender does,
     // and leaves a session to the send already on its way to it.
@@ -18622,6 +19538,10 @@ export const createServer = (
         failSend(send, reason);
       }
     },
+    // A delegate's finish_item ends its turn: what its harness holds unread
+    // waits at the hub, and goes once that turn is over.
+    reclaimUnread,
+    finishOver: (instanceId) => releaseOwed({ instanceId }),
     workspaceChanged: (workspace) => publishInstances(workspace.machineId),
   });
   // A hub crash after intent persistence cannot leave its work item reading
@@ -18778,6 +19698,7 @@ export const createServer = (
     },
     placesChanged,
     projectsChanged,
+    folderMoved: () => projectFolderMoved(),
   };
   /** Set once approved actions exist (below): until then no `action` move goes. */
   let actionMoves: NonNullable<TaskStore["actionMove"]> = () => false;
@@ -18894,7 +19815,6 @@ export const createServer = (
     },
     threadOf: (actor) => lead?.askThread(actor),
     park: (envelope) => parkForPerson(envelope),
-    recall: (actor, asked) => sessionProse.recall(actor, asked),
     settle: (requestId) => {
       pending.resolve(requestId);
     },
@@ -19009,9 +19929,11 @@ export const createServer = (
     },
     fleetChoicesSet: () => db.getSupervisorConfig().choicesSetAt !== null,
     relayOffer: () =>
-      db.streamRelay.read() || db.streamRelay.askedAt() !== null
+      db.streamRelay.read() ||
+      db.streamRelay.journey() ||
+      db.streamRelay.askedAt() !== null
         ? null
-        : streamRelay.answer().candidates,
+        : { domain: lastRelayDomain },
     upstreamAnswered: () => db.upstreamPosts() !== null,
     projectsChanged,
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
@@ -19056,6 +19978,7 @@ export const createServer = (
   // every machine's transcripts, under one ranking.
   const find = createFind({
     db,
+    purged: () => db.find.purged(),
     refreshInstances: refreshBoard,
     online: (machineId) => registry.agent(machineId) !== undefined,
     needsYou: () =>
@@ -19420,11 +20343,50 @@ export const createServer = (
     declined: (projectId) => projectStarters.designDeclined(projectId),
   });
   tasks.listen(designOffers.taskChanged);
+  /**
+   * Project `id` for a machine asking about its large files (agent
+   * host-lfs.ts): one that holds a place of it, and nothing else.
+   */
+  const lfsMachineProject = (
+    id: string,
+    caller: Caller
+  ):
+    | { machineId: string | null; row: ProjectRow }
+    | { refused: string; status: 403 | 404 } => {
+    // The route's rule lets in a machine or the owner (hub-auth.ts): an
+    // agent with no proof is the owner on a trusted hub, and names no machine.
+    if (caller.kind !== "machine" && caller.kind !== "owner") {
+      return { status: 403, refused: "Only a machine asks this." };
+    }
+    const row = db.project(id);
+    if (!row) {
+      return { status: 404, refused: `There is no project ${id}.` };
+    }
+    if (caller.kind === "owner") {
+      return { row, machineId: null };
+    }
+    return row.places.some((place) => place.machineId === caller.machineId)
+      ? { row, machineId: caller.machineId }
+      : {
+          status: 403,
+          refused: `This machine holds no place of ${row.name}.`,
+        };
+  };
+  // Git LFS offered for the large files a place's first commit left out,
+  // under that note (lfs-offers.ts): tracked on the place's machine once the
+  // person says so.
+  const lfsOffers = createLfsOffers({
+    call: callMachine,
+    db,
+    notice: (projectId, threadId, note) =>
+      caw.notice(projectId, threadId, note),
+  });
   // A project's starters, written for it by Jev from what it holds now, on
   // its changes (project-starters.ts): a task filed or moved here; its
   // making, Caw's answers, attempts and routines at their own sites.
   const projectStarters = createProjectStarters({
     db,
+    lifetime,
     tasks,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
@@ -19755,6 +20717,7 @@ export const createServer = (
     landingWait: (itemId) => workItems.landingWaitOf(itemId),
     machineName,
     machinePaused: (machineId) => machinePause.words(machineId),
+    stalled: (instanceId) => stallOf(instanceId),
     activity: (row) => {
       const state = followupState(row);
       // The same test the cold check makes: warm mid-turn, unmeasured, or unexpired.
@@ -19873,48 +20836,44 @@ export const createServer = (
           )?.connections ?? [])
         : [],
     changed: () => toolsMayHaveChanged(),
-    // A GitHub connection's write tool (github-mcp-server marks each read
-    // `ReadOnlyHint: true`, pkg/github/issues.go) naming another person's
-    // `owner`/`repo`: refused under off, held for the person under ask.
+    // A forge connection's write tool (connection-writes.ts) to another
+    // person's repository: decided as every write is (core decideWrite),
+    // refused under off, held for the person under ask.
     upstream: (actor, connection, tool, args) => {
-      const { owner, repo } = args;
-      if (
-        connection.service.trim().toLowerCase() !== "github" ||
-        tool.annotations?.readOnlyHint === true ||
-        typeof owner !== "string" ||
-        typeof repo !== "string"
-      ) {
-        return;
-      }
       const rule = upstreamRuleOf(db, actor.projectId);
-      const write = otherWrite(rule, {
-        what: `${connection.name} ${tool.name}`,
-        repo: `github.com/${owner}/${repo}`,
-      });
-      if (rule.posts === "on" || !write?.repo) {
+      const write = connectionWrite(connection, tool, args, rule.remotes);
+      if (!write) {
         return;
       }
-      if (rule.posts === "off") {
-        return {
-          isError: true,
-          content: [{ type: "text", text: writeRefusal(rule, write) ?? "" }],
-        };
+      const decision = decideWrite(rule, write);
+      switch (decision.kind) {
+        case "go":
+          return;
+        case "refuse":
+          return {
+            isError: true,
+            content: [{ type: "text", text: decision.why }],
+          };
+        case "hold": {
+          const text = upstreamAsks.ask(
+            actor,
+            {
+              post: {
+                via: "mcp",
+                connection: connection.name,
+                tool: tool.name,
+                args,
+              },
+              repo: decision.repo,
+              what: write.what,
+            },
+            `${connection.account || connection.name} (connection ${connection.name})`
+          );
+          return { content: [{ type: "text", text }] };
+        }
+        default:
+          throw unreachable(decision);
       }
-      const text = upstreamAsks.ask(
-        actor,
-        {
-          post: {
-            via: "mcp",
-            connection: connection.name,
-            tool: tool.name,
-            args,
-          },
-          repo: write.repo,
-          what: write.what,
-        },
-        `${connection.account || connection.name} (connection ${connection.name})`
-      );
-      return { content: [{ type: "text", text }] };
     },
   });
   // Tracker sync (tracker.ts): a project's tasks one record with their
@@ -19967,6 +20926,7 @@ export const createServer = (
   const projectEdits = createProjectEdits({
     db,
     lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
+    lfsProblem: (connection) => connections.lfsProblem(connection),
     projectsChanged,
     stagesChanged: (projectId) => tasks.touched(projectId),
   });
@@ -20074,8 +21034,34 @@ export const createServer = (
     workItems,
   });
   offBoot.push(() => designVerify.start());
+  // `find`: the dashboard's Finder as every session's tool (find-tool.ts).
+  const findTool = createFindTool({
+    find,
+    instance: (id) => db.getInstancesByIds([id])[0] as InstanceRow | undefined,
+    machines: () =>
+      db.listAgents().map((agent) => ({
+        id: agent.machineId,
+        name: machineLabel(agent.hostname),
+      })),
+    projects: () =>
+      db.listProjects().map((project) => ({
+        id: project.id,
+        name: project.name,
+      })),
+    readHistory: (id) => readHistory(id),
+    thread: (id) => db.thread(id),
+    threadMessages: (threadId) =>
+      db.threadMessages(threadId).map((message) => ({
+        id: message.id,
+        at: message.createdAt,
+        author: message.author,
+        body: message.body,
+        noteTitle: message.noteTitle,
+      })),
+  });
   const hubTools = createHubTools({
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
+    find: (actor, input) => findTool.call(actor, input),
     designVerdict: (actor, verdict) => designVerify.verdict(actor, verdict),
     designWrite: (actor, files, why, toolUseId) =>
       designSystem.write(actor, files, why, toolUseId),
@@ -20087,6 +21073,7 @@ export const createServer = (
     tasks,
     connections,
     hubTools,
+    browserTools: (actor, toolUseId) => browserAsks.tools(actor, toolUseId),
     workItemTask: (id) => db.workItem(id)?.taskId,
     workItemLands: (id) => db.workItem(id)?.lands,
     designBuild: (projectId, actor, stage) =>
@@ -20557,22 +21544,50 @@ export const createServer = (
     );
   };
 
+  /**
+   * When each account's confirmed reading was last said to every screen.
+   * Each screen reckons a reading stale on its own clock from the time it
+   * was told, so a confirmation is said once this long has passed since the
+   * last one said, or a busy account whose percent holds would read stale.
+   */
+  const confirmationSaid = new Map<string, number>();
+  const CONFIRMATION_SAID_MS = 10 * 60_000;
   /** A claimed turn's tokens, on the account the session runs on. */
   const recordTurnUsage = (
-    session: Parameters<typeof turnUsageOf>[0],
+    session: Parameters<typeof turnUsageOf>[0] & {
+      harness: string;
+      machineId: string;
+    },
     result: NeutralResultMessage,
     keepAlive: boolean
   ) => {
     if (!result.uuid) {
       return;
     }
+    const at = result.timestamp ? Date.parse(result.timestamp) : Date.now();
     const turn = turnUsageOf(
       session,
       { ...result, uuid: result.uuid },
       keepAlive,
-      result.timestamp ? Date.parse(result.timestamp) : Date.now()
+      at
     );
     db.turnUsage.put(session.id, turn.rows, turn.seen);
+    // A Claude turn that reached the model and said nothing of its account's
+    // limits left them where they stood: its Claude Code reports every move.
+    const reached = turn.rows.some(
+      (row) => row.inputTokens + row.outputTokens > 0
+    );
+    const { accountId } = session;
+    if (
+      session.harness === "claude" &&
+      accountId &&
+      reached &&
+      confirmReading(db, accountId, session.machineId, at) &&
+      at - (confirmationSaid.get(accountId) ?? 0) >= CONFIRMATION_SAID_MS
+    ) {
+      confirmationSaid.set(accountId, at);
+      publishUsage(session.machineId);
+    }
   };
   const pruneTurnUsage = () => {
     const gone = db.turnUsage.prune();
@@ -21478,15 +22493,17 @@ export const createServer = (
     if (!to || to.id === from.id) {
       return;
     }
+    const accounts = db.accounts.list();
+    const toName = accountNameAmong(to, accounts);
     console.info(
-      `[rebalance] ${sessionName(row)} moves from ${accountName(from)} to ${accountName(to)} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${accountName(to)} is where placement puts it now. Its conversation is copied there before it starts.`
+      `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now. Its conversation is copied there before it starts.`
     );
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
       move: {
         kind: "moved",
-        from: namedAccount(from),
-        to: namedAccount(to),
+        from: namedAccount(from, accounts),
+        to: namedAccount(to, accounts),
         sameOrganization: cacheCarries(from, to),
         tokens: row.contextTokens,
         window: null,
@@ -21659,57 +22676,22 @@ export const createServer = (
         .sendsIn(row.id, ["read", "pending", "failed"])
         .filter((send) => !(send.owed || isKeepAlive(send.body)))
         .at(-1)?.body;
-      if (!body?.origin) {
-        return;
-      }
-      const { content } = body.message;
-      return {
-        origin: body.origin,
-        words:
-          typeof content === "string"
-            ? content
-            : content
-                .flatMap((block) => (block.type === "text" ? [block.text] : []))
-                .join("\n"),
-      };
-    },
-    owedFrom: (row) =>
-      db
-        .owedSends({ instanceId: row.id })
-        .map((send) => send.body?.origin ?? { kind: "human" as const }),
-    // The hub's word to a work item, again: the one send path, which keeps it
-    // while anything still holds the session.
-    nudge: (row, words) => {
-      const sent = deliverSend({
-        verb: "send",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: {
-          instanceId: row.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: { role: "user", content: words },
-            parent_tool_use_id: null,
-            origin: { kind: "system", name: WORK_ITEM_ORIGIN },
-          },
-        },
-      });
-      if (sent?.state === "failed") {
-        console.warn(
-          `[at-limit] ${sessionName(row)}: the hub's word to its work item, sent again after its account's reset, did not go: ${sent.reason ?? "the send failed"}.`
-        );
-      }
+      return body?.origin ? { origin: body.origin } : undefined;
     },
     note: noteAtLimit,
     unnote: unnoteAtLimit,
-    // Whatever it decided, what a session it no longer holds was kept goes.
+    // Whatever it decided, what a session it no longer holds was kept goes,
+    // and each work item whose stop at its limit began, moved or ended goes
+    // out again, its chip saying so.
     changed: () => {
       publishInstances("");
       releaseLimitHeld();
+      publishStalls();
     },
   });
   accountsMoved = atLimit.accountsChanged;
+  stallOf = (instanceId) => atLimit.stall(instanceId);
+  stalledNow = () => atLimit.stalled();
 
   /**
    * Who answers the end of a turn of `instanceId` its live launch's Claude
@@ -21755,7 +22737,7 @@ export const createServer = (
     }
     refusedFailures.set(instanceId, {
       accountId: from.id,
-      words: `${accountName(from)}'s sign-in was refused, so it is signed out on ${machineName(row.machineId)}; ${stays}. Sign it in again in Configure → Accounts.`,
+      words: `${accountNameAmong(from, db.accounts.list())}'s sign-in was refused, so it is signed out on ${machineName(row.machineId)}; ${stays}. Sign it in again in Configure → Accounts.`,
     });
   };
 
@@ -21773,12 +22755,13 @@ export const createServer = (
     if (!(row && from && to) || row.accountId !== from.id) {
       return;
     }
+    const accounts = db.accounts.list();
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
       move: {
         kind: "moved",
-        from: namedAccount(from),
-        to: namedAccount(to),
+        from: namedAccount(from, accounts),
+        to: namedAccount(to, accounts),
         sameOrganization: cacheCarries(from, to),
         tokens: row.contextTokens,
         window: null,
@@ -22144,7 +23127,11 @@ export const createServer = (
           db.listProjects().some((project) => project.id === id)
         ),
         fleetChoicesRoutes(fleetChoices),
-        streamRelayRoutes(streamRelay),
+        browserRoutes(browsers),
+        browserStreamRoutes(browserStream),
+        relayJourneyRoutes(relayJourney, relayAsker, (request, server) =>
+          addressOf(server as Parameters<typeof addressOf>[0], request)
+        ),
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
           (id) => {
@@ -22176,6 +23163,7 @@ export const createServer = (
         appleDiagnosticsRoutes(),
         projectOfferRoutes(projectOffers, YOU_ACTOR),
         designOfferRoutes(designOffers, YOU_ACTOR),
+        lfsOfferRoutes(lfsOffers),
         starterRoutes(projectStarters),
         planRoutes(plans),
         dispatchRoutes(dispatcher),
@@ -22401,6 +23389,81 @@ export const createServer = (
           return { ok: true };
         }
       )
+      // Where a project's large files live, for a machine that holds a place
+      // of it and runs git-lfs for it (agent host-lfs.ts): its declared LFS
+      // endpoint and the connection's key as HTTP Basic, or null when it
+      // declared none. Nothing but such a machine is answered.
+      .get(
+        "/api/lfs/projects/:id",
+        { ...hidden, params: t.Object({ id: t.String() }) },
+        ({ params, request, server, status }) => {
+          const project = lfsMachineProject(
+            params.id,
+            hubAuth.callerOf(request, addressOf(server, request))
+          );
+          if ("refused" in project) {
+            return status(project.status, project.refused);
+          }
+          const { lfsUrl, lfsConnection } = project.row;
+          if (!(lfsUrl && lfsConnection)) {
+            return { declared: null };
+          }
+          try {
+            return {
+              declared: {
+                endpoint: lfsUrl,
+                basic: connections.lfsBasic(lfsConnection),
+              },
+            };
+          } catch (error) {
+            return status(
+              409,
+              `${project.row.name}'s large files live at ${lfsUrl}, but its connection can't sign in there: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+      )
+      // A repository's `.lfsconfig` named an LFS endpoint that is neither its
+      // origin's nor the project's declared one (agent host-lfs.ts): its
+      // large files stayed pointers. The project's thread is told once per
+      // endpoint, ever (`lfs_refusals`), with how to declare it.
+      .post(
+        "/api/lfs/projects/:id/refused",
+        {
+          ...hidden,
+          params: t.Object({ id: t.String() }),
+          body: t.Object({
+            root: t.String({ minLength: 1, maxLength: 4096 }),
+            endpoint: t.String({ minLength: 1, maxLength: 2000 }),
+            // The asking machine's own word for itself, for a trusted hub's
+            // caller, which proves none.
+            machineId: t.String({ minLength: 1, maxLength: 200 }),
+          }),
+        },
+        ({ body, params, request, server, status }) => {
+          const caller = hubAuth.callerOf(request, addressOf(server, request));
+          const project = lfsMachineProject(params.id, caller);
+          if ("refused" in project) {
+            return status(project.status, project.refused);
+          }
+          if (!db.lfsOffers.refused(params.id, body.endpoint)) {
+            return { ok: true };
+          }
+          const machineId = project.machineId ?? body.machineId;
+          caw.notice(params.id, db.newestConversation(params.id)?.id ?? null, {
+            title: "Large files left as pointers: an undeclared LFS server",
+            event: {
+              kind: "repo",
+              root: body.root,
+              machineId,
+              commit: null,
+              lfsRefused: body.endpoint,
+            },
+            body: `The repository's \`.lfsconfig\` says its large files live at ${body.endpoint}, which is neither its origin's LFS nor where ${project.row.name} declared its large files live. CawCo fetches nothing from a server it was not told of, so in ${body.root} on ${machineCalled(machineId, db.listAgents())} they are pointer files, not the files themselves.\n\nIf they belong there, declare it: Project details › Large files, set to ${body.endpoint} with the connection that signs in there. Workspaces cut after that fetch them.`,
+          });
+          return { ok: true };
+        }
+      )
       // A post to another person's repository a workspace held under "Ask me
       // first" (agent github-door.ts, hub-git.ts), raised by its machine as
       // the person's ask (upstream-asks.ts); answers what the session reads.
@@ -22435,11 +23498,14 @@ export const createServer = (
               `cawco: \`${what}\` did not run: the hub holds no session of this workspace, so the owner could not be asked. Nothing was posted.`
             );
           }
-          const rule = upstreamRuleOf(db, actor.projectId);
-          if (rule.posts !== "ask" || !otherWrite(rule, { what, repo })) {
+          const decision = decideWrite(upstreamRuleOf(db, actor.projectId), {
+            what,
+            repo,
+          });
+          if (decision.kind !== "hold") {
             return status(
               409,
-              `cawco: \`${what}\` did not run: this project's choice changed since the call (${writeRefusal(rule, { what, repo }) ? "agents are kept off other repositories" : "it may post there now"}). Run it again to go by the choice as it is now.`
+              `cawco: \`${what}\` did not run: this project's choice changed since the call (${decision.kind === "refuse" ? "agents are kept off other repositories" : "it may post there now"}). Run it again to go by the choice as it is now.`
             );
           }
           return upstreamAsks.ask(
@@ -22572,6 +23638,34 @@ export const createServer = (
         ({ params, status }) =>
           machineRow(params.machineId) ??
           status(404, machineFault(params.machineId, "unknown"))
+      )
+      // A session's forge_post (forge-posts.ts): what it says is the
+      // tool's answer; a write that did not go is a refusal in its words.
+      .post(
+        "/api/instances/:id/forge-post",
+        {
+          ...hidden,
+          body: t.Object({
+            repo: t.Optional(t.String({ minLength: 1 })),
+            write: t.Any(),
+          }),
+        },
+        async ({ params, body, status, request, server }) => {
+          const [row] = db.listedInstancesByIds([params.id]);
+          const write = readForgeAsk({ repo: "-", write: body.write })?.write;
+          if (!(row && write)) {
+            return status(
+              row ? 400 : 404,
+              row ? "forge_post takes one write." : "Unknown calling session."
+            );
+          }
+          server?.timeout(request, 0);
+          const answer = await forgePosts.post(row, {
+            write,
+            ...(body.repo ? { repo: body.repo } : {}),
+          });
+          return answer.ok ? answer.text : status(422, answer.text);
+        }
       )
       .post(
         "/api/instances/:id/generate-image",
@@ -23201,7 +24295,7 @@ export const createServer = (
             return {
               state: "moved" as const,
               accountId: account.id,
-              why: `${sessionName(row)} already runs on ${accountName(account)}.`,
+              why: `${sessionName(row)} already runs on ${accountNameAmong(account, db.accounts.list())}.`,
             };
           }
           const moved = await moveByHand(row, account);
@@ -23483,11 +24577,8 @@ export const createServer = (
               ? Math.floor(Number(query.limit))
               : undefined;
           // A former id is its session's (the hub's fold of older continuations).
-          const page = await transcripts.page(
-            db.instanceIdOf(params.id),
-            limit,
-            query.before
-          );
+          const id = db.instanceIdOf(params.id);
+          const page = await transcripts.page(id, limit, query.before);
           if ("gone" in page) {
             return status(
               409,
@@ -23495,28 +24586,20 @@ export const createServer = (
             );
           }
           if (!("fault" in page)) {
-            return page;
+            // Where a continued session's work went rides its newest page,
+            // for a first paint and a reader whose board no longer lists it.
+            const now = query.before ? id : continuationNow(id);
+            const [to] = now === id ? [] : db.getInstancesByIds([now]);
+            return to
+              ? {
+                  ...page,
+                  continuedTo: { instanceId: to.id, title: sessionName(to) },
+                }
+              : page;
           }
           switch (page.fault) {
-            // Named with the machine, so a reader can say which one is away
-            // and hear it come back, and whether it is on its way back: then
-            // `Retry-After` is when this hub stops reading it so (whole
-            // seconds, rounded up, so a read then finds it offline).
-            case "offline": {
-              const left = page.machineId ? reconnectingFor(page.machineId) : 0;
-              return new Response(page.message, {
-                status: 503,
-                headers: {
-                  "X-Cawco-Machine": page.machineId ?? "",
-                  ...(left > 0
-                    ? {
-                        "X-Cawco-Machine-State": "reconnecting",
-                        "Retry-After": String(Math.ceil(left / 1000)),
-                      }
-                    : {}),
-                },
-              });
-            }
+            case "offline":
+              return machineAway(page);
             case "missing":
               return status(404, page.message);
             case "timeout":
@@ -23527,6 +24610,51 @@ export const createServer = (
           return status(500, page.message);
         }
       )
+      // Files' Attachments: every text, file and picture the session's
+      // conversation carried, read off its whole transcript here, newest
+      // first, so the list never depends on the pages a reader has loaded.
+      // A transcript that can't be read answers as its page would.
+      .get("/api/instances/:id/attachments", async ({ params, status }) => {
+        const id = db.instanceIdOf(params.id);
+        const pages: TranscriptPage[] = [];
+        let before: string | undefined;
+        // Back to the conversation's start: the pages are the in-memory
+        // builder's (transcripts.ts), so the whole walk reads no disk twice.
+        for (;;) {
+          // biome-ignore lint/performance/noAwaitInLoops: each page names the cursor of the next
+          const page = await transcripts.page(
+            id,
+            ATTACHMENT_PAGE_LIMIT,
+            before
+          );
+          if ("gone" in page) {
+            return status(
+              409,
+              `the transcript no longer holds block ${page.gone}`
+            );
+          }
+          if ("fault" in page) {
+            switch (page.fault) {
+              case "offline":
+                return machineAway(page);
+              case "missing":
+                return status(404, page.message);
+              case "timeout":
+                return status(504, page.message);
+              case "failed":
+                return status(500, page.message);
+            }
+          }
+          pages.push(page);
+          if (page.cursor === null) {
+            return {
+              harness: page.where.harness,
+              attachments: attachmentsOfPages(pages),
+            } satisfies SessionAttachments;
+          }
+          before = page.cursor;
+        }
+      })
       .patch(
         "/api/instances/:id",
         {
@@ -23878,12 +25006,26 @@ export const createServer = (
                 t.Null(),
               ])
             ),
+            /**
+             * One instance on each machine for all its sessions, started at
+             * its first call (core `FleetMcpServer.shared`). Left out: as it
+             * was.
+             */
+            shared: t.Optional(t.Boolean()),
           }),
         },
         async ({ params, body, status }) => {
           const problem =
             mcpProblem(params.name, body.config) ??
-            boundProblem(body.projectId);
+            boundProblem(body.projectId) ??
+            sharedProblem(
+              params.name,
+              body.config,
+              body.projectId === undefined
+                ? db.getMcpServer(params.name)?.projectId
+                : body.projectId,
+              body.shared ?? db.getMcpServer(params.name)?.shared ?? false
+            );
           if (problem) {
             return status(400, problem);
           }
@@ -23894,6 +25036,7 @@ export const createServer = (
             enabled: body.enabled,
             projectId: body.projectId,
             platforms: body.platforms,
+            shared: body.shared,
           });
           await fleetMcp.probe(params.name);
           announceMcp();
@@ -25344,7 +26487,7 @@ export const createServer = (
           if (!agent) {
             return status(404, machineFault(body.machineId, "offline"));
           }
-          sendFleetSync(body.machineId, agent);
+          sendFleetSync(body.machineId, agent, "asked for");
           publishInstances(body.machineId);
           return { ok: true };
         }
@@ -25472,6 +26615,16 @@ export const createServer = (
             upstreamPosts: t.Optional(
               t.Union([UPSTREAM_POSTS_SCHEMA, t.Null()])
             ),
+            // Where its large files live; null: each origin's own LFS.
+            lfs: t.Optional(
+              t.Union([
+                t.Object({
+                  url: t.String({ maxLength: 2000 }),
+                  connection: t.String({ maxLength: 200 }),
+                }),
+                t.Null(),
+              ])
+            ),
           }),
         },
         async ({ params, body, status }) => {
@@ -25509,10 +26662,12 @@ export const createServer = (
         }
         // The project is gone either way; a folder that could not be moved
         // stays where it was, and the hub says so in its log.
-        await trashProjectFolder(params.id).catch((error: unknown) =>
-          console.warn(
-            `[hub] project ${params.id}'s folder was not moved to the trash: ${error instanceof Error ? error.message : String(error)}`
-          )
+        await trashProjectFolder(params.id).then(
+          projectFolderMoved,
+          (error: unknown) =>
+            console.warn(
+              `[hub] project ${params.id}'s folder was not moved to the trash: ${error instanceof Error ? error.message : String(error)}`
+            )
         );
         return { ok: true };
       })
@@ -26071,14 +27226,28 @@ export const createServer = (
             ),
           }),
         },
-        ({ params, body, status }) =>
-          db.accounts.patch(params.id, body) ??
-          status(404, `There is no account ${params.id}.`)
+        ({ params, body, status }) => {
+          const account = accountOf(params.id);
+          return (
+            (account && db.accounts.patch(account.id, body)) ??
+            status(404, `There is no account ${params.id}.`)
+          );
+        }
       )
       .delete("/api/accounts/:id", async ({ params, status }) => {
-        const account = db.accounts.get(params.id);
+        const account = accountOf(params.id);
         if (!account) {
           return status(404, `There is no account ${params.id}.`);
+        }
+        const named = accountNameAmong(account, db.accounts.list());
+        // An id a join removed names the account it became, which is not the
+        // one the screen asking made: removing that is never done by its old
+        // id.
+        if (account.id !== params.id) {
+          return status(
+            409,
+            `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in Configure → Accounts.`
+          );
         }
         const signins = db.accounts
           .signins()
@@ -26093,7 +27262,7 @@ export const createServer = (
         if (live.length > 0) {
           return status(
             409,
-            `${live.length} session${live.length === 1 ? "" : "s"} still run on ${accountName(account)}; stop them first.`
+            `${live.length} session${live.length === 1 ? "" : "s"} still run on ${named}; stop them first.`
           );
         }
         // Each machine signed in to it signs it out (Claude Code itself for a
@@ -26111,10 +27280,10 @@ export const createServer = (
             409,
             [
               failed.length > 0
-                ? `${failed.join(", ")} did not sign ${accountName(account)} out.`
+                ? `${failed.join(", ")} did not sign ${named} out.`
                 : "",
               silent.length > 0
-                ? `${silent.join("; ")}, so whether ${accountName(account)} was signed out there is not known.`
+                ? `${silent.join("; ")}, so whether ${named} was signed out there is not known.`
                 : "",
               "Try again.",
             ]
@@ -26135,11 +27304,12 @@ export const createServer = (
         "/api/accounts/:id/machines/:machineId",
         { params: t.Object({ id: t.String(), machineId: t.String() }) },
         async ({ params, status }) => {
-          const account = db.accounts.get(params.id);
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
           const machine = machineName(params.machineId);
+          const named = accountNameAmong(account, db.accounts.list());
           const signin = db.accounts
             .signins()
             .find(
@@ -26148,10 +27318,7 @@ export const createServer = (
                 one.machineId === params.machineId
             );
           if (!signin) {
-            return status(
-              404,
-              `${accountName(account)} is not signed in on ${machine}.`
-            );
+            return status(404, `${named} is not signed in on ${machine}.`);
           }
           const live = db
             .listInstances()
@@ -26164,7 +27331,7 @@ export const createServer = (
           if (live.length > 0) {
             return status(
               409,
-              `${live.length} session${live.length === 1 ? "" : "s"} still run on ${accountName(account)} on ${machine}; stop them first.`
+              `${live.length} session${live.length === 1 ? "" : "s"} still run on ${named} on ${machine}; stop them first.`
             );
           }
           const answer = await forgetOn(account, params.machineId);
@@ -26173,17 +27340,17 @@ export const createServer = (
               return answer.reason === "dead"
                 ? status(
                     409,
-                    `${machine} is offline, so ${accountName(account)} was not signed out there; try again when it is online.`
+                    `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
                   )
                 : status(
                     409,
-                    `${machine} did not answer within ${Math.round(answer.after / 1000)} s, so whether ${accountName(account)} was signed out there is not known. Try again.`
+                    `${machine} did not answer within ${Math.round(answer.after / 1000)} s, so whether ${named} was signed out there is not known. Try again.`
                   );
             case "answered":
               if (!answer.value.ok) {
                 return status(
                   409,
-                  `${machine} did not sign ${accountName(account)} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
+                  `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
                 );
               }
               break;
@@ -26209,11 +27376,6 @@ export const createServer = (
               moveWholeUnderK: t.Integer({ minimum: 0 }),
               // Read by nothing; shipped apps still send it (core AtLimit).
               prepareAtPct: t.Optional(t.Integer({ minimum: 0, maximum: 100 })),
-              // An app that has no control for it sends none, and keeps what
-              // was chosen.
-              delegateWork: t.Optional(
-                t.Union(DELEGATE_WORK.map((one) => t.Literal(one)))
-              ),
             }),
           }),
         },
@@ -26254,9 +27416,7 @@ export const createServer = (
               // Kept for the shipped apps that read it (core AtLimit).
               prepareAtPct:
                 body.atLimit.prepareAtPct ?? DEFAULT_AT_LIMIT.prepareAtPct,
-              delegateWork:
-                body.atLimit.delegateWork ??
-                db.accounts.routing(params.provider).atLimit.delegateWork,
+              delegateWork: DEFAULT_AT_LIMIT.delegateWork,
             },
           };
           db.accounts.setRouting(routing);
@@ -26397,7 +27557,7 @@ export const createServer = (
       .post(
         "/api/accounts/:id/machines/:machineId/signin",
         async ({ params, status }) => {
-          const account = db.accounts.get(params.id);
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
@@ -26405,21 +27565,24 @@ export const createServer = (
           if (!claude && account.kind !== "oauth") {
             return status(
               400,
-              `${accountName(account)} is a key account: send its key to the machines that use it.`
+              `${accountNameAmong(account, db.accounts.list())} is a key account: send its key to the machines that use it.`
             );
           }
+          // The machine's sign-in runs under the id it was asked for, the id
+          // `…/signin/complete` finishes it under: one a join removed
+          // finishes into the account it joined ({@link finishJoined}).
           const answer = claude
             ? await callAgent(
                 params.machineId,
                 CONTROL_BEGIN_ACCOUNT_LOGIN,
-                [account.id, account.kind],
+                [params.id, account.kind],
                 SIGNIN_TIMEOUT_MS,
                 "claude"
               )
             : await callAgent(
                 params.machineId,
                 CONTROL_BEGIN_PROVIDER_LOGIN,
-                [account.id, account.provider],
+                [params.id, account.provider],
                 SIGNIN_TIMEOUT_MS
               );
           // Sent, whether or not it answered: only a machine not connected was
@@ -26427,7 +27590,7 @@ export const createServer = (
           const sent = !(
             answer.kind === "unanswered" && answer.reason === "dead"
           );
-          if (sent && !db.accounts.get(account.id)) {
+          if (sent && !accountOf(params.id)) {
             return status(
               404,
               await undoRemovedSignin(account, params.machineId)
@@ -26436,9 +27599,12 @@ export const createServer = (
           // A machine that was asked makes the account's store (and may be
           // waiting on its sign-in) whether or not a code came back; it holds
           // that store signed out, as its next register would report, so
-          // removing the account forgets it there.
+          // removing the account forgets it there. A store under an id a
+          // join removed is no account's: the machine forgets it when it
+          // next names its stores ({@link unknownAccountsOf}).
           if (
             sent &&
+            params.id === account.id &&
             !db.accounts
               .signins()
               .some(
@@ -26480,10 +27646,7 @@ export const createServer = (
         async ({ params, body, status }) => {
           // The account the sign-in finishes into: its own, or the one a
           // sign-in on another machine has since joined it into.
-          const into = () =>
-            db.accounts.get(params.id) ??
-            db.accounts.get(joinedInto.get(params.id) ?? "");
-          const account = into();
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
@@ -26506,7 +27669,7 @@ export const createServer = (
               throw unreachable(asked);
           }
           const answer = asked.value;
-          const now = into();
+          const now = accountOf(params.id);
           if (!now) {
             return status(
               404,
@@ -26537,14 +27700,14 @@ export const createServer = (
           }),
         },
         async ({ params, body, status }) => {
-          const account = db.accounts.get(params.id);
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
           if (account.kind !== "api_key") {
             return status(
               400,
-              `${accountName(account)} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
+              `${accountNameAmong(account, db.accounts.list())} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
             );
           }
           const machines = await Promise.all(
@@ -26572,9 +27735,8 @@ export const createServer = (
               const result = answer.value.result as ProviderSigninResult;
               // Another machine's write already joined the key into the
               // account it already was: this one joins it there too.
-              const joinedTo = db.accounts.get(account.id)
-                ? undefined
-                : db.accounts.get(joinedInto.get(account.id) ?? "");
+              const now = accountOf(account.id);
+              const joinedTo = now?.id === account.id ? undefined : now;
               const settled =
                 joinedTo && result.state === "signed-in" && result.identity
                   ? await joinOn(
@@ -26697,14 +27859,7 @@ export const createServer = (
       // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
       // The heavy data lives behind these reads; the socket only carries the small
       // limits frame, so the dashboard pulls aggregates when it needs them.
-      .get("/api/usage/limits", (): UsageLimitsResponse => ({
-        machines: machineReadings(db).map((row) => ({
-          machineId: row.machineId,
-          hostname: row.hostname,
-          limits: row.payload,
-          openCodeGo: row.openCodeGo,
-        })),
-      }))
+      .get("/api/usage/limits", (): UsageLimitsResponse => usageLimits(db))
       .get("/api/usage/spend", (): UsageSpend => spendNow())
       .get(
         "/api/usage/limits/history",
@@ -26822,17 +27977,11 @@ export const createServer = (
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
               // A project Caw could not set up while no machine was online is set up now.
-              queueMicrotask(() => {
+              soon(() => {
                 caw.machineOnline();
                 repairThread();
               });
               workItems.discardUnfiled(message.machineId);
-              // Its project sessions' stored transcripts the prose cut has
-              // not read yet (session-prose.ts), now that it can be asked.
-              detach(
-                sessionProse.backfill(message.machineId),
-                "session prose backfill"
-              );
               // Landings a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the
               // register asks of the agent.
@@ -26905,6 +28054,17 @@ export const createServer = (
               // The relay's machine back: a relay that should run starts again
               // (kept as it is when its container runs).
               streamRelay.connected(message.machineId);
+              // Its browsers read from it whole: every row, take-overs
+              // included, is what the machine holds now.
+              browsers
+                .connected(message.machineId)
+                .catch((error: unknown) =>
+                  console.warn(
+                    `[browser] ${machineName(message.machineId)}'s browsers were not read as it registered: ${error instanceof Error ? error.message : String(error)}`
+                  )
+                );
+              browserStream.connected(message.machineId);
+              relayJourney.connected(message.machineId);
               // A question parked by a process that is gone cannot be answered:
               // the reply would arrive at a daemon with no such session. Drop them
               // with the sessions they belonged to, or they replay to every
@@ -27198,6 +28358,9 @@ export const createServer = (
                   streams.deliveredFor(peekInstances(message.payload)),
                   unknownAccountsOf(message.machineId, message.payload),
                   claudeSessionsOn(message.machineId),
+                  // Every session this hub has on the machine: what it kept
+                  // for any other goes.
+                  db.sessionOwnership(message.machineId).map((row) => row.id),
                   // This connection's credential for the hub's git remote;
                   // the one its last connection held stops working.
                   machineCredentials.mint(message.machineId),
@@ -27397,6 +28560,7 @@ export const createServer = (
               // or tools runs here, off the part it reads.
               const reported = peekHarnesses(message.payload);
               if (reported) {
+                const convergingBefore = fleetHarnesses(message.machineId);
                 // A report with no word (Claude's, its dirs unanswered) is
                 // filed with the last word kept of that harness; with none
                 // kept, it is not filed, and the harness reads as not
@@ -27435,7 +28599,26 @@ export const createServer = (
                     unread: claudeReport?.unreadAccounts ?? [],
                   });
                 }
-                sendFleetSync(message.machineId, ws);
+                // A connection no sync has gone out on yet is sent one once
+                // its harnesses are known: the register no longer carries
+                // them (aca170f8f), and a sync's content needs none of them,
+                // so one sent already (a fleet change) is that sync. A later
+                // report (Claude's sign-ins read again and changed, one per
+                // harness on a re-announce) syncs only when it moved which
+                // harnesses here converge the fleet: one installed since,
+                // or gone. Any other is no fleet change, and a sync then
+                // started every fleet server in a location again.
+                if (fleetSyncedLinks.get(message.machineId) !== ws.id) {
+                  sendFleetSync(message.machineId, ws, "its harnesses known");
+                } else if (
+                  fleetHarnesses(message.machineId) !== convergingBefore
+                ) {
+                  sendFleetSync(
+                    message.machineId,
+                    ws,
+                    `the harnesses converging the fleet are now ${fleetHarnesses(message.machineId) || "none"}`
+                  );
+                }
               }
               const tools = peekTools(message.payload);
               if (tools.length > 0) {
@@ -27607,9 +28790,34 @@ export const createServer = (
                 );
                 break;
               }
-              // A machine's browsers, whole: the hub's browser registry is
-              // where they are read (Projects spec §5.11); no screen is sent them.
+              // A machine's browsers, whole: kept by the hub's browser registry
+              // (browsers.ts, Projects spec §5.11); no screen is sent them.
               if (kind === "browsers") {
+                browsers.heard(
+                  message.machineId,
+                  message.payload as BrowserFrame
+                );
+                browserStream.heard(
+                  message.machineId,
+                  message.payload as BrowserFrame
+                );
+                break;
+              }
+              // The machine's fleet report, sent unasked when a reading moved
+              // with no fleet change: kept as a sync's answer is.
+              if (kind === "fleet_report") {
+                const { report } = message.payload as FleetReportFrame;
+                if (isFleetReport(report)) {
+                  keepFleetReport(message.machineId, ws, report, undefined);
+                }
+                break;
+              }
+              // A take-over its machine ended itself: the ask's call answers.
+              if (kind === "browser_handback") {
+                browsers.heardHandback({
+                  ...(message.payload as BrowserHandedBackFrame),
+                  machineId: message.machineId,
+                });
                 break;
               }
               // The stream relay on its machine: the relay's record follows it.
@@ -27964,8 +29172,6 @@ export const createServer = (
                   admitted.message,
                   admitted.harness
                 );
-                // Its own words, into the project session's prose (session-prose.ts).
-                sessionProse.said(message.instanceId, admitted.message);
                 // A lead's web reads, his calls' results and his turn's end
                 // (lead-gate.ts): none of a stream's deltas carry them. A
                 // routine run's session's words, for a failure that gives no
@@ -28249,7 +29455,21 @@ export const createServer = (
                     break;
                   }
                   const read = frame.message.account;
-                  const account = db.accounts.get(accountId);
+                  const stored = db.accounts.get(accountId);
+                  const account =
+                    stored && read?.identity
+                      ? withOrgIdFrom(db, stored, read.identity)
+                      : stored;
+                  if (read?.identity && !read.identity.orgId) {
+                    // Its dir's login named no org id the agent could
+                    // carry over: whose process it is is not known, and its
+                    // reading is no account's.
+                    uncompared(
+                      read.identity,
+                      `${message.instanceId}'s Claude Code`
+                    );
+                    break;
+                  }
                   if (
                     read?.identity &&
                     account?.identity &&
@@ -28264,13 +29484,13 @@ export const createServer = (
                     // from it held it "mismatch" with its own login intact,
                     // since an unchanged reading is never squared again.
                     console.warn(
-                      `[hub] ${message.instanceId} runs on ${accountName(account)} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}; its reading is dropped, and the account's sign-in there is its dir's reading`
+                      `[hub] ${message.instanceId} runs on ${accountNameAmong(account, db.accounts.list())} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}; its reading is dropped, and the account's sign-in there is its dir's reading`
                     );
                     break;
                   }
                   const info = frame.message.rate_limit_info;
                   if (info) {
-                    noteRateLimit(db, accountId, info);
+                    noteRateLimit(db, accountId, info, row.model);
                     if (info.status === "rejected" && !info.isUsingOverage) {
                       limitRefused.add(message.instanceId);
                     }
@@ -28796,6 +30016,9 @@ export const createServer = (
                   // budget, whatever answers it; one at the limit stops it.
                   if (row?.workItemId) {
                     workItems.countTurn(row);
+                    // The turn that called finish_item is over: what waited
+                    // out its end goes now, as the next turn.
+                    workItems.turnOver(row.id);
                   }
                   // Fleet watch counts the turn (and ends a triage run's).
                   watch?.endTurn(turnId, neutral);
@@ -28999,64 +30222,8 @@ export const createServer = (
                 const riding = fleetMcpRiding.get(message.requestId);
                 fleetMcpRiding.delete(message.requestId);
                 const peeked = peekFleetReport(message.payload);
-                // A project-bound hook, MCP server or skill went out once per
-                // place; the hub keeps one state per row, the worst of its places.
-                const pathOf = placePathById();
-                const report = peeked
-                  ? {
-                      ...peeked,
-                      mcp: foldPlacedStates(peeked.mcp, pathOf) ?? peeked.mcp,
-                      ...(peeked.skills
-                        ? { skills: foldPlacedStates(peeked.skills, pathOf) }
-                        : {}),
-                      ...(peeked.hooks
-                        ? { hooks: foldPlacedStates(peeked.hooks, pathOf) }
-                        : {}),
-                      ...(peeked.memoryDocs
-                        ? {
-                            memoryDocs: foldPlacedStates(
-                              peeked.memoryDocs,
-                              pathOf
-                            ),
-                          }
-                        : {}),
-                    }
-                  : peeked;
-                if (report) {
-                  // Compare the machine's persisted content before overwriting
-                  // its report; timestamps and insertion order cannot cause a reload.
-                  const previous = db
-                    .listAgents()
-                    .find((row) => row.machineId === message.machineId)?.fleet;
-                  const sameHashes = (
-                    before: Record<string, string> = {},
-                    after: Record<string, string> = {}
-                  ): boolean =>
-                    Object.keys(before).length === Object.keys(after).length &&
-                    Object.entries(before).every(
-                      ([key, hash]) => after[key] === hash
-                    );
-                  const skillsChanged = !sameHashes(
-                    previous?.have?.skills,
-                    report.have?.skills
-                  );
-                  const pluginsChanged = !sameHashes(
-                    previous?.have?.plugins,
-                    report.have?.plugins
-                  );
-                  const hooksChanged =
-                    JSON.stringify(previous?.hooks ?? {}) !==
-                    JSON.stringify(report.hooks ?? {});
-                  db.setAgentFleet(message.machineId, report);
-                  publishInstances(message.machineId);
-                  refreshSessions(message.machineId, ws, [
-                    ...(pluginsChanged ? ["reloadPlugins"] : []),
-                    ...(skillsChanged && !pluginsChanged
-                      ? [CONTROL_RELOAD_SKILLS]
-                      : []),
-                    ...(hooksChanged ? ["reinitialize"] : []),
-                  ]);
-                  sendMcpChanges(message.machineId, ws, riding);
+                if (peeked) {
+                  keepFleetReport(message.machineId, ws, peeked, riding);
                 }
               }
               // A control a route is waiting on: the reply is that request's
@@ -29216,11 +30383,11 @@ export const createServer = (
           // a listener, until the register that brings the machine back
           // starts one again (see `reconcilePreviews`). Nothing is published;
           // the panes keep the page they have until that "open" reloads them.
-          for (const [instanceId, target] of previewTargets) {
+          for (const [key, target] of [...previewTargets, ...embedTargets]) {
             // A page is the hub's own; no machine serves it.
             if (target.machineId === machineId && !("page" in target.source)) {
-              nextPreviewGeneration(instanceId);
-              previewTargets.set(instanceId, {
+              nextPreviewGeneration(key);
+              targetsOf(key).set(key, {
                 artifact: target.artifact,
                 machineId,
                 source: target.source,

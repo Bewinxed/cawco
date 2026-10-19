@@ -40,6 +40,11 @@ public final class SessionComposerBinding {
     public var ring: UIView?
     /// The group's delegate tray stands for this conversation (`delegatesOf`).
     public var delegates = true
+    /// Where a continued session's work went (SessionPane.svelte
+    /// `continuedTo`): this one never runs again, so its composer's place
+    /// says so, a link to the session that took its work item on, and no
+    /// composer stands. Nil on every other conversation.
+    public var continuedIn: ContinuedIn?
     public var onSend: (String, [ComposerAttachment]) -> Void = { _, _ in }
     public var onStop: () -> Void = {}
     /// Pictures and files pasted into the field, for the pane to attach.
@@ -211,6 +216,17 @@ public final class SessionComposerBinding {
         guard canvas == nil else { return }
         canvas = DraftCanvas(id: id, name: name, folded: true)
         composer?.canvasRestored(of: self)
+    }
+}
+
+/// The session a continued one's work went to: its title, and opening it.
+public struct ContinuedIn {
+    public let title: String
+    public let open: () -> Void
+
+    public init(title: String, open: @escaping () -> Void) {
+        self.title = title
+        self.open = open
     }
 }
 

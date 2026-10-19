@@ -1,0 +1,11 @@
+apps/dashboard/src/lib/cawco/accounts/RoutingEditor.svelte
+apps/dashboard/src/lib/cawco/accounts/SigninPanel.svelte
+apps/dashboard/src/lib/cawco/accounts/StrategyFigure.svelte
+apps/dashboard/src/lib/cawco/accounts/StrategyPicker.svelte
+apps/dashboard/src/lib/cawco/accounts/Swatches.svelte
+
+# apps/dashboard/src/lib/cawco/accounts/RoutingEditor.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/accounts/SigninPanel.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/accounts/StrategyFigure.svelte: relic: literal ×1; relic: style-var ×11; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/accounts/StrategyPicker.svelte: relic: literal ×3; relic: style-var ×5; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/accounts/Swatches.svelte: relic: literal ×1; relic: style-var ×3

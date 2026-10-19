@@ -9,16 +9,9 @@
    * composer (`inset.bottom`). Host mode enters with a pass of its own (hub
    * preview-access.ts); a lapsed pass enters again once.
    */
-  import {
-    PREVIEW_LOCKED_MESSAGE,
-    PREVIEW_PING_PATH,
-    type PreviewAddress,
-    type PreviewTicket,
-    previewEnterUrl,
-    previewRoute,
-  } from "@cawco/core";
+  import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
   import { untrack } from "svelte";
-  import { hubRefusal } from "#lib/cawco/hub-read.js";
+  import { enterPage, pageSource } from "#lib/cawco/preview/page-source.js";
   import { theme } from "#lib/theme.svelte.js";
 
   let {
@@ -51,26 +44,14 @@
     `/__cawco/page/${artifactId}/${card ? `#${encodeURIComponent(card)}` : ""}`
   );
 
-  /** The hub's sentence for a refused request, or the fallback words. */
-  const said = async (answer: Response | null, otherwise: string) =>
-    answer ? (await hubRefusal(answer)).message : otherwise;
-
-  /** Its address: straight on a port, or entered with a new pass by host name. */
+  /** Its address entered again (a lapsed pass): straight, or by a new pass. */
   async function enter(at: string, byHost: boolean, wanted: string) {
-    if (!byHost) {
-      src = `${at}${wanted}`;
-      return;
+    const entered = await enterPage(instanceId, at, byHost, wanted);
+    if ("src" in entered) {
+      ({ src } = entered);
+    } else {
+      ({ problem } = entered);
     }
-    const answer = await fetch(
-      `/api/instances/${encodeURIComponent(instanceId)}/preview-ticket`,
-      { method: "POST" }
-    ).catch(() => null);
-    if (!answer?.ok) {
-      problem = await said(answer, "The hub didn't give this page a pass.");
-      return;
-    }
-    const { ticket } = (await answer.json()) as PreviewTicket;
-    src = previewEnterUrl(at, ticket, wanted);
   }
 
   // Where its session's pages are served, asked once per session and page.
@@ -82,46 +63,16 @@
     src = null;
     connected = false;
     turnedAway = 0;
-    (async () => {
-      const answer = await fetch(
-        `/api/instances/${encodeURIComponent(session)}/preview-address`,
-        { method: "POST" }
-      ).catch(() => null);
+    pageSource(session, wanted).then((found) => {
       if (!live) {
         return;
       }
-      if (!answer?.ok) {
-        problem = await said(
-          answer,
-          "The hub didn't say where this page is served."
-        );
+      if ("problem" in found) {
+        ({ problem } = found);
         return;
       }
-      const route = previewRoute(
-        (await answer.json()) as PreviewAddress,
-        location
-      );
-      if (!route) {
-        problem = "The hub named no address for this page.";
-        return;
-      }
-      const reached = await fetch(`${route.origin}${PREVIEW_PING_PATH}`, {
-        mode: "cors",
-        credentials: "omit",
-        cache: "no-store",
-      })
-        .then((ping) => ping.ok)
-        .catch(() => false);
-      if (!live) {
-        return;
-      }
-      if (!reached) {
-        problem = `Pages are served at ${new URL(route.origin).host}, which this browser can't reach.`;
-        return;
-      }
-      ({ origin } = route);
-      await enter(route.origin, route.byHost, wanted);
-    })();
+      ({ origin, src } = found);
+    });
     return () => {
       live = false;
     };
@@ -179,8 +130,7 @@
       } else if (type === PREVIEW_LOCKED_MESSAGE && src) {
         turnedAway += 1;
         if (turnedAway > 1) {
-          problem =
-            "This page turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then open it again.";
+          problem = decisionsWords.turnedAway;
           return;
         }
         enter(origin, true, place);

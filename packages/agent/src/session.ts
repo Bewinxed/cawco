@@ -18,6 +18,7 @@ import type {
   DaemonPermissionRequestFrame,
   Envelope,
   FleetHoldings,
+  FleetReportFrame,
   FleetSyncReport,
   FramePayload,
   FrameProvenance,
@@ -32,8 +33,6 @@ import type {
   NeutralResultMessage,
   NeutralSessionInfo,
   PermissionResult,
-  RepoInfo,
-  ReposResult,
   SendPayload,
   SessionAddress,
   SessionPulse,
@@ -73,6 +72,7 @@ import {
   type HarnessUnanswered,
   holdingWords,
   INSTALL_SESSION_CREDENTIAL,
+  isGitUrl,
   LIMIT_REACHED,
   type LimitHolder,
   lastErrorKindOf,
@@ -91,10 +91,12 @@ import {
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   RESOLVE_PERMISSION,
+  ROOM_HELD,
   readDelivered,
   readIngested,
   repoPath,
   resumeCursor,
+  roomHeldSentence,
   SESSION_DIR_READ,
   VERIFY_SESSION_CREDENTIAL,
   WITHDRAW_PERMISSION,
@@ -108,7 +110,10 @@ import {
   waitingWords,
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
+import { keepRoomSampled, measureMemoryRoom } from "@cawco/core/heavy-run";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { hostEnvironment } from "@cawco/core/session-env";
 import {
   processLimitSentence,
   SESSIOND_PROCESS_LIMIT,
@@ -117,7 +122,24 @@ import {
 import { isDamagedRecord } from "@cawco/core/state-file";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
-import { type Boundary, boundaryFor, hookArmed, shellQuote } from "./boundary";
+import {
+  type Boundary,
+  boundaryFor,
+  hookArmed,
+  recheckNarrowed,
+  shellQuote,
+} from "./boundary";
+import {
+  type BrowserDoor,
+  browserDoor,
+  closeBrowserDoor,
+  forgetBrowserDoor,
+} from "./browser/door";
+import {
+  closeCanvasScreen,
+  closeCanvasScreens,
+  openCanvasScreen,
+} from "./canvas-screen";
 import { carryWorktree, worktreeHeld } from "./carry";
 import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
@@ -138,7 +160,10 @@ import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
 import { type KeeperReading, withKeepers } from "./keepers";
 import { isMachineAgent } from "./machine-agent";
-import { prepareFleetMcp } from "./mcp-launcher";
+import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
+import { retireInstalls, syncInstalls } from "./mcp-install";
+import { resolveMcpLauncher } from "./mcp-launcher";
+import { onFleetMcpMoved } from "./mcp-status";
 import { gaugeGroup, gaugeTables } from "./memory";
 import { Outbox } from "./outbox";
 import {
@@ -296,6 +321,8 @@ const warn = (message: string): void => {
  * the hub's 120 s for the whole carry (hub `CARRY_TIMEOUT_MS`), so the hub
  * always hears the machine's own reason, never "not answering". Ours.
  */
+/** How often a start waiting for memory measures the room again: the heavy-run queue's own pace (core heavy-run.ts). */
+const ROOM_POLL_MS = 3000;
 const CARRY_KEEPERS_MS = 15_000;
 const CARRY_STOP_MS = 30_000;
 const CARRY_COPY_MS = 45_000;
@@ -448,9 +475,6 @@ interface SpinOff {
 /** A control reached by name through `control`. */
 type ControlMethod = (...args: unknown[]) => unknown;
 
-/** How many repositories the bootstrap picker asks a machine for. */
-const REPO_LIST_LIMIT = 100;
-
 /** The end of a command's output: enough to name what happened, not a wall of it. */
 const TAIL_LINES = 4;
 
@@ -502,15 +526,6 @@ const glanceOf = (input: Record<string, unknown> | undefined): string => {
   return "";
 };
 
-/** Whether the GitHub CLI is here at all — its absence is an answer, not a failure. */
-const ghAvailable = async (): Promise<boolean> =>
-  (await Bun.$`gh --version`.quiet().nothrow()).exitCode === 0;
-
-/**
- * The repositories `gh` can see from this machine. Whoever is logged in there
- * decides what that is — the private ones included, which is the point of
- * asking the machine rather than GitHub.
- */
 /**
  * {@link CONTROL_GIT_CHANGES}: exactly two read-only git commands in `cwd`.
  * `git status` refusing (exit 128: no work tree here) answers `{ repo: false }`.
@@ -552,40 +567,34 @@ const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
 /** How long each of {@link gitChanges}' two git commands may take. */
 const GIT_CHANGES_TIMEOUT_MS = 30_000;
 
-const listRepos = async (): Promise<ReposResult> => {
-  if (!(await ghAvailable())) {
-    return { error: "gh-missing" };
-  }
-  const auth = await Bun.$`gh auth status`.quiet().nothrow();
-  if (auth.exitCode !== 0) {
-    return { error: "gh-unauthenticated" };
-  }
+/** A `<scheme>://` git URL's host and path, past any login and port. */
+const SCHEME_URL_PARTS =
+  /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([^/:]*)(?::\d*)?(\/.*)?$/i;
+/** An scp-like git URL's host and path, past any login. */
+const SCP_URL_PARTS = /^(?:[^@/:]*@)?([^/:]+):\/?(.*)$/;
+const TRAILING_SLASHES = /\/+$/;
+const DOT_GIT = /\.git$/;
+const LEADING_SLASHES = /^\/+/;
 
-  const listed =
-    await Bun.$`gh repo list --json nameWithOwner,visibility,updatedAt,description --limit ${REPO_LIST_LIMIT}`
-      .quiet()
-      .nothrow();
-  if (listed.exitCode !== 0) {
-    throw new Error(`gh repo list failed: ${tail(listed.stderr.toString())}`);
-  }
-  return listed.json() as RepoInfo[];
+/**
+ * A git URL as `host/path`, lowercased, without its login, port, `.git` or
+ * trailing slash: the same repository, under whichever of its URLs
+ * (`https://`, `ssh://`, scp-like), is the same repository, and the same
+ * path on another host is another.
+ */
+const repoIdentity = (url: string): string => {
+  const bare = url.trim().replace(TRAILING_SLASHES, "").replace(DOT_GIT, "");
+  const parts = bare.match(SCHEME_URL_PARTS) ?? bare.match(SCP_URL_PARTS);
+  const [host = "", path = ""] = parts ? [parts[1], parts[2]] : ["", bare];
+  return `${host}/${path.replace(LEADING_SLASHES, "")}`.toLowerCase();
 };
-
-/** The same repository, under whichever of its names, is the same repository. */
-const repoIdentity = (repo: string): string => repoPath(repo).toLowerCase();
 
 /** What a clone of it is called on disk — git's own default. */
 const repoLeaf = (repo: string): string =>
   repoPath(repo).split("/").pop() ?? "";
 
-const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
-const SCP_LIKE_RE = /^[^/]+@[^:]+:/;
 /** A reason's own full stop, dropped where a sentence carries on after it. */
 const FINAL_STOP = /\.$/;
-
-/** A reference git can clone on its own, without `gh` resolving it first. */
-const isRepoUrl = (repo: string): boolean =>
-  URL_SCHEME_RE.test(repo.trim()) || SCP_LIKE_RE.test(repo.trim());
 
 /** The machine-scoped session-catalog controls, routed to a harness. */
 const CATALOG_METHODS = new Set([
@@ -744,7 +753,10 @@ export class SessionSupervisor {
     this.#adapter("opencode").setCustodyReadiness?.(() =>
       this.harnessCustodyReady("opencode")
     );
+    onFleetMcpMoved(() => this.#reportFleet());
     keeperLimits.on("limit", (message) => this.#limitReached(message));
+    // The Mac's readings kept a window deep, so a start reads the room at once.
+    keepRoomSampled();
     setInterval(() => {
       this.#sweepIdle().catch((error: unknown) =>
         warn(`the idle sweep failed: ${error}`)
@@ -870,8 +882,17 @@ export class SessionSupervisor {
    * child rather than wait on an answer it may never give.
    */
   readonly #attaching = new Map<string, AbortController>();
+  /**
+   * Each start waiting for the machine's memory ({@link #roomForStart}), by
+   * instance id: a stop for it ends the wait ({@link dispatch}).
+   */
+  readonly #roomWaits = new Map<string, AbortController>();
   /** The fleet MCP heal passes, one session after another ({@link #healFleetMcp}). */
   #healing: Promise<void> = Promise.resolve();
+  /** The machine's fleet syncs and reads, one after another ({@link #fleetTurn}). */
+  #fleetQueue: Promise<unknown> = Promise.resolve();
+  /** A fleet report the hub is owed and not yet read ({@link #reportFleet}). */
+  #fleetReportOwed = false;
   /**
    * The held children taken into custody whose turn is not decided yet: busy
    * until it is, as unknown is ({@link busyNow}).
@@ -957,13 +978,29 @@ export class SessionSupervisor {
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) =>
       stopPreview(options as Parameters<typeof stopPreview>[0]),
-    [PREVIEW_WEIGHT]: (dir) => previewWeight(dir),
+    [PREVIEW_WEIGHT]: (dir, path) => previewWeight(dir, path),
+    // A canvas no person's screen shows, drawn by this machine's Chromium (canvas-screen.ts).
+    [CANVAS_SCREEN_OPEN]: (options) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : openCanvasScreen(options as Parameters<typeof openCanvasScreen>[0]),
+    [CANVAS_SCREEN_CLOSE]: (options) =>
+      closeCanvasScreen(options as Parameters<typeof closeCanvasScreen>[0]),
     [AGENT_BUSY]: () => this.busyNow(),
   };
 
   /** Register a machine-scoped control method, callable without an instanceId. */
   registerDaemonFunction(name: string, fn: ControlMethod): void {
     this.#daemonFunctions[name] = fn;
+  }
+
+  /** What a deleted transcript's words are forgotten by: the transcript index (daemon.ts). */
+  #transcriptDeleted: (sessionId: string) => Promise<void> = () =>
+    Promise.resolve();
+
+  /** Tells the transcript index each transcript this machine deletes, so a purge leaves no words behind. */
+  onTranscriptDeleted(forget: (sessionId: string) => Promise<void>): void {
+    this.#transcriptDeleted = forget;
   }
 
   /**
@@ -1139,11 +1176,18 @@ export class SessionSupervisor {
     // A stop for a session being attached does not wait on its child's
     // answer: the attach lets go, and the stop behind it ends the child.
     if (envelope.verb === "stop") {
+      const stopping =
+        envelope.instanceId ?? (envelope.payload as StopPayload).instanceId;
       this.#attaching
-        .get(
-          envelope.instanceId ?? (envelope.payload as StopPayload).instanceId
-        )
+        .get(stopping)
         ?.abort(new Error("The session was stopped before it was attached."));
+      this.#roomWaits
+        .get(stopping)
+        ?.abort(
+          new Error(
+            "The session was stopped while it waited for its machine's memory."
+          )
+        );
     }
     // A question about the session waits for what is already on its way —
     // the spawn that makes the session, a send before it — but nothing waits
@@ -2192,6 +2236,11 @@ export class SessionSupervisor {
       clearTimeout(timer);
     }
     this.#pulseTimers.delete(instanceId);
+    // A fleet MCP install no row names any more may have waited on this
+    // session's process alone (mcp-install.ts).
+    retireInstalls(() => this.instanceIds).catch((error: unknown) =>
+      warn(`retiring old fleet MCP installs failed: ${errorText(error)}`)
+    );
   }
 
   /**
@@ -2291,6 +2340,7 @@ export class SessionSupervisor {
    */
   detach(): void {
     stopPreviews();
+    closeCanvasScreens();
     // A stage speaks to this daemon alone (its stdout): the next one starts it again on its next open.
     stopStages();
     for (const instanceId of [...this.#sessions.keys()]) {
@@ -2365,6 +2415,62 @@ export class SessionSupervisor {
         processGeneration: payload.processGeneration,
         reason,
       });
+    }
+  }
+
+  /**
+   * A launch waits here while its machine's room on memory fails (core
+   * heavy-run.ts `measureMemoryRoom`: swap read back, swap left, memory
+   * stall or pressure), measured again every {@link ROOM_POLL_MS}. Never
+   * refused: the session's transcript says once why it waits, in the
+   * machine's readings ({@link ROOM_HELD}), and the hub waits on its start
+   * as long as that line stands. A stop ends the wait ({@link dispatch}).
+   */
+  async #roomForStart(instanceId: string, harness: HarnessKind): Promise<void> {
+    let room = measureMemoryRoom();
+    if (room.ok) {
+      return;
+    }
+    const stop = new AbortController();
+    this.#roomWaits.set(instanceId, stop);
+    const began = Date.now();
+    console.info(`[session] ${instanceId}: start waits: ${room.words}`);
+    this.sink({
+      kind: "frame",
+      instanceId,
+      harness,
+      message: {
+        type: "system",
+        subtype: ROOM_HELD,
+        uuid: `room-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        session_id: "",
+        content: roomHeldSentence(room.words),
+      } as unknown as NeutralMessage,
+    });
+    try {
+      while (!room.ok) {
+        // biome-ignore lint/performance/noAwaitInLoops: one reading per tick until the room is back
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, ROOM_POLL_MS);
+          stop.signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              reject(stop.signal.reason);
+            },
+            { once: true }
+          );
+        });
+        room = measureMemoryRoom();
+      }
+      console.info(
+        `[session] ${instanceId}: starts after ${Math.round((Date.now() - began) / 1000)} s waiting for memory`
+      );
+    } finally {
+      if (this.#roomWaits.get(instanceId) === stop) {
+        this.#roomWaits.delete(instanceId);
+      }
     }
   }
 
@@ -2709,6 +2815,11 @@ export class SessionSupervisor {
       if (payload.ingested) {
         this.#ingested.set(instanceId, payload.ingested);
       }
+      // A launch waits for the machine's memory before anything of it
+      // starts, its grant included; a reattach starts nothing.
+      if (!payload.reattachOnly) {
+        await this.#roomForStart(instanceId, kind);
+      }
       // A launch runs on what the hub grants it now, as its process starts,
       // and on nothing it was sent ({@link #granted}). A reattach launches
       // nothing: its process holds its credential, and runs where it runs.
@@ -2765,7 +2876,15 @@ export class SessionSupervisor {
         spec.processGeneration,
         boundary && place ? { boundary, workspace: place.id } : undefined,
         grant?.sessionCredential,
-        !!spec.reattachOnly
+        !!spec.reattachOnly,
+        // Its browser tool's door (browser/door.ts): its workspace's, else
+        // its own. A fenced session takes no fleet server, so has none.
+        spec.fence
+          ? undefined
+          : () =>
+              place
+                ? browserDoor(place.id)
+                : browserDoor(instanceId, spec.projectId)
       );
 
       if (spec.resume) {
@@ -2966,7 +3085,8 @@ export class SessionSupervisor {
     processGeneration: string | undefined,
     bounded?: { boundary: Boundary; workspace: string },
     sessionCredential?: string,
-    recovery = false
+    recovery = false,
+    browser?: () => Promise<BrowserDoor>
   ): SessiondAwareContext {
     const boundary = bounded?.boundary;
     if (!processGeneration) {
@@ -3022,6 +3142,7 @@ export class SessionSupervisor {
         ? { ingested: this.#ingested.get(instanceId) }
         : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
+      ...(browser ? { browserDoor: browser } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
        * an adapter that does not read its frames off a ring never calls it,
@@ -3188,6 +3309,11 @@ export class SessionSupervisor {
       rejected: (uuid, error) => this.#reject(instanceId, uuid, error),
       emit: (envelope) => this.emit(envelope),
       closed: () => {
+        // A session outside any workspace browsed through a door of its own:
+        // its pages close with its process, as its browser tool's Chromium did.
+        if (!bounded) {
+          closeBrowserDoor(instanceId);
+        }
         // A dead process is never going to answer anything it asked.
         for (const [requestId, body] of this.#openAsks) {
           if (
@@ -4248,6 +4374,7 @@ export class SessionSupervisor {
     cwd,
     claimedSessionIds = [],
     scratchWorktree,
+    forget,
   }: StopPayload): Promise<void> {
     const stopStartedAt = Date.now();
     const processGeneration =
@@ -4377,6 +4504,11 @@ export class SessionSupervisor {
           await this.#removeQuestSession(instanceId);
         }
       }
+      // The hub forgets the session once this stop is confirmed: nothing
+      // can reattach it, so its own browser door goes now.
+      if (forget) {
+        await forgetBrowserDoor(instanceId);
+      }
       Effect.runFork(
         Effect.logInfo(
           `[agent] stop session=${instanceId} request=${requestId ?? "none"} outcome=runner-gone elapsedMs=${Date.now() - stopStartedAt}`
@@ -4411,10 +4543,19 @@ export class SessionSupervisor {
     }
   }
 
+  /**
+   * `repo`, a git URL on any host, cloned by plain git with the machine's own
+   * git credential, whatever host it names; anything else is refused.
+   */
   async #clone({
     repo,
     baseDir,
   }: NonNullable<SpawnPayload["bootstrap"]>): Promise<string> {
+    if (!isGitUrl(repo)) {
+      throw new Error(
+        `${repo} is not a git URL: name the repository by its clone URL (https://, ssh:// or git@host:path)`
+      );
+    }
     // A MachinePath from the hub: absolute, no trailing slash.
     const parent = baseDir;
     const target = `${parent === "/" ? "" : parent}/${repoLeaf(repo)}`;
@@ -4432,19 +4573,14 @@ export class SessionSupervisor {
       return target;
     }
 
-    const gh = await ghAvailable();
-    if (!(gh || isRepoUrl(repo))) {
-      throw new Error(
-        `cloning ${repo} needs the GitHub CLI, and gh is not installed on this machine`
-      );
-    }
-
-    await Bun.$`mkdir -p ${parent}`.quiet();
-    const cloned = gh
-      ? await Bun.$`gh repo clone ${repo} ${target} -- --single-branch`
-          .quiet()
-          .nothrow()
-      : await hostGit(parent, ["clone", "--single-branch", repo, target]);
+    await Bun.$`mkdir -p ${parent}`.env(hostEnvironment()).quiet();
+    const cloned = await hostGit(parent, [
+      "clone",
+      "--single-branch",
+      "--",
+      repo.trim(),
+      target,
+    ]);
     if (cloned.exitCode !== 0) {
       throw new Error(
         `could not clone ${repo}: ${tail(cloned.stderr.toString())}`
@@ -4615,6 +4751,7 @@ export class SessionSupervisor {
     const adapter = harnessOf(spinOff.harness);
     if (await adapter?.getSessionInfo(spinOff.sessionId, spinOff.dir)) {
       await adapter?.deleteSession(spinOff.sessionId, spinOff.dir);
+      await this.#transcriptDeleted(spinOff.sessionId);
     }
     this.#spinOffs.delete(instanceId);
   }
@@ -4808,6 +4945,112 @@ export class SessionSupervisor {
     });
   }
 
+  /**
+   * Runs `work` once every fleet sync and read before it has answered: one at
+   * a time on the machine, so no report the hub keeps is older than one it
+   * was sent before it.
+   */
+  #fleetTurn<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.#fleetQueue.then(work, work);
+    this.#fleetQueue = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
+   * The machine's fleet report read again and sent to the hub unasked, when a
+   * harness's reading of a fleet MCP server moved with no fleet change
+   * ({@link onFleetMcpMoved}): the hub's row says what is true now, not what
+   * the last sync met. One is owed at a time; a move heard while it waits its
+   * turn is in the read it makes. Only the machine's agent reports for it.
+   */
+  #reportFleet(): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: set below and cleared by the queued read, a later turn
+    if (this.#fleetReportOwed) {
+      return;
+    }
+    this.#fleetReportOwed = true;
+    this.#fleetTurn(async () => {
+      this.#fleetReportOwed = false;
+      if (!(await isMachineAgent())) {
+        return;
+      }
+      const report = await this.#syncFleet(undefined, "fleetStatus");
+      this.emit({
+        verb: "frames",
+        machineId: "",
+        payload: { kind: "fleet_report", report } satisfies FleetReportFrame,
+      });
+    }).catch((error: unknown) =>
+      warn(`the fleet report was not read again: ${errorText(error)}`)
+    );
+  }
+
+  /**
+   * The fleet's MCP rows as this machine launches them (mcp-launcher.ts),
+   * each npx row's package installed first (mcp-install.ts): a row that
+   * cannot launch here is disabled and says why in its launcher state, and a
+   * shared command row goes to the gateway (`hosted`) with the harnesses
+   * dialing it there. The installs no row launches from any more retire once
+   * no session uses them.
+   */
+  async #launchRows(
+    rows: MachineFleetConfig["mcp"],
+    hosted: { name: string; config: HostedConfig }[]
+  ): Promise<MachineFleetConfig["mcp"]> {
+    const launched = await syncInstalls(
+      async () => {
+        const result = await Promise.all(
+          rows.map(async (row) => ({
+            row,
+            launcher: row.enabled
+              ? await resolveMcpLauncher(row.config)
+              : undefined,
+          }))
+        );
+        return {
+          dirs: result.flatMap(({ launcher }) =>
+            launcher && "dir" in launcher && launcher.dir ? [launcher.dir] : []
+          ),
+          result,
+        };
+      },
+      () => this.instanceIds
+    );
+    return launched.map(({ row, launcher }) => {
+      if (!launcher) {
+        return row;
+      }
+      if (!("config" in launcher)) {
+        this.#mcpLauncherStates.set(
+          row.name,
+          "failed" in launcher
+            ? { state: "failed", cause: "unknown", detail: launcher.failed }
+            : { state: "pending", detail: launcher.unavailable }
+        );
+        return { ...row, enabled: false };
+      }
+      const local = { ...row, config: launcher.config };
+      if (local.shared && "command" in local.config) {
+        hosted.push({ name: row.name, config: local.config });
+        return {
+          ...local,
+          config: hostedEntry(
+            harnessMcpUrl(`/mcp/local/${encodeURIComponent(row.name)}`)
+          ),
+        };
+      }
+      return local.proxied && "url" in local.config
+        ? {
+            ...local,
+            config: {
+              ...local.config,
+              url: harnessMcpUrl(`/mcp/fleet/${encodeURIComponent(row.name)}`),
+            },
+          }
+        : local;
+    });
+  }
+
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
   async #syncFleet(
@@ -4818,42 +5061,16 @@ export class SessionSupervisor {
     if (incoming) {
       this.#mcpLauncherStates.clear();
     }
+    // The fleet's shared servers, run once for the machine by its gateway
+    // (mcp-host.ts): each harness dials the gateway for them.
+    const hosted: { name: string; config: HostedConfig }[] = [];
     const config = incoming && {
       ...incoming,
-      mcp: await Promise.all(
-        incoming.mcp.map(async (row) => {
-          if (!row.enabled) {
-            return row;
-          }
-          const launcher = await prepareFleetMcp(row.name, row.config);
-          if ("failure" in launcher || "unavailable" in launcher) {
-            this.#mcpLauncherStates.set(
-              row.name,
-              "unavailable" in launcher
-                ? { state: "pending", detail: launcher.unavailable }
-                : {
-                    state: "failed",
-                    cause: "unknown",
-                    detail: launcher.failure,
-                  }
-            );
-            return { ...row, enabled: false };
-          }
-          const local = { ...row, config: launcher.config };
-          return local.proxied && "url" in local.config
-            ? {
-                ...local,
-                config: {
-                  ...local.config,
-                  url: harnessMcpUrl(
-                    `/mcp/fleet/${encodeURIComponent(row.name)}`
-                  ),
-                },
-              }
-            : local;
-        })
-      ),
+      mcp: await this.#launchRows(incoming.mcp, hosted),
     };
+    if (config) {
+      mcpHost.configure(hosted);
+    }
     type State = import("@cawco/core").FleetItemState;
     const mcp: FleetSyncReport["mcp"] = {};
     const mcpByHarness: NonNullable<FleetSyncReport["mcpByHarness"]> = {};
@@ -5060,9 +5277,6 @@ export class SessionSupervisor {
       if (method === CONTROL_SPIN_OFF_HELD) {
         return await this.#spinOffHeld(String(args[0]));
       }
-      if (method === "listRepos") {
-        return await listRepos();
-      }
       if (method === CONTROL_GIT_CHANGES) {
         return await gitChanges(args[0] as string, args[1] as string);
       }
@@ -5080,6 +5294,11 @@ export class SessionSupervisor {
       // sends one desired state, and each harness converges the parts it
       // understands onto its own files. Reports merge into one machine word.
       if (method === FLEET_SYNC) {
+        // What a workspace's policy reads may have moved with it (a
+        // project's folder the hub moved away): every boundary this agent
+        // holds is checked for a narrowed access at once, whether or not it
+        // is the machine's agent, which alone writes the harness config.
+        recheckNarrowed("the fleet's config was synced").catch(() => undefined);
         // Fleet sync writes machine-wide harness config (claude's, opencode's
         // and pi's); only the machine's own agent may (see machine-agent.ts).
         if (!(await isMachineAgent())) {
@@ -5087,15 +5306,20 @@ export class SessionSupervisor {
             "fleet sync skipped: this is not the machine's agent, so machine-wide harness config is left to the agent that is"
           );
         }
-        const report = await this.#syncFleet(
-          args[0] as MachineFleetConfig,
-          "syncFleet"
-        );
+        const config = args[0] as MachineFleetConfig;
+        const report = await this.#fleetTurn(() => {
+          console.info(
+            `[fleet] sync from the hub: ${config.mcp.length} MCP server(s)`
+          );
+          return this.#syncFleet(config, "syncFleet");
+        });
         this.#healFleetMcp([...this.#sessions.keys()]);
         return report;
       }
       if (method === FLEET_STATUS) {
-        return await this.#syncFleet(undefined, "fleetStatus");
+        return await this.#fleetTurn(() =>
+          this.#syncFleet(undefined, "fleetStatus")
+        );
       }
       if (method === READ_FLEET_HOLDINGS) {
         return await this.#fleetHoldings();
@@ -5139,10 +5363,9 @@ export class SessionSupervisor {
             this.#closeTagging(args[0]);
             return undefined;
           case "deleteSession":
-            return await adapter.deleteSession(
-              args[0] as string,
-              dirOf(args[1])
-            );
+            await adapter.deleteSession(args[0] as string, dirOf(args[1]));
+            await this.#transcriptDeleted(args[0] as string);
+            return undefined;
           default:
             break;
         }

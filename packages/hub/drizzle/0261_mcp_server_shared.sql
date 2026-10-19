@@ -1,0 +1,1 @@
+ALTER TABLE `mcp_servers` ADD `shared` integer DEFAULT false NOT NULL;

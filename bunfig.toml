@@ -7,9 +7,10 @@
 #
 # A store package's own undeclared import is declared in the root package.json,
 # the one node_modules above the store, until bun ships packageExtensions
-# (oven-sh/bun#40053): bits-ui for vaul-svelte (huntabyte/vaul-svelte#130), and
-# drizzle-orm for drizzle-kit, whose `generate` imports drizzle-orm/version and
-# declares no dependency on it (packages/hub `db:generate`).
+# (oven-sh/bun#40053): bits-ui for vaul-svelte (huntabyte/vaul-svelte#130).
+# drizzle-kit's bare import() of drizzle-orm (drizzle-team/drizzle-orm#6156) is
+# answered by NODE_PATH in packages/hub's db scripts instead, so it reaches the
+# hub's own copy on the host and in a workspace alike.
 # Inside a CawCo workspace bun's global store is on (its workspace bunfig), and
 # a package there realpaths into the cache, with no node_modules of ours above
 # it. So the dashboard resolves bits-ui from its own root whatever imports it:
@@ -19,6 +20,3 @@
 # in every Bun.build, so the root declares no react.
 [install]
 hoist = false
-# drizzle-kit loads drizzle-orm with a bare import() from its store dir; the root link
-# makes it reachable (drizzle-team/drizzle-orm#6156, open, no release fixes it).
-publicHoistPattern = ["drizzle-orm"]

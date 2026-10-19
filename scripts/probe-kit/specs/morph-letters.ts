@@ -19,6 +19,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, on one clock
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { bundled } from "../../../packages/core/src/bundled";
 import { Clock } from "../anim";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -66,13 +67,11 @@ const run = async (kit: Kit) => {
     entry,
     `import { Morph } from ${JSON.stringify(MORPH)};\n(window as unknown as { Morph: typeof Morph }).Morph = Morph;\n`
   );
-  const built = await Bun.build({ entrypoints: [entry], target: "browser" });
-  const code = await built.outputs[0]?.text();
-  if (!(built.success && code)) {
-    throw new Error(
-      `morph-letters: the bundle failed: ${built.logs.join("; ")}`
-    );
-  }
+  const built = await bundled("morph-letters' page", {
+    entrypoints: [entry],
+    target: "browser",
+  });
+  const code = await (built.outputs[0] as Bun.BuildArtifact).text();
   const html = join(kit.out, "morph.html");
   await writeFile(
     html,

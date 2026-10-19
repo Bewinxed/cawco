@@ -7,9 +7,11 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  * THE ONE SHUTDOWN PATH. Everything a hub schedules for itself runs on its
  * lifetime: every `setTimeout` and `setInterval` in packages/hub/src is one of
  * {@link HubLifetimeShape.after}, {@link HubLifetimeShape.every} and
- * {@link HubLifetimeShape.sleep}, but for two that are not the hub's own
- * schedule, each named where it stands (json-response's yield inside one
- * response body; jev's backoff inside one request, bounded by its deadline).
+ * {@link HubLifetimeShape.sleep}, and every `queueMicrotask` is {@link soon}.
+ * The rest only resolve a promise, so nothing in them can throw, and none is
+ * the hub's own schedule: json-response's yield inside one response body;
+ * jev's backoff inside one request, bounded by its deadline; the register's
+ * `setImmediate` yields between restore batches (server.ts).
  * A read with a deadline waits on `readWithin` (@cawco/core/bounded) instead,
  * handed {@link HubLifetimeShape.signal} when the hub holds the wait.
  * What holds a resource gives its release to {@link HubLifetimeShape.onClose}.
@@ -27,6 +29,12 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  *
  * Every timer is unref'd: a hub is kept alive by its listening socket, never
  * by something it scheduled.
+ *
+ * A run that throws fails that run alone: its error goes to the log with its
+ * stack ({@link timerFailed}), and the hub, and every other timer, go on (an
+ * `every` keeps its schedule). A timer has no caller to hand the error to,
+ * and the runtime ends the process on a throw no one catches: one publish
+ * that met a bad row took the whole fleet's hub down that way.
  */
 export interface HubLifetimeShape {
   /** Runs `run` once after `ms`, unless it is cancelled or the lifetime closes first. */
@@ -54,6 +62,30 @@ export interface HubLifetimeShape {
   readonly sleep: (ms: number) => Promise<void>;
 }
 
+/** A timer's run threw: said in one line with its stack, the hub's own words before it. */
+const timerFailed = (error: unknown): void => {
+  console.error(
+    `[hub] a scheduled run failed, and only that run: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`
+  );
+};
+
+/** `run`, its throw said rather than left to end the process. */
+const guarded = (run: () => void) => (): void => {
+  try {
+    run();
+  } catch (error) {
+    timerFailed(error);
+  }
+};
+
+/**
+ * Runs `run` once the current step ends (a microtask), its throw said as a
+ * timer's is: the hub's one way to defer work to the end of a step.
+ */
+export const soon = (run: () => void): void => {
+  queueMicrotask(guarded(run));
+};
+
 export const makeLifetime = (): HubLifetimeShape => {
   const timers = new Set<HubTimer>();
   const releases: (() => void)[] = [];
@@ -70,15 +102,16 @@ export const makeLifetime = (): HubLifetimeShape => {
     return timer;
   };
   const after = (ms: number, run: () => void): HubTimer => {
+    const guardedRun = guarded(run);
     const timer = setTimeout(() => {
       timers.delete(timer);
-      run();
+      guardedRun();
     }, ms);
     return hold(timer);
   };
   return {
     after,
-    every: (ms, run) => hold(setInterval(run, ms)),
+    every: (ms, run) => hold(setInterval(guarded(run), ms)),
     cancel: (timer) => {
       if (timer) {
         clearTimeout(timer);

@@ -13,6 +13,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { hashFiles } from "@cawco/core/file-hash";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { $ } from "bun";
 
@@ -220,9 +221,9 @@ const extract = async (
   const into = join(work, "src");
   await mkdir(into, { recursive: true });
   if (ZIP_NAME_RE.test(name)) {
-    await $`unzip -q ${archive} -d ${into}`.quiet();
+    await $`unzip -q ${archive} -d ${into}`.env(hostEnvironment()).quiet();
   } else {
-    await $`tar -xzf ${archive} -C ${into}`.quiet();
+    await $`tar -xzf ${archive} -C ${into}`.env(hostEnvironment()).quiet();
   }
 
   const entries = await readdir(into, { withFileTypes: true });

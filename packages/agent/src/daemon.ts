@@ -1,6 +1,6 @@
 import { existsSync, watch } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
-import { arch, homedir, hostname, platform } from "node:os";
+import { arch, homedir, hostname, networkInterfaces, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type {
   AccountIdentity,
@@ -43,9 +43,11 @@ import {
   CONTROL_MOVE_PREPARE,
   CONTROL_MOVE_REMOTE_CREDENTIAL,
   CONTROL_MOVE_SNAPSHOT,
+  CONTROL_PLACE_LFS,
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_READ_HOME_CREDENTIALS,
+  CONTROL_REPO_ROOT,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PROVIDER_KEY,
@@ -69,11 +71,19 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
+  BROWSER_HANDBACK,
+  BROWSER_LISTEN,
   BROWSER_REMOVE,
+  BROWSER_ROWS,
+  BROWSER_SHIELD,
   BROWSER_START,
   BROWSER_STOP,
+  BROWSER_VIEWER_TOKEN,
+  BROWSER_VIEWERS,
   type BrowserKey,
+  type BrowserShieldArgs,
   type BrowserStartArgs,
+  type BrowserViewersArgs,
   isBrowserKey,
 } from "@cawco/core/browser";
 import {
@@ -109,22 +119,36 @@ import {
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
+  RELAY_CERTIFY,
+  RELAY_LOW_PORTS,
+  RELAY_MAP,
+  RELAY_PROVE,
   RELAY_REMOVE,
   RELAY_RENEW,
   RELAY_START,
   RELAY_STOP,
+  type RelayCertifyArgs,
+  type RelayMapArgs,
   type RelayStartArgs,
 } from "@cawco/core/stream-relay";
+import { readUpstreamRule } from "@cawco/core/upstream-guard";
 import {
+  CONTROL_FORGE_POST,
   CONTROL_UPSTREAM_POST,
   isUpstreamPost,
+  readForgeAsk,
 } from "@cawco/core/upstream-post";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
-import { accountReports, claudeAuthNote, claudeSignins } from "./accounts";
+import {
+  accountReports,
+  claudeAuthNote,
+  claudeSignins,
+  onSigninsChanged,
+} from "./accounts";
 import { resolveClaudeExecutable, unlockKeychain } from "./auth";
 import {
   BinaryUpdater,
@@ -132,6 +156,7 @@ import {
   reportBinaryUpdate,
 } from "./binary-update";
 import {
+  accountsChangedHere,
   checkBoundaryHost,
   liveWorkItems,
   rearmHooks,
@@ -139,13 +164,19 @@ import {
   watchQuietBoundaries,
 } from "./boundary";
 import {
+  browserFrame,
   removeBrowser,
   setBrowserSink,
   startBrowser,
   stopBrowser,
+  stopBrowsers,
+  viewerSession,
   watchBrowsers,
 } from "./browser/browsers";
+import { sweepBrowserDoors } from "./browser/door";
 import {
+  certifyRelay,
+  relayLowPorts,
   removeRelay,
   renewRelay,
   setRelaySink,
@@ -153,12 +184,22 @@ import {
   stopRelay,
   watchRelay,
 } from "./browser/relay";
+import { proveRelay } from "./browser/relay-reach";
+import { mapRelayPorts } from "./browser/relay-router";
+import {
+  browserViewers,
+  handBackBrowser,
+  restoreShields,
+  setShieldSink,
+  shieldBrowser,
+} from "./browser/shield";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
 import { readConfig, writeConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
 import { rediscoverHub, toWsUrl } from "./discovery";
+import { forgePost } from "./forges/forge";
 import type { Harness } from "./harness";
 import { harness, harnesses } from "./harnesses";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
@@ -186,8 +227,8 @@ import {
   setMoveProgress,
 } from "./move";
 import { placePush } from "./place-push";
-import { placeRepo } from "./place-repo";
-import { servingPreviews } from "./preview";
+import { placeLfs, placeRepo, repoRoot } from "./place-repo";
+import { listenBrowsers, servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
 import { parseProcId, procIdFor, SESSION_PROC_KINDS } from "./proc-id";
 import {
@@ -247,6 +288,9 @@ const takeUpstream = (
   });
 };
 
+/** How often the machine's interfaces are compared, for a network change (our call: a minute's stale address is a minute's wrong relay candidate). */
+const NETWORK_CHECK_MS = 30_000;
+
 /** The settings a `relay.start` carries, or a refusal saying what came. */
 const relayStartOf = (args: unknown): RelayStartArgs => {
   const given = args as Partial<RelayStartArgs> | null;
@@ -268,6 +312,33 @@ const relayStartOf = (args: unknown): RelayStartArgs => {
     );
   }
   return given as RelayStartArgs;
+};
+
+/** A `relay.certify`'s name and token, or a refusal saying what came. */
+const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
+  const given = args as Partial<RelayCertifyArgs> | null;
+  if (!(
+    given &&
+    typeof given.hostname === "string" &&
+    (given.cloudflareToken === undefined ||
+      typeof given.cloudflareToken === "string")
+  )) {
+    throw new Error("relay.certify takes a hostname and, for DNS, a token.");
+  }
+  return given as RelayCertifyArgs;
+};
+
+/** A `relay.map`'s address on the router's network, or a refusal saying what came. */
+const relayMapOf = (args: unknown): RelayMapArgs => {
+  const given = args as Partial<RelayMapArgs> | null;
+  if (!(
+    given &&
+    typeof given.lan === "string" &&
+    typeof given.http === "boolean"
+  )) {
+    throw new Error("relay.map takes the machine's router address and http.");
+  }
+  return given as RelayMapArgs;
 };
 
 /** The key a `browser.stop` or `browser.remove` names (`{ key }`), or a refusal saying what came. */
@@ -1632,10 +1703,43 @@ const attach = (
           }
         })()
       : undefined;
+    // The machine's network changed (an interface's address came or went):
+    // its capabilities read again, so the public address its router maps it
+    // to (STUN, browser/relay-reach.ts) follows the network it is on.
+    const interfacesNow = (): string =>
+      Object.values(networkInterfaces())
+        .flatMap((addresses) => addresses ?? [])
+        .map((one) => one.address)
+        .sort()
+        .join(",");
+    let network = interfacesNow();
+    const networkWatch = setInterval(() => {
+      const now = interfacesNow();
+      if (now === network) {
+        return;
+      }
+      network = now;
+      readPart("the machine's capabilities", probeCapabilities)
+        .then((machineCapabilities) => {
+          if (machineCapabilities && socket.readyState === WebSocket.OPEN) {
+            send(socket, {
+              verb: "heartbeat",
+              machineId: identity.machineId,
+              payload: {
+                at: Date.now(),
+                instances: supervisor.instanceIds,
+                machineCapabilities,
+              } satisfies HeartbeatPayload,
+            });
+          }
+        })
+        .catch(() => undefined);
+    }, NETWORK_CHECK_MS);
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         clearTimeout(piSoon);
         piWatch?.close();
+        clearInterval(networkWatch);
       })
     );
     // Each part goes on its own beat as soon as it is read (`readPart`), so
@@ -1789,8 +1893,8 @@ const attach = (
       }
     }
 
-    // This probe counts tokens through pi's proxy; it never starts a Claude SDK
-    // query or rotates Claude Code's own login. The initial detect already ran it.
+    // pi's own word on its sign-in (pi-auth.ts), read again on a schedule
+    // beside the watch on its agent dir. The initial detect already read it.
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(async () => {
@@ -1997,6 +2101,7 @@ const attach = (
         frame.kind === "command_queue" ||
         frame.kind === "stage" ||
         frame.kind === "browsers" ||
+        frame.kind === "browser_handback" ||
         frame.kind === "stream_relay" ||
         frame.kind === "stage-clone"
       ) {
@@ -2491,6 +2596,8 @@ const attach = (
         const spawns = heldSpawns.splice(0);
         takeCustody(envelope.payload, spawns);
         sweepAccounts(envelope.payload as RegisterAckPayload);
+        // The welcome read whole: the doors of sessions it no longer has go.
+        sweepBrowserDoors(envelope.payload);
         return true;
       }
       if (envelope.verb !== "spawn") {
@@ -2862,6 +2969,9 @@ export const startDaemon = (rediscover = false) =>
           return network ? [network] : [];
         }),
     });
+    // A sign-in moves what a workspace's policy denies: every boundary is
+    // checked for a narrowed access at once (boundary.ts `recheckNarrowed`).
+    onSigninsChanged(accountsChangedHere);
 
     // The usage scanner outlives connections too: its store (usage.db) is the
     // machine's, so a reconnect picks up where the last scan stopped.
@@ -2921,6 +3031,11 @@ export const startDaemon = (rediscover = false) =>
             await updater.noteKeeperRestart(restart);
           }
         },
+        kept: async (version, current, held, holding) => {
+          if (await readInstallation()) {
+            await updater.noteKeeperKept(version, current, held, holding);
+          }
+        },
       });
       watchdog.start();
       yield* Effect.addFinalizer(() => Effect.sync(() => watchdog.stop()));
@@ -2933,6 +3048,8 @@ export const startDaemon = (rediscover = false) =>
       TranscriptSearchService.create()
     );
     search.start();
+    // A deleted transcript's words leave the index with it (a purge).
+    supervisor.onTranscriptDeleted((sessionId) => search.forget(sessionId));
     // The agent's memory, by what holds it (memory.ts): once its first usage
     // scan and search sync have ended, and on its own clock from the start, so
     // an agent that never reaches its hub still says it.
@@ -2976,6 +3093,16 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path) =>
       fenced() ? Promise.reject(new Error(AGENT_RESTARTING)) : placeRepo(path)
     );
+    // What a workspace cut from a folder is cut from: read only.
+    supervisor.registerDaemonFunction(CONTROL_REPO_ROOT, (path) =>
+      repoRoot(path)
+    );
+    // A place's left-out large files through Git LFS, once the person accepted: a second commit.
+    supervisor.registerDaemonFunction(CONTROL_PLACE_LFS, (path, rows) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : placeLfs(path, rows)
+    );
     // A place published to GitHub goes through the hub's remote first.
     supervisor.registerDaemonFunction(
       CONTROL_PLACE_PUSH,
@@ -3004,15 +3131,29 @@ export const startDaemon = (rediscover = false) =>
         discardWorkspace
       )
     );
-    // A post to another person's repository the person approved, made once
-    // with this machine's GitHub sign-in (upstream-posts.ts).
+    // A post made once with this machine's own sign-in (upstream-posts.ts):
+    // one the person approved, or a landing's pull or merge request.
     supervisor.registerDaemonFunction(CONTROL_UPSTREAM_POST, (id, post) => {
-      if (!(typeof id === "string" && isUpstreamPost(post))) {
+      if (!(
+        isUpstreamPost(post) &&
+        (typeof id === "string" || (id === null && post.via === "forge"))
+      )) {
         return Promise.reject(
           new Error("upstreamPost takes a workspace id and a post")
         );
       }
       return makeUpstreamPost(id, post);
+    });
+    // A session's forge write under its project's rule (forges/forge.ts):
+    // made, held for the person, or refused here.
+    supervisor.registerDaemonFunction(CONTROL_FORGE_POST, (rule, ask) => {
+      const read = readForgeAsk(ask);
+      if (!read || (rule !== null && !readUpstreamRule(rule))) {
+        return Promise.reject(
+          new Error("forgePost takes the project's rule and a forge write")
+        );
+      }
+      return forgePost(readUpstreamRule(rule), read);
     });
     // A project's browser (browser/browsers.ts): started or woken on its
     // machine's host, stopped, removed; the whole list told on each change.
@@ -3030,13 +3171,65 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(BROWSER_REMOVE, async (args) =>
       removeBrowser(browserKeyOf(args))
     );
+    // The person takes a browser over privately and hands it back
+    // (browser/shield.ts); a take-over with no view for two minutes is
+    // handed back here, and the hub told.
+    setShieldSink(machineIdValue, (frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    supervisor.registerDaemonFunction(BROWSER_SHIELD, (args) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : shieldBrowser({
+            ...(args as BrowserShieldArgs),
+            key: browserKeyOf(args),
+          })
+    );
+    supervisor.registerDaemonFunction(BROWSER_HANDBACK, async (args) =>
+      handBackBrowser(browserKeyOf(args))
+    );
+    // The person's view of a browser, through the hub (hub
+    // browser-routes.ts): the machine's one browser listener, and a neko
+    // session of its own for each viewer.
+    supervisor.registerDaemonFunction(BROWSER_LISTEN, async (args) =>
+      listenBrowsers(args)
+    );
+    supervisor.registerDaemonFunction(BROWSER_VIEWER_TOKEN, async (args) =>
+      viewerSession(browserKeyOf(args))
+    );
+    // The machine's browsers whole, as its records hold them: what the hub
+    // reads as the machine registers (its take-overs are the machine's own).
+    supervisor.registerDaemonFunction(BROWSER_ROWS, () => browserFrame());
+    supervisor.registerDaemonFunction(BROWSER_VIEWERS, (args) => {
+      const { count } = args as BrowserViewersArgs;
+      const key = browserKeyOf(args);
+      const views = typeof count === "number" ? count : 0;
+      browserViewers(key, views);
+      console.info(
+        `[browser] ${key}: the hub counts ${views} view${views === 1 ? "" : "s"}`
+      );
+      return Promise.resolve(true);
+    });
     yield* Effect.forkScoped(
       Effect.promise(() =>
-        watchBrowsers().catch((error: unknown) =>
-          console.warn(`[browser] not watched: ${String(error)}`)
-        )
+        // The take-overs held before a restart are held again first (their
+        // gates start closed as the registry makes them, browsers.ts
+        // `gateFor`), so a browser the registry then reads back as stopped
+        // has its take-over released and its gate opened.
+        restoreShields()
+          .catch((error: unknown) =>
+            console.warn(`[browser] take-overs not restored: ${String(error)}`)
+          )
+          .then(() => watchBrowsers())
+          .catch((error: unknown) =>
+            console.warn(`[browser] not watched: ${String(error)}`)
+          )
       )
     );
+    // A browser's move into a container under way as the agent stops is
+    // aborted and its own failure path awaited, so nothing it made is left
+    // on the runtime (browsers.ts `stopBrowsers`).
+    yield* Effect.addFinalizer(() => Effect.promise(() => stopBrowsers()));
     // The fleet's stream relay, when this machine runs it (browser/relay.ts):
     // started, stopped, its certificate renewed; read back from its container.
     setRelaySink(machineIdValue, (frame) =>
@@ -3049,7 +3242,31 @@ export const startDaemon = (rediscover = false) =>
     );
     supervisor.registerDaemonFunction(RELAY_STOP, () => stopRelay());
     supervisor.registerDaemonFunction(RELAY_REMOVE, () => removeRelay());
-    supervisor.registerDaemonFunction(RELAY_RENEW, () => renewRelay());
+    supervisor.registerDaemonFunction(RELAY_RENEW, (args) => {
+      const token = (args as { cloudflareToken?: unknown } | null)
+        ?.cloudflareToken;
+      return renewRelay(
+        typeof token === "string" ? { cloudflareToken: token } : {}
+      );
+    });
+    // The relay's journey (hub relay-journey.ts): its certificate issued, the
+    // low ports read, the router asked, and a binding from here through it.
+    supervisor.registerDaemonFunction(RELAY_CERTIFY, (args) =>
+      certifyRelay(relayCertifyOf(args))
+    );
+    supervisor.registerDaemonFunction(RELAY_LOW_PORTS, (args) => {
+      const lowest = (args as { lowest?: unknown } | null)?.lowest;
+      return relayLowPorts(typeof lowest === "number" ? lowest : 443);
+    });
+    supervisor.registerDaemonFunction(RELAY_MAP, (args) =>
+      mapRelayPorts(relayMapOf(args))
+    );
+    supervisor.registerDaemonFunction(RELAY_PROVE, (args) => {
+      const urls = (args as { urls?: unknown } | null)?.urls;
+      return proveRelay(
+        Array.isArray(urls) ? urls.filter((one) => typeof one === "string") : []
+      );
+    });
     yield* Effect.forkScoped(
       Effect.promise(() =>
         watchRelay().catch((error: unknown) =>

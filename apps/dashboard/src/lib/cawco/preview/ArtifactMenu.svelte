@@ -2,8 +2,11 @@
   /**
    * The artifact panel's title control (DESIGN.md Artifact panel, canvas and
    * ink): the shown artifact's name as a menu button listing the session's
-   * artifacts, newest first, each promoted one tagged with its commit;
-   * choosing one shows it. Each row's Remove (its trailing glyph, or Delete
+   * artifacts, newest first, each promoted one tagged with its commit and
+   * each waiting on the person wearing the live dot; choosing one shows it.
+   * Its line (the ask, or "Sent to <session>") stands under it in the head's
+   * subtitle (SideSurface); where the head drops it, it is the menu's first
+   * row, and always the control's title and description. Each row's Remove (its trailing glyph, or Delete
    * or Backspace on the highlighted row) removes it where it stands: a light
    * action, no confirm; focus goes on to the row that takes its place. The row leaves once the hub says it is gone, closing as the
    * rows under it slide up (motion/rows), in every tab: the panel's frame
@@ -25,6 +28,7 @@
     IconArtifactPage,
     IconArtifactSheet,
     IconChevronDown,
+    IconGlobe,
     IconTrash,
     IconWindow,
   } from "#lib/icons.js";
@@ -32,13 +36,23 @@
   import { listArtifacts, removeArtifact, showArtifact } from "../artifact-api";
   import { reflow } from "../motion/rows.svelte";
   import { toast } from "../toasts.js";
+  import LiveDot from "./LiveDot.svelte";
 
   let {
     instanceId,
     held,
+    line,
+    lineId,
+    lineDropped,
     shown,
   }: {
     instanceId: string;
+    /** The head's line under the name (the ask, or "Sent to <session>"); empty: the name alone. */
+    line: string;
+    /** The head's line's element (SideSurface's subtitle), which describes this control. */
+    lineId: string;
+    /** The head dropped the line for want of room: the menu says it first. */
+    lineDropped: boolean;
     /**
      * The session's artifacts by id, as its panel's frame lists them: a row
      * whose id leaves it (removed in any tab, or by the agent) leaves the
@@ -54,6 +68,7 @@
     canvas: IconArtifactCanvas,
     preview: IconWindow,
     component: IconArtifactSheet,
+    browser: IconGlobe,
   };
 
   let open = $state(false);
@@ -63,10 +78,11 @@
     (Pick<ArtifactSummary, "id" | "kind" | "name"> & {
       createdAt: string | null;
       promoted: ArtifactSummary["promoted"];
+      waiting: boolean;
     })[]
   >(
     listed?.filter((row) => held?.includes(row.id) ?? true) ?? [
-      { ...shown, createdAt: null, promoted: null },
+      { ...shown, createdAt: null, promoted: null, waiting: false },
     ]
   );
 
@@ -133,7 +149,7 @@
 
   /** Each row's name is its name and tags, never its Remove's words. */
   const uid = $props.id();
-  const part = (id: string, what: "name" | "promoted" | "age") =>
+  const part = (id: string, what: "name" | "promoted" | "waiting" | "age") =>
     `${uid}-${what}-${id}`;
 
   /**
@@ -203,8 +219,10 @@
 <DropdownMenu.Root bind:open>
   <DropdownMenu.Trigger
     data-artifact-trigger
-    class="mark-line min-w-0 max-w-full text-ink-strong type-label"
+    aria-describedby={line ? lineId : undefined}
+    class="artifact-trigger mark-line"
     data-artifact={shown.id}
+    title={line || undefined}
   >
     {@const Glyph = GLYPHS[shown.kind]}
     <Glyph />
@@ -219,6 +237,11 @@
     width="wide"
     bind:ref={list}
   >
+    {#if line && lineDropped}
+      <DropdownMenu.Label data-slot="menu-line" class="menu-line"
+        >{line}</DropdownMenu.Label
+      >
+    {/if}
     <div {@attach reflow()} {@attach keepFocus}>
       {#each rows as artifact (artifact.id)}
         {@const Glyph = GLYPHS[artifact.kind]}
@@ -230,6 +253,7 @@
           aria-labelledby={[
             part(artifact.id, "name"),
             artifact.promoted ? part(artifact.id, "promoted") : "",
+            artifact.waiting ? part(artifact.id, "waiting") : "",
             artifact.createdAt ? part(artifact.id, "age") : "",
           ]
             .filter(Boolean)
@@ -267,6 +291,13 @@
               >
             {/if}
           </span>
+          {#if artifact.waiting}
+            <LiveDot
+              id={part(artifact.id, "waiting")}
+              label={artifactWords.waitingOnYou}
+              kind="row-waiting"
+            />
+          {/if}
           {#if artifact.createdAt}
             <span
               data-slot="row-age"
@@ -298,3 +329,95 @@
     </div>
   </DropdownMenu.Content>
 </DropdownMenu.Root>
+
+<style>
+  /* The head's first control: the name in the label role, the button
+     recipe the head gives every control (SideSurface). */
+  :global(.artifact-trigger) {
+    min-width: 0;
+    max-width: 100%;
+    color: var(--ink-strong);
+    font: var(--type-label);
+  }
+  .artifact-name {
+    min-width: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Narrow, the line is the menu's first row: plain words, wrapping, never an item. */
+  :global(.artifact-list .menu-line) {
+    color: var(--ink-muted);
+    font: var(--type-meta);
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  :global(.artifact-list .artifact-row) {
+    min-block-size: var(--c-artifact-row-h);
+  }
+  :global(.artifact-list .artifact-row[aria-current="true"]) {
+    color: var(--ink-strong);
+  }
+  /* The name is what a row is chosen by: it keeps its own width, and in a
+     row too narrow for everything the promoted tag gives up its room first
+     (its title and the row's name still say it). */
+  .row-text {
+    display: flex;
+    flex: 1 1 auto;
+    gap: inherit;
+    min-width: 0;
+  }
+  .row-name {
+    flex: 0 0 auto;
+    max-inline-size: 100%;
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: var(--type-label);
+  }
+  .row-promoted,
+  .row-age {
+    color: var(--ink-muted);
+    font-size: var(--text-meta);
+    font-variant-numeric: tabular-nums;
+  }
+  .row-promoted {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.artifact-list .artifact-row[aria-busy="true"]) {
+    opacity: 0.5;
+  }
+  /* Shown on the highlighted row (pointer or arrow keys), always under a
+     finger; red under the pointer, as a destructive item's glyph is. */
+  .row-remove {
+    display: grid;
+    place-items: center;
+    margin-inline-end: calc(-1 * var(--space-1));
+    padding: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--ink-muted);
+    opacity: 0;
+    transition:
+      opacity var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
+  }
+  :global(.artifact-row[data-highlighted]) .row-remove {
+    opacity: 1;
+  }
+  @media (hover: hover) {
+    .row-remove:hover {
+      color: var(--destructive);
+    }
+  }
+  @media (pointer: coarse) {
+    .row-remove {
+      opacity: 1;
+    }
+  }
+</style>

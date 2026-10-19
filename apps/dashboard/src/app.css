@@ -2270,26 +2270,16 @@
    argument). Not `!important`: an important base value cannot be animated
    on the compositor (Chromium's kAffectsImportantProperty), so every
    control's fade into the tint ran on the main thread. A colour change, so
-   it runs under every motion preference. By day the hover step is
-   surface-fill's own, so a press under the pointer is the step past it;
-   night keeps surface-fill. `[data-pressed]` is the `pressed` variant's
-   kit menu Trigger. */
+   it runs under every motion preference. The kit Toggle's on step,
+   `surface-pressed`: by day the hover step is surface-fill's own, so a
+   press under the pointer is the step past it; night keeps surface-fill.
+   `[data-pressed]` is the `pressed` variant's kit menu Trigger. */
 :is(.press-tint:is(:active, [data-pressed]), #\#):not(
   :disabled,
   [aria-disabled="true"]
 ),
 :is([data-holding], #\#) {
-  background-color: var(--surface-fill);
-}
-:root:not(.dark)
-  :is(
-    :is(.press-tint:is(:active, [data-pressed]), #\#):not(
-      :disabled,
-      [aria-disabled="true"]
-    ),
-    :is([data-holding], #\#)
-  ) {
-  background-color: var(--surface-fill-strong);
+  background-color: var(--surface-pressed);
 }
 /* Muted ink on the day's press step is 3.93:1 and a selected row's coral
    ink 4.12:1: those inks inside the pressed control go strong for as long
@@ -2957,6 +2947,22 @@
 @keyframes kit-fade-out {
   to {
     opacity: 0;
+  }
+}
+/* Live work breathes (DESIGN.md): one loop of `--breath` on ease-in-out,
+   down to `--breath-floor` half a breath in, the lowest opacity at which the
+   live glyph still holds 3:1 on every surface. Every breather runs this one:
+   `animation: breath var(--breath) var(--ease-in-out) infinite`. */
+@keyframes breath {
+  50% {
+    opacity: var(--breath-floor);
+  }
+}
+/* A mark that is live work takes the breath by its class (the in-flight
+   tool glyph, a delegate's live tool row). */
+@media (prefers-reduced-motion: no-preference) {
+  .breathe {
+    animation: breath var(--breath) var(--ease-in-out) infinite;
   }
 }
 

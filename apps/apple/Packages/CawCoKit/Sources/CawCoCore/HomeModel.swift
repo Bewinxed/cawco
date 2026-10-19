@@ -288,12 +288,13 @@ public final class HomeModel {
                 // (home-state.svelte.ts).
                 let machineId = row?.machineId ?? ask.machineId
                 // An ask a project's Caw made is his thread's: titled by it, and it opens the thread.
+                // A held post is titled by itself (home-state.svelte.ts).
                 let thread = ask.threadId.flatMap { fleet.thread(ThreadTabs.tabId($0)) }
                 var item = NeedsItem(
                     id: "\(ask.instanceId):\(ask.requestId)",
                     kind: .ask(ask),
                     machineId: machineId,
-                    title: thread?.title ?? row.map { fleet.title($0) } ?? Self.asker(ask) ?? fleet.machineName(machineId),
+                    title: ask.presentation.post?.title ?? thread?.title ?? row.map { fleet.title($0) } ?? Self.asker(ask) ?? fleet.machineName(machineId),
                     place: Naming.unbroken(fleet.placeOf(machineId, row?.cwd)),
                     raisedAt: ask.raisedAt
                 )
@@ -743,7 +744,7 @@ public final class HomeModel {
     /// whole, and the sign-in that fixes it (UsageMeter.svelte `gap`).
     public func usageGap(_ view: UsageRings) -> Usage.Gap? {
         view.claude == nil && view.openCode == nil && fleet.limitsRead && view.read
-            ? Usage.claudeGap(fleet.claudeLimits, machines: fleet.machines) : nil
+            ? Usage.claudeGap(fleet.claudeLimits) : nil
     }
 
     /// Why there is nothing to draw: a normal state, never a fake 0% (`empty`).

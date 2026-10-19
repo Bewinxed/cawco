@@ -6,8 +6,11 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { agentReact } from "../packages/core/src/agent-react";
+import { bundled } from "../packages/core/src/bundled";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
 import { decisionHostAssets } from "../packages/core/src/decision-host";
+import { bundleOverlay } from "../packages/core/src/preview-proxy";
+import { publishedFile } from "../packages/core/src/runtime";
 
 export const PINNED_BUN = "1.4.3";
 export const TARGETS = [
@@ -101,33 +104,19 @@ export async function buildBinary(options: {
       "@cawco/dashboard",
       "build",
     ]);
-    const overlay = await Bun.build({
-      entrypoints: [
-        join(ROOT, "packages/agent/src/preview-overlay/overlay.ts"),
-      ],
-      target: "browser",
-      format: "iife",
-      minify: true,
-      outdir: work,
-    });
-    if (!overlay.success) {
-      throw new AggregateError(overlay.logs, "Overlay build failed");
-    }
+    await writeFile(join(work, "overlay.js"), await bundleOverlay());
   }
   const pi = packageDir("@earendil-works/pi-coding-agent", requireAgent);
   const requirePi = createRequire(join(pi, "package.json"));
   const photon = packageDir("@silvia-odwyer/photon-node", requirePi);
   const zod = packageDir("zod", requireCore);
   const typescript = packageDir("typescript", requireCore);
-  const zodBundle = await Bun.build({
+  const zodBundle = await bundled("Workflow zod", {
     entrypoints: [join(zod, "index.js")],
     target: "bun",
     format: "esm",
     minify: true,
   });
-  if (!zodBundle.success) {
-    throw new AggregateError(zodBundle.logs, "Workflow zod build failed");
-  }
   await writeFile(
     join(work, "zod-runtime.js"),
     await zodBundle.outputs[0].text()
@@ -168,32 +157,24 @@ export async function buildBinary(options: {
     join(work, "workspace-judge.ts"),
     await Bun.file(join(ROOT, "packages/core/src/workspace-judge.ts")).bytes()
   );
-  // And the upstream guard: the hub imports it as a module, and each
-  // workspace's shims run its copy.
-  await writeFile(
-    join(work, "upstream-guard.ts"),
-    await Bun.file(join(ROOT, "packages/core/src/upstream-guard.ts")).bytes()
-  );
   // A Linux workspace's boundary host, srt inside, run as plain Bun by sessiond
   // (boundary.ts), and the ripgrep srt scans a clone with: a fresh machine has
   // none (REPORT.md §1). macOS boundaries run on Seatbelt and need neither.
   const linuxTarget = options.target.startsWith("linux-");
   if (linuxTarget) {
-    const host = await Bun.build({
+    const host = await bundled("The boundary host", {
       entrypoints: [join(ROOT, "packages/agent/src/boundary-host.ts")],
       target: "bun",
       format: "esm",
       minify: true,
     });
-    if (!host.success) {
-      throw new AggregateError(host.logs, "Boundary host build failed");
-    }
     await writeFile(join(work, "srt-host.js"), await host.outputs[0].text());
   }
   // A workspace's stage (live components): run by the project's own node or
   // bun inside the workspace's boundary, never by cawco (agent stage.ts).
   await writeFile(join(work, "stage-host.mjs"), await buildStageHost());
   const ripgrep = packageDir("@vscode/ripgrep-universal", requireAgent);
+  const playwright = packageDir("playwright-core", requireAgent);
   const assets = [
     ...(linuxTarget
       ? [
@@ -241,24 +222,40 @@ export async function buildBinary(options: {
     ["boundary/log-protocol.ts", join(work, "boundary-log-protocol.ts")],
     // Run as plain Bun beside the judge, and imported by OpenCode's plugin (boundary.ts).
     ["boundary/workspace-judge.ts", join(work, "workspace-judge.ts")],
-    // Run as plain Bun by each workspace's upstream guard shims (boundary.ts).
-    [
-      "boundary/upstream-shim.ts",
-      join(ROOT, "packages/agent/src/upstream-shim.ts"),
-    ],
-    ["boundary/upstream-guard.ts", join(work, "upstream-guard.ts")],
     // A project's browser image's build context, sent to the machine's
     // container runtime as it is (agent browser/image.ts).
     ...(await filesUnder(join(ROOT, "packages/agent/browser"), "browser")),
+    // The files playwright-core's bundled code reads beside itself at run
+    // time, published as its runtime tree (the plugin's coreBundle.js load).
+    ["playwright-core/package.json", join(playwright, "package.json")],
+    ["playwright-core/browsers.json", join(playwright, "browsers.json")],
+    [
+      "playwright-core/lib/webp_codec.wasm",
+      join(playwright, "lib/webp_codec.wasm"),
+    ],
+    ...(await filesUnder(
+      join(playwright, "lib/server"),
+      "playwright-core/lib/server"
+    )),
   ] as [string, string][];
-  const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;
+  // Each published file's content hash, the manifest a start compares with
+  // its runtime folder's marker instead of reading the files (core runtime.ts).
+  const publishedHashes: Record<string, string> = {};
+  for (const [key, path] of assets) {
+    if (publishedFile(key)) {
+      publishedHashes[key] = Bun.hash(await Bun.file(path).bytes()).toString(
+        36
+      );
+    }
+  }
+  const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};\nexport const publishedHashes = ${JSON.stringify(publishedHashes)};`;
   const [platform, arch] = options.target.split("-");
   const tui = packageDir("@earendil-works/pi-tui", requirePi);
   const clipboard = join(
     tui,
     `native/${platform}/prebuilds/${platform}-${arch}/${platform}-platform${platform === "linux" ? "-x11" : ""}.node`
   );
-  const result = await Bun.build({
+  await bundled("The standalone binary", {
     entrypoints: [
       join(
         ROOT,
@@ -282,8 +279,19 @@ export async function buildBinary(options: {
     // cpu-features: an optional native addon of ssh2 (dockerode's
     // docker-modem loads it), built by no install here; ssh2 requires it
     // inside a try and goes on without it, and the browser runtime speaks to
-    // unix sockets alone, never SSH.
-    external: ["playwright-core", "cpu-features"],
+    // unix sockets alone, never SSH. lightningcss and browserslist: the
+    // runtime pages' CSS compiler (core page-css.ts), which loads them on a
+    // compile only; the binary carries every page prebuilt and compiles none.
+    // chromium-bidi and electron: playwright-core requires them only for
+    // BiDi over CDP and Electron, which nothing here drives, and installs
+    // neither, so from source those requires fail the same way.
+    external: [
+      "cpu-features",
+      "lightningcss",
+      "browserslist",
+      "chromium-bidi",
+      "electron",
+    ],
     define: {
       __CAWCO_RELEASE__: "true",
       __CAWCO_VERSION__: JSON.stringify(options.version),
@@ -316,6 +324,44 @@ export async function buildBinary(options: {
           build.onLoad(
             { filter: /packages\/core\/src\/binary-assets\.ts$/ },
             () => ({ contents: assetsSource, loader: "ts", resolveDir: ROOT })
+          );
+          // playwright-core reads package.json, browsers.json and its wasm
+          // from __dirname, which the bundle would fix at this machine's
+          // node_modules: point it at the tree the binary publishes.
+          build.onLoad(
+            { filter: /playwright-core\/lib\/coreBundle\.js$/ },
+            async ({ path }) => ({
+              contents: `var __dirname=require(${JSON.stringify(join(ROOT, "packages/core/src/runtime.ts"))}).runtimeTree("playwright-core/lib");\n${await Bun.file(path).text()}`,
+              loader: "js",
+              resolveDir: dirname(path),
+            })
+          );
+          // @achingbrain/ssdp (nat-port-mapper's) reads its name and version
+          // through createRequire(import.meta.url), which the bundle leaves to
+          // run time against /$bunfs (oven-sh/bun#36565): fix them at build.
+          build.onLoad(
+            { filter: /@achingbrain\/ssdp\/dist\/src\/ssdp\.js$/ },
+            async ({ path }) => {
+              const source = await Bun.file(path).text();
+              const read =
+                "const { name, version } = req('../../package.json');";
+              if (!source.includes(read)) {
+                throw new Error(
+                  `${path} no longer reads its manifest as expected`
+                );
+              }
+              const { name, version } = JSON.parse(
+                readFileSync(join(dirname(path), "../../package.json"), "utf8")
+              );
+              return {
+                contents: source.replace(
+                  read,
+                  `const { name, version } = ${JSON.stringify({ name, version })};`
+                ),
+                loader: "js",
+                resolveDir: dirname(path),
+              };
+            }
           );
           build.onResolve({ filter: /^socket-activation$/ }, () => ({
             path: join(ROOT, "scripts/binary/socket-activation.ts"),
@@ -410,9 +456,6 @@ export async function buildBinary(options: {
       },
     ],
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "Standalone compile failed");
-  }
   console.log(
     `${options.target}: ${options.outfile} (${(await stat(options.outfile)).size} bytes)`
   );

@@ -1,7 +1,11 @@
 /**
  * The container host: a browser as a neko container (our image, built on
  * the machine) with its Chromium profile on a named volume of its own,
- * `cawco-browser-<slug>`, so a project's sign-ins outlive the container.
+ * `cawco-browser-<owner>-<slug>`, so a project's sign-ins outlive the
+ * container. Its container and volume carry two labels: its key, and the
+ * agent whose records keep it (state.ts `browserOwner`). Every agent of a
+ * machine has the machine's id, so a machine browser's key is theirs alike;
+ * on one runtime each finds, makes and removes its own alone.
  * neko's HTTP and Chromium's DevTools are published on 127.0.0.1 alone; the
  * media port, UDP and TCP, on every address, advertised with the machine's
  * own addresses so a screen on the LAN or the tailnet connects directly.
@@ -22,9 +26,10 @@
  */
 import { randomBytes } from "node:crypto";
 import { readWithin } from "@cawco/core/bounded";
-import type { BrowserRelay } from "@cawco/core/browser";
-import { browserSlug } from "@cawco/core/browser";
+import type { BrowserKey, BrowserRelay } from "@cawco/core/browser";
+import { BROWSER_SCREEN, browserSlug } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
+import { stunServer } from "@cawco/core/stream-relay";
 import type Docker from "dockerode";
 import { ensureImage } from "./image";
 import {
@@ -39,6 +44,7 @@ import type { Runtime } from "./runtime";
 import {
   type BrowserHost,
   type BrowserRecord,
+  browserOwner,
   httpAnswers,
   type Progress,
   portsOf,
@@ -49,6 +55,9 @@ const IMAGE = "cawco-browser";
 
 /** The label every browser container and volume carries: its key. */
 export const BROWSER_LABEL = "dev.cawco.browser";
+
+/** The label naming the agent whose records keep a browser's container and volume (state.ts `browserOwner`). */
+export const OWNER_LABEL = "dev.cawco.browser.owner";
 
 /** How long a container has to answer once started. */
 const LIVE_MS = 90_000;
@@ -78,21 +87,100 @@ const PROFILE = {
 
 const password = (): string => randomBytes(24).toString("base64url");
 
-/** The container's name on the runtime. */
-const containerName = (record: BrowserRecord): string =>
-  `cawco-browser-${browserSlug(record.key)}`;
+/** A browser's container and volume name on the runtime: its owner's and its key's. */
+const nameOf = (owner: string, key: BrowserKey): string =>
+  `cawco-browser-${owner}-${browserSlug(key)}`;
+
+/** The labels a browser's container and volume carry. */
+const labelsOf = (owner: string, key: BrowserKey): Record<string, string> => ({
+  [BROWSER_LABEL]: key,
+  [OWNER_LABEL]: owner,
+});
+
+/** The runtime's not-found answer, taken as gone. */
+const absent = (error: unknown): void => {
+  if ((error as { statusCode?: number }).statusCode !== 404) {
+    throw error;
+  }
+};
+
+/**
+ * What `owner` holds on `docker`, for `key` alone when it is named: its
+ * containers' ids and its volumes' names. The runtime filters on the one
+ * owner label, and the key is matched here, so no runtime's way of combining
+ * two label filters decides what is found.
+ */
+export const ownedBy = async (
+  docker: Docker,
+  owner: string,
+  key?: BrowserKey
+): Promise<{ containers: string[]; volumes: string[] }> => {
+  const filters = { label: [`${OWNER_LABEL}=${owner}`] };
+  const ours = (labels: Record<string, string> | undefined) =>
+    key === undefined || labels?.[BROWSER_LABEL] === key;
+  const containers = await docker.listContainers({ all: true, filters });
+  const { Volumes } = await docker.listVolumes({ filters });
+  return {
+    containers: containers
+      .filter((one) => ours(one.Labels))
+      .map((one) => one.Id),
+    volumes: (Volumes ?? [])
+      .filter((one) => ours(one.Labels))
+      .map((one) => one.Name),
+  };
+};
+
+/** Removes the containers {@link ownedBy} names, and the ids in `also`, keeping every volume. */
+const removeContainers = async (
+  docker: Docker,
+  owner: string,
+  key: BrowserKey,
+  also: (string | undefined)[] = []
+): Promise<void> => {
+  const { containers } = await ownedBy(docker, owner, key);
+  const ids = new Set([
+    ...containers,
+    ...also.filter((id): id is string => !!id),
+  ]);
+  await Promise.all(
+    [...ids].map((id) =>
+      docker.getContainer(id).remove({ force: true }).catch(absent)
+    )
+  );
+};
+
+/**
+ * Removes everything {@link ownedBy} names, containers first (a volume in
+ * use cannot go): an agent's own browsers on a runtime, by its label alone.
+ */
+export const removeOwned = async (
+  docker: Docker,
+  owner: string,
+  key?: BrowserKey
+): Promise<void> => {
+  const { containers, volumes } = await ownedBy(docker, owner, key);
+  await Promise.all(
+    containers.map((id) =>
+      docker.getContainer(id).remove({ force: true }).catch(absent)
+    )
+  );
+  await Promise.all(
+    volumes.map((name) => docker.getVolume(name).remove().catch(absent))
+  );
+};
 
 /** The env neko starts with. */
 const nekoEnv = (
   record: BrowserRecord,
   passwords: { admin: string; user: string },
   relay: BrowserRelay | undefined,
-  media: MediaPath
+  media: MediaPath,
+  addresses: string[],
+  stun: string
 ): string[] => {
   const port = portsOf(record).media;
-  const addresses = machineAddresses();
   return [
-    "NEKO_DESKTOP_SCREEN=1280x800@30",
+    `NEKO_DESKTOP_SCREEN=${BROWSER_SCREEN.width}x${BROWSER_SCREEN.height}@30`,
     "NEKO_SERVER_BIND=0.0.0.0:8080",
     "NEKO_SERVER_CORS=",
     "NEKO_MEMBER_PROVIDER=multiuser",
@@ -113,12 +201,17 @@ const nekoEnv = (
     // A list, space-separated: viper hands the env's string to cast's
     // ToStringSlice, which splits it with strings.Fields.
     ...(addresses.length ? [`NEKO_WEBRTC_NAT1TO1=${addresses.join(" ")}`] : []),
-    ...(relay
-      ? [
-          `NEKO_WEBRTC_ICESERVERS_BACKEND=${JSON.stringify([relay])}`,
-          "NEKO_WEBRTC_ICESERVERS_FRONTEND=[]",
-        ]
-      : []),
+    // Always named: with neither list set neko gives both
+    // stun.l.google.com:19302 (server/internal/config/webrtc.go, "add default
+    // stun server if none are configured"), a server no one chose. Its own
+    // candidates come from the relay and the fleet's STUN server; each
+    // viewer's list is the hub's, put in the offer it relays
+    // (hub browser-routes.ts), so neko gives none of its own.
+    `NEKO_WEBRTC_ICESERVERS_BACKEND=${JSON.stringify([
+      ...(relay ? [relay] : []),
+      { urls: [stun] },
+    ])}`,
+    "NEKO_WEBRTC_ICESERVERS_FRONTEND=[]",
   ];
 };
 
@@ -188,33 +281,32 @@ export class ContainerHost implements BrowserHost {
       })
     );
     options.progress({ state: "starting" });
-    const volume = containerName(record);
-    await this.#docker
-      .getVolume(volume)
-      .inspect()
-      .catch(async (error: unknown) => {
-        if (!notFound(error)) {
-          throw error;
-        }
-        await this.#docker.createVolume({
-          Name: volume,
-          Labels: { [BROWSER_LABEL]: record.key },
-        });
-      });
+    const owner = await browserOwner();
     const kept = record.container;
+    const volume = await this.#volumeFor(record, owner);
     const { endpoint } = this.#runtime;
     const forwarding = await mediaForwarding(endpoint);
     let { media } = forwarding;
-    // The same image, the media port published for what the runtime forwards
-    // now, and its relay credential good for a day more (or no relay asked
-    // for): the container as it is. Otherwise a new one on the same volume,
-    // with the credential just minted.
+    // The same image, published on the record's ports, the media port
+    // published for what the runtime forwards now, made with the STUN server
+    // named now, and its relay credential good for a day more (or no relay
+    // asked for): the container as it is. Otherwise a new one on the same
+    // volume, with the credential just minted. One made before it named its
+    // STUN server has neko's own default in it, and is made again.
     const relayHolds =
       !options.relay ||
       (record.relayUrls?.join(" ") === options.relay.urls.join(" ") &&
         (record.relayExpiresAt ?? 0) > Date.now() + RELAY_RENEW_MS);
+    const published = portsOf(record);
     let reuse =
-      kept && kept.image === image && kept.media === media && relayHolds
+      kept &&
+      kept.image === image &&
+      kept.media === media &&
+      kept.ports?.http === published.http &&
+      kept.ports?.devtools === published.devtools &&
+      kept.ports?.media === published.media &&
+      kept.stun === stunServer() &&
+      relayHolds
         ? await this.#docker
             .getContainer(kept.id)
             .inspect()
@@ -245,13 +337,14 @@ export class ContainerHost implements BrowserHost {
     for (;;) {
       if (!container) {
         // biome-ignore lint/performance/noAwaitInLoops: each round waits on the container it made.
-        await this.#removeContainer(record);
+        await removeContainers(this.#docker, owner, record.key, [kept?.id]);
         container = await this.#create(
           record,
           image,
           volume,
           options.relay,
-          media
+          media,
+          owner
         );
       }
       await this.#live(container.id, ports);
@@ -312,21 +405,48 @@ export class ContainerHost implements BrowserHost {
     );
   }
 
+  /** The volume `record` names (its sign-ins), or one made for it now, named and labelled for `owner`. */
+  async #volumeFor(record: BrowserRecord, owner: string): Promise<string> {
+    const volume = record.container?.volume ?? nameOf(owner, record.key);
+    await this.#docker
+      .getVolume(volume)
+      .inspect()
+      .catch(async (error: unknown) => {
+        if (!notFound(error)) {
+          throw error;
+        }
+        await this.#docker.createVolume({
+          Name: volume,
+          Labels: labelsOf(owner, record.key),
+        });
+      });
+    return volume;
+  }
+
   async #create(
     record: BrowserRecord,
     image: string,
     volume: string,
     relay: BrowserRelay | undefined,
-    media: MediaPath
+    media: MediaPath,
+    owner: string
   ): Promise<NonNullable<BrowserRecord["container"]>> {
     const { http, devtools, media: port } = portsOf(record);
     const passwords = { admin: password(), user: password() };
+    const stun = stunServer();
     const protocols = mediaProtocols(media);
     const created = await this.#docker.createContainer({
-      name: containerName(record),
+      name: nameOf(owner, record.key),
       Image: image,
-      Labels: { [BROWSER_LABEL]: record.key },
-      Env: nekoEnv(record, passwords, relay, media),
+      Labels: labelsOf(owner, record.key),
+      Env: nekoEnv(
+        record,
+        passwords,
+        relay,
+        media,
+        await machineAddresses(),
+        stun
+      ),
       ExposedPorts: {
         "8080/tcp": {},
         "9222/tcp": {},
@@ -360,31 +480,13 @@ export class ContainerHost implements BrowserHost {
       id: created.id,
       image,
       media,
+      ports: { http, devtools, media: port },
+      runtime: { kind: this.#runtime.kind, endpoint: this.#runtime.endpoint },
+      stun,
       volume,
       adminPassword: passwords.admin,
       userPassword: passwords.user,
     };
-  }
-
-  async #removeContainer(record: BrowserRecord): Promise<void> {
-    const named = await this.#docker
-      .listContainers({
-        all: true,
-        filters: { label: [`${BROWSER_LABEL}=${record.key}`] },
-      })
-      .catch(() => []);
-    await Promise.all(
-      named.map((one) =>
-        this.#docker
-          .getContainer(one.Id)
-          .remove({ force: true })
-          .catch((error: unknown) => {
-            if (!notFound(error)) {
-              throw error;
-            }
-          })
-      )
-    );
   }
 
   async stop(record: BrowserRecord): Promise<void> {
@@ -403,28 +505,44 @@ export class ContainerHost implements BrowserHost {
       });
   }
 
+  /**
+   * Every container and then every volume this agent holds on the runtime
+   * for `key` (both labels, {@link ownedBy}), removed, whatever any record
+   * says: what a move into a container cut short left (the agent stopped,
+   * or was killed, before the record's one write).
+   */
+  async removeLabelled(key: BrowserKey): Promise<void> {
+    await removeOwned(this.#docker, await browserOwner(), key);
+  }
+
   async remove(record: BrowserRecord): Promise<void> {
-    await this.#removeContainer(record);
+    const owner = await browserOwner();
+    await removeContainers(this.#docker, owner, record.key, [
+      record.container?.id,
+    ]);
     await this.#docker
-      .getVolume(record.container?.volume ?? containerName(record))
+      .getVolume(record.container?.volume ?? nameOf(owner, record.key))
       .remove()
-      .catch((error: unknown) => {
-        if (!notFound(error)) {
-          throw error;
-        }
-      });
+      .catch(absent);
   }
 }
 
-/**
- * A neko session token for the browser: the daemon's own as admin, or a
- * viewer's (the hub's, for a person watching). neko answers it in the
- * login's body while its cookie is off.
- */
+/** A neko session token for the browser, as {@link nekoSession} makes it. */
 export const nekoLogin = async (
   record: BrowserRecord,
   as: "admin" | "viewer"
-): Promise<string> => {
+): Promise<string> => (await nekoSession(record, as)).token;
+
+/**
+ * A new neko session for the browser, its id and its token: the daemon's own
+ * as admin, or a viewer's (a person watching through the hub). Each login is
+ * a session of its own (neko's multiuser provider names it `<username>-<uid>`).
+ * neko answers the token in the login's body while its cookie is off.
+ */
+export const nekoSession = async (
+  record: BrowserRecord,
+  as: "admin" | "viewer"
+): Promise<{ id: string; token: string }> => {
   if (!record.container) {
     throw new Error(`${record.key} runs on no container.`);
   }
@@ -452,9 +570,14 @@ export const nekoLogin = async (
       `neko refused the ${as} login (HTTP ${response.status}): ${(await response.text()).trim()}`
     );
   }
-  const { token } = (await response.json()) as { token?: string };
-  if (!token) {
-    throw new Error(`neko answered the ${as} login with no token.`);
+  const { id, token } = (await response.json()) as {
+    id?: string;
+    token?: string;
+  };
+  if (!(id && token)) {
+    throw new Error(
+      `neko answered the ${as} login with no session id or token.`
+    );
   }
-  return token;
+  return { id, token };
 };

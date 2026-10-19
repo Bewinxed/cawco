@@ -8,7 +8,9 @@
  * - Linux: one @anthropic-ai/sandbox-runtime (srt) sandbox per workspace,
  *   hosted by `boundary-host.ts` in library mode. Inside it a command reads
  *   nothing in the home dir but what the policy reads back, writes only the
- *   clone, its scratch dir and the workspaces' cache, sees and signals only
+ *   clone, its scratch dir and the workspaces' cache (a write anywhere else,
+ *   the read-denied home dir, `/tmp` and `/run` among them, fails at once
+ *   with EROFS: `srtSettings` in boundary-policy.ts), sees and signals only
  *   the workspace's processes (its own pid namespace), and reaches the
  *   network only through srt's proxy: any public host, none of the owner's
  *   machines. Every host socket is out of sight.
@@ -24,18 +26,20 @@
  * Both run the same runner ({@link RUNNER}), which takes every command of the
  * workspace over a FIFO and runs it inside: one network namespace on Linux,
  * so a dev server one command starts answers the next. Commands go in
- * through one executor, `~/.cawco/workspaces/<id>/exec [--cwd-out FILE]
- * COMMAND` ({@link execScript}), that every harness runs its shell commands
+ * through one executor, `~/.cawco/workspaces/<id>/exec [--session]
+ * [--cwd-out FILE] COMMAND` ({@link execScript}), that every harness runs its shell commands
  * through: claude by a PreToolUse hook that rewrites the command (the
  * workspace's `hook` script, which asks its judge, `boundary-judge.ts`), OpenCode by its
  * plugin's `bash` tool, pi by its bash tool's operations, a workflow's
- * `runCommand`. The GitHub CLI's keyring is the host's, so the executor reads
- * its token on the host side, from a copy it keeps in the workspace's state
- * dir ({@link ghToken}), and hands it in as `GH_TOKEN`, with an empty config
- * dir of gh's own ({@link ghConfigOf}): pushes, through git's `gh auth
- * git-credential` helper, and `gh` keep working inside, on both OSes. The
- * hub lands a workspace's commits the same way: its `git push` is a command
- * the workspace's agent runs through this executor (`runWorkflowCommand`). `cawco tools` reaches the hub's tools through the
+ * `runCommand`. A workspace holds no credential of any host: its git reaches
+ * its clone's origin, on any host and over any transport, through the git
+ * door (hub-git.ts), which signs in on the host with the host's own. Its
+ * `gh` reaches GitHub's API through the workspace's GitHub door
+ * (github-door.ts), which judges each write by the project's upstream rule
+ * and signs in on the host to what goes, whatever the rule: no forge's token
+ * ever enters a workspace ({@link commandEnv}). The hub lands a workspace's
+ * commits through the same door: its `git push` is a command the workspace's
+ * agent runs through this executor (`runWorkflowCommand`). `cawco tools` reaches the hub's tools through the
  * workspace's tool door (`tool-door.ts`).
  *
  * sessiond holds the boundary and the workspace's judge, so an agent restart
@@ -45,10 +49,10 @@
  * there, core keepers.ts), is handed over ({@link handOver}): a boundary of
  * this build's form starts beside it on the current keeper, every new command
  * runs in the new one, and the older one runs on, untouched, until nothing
- * runs in it, then closes ({@link closeIdle}). One whose work listens on a
- * port is not handed over until that ends ({@link servedPorts}): the new
- * one's network is another, where its own next command would find nothing
- * listening. Every boundary and judge
+ * runs in it, then closes ({@link closeIdle}). One whose work still runs
+ * anything is not handed over until that ends ({@link workLeft}): the new
+ * one's pid namespace and network are others, where the delegate's next
+ * command would find nothing of what it left running. Every boundary and judge
  * process is found and stopped on whichever keeper holds it. A boundary runs
  * only while something holds it ({@link liveWhy}); one nothing has held for
  * {@link QUIET_CLOSE_MS} closes with its judge, its clone and state left as
@@ -67,10 +71,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { accessSync, constants, existsSync } from "node:fs";
 import {
   access,
+  appendFile,
   chmod,
   copyFile,
   lstat,
   mkdir,
+  open as openFile,
   readdir,
   readFile,
   readlink,
@@ -118,12 +124,14 @@ import {
   workspaceCacheDir,
   workspaceCacheEnv,
   workspaceCaches,
+  workspaceClaudeTmpDir,
   workspaceDoorDir,
   workspaceMaestroEnv,
   workspaceMaestroHome,
   workspacePolicyFile,
   workspaceProjectFile,
   workspaceReadOnlyDir,
+  workspaceRuntimeDir,
   workspaceScratchDir,
   workspaceSpillsFile,
   workspaceStateDir,
@@ -145,6 +153,7 @@ import {
   runtimeVersion,
   standalone,
 } from "@cawco/core/runtime";
+import { hostEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { listedPid, type Pid, signal as signalPid } from "@cawco/core/signal";
 import {
@@ -153,31 +162,37 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import type { UpstreamRule, UpstreamRules } from "@cawco/core/upstream-guard";
 import {
-  GUARDED_PROGRAMS,
-  type UpstreamRule,
-  type UpstreamRules,
-} from "@cawco/core/upstream-guard";
-import { PROTECTED_NAMES, PROTECTED_UNDER } from "@cawco/core/workspace-judge";
+  type Policy,
+  PROTECTED_NAMES,
+  PROTECTED_UNDER,
+} from "@cawco/core/workspace-judge";
 import {
   isPlace,
   workspaceDenies,
   workspacePolicy,
 } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
-import { seatbeltProfile, srtSettings } from "./boundary-policy";
+import {
+  readOnlyDeniesBwrap,
+  seatbeltProfile,
+  srtSettings,
+} from "./boundary-policy";
+import { closeWorkspaceBrowsers, ensureGateToken } from "./browser/gate";
+import { colimaHome } from "./browser/media-forwarding";
+import { runtimeSockets } from "./browser/runtime";
+import { bunNodeShim } from "./bun-node-shim";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { cawcoCommand } from "./git-credential";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
-import { hostGh } from "./host-gh";
 import {
-  askedPushParameters,
   closeGitDoor,
   gitDoorEnv,
   gitDoorOf,
   gitHelperDirOf,
-  guardedGitParameters,
+  guardedPushParameters,
   openGitDoor,
 } from "./hub-git";
 import { type HeldProc, KeeperPool } from "./keepers";
@@ -206,7 +221,9 @@ import {
 
 /** A running boundary, as a harness uses it. */
 export interface Boundary {
-  /** `exec [--cwd-out FILE] COMMAND`: runs COMMAND inside the boundary, in the caller's directory. */
+  /** The temp root its sessions' Claude Code CLIs run with (`CLAUDE_CODE_TMPDIR`, core `workspaceClaudeTmpDir`): written on the host, read inside, so a background task's output is there for the session's shell. */
+  readonly claudeTmp: string;
+  /** `exec [--session] [--cwd-out FILE] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}). */
   readonly exec: string;
   /** The PreToolUse hook a claude session runs before each tool call ({@link hookScript}). */
   readonly hook: string;
@@ -236,12 +253,11 @@ interface Held extends Boundary {
 
 /**
  * An older boundary still running beside the current one ({@link handOver}):
- * its record, and the executors that were on their way into it when it was
- * handed over, which may still hand it a command.
+ * its record. The commands still running in it, or on their way into it,
+ * are each its executor's own mark in its generation's dir ({@link
+ * commandsIn}).
  */
-interface Retiring extends Held {
-  readonly executors: readonly number[];
-}
+type Retiring = Held;
 
 /**
  * Linux: the sandbox the srt host runs now, as it writes `<state>/sandbox`
@@ -272,6 +288,26 @@ const roOf = workspaceReadOnlyDir;
 const generationDir = (id: string, gen: string): string =>
   join(stateDir(id), "boundaries", gen);
 
+/**
+ * The policy a boundary generation started with, as {@link planFor} wrote it
+ * beside its other files: what that boundary grants for its whole life,
+ * whatever the workspace's policy says since ({@link narrowing}).
+ */
+const grantedOf = (id: string, gen: string): string =>
+  join(generationDir(id, gen), "policy.json");
+
+/** The policy generation `gen` of workspace `id` started with ({@link grantedOf}); undefined when none is on record. */
+const grantedPolicy = (id: string, gen: string): Promise<Policy | undefined> =>
+  readRecord<Policy>(grantedOf(id, gen)).catch(() => undefined);
+
+/**
+ * Lines for a workspace's next session command, which its executor shows on
+ * stderr before the command's own output and then removes ({@link
+ * execScript}'s `--session`): what CawCo did to the work without being asked
+ * ({@link replaceNarrowed}). In the state dir, which nothing inside writes.
+ */
+const noticeOf = (id: string): string => join(stateDir(id), "notice");
+
 /** The runner's FIFO, in the part of the state dir a command reads. */
 const fifoOf = (id: string, gen: string): string =>
   join(roOf(id), `runner-${gen}.fifo`);
@@ -284,40 +320,22 @@ const fifoOf = (id: string, gen: string): string =>
 const gitTemplateOf = (id: string): string => join(roOf(id), "git-template");
 
 /**
- * `gh`'s config dir inside the boundary (`GH_CONFIG_DIR`): empty and
- * read-only there. gh reads `config.yml` from its config dir as it starts and
- * takes a missing one as nothing set, but quits on any other error ("failed
- * to create root command: failed to read configuration"). The host's
- * `~/.config/gh` is under the home deny: srt shows it as missing, Seatbelt
- * answers EPERM, so on macOS every `gh` inside quit before it read
- * `GH_TOKEN`, git's `gh auth git-credential` helper with it, and a push went
- * out anonymous (Nightly C, 2026-10-10). Here it finds no config on both.
- */
-const ghConfigOf = (id: string): string => join(roOf(id), "gh");
-
-/**
  * The system gitconfig every command's git reads (`GIT_CONFIG_SYSTEM`, git
  * 2.32+), read-only inside, in place of the host's: Apple's git (Command
  * Line Tools) and Homebrew's each ship one naming
- * `credential.helper=osxkeychain`. It names gh's helper, by the host's gh,
- * for GitHub, so git takes the `GH_TOKEN` the executor hands in whatever the
- * user's gitconfig says: `helper =` clears what came before, and git asks its
- * helpers in order, stopping at the first that answers, so an osxkeychain
- * the user's gitconfig adds after it is never asked for a GitHub login (and
- * reaches no keychain service in any case: `KEYCHAIN_MACH_SERVICES`). The
- * user's gitconfig, read after it, still applies. `GIT_CONFIG_COUNT` is left
- * alone: srt and the session hand git their own entries through it.
+ * `credential.helper=osxkeychain`, which reaches no keychain service inside
+ * in any case (`KEYCHAIN_MACH_SERVICES`). It names no helper: a workspace
+ * holds no credential, and every push across the network and its clone's
+ * own origin go through the git door, which signs in on the host
+ * (hub-git.ts). The user's gitconfig, read after it, still applies.
+ * `GIT_CONFIG_COUNT` is left alone: srt and the session hand git their own
+ * entries through it.
  */
 const gitSystemConfigOf = (id: string): string => join(roOf(id), "gitconfig");
 
-/** {@link gitSystemConfigOf}'s text for the host's gh, by its real path; no helper when the host has none. */
-const gitSystemConfig = (id: string, gh: string | undefined): string => {
-  const helper = gh
-    ? `\thelper =\n\thelper = "${`!${shellQuote(gh)} auth git-credential`.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"\n`
-    : "";
-  return `# CawCo workspace ${id}: the system gitconfig git reads inside the boundary.
-${helper ? ["https://github.com", "https://gist.github.com"].map((url) => `[credential "${url}"]\n${helper}`).join("") : ""}`;
-};
+/** {@link gitSystemConfigOf}'s text. */
+const gitSystemConfig = (id: string): string =>
+  `# CawCo workspace ${id}: the system gitconfig git reads inside the boundary.\n`;
 
 const WHITESPACE = /\s+/;
 
@@ -362,9 +380,9 @@ export const shellQuote = (value: string): string =>
  */
 const SYSTEM_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
 
-/** `command`, as it runs inside the boundary. */
+/** A session's `command`, as it runs inside the boundary (pi's bash tool): `--session`, so it shows the workspace's notice first. */
 export const boundaryCommand = (boundary: Boundary, command: string): string =>
-  `${shellQuote(boundary.exec)} ${shellQuote(command)}`;
+  `${shellQuote(boundary.exec)} --session ${shellQuote(command)}`;
 
 /** Claude Code's own limit on the boundary hook, in seconds; its default is 600. */
 const HOOK_TIMEOUT_S = 90;
@@ -470,6 +488,7 @@ const HEX = /^[0-9a-f]+$/;
 const socketAddress = async (id: string, socket: string): Promise<string> => {
   const packed =
     await Bun.$`${PERL} -MSocket -e ${'print unpack("H*", pack_sockaddr_un($ARGV[0]))'} ${socket}`
+      .env(hostEnvironment())
       .quiet()
       .nothrow();
   const address = packed.stdout.toString();
@@ -703,11 +722,13 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
     return;
   }
   watchedJudges.set(procId, client);
-  client.subscribe(procId, {
+  let stop = (): void => undefined;
+  stop = client.subscribe(procId, {
     line: () => undefined,
-    exit: (code, signal) => {
+    exit: (code, signal, pid) => {
       watchedJudges.delete(procId);
-      client.unsubscribe(procId);
+      stop();
+      client.release(procId, pid);
       // Counted as arming from its exit until it is started again, as the
       // handover decides ({@link armStep}).
       whileArming(id, async () => {
@@ -756,7 +777,8 @@ const watchHost = async (
   }
   const { client } = proc;
   watchedHosts.set(procId, client);
-  client.subscribe(
+  let stop = (): void => undefined;
+  stop = client.subscribe(
     procId,
     {
       line: (event) => {
@@ -767,11 +789,17 @@ const watchHost = async (
           );
         }
       },
-      exit: () => {
+      exit: (exitCode, signal, pid) => {
+        // Whatever ended it, the agent's own close or the host's own exit
+        // (its sandbox ended, an OOM kill): the one record of the latter.
+        console.info(
+          `[workspace] ${id}: its boundary ${held.pid} (${procId}) exited, ${signal ? `killed by ${signal}` : `status ${exitCode ?? "unknown"}`}`
+        );
         if (watchedHosts.get(procId) === client) {
           watchedHosts.delete(procId);
         }
-        client.unsubscribe(procId);
+        stop();
+        client.release(procId, pid);
       },
     },
     afterSeq
@@ -819,6 +847,10 @@ const shimsOf = (id: string): string => join(roOf(id), "bin");
  *   free and the machine has room, unless a run it is under already holds
  *   one (`CAWCO_HEAVY_RUN_HELD`). `test-without-building` compiles nothing:
  *   Maestro's runner, on a simulator whose slot holds the run.
+ * - `xcrun simctl boot` is a heavy run too, as a simulator mac-slot.sh boots
+ *   is: on 2026-10-19 the Mac had a third simulator booted outside
+ *   mac-slot.sh while it paged at a load of 800. Every other `xcrun` call
+ *   runs as it is.
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
  *   or `log stream` outside the boundary (`log-relay.ts`).
  *
@@ -977,6 +1009,22 @@ exec "\${run[@]}"
 `,
       0o755
     ),
+    // A simulator boot is one of the machine's heavy runs, as mac-slot.sh's
+    // are: it waits for a slot and the machine's room (memory and swap
+    // among it), then the boot runs and the slot goes once it returns.
+    writeWhole(
+      join(bin, "xcrun"),
+      `#!/bin/bash
+# CawCo workspace ${id}: xcrun, a simulator boot waiting for the machine's room.
+if [ "\${1:-}" = simctl ] && [ "\${2:-}" = boot ]; then
+  run=(/usr/bin/xcrun "$@")
+  ${heavyRunLine}
+  exec "\${run[@]}"
+fi
+exec /usr/bin/xcrun "$@"
+`,
+      0o755
+    ),
     writeWhole(
       join(bin, "log"),
       `#!/bin/sh
@@ -987,13 +1035,6 @@ ${standalone ? "export BUN_BE_BUN=1\n" : ""}exec ${[runtime, client, String(port
     ),
   ]);
 };
-
-/**
- * The upstream guard's shims (core upstream-guard.ts), first on the PATH of
- * every command in the workspace's boundary on both OSes, after the hub's
- * git helper: read-only inside.
- */
-const guardShimsOf = (id: string): string => join(roOf(id), "guard");
 
 /** The workspace's upstream rule (`UpstreamRule`), written only here ({@link workspaceUpstreamRuleFile}). */
 const upstreamRuleOf = workspaceUpstreamRuleFile;
@@ -1056,89 +1097,8 @@ export const takeUpstreamRules = async (
 };
 
 /**
- * The upstream guard's shims, one for each program it reads
- * (`GUARDED_PROGRAMS`), and the two scripts they run, written into the part
- * of the state dir a command reads. Each shim finds the program it stands in
- * for on the rest of the caller's PATH, has `upstream-shim.ts` judge the call
- * by the workspace's rule ({@link upstreamRuleOf}), and runs the program only
- * when the judge lets it; a refusal's reason is what the session reads. In
- * a guarded workspace, whose commands hold no GitHub token ({@link
- * guardedEnv}), gh runs with {@link guardedGhConfigOf}: it reaches GitHub
- * through the workspace's GitHub door, which judges each request again on
- * the host and signs in there (github-door.ts). A
- * `curl` naming none of GitHub's API hosts runs without asking, so a dev
- * server's poll costs nothing.
- */
-const writeGuardShims = async (id: string, runtime: string): Promise<void> => {
-  const dir = guardShimsOf(id);
-  await mkdir(dir, { recursive: true });
-  await writeScript(
-    roOf(id),
-    "upstream-guard.ts",
-    "boundary/upstream-guard.ts",
-    join(import.meta.dir, "..", "..", "core", "src", "upstream-guard.ts")
-  );
-  const shim = await writeScript(
-    roOf(id),
-    "upstream-shim.ts",
-    "boundary/upstream-shim.ts"
-  );
-  const door = githubDoorOf(id);
-  const judge = `${standalone ? "BUN_BE_BUN=1 " : ""}${[runtime, shim, upstreamRuleOf(id), door].map(shellQuote).join(" ")}`;
-  // The judge's exit (upstream-shim.ts): 0 runs the program, 4 is a post
-  // held for the person (nothing runs), 3 sends curl through the GitHub door
-  // (each GitHub API URL in the clear: the door reads plain HTTP), anything
-  // else is the call's own exit.
-  const viaDoor = `args=()
-    for arg in "$@"; do
-      case "$arg" in
-        https://api.github.com* | https://uploads.github.com*) arg=http://\${arg#https://} ;;
-        api.github.com* | uploads.github.com*) arg=http://$arg ;;
-      esac
-      args+=("$arg")
-    done
-    exec "$real" --unix-socket ${shellQuote(door)} "\${args[@]}" ;;`;
-  await Promise.all(
-    GUARDED_PROGRAMS.map((program) => {
-      const asks = `${judge} ${shellQuote(program)} "$@" < /dev/null
-  judged=$?
-  case $judged in
-    0) ;;
-    4) exit 0 ;;
-    3) ${program === "curl" ? viaDoor : "exit 1 ;;"}
-    *) exit $judged ;;
-  esac`;
-      return writeWhole(
-        join(dir, program),
-        `#!/bin/bash
-# CawCo workspace ${id}: ${program}, run once the upstream guard lets the call (upstream-shim.ts).
-real=
-IFS=: read -ra dirs <<< "$PATH"
-for dir in "\${dirs[@]}"; do
-  [ -z "$dir" ] || [ "$dir" = ${shellQuote(dir)} ] && continue
-  if [ -x "$dir/${program}" ] && [ ! -d "$dir/${program}" ]; then real=$dir/${program}; break; fi
-done
-if [ -z "$real" ]; then echo "${program}: command not found" >&2; exit 127; fi
-${
-  program === "curl"
-    ? `case " $* " in
-  *api.github.com* | *uploads.github.com*)
-  ${asks}
-  ;;
-esac`
-    : asks
-}
-exec "$real" "$@"
-`,
-        0o755
-      );
-    })
-  );
-};
-
-/**
- * The gh config dir a guarded workspace's commands run with
- * (`GH_CONFIG_DIR`, {@link guardedEnv}), read-only inside: `http_unix_socket`
+ * The gh config dir every workspace's commands run with (`GH_CONFIG_DIR`,
+ * {@link commandEnv}), read-only inside: `http_unix_socket`
  * names the workspace's GitHub door, so gh sends every request there in the
  * clear (go-gh pkg/api/client_options.go `resolveOptions`: "if
  * opts.UnixDomainSocket == \"\" … cfg.Get([]string{\"http_unix_socket\"})"),
@@ -1148,7 +1108,7 @@ exec "$real" "$@"
  */
 const guardedGhConfigOf = (id: string): string => join(roOf(id), "gh-guarded");
 
-/** The placeholder gh signs in with in a guarded workspace: no token at all. */
+/** The placeholder gh signs in with in a workspace: no token at all. */
 const GH_PLACEHOLDER = "cawco-github-door";
 
 const writeGuardedGhConfig = async (id: string): Promise<void> => {
@@ -1188,16 +1148,20 @@ const writeWhole = (
  */
 const armHook = (
   id: string,
-  held: Omit<Held, "hook" | "policy">
+  held: Omit<Held, "claudeTmp" | "hook" | "policy">
 ): Promise<Held> => whileArming(id, () => armHookNow(id, held));
 
 /** {@link armHook}'s writes and starts, counted as {@link arming}. */
 const armHookNow = async (
   id: string,
-  held: Omit<Held, "hook" | "policy">
+  held: Omit<Held, "claudeTmp" | "hook" | "policy">
 ): Promise<Held> => {
   const hook = join(stateDir(id), "hook");
   const policy = workspacePolicyFile(id);
+  // The CLI makes its own `claude-<uid>` in it, 0700, and refuses a root it
+  // does not own; inside the boundary it is read only, as the rest of `ro`.
+  const claudeTmp = workspaceClaudeTmpDir(id);
+  await mkdir(claudeTmp, { recursive: true, mode: 0o700 });
   await writeWhole(
     policy,
     `${JSON.stringify(await workspacePolicy({ id, path: held.path }), null, 2)}\n`,
@@ -1209,25 +1173,24 @@ const armHookNow = async (
   if (process.platform === "darwin") {
     await writeShims(id, runtime);
   }
-  await writeGuardShims(id, runtime);
   await writeGuardedGhConfig(id);
   await writeUpstreamRule(id);
-  // The system gitconfig names the host's gh as it is now.
-  const gh = await hostGh();
-  await mkdir(ghConfigOf(id), { recursive: true });
-  await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id, gh), 0o644);
+  await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id), 0o644);
+  // The copy of gh's token an earlier build's executor kept beside the
+  // workspace: nothing reads it now, and a token is kept nowhere it is not used.
+  await rm(join(stateDir(id), "gh-token"), { force: true });
   // Its host's pid as the keeper listed it at its start, and matched to
   // the keeper's list again before any boundary on record is armed.
   await writeWhole(
     held.exec,
-    execScript(id, { ...held, pid: listedPid(held.pid) }, gh),
+    execScript(id, { ...held, pid: listedPid(held.pid) }),
     0o755
   );
   await openToolDoor(id);
   await openGitDoor({ id, path: held.path });
   await openGithubDoor(id);
   await watchHost(id, held);
-  const armed: Held = { ...held, hook, policy };
+  const armed: Held = { ...held, claudeTmp, hook, policy };
   await writeWhole(
     join(stateDir(id), "boundary.json"),
     `${JSON.stringify(armed)}\n`,
@@ -1291,7 +1254,12 @@ const rearmOne = async (id: string): Promise<boolean> => {
   const form = await formOf(ref).catch(
     said("its boundary's form could not be checked")
   );
-  const stale = form !== undefined && held.form !== form;
+  // An older form, or a grant this build cannot compare with its policy
+  // ({@link compareGrant}): ensured now, so it is handed over once idle.
+  const stale =
+    form !== undefined &&
+    (held.form !== form ||
+      (await unknownGrant(ref, held).catch(() => undefined)) !== undefined);
   if (stale && (await running(id, held))) {
     // Handed over now, behind the gate: a command waits at the gate and runs
     // through the new boundary rather than through one of another form.
@@ -1800,7 +1768,7 @@ export const boundaryFor = async (
  * its own; never taken away while the workspace lives, as a session's
  * transcript names its saved results for as long as it is resumed.
  */
-const addSpill = async (id: string, dir: string): Promise<void> => {
+export const addSpill = async (id: string, dir: string): Promise<void> => {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const file = workspaceSpillsFile(id);
   const listed = await reported(
@@ -1840,6 +1808,10 @@ export const setProject = async (
   }
   await mkdir(stateDir(id), { recursive: true });
   await writeWhole(file, `${JSON.stringify(project)}\n`, 0o644);
+  // Another project's folder: the one before is no longer read, now.
+  if (kept !== undefined) {
+    recheckNarrowed("its project changed", [id]).catch(() => undefined);
+  }
 };
 
 /**
@@ -2120,6 +2092,9 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
     throw refusal(ref.id, nested);
   }
   await placeReady(ref);
+  // Its door to the project's browser (browser/gate.ts), minted once and
+  // kept in its state dir for the workspace's life.
+  await ensureGateToken(ref.id);
   // Asked before the keeper is: the endpoint only ever moves on to this
   // build's keeper, so a keeper dialled after "not owed" is this build's.
   const owed = await ownKeeperOwed();
@@ -2130,9 +2105,33 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
     await stopUnvouched(ref.id, held);
     return start(client, ref);
   }
-  // One of an older form, or one a retiring keeper holds, is handed over to
-  // one of this build's form on the current keeper.
-  if (held.form !== (await formOf(ref)) || holder.epoch !== client.epoch) {
+  // Access is never kept past its removal: a generation that grants what the
+  // workspace's policy no longer does is stopped now with what runs in it,
+  // said to the delegate, whatever runs there or whichever keeper is owed
+  // the endpoint ({@link replaceNarrowed}).
+  const narrowed = await narrowedGenerations(ref, held);
+  if (narrowed) {
+    const runs = await replaceNarrowed(client, ref, held, narrowed, owed);
+    if (narrowed.current.length > 0) {
+      return runs;
+    }
+  }
+  // One of an older form, one a retiring keeper holds, or one whose grant
+  // this build cannot compare with its policy ({@link compareGrant}) is
+  // handed over to one of this build's form on the current keeper, as soon
+  // as nothing runs in it.
+  const unknown = await unknownGrant(ref, held);
+  if (unknown && saidUnknown.get(ref.id) !== held.pid) {
+    saidUnknown.set(ref.id, held.pid);
+    console.info(
+      `[workspace] ${ref.id}: its boundary ${held.pid}'s grant cannot be compared with this build's policy (${unknown}), so it is not stopped as narrowed: it is kept as it is while its work runs, and handed over once that ends`
+    );
+  }
+  if (
+    unknown ||
+    held.form !== (await formOf(ref)) ||
+    holder.epoch !== client.epoch
+  ) {
     return replaceOlder(client, ref, held, owed);
   }
   forgetStale(ref.id);
@@ -2141,11 +2140,16 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   return armHook(ref.id, held);
 };
 
+/** The boundary each workspace's unknown grant was last said for ({@link ensure}): said once per boundary. */
+const saidUnknown = new Map<string, number>();
+
 /**
  * {@link ensure} for workspace `ref`'s running boundary `held`, of an older
- * form or on a retiring keeper: handed over to one of this build's form on
- * the current keeper, or, until it can be, armed as it is.
+ * form, on a retiring keeper, or whose grant is not comparable ({@link
+ * compareGrant}): handed over to one of this build's form on the current
+ * keeper, or, until it can be, armed as it is.
  */
+
 const replaceOlder = async (
   client: SessiondClient,
   ref: WorkspaceRef,
@@ -2172,21 +2176,23 @@ const replaceOlder = async (
     restartWhenIdle(ref);
     return armHook(ref.id, held);
   }
-  // Every command after a handover runs in the new sandbox's network, where
-  // nothing listens: a dev server the work left running in this one would
-  // answer its previews but never its own next curl (5be5bfbb, 2026-10-15:
-  // its server on 5222 "gone" at each turn after a handover). So a boundary
-  // whose work serves on a port is kept as it is, armed, and handed over at
-  // the first look after its last listener ends ({@link handOverStale}); one
-  // nothing holds closes once quiet ({@link sweepQuiet}), and its next start
-  // is of this form.
-  const serving = (await servedPorts(ref.id, held)).join(", ");
-  if (serving) {
+  // Every command after a handover runs in the new sandbox: its own pid
+  // namespace, where nothing the work left running in this one can be seen
+  // or signalled, and its own network, where nothing listens. A dev server
+  // answered its previews but never its own next curl (5be5bfbb, 2026-10-15:
+  // its server on 5222 "gone" at each turn after a handover), and a `setsid
+  // nohup` loop was "gone" at the next turn (9b87c52b, 2026-10-19). So a
+  // boundary whose work runs anything is kept as it is, armed, and handed
+  // over at the first look after the last of it ends ({@link
+  // handOverStale}); one nothing holds closes once quiet ({@link
+  // sweepQuiet}), with what runs in it, and its next start is of this form.
+  const work = await workLeft(ref.id, held);
+  if (work) {
     replaceSoon(ref);
-    if (keptServing.get(ref.id) !== serving) {
-      keptServing.set(ref.id, serving);
+    if (keptRunning.get(ref.id) !== work) {
+      keptRunning.set(ref.id, work);
       console.info(
-        `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work listens on ${serving}, and handed over once that ends`
+        `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work}, and handed over once that ends`
       );
     }
     return armHook(ref.id, held);
@@ -2210,18 +2216,32 @@ const stopUnvouched = async (
   const kept = new Set(
     (await readRetiring(id)).map((old) => boundaryProcId(id, old.gen))
   );
+  const recorded =
+    held && (await keepers.holding(boundaryProcId(id, held.gen)));
   if (held) {
     await stopBoundary(id, held);
     await cleanGeneration(id, held);
   }
-  await Promise.all(
-    (await keepers.held())
-      .filter(
-        (proc) =>
-          proc.alive && isBoundaryOf(proc.procId, id) && !kept.has(proc.procId)
-      )
-      .map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
+  const unrecorded = (await keepers.held()).filter(
+    (proc) =>
+      proc.alive && isBoundaryOf(proc.procId, id) && !kept.has(proc.procId)
   );
+  await Promise.all(
+    unrecorded.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
+  );
+  const ended = [
+    ...(recorded
+      ? [
+          `${recorded.procId} (pid ${recorded.pid}, its record naming pid ${held?.pid})`,
+        ]
+      : []),
+    ...unrecorded.map((proc) => `${proc.procId} (pid ${proc.pid}, no record)`),
+  ];
+  if (ended.length > 0) {
+    console.info(
+      `[workspace] ${id}: before a boundary starts, what it cannot vouch for is killed: ${ended.join(", ")}`
+    );
+  }
   if (process.platform === "darwin" && kept.size === 0) {
     await killMarked(id);
   }
@@ -2306,8 +2326,10 @@ const LAUNCH = [
 /**
  * The runner inside the boundary: takes each request off the FIFO and runs
  * it. A `cancel <pgid>` ends that command's group; a pgid of 0, 1 or with a
- * leading zero is never one its launch made, and `kill -- -0` or `-1` would
- * be its own group or every process it may signal, so it is no request.
+ * leading zero is never one its launch made, and a group of 0 or -1 would
+ * be its own group or every process it may signal, so it is no request. The
+ * group follows the signal with no `--`, a form every shell's `kill` reads
+ * (dash refuses `--`).
  *
  * A command's stdout and stderr are anonymous pipes, each copied by a `cat`
  * into its request's FIFO (`$req/out`, `$req/err`), never those FIFOs opened
@@ -2320,11 +2342,19 @@ const LAUNCH = [
  * (`profile ssh-keyscan /usr/bin/ssh-keyscan`) took `/usr/bin/ssh-keyscan`'s
  * stdout away in every workspace: it printed nothing, its fd 1 free at its
  * first `openat` (2026-10-18), and the hub's host-key check found no key.
+ *
+ * srt's own environment (its proxies, `GIT_CONFIG_*`) is set again over each
+ * request's (`CAWCO_SANDBOX_ENV`), but for `GIT_SSH_COMMAND`: srt names an
+ * ssh through its proxy there, and CawCo's is the refusal that says a
+ * workspace holds no ssh key (hub-git.ts `SSH_REFUSAL`, in `gitDoorEnv`). Set
+ * again over it, srt's ran instead: a push over ssh to another host failed at
+ * the proxy's CONNECT ("socat … CONNECT other.probe.test:22: Bad Gateway"),
+ * never saying why.
  */
 const RUNNER = `fifo=$1
 [ -n "\${HTTPS_PROXY:-}" ] && export YARN_HTTPS_PROXY=$HTTPS_PROXY
 [ -n "\${HTTP_PROXY:-}" ] && export YARN_HTTP_PROXY=$HTTP_PROXY
-CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|YARN_HTTPS?_PROXY|GIT_SSH_COMMAND|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
+CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|YARN_HTTPS?_PROXY|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
 export CAWCO_SANDBOX_ENV
 sandbox=$(readlink /proc/self/ns/pid 2>/dev/null)
 launch='${LAUNCH}'
@@ -2335,8 +2365,8 @@ while :; do
       "cancel "*)
         pid=\${req#cancel }
         case $pid in ''|*[!0-9]*|0*|1) continue ;; esac
-        kill -TERM -- "-$pid" 2>/dev/null
-        ( sleep 4; kill -KILL -- "-$pid" 2>/dev/null ) &
+        kill -TERM "-$pid" 2>/dev/null
+        ( sleep 4; kill -KILL "-$pid" 2>/dev/null ) &
         continue ;;
     esac
     (
@@ -2365,6 +2395,53 @@ const LAUNCHD_SOCKETS = "/private/tmp";
  * {@link REMOTE_AUTOMATION_SOCKET}.
  */
 const SIMULATOR_SOCKETS = "/private/var/tmp";
+
+/**
+ * Where container runtimes keep their sockets: Docker's system socket (on
+ * macOS its link and the file it names both resolve past `/var/run`, which
+ * no policy denies there) and the user's Docker Desktop, OrbStack, Colima,
+ * Rancher Desktop and Podman machine dirs, under home, denied by the policy
+ * already and named so a policy's allow under home never reopens one.
+ */
+const containerSocketDirs = (): string[] => [
+  "/var/run/docker.sock",
+  "/private/var/run/docker.sock",
+  join(homedir(), ".docker", "run"),
+  join(homedir(), ".orbstack", "run"),
+  join(homedir(), ".colima"),
+  join(homedir(), ".rd"),
+  join(homedir(), ".local", "share", "containers"),
+  // Colima's home where `COLIMA_HOME` or `$XDG_CONFIG_HOME/colima` puts it.
+  colimaHome(),
+];
+
+/**
+ * Every place a container runtime's socket is, which no workspace connects
+ * to: the runtimes' own dirs ({@link containerSocketDirs}) and every socket
+ * the runtime registry may dial wherever it lives (browser/runtime.ts
+ * `runtimeSockets`: `DOCKER_HOST`'s, the Docker context's, each runtime's
+ * usual one), each as named and as the file it names. A command that
+ * reached one would run a container of its own beside a project's browser,
+ * or into it. `dirs` are runtime dirs, denied whole; `sockets` are the
+ * endpoints, which may sit in a dir that holds other things.
+ */
+export const containerSockets = async (): Promise<{
+  dirs: string[];
+  sockets: string[];
+}> => {
+  const withReal = async (paths: string[]) => [
+    ...new Set([
+      ...paths,
+      ...(await Promise.all(
+        paths.map((path) => realpath(path).catch(() => path))
+      )),
+    ]),
+  ];
+  return {
+    dirs: await withReal(containerSocketDirs()),
+    sockets: await withReal(await runtimeSockets()),
+  };
+};
 
 /**
  * A host socket in {@link LAUNCHD_SOCKETS} or {@link SIMULATOR_SOCKETS}
@@ -2445,6 +2522,22 @@ const runtimePlaces = (id: string, allowRead: readonly string[]): string[] => {
  */
 const BOUNDARY_MARKER = "CAWCO_BOUNDARY";
 
+/** The host's bwrap: the first on the system PATH, where `missingHostTools` looks for it. */
+const hostBwrap = (): string =>
+  SYSTEM_PATH.split(":")
+    .map((dir) => join(dir, "bwrap"))
+    .find((path) => existsSync(path)) ?? "/usr/bin/bwrap";
+
+/**
+ * The bwrap generation `gen` of workspace `id`'s srt runs (srt's `bwrapPath`,
+ * boundary-policy.ts `readOnlyDeniesBwrap`): the host's, with each
+ * read-denied dir remounted read-only. Named `bwrap`, and it execs the host's
+ * in its own process, so the outer sandbox process reads as a bwrap
+ * ({@link isBwrap}).
+ */
+const bwrapLauncherOf = (id: string, gen: string): string =>
+  join(generationDir(id, gen), "bwrap");
+
 /** The ripgrep srt scans a clone with: the one this build ships. */
 const ripgrep = (): string =>
   standalone ? runtimeExecutable("srt/rg") : rgPath;
@@ -2455,13 +2548,34 @@ const hostScript = (): string =>
     ? runtimeExecutable("srt/host.js")
     : join(import.meta.dir, "boundary-host.ts");
 
-/** What the host script holds, for the form: a change to it is a change of form. */
+/**
+ * What the host script runs, for the form: a change to it is a change of
+ * form. A build's script bundles srt; a checkout's imports it, so srt's
+ * module that writes the sandbox's mounts (each read-deny tmpfs among them,
+ * which the bwrap it runs makes read-only, {@link bwrapLauncherOf}) is read
+ * beside it.
+ */
+const readHostText = async (host: string): Promise<string> => {
+  if (standalone) {
+    return await Bun.file(host).text();
+  }
+  const srt = dirname(
+    Bun.resolveSync("@anthropic-ai/sandbox-runtime", dirname(host))
+  );
+  const texts = await Promise.all(
+    [host, join(srt, "sandbox", "linux-sandbox-utils.js")].map((file) =>
+      Bun.file(file).text()
+    )
+  );
+  return texts.join("\0");
+};
+
 let hostText: Promise<string> | undefined;
 
 /** How a workspace's boundary of one generation starts in this build, and the form that names it. */
 interface Plan {
-  /** Written into the generation's dir before the boundary starts. */
-  readonly files: readonly (readonly [string, string])[];
+  /** Written into the generation's dir before the boundary starts: path, text and, for one that runs, its mode. */
+  readonly files: readonly (readonly [string, string, number?])[];
   /**
    * A hash of what the boundary runs under: its srt settings or Seatbelt
    * profile (so the policy as this machine stands now), the runner, the
@@ -2491,19 +2605,23 @@ const planOf = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
 const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   const { id } = ref;
   const policy = await workspacePolicy(ref);
+  // Kept beside the generation's other files, never hashed into its form:
+  // what it grants, to judge a later policy by ({@link narrowing}).
+  const granted = `${JSON.stringify(policy, null, 2)}\n`;
   const runtime = await bunRuntime(id);
-  const exec = execScript(
-    id,
-    {
-      exec: join(stateDir(id), "exec"),
-      gen,
-      path: ref.path,
-      pid: undefined,
-      scratch: scratchOf(id),
-    },
-    await hostGh()
-  );
+  const exec = execScript(id, {
+    exec: join(stateDir(id), "exec"),
+    gen,
+    path: ref.path,
+    pid: undefined,
+    scratch: scratchOf(id),
+  });
   const hash = createHash("sha256");
+  const runtimes = await containerSockets();
+  // Made on the host at every look, on both OSes, where Bun looks for it
+  // (bun-node-shim.ts); macOS reads `/private/tmp` as it stands, Linux binds it
+  // back into the sandbox's `/tmp`.
+  const bunNode = await bunNodeShim();
   if (process.platform === "darwin") {
     const profile = seatbeltProfile(policy, {
       // With the scratch dir's short name, its `TMPDIR`: a tool's socket
@@ -2514,23 +2632,34 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         githubDoorOf(id),
         workspaceTmpDir(id),
       ],
-      hostSockets: await Promise.all(
-        [
-          dirname(workspacesDir()),
-          dirname(sessiondPath()),
-          LAUNCHD_SOCKETS,
-          SIMULATOR_SOCKETS,
-          // The per-user temp and cache dirs: a workspace writes them for
-          // Apple's build tools, and every host app keeps its sockets there
-          // (VS Code's git askpass, browsers' singletons, srt's proxies).
-          ...(await darwinUserDirs()),
-        ].map((path) => realpath(path).catch(() => path))
-      ),
+      hostSockets: [
+        ...(await Promise.all(
+          [
+            dirname(workspacesDir()),
+            dirname(sessiondPath()),
+            LAUNCHD_SOCKETS,
+            SIMULATOR_SOCKETS,
+            // The per-user temp and cache dirs: a workspace writes them for
+            // Apple's build tools, and every host app keeps its sockets there
+            // (VS Code's git askpass, browsers' singletons, srt's proxies,
+            // Podman machine's API socket).
+            ...(await darwinUserDirs()),
+          ].map((path) => realpath(path).catch(() => path))
+        )),
+        // The container runtimes' sockets, the browsers' among them, each
+        // by the path a runtime is dialled at and by the file it names.
+        ...runtimes.dirs,
+        ...runtimes.sockets,
+      ],
       reachedHostSockets: [TEST_MANAGER_SOCKET, REMOTE_AUTOMATION_SOCKET],
     });
     const file = join(generationDir(id, gen), "boundary.sb");
     return {
-      files: [[file, profile], ...guardFiles(id, gen)],
+      files: [
+        [file, profile],
+        [grantedOf(id, gen), granted],
+        ...guardFiles(id, gen),
+      ],
       form: hash
         .update(profile)
         .update("\0")
@@ -2573,9 +2702,21 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     };
   }
   const srtTmp = srtTmpOf(id, gen);
-  const settings = `${JSON.stringify(srtSettings(policy, { rg: ripgrep(), srtTmp }), null, 2)}\n`;
+  const bwrap = bwrapLauncherOf(id, gen);
+  const launcher = readOnlyDeniesBwrap(hostBwrap());
+  const settings = `${JSON.stringify(
+    srtSettings(policy, {
+      bwrap,
+      rg: ripgrep(),
+      srtTmp,
+      bunNode,
+      containerSockets: runtimes,
+    }),
+    null,
+    2
+  )}\n`;
   const host = hostScript();
-  hostText ??= Bun.file(host).text();
+  hostText ??= readHostText(host);
   // What the host makes in the clone before each sandbox, so srt binds
   // each deny path onto itself and leaves nothing on the host
   // (`cloneDenies`), and guards for the sandbox's whole life.
@@ -2591,10 +2732,14 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       [files.settings, settings],
       [files.runner, RUNNER],
       [files.denies, denies],
+      [bwrap, launcher, 0o755],
+      [grantedOf(id, gen), granted],
       ...guardFiles(id, gen),
     ],
     form: hash
       .update(settings)
+      .update("\0")
+      .update(launcher)
       .update("\0")
       .update(RUNNER)
       .update("\0")
@@ -2933,9 +3078,10 @@ const executors = (
 };
 
 /**
- * Whether anything still runs in an older boundary of workspace `id`
- * ({@link Retiring}): an executor that was on its way into it as it was
- * handed over, or a command or a process one left. On Linux that is anything
+ * Whether anything still runs in boundary generation `old` of workspace
+ * `id`: a command its executor marked there and still waits on ({@link
+ * commandsIn}), whatever it listens on, or a process a command left. On
+ * Linux a process left is anything
  * that descends from its sandbox's init and was not there when its runner
  * was ready ({@link inTree}), a server a command left behind with
  * `setsid -f` or a double fork among them, in the sandbox's pid namespace or
@@ -2951,7 +3097,7 @@ const busyOld = async (
   old: Retiring,
   current: Held | undefined
 ): Promise<boolean> => {
-  if (inFlight(seen, id, old)) {
+  if ((await commandsIn(seen, id, old.gen)).length > 0) {
     return true;
   }
   if (process.platform === "linux") {
@@ -2971,16 +3117,45 @@ const busyOld = async (
 };
 
 /**
- * Whether an executor that was on its way into the older boundary `old` as it
- * was handed over is still there, its command not yet answered. Checked
- * again as the executor itself, not by the record alone: a record written
- * before {@link runsExecutor} lists the judge too.
+ * Where each executor marks the command it runs in generation `gen` of
+ * workspace `id`: a file named for its pid, made before it looks at the gate
+ * and removed as it exits, or as it goes through to a newer generation
+ * ({@link execScript}). In the generation's own dir, which nothing inside
+ * the boundary writes.
  */
-const inFlight = (seen: Seen[], id: string, old: Retiring): boolean => {
-  const exec = join(stateDir(id), "exec");
-  return seen.some(
-    (one) => old.executors.includes(one.pid) && runsExecutor(one.command, exec)
+const commandsOf = (id: string, gen: string): string =>
+  join(generationDir(id, gen), "commands");
+
+/**
+ * The executors whose command runs in generation `gen` of workspace `id`, or
+ * is on its way into it, as each marked it ({@link commandsOf}): a mark
+ * counts while its pid is an executor of the workspace in `seen`. A mark
+ * whose executor is gone (one killed outright leaves its mark) is removed.
+ * THE ONE TEST that a boundary has a live command: every look that would
+ * close or replace a generation asks it first ({@link busyOld}), whatever
+ * the command listens on, so a command with no listener keeps its boundary
+ * across an agent restart and the handover after it, to its own end.
+ */
+const commandsIn = async (
+  seen: readonly Pick<Seen, "command" | "pid">[],
+  id: string,
+  gen: string
+): Promise<number[]> => {
+  const dir = commandsOf(id, gen);
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const live = new Set(executors(seen, id));
+  const marked: number[] = [];
+  await Promise.all(
+    names.map(async (name) => {
+      const pid = Number(name);
+      if (live.has(pid)) {
+        marked.push(pid);
+        return;
+      }
+      await rm(join(dir, name), { force: true });
+    })
   );
+  return marked.sort((a, b) => a - b);
 };
 
 /**
@@ -3044,25 +3219,612 @@ const workPorts = async (seen: Seen[], place: Place): Promise<number[]> => {
 };
 
 /**
- * The ports the work of workspace `id`'s running boundary `held` listens on
- * ({@link workPorts}); none on macOS, whose boundary has no network of its
- * own.
+ * What the work of workspace `id`'s running boundary `held` still runs, in
+ * words ("listens on 5222", "runs"); nothing once nothing does. Its work is
+ * every process in it its runner did not start with ({@link busyOld}), what
+ * a command left behind with `&`, `nohup`, `setsid` or a double fork among
+ * them, whatever its session or process group: on Linux each descends from
+ * the sandbox's init, on macOS each carries the workspace's marker.
  */
-const servedPorts = async (id: string, held: Held): Promise<number[]> => {
-  if (process.platform !== "linux") {
-    return [];
+const workLeft = async (
+  id: string,
+  held: Held
+): Promise<string | undefined> => {
+  const seen = await snapshot();
+  if (!(await busyOld(seen, id, held, undefined))) {
+    return;
   }
-  const place = await readPlace(id, held.gen);
-  return place ? workPorts(await snapshot(), place) : [];
+  const commands = await commandsIn(seen, id, held.gen);
+  const place =
+    process.platform === "linux" ? await readPlace(id, held.gen) : undefined;
+  const ports = place ? await workPorts(seen, place) : [];
+  const words = [
+    ...(commands.length > 0
+      ? [
+          `runs ${commands.length === 1 ? "a command" : `${commands.length} commands`} (executor ${commands.join(", ")})`,
+        ]
+      : []),
+    ...(ports.length > 0 ? [`listens on ${ports.join(", ")}`] : []),
+  ];
+  return words.length > 0 ? words.join(" and ") : "runs";
 };
 
 /**
  * The workspaces whose boundary of an older form, or on a retiring keeper,
- * is kept as it is because its work serves on a port ({@link replaceOlder}),
- * each with those ports as last said: said once per change. Each stays
- * {@link stale}, looked at until its last listener ends, then handed over.
+ * is kept as it is because its work still runs ({@link replaceOlder}), each
+ * with what it runs as last said ({@link workLeft}): said once per change.
+ * Each stays {@link stale}, looked at until the last of its work ends, then
+ * handed over.
  */
-const keptServing = new Map<string, string>();
+const keptRunning = new Map<string, string>();
+
+/** Whether `path` is `dir` or lies under it. */
+const lies = (path: string, dir: string): boolean =>
+  path === dir || path.startsWith(`${dir}/`);
+
+/**
+ * Whether one pair of a policy's lists (`allowRead` and `denyRead`, …) lets
+ * `path` through: the deepest entry that holds it decides, a tie denying, as
+ * srt and the judge decide (core workspace-policy.ts: "the deeper entry
+ * deciding"). A path no entry holds is `unheld`: what the pair grants there
+ * is its kind's default (read: yes; write: no), which no name says, so an old
+ * policy reads it as let through and a new one as not, and a narrowing is
+ * never missed.
+ */
+const letThrough = (
+  path: string,
+  allow: readonly string[],
+  deny: readonly string[],
+  unheld: boolean
+): boolean => {
+  const deepest = (list: readonly string[]) =>
+    Math.max(
+      -1,
+      ...list
+        .filter((entry) => lies(path, entry))
+        .map((entry) => entry.split("/").length)
+    );
+  const allowed = deepest(allow);
+  const denied = deepest(deny);
+  return allowed < 0 && denied < 0 ? unheld : allowed > denied;
+};
+
+/** A policy field's `allow` or `deny` head, before what it is for (`Read`, `Write`). */
+const ALLOW_OR_DENY = /^(allow|deny)/;
+
+/** A list of a policy's as paths; undefined when it is no list of strings. */
+const pathsOf = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((entry) => typeof entry === "string")
+    ? value
+    : undefined;
+
+/**
+ * How a boundary's recorded grant ({@link grantedOf}) stands against the
+ * policy `now`: comparable, with how it narrows ({@link narrowing}), or not
+ * comparable, with why. NOT COMPARABLE IS NO NARROWING: a record that is
+ * missing, unreadable, or of another set of fields than this build's policy
+ * (a build before the record, or one that added or dropped a field) says
+ * nothing about which way access moved, so the boundary is never stopped for
+ * it with a command in it; it is kept while its work runs and handed over
+ * once that ends ({@link ensure}), and its replacement starts with this
+ * build's record. On 2026-10-19 the install of the build that introduced the
+ * record stopped 20 running boundaries as "narrowed (what its boundary
+ * started with is not on record)", a leaf's probe run among them, cut off
+ * with exit 137.
+ */
+type Grant =
+  | { readonly kind: "comparable"; readonly narrowed: readonly string[] }
+  | { readonly kind: "unknown"; readonly why: string };
+
+const compareGrant = (was: Policy | undefined, now: Policy): Grant => {
+  if (!was) {
+    return {
+      kind: "unknown",
+      why: "what it started with is not on record (a build before the record started it, or its record cannot be read)",
+    };
+  }
+  const fieldsOf = (policy: Policy) => Object.keys(policy).sort().join(", ");
+  if (fieldsOf(was) !== fieldsOf(now)) {
+    return {
+      kind: "unknown",
+      why: `its record names the fields ${fieldsOf(was)}, and this build's policy ${fieldsOf(now)}`,
+    };
+  }
+  return { kind: "comparable", narrowed: narrowing(was, now) };
+};
+
+/** The reasons a grant narrowed; none when it is not comparable ({@link compareGrant}). */
+const narrowedBy = (grant: Grant): readonly string[] =>
+  grant.kind === "comparable" ? grant.narrowed : [];
+
+/**
+ * How policy `now` narrows `was`, the policy a boundary started with
+ * ({@link grantedOf}), the two of one set of fields ({@link compareGrant}),
+ * each in words; none when it widens it or leaves it as it was. Read off the
+ * policy's own fields, whatever they are: each pair of lists named
+ * `allow<X>` and `deny<X>` narrows when a path one of its lists names was let
+ * through before and is not now ({@link letThrough}); any other field narrows
+ * when it changed at all (a flag, a path), as no name says which way.
+ */
+const narrowing = (was: Policy, now: Policy): string[] => {
+  const before: Record<string, unknown> = { ...was };
+  const after: Record<string, unknown> = { ...now };
+  const fields = [
+    ...new Set([...Object.keys(before), ...Object.keys(after)]),
+  ].sort();
+  const paired = (field: string): string | undefined => {
+    const rest = field.replace(ALLOW_OR_DENY, "");
+    return rest !== field &&
+      [`allow${rest}`, `deny${rest}`].every(
+        (name) => pathsOf(before[name]) && pathsOf(after[name])
+      )
+      ? rest
+      : undefined;
+  };
+  return fields.flatMap((field) => {
+    const rest = paired(field);
+    if (rest === undefined) {
+      return JSON.stringify(before[field]) === JSON.stringify(after[field])
+        ? []
+        : [`${field} changed`];
+    }
+    if (field.startsWith("deny")) {
+      return [];
+    }
+    const lists = (policy: Record<string, unknown>) =>
+      [
+        pathsOf(policy[`allow${rest}`]) ?? [],
+        pathsOf(policy[`deny${rest}`]) ?? [],
+      ] as const;
+    const [allowBefore, denyBefore] = lists(before);
+    const [allowNow, denyNow] = lists(after);
+    return [
+      ...new Set([...allowBefore, ...denyBefore, ...allowNow, ...denyNow]),
+    ]
+      .filter(
+        (path) =>
+          letThrough(path, allowBefore, denyBefore, true) &&
+          !letThrough(path, allowNow, denyNow, false)
+      )
+      .map((path) => `${path} is no longer let through by allow${rest}`);
+  });
+};
+
+/** One process a boundary's work runs, as the delegate's own commands saw it: its pid there and its command line. */
+interface WorkProcess {
+  readonly command: string;
+  readonly pid: number;
+}
+
+/** How much of a stopped process's command line is said. Ours: a line's worth. */
+const COMMAND_SAID = 160;
+
+const NS_PIDS = /^NSpid:\s+(.+)$/m;
+
+/** Linux: process `pid`'s pid in each pid namespace it is in, outermost first (`/proc/<pid>/status`'s `NSpid`); none once it is gone. */
+const nsPids = async (pid: number): Promise<number[]> =>
+  (
+    NS_PIDS.exec(
+      await readFile(`/proc/${pid}/status`, "utf8").catch(() => "")
+    )?.[1] ?? ""
+  )
+    .trim()
+    .split(WHITESPACE)
+    .filter(Boolean)
+    .map(Number);
+
+/**
+ * What the work of workspace `id`'s generation `boundary` runs now, as
+ * {@link busyOld} counts it: every process by its pid on this machine, and
+ * those the rest descend from (the work's roots), as its commands saw them.
+ * Linux: each pid in the sandbox's own pid namespace; macOS: the processes
+ * carrying that generation's marker, its runner aside.
+ */
+const workIn = async (
+  id: string,
+  boundary: Pick<Held, "gen" | "pid">
+): Promise<{ all: number[]; roots: WorkProcess[] }> => {
+  const seen = await snapshot();
+  let work: Seen[] = [];
+  let level = 0;
+  if (process.platform === "linux") {
+    const place = await readPlace(id, boundary.gen);
+    if (place) {
+      const idle = new Set(place.idle);
+      work = inTree(seen, place.inner).filter((one) => !idle.has(one.pid));
+      level = (await nsPids(place.inner)).length - 1;
+    }
+  } else {
+    const marker = `${BOUNDARY_MARKER}=${boundary.gen}`;
+    work = seen.filter(
+      (one) =>
+        one.pid !== boundary.pid &&
+        one.pid !== process.pid &&
+        one.command.includes(`CAWCO_WORKSPACE=${id}`) &&
+        one.command.includes(marker)
+    );
+  }
+  const pids = new Set(work.map((one) => one.pid));
+  // macOS reads each command with its environment, which is never said.
+  const plain =
+    process.platform === "linux"
+      ? undefined
+      : new Map((await commandLines()).map((line) => [line.pid, line.command]));
+  const roots = await Promise.all(
+    work
+      .filter((one) => !pids.has(one.ppid))
+      .map(async (one) => ({
+        pid: level > 0 ? ((await nsPids(one.pid))[level] ?? one.pid) : one.pid,
+        command: (plain?.get(one.pid) ?? one.command).slice(0, COMMAND_SAID),
+      }))
+  );
+  return { all: [...pids], roots };
+};
+
+/** At most this many reasons for a narrowing are said, then how many more. */
+const REASONS_SAID = 3;
+
+/**
+ * The line a delegate's next command shows once CawCo stopped what its work
+ * ran (`stopped`) for `cause`: each process by its command and the pid its
+ * commands saw, to be started again. Queued by {@link tellStopped}.
+ */
+const workStoppedLine = (
+  cause: string,
+  stopped: readonly WorkProcess[]
+): string => {
+  const one = stopped.length === 1;
+  const each = stopped
+    .map((proc) => `\`${proc.command}\` (pid ${proc.pid})`)
+    .join(", ");
+  return `cawco: ${cause}, and what still ran in it was stopped: ${each}. Start ${one ? "it" : "them"} again if you still need ${one ? "it" : "them"}.`;
+};
+
+/** Queues {@link workStoppedLine} for workspace `id`'s next session command ({@link noticeOf}); nothing when nothing was stopped. Answers the line. */
+const tellStopped = async (
+  id: string,
+  cause: string,
+  stopped: readonly WorkProcess[]
+): Promise<string | undefined> => {
+  if (stopped.length === 0) {
+    return;
+  }
+  const line = workStoppedLine(cause, stopped);
+  await appendFile(noticeOf(id), `${line}\n`, { mode: 0o600 });
+  return line;
+};
+
+/** Why a narrowed boundary was replaced, in a delegate's words: at most {@link REASONS_SAID} reasons, then how many more. */
+const narrowedCause = (narrowed: readonly string[]): string => {
+  const more = narrowed.length - REASONS_SAID;
+  return `this workspace's access was narrowed (${narrowed.slice(0, REASONS_SAID).join("; ")}${more > 0 ? `; and ${more} more` : ""}), so its boundary was replaced`;
+};
+
+/** The generations of a workspace whose access narrowed ({@link narrowedGenerations}): the current one's reasons (none when it did not), and each older one still beside it that did. */
+interface Narrowed {
+  readonly current: readonly string[];
+  readonly older: readonly { boundary: Retiring; why: readonly string[] }[];
+}
+
+/**
+ * Which generations of workspace `ref`, its current boundary `held` and each
+ * older one still beside it ({@link Retiring}), grant what the workspace's
+ * policy as it stands no longer does ({@link narrowing}); undefined when none
+ * does. One whose grant is not comparable is none of them ({@link
+ * compareGrant}).
+ */
+const narrowedGenerations = async (
+  ref: WorkspaceRef,
+  held: Pick<Held, "gen">
+): Promise<Narrowed | undefined> => {
+  const now = await workspacePolicy(ref);
+  const current = narrowedBy(
+    compareGrant(await grantedPolicy(ref.id, held.gen), now)
+  );
+  const older: { boundary: Retiring; why: readonly string[] }[] = [];
+  for (const boundary of await readRetiring(ref.id)) {
+    // biome-ignore lint/performance/noAwaitInLoops: one small record read per older generation
+    const granted = await grantedPolicy(ref.id, boundary.gen);
+    const why = narrowedBy(compareGrant(granted, now));
+    if (why.length > 0) {
+      older.push({ boundary, why });
+    }
+  }
+  return current.length > 0 || older.length > 0
+    ? { current, older }
+    : undefined;
+};
+
+/** Why workspace `ref`'s current boundary `held`'s grant is not comparable with its policy now ({@link compareGrant}); nothing when it is. */
+const unknownGrant = async (
+  ref: WorkspaceRef,
+  held: Pick<Held, "gen">
+): Promise<string | undefined> => {
+  const grant = compareGrant(
+    await grantedPolicy(ref.id, held.gen),
+    await workspacePolicy(ref)
+  );
+  return grant.kind === "unknown" ? grant.why : undefined;
+};
+
+/**
+ * The keeper a boundary replaced while this build's keeper is owed the
+ * machine's endpoint ({@link ownKeeperOwed}) starts on: this build's own
+ * keeper, which an update's helper starts at its own endpoint before the
+ * machine's names it, once it answers there. Until then there is none to
+ * start on but the current one (`client`), and the boundary started there is
+ * handed over to this build's keeper once that is the machine's, as every
+ * boundary on a retiring keeper is ({@link leaveRetiringKeepers}).
+ */
+const keeperTakingOver = async (
+  client: SessiondClient,
+  owed: boolean
+): Promise<SessiondClient> =>
+  owed
+    ? ((await keepers.of({ kind: "build", version: runtimeVersion })) ?? client)
+    : client;
+
+/**
+ * Stops every generation of workspace `ref` whose access the workspace's
+ * policy has narrowed since it started (`narrowed`, {@link narrowing}), now,
+ * as {@link restartIfIdle} stops one: the gate goes up, each is stopped with
+ * everything in it, and, when the current one `held` was, a boundary of the
+ * policy as it stands starts, on the keeper taking over when one is owed the
+ * endpoint ({@link keeperTakingOver}). What their work still ran is said,
+ * each process by its command and the pid its commands saw: in the agent's
+ * log, and as a line the delegate's next command shows ({@link noticeOf}),
+ * so it can start it again. Nothing it ran is lost silently, and no access
+ * outlives its removal. Answers the boundary that runs.
+ */
+const replaceNarrowed = async (
+  client: SessiondClient,
+  ref: WorkspaceRef,
+  held: Held,
+  narrowed: Narrowed,
+  owed: boolean
+): Promise<Boundary> => {
+  const gate = gateOf(ref.id);
+  await writeStateFile(gate, String(process.pid));
+  try {
+    const stopping: Held[] = [
+      ...(narrowed.current.length > 0 ? [held] : []),
+      ...narrowed.older.map((one) => one.boundary),
+    ];
+    const why = [
+      ...new Set([
+        ...narrowed.current,
+        ...narrowed.older.flatMap((one) => one.why),
+      ]),
+    ];
+    const stopped: WorkProcess[] = [];
+    for (const boundary of stopping) {
+      // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, each gone before the next
+      const work = await workIn(ref.id, boundary);
+      stopped.push(...work.roots);
+      const place = await readPlace(ref.id, boundary.gen);
+      await stopBoundary(ref.id, boundary);
+      if (process.platform === "darwin") {
+        // What a macOS runner started outlives it ({@link stopBoundary}).
+        for (const pid of work.all) {
+          signalPid(listedPid(pid), "SIGKILL");
+        }
+      } else if (!(await sandboxesGone(place ? [place.inner] : []))) {
+        throw new Error(
+          `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped`
+        );
+      }
+      await cleanGeneration(ref.id, boundary);
+      await rm(retiringFileOf(ref.id, boundary), { force: true });
+    }
+    const runs =
+      narrowed.current.length > 0
+        ? await (async () => {
+            forgetStale(ref.id);
+            return start(await keeperTakingOver(client, owed), ref);
+          })()
+        : await armHook(ref.id, held);
+    const line = await tellStopped(ref.id, narrowedCause(why), stopped);
+    console.info(
+      `[workspace] ${ref.id}: its boundary ${stopping.map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is stopped now, as its access narrowed, and ${runs.pid} runs: ${line ?? `nothing ran in it (${why.slice(0, REASONS_SAID).join("; ")})`}`
+    );
+    return runs;
+  } finally {
+    await rm(gate, { force: true });
+  }
+};
+
+/**
+ * How often the boundaries in use are looked at for a narrowing no event
+ * says ({@link lookForNarrowing}): 5 s, unless a probe's scratch fleet names
+ * another in `CAWCO_NARROW_LOOK_MS` (boundary-handover holds it off, so only
+ * the hub's event can act on a project's folder moved away). Read once, as
+ * the daemon starts.
+ */
+const NARROW_LOOK_MS = process.env.CAWCO_NARROW_LOOK_MS
+  ? Number(process.env.CAWCO_NARROW_LOOK_MS)
+  : 5000;
+
+/** Each workspace's narrowing check under way, and whether another was asked meanwhile ({@link recheckNarrowed}). */
+let narrowLook: Promise<void> | undefined;
+let narrowAgain: { readonly why: string } | undefined;
+
+/**
+ * Checks the running boundaries for a narrowed access now ({@link narrowing}),
+ * and stops each generation whose access narrowed, its current boundary
+ * replaced ({@link replaceNarrowed}), as a start of its own (an ensure under
+ * way checks for itself, and a close under way ends it): every workspace with
+ * a boundary running on any keeper, or only `ids`. One check at a time; one
+ * asked meanwhile runs once it ends. Never rejects.
+ *
+ * THE LIST of what a workspace's policy reads (core workspace-policy.ts
+ * `workspacePolicy`) and what says each changed, so its boundaries are
+ * checked for a narrowed access ({@link recheckNarrowed}) at once:
+ *
+ * - its accounts (`accounts.json`) and its sessions' spill folders
+ *   (`spills.json`), which only grow: written by {@link boundaryFor} and the
+ *   workspace's create, each followed by an ensure, which checks
+ *   ({@link ensure});
+ * - its project (`project.json`): a change of it checks at once
+ *   ({@link setProject}, written by those and a browser door's);
+ * - its project's folder on the hub (`projectFolder`): moved away only by
+ *   the hub (a project's delete or merge), which then syncs every machine's
+ *   fleet config; the sync checks (session.ts `FLEET_SYNC`);
+ * - what the fleet sync writes (`fleetSyncedPaths`, the user layer under
+ *   Claude Code's home): the sync checks;
+ * - this machine's accounts and the credential stores they make
+ *   (`accountLayers`' config dirs, `credentialStores`): an account's sign-in
+ *   or removal checks ({@link accountsChangedHere});
+ * - this build (`binaryRoot`, the form): the agent's start re-arms every
+ *   boundary in use, through an ensure ({@link rearmHooks});
+ * - the clone's alternates, the toolchains under home (`homeToolchains`),
+ *   Xcode's developer dir, a place's own files (`ownerOnlyIn`, `linkedIn`,
+ *   `protectedIn`) and every link a path resolves through: no event says
+ *   these, and no file watch is kept for them (a watch per workspace is what
+ *   fseventsd's memory went to); the boundaries in use are looked at for
+ *   them each {@link NARROW_LOOK_MS} ({@link lookForNarrowing}).
+ *
+ * What is fixed for a workspace's life (its clone, state and scratch dirs,
+ * doors, caches, the gitconfig, the host's tool caches, Linux's host-private
+ * paths) needs none.
+ */
+export const recheckNarrowed = (
+  why: string,
+  ids?: readonly string[]
+): Promise<void> => {
+  if (narrowLook) {
+    narrowAgain = { why };
+    return narrowLook;
+  }
+  narrowLook = recheckNow(why, ids)
+    .catch((error: unknown) => {
+      console.warn(
+        `[workspace] the boundaries could not be checked for a narrowed access (${why}): ${error instanceof Error ? error.message : String(error)}`
+      );
+    })
+    .finally(() => {
+      narrowLook = undefined;
+      const again = narrowAgain;
+      narrowAgain = undefined;
+      if (again) {
+        recheckNarrowed(again.why).catch(() => undefined);
+      }
+    });
+  return narrowLook;
+};
+
+/** {@link recheckNarrowed}'s check itself. */
+const recheckNow = async (
+  why: string,
+  ids?: readonly string[]
+): Promise<void> => {
+  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const runningIds = (
+    ids ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
+  ).filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)));
+  for (const id of runningIds) {
+    if (starting.has(id) || closing.has(id)) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, as each start is
+    const held = await readHeld(id).catch(() => undefined);
+    if (!held) {
+      continue;
+    }
+    const ref = { id, path: held.path };
+    const narrowed = await narrowedGenerations(ref, held).catch(
+      () => undefined
+    );
+    if (!narrowed || starting.has(id) || closing.has(id)) {
+      continue;
+    }
+    console.info(
+      `[workspace] ${id}: its access narrowed (${why}), so its narrowed boundaries are stopped now`
+    );
+    const replaced = (async () =>
+      replaceNarrowed(
+        await sessiond(),
+        ref,
+        held,
+        narrowed,
+        await ownKeeperOwed()
+      ))();
+    starting.set(id, replaced);
+    await replaced
+      .catch((error: unknown) => {
+        console.warn(
+          `[workspace] ${id}: its narrowed boundary could not be replaced: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => starting.delete(id));
+  }
+};
+
+/**
+ * The workspaces whose boundary is in use: a session attached, a live work
+ * item, a preview, a command, or work running in it ({@link liveWhy},
+ * {@link workLeft}); every running one while the hub has not said which
+ * items are live.
+ */
+const inUseNow = async (): Promise<string[]> => {
+  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
+    .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
+    .filter((id) => !(starting.has(id) || closing.has(id)));
+  const facts = await liveFacts(procs);
+  if (!facts) {
+    return ids;
+  }
+  // The process table, read once and only for a boundary nothing holds.
+  let seen: Seen[] | undefined;
+  const used: string[] = [];
+  for (const id of ids) {
+    // biome-ignore lint/performance/noAwaitInLoops: one small record read per running boundary
+    const held = await readHeld(id).catch(() => undefined);
+    if (!held) {
+      continue;
+    }
+    if (liveWhy(id, held.path, facts)) {
+      used.push(id);
+      continue;
+    }
+    seen ??= await snapshot();
+    if (await busyOld(seen, id, held, undefined)) {
+      used.push(id);
+    }
+  }
+  return used;
+};
+
+/** A machine's accounts changed (a sign-in, an account removed): every running boundary is checked for a narrowed access. */
+export const accountsChangedHere = (): void => {
+  recheckNarrowed("this machine's accounts changed").catch(() => undefined);
+};
+
+let narrowTimer: ReturnType<typeof setInterval> | undefined;
+
+/** Looks at the boundaries in use for a narrowed access each {@link NARROW_LOOK_MS} ({@link recheckNarrowed}'s list, its last item). */
+const lookForNarrowing = (): void => {
+  if (narrowTimer) {
+    return;
+  }
+  narrowTimer = setInterval(() => {
+    if (narrowLook) {
+      return;
+    }
+    inUseNow()
+      .then((ids) =>
+        ids.length > 0
+          ? recheckNarrowed("a look at the boundaries in use", ids)
+          : undefined
+      )
+      .catch((error: unknown) => {
+        console.warn(
+          `[workspace] the boundaries in use could not be looked at for a narrowed access: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+  }, NARROW_LOOK_MS);
+  narrowTimer.unref();
+};
 
 /** The socket inodes process `pid` has open, as its `/proc/<pid>/fd` links name them (`socket:[INODE]`); none once it is gone. */
 const socketsOf = async (pid: number): Promise<string[]> => {
@@ -3103,8 +3865,8 @@ const readRetiring = async (id: string): Promise<Retiring[]> => {
  * Hands workspace `ref`'s boundary `old`, of an older form, over to a new
  * one of this build's form, started beside it. The gate goes up first, so an
  * executor on its way in either waits and then runs through the new one, or
- * is already past it and is recorded with the older boundary, which it may
- * still hand its command. The older one is recorded before the new one
+ * is already past it, its mark in the older generation ({@link
+ * commandsIn}), which it may still hand its command. The older one is recorded before the new one
  * replaces its record, so no agent loses it, and runs on untouched with every
  * process in it; it closes once nothing runs in it ({@link closeIdle}).
  */
@@ -3117,10 +3879,7 @@ const handOver = async (
   await writeStateFile(gate, String(process.pid));
   try {
     const record = retiringFileOf(ref.id, old);
-    const retiring: Retiring = {
-      ...old,
-      executors: executors(await snapshot(), ref.id),
-    };
+    const retiring: Retiring = old;
     await writeWhole(record, `${JSON.stringify(retiring)}\n`, 0o644);
     const fresh = await start(client, ref).catch(async (error: unknown) => {
       await rm(record, { force: true });
@@ -3154,14 +3913,23 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
       ? "has nothing left running in it and is closed"
       : "is gone";
     if (alive && (await busyOld(seen, id, old, current))) {
-      const ports = inFlight(seen, id, old)
-        ? undefined
-        : await supersededPorts(seen, old, now);
+      // A command still running there keeps it, whatever its work listens
+      // on and whoever listens there since ({@link commandsIn}).
+      const ports =
+        (await commandsIn(seen, id, old.gen)).length > 0
+          ? undefined
+          : await supersededPorts(seen, old, now);
       if (!ports) {
         left = true;
         continue;
       }
-      closed = `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})`;
+      // What still runs there is the delegate's: it is said to it.
+      const line = await tellStopped(
+        id,
+        `a newer boundary of this workspace listens on every port its older one's work listened on (${ports.join(", ")}), so the older one was closed`,
+        (await workIn(id, old)).roots
+      );
+      closed = `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})${line ? `; said to the delegate: ${line}` : ""}`;
     }
     await stopBoundary(id, old);
     await cleanGeneration(id, old);
@@ -3293,7 +4061,7 @@ const restartIfIdle = async (
     const seen = await snapshot();
     if (
       executors(seen, ref.id).length > 0 ||
-      (await busyOld(seen, ref.id, { ...held, executors: [] }, undefined))
+      (await busyOld(seen, ref.id, held, undefined))
     ) {
       return held;
     }
@@ -3336,12 +4104,10 @@ const handOverStale = async (): Promise<void> => {
         forgetStale(ref.id);
         continue;
       }
-      // One kept while its work serves ({@link replaceOlder}) is only looked
+      // One kept while its work runs ({@link replaceOlder}) is only looked
       // at, not ensured: an ensure is a use, and its quiet time must run.
-      if (
-        keptServing.has(ref.id) &&
-        (await servedPorts(ref.id, held)).length > 0
-      ) {
+      // A narrowing meanwhile is the narrowing look's ({@link recheckNarrowed}).
+      if (keptRunning.has(ref.id) && (await workLeft(ref.id, held))) {
         continue;
       }
       await ensureBoundary(ref);
@@ -3422,7 +4188,7 @@ const stopLooking = (): void => {
 
 const forgetStale = (id: string): void => {
   stale.delete(id);
-  keptServing.delete(id);
+  keptRunning.delete(id);
   stopLooking();
 };
 
@@ -4077,6 +4843,7 @@ let quietTimer: ReturnType<typeof setInterval> | undefined;
  */
 export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   holders = given;
+  lookForNarrowing();
   if (quietTimer) {
     return;
   }
@@ -4112,9 +4879,10 @@ const ready = (
   new Promise((resolve, reject) => {
     const said: string[] = [];
     const words = (): string => (said.length ? `: ${said.join(" / ")}` : "");
+    let stop = (): void => undefined;
     const finish = (outcome: Error | number): void => {
       clearTimeout(timer);
-      client.unsubscribe(procId);
+      stop();
       if (typeof outcome === "number") {
         resolve(outcome);
       } else {
@@ -4130,7 +4898,7 @@ const ready = (
         ),
       WORKSPACE_BOUNDARY_START_TIMEOUT_MS
     );
-    client.subscribe(
+    stop = client.subscribe(
       procId,
       {
         line: (event) => {
@@ -4153,42 +4921,6 @@ const ready = (
   });
 
 /**
- * Where the executor keeps `gh`'s token for workspace `id`: its state dir,
- * which no workspace reads (`workspacePolicy` gives back only its `ro`
- * part), and which goes with the workspace ({@link closeBoundary}).
- */
-const ghTokenCacheOf = (id: string): string => join(stateDir(id), "gh-token");
-
-/**
- * The command token for `gh` when its caller has none, read on the host,
- * where the keyring is. `gh auth token` costs a command about 26 ms
- * (artifacts/srt-eval/REPORT.md §9), so the executor keeps its answer in a
- * 0600 file and asks again only when the file is missing or gh's `hosts.yml`
- * is not older than it: `gh auth login`, `logout` and `switch` rewrite
- * `hosts.yml`. The newer answer replaces the file by a rename; no answer
- * removes it, and no token goes in. The fast path forks nothing. A guarded
- * workspace's commands get none ({@link guardedEnv}): the block reads the
- * executor's `guarded` itself, so it is whole or absent, never an `if` left
- * with no body when the machine has no gh.
- */
-const ghToken = (id: string, gh: string | undefined): string =>
-  gh
-    ? `if [ -z "$guarded" ] && [ -z "\${GH_TOKEN:-}" ]; then
-  gh_cache=${shellQuote(ghTokenCacheOf(id))}
-  gh_hosts=\${GH_CONFIG_DIR:-\${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml
-  if [ -s "$gh_cache" ] && [ "$gh_cache" -nt "$gh_hosts" ]; then
-    read -r GH_TOKEN < "$gh_cache"
-  elif token=$(${shellQuote(gh)} auth token 2>/dev/null) && [ -n "$token" ]; then
-    (umask 077 && printf '%s\\n' "$token" > "$gh_cache.$$" && mv -f "$gh_cache.$$" "$gh_cache") || rm -f "$gh_cache.$$"
-    GH_TOKEN=$token
-  else
-    rm -f "$gh_cache"
-  fi
-  [ -n "\${GH_TOKEN:-}" ] && export GH_TOKEN
-fi`
-    : "";
-
-/**
  * What every command runs with besides its caller's environment: the
  * workspaces' own cache (`workspaceCacheEnv`), its own XDG config, data and
  * state homes (`workspaceXdgEnv`), Maestro's home and temp dir in the
@@ -4197,15 +4929,28 @@ fi`
  * on the boundary's proxy as every other tool is (`NODE_USE_ENV_PROXY`:
  * node's `fetch` and `http`/`https` read `HTTPS_PROXY` and `NO_PROXY` only
  * with it, and a workspace reaches the network through that proxy alone),
- * its scratch dir as `TMPDIR` (by its short name on macOS, `workspaceTmpDir`),
- * the empty git template, gh's empty config dir ({@link ghConfigOf}), git's
- * system config naming gh's helper ({@link gitSystemConfigOf}), the tool and
- * git doors (hub-git.ts `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a
- * script tells that it runs inside one; never a key agent's socket
- * ({@link AGENT_SOCKET_ENV}).
+ * its scratch dir as `TMPDIR` (by its short name on macOS, `workspaceTmpDir`)
+ * and no `CLAUDE_CODE_TMPDIR`, the empty git template, git's own system config
+ * ({@link gitSystemConfigOf}), the tool and git doors (hub-git.ts
+ * `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a script tells that it runs
+ * inside one; never a key agent's socket ({@link AGENT_SOCKET_ENV}).
+ *
+ * And never a forge's token, its caller's included ({@link FORGE_TOKEN_ENV}),
+ * whatever the project's upstream rule: no forge CLI by its path, nor curl,
+ * nor any HTTP client has one to post with, on any host. gh runs with the
+ * door's config dir ({@link guardedGhConfigOf}): its requests go through the
+ * workspace's GitHub door, which decides each write by the rule as every door
+ * does (core `decideWrite`) and signs in on the host to what goes
+ * (github-door.ts). Every push across the network goes through the git door
+ * (hub-git.ts `guardedPushParameters`), which decides it the same way and
+ * pushes what goes with the host's own credential.
  */
 const commandEnv = (id: string, clone: string): string[] => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
+  // The session's CLI temp root, read only in here ({@link Boundary.claudeTmp}):
+  // a Claude Code a command starts takes `TMPDIR`, the scratch dir, instead.
+  "unset CLAUDE_CODE_TMPDIR",
+  `for name in $(compgen -e); do case $name in ${FORGE_TOKEN_ENV.join(" | ")}) unset "$name" ;; esac; done`,
   ...Object.entries({
     ...workspaceCacheEnv(),
     ...workspaceXdgEnv(id),
@@ -4217,55 +4962,46 @@ const commandEnv = (id: string, clone: string): string[] => [
     NODE_USE_ENV_PROXY: "1",
     TMPDIR: workspaceTmpDir(id),
     GIT_TEMPLATE_DIR: gitTemplateOf(id),
-    GH_CONFIG_DIR: ghConfigOf(id),
+    GH_CONFIG_DIR: guardedGhConfigOf(id),
     GIT_CONFIG_SYSTEM: gitSystemConfigOf(id),
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
-    ...gitDoorEnv(id, clone),
+    ...doorEnv(id, clone),
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
 ];
 
-/** The variables a GitHub token travels in: gh's (`GH_TOKEN`, `GH_ENTERPRISE_TOKEN`), hub's and the Actions convention's (`GITHUB_TOKEN`, `GITHUB_ENTERPRISE_TOKEN`). */
-const GITHUB_TOKEN_ENV = [
-  "GH_TOKEN",
-  "GITHUB_TOKEN",
-  "GH_ENTERPRISE_TOKEN",
-  "GITHUB_ENTERPRISE_TOKEN",
-];
+/** The git door's variables, its config words joined by those that send every push across the network through it. */
+const doorEnv = (id: string, clone: string): Record<string, string> => {
+  const door = gitDoorEnv(id, clone);
+  return {
+    ...door,
+    CAWCO_GIT_PARAMETERS: [door.CAWCO_GIT_PARAMETERS, guardedPushParameters()]
+      .filter(Boolean)
+      .join(" "),
+  };
+};
 
 /**
- * What a command of a workspace the upstream guard keeps off other
- * people's repositories runs with on top of {@link commandEnv}: no GitHub
- * token, its caller's included, so neither `/usr/bin/gh` by its path nor
- * curl nor any HTTP client has one to post with; and, when the clone's
- * origin is on GitHub, that origin sent through the git door
- * (hub-git.ts `guardedGitParameters`), which fetches and pushes it on the
- * host with the host's gh credential, its large files with it
- * (`GIT_LFS_SKIP_PUSH`: the door sends them). gh runs with the guarded
- * config dir ({@link guardedGhConfigOf}): its requests go through the
- * workspace's GitHub door, which signs in on the host to what it lets
- * through (github-door.ts). Under `ask` (`asks`), every push to GitHub goes
- * through the git door too (hub-git.ts `askedPushParameters`), which holds
- * one to another person's repository for the person.
+ * The variables a forge's credential travels in, whatever the forge, as
+ * shell `case` patterns: gh's and hub's (`GH_TOKEN`, `GH_ENTERPRISE_TOKEN`,
+ * `GITHUB_TOKEN`, `GITHUB_ENTERPRISE_TOKEN`), glab's ("Environment
+ * variables, first one set wins: `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN`,
+ * `OAUTH_TOKEN`", and `CI_JOB_TOKEN` under CI auto-login,
+ * docs.gitlab.com/cli/config), and any other forge's token by its name
+ * (Gitea, Forgejo, Codeberg, Bitbucket): the forge-named token variables are
+ * my own call, as no list of every forge's names exists.
  */
-const guardedEnv = (id: string, clone: string, asks: boolean): string[] => {
-  const github = guardedGitParameters(clone);
-  const words = [
-    gitDoorEnv(id, clone).CAWCO_GIT_PARAMETERS,
-    github,
-    asks ? askedPushParameters() : undefined,
-  ].filter((each): each is string => Boolean(each));
-  return [
-    `unset ${GITHUB_TOKEN_ENV.join(" ")}`,
-    `export GH_CONFIG_DIR=${shellQuote(guardedGhConfigOf(id))}`,
-    ...(github || asks
-      ? [
-          `export CAWCO_GIT_PARAMETERS=${shellQuote(words.join(" "))}`,
-          "export GIT_LFS_SKIP_PUSH=1",
-        ]
-      : []),
-  ];
-};
+const FORGE_TOKEN_ENV = [
+  "GH_*TOKEN",
+  "GITHUB_*TOKEN",
+  "GITLAB_*TOKEN",
+  "OAUTH_TOKEN",
+  "CI_JOB_TOKEN",
+  "GITEA_*TOKEN",
+  "FORGEJO_*TOKEN",
+  "CODEBERG_*TOKEN",
+  "BITBUCKET_*",
+];
 
 const stoppedLine = (id: string): string =>
   `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
@@ -4323,8 +5059,8 @@ take() {
  * The executor: hands a command, the caller's directory and environment to
  * the workspace's runner over its FIFO, streams the output back and exits
  * with the command's status. It finds its own tools on {@link SYSTEM_PATH};
- * the command runs with its caller's PATH, behind the upstream guard's
- * shims ({@link writeGuardShims}) and, on macOS, the toolchain shims.
+ * the command runs with its caller's PATH, behind the hub's git helper and,
+ * on macOS, the toolchain shims.
  */
 /** A place's guard, looking before its command ({@link PLACE_GUARD}): a place it cannot look at runs no command. Nothing for a clone. */
 const guardBefore = (id: string, held: Pick<Held, "gen" | "path">): string =>
@@ -4359,26 +5095,32 @@ const execScript = (
   id: string,
   held: Pick<Held, "exec" | "gen" | "path" | "scratch"> & {
     readonly pid: Pid | undefined;
-  },
-  gh: string | undefined
+  }
 ): string => {
   const linux = process.platform === "linux";
   const pid = held.pid === undefined ? "PID" : String(held.pid);
-  // The hub's git helper (`hub-git.ts`) first, then the upstream guard's
-  // shims ({@link writeGuardShims}), then on macOS the toolchain shims.
-  const helpers = `${gitHelperDirOf(id)}:${guardShimsOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
+  // The hub's git helper (`hub-git.ts`) first, then on macOS the toolchain
+  // shims.
+  const helpers = `${gitHelperDirOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
   const path = `printf 'export PATH=%q\\n' ${shellQuote(helpers)}"$caller_path"`;
   return `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
-# exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
+# exec [--session] [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND
+# ended in; a session's command (--session) shows the workspace's notice first.
 caller_path=$PATH
 PATH=${SYSTEM_PATH}
 export PATH
+# This command is this generation's from here until it exits: the agent keeps
+# the generation running while the mark names a live executor.
+marks=${shellQuote(commandsOf(id, held.gen))}
+mark="$marks/$$"
+mkdir -p "$marks" 2>/dev/null && : > "$mark"
+trap 'rm -f "$mark"' EXIT
 # While the agent replaces the boundary, wait, then run through the new one.
 gate=${shellQuote(gateOf(id))}
 if [ -e "$gate" ]; then
   while [ -e "$gate" ] && kill -0 "$(cat "$gate" 2>/dev/null)" 2>/dev/null; do sleep 0.1; done
-  [ -e "$gate" ] || PATH=$caller_path exec "$0" "$@"
+  [ -e "$gate" ] || { rm -f "$mark"; PATH=$caller_path exec "$0" "$@"; }
 fi
 fifo=${shellQuote(fifoOf(id, held.gen))}
 if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
@@ -4386,14 +5128,16 @@ if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
   exit 126
 fi
 ${linux ? mountCheck(id, held.gen, pid) : ""}
+session=
+if [ "$1" = --session ]; then session=1; shift; fi
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
-# Kept off other people's repositories, or asking the person first
-# (upstream-guard.ts isGuarded): no GitHub token.
-posts=$(sed -n 's/.*"posts":"\\([a-z]*\\)".*/\\1/p' ${shellQuote(upstreamRuleOf(id))} 2>/dev/null)
-guarded=
-case "$posts" in off | ask) guarded=1 ;; esac
-${ghToken(id, gh)}
+# A session's command shows what CawCo did to the work meanwhile, once.
+notice=${shellQuote(noticeOf(id))}
+if [ -n "$session" ] && [ -s "$notice" ] && mv "$notice" "$notice.$$" 2>/dev/null; then
+  cat "$notice.$$" >&2
+  rm -f "$notice.$$"
+fi
 req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
@@ -4402,15 +5146,6 @@ pwd -P > "$req/cwd"
 ${commandEnv(id, held.path)
   .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
-  if [ "$posts" = ask ]; then
-${guardedEnv(id, held.path, true)
-  .map((line) => `    echo ${shellQuote(line)}`)
-  .join("\n")}
-  elif [ -n "$guarded" ]; then
-${guardedEnv(id, held.path, false)
-  .map((line) => `    echo ${shellQuote(line)}`)
-  .join("\n")}
-  fi
   ${path}
 } > "$req/env"
 mkfifo "$req/out" "$req/err"
@@ -4437,6 +5172,47 @@ ${guardAfter(id, held)}if [ -n "$cwd_out" ] && [ -s "$req/cwd-out" ]; then cp "$
 rm -rf "$req"
 exit "$status"
 `;
+};
+
+/**
+ * Workspace `ref`'s executor and runner as this build writes them, for a
+ * proof that runs them on the host with no sandbox around them (the probe
+ * kit's git-door spec): the files the executor's environment names written
+ * as arming writes them (gh's door config, git's system config), then the
+ * executor's text for a runner at `pid` and the runner's own. Every command
+ * still goes in through the same executor, its environment built by
+ * {@link commandEnv}, and runs through the same runner: `bash -c <runner>
+ * cawco <fifo>`, its pid both of the boundary's in `place`, `guarded`
+ * naming no bind.
+ */
+export const executorUnsandboxed = async (
+  ref: WorkspaceRef,
+  gen: string,
+  pid: Pid
+): Promise<{
+  exec: string;
+  fifo: string;
+  guarded: string;
+  place: string;
+  runner: string;
+  scratch: string;
+}> => {
+  await writeGuardedGhConfig(ref.id);
+  await writeWhole(gitSystemConfigOf(ref.id), gitSystemConfig(ref.id), 0o644);
+  return {
+    exec: execScript(ref.id, {
+      exec: join(stateDir(ref.id), "exec"),
+      gen,
+      path: ref.path,
+      pid,
+      scratch: scratchOf(ref.id),
+    }),
+    fifo: fifoOf(ref.id, gen),
+    guarded: guardedOf(ref.id, gen),
+    place: placeOf(ref.id, gen),
+    runner: RUNNER,
+    scratch: scratchOf(ref.id),
+  };
 };
 
 /**
@@ -4474,12 +5250,12 @@ export const makeDirs = async (id: string): Promise<void> => {
       stateDir(id),
       roOf(id),
       gitTemplateOf(id),
-      ghConfigOf(id),
       scratchOf(id),
       ...inScratch.filter((path) => !planted.includes(path)),
       ...workspaceCaches(),
     ].map((path) => mkdir(path, { recursive: true }))
   );
+  await makeRuntimeDir(id);
   if (!planted.includes(xdg.config)) {
     await linkGitConfig(xdg.config);
     await writeBunConfig(xdg.config);
@@ -4490,6 +5266,43 @@ export const makeDirs = async (id: string): Promise<void> => {
   }
   // Its `TMPDIR`'s short name on macOS, made again after a restart cleared it.
   linkWorkspaceTmp(id);
+};
+
+/**
+ * The runtime dir every command runs with (paths.ts `workspaceRuntimeDir`),
+ * mode 0700 whatever the umask: pnpm takes no other for its store locks, and
+ * one other users can write to it ignores. Every workspace writes the cache,
+ * so it is opened without following a link (a link a workspace planted
+ * there is never changed through, and the log says so) and changed through
+ * that handle.
+ */
+const makeRuntimeDir = async (id: string): Promise<void> => {
+  const dir = workspaceRuntimeDir();
+  await mkdir(dir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "EEXIST") {
+      throw error;
+    }
+  });
+  const handle = await openFile(
+    dir,
+    // biome-ignore lint/suspicious/noBitwiseOperators: open(2) takes its flags as one bit set
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+  ).catch((error: NodeJS.ErrnoException) => {
+    console.warn(
+      `[workspace] ${id}: ${dir} is not a folder of its own (${error.code}), so pnpm's store locks have no runtime dir there`
+    );
+  });
+  if (!handle) {
+    return;
+  }
+  try {
+    // biome-ignore lint/suspicious/noBitwiseOperators: a mode's permission bits
+    if (((await handle.stat()).mode & 0o777) !== 0o700) {
+      await handle.chmod(0o700);
+    }
+  } finally {
+    await handle.close();
+  }
 };
 
 /**
@@ -4586,7 +5399,8 @@ const pnpmStore = (): string => join(workspaceCacheDir(), "pnpm", "store");
  * copy took 119 MB, 2026-10-18. On macOS Seatbelt lets a command read and
  * write the cache (workspace-policy.ts `workspacePolicy`, `workspaceCaches` in
  * its reads and writes) and judges each link by where it lands, so the same
- * links work there.
+ * links work there. pnpm 12 locks the store from outside it, in the
+ * runtime dir every workspace shares ({@link makeRuntimeDir}).
  *
  * Two files, one for each config pnpm has had. pnpm 11 and later read
  * `$XDG_CONFIG_HOME/pnpm/config.yaml` and take only auth and registry
@@ -4700,6 +5514,7 @@ const linkedFiles = async (
 ): Promise<{ inode: string; file: string }[]> => {
   const listed =
     await Bun.$`/usr/bin/find ${root} -xdev -type f -links +1 -printf ${"%D %i %p\\0"}`
+      .env(hostEnvironment())
       .quiet()
       .nothrow();
   return listed.stdout
@@ -5018,12 +5833,15 @@ const launch = async (
     await listStandIns(ref, linux);
   }
   const plan = await planOf(ref, gen);
-  for (const [path, content] of plan.files) {
+  for (const [path, content, mode] of plan.files) {
     // biome-ignore lint/performance/noAwaitInLoops: a few small files
-    await writeWhole(path, content, 0o644);
+    await writeWhole(path, content, mode ?? 0o644);
   }
   const fifo = fifoOf(ref.id, gen);
-  const made = await Bun.$`/usr/bin/mkfifo ${fifo}`.quiet().nothrow();
+  const made = await Bun.$`/usr/bin/mkfifo ${fifo}`
+    .env(hostEnvironment())
+    .quiet()
+    .nothrow();
   if (made.exitCode !== 0) {
     throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
   }
@@ -5046,7 +5864,7 @@ const launch = async (
       "its sandbox's processes could not be found as it started"
     );
   }
-  const held: Omit<Held, "hook" | "policy"> = {
+  const held: Omit<Held, "claudeTmp" | "hook" | "policy"> = {
     exec: join(stateDir(ref.id), "exec"),
     gen,
     pid: proc.pid,
@@ -5080,7 +5898,8 @@ const signalHeld = async (
  * Kills the workspace's boundaries, the current one and every older one
  * still beside it, with every process in them ({@link stopBoundary}), and any
  * other boundary process of the workspace; on macOS everything carrying the
- * workspace's marker. Stops serving its doors. What still uses it from
+ * workspace's marker. Stops serving its doors, and closes its pages in its
+ * project's browser with its sessions' connections there. What still uses it from
  * outside the boundary ends too: a session's CLI in its clone, an executor
  * on its way in ({@link endUsers}). Its record goes (`boundary.json`, each
  * older one's), so its executor says the boundary is not running and a
@@ -5169,6 +5988,9 @@ const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
   await closeToolDoor(ref.id);
   await closeGitDoor(ref.id);
   await closeGithubDoor(ref.id);
+  // Its sessions' connections to the project's browser cut, and its pages
+  // there closed (browser/gate.ts).
+  await closeWorkspaceBrowsers(ref.id);
   const held = await readHeld(ref.id).catch(() => undefined);
   const boundaries = [...(held ? [held] : []), ...(await readRetiring(ref.id))];
   const inners: number[] = [];

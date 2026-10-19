@@ -59,7 +59,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { browser } from "$app/env";
   import { page } from "$app/state";
   import {
     barGlass,
@@ -67,21 +66,30 @@
     glassElement,
     glassPlacement,
   } from "./bar-glass.svelte";
+  import FilesFace from "./files/FilesFace.svelte";
   import FinderCard from "./find/FinderCard.svelte";
+  import { firstRender } from "./first-render.svelte";
   import CawPanel from "./home/CawPanel.svelte";
   import { liveFeed } from "./home/caw-feed.svelte";
+  import { lightbox } from "./lightbox/lightbox-state.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { dur, ease } from "./motion/curves.svelte";
   import { FOLDED, GROWN, standsOpen } from "./motion/hang";
   import { cawQuiet } from "./NeedsCaw.svelte";
 
+  /** The first paint, on both sides, has the width cookie's guess (first-render.svelte.ts). */
   const phoneQuery = new MediaQuery(DRAWER_QUERY);
   const phone = $derived(
-    browser ? phoneQuery.current : Boolean(page.data.narrow)
+    firstRender.held ? Boolean(page.data.narrow) : phoneQuery.current
   );
-  /** The card asked for. A phone keeps the machines in its sidebar (Shell). */
+  /**
+   * The card asked for. A phone keeps the machines in its sidebar and Files
+   * in its drawer (Shell).
+   */
   const asked = $derived(
-    barGlass.open === "machines" && phone ? null : barGlass.open
+    (barGlass.open === "machines" || barGlass.open === "files") && phone
+      ? null
+      : barGlass.open
   );
 
   let glass = $state<HTMLElement | null>(null);
@@ -102,17 +110,20 @@
     caw: "caw-pop",
     machines: "machines-pop",
     jump: "jump-pop",
+    files: "files-pop",
   } as const satisfies Record<Card, string>;
   const LABEL = {
     caw: "Needs you",
     machines: "Machines",
     jump: "Jump to",
+    files: "Files",
   } as const satisfies Record<Card, string>;
   /** Where each one puts the focus as it comes in. */
   const FOCUS = {
     caw: 'a[data-slot="cover"], button, [data-slot="caw-panel-empty"]',
     machines: ".row",
     jump: "input",
+    files: "input",
   } as const satisfies Record<Card, string>;
 
   /** Each face's element, and the fade running on it. */
@@ -380,9 +391,56 @@
       node.removeEventListener(FOLDED, endRehearsal);
     };
   });
+  /**
+   * The card opened with something asked: what had the focus is kept to give
+   * it back, and the focus goes where the new contents put it.
+   */
+  function takeFocus() {
+    // Rehearsed (opened with nothing asked), the focus stays where it is.
+    if (asked === null) {
+      return;
+    }
+    // What invoked it, or what invoked the opener that has gone (the
+    // phone's sheet hands over its burger, bar-glass `invoker`).
+    returnTo =
+      barGlass.invoker ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
+    barGlass.invoker = null;
+    const card = asked;
+    const node = content?.querySelector<HTMLElement>(`[data-face="${card}"]`);
+    if (!node) {
+      return;
+    }
+    if (card === "caw" && barGlass.byPointer) {
+      // Once it stands open, and in a task after the frame it landed in:
+      // taken in the press's own task, the style and layout it forced
+      // held back the open's first frame, and taken in the landing's, its
+      // last.
+      content?.addEventListener(
+        GROWN,
+        () => {
+          setTimeout(() => {
+            if (asked === "caw") {
+              focusIn(card, node);
+            }
+          });
+        },
+        { once: true }
+      );
+      return;
+    }
+    focusIn(card, node);
+  }
+
+  // A real open while the rehearsal stands ends it there; the popover was
+  // already open, so its open-focus never runs: the focus is taken here,
+  // once the face asked for has mounted.
   $effect.pre(() => {
     if (asked !== null && untrack(() => rehearsing)) {
       endRehearsal();
+      requestAnimationFrame(() => takeFocus());
     }
   });
 
@@ -420,7 +478,9 @@
     frame={shown}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
-    escapeKeydownBehavior={shown === "jump" ? "ignore" : "close"}
+    escapeKeydownBehavior={shown === "jump" || lightbox.current
+      ? "ignore"
+      : "close"}
     folded={() => barGlass.instant}
     forceMount
     glass
@@ -447,7 +507,17 @@
       const pressedGlass =
         document.activeElement instanceof Element &&
         glass?.contains(document.activeElement);
-      if (!(closedOutside || pressedGlass) && returnTo?.isConnected) {
+      // What the card put away also moved the focus on to somewhere of its
+      // own (Files' ask, into the composer): it stays there.
+      const movedOn =
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement !== document.body &&
+        !content?.contains(document.activeElement) &&
+        !pressedGlass;
+      if (
+        !(closedOutside || pressedGlass || movedOn) &&
+        returnTo?.isConnected
+      ) {
         returnTo.focus({ preventScroll: true });
       }
       closedOutside = false;
@@ -455,10 +525,15 @@
     }}
     onInteractOutside={(event) => {
       // The glass's own items open, swap or shut it themselves; bits-ui
-      // tells of a press on one after its click has already done so.
+      // tells of a press on one after its click has already done so. The
+      // file floating beside Files is Files' own, and so is a picture it
+      // opened (the lightbox's PhotoSwipe root, appended to the body, is no
+      // layer of bits-ui's).
       if (
         event.target instanceof Element &&
-        event.target.closest("[data-bar-group]")
+        event.target.closest(
+          "[data-bar-group], [data-files-float], .cawco-pswp"
+        )
       ) {
         event.preventDefault();
         return;
@@ -467,42 +542,7 @@
     }}
     onOpenAutoFocus={(event) => {
       event.preventDefault();
-      // Rehearsed (opened with nothing asked), the focus stays where it is.
-      if (asked === null) {
-        return;
-      }
-      // What invoked it, or what invoked the opener that has gone (the
-      // phone's sheet hands over its burger, bar-glass `invoker`).
-      returnTo =
-        barGlass.invoker ??
-        (document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null);
-      barGlass.invoker = null;
-      const card = asked;
-      const node = content?.querySelector<HTMLElement>(`[data-face="${card}"]`);
-      if (!node) {
-        return;
-      }
-      if (card === "caw" && barGlass.byPointer) {
-        // Once it stands open, and in a task after the frame it landed in:
-        // taken in the press's own task, the style and layout it forced
-        // held back the open's first frame, and taken in the landing's, its
-        // last.
-        content?.addEventListener(
-          GROWN,
-          () => {
-            setTimeout(() => {
-              if (asked === "caw") {
-                focusIn(card, node);
-              }
-            });
-          },
-          { once: true }
-        );
-        return;
-      }
-      focusIn(card, node);
+      takeFocus();
     }}
     side="bottom"
     sideOffset={placement.sideOffset}
@@ -531,6 +571,8 @@
           <CawPanel feed={liveFeed} onchoose={close} quiet={cawQuiet()} />
         {:else if one.card === "machines"}
           <MachinesList onleave={close} />
+        {:else if one.card === "files"}
+          <FilesFace onclose={close} />
         {:else}
           <FinderCard onclose={close} {phone} />
         {/if}

@@ -1,8 +1,7 @@
 /**
- * What reads as a credential in a piece of text, wherever CawCo looks: a
- * memory note's words (hub memory.ts hides each one), and a file a place's
- * first commit would take (agent place-repo.ts leaves the file out). One
- * list, so both read a key the same way.
+ * What reads as a credential in a file a place's first commit would take
+ * (agent place-repo.ts leaves the file out). A memory note's words and what
+ * an agent's `find` answers pass the hub's own filter (hub secret-filter.ts).
  */
 
 /** Each credential's shape, global so a caller can replace every one, and what it is called. */
@@ -24,11 +23,6 @@ const CREDENTIALS: readonly { kind: string; pattern: RegExp }[] = [
   },
   { kind: "a bearer token", pattern: /\bbearer\s+[A-Za-z0-9._~+/-]{16,}=*/gi },
 ];
-
-/** Every credential's shape, global: what a caller replaces to hide them. */
-export const CREDENTIAL_PATTERNS: readonly RegExp[] = CREDENTIALS.map(
-  (each) => each.pattern
-);
 
 /**
  * What the first credential `text` holds is called ("an API key"), never

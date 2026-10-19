@@ -245,8 +245,8 @@ export interface SpawnPayload {
   accountDir?: { accountId: string };
   /**
    * Start from a repository instead of a directory that is already there: the
-   * agent clones `repo` — `owner/name`, or any URL git understands — into a
-   * subdirectory of `baseDir` and runs the session in the clone.
+   * agent clones `repo`, a git URL on any host ({@link isGitUrl}), with plain
+   * git into a subdirectory of `baseDir` and runs the session in the clone.
    */
   bootstrap?: { repo: string; baseDir: string };
   /**
@@ -423,25 +423,24 @@ export interface SpawnPayload {
   workspace?: import("./harness").WorkspaceRef;
 }
 
-/** One repository a machine can {@link SpawnPayload.bootstrap} from. */
-export interface RepoInfo {
-  description: string;
-  nameWithOwner: string;
-  updatedAt: string;
-  visibility: "PUBLIC" | "PRIVATE" | "INTERNAL";
-}
-
-/**
- * What the machine-scoped `listRepos` control answers with. The GitHub CLI is
- * the machine's own credential store — cawco never holds a token.
- */
-export type ReposResult =
-  RepoInfo[] | { error: "gh-missing" | "gh-unauthenticated" };
-
 const TRAILING_SLASHES = /\/+$/;
 const URL_SCHEME_AND_HOST = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i;
 const SCP_LIKE_HOST = /^[^/]+@[^:]+:/;
 const DOT_GIT_SUFFIX = /\.git$/;
+
+/** A URL with a scheme: `https://`, `ssh://`, `git://`, `file://`, any `<scheme>://`. */
+const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i;
+/** git's scp-like form, `[<user>@]<host>:<path>`: "only recognized if there are no slashes before the first colon". */
+const SCP_LIKE_URL = /^[^/\s:]+:\S+$/;
+
+/**
+ * Whether `repo` is a git URL, in git's own syntaxes (git-scm.com/docs/git-clone,
+ * "GIT URLS"): a `<scheme>://` URL or the scp-like `[<user>@]<host>:<path>`,
+ * on any host. A spawn's {@link SpawnPayload.bootstrap} clones only one, by
+ * plain git; a bare `owner/name` names no host, so it is none.
+ */
+export const isGitUrl = (repo: string): boolean =>
+  SCHEME_URL.test(repo.trim()) || SCP_LIKE_URL.test(repo.trim());
 
 /** `owner/name`, however the repository was written. */
 export const repoPath = (repo: string): string =>
@@ -689,6 +688,12 @@ export interface StopPayload {
   cwd?: string;
   /** Explicitly abort unadopted custody too, then tear down spin-off resources. */
   discard?: boolean;
+  /**
+   * The hub forgets the session once this stop is confirmed (its end is a
+   * delete or a transcript delete): the machine lets go of what it kept for
+   * the session to be reattached, its browser door among it.
+   */
+  forget?: true;
   /** The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
   /**
@@ -719,7 +724,7 @@ export interface StopPayload {
  *
  * Machine-scoped, `method` names either a session-catalog operation — routed to
  * whichever harness owns the id (`harness`, or merged across all when listing)
- * — or a machine feature (`listRepos`, `installTool`, the fleet controls). With
+ * — or a machine feature (`installTool`, the fleet controls). With
  * no `instanceId` and no `harness`, `listSessions` merges every harness.
  */
 export interface ControlPayload {
@@ -1207,18 +1212,41 @@ export const lastErrorKindOf = (error: unknown): LastErrorKind | undefined =>
  * How a session with no process comes back: on its conversation by its key;
  * fresh under the same id when its harness never began one (no key: it never
  * said init), so there is nothing to lose; or not at all when its
- * conversation existed and is gone. The one decision for every revive: the
- * dashboard's (`ensureAlive`) and the hub's wake for a send.
+ * conversation existed and is gone, or a continuation took its work item on
+ * ({@link InstanceRow.continuedInto}): two sessions never work one item in
+ * one workspace. The one decision for every revive: the dashboard's
+ * (`ensureAlive`), the hub's wake for a send, and a relaunch on another
+ * account at a limit.
  */
 export type Relaunch =
   | { kind: "resume"; sessionKey: string }
   | { kind: "fresh" }
   | { kind: "refused"; reason: string };
 
+/** Why a session whose work a continuation took on never runs again. */
+export const continuedWords = (continuedInto: string): string =>
+  `This session was continued in session ${continuedInto.slice(0, 8)}, which carries its work on; it doesn't run again. Write to ${continuedInto.slice(0, 8)}.`;
+
+/**
+ * Where a continued session's work went, as its page says it in its
+ * composer's place (the words before the new session's title, a link to
+ * it), and as the hub refuses a person's message to it: a moved
+ * conversation points onward, it never takes a message on silently.
+ */
+export const CONTINUED_IN = "Continued in";
+
+/** {@link CONTINUED_IN} with the new session's title, as one sentence. */
+export const continuedInWords = (title: string): string =>
+  `${CONTINUED_IN} ${title}`;
+
 export const relaunchOf = (row: {
+  continuedInto?: string | null;
   lastErrorKind?: LastErrorKind | null;
   sessionId: string | null;
 }): Relaunch => {
+  if (row.continuedInto) {
+    return { kind: "refused", reason: continuedWords(row.continuedInto) };
+  }
   if (row.lastErrorKind === "conversation-gone") {
     return { kind: "refused", reason: CLAUDE_CONVERSATION_GONE };
   }
@@ -1285,6 +1313,14 @@ export interface InstanceRow {
    * chose, and the harness runs its model's default.
    */
   chosenEffort?: import("./harness").EffortLevel | null;
+  /**
+   * The session a continuation moved this one's work item to: this one never
+   * runs again ({@link relaunchOf} refuses it), and what is sent to it goes
+   * there. Null on every other session.
+   */
+  continuedInto?: string | null;
+  /** When the hub first opened its row: when it was started. */
+  createdAt?: string | number | Date | null;
   /** The directory the session was launched in; see `launchDir`. */
   cwd: string;
   /**
@@ -1468,6 +1504,13 @@ export interface WorkItemSummary {
   queued: { owns: string[]; paused: string | null } | null;
   /** The later item of the same tray the reader said took over its work; null otherwise. */
   replacedBy: string | null;
+  /**
+   * While its account's limit (or a refused sign-in) has stopped its
+   * session: "Stopped at A's limit; continues on B", "…; continues at
+   * 15:40" (core `accountsWords.stalled`). It runs no turn until then; null
+   * otherwise.
+   */
+  stalled: string | null;
   state: "starting" | "running" | "done" | "failed" | "cancelled";
   title: string;
   waitReason: string | null;
@@ -1573,6 +1616,7 @@ export const SERVER_STOPPED_MID_TURN =
  */
 export type FramePayload =
   | import("./frames").FleetMcpFrame
+  | import("./frames").FleetReportFrame
   | import("./frames").PreviewFrame
   | import("./frames").MessageFrame
   | import("./frames").SendFrame
@@ -1629,8 +1673,12 @@ export type FramePayload =
   | import("./accounts").AccountBorrowFrame
   /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
   | import("./browser").BrowserFrame
+  /** Daemon-originated: a take-over the daemon ended itself (no view for two minutes, or the browser stopped). */
+  | import("./browser").BrowserHandedBackFrame
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */
   | import("./stream-relay").RelayFrame
+  /** Hub-originated: the stream relay's journey, whole, on each change. */
+  | import("./stream-relay").RelayJourneyFrame
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 
@@ -1684,25 +1732,115 @@ export type PreviewSource =
 
 /**
  * The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev
- * server or folder shown live, and a sheet: a story file's stories, each a
- * real component mounted by the project's own toolchain (core `stage.ts`).
+ * server or folder shown live, a sheet: a story file's stories, each a
+ * real component mounted by the project's own toolchain (core `stage.ts`),
+ * and the project's browser, listed for every session of the project (or of
+ * the machine, for the machine's browser). A browser's source is its key as
+ * a page (`{ page: "project:<id>" }`): the hub holds it, no machine's
+ * preview listener serves it, and every installed app reads that shape.
  */
-export type ArtifactKind = "page" | "canvas" | "preview" | "component";
+export type ArtifactKind =
+  "page" | "canvas" | "preview" | "component" | "browser";
 
 /** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
 export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
+/** What the person does on an artifact: the reason it is in their panel. */
+export const ARTIFACT_DOES = ["pick", "judge", "try", "draw"] as const;
+export type ArtifactDoes = (typeof ARTIFACT_DOES)[number];
+/** The ask's length: one line in the panel's head. */
+export const ASK_LIMIT = 160;
+/** Words the owner banned from anything that reaches him. */
+export const ASK_BANNED = /\b(tap|poke)(s|ped|ping)?\b/i;
+/** A path or a file in the ask: the person's words carry neither. */
+export const ASK_PATHLIKE =
+  /(^|[\s(])[\w.-]*\/[\w.-]+\.[a-z]{1,5}\b|\b[\w-]+\.(svelte|tsx?|png|webp|jpe?g|oui|html)\b/i;
+/** Desk captures one page for judging or picking may hold: past it, the page is a catalogue of pictures drawn at a fraction of their size in the panel. */
+export const DESK_CAPTURES_PER_PAGE = 2;
+/** A capture wider than this many pixels is a desk capture: the panel is 600px beside the transcript, 390px on a phone. */
+export const DESK_CAPTURE_WIDTH = 1600;
+
 /** One artifact as the panel's list shows it, newest first. */
 export interface ArtifactSummary {
+  /** The one line the panel's head shows under its name: what the person does here, in their words. Empty on one made before asks were kept. */
+  ask: string;
   createdAt: string;
+  /** What the person does on it. */
+  does: ArtifactDoes;
   id: string;
   kind: ArtifactKind;
   name: string;
   /** Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one. */
   promoted: ArtifactPromotion | null;
+  /** The person pressed Send on it since the session last revised it or changed its ask. */
+  sent: boolean;
   /** When it was last brought to the front of the panel. */
   shownAt: string | null;
+  /** Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one. */
+  thumbnail: ArtifactThumbnail | null;
   updatedAt: string;
+  /** The person has something to do on it now (`artifact_list`'s `waitingOn` person): its row wears a dot. */
+  waiting: boolean;
+}
+
+/**
+ * An artifact's latest picture: a page's or preview's thumbnail as the
+ * dashboard's pane took it (both schemes, or one when the page draws the
+ * same in both), a canvas's own picture. `at` changes with every new one.
+ */
+export interface ArtifactThumbnail {
+  at: string;
+  /** Its pixels, as its PNG says: the card is laid out at its shape before it loads. */
+  height: number;
+  /** The page draws the same in both schemes: `light` is its one picture. */
+  single: boolean;
+  width: number;
+}
+
+/**
+ * One of a session's artifacts a Files search matched
+ * (`GET /api/instances/:id/artifacts/search`), best first: what matched,
+ * and where the words on its page did, the words around the first hit with
+ * each hit between 「 and 」 (the finder's excerpt).
+ */
+export interface ArtifactHit {
+  excerpt: string | null;
+  id: string;
+}
+
+/**
+ * One attachment a session's conversation carried, as Files lists them
+ * (`GET /api/instances/:id/attachments`, newest first): a text pasted at
+ * length, a file the hub stores, or a picture, read off the whole
+ * transcript on the hub, whatever pages a reader has loaded.
+ */
+export interface SessionAttachment {
+  /** When its message was, ISO-8601; null when the harness gave no time. */
+  at: string | null;
+  /** A text's words, for reading it in place. */
+  content?: string;
+  /** Its message's id and its place within that message: the same however the list grows. */
+  id: string;
+  kind: "text" | "file" | "image";
+  mediaType: string;
+  /** The message it rode, for Show in conversation (`?at=`). */
+  messageId: string;
+  /** A file's or text's name; a picture's is its place among the conversation's pictures ("Picture 3"). */
+  name: string;
+  /** Where the hub serves a file (`/api/files/<sha256>`); absent when the harness's copy names only part of its hash. */
+  ref?: string;
+  /** A file's length in bytes. */
+  size?: number;
+  /** A picture's address. */
+  src?: string;
+  /** Who sent it: the person, or the session's agent. */
+  who: "person" | "agent";
+}
+
+/** A session's attachments as Files reads them: the list, and the harness that speaks as the agent. */
+export interface SessionAttachments {
+  attachments: SessionAttachment[];
+  harness: import("./harness").HarnessKind;
 }
 
 /** An artifact's promote: the project folder's commit that holds it, and when. */
@@ -1886,6 +2024,30 @@ export const CAWCO_ENV = {
    * checkout) names its own.
    */
   mcpPort: "CAWCO_MCP_PORT",
+  /**
+   * The port of the agent's DevTools gate (browser.ts `browserGatePort`).
+   * Unset on every installed machine; a second agent on one host (a rig, a
+   * scratch fleet) names its own.
+   */
+  browserGatePort: "CAWCO_BROWSER_GATE_PORT",
+  /**
+   * The stream relay journey's stand-ins (hub relay-journey.ts, agent
+   * browser/relay.ts), each unset on every installed machine; a scratch
+   * fleet names its own so no request leaves the machine: Cloudflare's API
+   * origin (`https://api.cloudflare.com/client/v4`), the page listing
+   * Cloudflare's IPv4 ranges, the DNS server the name check asks
+   * (`host:port`) in place of the system's, the STUN server the agent asks
+   * for its router's address, and the router the agent maps ports on: the
+   * UPnP gateway's descriptor URL in place of the one SSDP finds, and the
+   * NAT-PMP gateway's address in place of the default route's. Either set,
+   * the agent asks only the gateways named.
+   */
+  cloudflareApi: "CAWCO_CLOUDFLARE_API",
+  cloudflareIps: "CAWCO_CLOUDFLARE_IPS",
+  natPmpGateway: "CAWCO_NAT_PMP_GATEWAY",
+  relayDns: "CAWCO_RELAY_DNS",
+  stunServer: "CAWCO_STUN_SERVER",
+  upnpGateway: "CAWCO_UPNP_GATEWAY",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */
@@ -1960,19 +2122,31 @@ export * from "./image-generation";
 // The words the dashboard and the native app share (Words.generated.swift).
 export * from "./words/accounts";
 export * from "./words/artifacts";
+export * from "./words/blocks";
 export * from "./words/catalog";
 export * from "./words/configure";
 export * from "./words/connection";
+export * from "./words/connections";
+export * from "./words/decisions";
+export * from "./words/delegate-types";
 export * from "./words/helpers";
+export * from "./words/lfs";
+export * from "./words/made";
+export * from "./words/mcp";
+export * from "./words/memory";
 export * from "./words/offers";
 export * from "./words/pairing";
 export * from "./words/place";
 export * from "./words/plan";
 export * from "./words/preview";
+export * from "./words/routines";
 export * from "./words/sheet";
 export * from "./words/side";
 export * from "./words/sidebar";
+export * from "./words/skills";
+export * from "./words/spend";
 export * from "./words/tailnet";
+export * from "./words/views";
 export * from "./workflow";
 export * from "./workflow-compile";
 

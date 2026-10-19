@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/decisions/DecisionPage.svelte
+apps/dashboard/src/lib/cawco/decisions/DecisionTile.svelte
+apps/dashboard/src/lib/cawco/decisions/DecisionsView.svelte
+apps/dashboard/src/lib/cawco/decisions/PageFrame.svelte
+apps/dashboard/src/lib/cawco/decisions/RecordCard.svelte
+apps/dashboard/src/lib/cawco/decisions/StatePill.svelte
+apps/dashboard/src/lib/cawco/decisions/graph/DecisionEdge.svelte
+
+# apps/dashboard/src/lib/cawco/decisions/DecisionPage.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×3; relic: style-var ×3; lint: shadcn/no-unknown-classes ×4; lint: shadcn/no-restyle ×2
+# apps/dashboard/src/lib/cawco/decisions/DecisionTile.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/decisions/DecisionsView.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-var ×3; relic: literal ×3; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×2
+# apps/dashboard/src/lib/cawco/decisions/PageFrame.svelte: relic: literal ×1; relic: style-var ×2
+# apps/dashboard/src/lib/cawco/decisions/RecordCard.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×3; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×2
+# apps/dashboard/src/lib/cawco/decisions/StatePill.svelte: relic: literal ×1; relic: style-var ×3
+# apps/dashboard/src/lib/cawco/decisions/graph/DecisionEdge.svelte: after-M: an inline style; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; lint: shadcn/no-inline-styles ×2

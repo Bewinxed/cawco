@@ -38,12 +38,7 @@
      less: the dot beats on --breath. Still, the tag's presence carries it. */
   [data-slot="beat"] {
     @media (prefers-reduced-motion: no-preference) {
-      animation: beat var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes beat {
-    50% {
-      opacity: 0.3;
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
 </style>

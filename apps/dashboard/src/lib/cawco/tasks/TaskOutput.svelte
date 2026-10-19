@@ -13,7 +13,12 @@
    * file the hub does not hold yet says so in the hub's words.
    * `compact` draws it small, for the project's Made list.
    */
-  import { deliverableKind, type PostFile, parsePost } from "@cawco/core";
+  import {
+    deliverableKind,
+    madeWords,
+    type PostFile,
+    parsePost,
+  } from "@cawco/core";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconDocument } from "#lib/icons.js";
   import { failureWords } from "../hub-read";
@@ -57,9 +62,7 @@
       return null;
     }
     const parsed = parsePost(content);
-    return parsed.ok
-      ? null
-      : `${name} does not read as a post. ${parsed.problem}`;
+    return parsed.ok ? null : madeWords.notPost(name, parsed.problem);
   });
 
   $effect(() => {
@@ -135,8 +138,8 @@
         rel="noopener"
         target="_blank"
       >
-        <span>Open</span>
-        <IconArrowUpRight data-task-output-glyph class="size-icon-sm" />
+        <span>{madeWords.open}</span>
+        <IconArrowUpRight data-task-output-glyph class="glyph" />
       </a>
     {/if}
   </figcaption>
@@ -175,8 +178,8 @@
         </div>
       {:else if kind === "image"}
         <button
-          aria-label="Open {name}"
-          class="block p-0 rounded-sm cursor-zoom-in press-tint focus-inset"
+          aria-label={madeWords.openFile(name)}
+          class="image press-tint focus-inset"
           onclick={openImage}
           type="button"
         >

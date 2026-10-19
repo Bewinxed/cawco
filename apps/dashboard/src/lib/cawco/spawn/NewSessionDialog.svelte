@@ -1,12 +1,13 @@
 <script lang="ts">
   import {
     type AccountProvider,
-    accountName,
+    accountNameAmong,
     CLAUDE_PROVIDER,
     contextFitRefusal,
     type EffortLevel,
     HARNESSES,
     type HarnessKind,
+    isGitUrl,
     type MoveEstimate,
     type PermissionMode,
     type PlacementPreview,
@@ -151,7 +152,6 @@
     /** The operator deleted the source chip: the dialog stays open as a plain New Session. */
     onexitcontinue?: () => void;
   } = $props();
-  const REPO = /^[\w.-]+\/[\w.-]+$/;
   /** A home folder at the start of a path (Linux, macOS). */
   const HOME = /^\/(home|Users)\/[^/]+(?=\/|$)/;
   /**
@@ -488,7 +488,7 @@
         }
         return {
           id: one.id,
-          name: accountName(one),
+          name: accountNameAmong(one, cawco.accounts?.accounts ?? []),
           nick: one.label,
           email: one.email,
           color: `var(--account-${one.hue})`,
@@ -944,7 +944,7 @@
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
       unreadable ||
-      (repo !== undefined && !REPO.test(repo.trim())) ||
+      (repo !== undefined && !isGitUrl(repo)) ||
       (moveTo !== null && !(moving || movedAlready))
   );
   /** The source as the prompt's opening chip; a session title is often its first prompt, so it is cut short. */
@@ -1236,8 +1236,8 @@
     if (!machineIds.length) {
       return "Choose a machine to run this session on.";
     }
-    if (repo !== undefined && !REPO.test(repo.trim())) {
-      return "Enter a repository as owner/repository.";
+    if (repo !== undefined && !isGitUrl(repo)) {
+      return "Enter the repository's git URL.";
     }
     if (!cwd.trim()) {
       return "Enter the directory this session should work in.";
@@ -2299,15 +2299,21 @@
 
 <style>
   /* residual: keyframes */
+  /* An entrance ends on the element's own style: it holds its start through
+     a delay (`backwards`) and nothing once it has landed. Held with `both`,
+     a finished entrance kept its last keyframe over the element's own style
+     and kept the card on a compositor layer rastered at a mid-entrance
+     frame, so its text landed 1px off by which frame that was. An exit
+     holds its end until it is gone. */
   .sec {
     @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in var(--dur-pop) var(--ease-out) both;
+      animation: ns-in var(--dur-pop) var(--ease-out) backwards;
       animation-delay: var(--delay, 0ms);
     }
   }
   @media (prefers-reduced-motion: no-preference) {
     :global([data-session-card]:not([data-vaul-drawer])[data-state="open"]) {
-      animation: ns-panel var(--dur-panel) var(--ease-out) both;
+      animation: ns-panel var(--dur-panel) var(--ease-out) backwards;
     }
     :global([data-session-card]:not([data-vaul-drawer])[data-state="closed"]) {
       animation: ns-panel-out var(--dur-exit) var(--ease-out) both;
@@ -2316,7 +2322,7 @@
     :global(
       [data-slot="session-scrim"]:not([data-vaul-overlay])[data-state="open"]
     ) {
-      animation: ns-scrim var(--dur-panel) var(--ease-out) both;
+      animation: ns-scrim var(--dur-panel) var(--ease-out) backwards;
     }
     /* css-scope: the same scrim, leaving */
     :global(

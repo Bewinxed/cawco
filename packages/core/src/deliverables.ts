@@ -9,6 +9,7 @@
  * community, and the thread's further parts. A plan or notes beside it is
  * markdown; both are listed in the task's `outputs`.
  */
+import { madeWords } from "./words/made";
 
 /** A social post as its writer leaves it: `<task>.post.json`. */
 export interface PostFile {
@@ -60,18 +61,20 @@ export function parsePost(
   } catch (error) {
     return {
       ok: false,
-      problem: `It is not JSON: ${error instanceof Error ? error.message : String(error)}`,
+      problem: madeWords.notJson(
+        error instanceof Error ? error.message : String(error)
+      ),
     };
   }
   if (!value || typeof value !== "object") {
-    return { ok: false, problem: "It holds no post object." };
+    return { ok: false, problem: madeWords.noObject };
   }
   const post = value as Record<string, unknown>;
   if (post.kind !== "x-post") {
-    return { ok: false, problem: 'Its kind is not "x-post".' };
+    return { ok: false, problem: madeWords.notXPost };
   }
   if (typeof post.text !== "string" || typeof post.account !== "string") {
-    return { ok: false, problem: "It has no text or no account." };
+    return { ok: false, problem: madeWords.noText };
   }
   const media = post.media as Record<string, unknown> | undefined;
   return {

@@ -22,7 +22,7 @@ import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
 import { conversationHref, isSessionRow } from "../links";
-import { keepPrefs } from "../prefs";
+import { asPref, keepPrefs } from "../prefs";
 import { store, stored as storedIn } from "../storage";
 import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
@@ -111,15 +111,33 @@ const emptyLeaf = (): LeafNode => ({
   active: null,
 });
 
-function blank(): WorkspaceV1 {
-  const leaf = emptyLeaf();
-  return { v: 1, root: leaf, focusedLeaf: leaf.id, ctx: {} };
-}
+/**
+ * The tree the server draws when it was given none: the layout's own
+ * (`(app)/+layout.server.ts` `blank`), under the same group id, so a page
+ * drawn from it hydrates as the same group.
+ */
+const unserved = (): WorkspaceV1 => ({
+  v: 1,
+  root: { t: "l", id: "p0", tabs: [], active: null },
+  focusedLeaf: "p0",
+  ctx: {},
+});
 /* ── Persistence ──────────────────────────────────────────────────────
    localStorage is the source, written on every mutation; the cookies are
    the copy the SERVER renders from, which only the server writes and reads
-   (prefs.ts, HttpOnly), sent once the layout holds still, so the first paint
-   and the first client render agree.
+   (prefs.ts, HttpOnly), sent once the layout holds still.
+
+   The first client render draws the tree the server drew (`serve`, from the
+   layout's data), never localStorage: hydration keeps every tab the server
+   drew, as it drew it. Once that has been painted, `restore` puts the tree
+   localStorage keeps in front and sends its copy, and the strip moves to it
+   as it moves for any change (PaneTabs: tabs open, close and slide). A copy
+   behind localStorage (another window's write, one sent too late, a
+   dashboard on another port of this host) is drawn first and corrected
+   then, and the copy sent with it makes the next load agree. Nothing is
+   written before the restore, so nothing drawn from the server's tree
+   overwrites the tree localStorage keeps; a change asked for before it
+   (a tap held through hydration) restores first.
 
    The tree and the addresses are two cookies. A browser refuses a cookie
    over 4KB outright and keeps the one it had, and an address runs to a
@@ -168,14 +186,29 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
   }
 }
 
-function load(): WorkspaceV1 {
-  return parse(storedIn("local", KEY)) ?? blank();
+const held = $state<WorkspaceV1>(unserved());
+
+/** Whether the tree localStorage keeps has been put in front (`restore`); the server's needs none. */
+let restored = $state(!browser);
+
+/** Puts the tree localStorage keeps in front of the server's, once; the URL still names what is in front. */
+function restore(): void {
+  if (restored) {
+    return;
+  }
+  restored = true;
+  const kept = parse(storedIn("local", KEY));
+  if (kept) {
+    held.root = kept.root;
+    held.focusedLeaf = kept.focusedLeaf;
+    held.ctx = kept.ctx ?? {};
+  }
+  workspace.followUrl(location.href);
+  save();
 }
 
-const held = $state<WorkspaceV1>(load());
-
 function save(): void {
-  if (!browser) {
+  if (!(browser && restored)) {
     return;
   }
   const payload = JSON.stringify(held);
@@ -187,10 +220,13 @@ function save(): void {
   });
   const ctx = JSON.stringify(held.ctx ?? {});
   // The server's copy (prefs.ts), once the layout stops moving: a drag
-  // saves on every step, and only where it settles is worth sending.
+  // saves on every step, and only where it settles is worth sending. One
+  // too long for a cookie is sent as none: the server then draws the URL's
+  // tab alone (or the addresses unknown), and the rest arrive with the
+  // restore, rather than an older strip drawn as this one.
   clearTimeout(keeping);
   keeping = setTimeout(
-    () => keepPrefs({ [KEY]: tree, [CTX_KEY]: ctx }),
+    () => keepPrefs({ [KEY]: asPref(tree), [CTX_KEY]: asPref(ctx) }),
     KEEP_AFTER_MS
   );
 }
@@ -550,6 +586,7 @@ export const workspace = {
    * catches up afterwards without a load.
    */
   activate(sessionId: string | null, leafId?: string): void {
+    restore();
     const leaf =
       (leafId ? leafById(leafId) : leafHolding(sessionId ?? "")) ?? focused();
     if (sessionId) {
@@ -563,6 +600,7 @@ export const workspace = {
 
   /** Move keyboard focus between groups without changing what is shown. */
   focus(leafId: string): void {
+    restore();
     const leaf = leafById(leafId);
     if (!leaf || held.focusedLeaf === leafId) {
       return;
@@ -580,6 +618,7 @@ export const workspace = {
    * way, and the hub resolves it.
    */
   open(sessionId: string, ctx?: AskedContext, into?: string): void {
+    restore();
     remember(sessionId, ctx);
     if (ctx) {
       workingSet.visit(sessionId, ctx);
@@ -596,6 +635,7 @@ export const workspace = {
    * projecting it again would push a duplicate history entry.
    */
   reveal(sessionId: string | null, ctx?: AskedContext): void {
+    restore();
     if (sessionId) {
       remember(sessionId, ctx);
       if (ctx) {
@@ -667,6 +707,7 @@ export const workspace = {
    * The tab keeps its place and, if it was showing, keeps showing.
    */
   retarget(from: string, to: string): void {
+    restore();
     const leaf = leafHolding(from);
     if (!leaf) {
       return;
@@ -708,6 +749,7 @@ export const workspace = {
    * Closing a tab that is not in front changes nothing about what is shown.
    */
   close(sessionId: string): void {
+    restore();
     const leaf = leafHolding(sessionId);
     if (!leaf) {
       return;
@@ -745,6 +787,7 @@ export const workspace = {
    * pushed, so Back never walks into a conversation the app chose.
    */
   land(sessionId: string): void {
+    restore();
     workingSet.visit(sessionId);
     const leaf = leafHolding(sessionId) ?? focused();
     place(leaf, sessionId);
@@ -762,6 +805,7 @@ export const workspace = {
    * the URL is replaced (not pushed) to name what is now in front.
    */
   fillGroups(): void {
+    restore();
     let changed = false;
     for (const leaf of leavesOf(held.root)) {
       if (leaf.active === null && leaf.tabs.length > 0) {
@@ -781,6 +825,7 @@ export const workspace = {
    * tablet's two, a single wide transcript) does to a tree made at a desk.
    */
   capLeaves(max: number): void {
+    restore();
     const leaves = leavesOf(held.root);
     if (leaves.length <= max) {
       return;
@@ -817,6 +862,7 @@ export const workspace = {
     edge: "left" | "right" | "top" | "bottom",
     sessionId: string
   ): void {
+    restore();
     const target = leafById(leafId);
     if (!target || leavesOf(held.root).length >= layoutPolicy.maxLeaves) {
       return;
@@ -854,6 +900,7 @@ export const workspace = {
    * strip. Same invariant as `split`: it leaves where it was first.
    */
   move(sessionId: string, leafId: string, index?: number): void {
+    restore();
     const target = leafById(leafId);
     if (!target) {
       return;
@@ -879,6 +926,7 @@ export const workspace = {
 
   /** Reorder within one group's strip, for a drag that never left it. */
   reorder(leafId: string, sessionId: string, index: number): void {
+    restore();
     const leaf = leafById(leafId);
     if (!leaf) {
       return;
@@ -907,6 +955,7 @@ export const workspace = {
 
   /** Record a resize. Written by paneforge as the divider moves. */
   resize(branchId: string, sizes: number[]): void {
+    restore();
     const walk = (node: PaneNode): BranchNode | null => {
       if (node.t === "l") {
         return null;
@@ -930,14 +979,28 @@ export const workspace = {
     save();
   },
 
-  /** Server only: this request's tree, from its cookie. Reset every render, because the module is shared across requests. */
+  /**
+   * The tree the server drew this page from (the layout's data, from its
+   * cookie), for the first render on both sides: on the server every
+   * render, because the module is shared across requests; in the browser
+   * until `restore`, so the Shell coming back later (an artifact's own
+   * route left) never sets the reader's tree back to the server's.
+   */
   serve(served: WorkspaceV1 | null): void {
-    if (browser) {
+    if (browser && restored) {
       return;
     }
-    const next = served && validate(served.root) ? served : blank();
+    const next = served && validate(served.root) ? served : unserved();
     held.root = next.root;
     held.focusedLeaf = next.focusedLeaf;
     held.ctx = next.ctx ?? {};
   },
+
+  /** Whether the tree localStorage keeps is in front yet: what happens of itself (a group filled, a tab re-addressed) waits for it. */
+  get restored(): boolean {
+    return restored;
+  },
+
+  /** Once the first paint is up: the tree localStorage keeps, in front of the server's (Persistence above). */
+  restore,
 };

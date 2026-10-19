@@ -3,19 +3,65 @@
  * the upstream choice's `ask` (upstream-guard.ts): exactly what CawCo makes
  * once it is approved, and what the ask in Needs you says it is.
  *
- * Each way a session posts is held where the guard already sees it, and
- * made, approved, by CawCo with a credential the session never holds:
- * - `gh`: the workspace's gh shim (agent upstream-shim.ts), its argv whole
- *   with every file it read in it; the host's gh runs it.
+ * Each way a session posts is held where its credential is, and made,
+ * approved, by CawCo with a credential the session never holds:
  * - `http`: a request to GitHub's API through the workspace's GitHub door
- *   (gh by its path, curl, a request by hand); the door sends it again with
- *   the host's token.
- * - `git`: a push to a GitHub repository that is not the project's, through
- *   the workspace's git door; the host pushes the same commits.
- * - `mcp`: a write tool of a GitHub connection (hub connections.ts); the hub
- *   calls it once.
+ *   (gh, curl, a request by hand); the door sends it again with the host's
+ *   token.
+ * - `git`: a push to a repository that is not the project's, on any host,
+ *   through the workspace's git door; the host pushes the same commits with
+ *   its own credential.
+ * - `mcp`: a write tool of a forge's connection (hub connections.ts); the
+ *   hub calls it once.
+ * - `forge`: an issue, a pull or merge request, or a comment an agent asked
+ *   for (`forge_post`), on GitHub, GitLab or Gitea; the machine makes it
+ *   through that forge's adapter with its own sign-in there (agent
+ *   forges/forge.ts, docs/forge-adapters.md).
  */
-import { type GhPost, ghWords } from "./upstream-guard";
+
+/** The forges CawCo posts to through an adapter. */
+export const FORGES = ["github", "gitlab", "gitea"] as const;
+export type Forge = (typeof FORGES)[number];
+
+/** Each forge as a person names it. */
+export const FORGE_NAMES: Readonly<Record<Forge, string>> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  gitea: "Gitea",
+};
+
+/** What a pull request is called on each forge: GitLab's is a merge request. */
+export const changeRequestWords = (forge: Forge): string =>
+  forge === "gitlab" ? "merge request" : "pull request";
+
+/**
+ * One write to a repository on a forge: an issue, a pull or merge request
+ * from `head` into `base`, or a comment on an issue's or a pull request's
+ * `number` (GitLab numbers its issues and merge requests apart).
+ */
+export type ForgeWrite =
+  | { readonly body: string; readonly op: "issue"; readonly title: string }
+  | {
+      readonly base: string;
+      readonly body: string;
+      readonly head: string;
+      readonly op: "pull_request";
+      readonly title: string;
+    }
+  | {
+      readonly body: string;
+      readonly number: number;
+      readonly on: "issue" | "pull_request";
+      readonly op: "comment";
+    };
+
+/** A forge write to the repository `repo` (`host/path`), on the forge its machine found for that host. */
+export interface ForgePost {
+  readonly forge: Forge;
+  readonly repo: string;
+  readonly via: "forge";
+  readonly write: ForgeWrite;
+}
 
 /** A request to GitHub's API, as the door read it. */
 export interface HttpPost {
@@ -36,7 +82,7 @@ export interface PushedRef {
   readonly sha: string;
 }
 
-/** A push from the workspace's clone to a GitHub repository by URL. */
+/** A push from the workspace's clone to a repository by URL, on any host. */
 export interface GitPost {
   readonly refs: readonly PushedRef[];
   readonly url: string;
@@ -51,94 +97,86 @@ export interface McpPost {
   readonly via: "mcp";
 }
 
-export type UpstreamPost = GhPost | HttpPost | GitPost | McpPost;
+export type UpstreamPost = HttpPost | GitPost | McpPost | ForgePost;
 
 /** The tool name an upstream post's ask is parked under: the permission card draws it (permission-presentation.ts). */
 export const UPSTREAM_POST_TOOL = "mcp__cawco__upstream_post";
 
-/** The machine control that makes an approved post on the machine whose workspace held it; args `[workspaceId, UpstreamPost]`, answers {@link PostMade}. */
+/**
+ * The machine control that makes a post once, with no decision, on the
+ * machine that holds its sign-in: an approved held post, or a landing's pull
+ * request. Args `[workspaceId | null, UpstreamPost]` (a forge post needs no
+ * workspace), answers {@link PostMade}.
+ */
 export const CONTROL_UPSTREAM_POST = "upstreamPost";
 
-/** What making a post said: whether it went, and what the host's program or GitHub answered. */
+/**
+ * The machine control a session's `forge_post` reaches (agent forges/forge.ts
+ * `forgePost`): args `[UpstreamRule | null, ForgeAsk]`, the project's rule as
+ * the hub holds it; answers what the write came to there.
+ */
+export const CONTROL_FORGE_POST = "forgePost";
+
+/** A session's forge write as the hub sends it: the repository by URL or `host/path`, and the write. */
+export interface ForgeAsk {
+  readonly repo: string;
+  readonly write: ForgeWrite;
+}
+
+/** A forge ask read off the wire; undefined when it is none. */
+export const readForgeAsk = (value: unknown): ForgeAsk | undefined => {
+  const ask = value as { repo?: unknown; write?: unknown } | null;
+  return ask &&
+    typeof ask === "object" &&
+    typeof ask.repo === "string" &&
+    isForgeWrite(ask.write)
+    ? { repo: ask.repo, write: ask.write }
+    : undefined;
+};
+
+/**
+ * What a session's forge write came to on the machine: made (or the
+ * making failed, in its words), held with the post and the account it would
+ * post as for the person's ask, or refused in the guard's words.
+ */
+export type ForgeVerdict =
+  | { readonly kind: "made"; readonly made: PostMade }
+  | {
+      readonly account: string;
+      readonly kind: "held";
+      readonly post: ForgePost;
+      readonly what: string;
+    }
+  | { readonly kind: "refused"; readonly why: string };
+
+/** What making a post said: whether it went, and what the host's program or the forge answered; a forge write's page when it made or found one. */
 export interface PostMade {
+  /** A pull or merge request that was open already for the same branches. */
+  readonly existing?: boolean;
   readonly ok: boolean;
   readonly said: string;
+  readonly url?: string;
 }
 
 /** What the person reads on the ask: where it posts, what, as whom, and the post itself. */
 export interface UpstreamAskInput {
-  /** The account it posts as: the host's GitHub login, or the connection's account. */
+  /** The account it posts as: the host's GitHub login, the host's git sign-in for another host, or the connection's account. */
   readonly account: string;
   readonly body?: string;
-  /** The post itself in one line: the gh command, the request, the push, the tool call. */
+  /** The post itself in one line: the request, the push, the tool call. */
   readonly command: string;
   /** What it is: "issue", "comment", "pull request", "push", … */
   readonly kind: string;
   /** `host/owner/repo`. */
   readonly repo: string;
+  /**
+   * Where it goes as Needs you names it: `owner/repo` (the host too, off
+   * GitHub), with `#n` for the issue or pull request a comment, a review or
+   * an edit is on.
+   */
+  readonly target: string;
   readonly title?: string;
 }
-
-/** A word as a shell would take it back: bare when it is plain, else single-quoted. */
-const PLAIN = /^[A-Za-z0-9_./:=@%+,-]+$/;
-const shellWord = (word: string): string =>
-  PLAIN.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
-
-/** The value of the last `-x VALUE`, `-xVALUE`, `--long VALUE` or `--long=VALUE`. */
-const flagValue = (
-  args: readonly string[],
-  short: string,
-  long: string
-): string | undefined => {
-  let found: string | undefined;
-  for (const [index, arg] of args.entries()) {
-    if (arg === short || arg === long) {
-      found = args[index + 1];
-    } else if (arg.startsWith(`${long}=`)) {
-      found = arg.slice(long.length + 1);
-    } else if (arg.startsWith(short) && !arg.startsWith("--")) {
-      found = arg.slice(short.length);
-    }
-  }
-  return found;
-};
-
-/** `gh api`'s raw and typed fields, by key. */
-const apiFields = (
-  args: readonly string[]
-): Partial<Record<string, string>> => {
-  const fields: Partial<Record<string, string>> = {};
-  for (const [index, arg] of args.entries()) {
-    let field: string | undefined;
-    if (["-f", "-F", "--raw-field", "--field"].includes(arg)) {
-      field = args[index + 1];
-    } else if (arg.startsWith("--raw-field=") || arg.startsWith("--field=")) {
-      field = arg.slice(arg.indexOf("=") + 1);
-    } else if (
-      (arg.startsWith("-f") || arg.startsWith("-F")) &&
-      !arg.startsWith("--") &&
-      arg.length > 2
-    ) {
-      field = arg.slice(2);
-    }
-    const at = field?.indexOf("=") ?? -1;
-    if (field && at > 0) {
-      fields[field.slice(0, at)] = field.slice(at + 1);
-    }
-  }
-  return fields;
-};
-
-const GH_KINDS: Readonly<Record<string, string>> = {
-  "issue create": "issue",
-  "issue comment": "comment",
-  "pr create": "pull request",
-  "pr comment": "comment",
-  "pr review": "review",
-  "pr merge": "merge",
-  "repo fork": "fork",
-  "release create": "release",
-};
 
 /** A REST path's kind, by what it posts to. */
 const REST_KINDS: readonly [RegExp, string][] = [
@@ -168,6 +206,67 @@ const MUTATION_FIELD = /mutation\b[^{]*\{\s*(?:\w+\s*:\s*)?(\w+)/;
 const TRAILING_SLASHES = /\/+$/;
 /** A branch's ref prefix, left off where a push names its branches. */
 const HEADS = /^refs\/heads\//;
+
+/** A forge write's kind and its one line, as the card says them. */
+const forgeDescribed = (
+  post: ForgePost
+): Omit<UpstreamAskInput, "account" | "repo" | "target"> => {
+  const forge = FORGE_NAMES[post.forge];
+  const { write } = post;
+  switch (write.op) {
+    case "issue":
+      return {
+        kind: `${forge} issue`,
+        title: write.title,
+        body: write.body,
+        command: `open an issue on ${post.repo}`,
+      };
+    case "pull_request":
+      return {
+        kind: `${forge} ${changeRequestWords(post.forge)}`,
+        title: write.title,
+        body: write.body,
+        command: `open a ${changeRequestWords(post.forge)} on ${post.repo} from ${write.head} into ${write.base}`,
+      };
+    case "comment":
+      return {
+        kind: `${forge} comment`,
+        body: write.body,
+        command: `comment on ${write.on === "issue" ? "issue" : changeRequestWords(post.forge)} ${write.number} of ${post.repo}`,
+      };
+    default: {
+      const unhandled: never = write;
+      throw new Error(`unhandled forge write: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
+/** Whether a value read off the wire is a forge write the adapters make. */
+const isForgeWrite = (value: unknown): value is ForgeWrite => {
+  const write = value as Record<string, unknown> | null;
+  if (!write || typeof write !== "object") {
+    return false;
+  }
+  switch (write.op) {
+    case "issue":
+      return typeof write.title === "string" && typeof write.body === "string";
+    case "pull_request":
+      return (
+        typeof write.title === "string" &&
+        typeof write.body === "string" &&
+        typeof write.base === "string" &&
+        typeof write.head === "string"
+      );
+    case "comment":
+      return (
+        typeof write.body === "string" &&
+        Number.isInteger(write.number) &&
+        (write.on === "issue" || write.on === "pull_request")
+      );
+    default:
+      return false;
+  }
+};
 
 /** A JSON text's `title` and `body`, at its top or in a GraphQL request's variables (`input` too). */
 const titled = (
@@ -207,35 +306,9 @@ const mutationOf = (text: string | undefined): string | undefined => {
   }
 };
 
-const ghDescribed = (
-  post: GhPost
-): Omit<UpstreamAskInput, "account" | "repo"> => {
-  const words = ghWords(post.args);
-  const pair = `${words.command} ${words.sub}`;
-  const api = words.command === "api";
-  const fields = api ? apiFields(post.args) : {};
-  const fromInput = api ? titled(post.stdin) : {};
-  const title = api
-    ? (fields.title ?? fromInput.title)
-    : flagValue(post.args, "-t", "--title");
-  const body = api
-    ? (fields.body ?? fromInput.body)
-    : (flagValue(post.args, "-b", "--body") ??
-      flagValue(post.args, "-n", "--notes"));
-  const endpoint = words.endpoint ?? "";
-  return {
-    kind: api
-      ? (REST_KINDS.find(([path]) => path.test(endpoint))?.[1] ?? "API call")
-      : (GH_KINDS[pair] ?? pair),
-    command: ["gh", ...post.args].map(shellWord).join(" "),
-    ...(title === undefined ? {} : { title }),
-    ...(body === undefined ? {} : { body }),
-  };
-};
-
 const httpDescribed = (
   post: HttpPost
-): Omit<UpstreamAskInput, "account" | "repo"> => {
+): Omit<UpstreamAskInput, "account" | "repo" | "target"> => {
   const graphql = post.path.replace(TRAILING_SLASHES, "") === "/graphql";
   const mutation = graphql ? mutationOf(post.body) : undefined;
   const kind = graphql
@@ -261,7 +334,7 @@ const MCP_KINDS: Readonly<Record<string, string>> = {
 
 const mcpDescribed = (
   post: McpPost
-): Omit<UpstreamAskInput, "account" | "repo"> => {
+): Omit<UpstreamAskInput, "account" | "repo" | "target"> => {
   const { title, body, method } = post.args;
   const issue = method === "update" ? "issue edit" : "issue";
   const kind =
@@ -285,13 +358,13 @@ export const describePost = (
   repo: string,
   account: string
 ): UpstreamAskInput => {
-  let described: Omit<UpstreamAskInput, "account" | "repo">;
+  let described: Omit<UpstreamAskInput, "account" | "repo" | "target">;
   switch (post.via) {
-    case "gh":
-      described = ghDescribed(post);
-      break;
     case "http":
       described = httpDescribed(post);
+      break;
+    case "forge":
+      described = forgeDescribed(post);
       break;
     case "git":
       described = {
@@ -306,7 +379,41 @@ export const describePost = (
     case "mcp":
       described = mcpDescribed(post);
   }
-  return { repo, account, ...described };
+  const number = numberOf(post);
+  const path = repo.startsWith(GITHUB_HOST)
+    ? repo.slice(GITHUB_HOST.length)
+    : repo;
+  return {
+    repo,
+    account,
+    target: number === undefined ? path : `${path}#${number}`,
+    ...described,
+  };
+};
+
+/** A repository on GitHub is named without its host. */
+const GITHUB_HOST = "github.com/";
+/** A REST path's issue or pull request: `/issues/12`, `/pulls/12/reviews`. */
+const REST_NUMBER = /\/(?:issues|pulls)\/(\d+)(?:\/|$)/;
+/** A GitHub connection tool's issue or pull request, by the argument it names it with. */
+const MCP_NUMBER_ARGS = ["issue_number", "pullNumber", "pull_number"] as const;
+
+/** The issue or pull request a post is on; undefined for a post that makes one, or a push. */
+const numberOf = (post: UpstreamPost): number | undefined => {
+  switch (post.via) {
+    case "forge":
+      return post.write.op === "comment" ? post.write.number : undefined;
+    case "http": {
+      const found = REST_NUMBER.exec(post.path)?.[1];
+      return found === undefined ? undefined : Number(found);
+    }
+    case "mcp":
+      return MCP_NUMBER_ARGS.map((key) => post.args[key]).find(
+        (value): value is number => Number.isInteger(value)
+      );
+    case "git":
+      return undefined;
+  }
 };
 
 /** One post as it is compared with another: two asks for the same post are one. */
@@ -320,14 +427,6 @@ export const isUpstreamPost = (value: unknown): value is UpstreamPost => {
   }
   const one = post as Record<string, unknown>;
   switch (post.via) {
-    case "gh":
-      return (
-        Array.isArray(one.args) &&
-        one.args.every((arg) => typeof arg === "string") &&
-        typeof one.repo === "string" &&
-        typeof one.host === "string" &&
-        (one.stdin === undefined || typeof one.stdin === "string")
-      );
     case "http":
       return (
         typeof one.method === "string" &&
@@ -346,6 +445,12 @@ export const isUpstreamPost = (value: unknown): value is UpstreamPost => {
             typeof ref.dst === "string" &&
             typeof ref.force === "boolean"
         )
+      );
+    case "forge":
+      return (
+        (FORGES as readonly unknown[]).includes(one.forge) &&
+        typeof one.repo === "string" &&
+        isForgeWrite(one.write)
       );
     case "mcp":
       return (

@@ -12,6 +12,8 @@ import UIKit
 @MainActor
 final class ComposerDock {
     let composer = ComposerView()
+    /// A continued session's line, standing where its composer would.
+    private let onward = ContinuedLine()
     private let fade = RecessFade()
     private unowned let host: UIView
     private let leading: NSLayoutConstraint
@@ -44,6 +46,8 @@ final class ComposerDock {
 
     /// A conversation is bound to the composer.
     private var bound = false
+    /// The bound conversation was continued: its line stands, no composer.
+    private var continued = false
     /// The transcript under the composer has no share of the group: nothing to write into.
     private var away: Bool { transcriptShare <= 0.001 }
 
@@ -80,6 +84,7 @@ final class ComposerDock {
         self.host = host
         host.addSubview(fade)
         host.addSubview(composer)
+        host.addSubview(onward)
         let safe = host.safeAreaLayoutGuide
         leading = composer.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space3)
         trailing = composer.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space3)
@@ -101,7 +106,12 @@ final class ComposerDock {
             fade.heightAnchor.constraint(equalToConstant: RecessFade.height),
             composer.topAnchor.constraint(greaterThanOrEqualTo: top, constant: Space.space3),
             leading, trailing, bottom,
+            // The line takes the composer's place: its width, on its foot.
+            onward.leadingAnchor.constraint(equalTo: composer.leadingAnchor),
+            onward.trailingAnchor.constraint(equalTo: composer.trailingAnchor),
+            onward.bottomAnchor.constraint(equalTo: composer.bottomAnchor),
         ])
+        composer.onRendered = { [weak self] binding in self?.showContinued(binding?.continuedIn) }
         composer.onHeight = { [weak host] in host?.setNeedsLayout() }
         // The desk's toasts stand on the composer, never on its Send (DESIGN.md, "Toast").
         Toast.stand(on: composer)
@@ -124,9 +134,19 @@ final class ComposerDock {
         paint()
     }
 
+    /// The bound conversation's work went to another session, or not (nil).
+    private func showContinued(_ next: ContinuedIn?) {
+        if let next { onward.show(next) }
+        guard (next != nil) != continued else { return }
+        continued = next != nil
+        if continued { composer.endEditing(true) }
+        paint()
+    }
+
     private func paint() {
         let hidden = !bound || away
-        composer.isHidden = hidden
+        composer.isHidden = hidden || continued
+        onward.isHidden = hidden || !continued
         fade.isHidden = hidden
         host.setNeedsLayout()
     }
@@ -137,7 +157,8 @@ final class ComposerDock {
         let keyboardUp = host.keyboardLayoutGuide.layoutFrame.minY < host.bounds.maxY - host.safeAreaInsets.bottom - 1
         let below = keyboardUp ? 0 : host.safeAreaInsets.bottom
         if footFollow.constant != below { footFollow.constant = below }
-        let reach = composer.isHidden ? 0 : max(0, host.bounds.maxY - composer.frame.minY)
+        let standing: UIView? = !composer.isHidden ? composer : (!onward.isHidden ? onward : nil)
+        let reach = standing.map { max(0, host.bounds.maxY - $0.frame.minY) } ?? 0
         guard abs(reach - inset) > 0.5 else { return }
         inset = reach
         onInset(reach)

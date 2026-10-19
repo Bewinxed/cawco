@@ -9,7 +9,8 @@
  * CLI act on the same file, so neither needs the other running. A record
  * holds neko's passwords, so the dirs are 0700 and the record 0600.
  */
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
@@ -43,21 +44,48 @@ export interface BrowserRecord {
     image: string;
     /** What its media port was published, and neko's candidates advertised, for. */
     media: MediaPath;
+    /** The ports it was published on: one made for other ports is made again. */
+    ports?: BrowserPorts;
+    /** The runtime it was made on, as the record names it while that runtime is away. */
+    runtime?: { endpoint: string; kind: "docker" | "podman" };
+    /** The STUN server neko's own ICE servers name (core `stunServer`): one made for another is made again. */
+    stun?: string;
     userPassword: string;
     volume: string;
   };
+  /**
+   * The host it runs on. A browser made for the first time picks it from
+   * what answers then; one made on the local host moves into a container
+   * once a runtime answers, its sign-ins carried (browsers.ts
+   * `moveIntoContainer`), and a container browser stays one for good.
+   */
   host: BrowserHostKind;
   key: BrowserKey;
   lastUsedAt: number;
   /** The local host's Chromium, by its identity, so a later process signals only it. */
   local?: { bootId?: string; pid: number; procStart: string };
   name: string;
+  /**
+   * The stream relay's credential the hub's last `browser.start` brought: a
+   * wake by the gate starts with it, so a container made again keeps its
+   * relay.
+   */
+  relay?: BrowserRelay;
   /** When the stream relay's credential the container was started with lapses (ms epoch). */
   relayExpiresAt?: number;
   /** The stream relay's URLs that credential is for. */
   relayUrls?: string[];
-  /** Its place in BROWSER_PORTS, kept until it is removed. */
-  slot: number;
+  /**
+   * A container browser whose runtime does not answer now: not live, its
+   * `why` naming the runtime, started again as soon as the runtime answers.
+   * Its container and volume are kept.
+   */
+  runtimeAway?: true;
+  /**
+   * Its place in BROWSER_PORTS, taken as it first starts and kept until it is
+   * removed. None while it was only reserved for a session's browser tool.
+   */
+  slot?: number;
   state: BrowserState;
   takeover: BrowserRow["takeover"];
   why?: string;
@@ -87,6 +115,48 @@ export type Progress = Pick<BrowserRow, "state" | "progress">;
 
 /** Every browser's dir. */
 export const browsersDir = (): string => join(cawcoDataDir(), "browsers");
+
+/** The file in a browsers dir naming the agent that keeps them. */
+const OWNER_FILE = "owner";
+
+/**
+ * This agent's mark on what it makes on a container runtime (its containers'
+ * and volumes' names and owner label, container-host.ts): a random id kept
+ * in its browsers dir beside the records, made once (an exclusive create, so
+ * the daemon and `cawco browser` agree on it). A machine's id is every
+ * agent's on it (core machine-id.ts hashes `/etc/machine-id` or the Mac's
+ * IOPlatformUUID with the host's name), so two agents of one machine on one
+ * runtime (two users of a rootful Docker, two scratch fleets) keep the same
+ * keys; their owners are their own.
+ */
+export const browserOwner = async (): Promise<string> => {
+  const kept = await keptBrowserOwner(browsersDir());
+  if (kept) {
+    return kept;
+  }
+  await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
+  const made = randomBytes(6).toString("hex");
+  try {
+    await writeFile(join(browsersDir(), OWNER_FILE), `${made}\n`, {
+      flag: "wx",
+      mode: 0o600,
+    });
+    return made;
+  } catch (error) {
+    const first = await keptBrowserOwner(browsersDir());
+    if ((error as { code?: string }).code === "EEXIST" && first) {
+      return first;
+    }
+    throw error;
+  }
+};
+
+/** The owner the browsers dir `dir` names, or undefined while its agent has made none. */
+export const keptBrowserOwner = async (
+  dir: string
+): Promise<string | undefined> =>
+  (await readFile(join(dir, OWNER_FILE), "utf8").catch(() => "")).trim() ||
+  undefined;
 
 /** One browser's dir. */
 export const browserDir = (key: BrowserKey): string =>
@@ -183,8 +253,8 @@ const portFree = (port: number): Promise<boolean> =>
   });
 
 /**
- * The record of `key`, made with the lowest slot of BROWSER_PORTS no other
- * record keeps and whose ports are free now, when it has none.
+ * The record of `key`, made when it has none: asleep, holding no ports until
+ * it first starts ({@link slotted}).
  */
 export const recordFor = async (
   key: BrowserKey,
@@ -195,12 +265,35 @@ export const recordFor = async (
   if (kept) {
     return kept;
   }
+  const record: BrowserRecord = {
+    key,
+    name,
+    host,
+    state: "asleep",
+    lastUsedAt: Date.now(),
+    takeover: null,
+  };
+  await writeBrowser(record);
+  return record;
+};
+
+/**
+ * `record` with its ports: the lowest slot of BROWSER_PORTS no other record
+ * keeps and whose ports are free now, taken and written as it first starts.
+ */
+export const slotted = async (
+  record: BrowserRecord
+): Promise<BrowserRecord & { slot: number }> => {
+  const { slot: kept } = record;
+  if (kept !== undefined) {
+    return { ...record, slot: kept };
+  }
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
   return holding(
     join(browsersDir(), "slots.lock"),
     "The browser ports",
     async () => {
-      const taken = new Set((await allBrowsers()).map((record) => record.slot));
+      const taken = new Set((await allBrowsers()).map((one) => one.slot));
       for (let slot = 0; slot < BROWSER_SLOTS; slot += 1) {
         if (taken.has(slot)) {
           continue;
@@ -209,34 +302,25 @@ export const recordFor = async (
         // biome-ignore lint/performance/noAwaitInLoops: the first free slot, in order.
         const free = await Promise.all(ports.map(portFree));
         if (free.every(Boolean)) {
-          const record: BrowserRecord = {
-            key,
-            name,
-            host,
-            slot,
-            state: "asleep",
-            lastUsedAt: Date.now(),
-            takeover: null,
-          };
-          await writeBrowser(record);
-          return record;
+          const placed = { ...record, slot };
+          await writeBrowser(placed);
+          return placed;
         }
       }
       throw new Error(
-        `Every browser port of this machine (${ports(0).http}–${ports(BROWSER_SLOTS - 1).media}) is taken: stop or remove a browser first.`
+        `Every browser port of this machine (${browserPorts(0).http}–${browserPorts(BROWSER_SLOTS - 1).media}) is taken by a browser that has run: stop and remove one first.`
       );
     }
   );
 };
 
-const ports = browserPorts;
-
-/** The ports `record`'s host uses: DevTools and the gate on the local host, all four in a container. */
+/** The ports `record`'s host uses: DevTools on the local host, all three in a container. Only a browser that has started has any. */
 export const portsOf = (record: BrowserRecord): BrowserPorts => {
+  if (record.slot === undefined) {
+    throw new Error(`${record.key} has not started yet, so it has no ports.`);
+  }
   const all = browserPorts(record.slot);
-  return record.host === "container"
-    ? all
-    : { devtools: all.devtools, gate: all.gate };
+  return record.host === "container" ? all : { devtools: all.devtools };
 };
 
 /** Whether `url` answers 2xx within `ms` (a server that is starting, or one asked whether it is up). */

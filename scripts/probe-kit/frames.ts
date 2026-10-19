@@ -542,6 +542,11 @@ export interface MainThread {
    * most first (`profile` only; empty otherwise): `name@file:line`.
    */
   selfTime: (from: number, to: number) => [string, number][];
+  /**
+   * As `selfTime`, by the whole sampled stack: the function and the script
+   * frames that called it, the nearest first (`profile` only).
+   */
+  stacksIn: (from: number, to: number) => [string, number][];
   tasks: MainTask[];
 }
 
@@ -614,6 +619,9 @@ const scriptFrame = (c: Partial<StackFrame>): string | null =>
     ? `${c.functionName || "(anonymous)"}@${c.url.split("/").pop()}:${(c.lineNumber ?? 0) + 1}:${(c.columnNumber ?? 0) + 1}`
     : null;
 
+/** How many script frames a sampled stack is said with (`stacksIn`). */
+const STACK_DEPTH = 10;
+
 /**
  * The main thread's sampling profile, out of the trace's `Profile` and
  * `ProfileChunk` events: each sample's time (µs, the trace clock), how long
@@ -625,7 +633,7 @@ function samplesOf(
   events: TraceEvent[],
   pid: number,
   tid: number
-): { at: number; fn: string; us: number }[] {
+): { at: number; fn: string; stack: string; us: number }[] {
   const head = events.find(
     (event) =>
       event.name === "Profile" && event.pid === pid && event.tid === tid
@@ -656,7 +664,29 @@ function samplesOf(
     fns.set(id, name);
     return name;
   };
-  const samples: { at: number; fn: string; us: number }[] = [];
+  const stacks = new Map<number, string>();
+  /** The sample's function and up to `STACK_DEPTH` script frames above it. */
+  const stackOf = (id: number): string => {
+    const known = stacks.get(id);
+    if (known !== undefined) {
+      return known;
+    }
+    const chain = [nameOf(id)];
+    for (
+      let up = parents.get(id);
+      up !== undefined && chain.length < STACK_DEPTH;
+      up = parents.get(up)
+    ) {
+      const caller = scriptFrame(frames.get(up) ?? {});
+      if (caller) {
+        chain.push(caller);
+      }
+    }
+    const said = chain.join(" < ");
+    stacks.set(id, said);
+    return said;
+  };
+  const samples: { at: number; fn: string; stack: string; us: number }[] = [];
   let at = head.args?.data?.startTime ?? head.ts;
   for (const chunk of events) {
     if (
@@ -677,7 +707,12 @@ function samplesOf(
     const deltas = data?.timeDeltas ?? [];
     ids.forEach((id, i) => {
       at += deltas[i] ?? 0;
-      samples.push({ at, fn: nameOf(id), us: deltas[i + 1] ?? 0 });
+      samples.push({
+        at,
+        fn: nameOf(id),
+        stack: stackOf(id),
+        us: deltas[i + 1] ?? 0,
+      });
     });
   }
   return samples;
@@ -975,6 +1010,15 @@ export async function traceMain(
     }
     return [...counted].sort((a, b) => b[1] - a[1]);
   };
+  const stacksIn = (from: number, to: number): [string, number][] => {
+    const counted = new Map<string, number>();
+    for (const { at, stack, us } of samples) {
+      if (at >= from && at < to) {
+        counted.set(stack, (counted.get(stack) ?? 0) + us / 1000);
+      }
+    }
+    return [...counted].sort((a, b) => b[1] - a[1]);
+  };
   /** What a task opened with, said as `MainTask.ran`. */
   const ranIn = (from: number, to: number): string => {
     const opening = starts.find((one) => one.ts >= from && one.ts < to);
@@ -1025,6 +1069,7 @@ export async function traceMain(
       })),
     marks: marks.map((event) => ({ at: event.ts, name: event.name })),
     selfTime,
+    stacksIn,
     tasks: main
       .filter((event) => event.name === "RunTask")
       .map((event) => {

@@ -15,9 +15,13 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import type { MessageMetadata } from "../types";
+  import OfferActs from "./OfferActs.svelte";
 
   let { offer }: { offer: NonNullable<MessageMetadata["designOffer"]> } =
     $props();
+
+  /** What was answered, once it was. */
+  const SAID = { built: offerWords.filed, dismissed: offerWords.notNow };
 
   let now = $state<DesignOfferState | null>(null);
   let problem = $state<string | null>(null);
@@ -60,9 +64,12 @@
   }
 </script>
 
-<div
-  class="rail-hang flex flex-wrap items-center gap-space-2 mt-space-2"
+<OfferActs
+  class="rail-hang"
+  data-answer={now?.answer}
   data-design-offer={offer.projectId}
+  {problem}
+  said={now && now.answer !== "open" ? SAID[now.answer] : null}
 >
   {#if now?.answer === "open"}
     <Button
@@ -81,21 +88,7 @@
       size="xs"
       variant="ghost"
     />
-  {:else if now?.answer === "built"}
-    <span class="text-size-meta font-normal text-ink-muted"
-      >{offerWords.filed}</span
-    >
-    {#if href}
-      <Button {href} label={offerWords.open} size="xs" variant="ghost" />
-    {/if}
-  {:else if now?.answer === "dismissed"}
-    <span class="text-size-meta font-normal text-ink-muted"
-      >{offerWords.notNow}</span
-    >
+  {:else if now?.answer === "built" && href}
+    <Button {href} label={offerWords.open} size="xs" variant="ghost" />
   {/if}
-  {#if problem}
-    <p class="basis-full m-0 text-size-meta font-normal text-status-fail-ink">
-      {problem}
-    </p>
-  {/if}
-</div>
+</OfferActs>

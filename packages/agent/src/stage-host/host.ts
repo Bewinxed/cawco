@@ -46,9 +46,11 @@ import {
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { hostEnvironment } from "@cawco/core/session-env";
 import {
   AS_PAGE,
   CANVAS_PATH,
+  CANVAS_PLAN_ID,
   COMPONENT_BUDGET,
   COMPONENTS_PATH,
   type ComponentDoc,
@@ -57,12 +59,15 @@ import {
   type DesignLink,
   type DesignMap,
   type DesignQuery,
+  type DesignThumb,
   type Found,
+  type FrameRender,
   HEALTH_PATH,
   type PageError,
   RENDERED_PATH,
   REPORT_PATH,
   type RenderReport,
+  type SectionPlan,
   type SectionRender,
   type SheetImport,
   type SheetOnPage,
@@ -74,10 +79,17 @@ import {
   STORY_FILE,
   type StageError,
   type StageToolchain,
+  sectionName,
+  THUMB_FRAMES,
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { transformCode } from "@code-inspector/core";
+import {
+  originalPositionFor,
+  type SourceMapInput,
+  TraceMap,
+} from "@jridgewell/trace-mapping";
 import { propsNames, propsOf } from "./docgen";
 import {
   readStoryFile,
@@ -96,7 +108,7 @@ interface ModuleNode {
   importedModules: Set<ModuleNode>;
   importers: Set<ModuleNode>;
   /** Its code as last served; null until a page asked for it. */
-  transformResult: { code: string } | null;
+  transformResult: { code: string; map?: unknown } | null;
   url: string;
 }
 
@@ -202,10 +214,13 @@ declare const __CANVAS_RUNTIME__: string;
 declare const __CANVAS_TOKENS__: string;
 declare const __DIALKIT_JS__: string;
 declare const __DIALKIT_CSS__: string;
+declare const __CANVAS_FACES__: string;
+declare const __CANVAS_FACE_FILES__: Record<string, string>;
 const CANVAS_RUNTIME = __CANVAS_RUNTIME__;
 const CANVAS_TOKENS = __CANVAS_TOKENS__;
 const DIALKIT_JS = __DIALKIT_JS__;
 const DIALKIT_CSS = __DIALKIT_CSS__;
+const CANVAS_FACES = __CANVAS_FACES__;
 const root = process.cwd();
 const port = Number(process.env.CAWCO_STAGE_PORT);
 const framework = process.env.CAWCO_STAGE_FRAMEWORK as Framework;
@@ -608,6 +623,7 @@ boot({
   adapter: { mountStory },
   root: ${JSON.stringify(root)},
   tokens: ${JSON.stringify(CANVAS_TOKENS)},
+  faces: ${JSON.stringify(CANVAS_FACES)},
   load: (file) => import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js"),
 });
 if (import.meta.hot) {
@@ -699,21 +715,91 @@ const reports = new Map<
   }
 >();
 
-/** Keeps what a canvas page posted (its body, unchecked until here): each section under its file. */
+/** A frame across draws of one states file: its story, its state, its scheme and its form. */
+const frameId = (frame: FrameRender): string =>
+  `${frame.story}|${frame.interaction}|${frame.scheme}|${frame.form}`;
+
+/**
+ * Keeps what a canvas page posted (its body, unchecked until here): each
+ * section under its file. A frame the page did not show (`unshown`: a
+ * phone's canvas shows one frame at a time) keeps the frame the last draw
+ * of the same content recorded, so a phone looking never drops what a desk
+ * saw from the map's counts.
+ */
 function keepReport(body: unknown): void {
   const report = body as Partial<RenderReport> | null;
   for (const section of report?.sections ?? []) {
     if (typeof section?.file === "string" && storyFile(section.file)) {
+      // A frame this page did not show (a phone's, one at a time) keeps what an earlier draw of the same content saw.
+      const kept = reports.get(section.file);
+      const seen =
+        kept?.section.hash === section.hash
+          ? new Map(
+              kept.section.frames
+                .filter((frame) => frame.state !== "unshown")
+                .map((frame) => [frameId(frame), frame])
+            )
+          : null;
       reports.set(section.file, {
         at:
           typeof report?.at === "string" ? report.at : new Date().toISOString(),
         by: report?.by === "stage" ? "stage" : "panel",
-        errors: report?.page?.errors ?? [],
-        section,
+        errors: (report?.page?.errors ?? []).map(sourced),
+        section: {
+          ...section,
+          frames: section.frames.map((frame) => {
+            if (frame.state === "unshown") {
+              return seen?.get(frameId(frame)) ?? frame;
+            }
+            return frame.error
+              ? { ...frame, error: sourced(frame.error) }
+              : frame;
+          }),
+          moves: section.moves.map((move) =>
+            move.error ? { ...move, error: sourced(move.error) } : move
+          ),
+        },
       });
     }
   }
 }
+
+/**
+ * A page's error at its place in the project's source: the browser's stack
+ * names the code Vite served (a compiled `.svelte`, a transformed `.tsx`),
+ * which Vite's own sourcemap for that module maps back to the line the
+ * project wrote. An error with no place, or whose module has no map, is as
+ * the page said it.
+ */
+function sourced(error: PageError): PageError {
+  if (!error.file || error.line === null || error.column === null) {
+    return error;
+  }
+  const abs = resolve(root, error.file);
+  const map = [
+    ...(server?.environments.client.moduleGraph.getModulesByFile(abs) ?? []),
+  ].find((one) => one.transformResult?.map)?.transformResult?.map;
+  if (!(map && typeof map === "object" && "mappings" in map)) {
+    return error;
+  }
+  let traced: ReturnType<typeof originalPositionFor>;
+  try {
+    traced = originalPositionFor(new TraceMap(map as SourceMapInput), {
+      line: error.line,
+      column: error.column - 1,
+    });
+  } catch {
+    return error;
+  }
+  if (traced.line === null || traced.column === null) {
+    return error;
+  }
+  const file = traced.source
+    ? relative(root, resolve(dirname(abs), traced.source.replace(FILE_URL, "")))
+    : error.file;
+  return { ...error, file, line: traced.line, column: traced.column + 1 };
+}
+const FILE_URL = /^file:\/\//;
 
 /**
  * The canvas of `files` as the stage knows it: each section's newest
@@ -785,10 +871,21 @@ async function reportOf(files: string[]): Promise<RenderReport> {
   };
 }
 
-/** DialKit's vendored vanilla build and stylesheet (decision-page kit, MIT), served beside the canvas for its timeline and dials. */
-const CANVAS_ASSETS: Record<string, { text: string; type: string }> = {
-  "/@cawco/dialkit.js": { text: DIALKIT_JS, type: "text/javascript" },
-  "/@cawco/dialkit.css": { text: DIALKIT_CSS, type: "text/css" },
+/**
+ * DialKit's vendored vanilla build and stylesheet (decision-page kit, MIT),
+ * served beside the canvas for its timeline and dials, and the house faces'
+ * files (the dashboard's @fontsource-variable packages, OFL) its `faces`
+ * rules name, at `faces/<file>`.
+ */
+const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
+  "/@cawco/dialkit.js": { body: DIALKIT_JS, type: "text/javascript" },
+  "/@cawco/dialkit.css": { body: DIALKIT_CSS, type: "text/css" },
+  ...Object.fromEntries(
+    Object.entries(__CANVAS_FACE_FILES__).map(([name, base64]) => [
+      `/@cawco/faces/${name}`,
+      { body: Buffer.from(base64, "base64"), type: "font/woff2" },
+    ])
+  ),
 };
 
 const BODY = /(<body\b[^>]*>)[\s\S]*(<\/body>)/i;
@@ -814,9 +911,18 @@ async function serveCanvas(
   next: (error?: unknown) => void
 ): Promise<void> {
   try {
+    const files = new URL(
+      req.url ?? CANVAS_PATH,
+      "http://stage"
+    ).searchParams.getAll("file");
+    // JSON in a script element: no `<` closes it early.
+    const plan = JSON.stringify(planOf(files)).replaceAll("<", "\\u003c");
     const html = await dev.transformIndexHtml(
       req.url ?? CANVAS_PATH,
-      canvasPage(),
+      canvasPage().replace(
+        "</head>",
+        `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script></head>`
+      ),
       (req as IncomingMessage & { originalUrl?: string }).originalUrl
     );
     res.setHeader("content-type", "text/html");
@@ -825,6 +931,41 @@ async function serveCanvas(
   } catch (error) {
     next(error);
   }
+}
+
+/**
+ * Each states file's {@link SectionPlan} (from the toolchain root), read
+ * from the file as it stands, no transform: what the canvas page names its
+ * section and stands in place while the module loads. A file outside the
+ * root, or one that doesn't read, is named by its file with no stories; its
+ * module's load says what is wrong with it.
+ */
+function planOf(files: string[]): Record<string, SectionPlan> {
+  return Object.fromEntries(
+    files.map((file): [string, SectionPlan] => {
+      const named = sectionName(null, null, file);
+      const abs = resolve(root, file);
+      if (relative(root, abs).startsWith("..")) {
+        return [file, { name: named, stories: [] }];
+      }
+      try {
+        const read = readStoryFile(abs, readFileSync(abs, "utf8"));
+        return [
+          file,
+          {
+            name: sectionName(read.meta.title, read.meta.component, file),
+            stories: read.stories.map((story) => ({
+              name: story.name,
+              label: story.label,
+              width: story.form?.width ?? null,
+            })),
+          },
+        ];
+      } catch {
+        return [file, { name: named, stories: [] }];
+      }
+    })
+  );
 }
 
 /** A request's body, read whole as JSON. */
@@ -1064,6 +1205,7 @@ async function formatted(
   if (biome) {
     const ran = spawnSync(biome, ["format", `--stdin-file-path=${abs}`], {
       cwd: root,
+      env: hostEnvironment(),
       input: code,
       encoding: "utf8",
     });
@@ -1252,7 +1394,8 @@ async function designMap(ask: DesignQuery): Promise<DesignMap> {
       `${ask.dir} is no folder inside ${root}: dir is a folder from the toolchain root, like src/lib.`
     );
   }
-  let found = await discovered(top);
+  const library = await discovered(top);
+  let found = library;
   if (ask.query) {
     const needle = ask.query.toLowerCase();
     found = found.filter((one) => one.name.toLowerCase().includes(needle));
@@ -1364,6 +1507,17 @@ async function designMap(ask: DesignQuery): Promise<DesignMap> {
       if (ask.component) {
         card.props = (await propsOf(resolve(root, one.file), one.name)).props;
       }
+      if (ask.thumbs) {
+        card.thumb = thumbOf(one.sheets);
+        const known = new Map(library.map((each) => [each.file, each]));
+        const counted = (links: DesignLink[]): DesignLink[] =>
+          links.map((linked) => ({
+            ...linked,
+            ...countsOf(known.get(linked.file)?.sheets ?? []),
+          }));
+        card.usedIn = counted(used);
+        card.madeOf = counted(made);
+      }
       return card;
     })
   );
@@ -1381,6 +1535,68 @@ async function designMap(ask: DesignQuery): Promise<DesignMap> {
         }
       : {}),
   };
+}
+
+/** A component's states, frames drawn, states files and thumbnail, from its states files (from the toolchain root): the map's counts of a linked component. */
+function countsOf(
+  sheets: string[]
+): Required<Pick<DesignLink, "drawn" | "states" | "statesFiles" | "thumb">> {
+  let states = 0;
+  for (const sheet of sheets) {
+    try {
+      const abs = resolve(root, sheet);
+      states += readStoryFile(abs, readFileSync(abs, "utf8")).stories.length;
+    } catch {
+      // A states file that doesn't read counts none: its canvas says why.
+    }
+  }
+  return {
+    states,
+    drawn: sheets
+      .flatMap((sheet) => reports.get(sheet)?.section.frames ?? [])
+      .filter((frame) => frame.state === "drawn").length,
+    statesFiles: sheets,
+    thumb: thumbOf(sheets),
+  };
+}
+
+/** How far one states file's frames stand below the one before, in a thumbnail. Ours: a frame's own gap on the canvas. */
+const THUMB_GAP = 24;
+
+/**
+ * A component's frames as a browser last drew them, in miniature (the
+ * panel's map): each states file's first frames from its own top left, the
+ * next file's under it, at most {@link THUMB_FRAMES}; null before any drew.
+ */
+function thumbOf(sheets: string[]): DesignThumb | null {
+  const frames: DesignThumb["frames"] = [];
+  let top = 0;
+  let wide = 0;
+  for (const sheet of sheets) {
+    const own = (reports.get(sheet)?.section.frames ?? []).slice(
+      0,
+      THUMB_FRAMES - frames.length
+    );
+    if (own.length === 0) {
+      continue;
+    }
+    const left = Math.min(...own.map((frame) => frame.box.x));
+    const up = Math.min(...own.map((frame) => frame.box.y));
+    let low = 0;
+    for (const { box, state } of own) {
+      frames.push({
+        x: box.x - left,
+        y: box.y - up + top,
+        w: box.w,
+        h: box.h,
+        state,
+      });
+      wide = Math.max(wide, box.x - left + box.w);
+      low = Math.max(low, box.y - up + box.h);
+    }
+    top += low + THUMB_GAP;
+  }
+  return frames.length > 0 ? { frames, w: wide, h: top - THUMB_GAP } : null;
 }
 
 /** Every story file under `dir`, routes and builds left out. */
@@ -1616,6 +1832,7 @@ async function serveStage(
       cursor: ask.get("cursor") ?? undefined,
       limit: ask.has("limit") ? Number(ask.get("limit")) : undefined,
       detailed: ask.get("detailed") === "1",
+      thumbs: ask.get("thumbs") === "1",
     }).then(
       (map) => json(res, 200, map),
       (error) => refusedWith(res, error)
@@ -1635,7 +1852,7 @@ async function serveStage(
   if (asset) {
     res.setHeader("content-type", asset.type);
     res.setHeader("cache-control", "max-age=3600");
-    res.end(asset.text);
+    res.end(asset.body);
     return;
   }
   if (path === RENDERED_PATH && req.method === "POST") {
@@ -1907,35 +2124,44 @@ function cawcoStage() {
  * which compiles the markup away.
  */
 function stamp() {
-  const prefix = `data-insp-path="${root}${sep}`;
   return {
     name: "cawco:stage-stamp",
     enforce: "pre" as const,
-    async transform(code: string, id: string) {
-      if (id.includes("?") || id.includes(`${sep}node_modules${sep}`)) {
-        return null;
-      }
-      let fileType: "vue" | "jsx" | null = null;
-      if (id.endsWith(".vue")) {
-        fileType = "vue";
-      } else if (JSX_FILE.test(id)) {
-        fileType = "jsx";
-      }
-      if (!(fileType && id.startsWith(`${root}${sep}`))) {
-        return null;
-      }
-      const stamped = await transformCode({
-        content: code,
-        filePath: id,
-        fileType,
-        escapeTags: [],
-        pathType: "absolute",
-      });
-      return stamped === code
-        ? null
-        : { code: stamped.split(prefix).join('data-insp-path="'), map: null };
+    // Ahead of every plugin's transform, a framework's own `pre` one too:
+    // vite-plugin-solid compiles JSX away in its, and a project's plugins
+    // stand before the stage's in the merged config.
+    transform: {
+      order: "pre" as const,
+      handler: stampTransform,
     },
   };
+}
+
+/** One module stamped by code-inspector's transform; null when it is none the stage stamps. */
+async function stampTransform(code: string, id: string) {
+  if (id.includes("?") || id.includes(`${sep}node_modules${sep}`)) {
+    return null;
+  }
+  let fileType: "vue" | "jsx" | null = null;
+  if (id.endsWith(".vue")) {
+    fileType = "vue";
+  } else if (JSX_FILE.test(id)) {
+    fileType = "jsx";
+  }
+  if (!(fileType && id.startsWith(`${root}${sep}`))) {
+    return null;
+  }
+  const stamped = await transformCode({
+    content: code,
+    filePath: id,
+    fileType,
+    escapeTags: [],
+    pathType: "absolute",
+  });
+  const prefix = `data-insp-path="${root}${sep}`;
+  return stamped === code
+    ? null
+    : { code: stamped.split(prefix).join('data-insp-path="'), map: null };
 }
 
 const JSX_FILE = /\.[jt]sx$/;

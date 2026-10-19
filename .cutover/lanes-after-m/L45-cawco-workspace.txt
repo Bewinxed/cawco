@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/workspace/PaneDeck.svelte
+apps/dashboard/src/lib/cawco/workspace/PaneLeaf.svelte
+apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte
+apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte
+apps/dashboard/src/lib/cawco/workspace/SessionStatus.svelte
+apps/dashboard/src/routes/(app)/project/[id]/+page.svelte
+apps/dashboard/src/routes/(app)/project/new/+page.svelte
+
+# apps/dashboard/src/lib/cawco/workspace/PaneDeck.svelte: relic: literal ×4; relic: style-var ×5; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/workspace/PaneLeaf.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk
+# apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte: relic: literal ×4; relic: style-var ×4; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte: relic: literal ×6; relic: style-var ×9; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/workspace/SessionStatus.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/routes/(app)/project/[id]/+page.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×3; relic: style-var ×4; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×2
+# apps/dashboard/src/routes/(app)/project/new/+page.svelte: relic: literal ×1; relic: style-var ×2

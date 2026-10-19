@@ -40,6 +40,8 @@
     IconCheck,
     IconChevronDown,
     IconClose,
+    IconGlobe,
+    IconInteract,
     IconShield,
     IconTick,
   } from "#lib/icons.js";
@@ -50,7 +52,9 @@
     isStale,
     type PendingPermission,
     permissionAnswer,
+    takeOverBrowser,
   } from "../client.svelte";
+  import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
 
@@ -84,10 +88,74 @@
     onanswer: (result: PermissionResult) => string | null;
   } = $props();
 
+  /**
+   * A browser ask (core `BrowserAskFrame`): Take over is `takeOverBrowser`,
+   * the one take-over Needs you's row runs too; Deny answers the call,
+   * with the person's own words when its "Other" chip opened the line for
+   * them. That chip and its line are the question card's own (`openOther`,
+   * `writeOther`, `otherKey`): the ask is one question, its reason, with no
+   * options of its own.
+   */
+  const browserAsk = $derived(request.browserAsk ?? null);
+  /** What the hub refused the take-over with. */
+  let takeRefused = $state<string | null>(null);
+
+  async function takeOver(): Promise<void> {
+    if (!(answerable && browserAsk)) {
+      return;
+    }
+    pressed = "allow";
+    takeRefused = null;
+    takeRefused = await takeOverBrowser(request.requestId, browserAsk);
+    // Refused: the button is free again.
+    if (takeRefused !== null) {
+      pressed = null;
+    }
+  }
+
+  /** Deny, with the words the person wrote on the "Other" line, if any. */
+  function denyBrowser(): void {
+    if (!(answerable && browserAsk)) {
+      return;
+    }
+    pressed = "deny";
+    commandId = onanswer({
+      behavior: "deny",
+      message: (others[browserAsk.reason] ?? "").trim(),
+    });
+  }
+
+  /** What the card is, as its title and a screen reader name it. */
+  const cardLabel = $derived.by(() => {
+    if (browserAsk) {
+      return `Browser ask from ${asker}`;
+    }
+    return questions
+      ? `Question from ${asker}`
+      : `Permission request from ${who}`;
+  });
+
   /** Names each question's lede, which labels its option group. */
   const claimId = $props.id();
   const input = $derived(request.input as Record<string, unknown>);
   const questions = $derived(questionsOf(request.toolName, input));
+  /**
+   * The questions the "Other" line answers: a question card's, or a
+   * browser ask's one, its reason, which Deny sends the line's words with.
+   */
+  const asked = $derived<UserQuestion[] | null>(
+    questions ??
+      (browserAsk
+        ? [
+            {
+              question: browserAsk.reason,
+              header: "",
+              options: [],
+              multiSelect: false,
+            },
+          ]
+        : null)
+  );
   const presentation = $derived(request.presentation);
   /** Who asks and where: "Caw · cockpit". */
   const who = $derived(askerLine(presentation));
@@ -331,7 +399,7 @@
 
   /** The field's words become the answer, in place of what they were before. */
   function writeOther(text: string): void {
-    const q = otherAt === null ? undefined : questions?.[otherAt];
+    const q = otherAt === null ? undefined : asked?.[otherAt];
     if (!q) {
       return;
     }
@@ -348,7 +416,7 @@
 
   /** "Other": the field's line opens for this question's own answer. */
   async function openOther(index: number): Promise<void> {
-    const q = questions?.[index];
+    const q = asked?.[index];
     if (!(q && answerable)) {
       return;
     }
@@ -381,6 +449,11 @@
     }
     event.preventDefault();
     event.stopPropagation();
+    // A browser ask's line goes with its Deny.
+    if (browserAsk) {
+      denyBrowser();
+      return;
+    }
     if (allAnswered) {
       submitQuestion();
       return;
@@ -656,14 +729,9 @@
      the hub refused the one sent and said why. A live region, so the
      refusal is heard. -->
 {#snippet wait()}
-  {#if refused}
-    <p
-      data-wait
-      data-slot="refused"
-      class="mt-space-2 text-size-meta font-normal text-status-fail-ink"
-      role="status"
-    >
-      {refused}
+  {#if takeRefused ?? refused}
+    <p data-wait data-slot="refused" class="wait refused" role="status">
+      {takeRefused ?? refused}
     </p>
   {:else if pressed === null && offline}
     <p
@@ -695,23 +763,12 @@
      Safari: "stop responding and it didn't even show"; with the blur
      snapped instead of transitioned, or none, it never hung). -->
 {#snippet title(text: string)}
-  <h2
-    class="mark-line text-size-label font-medium text-ink-strong flex items-center gap-space-2 mb-space-2 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-shown/hitl:opacity-100 group-data-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-shown/hitl:delay-(--part-delay)"
-    style:--part="0"
-    style:--part-delay="calc(var(--part) * var(--dur-stagger))"
-  >
-    <!-- What asks, in the title's ink. Solar draws the question-circle's
-         disc at 20/24 of its box, so the box is --icon-lg for the disc
-         itself to stand at the title row's 16px icon size, its "?" large
-         enough to read over the duotone's half-ink layer. -->
-    <span
-      data-slot="glyph"
-      aria-hidden="true"
-      class="inline-grid place-items-center flex-none text-inherit"
-      data-box
-    >
-      {#if questions}
-        <IconAsk class="size-icon-lg" />
+  <h2 class="part mark-line" style:--part="0">
+    <span data-slot="glyph" aria-hidden="true" class="glyph" data-box>
+      {#if browserAsk}
+        <IconGlobe />
+      {:else if questions}
+        <IconAsk />
       {:else}
         <IconShield class="size-icon-lg" />
       {/if}
@@ -753,11 +810,8 @@
 <section
   data-prompt-shown={shown || undefined}
   data-slot="hitl"
-  aria-label={questions
-    ? `Question from ${asker}`
-    : `Permission request from ${who}`}
-  class="group/hitl flex flex-col max-h-(--hitl-max) pt-space-3 px-space-3 pb-space-2"
-  data-shown={shown || undefined}
+  aria-label={cardLabel}
+  class={["hitl", { shown }]}
   ontouchcancel={() => {
     swipe = null;
   }}
@@ -766,7 +820,106 @@
   style:--hitl-max="var(--ask-max, none)"
   bind:this={card}
 >
-  {#if questions}
+  {#if browserAsk}
+    {@render title(cardLabel)}
+    <!-- What the agent needs the person for, as a question's text, and the
+         page's origin in code type: the person checks where they will be
+         typing before they take over. -->
+    <div data-slot="body" class="body part" style:--part="1">
+      <p data-slot="lede" class="lede">{browserAsk.reason}</p>
+      <p
+        data-slot="browser-meta"
+        class="mb-(--space-2) min-w-0 text-(length:--text-meta) text-(--ink-muted)"
+      >
+        <!-- Broken only after its dots, never inside a label. -->
+        <code
+          data-slot="browser-origin"
+          class="min-w-0 [font:var(--type-code)] text-(--ink-strong) [overflow-wrap:break-word]"
+          ><OriginText origin={browserAsk.origin} /></code
+        >
+      </p>
+      <!-- The question card's "Other": its chip and its line, side by side
+           in one row of a fixed height, so nothing under the thumb moves as
+           the line opens. -->
+      <div
+        data-slot="browser-other"
+        class="mb-(--space-2) flex h-9 min-w-0 items-center gap-(--space-2)"
+      >
+        <ToggleGroup.Root
+          aria-label={`Other answer to: ${browserAsk.reason}`}
+          class="kit-chips flex-none"
+          type="single"
+          value={otherAt === 0 ? OTHER : ""}
+        >
+          <ToggleGroup.Item
+            data-sel={otherAt === 0 || undefined}
+            class="kit-chip touch-hit{otherAt === 0 ? ' sel' : ''}"
+            onclick={(event: MouseEvent) => {
+              event.preventDefault();
+              openOther(0);
+            }}
+            onkeydown={(event: KeyboardEvent) => otherChipKey(event, 0)}
+            type="button"
+            value={OTHER}
+          >
+            <span data-slot="opt-label" class="opt-label">Other</span>
+          </ToggleGroup.Item>
+        </ToggleGroup.Root>
+        {#if otherAt === 0}
+          <Input
+            data-other
+            aria-label={`Your answer to: ${browserAsk.reason}`}
+            class="other h-9 min-w-0 flex-1"
+            disabled={!answerable}
+            oninput={(event) => writeOther(event.currentTarget.value)}
+            onkeydown={otherKey}
+            placeholder="Your answer…"
+            value={others[browserAsk.reason] ?? ""}
+            bind:ref={otherField}
+          />
+        {/if}
+      </div>
+      <!-- What the answer reaches, before the person commits to it: the
+           permission card's own line for that. -->
+      <p data-slot="detail" class="detail">
+        No agent can see or use this browser until you hand it back.
+      </p>
+    </div>
+    <div data-slot="foot" class="foot part" style:--part="2">
+      <!-- A refusal stands over the pair: the card grows upward from the
+           composer's pill, so nothing under the thumb moves as it appears. -->
+      {@render wait()}
+      <!-- The Peer Rule's transcript form: Take over and Deny at the row's
+           two ends, the one recessed fill, each outlined in its tint; no
+           third control between them. -->
+      <div data-slot="choice" class="choice">
+        <Button
+          class={grant}
+          data-browser-take
+          disabled={disabledOf("allow")}
+          failed={takeRefused !== null}
+          icon={IconInteract}
+          label="Take over"
+          onclick={takeOver}
+          pending={pendingOf("allow")}
+          pendingLabel="Taking over…"
+          variant="secondary"
+        />
+        <Button
+          class={refuse}
+          data-browser-deny
+          disabled={disabledOf("deny")}
+          failed={failedOf("deny")}
+          icon={IconClose}
+          label="Deny"
+          onclick={denyBrowser}
+          pending={pendingOf("deny")}
+          pendingLabel="Denying…"
+          variant="secondary"
+        />
+      </div>
+    </div>
+  {:else if questions}
     {@render title(`Question from ${asker}`)}
     <!-- Every box sizes to the card: the body, and what stands in it, may
          shrink below its words' longest run, which then wraps
@@ -1190,3 +1343,344 @@
     </div>
   {/if}
 </section>
+
+<style>
+  /* The grown shape is the surface (Composer draws it): the card is what
+     stands in it, its title on top, its foot on the pill's top edge, and a
+     long ask scrolls between the two. As tall as the room over the pill
+     allows (`--ask-max`, the composer's). */
+  .hitl {
+    display: flex;
+    flex-direction: column;
+    max-block-size: var(--ask-max, none);
+    padding: var(--space-3) var(--space-3) var(--space-2);
+  }
+  /* Every box sizes to the card: the body, and what stands in it, may
+     shrink below its words' longest run, which then wraps (`overflow-wrap`
+     on the lede and the labels) rather than pushing past the card. */
+  .body {
+    position: relative;
+    flex: 1 1 auto;
+    min-block-size: 0;
+    min-inline-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* The live question's rail, on its lede's inline edge (`.railed .lede`,
+     below). */
+  .rail {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    inline-size: 1px;
+    background: var(--brand-solid);
+    pointer-events: none;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        translate var(--dur-control) var(--ease-drawer),
+        block-size var(--dur-control) var(--ease-drawer);
+    }
+  }
+  .foot {
+    flex: none;
+    padding-block-start: var(--space-1);
+  }
+  /* The title, the body and the foot come up with the shape one after the
+     other, by opacity and translate alone, and sink back together as it
+     folds. No filter: a blur transitioning on a part hung WebKit's web
+     process for good as the card came up (Playwright WebKit 2359 at an
+     iPhone's size, the owner's iPhone Safari: "stop responding and it didn't
+     even show"; with the blur snapped instead of transitioned, or none, it
+     never hung). */
+  .part {
+    opacity: 0;
+    transition: opacity var(--dur-fade) var(--ease-out);
+
+    @media (prefers-reduced-motion: no-preference) {
+      translate: 0 var(--pop-rise);
+      transition:
+        opacity var(--dur-fade) var(--ease-out),
+        translate var(--dur-panel) var(--ease-drawer);
+    }
+  }
+  .shown .part {
+    opacity: 1;
+    translate: none;
+    transition-delay: calc(var(--part) * var(--dur-stagger));
+  }
+  h2 {
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-block-end: var(--space-2);
+  }
+  /* What asks, in the title's ink. Solar draws the question-circle's disc
+     at 20/24 of its box, so the box is --icon-lg for the disc itself to
+     stand at the title row's 16px icon size, its "?" large enough to read
+     over the duotone's half-ink layer. */
+  .glyph {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    color: inherit;
+
+    & :global(svg) {
+      inline-size: var(--icon-lg);
+      block-size: var(--icon-lg);
+    }
+  }
+  /* Who asks gives way first (The Truncate Inside Rule): it shrinks a
+     hundred times faster than anything beside it, cut inside its own box. */
+  .title {
+    flex: 0 100 auto;
+    min-inline-size: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Where it stands ("2 of 3") keeps its width, on one line. */
+  h2 :global(.place) {
+    flex: none;
+    margin-inline-start: auto;
+  }
+  /* The minimize chevron ends the title row, in the title's muted ink; it
+     keeps the row's own height (its 24px box overhangs the label line). */
+  h2 :global(.minimize) {
+    flex: none;
+    margin-block: calc(var(--space-1) * -1);
+    margin-inline-start: auto;
+    color: var(--ink-muted);
+  }
+  h2 :global(.place + .minimize) {
+    margin-inline-start: 0;
+  }
+  /* The reader's own answer (the kit's field), on the step under the choices. */
+  .body :global(.other) {
+    margin-block-end: var(--space-2);
+  }
+  .wait {
+    margin-block-start: var(--space-2);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
+
+    &.refused {
+      color: var(--status-fail-ink);
+    }
+  }
+  .lede {
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
+    line-height: var(--leading-body);
+    color: var(--ink-strong);
+    margin-block-end: var(--space-2);
+    max-inline-size: 72ch;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  /* Every lede of a several-question ask stands off the rail's edge by the
+     same step, railed or not, so nothing moves as the rail does. */
+  .railed .lede {
+    padding-inline-start: var(--space-2);
+  }
+  /* The command under the reason, in the transcript's command rule: one
+     line, cut with an ellipsis, until its chevron opens it whole. */
+  .cmd {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    border-inline-start: 2px solid var(--border-hairline);
+    padding-block: 3px;
+    padding-inline: var(--space-3) 0;
+    margin-block-end: var(--space-2);
+  }
+  .cmd-text {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+  }
+  .cmd.open .cmd-text {
+    color: var(--ink-strong);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .cmd :global(.cmd-toggle) {
+    flex: none;
+    margin-block: calc(var(--space-1) * -1);
+    color: var(--ink-muted);
+
+    & :global(svg) {
+      @media (prefers-reduced-motion: no-preference) {
+        transition: rotate var(--dur-control) var(--ease-drawer);
+      }
+    }
+  }
+  .cmd.open :global(.cmd-toggle svg) {
+    rotate: 180deg;
+  }
+
+  /* What will happen, in the title's weight: the line the grant is made on. */
+  .summary {
+    font-weight: var(--weight-strong);
+    margin-block-end: var(--space-1);
+    overflow-wrap: anywhere;
+  }
+  /* How much it changes and where, under it. */
+  .detail {
+    font-size: var(--text-label);
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
+    margin-block-end: var(--space-2);
+  }
+  /* The change itself, open: each diff stands to the token's share of the
+     screen and scrolls inside it, so the answer row stays in reach. */
+  .changes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-block-end: var(--space-2);
+  }
+  /* The rest of the input, shown rather than disclosed: each field's name
+     over its value, values that run long scrolling in place. */
+  .fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-block: 0 var(--space-3);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--surface-recess);
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-inline-size: 0;
+  }
+  .field .k {
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    color: var(--ink-muted);
+  }
+  .field .v {
+    margin: 0;
+    max-block-size: 200px;
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    color: var(--ink-strong);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  /* JOURNEY §Triage: the full row width sits between grant and refusal. At
+     --space-2 the two sat 7px apart, close enough that a hand aiming at
+     Approve lands on Deny. The gap is unfillable on purpose — no third
+     control belongs between a grant and a refusal — and --space-8 is the
+     floor it never falls below when the row is narrow. */
+  .choice {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-8);
+    margin-block-start: var(--space-2);
+  }
+  .choice > :global(*) {
+    flex: 0 0 auto;
+  }
+  /* Each peer outlined in its tint (DESIGN.md, The Peer Rule, the
+     transcript's form): Approve in the done ink, Deny in the fail ink, 1px
+     each, both inks at one strength, over the one untinted recessed fill.
+     Neither changes under the pointer: the fill and the edge hold still, so
+     the hand's last move never makes one the more inviting. */
+  .choice > :global(.approve),
+  .choice > :global(.approve:hover) {
+    border-color: var(--status-done-ink);
+    background-color: var(--surface-recess);
+  }
+  .choice > :global(.deny),
+  .choice > :global(.deny:hover) {
+    border-color: var(--status-fail-ink);
+    background-color: var(--surface-recess);
+  }
+  .widen {
+    /* a clear break from the gate above, on the scale (--space-8 / --space-5) */
+    margin-block-start: var(--space-8);
+    padding-block-start: var(--space-5);
+    border-block-start: 1px solid var(--border-hairline);
+  }
+  .widen > p {
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
+    margin-block-end: var(--space-2);
+    max-inline-size: 66ch;
+  }
+  /* The permission scope actually being granted is consequential text — it
+     reads at --text-label, never the 10.25px micro-label step. */
+  .mono {
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+  }
+  /* The chip row is the kit's option-chip recipe (.kit-chips / .kit-chip in
+     app.css); the card only sets where it sits. */
+  .body :global(.qopts) {
+    margin-block: 2px var(--space-2);
+  }
+  /* An option's label shrinks with its chip and wraps inside it. */
+  .body :global(.qopts .opt-label) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  /* The list form: the chip recipe grown to one full-width row per option.
+     The rows are one column the card's width (`minmax(0, 1fr)`), and each
+     row sizes its own two columns: the keycap's cell at its own width,
+     standing on the label's first line (`.mark-cell`), and the words in
+     the rest, which may shrink to nothing and wrap. The label keeps the
+     chip's label type and ink; the description runs under it in meta and
+     muted ink. A pick changes the edge, the fill and the keycap, never the
+     row's size. */
+  .body :global(.qopts.list) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+
+    & > :global(.kit-chip) {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      min-inline-size: 0;
+    }
+    & :global(.opt-text) {
+      display: block;
+      min-inline-size: 0;
+    }
+    & :global(.opt-label) {
+      display: block;
+    }
+    & :global(.opt-desc) {
+      display: block;
+      font: var(--type-meta);
+      color: var(--ink-muted);
+      overflow-wrap: anywhere;
+      text-wrap: pretty;
+    }
+  }
+  /* The chips stand flush in a scroller that clips (`.body`), so the kit's
+     ring sits on each chip's own border box (The One Ring Rule) rather than
+     outside it, where the scroller's edge would cut it. */
+  .body :global(.qopts .kit-chip:focus-visible) {
+    outline-offset: var(--focus-ring-inset);
+  }
+  .qact {
+    display: flex;
+    gap: var(--space-2);
+  }
+</style>

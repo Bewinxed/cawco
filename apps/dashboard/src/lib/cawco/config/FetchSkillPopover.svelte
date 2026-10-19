@@ -8,8 +8,10 @@
     type FleetSkillMeta,
     projectClaudeRelative,
     userLayerLabel,
+    skillsWords as words,
   } from "@cawco/core";
   import { tick } from "svelte";
+  import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
@@ -119,7 +121,7 @@
     {#snippet child({ props })}
       <Button {...props} disabled={down !== null} title={down ?? undefined}>
         <IconPlus />
-        <span>Fetch skill</span>
+        <span>{words.fetchSkill}</span>
       </Button>
     {/snippet}
   </Popover.Trigger>
@@ -143,18 +145,12 @@
         }
       }}
     >
-      <Field id="skill-source" label="Source">
+      <Field id="skill-source" label={words.source}>
         {#snippet hint()}
           {#if source !== "" && source !== typed.trim()}
-            Reads as <span class="font-mono">{source}</span>
+            <Coded text={words.readsAs(source)} />
           {:else}
-            The install command, an <span class="font-mono">owner/repo</span>
-            slug, or a <span class="font-mono">skills:</span>,
-            <span class="font-mono">github:</span>,
-            <span class="font-mono">npm:</span>
-            or
-            <span class="font-mono">https://</span>
-            source.
+            <Coded text={words.sourceHint} />
           {/if}
         {/snippet}
         <Input
@@ -166,23 +162,23 @@
               skillName = suggestSkillName(normalizeSkillSource(typed));
             }
           }}
-          placeholder="bunx skills add pbakaus/impeccable"
+          placeholder={words.sourcePlaceholder}
           spellcheck="false"
           bind:value={typed}
         />
       </Field>
       <Field
         id="skill-name"
-        label="Name"
+        label={words.name}
         problem={skillName === "" ? undefined : nameProblem}
       >
         {#snippet hint()}
-          The directory it lands in —
+          {words.landsIn}
           <span class="font-mono"
             >{project
               ? projectClaudeRelative("skills", skillName || "name")
               : userLayerLabel("skills", skillName || "name")}</span
-          >{project ? ` in each of ${project.name}'s folders` : ""}
+          >{project ? words.inProjectFolders(project.name) : ""}
         {/snippet}
         <Input
           aria-invalid={skillName !== "" && nameProblem ? "true" : undefined}
@@ -192,19 +188,19 @@
           oninput={() => {
             named = true;
           }}
-          placeholder="impeccable"
+          placeholder={words.namePlaceholder}
           spellcheck="false"
           bind:value={skillName}
         />
       </Field>
       <div>
         <PickerChip
-          label="Scope"
+          label={words.scope}
           onpick={(next) => {
             projectId = next;
           }}
           options={[
-            { value: "", label: "Every machine in the fleet" },
+            { value: "", label: words.everyMachine },
             ...cawco.projects.map((each) => ({
               value: each.id,
               label: each.name,
@@ -214,16 +210,8 @@
         />
       </div>
       {#if choices.length > 0}
-        <!-- literal: 13rem, 10px -->
-        <div
-          class="flex flex-col max-h-(--choices-max) overflow-y-auto"
-          style:--choices-max="13rem"
-          style:--choice-pad="10px"
-          transition:unfold
-        >
-          <span data-slot="note" class="type-meta text-ink-muted"
-            >That repo holds several skills. Pick the one to fetch.</span
-          >
+        <div class="choices" transition:unfold>
+          <span data-slot="note" class="note">{words.severalSkills}</span>
           {#each choices as choice (choice)}
             <button
               data-slot="choice"
@@ -250,9 +238,9 @@
         class="self-end"
         disabled={down !== null || !ready}
         failed={failed !== undefined}
-        label="Fetch skill"
+        label={words.fetchSkill}
         pending={busy}
-        pendingLabel="Fetching…"
+        pendingLabel={words.fetching}
         title={down ?? undefined}
         type="submit"
       />

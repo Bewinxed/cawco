@@ -242,7 +242,8 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
 
         let safe = view.safeAreaLayoutGuide
         let fits = card.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -Space.space5 * 2)
-        fits.priority = .defaultHigh
+        // The pane's width less its gutters, 980 at most, whatever the card holds (SectionFrame `.body`).
+        fits.priority = .required - 1
         scrollToFoot = scroll.bottomAnchor.constraint(equalTo: footBar.topAnchor)
         scrollToBottom = scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         NSLayoutConstraint.activate(contentInsets + [
@@ -272,18 +273,11 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         empty.priority = .defaultLow
         empty.isActive = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (setup: AccountSetupController, _: UITraitCollection) in setup.paintBox() }
-        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (setup: AccountSetupController, _: UITraitCollection) in setup.drawTitle() }
         paintBox()
-        drawTitle()
     }
 
     private func paintBox() {
         box.layer.borderColor = Palette.borderWell.resolvedColor(with: traitCollection).cgColor
-    }
-
-    /// A compact width's navigation bar says the title; a wide card says it itself (SectionFrame).
-    private func drawTitle() {
-        titleLabel.isHidden = traitCollection.horizontalSizeClass == .compact
     }
 
     override func viewDidLayoutSubviews() {
@@ -454,14 +448,15 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             }
         case .atLimit:
             content.addArrangedSubview(heading(at.name))
-            if let pair = pair(view) {
-                let block = AtLimitView(accounts: (pair[1], pair[0]), terms: provider == FleetAccounts.claude, value: atLimit)
+            if let pair = pair(view), let view {
+                let block = AtLimitView(accounts: (pair[1], pair[0]), among: view.accounts, terms: provider == FleetAccounts.claude, value: atLimit)
                 block.onChange = { [weak self] next in self?.atLimit = next }
                 content.addArrangedSubview(block)
             }
         case .done:
-            if let pair = pair(view) {
-                content.addArrangedSubview(heading(Words.Accounts.Setup.setUp(first: FleetAccounts.name(pair[0]), second: FleetAccounts.name(pair[1]))))
+            if let pair = pair(view), let view {
+                content.addArrangedSubview(heading(Words.Accounts.Setup.setUp(first: FleetAccounts.name(pair[0], among: view.accounts),
+                                                                              second: FleetAccounts.name(pair[1], among: view.accounts))))
                 let lead = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
                 let line = FleetAccounts.routingLine(pair, yours: yours, delegates: delegates)
                 lead.text = limits && atLimit.move ? Words.Accounts.Setup.withMoves(line: line) : line
@@ -694,14 +689,12 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         card.backgroundColor = Palette.surfaceRaised
         card.layer.cornerRadius = Radius.radiusMd
         card.accessibilityIdentifier = "setup.preview"
-        card.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
         preview = (tile, name, email)
         let field = KitField(placeholder: Words.Accounts.Setup.nicknamePlaceholder)
         field.text = nickname
         field.accessibilityLabel = Words.Accounts.Setup.nicknameSaid
         field.accessibilityIdentifier = "setup.nickname"
         field.delegate = self
-        field.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
         field.addAction(UIAction { [weak self, weak field] _ in
             self?.nickname = field?.text ?? ""
             self?.requestRefresh()
@@ -720,10 +713,10 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             self?.hue = picked
             self?.requestRefresh()
         }
-        for (label, control) in [(showsLabel as UIView, card as UIView), (nicknameLabel, field), (colourLabel, swatches)] {
+        // The preview at most 360pt and the field 280pt, each in a box that spans the column.
+        for (label, control) in [(showsLabel as UIView, CapBox(card, max: 360) as UIView), (nicknameLabel, CapBox(field, max: 280)), (colourLabel, swatches)] {
             let fieldStack = UIStackView(arrangedSubviews: [label, control])
             fieldStack.axis = .vertical
-            fieldStack.alignment = control === swatches ? .fill : .leading
             fieldStack.spacing = Space.space2
             content.addArrangedSubview(fieldStack)
         }
@@ -736,7 +729,8 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         let label = nickname.trimmingCharacters(in: .whitespaces)
         let mail = email(view)
         preview.name.text = !label.isEmpty || mail != nil
-            ? FleetAccounts.name(label: label.isEmpty ? nil : label, email: mail, kind: choice?.kind)
+            ? FleetAccounts.name(label: label.isEmpty ? nil : label, email: mail, kind: choice?.kind,
+                                 organization: account(view).flatMap { FleetAccounts.sharedOrganization($0, among: view?.accounts ?? []) })
             : Words.Accounts.notSignedInYet
         preview.email.text = !label.isEmpty ? mail : nil
         preview.email.isHidden = preview.email.text == nil

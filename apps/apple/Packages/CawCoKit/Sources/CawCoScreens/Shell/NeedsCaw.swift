@@ -203,15 +203,18 @@ final class NeedsCawButton: UIControl {
 
     /// The arcs ON his glass's rim, a dial's ticks on its edge (owner: "lines
     /// along the rim of the circle … just like a dial thing"): the stroke's
-    /// outer edge just inside the glass's hairline (laid across it, its outer
-    /// half met the bar and read as cut off); arc k from k × (arc + arcGap)°
-    /// clockwise from 12 o'clock.
+    /// outer edge one hairline of glass inside the glass's own hairline
+    /// (NeedsCaw.svelte `RIM`; laid across it, its outer half met the bar and
+    /// read as cut off, and flush against it, at 1x it read as cutting the
+    /// arcs); arc k from k × (arc + arcGap)° clockwise from 12 o'clock. The
+    /// phone's standing glass draws its outline the same hairline in
+    /// (NeedsCaw.svelte `STAND`).
     override func layoutSubviews() {
         super.layoutSubviews()
         upperHalf.frame = bounds
         lowerHalf.frame = bounds
         let centre = CGPoint(x: bounds.midX, y: bounds.midY)
-        let rim = CGFloat(glassSide) / 2 - Self.glassEdge - Size.cCawRing / 2
+        let rim = CGFloat(glassSide) / 2 - 2 * Self.glassEdge - Size.cCawRing / 2
         if standing {
             layoutOutline(centre: centre, rim: rim)
             return
@@ -231,6 +234,21 @@ final class NeedsCawButton: UIControl {
         wholeHigh.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: .pi, endAngle: 2 * .pi, clockwise: true).cgPath
         wholeLow.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: 0, endAngle: .pi, clockwise: true).cgPath
     }
+
+    #if DEBUG
+    /// The rim as laid out (ParityProbe): its closed ring's path bounds in
+    /// the button (the circle, or the standing glass's outline), its half
+    /// width (the circle's radius) and half height on the path, and at the
+    /// stroke's outer edge; the path's inset from the glass's edge and the
+    /// stroke's outer edge's; and the glass's own hairline.
+    var probeRim: String {
+        let path = (wholeHigh.path?.boundingBoxOfPath ?? .null).union(wholeLow.path?.boundingBoxOfPath ?? .null)
+        let inset = path.minY - bounds.minY
+        let stroke = wholeHigh.lineWidth
+        let number = { (value: CGFloat) in String(format: "%.1f", Double(value)) }
+        return "standing=\(standing) glass=\(number(bounds.width))x\(number(bounds.height)) path=\(number(path.minX)),\(number(path.minY)),\(number(path.width))x\(number(path.height)) radius=\(number(path.width / 2)) half=\(number(path.height / 2)) halfOuter=\(number(path.height / 2 + stroke / 2)) inset=\(number(inset)) strokeOuter=\(number(inset - stroke / 2)) stroke=\(number(stroke)) glassEdge=\(number(Self.glassEdge))"
+    }
+    #endif
 
     /// The standing glass's arcs (NeedsCaw.svelte `outlinePath`): the outline
     /// drawn half the stroke in, clockwise from 12 o'clock along the top

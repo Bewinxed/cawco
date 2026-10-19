@@ -56,6 +56,7 @@ import {
   PREVIEW_PORTS,
   PREVIEW_PORTS_TEXT,
 } from "./config";
+import type { ArtifactRow } from "./db/artifacts";
 import type { PreviewsDb } from "./db/previews";
 import { DECISION_ASSETS } from "./decision-program";
 import {
@@ -92,19 +93,46 @@ export interface PreviewTarget {
   upstream?: { address: string; port: number; token: string };
 }
 
+/**
+ * What each session's panel shows, by instance id: every key is a session's,
+ * so the board, the panel's frames and the session's own port read it as one.
+ */
 export const previewTargets = new Map<string, PreviewTarget>();
+
+/** An artifact as its panel's frame names it: with its ask, the head's line under its name, when it has one. */
+export const shownArtifact = (
+  row: Pick<ArtifactRow, "ask" | "id" | "kind" | "name">
+): PreviewFrame["artifact"] => ({
+  id: row.id,
+  kind: row.kind,
+  name: row.name,
+  ...(row.ask ? { ask: row.ask } : {}),
+});
 
 /**
  * A decision page's Preview of a session's dev-server preview or sheet: its
- * target in {@link previewTargets} and its listener on an origin of its own
- * are keyed by the embedded artifact, apart from every session's. A dev
- * server and a stage serve from their root, so the page cannot show one under
- * a path of its own origin; the machine keys its listener by the same key.
+ * target in {@link embedTargets} and its listener on an origin of its own
+ * are keyed by the embedded artifact ({@link embedKey}), apart from every
+ * session's. A dev server and a stage serve from their root, so the page
+ * cannot show one under a path of its own origin; the machine keys its
+ * listener by the same key. No session owns the key: it has no row, no
+ * session port and no panel, so it is never in {@link previewTargets}.
  */
+export const embedTargets = new Map<string, PreviewTarget>();
+
 const EMBED_PREFIX = "embed-";
 export const embedKey = (artifactId: string): string =>
   `${EMBED_PREFIX}${artifactId}`;
-export const isEmbed = (key: string): boolean => key.startsWith(EMBED_PREFIX);
+const isEmbed = (key: string): boolean => key.startsWith(EMBED_PREFIX);
+
+/**
+ * The map that holds `key`'s target: an embed's, or a session's. Only what
+ * reaches a machine's listener (the relay, its start, a register, a machine
+ * gone) takes either key; everything a session's panel or the board reads
+ * goes to {@link previewTargets} by name.
+ */
+export const targetsOf = (key: string): Map<string, PreviewTarget> =>
+  isEmbed(key) ? embedTargets : previewTargets;
 
 /**
  * The dashboard origins this hub is reached from: each one a dashboard or an
@@ -310,9 +338,30 @@ async function servePage(
 }
 
 /**
- * What the hub serves for an artifact it holds: a page's files, or a
- * canvas's host page. A sheet is its workspace's stage, relayed as a port
- * preview: its source names no page, and it never comes here.
+ * A browser artifact's frame on the preview origin: an empty page carrying
+ * the overlay, so a show is answered. The browser itself is drawn by the
+ * panel from its stream (Projects spec §5.11, the view), never served here.
+ */
+const serveBrowser = (
+  artifactId: string,
+  _pathname: string,
+  deps: PreviewListenerDeps
+): Promise<Response> =>
+  Promise.resolve(
+    new Response(
+      injectOverlay(
+        '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>',
+        { artifact: artifactId, state: deps.state(artifactId) }
+      ),
+      { headers: { "content-type": "text/html; charset=utf-8" } }
+    )
+  );
+
+/**
+ * What the hub serves for an artifact it holds: a page's files, a
+ * canvas's host page, or a browser's empty frame. A sheet is its
+ * workspace's stage, relayed as a port preview: its source names no page,
+ * and it never comes here.
  */
 const HUB_SERVES: Record<
   Exclude<ArtifactKind, "component">,
@@ -327,6 +376,7 @@ const HUB_SERVES: Record<
   preview: servePage,
   canvas: (artifactId, pathname, deps) =>
     serveCanvas(artifactId, pathname, deps.state),
+  browser: serveBrowser,
 };
 
 type ListenerSocket = PreviewSocket | ArtifactSocket;
@@ -488,7 +538,7 @@ async function pingSession(
   instanceId: string,
   deps: PreviewListenerDeps
 ): Promise<Response> {
-  const target = previewTargets.get(instanceId);
+  const target = targetsOf(instanceId).get(instanceId);
   if (
     !target ||
     ("page" in target.source && target.artifact.kind !== "component")
@@ -711,7 +761,7 @@ async function serveSession(
   if (hubsOwn(pathname)) {
     return new Response("Not found", { status: 404 });
   }
-  const target = previewTargets.get(instanceId);
+  const target = targetsOf(instanceId).get(instanceId);
   if (!target) {
     previewFailed(HOP, instanceId, "its session shows no preview");
     return downResponse("closed", 404);
@@ -1051,8 +1101,14 @@ export function createPreviewListeners(
     try {
       Bun.serve({ hostname, port, fetch: () => new Response(null) }).stop(true);
       return true;
-    } catch {
-      return false;
+    } catch (thrown) {
+      // Held: another socket has the port. Any other refusal is the bind
+      // address's, which no other port avoids: said as itself, never as
+      // every preview port taken.
+      if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
+        return false;
+      }
+      throw portRefused(port, thrown);
     }
   };
 
@@ -1098,8 +1154,9 @@ export function createPreviewListeners(
     if (fleet) {
       return `it is ${fleet} port`;
     }
-    // A machine of the fleet may run the stream relay on these: TCP 3478
-    // sits inside the default range, and no preview ever takes it.
+    // A machine of the fleet may run the stream relay on these (443, 444,
+    // 5349, 5350 and its relay range): no preview ever takes one, wherever
+    // CAWCO_PREVIEW_PORTS puts the range.
     if (isStreamRelayPort(port)) {
       return "it is the stream relay's port";
     }
@@ -1341,6 +1398,24 @@ export function createPreviewListeners(
         return { port, origin, host: new URL(origin).host, ...onTailnet };
       }
       return { port, ...onTailnet };
+    },
+
+    /**
+     * Session `instanceId`'s origin as a process on the hub's own machine
+     * dials it: its own port on the listeners' bind address, loopback for a
+     * wildcard. That listener has no lock in either mode, so no ticket.
+     */
+    local(instanceId: string): string {
+      const port = portOf(instanceId);
+      let host = hostname;
+      if (hostname === "0.0.0.0") {
+        host = "127.0.0.1";
+      } else if (hostname === "::") {
+        host = "[::1]";
+      } else if (hostname.includes(":")) {
+        host = `[${hostname}]`;
+      }
+      return `http://${host}:${port}`;
     },
 
     /**

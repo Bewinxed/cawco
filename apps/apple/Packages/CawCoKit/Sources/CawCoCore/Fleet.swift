@@ -451,19 +451,15 @@ public final class FleetStore {
         adopt(noticesSeen: ids)
     }
 
+    /// Each Claude account's own limits, by account id.
     public internal(set) var claudeLimits: [String: Components.Schemas.ClaudeLimits] = [:]
+    /// Each machine's OpenCode Go plan, read with that machine's key, by machine id.
     public internal(set) var openCodeGoLimits: [String: Components.Schemas.OpenCodeGoLimits] = [:]
 
     /// Replaces both limits maps with the hub's word: a full snapshot, not a patch.
-    func adopt(limits readings: [(machineId: String, claude: Components.Schemas.ClaudeLimits, go: Components.Schemas.OpenCodeGoLimits?)]) {
-        var claude: [String: Components.Schemas.ClaudeLimits] = [:]
-        var go: [String: Components.Schemas.OpenCodeGoLimits] = [:]
-        for reading in readings {
-            claude[reading.machineId] = reading.claude
-            go[reading.machineId] = reading.go
-        }
-        claudeLimits = claude
-        openCodeGoLimits = go
+    func adopt(claude: [Components.Schemas.AccountLimits], go: [Components.Schemas.MachineGoLimits]) {
+        claudeLimits = Dictionary(claude.map { ($0.accountId, $0.limits) }, uniquingKeysWith: { _, last in last })
+        openCodeGoLimits = Dictionary(go.map { ($0.machineId, $0.plan) }, uniquingKeysWith: { _, last in last })
         limitsRead = true
     }
 

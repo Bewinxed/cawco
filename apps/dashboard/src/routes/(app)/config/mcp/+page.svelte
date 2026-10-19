@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FleetMcpServer } from "@cawco/core";
+  import { type FleetMcpServer, mcpWords as words } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { deleteMcpServer } from "#lib/cawco/config/deletes.js";
   import McpSignIn from "#lib/cawco/config/McpSignIn.svelte";
@@ -120,17 +120,17 @@
       title={down ?? undefined}
     >
       <IconPlus />
-      <span>Add server</span>
+      <span>{words.add}</span>
     </Button>
   {/snippet}
   {#snippet toolbar()}
     <Button
       failed={syncFailed}
       icon={IconRefresh}
-      label="Sync all"
+      label={words.syncAll}
       onclick={syncAll}
       pending={syncing}
-      pendingLabel="Syncing…"
+      pendingLabel={words.syncing}
       size="sm"
       variant="outline"
     />
@@ -140,16 +140,16 @@
   {#if servers.length === 0}
     <EmptyState
       icon={section.icon}
-      line="Add a server and every machine gets it — the quick way is a package name."
-      title="No MCP servers yet"
+      line={words.emptyLine}
+      title={words.emptyTitle}
     />
   {:else}
-    <RowList label="MCP servers">
+    <RowList label={words.list}>
       {#each servers as row (row.name)}
         <SectionRow
           actions={[
             {
-              label: "Remove everywhere",
+              label: words.remove,
               icon: IconTrash,
               destructive: true,
               disabled: busy[row.name] === true,
@@ -161,9 +161,12 @@
           href="/config/mcp/{encodeURIComponent(row.name)}"
           hue={HUE}
           icon={isRemoteMcp(row.config) ? IconGlobe : IconToolMcp}
-          meta="{isRemoteMcp(row.config)
-            ? `${row.config.type.toUpperCase()} · `
-            : ''}{describeMcp(row.config)}"
+          meta={isRemoteMcp(row.config)
+            ? words.transportOf(
+                row.config.type.toUpperCase(),
+                describeMcp(row.config)
+              )
+            : describeMcp(row.config)}
           name={row.name}
           ontoggle={(next) => toggle(row, next)}
           toggling={busy[row.name] === true}

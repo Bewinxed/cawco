@@ -103,7 +103,12 @@
           <span>{contextUsed}% · 124k/200k</span>
         </div>
         {#if row.limit}
-          <ProviderLimit label={row.limit.label} meter={row.limit.meter} />
+          <ProviderLimit
+            label={row.limit.label}
+            meter={row.limit.meter}
+            {now}
+            seenAt={now - 90 * 60_000}
+          />
         {/if}
       </div>
     </section>

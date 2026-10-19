@@ -4,7 +4,7 @@
    * nothing of its own (project-caps.ts in the hub). A project sets its
    * budget, and may set its own answer to this, on its Usage tile.
    */
-  import type { OnCap } from "@cawco/core";
+  import { type OnCap, SPEND_ON_CAP, spendWords } from "@cawco/core";
   import { onMount } from "svelte";
   import { setSpendSettings, spendSettings } from "#lib/cawco/client.svelte.js";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -18,26 +18,6 @@
 
   const section = sectionOf("spend");
 
-  const ON_CAP: { value: OnCap; label: string; means: string }[] = [
-    {
-      value: "pause",
-      label: "Pause dispatch",
-      means:
-        "No new attempt at the project's tasks starts. Caw still answers you.",
-    },
-    {
-      value: "quiet",
-      label: "Stop waking Caw",
-      means:
-        "What would wake the project's Caw is noted in its thread, without a turn. Attempts still start.",
-    },
-    {
-      value: "both",
-      label: "Pause both",
-      means: "No new attempt starts, and Caw is not woken.",
-    },
-  ];
-
   let onCap = $state<OnCap | null>(null);
   let problem = $state<string | null>(null);
   let refused = $state<string | undefined>(undefined);
@@ -48,7 +28,7 @@
         ({ onCap } = read);
       },
       (error: unknown) => {
-        problem = `Could not read the spend settings — ${failureClause(error)}.`;
+        problem = spendWords.unread(failureClause(error));
       }
     );
   });
@@ -65,7 +45,9 @@
     }
   }
 
-  const means = $derived(ON_CAP.find((each) => each.value === onCap)?.means);
+  const means = $derived(
+    SPEND_ON_CAP.find((each) => each.value === onCap)?.means
+  );
 </script>
 
 <SectionFrame
@@ -74,22 +56,12 @@
   ready={onCap !== null}
   title={section.label}
 >
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
-  <div
-    data-slot="group"
-    class="flex flex-col gap-(--group-gap)"
-    style:--group-gap="8px"
-    style:--note-measure="72ch"
-  >
-    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
-      Each project sets what it may spend in a day or a month on its Usage page,
-      and follows this unless it chooses otherwise.
-    </p>
+  <div data-slot="group" class="group">
+    <p data-slot="note" class="note">{spendWords.note}</p>
     <Field
       hint={means}
       id="spend-on-cap"
-      label="When one is reached"
+      label={spendWords.onCap}
       problem={refused}
     >
       <NativeSelect
@@ -100,7 +72,7 @@
           choose((event.currentTarget as HTMLSelectElement).value as OnCap)}
         value={onCap ?? ""}
       >
-        {#each ON_CAP as each (each.value)}
+        {#each SPEND_ON_CAP as each (each.value)}
           <NativeSelectOption value={each.value}
             >{each.label}</NativeSelectOption
           >

@@ -37,6 +37,34 @@
  * work item's check stands its clock while it waits). It re-measures the room
  * every {@link ROOM_POLL_MS}, never spinning.
  *
+ * A RUN IS ADMITTED FOR THE MEMORY IT DECLARES, its peak ({@link
+ * HeavyHolder.peak}, `CAWCO_HEAVY_PEAK_GIB` for a script or `cawco
+ * heavy-run`; a slot's {@link SLOT_MEMORY} when it declares none). It takes
+ * one slot per {@link SLOT_MEMORY} of that peak ({@link unitsOf}), all at
+ * once under the gate's lock or none, so the slots held are what the runs
+ * holding them may reach together; and the machine's measured room must hold
+ * that peak beside the person's reserve. A run that needs more slots than
+ * are free waits, and one that needs fewer still starts beside it: the runs
+ * already holding slots keep the memory they were admitted for. On
+ * 2026-10-19 the nightly release (`scripts/release.ts`, its stage-1 and
+ * stage-2 proofs and seven compiles) held no admission of its own: "Consumed
+ * 15min 31.083s CPU time over 8min 33.717s wall clock time, 17.2G memory
+ * peak" on obelisk, on top of the probes and gates holding every slot, and a
+ * probe's Chromium in the window lost its browser.
+ *
+ * A run that needs more slots than come free together is never kept out for
+ * good by smaller runs coming and going: once it has waited 15 minutes it
+ * holds a reservation ({@link Reservation}), and each slot that frees goes
+ * to it until it has its count, every other run but a landing gate's waiting
+ * behind it.
+ *
+ * The machines a heavy run brings up for itself (stage 2's rig machines,
+ * `CAWCO_HEAVY_ADMITTED` set in their image) are inside its admission: their
+ * session starts wait on no reading of the host's memory ({@link
+ * measureMemoryRoom}), which their own run's load moves. On 2026-10-19 a
+ * stage-2 run's rig machines held their session starts 63 s on the host's
+ * memory stall while its 24 machines ran.
+ *
  * macOS has no PSI, so the Mac reads its own counterparts from the kernel
  * ({@link macRoom}), each over the same last 10 s: the share of CPU time
  * spent busy, the pages read back in from swap, the memory the kernel calls
@@ -45,6 +73,13 @@
  * load under its core count; its resting state with nothing heavy running is
  * level 2 and a load of 7 to 16 (Colima, Brave, the sessions and their MCP
  * servers), so it started nothing for hours while twenty gates waited.
+ *
+ * Both also read how full swap is: Linux's SwapFree, the Mac's
+ * `vm.swapusage`. On 2026-10-19 the Mac had 29.6 GiB swapped out of 32 GiB
+ * of memory at a load of 800, and its swap read-back refused heavy runs while
+ * nothing held a session start. Memory's readings alone
+ * ({@link measureMemoryRoom}) hold session starts and simulator boots, in
+ * the same words.
  *
  * A work item's landing gate goes first. A run under a gate step
  * ({@link HEAVY_GATE_ENV}, set by the machine that runs the step: core
@@ -81,6 +116,18 @@ export const HEAVY_RUNS_ENV = "CAWCO_HEAVY_RUNS";
  * so a probe kit run's scratch fleet, or a typecheck under `cawco heavy-run`, counts once.
  */
 export const HEAVY_RUN_HELD_ENV = "CAWCO_HEAVY_RUN_HELD";
+/**
+ * A run's declared peak, in GiB, as a script or `cawco heavy-run` names it
+ * ({@link heavyPeak}): what it is admitted for.
+ */
+export const HEAVY_PEAK_ENV = "CAWCO_HEAVY_PEAK_GIB";
+/**
+ * Set on the machines a heavy run brings up for itself (stage 2's rig
+ * machines), naming that run: they run inside its admission, and a session
+ * start there waits on no reading of the host's memory ({@link
+ * measureMemoryRoom}).
+ */
+export const HEAVY_ADMITTED_ENV = "CAWCO_HEAVY_ADMITTED";
 
 /**
  * What one heavy run costs, from `bun scripts/probe-kit/run.ts
@@ -92,6 +139,32 @@ export const HEAVY_RUN_HELD_ENV = "CAWCO_HEAVY_RUN_HELD";
  */
 const SLOT_CORES = 6;
 const SLOT_MEMORY = 8 * 1024 ** 3;
+
+/**
+ * The slots a run declaring `peak` bytes takes: one per {@link SLOT_MEMORY}
+ * of it, at least 1, and at most `count`, every slot there is (a run larger
+ * than the machine's whole heavy budget waits for every other run to end).
+ */
+const unitsOf = (peak: number, count: number): number =>
+  Math.min(count, Math.max(1, Math.ceil(peak / SLOT_MEMORY)));
+
+/**
+ * The peak a script or `cawco heavy-run` declares ({@link HEAVY_PEAK_ENV}),
+ * in bytes; undefined when it declares none (a slot's {@link SLOT_MEMORY}).
+ */
+export const heavyPeak = (): number | undefined => {
+  const raw = process.env[HEAVY_PEAK_ENV];
+  if (raw === undefined || raw === "") {
+    return;
+  }
+  const gib = Number(raw);
+  if (!Number.isFinite(gib) || gib <= 0) {
+    throw new Error(
+      `${HEAVY_PEAK_ENV} is the most memory the run reaches, in GiB, a number above 0; it is "${raw}"`
+    );
+  }
+  return gib * GIB;
+};
 
 /**
  * Linux: the most of the last 10 s in which some task waited on memory
@@ -147,6 +220,26 @@ const MAC_CPU_BUSY_MAX = 75;
 const MAC_SWAPIN_MAX_MIB = 128;
 /** macOS: the window every rate reading spans, as Linux's PSI avg10 does. */
 const MAC_WINDOW_MS = 10_000;
+/**
+ * Linux: the least share of swap left free (`/proc/meminfo` SwapFree over
+ * SwapTotal, a percent) that still admits. Our call: Linux's swap is the
+ * size it was made, and once it is full the next allocation that cannot be
+ * reclaimed is the OOM killer's; a tenth left is the last moment a start can
+ * still be held back rather than ended. A machine with no swap has none to
+ * fill and is read on its memory stall alone.
+ */
+const LINUX_SWAP_FREE_MIN_PCT = 10;
+/**
+ * macOS: the most swap in use (`vm.swapusage` used), as a percent of the
+ * Mac's memory, that still admits. macOS adds swap files as it needs them, so
+ * `vm.swapusage`'s free is the slack in the files made so far, not what is
+ * left: at rest it read 1 GiB free of 10 GiB (2026-10-17), on the night of
+ * 2026-10-19 1.4 GiB free of 31 GiB. What tells the two apart is how much is
+ * swapped out against the memory there is to bring it back into: 9 GiB of 32
+ * (28%) at rest, 29.6 GiB of 32 (93%) with the Mac paging at a load of 800.
+ * Our call: half of memory, between the two.
+ */
+const MAC_SWAP_USED_MAX_PCT = 50;
 
 /**
  * Overrides of the thresholds above, for proving the gate holds and admits
@@ -159,6 +252,8 @@ const ROOM_ENV = {
   reserveGib: "CAWCO_HEAVY_RESERVE_GIB",
   cpuBusy: "CAWCO_HEAVY_CPU_BUSY_MAX",
   swapInMib: "CAWCO_HEAVY_SWAPIN_MAX_MIB",
+  swapFreeMin: "CAWCO_HEAVY_SWAP_FREE_MIN_PCT",
+  swapUsedMax: "CAWCO_HEAVY_SWAP_USED_MAX_PCT",
 } as const;
 
 /** How often a waiting run tries the slots, and a `hold` looks for its shell. */
@@ -172,6 +267,14 @@ const ROOM_POLL_MS = 3000;
  * the same tick the room comes back, each admitted on the same reading.
  */
 const ADMIT_SPACING_MS = 10_000;
+/**
+ * How long a run waits before it holds a reservation ({@link Reservation}):
+ * 15 minutes, `CAWCO_HEAVY_RESERVE_AFTER_S` to scale it for a proof. The
+ * usual aging reservation of batch schedulers (SLURM's backfill reserves for
+ * the job at the head of the queue); the number is the operator's call.
+ */
+const RESERVE_AFTER_MS = 15 * 60_000;
+const RESERVE_AFTER_ENV = "CAWCO_HEAVY_RESERVE_AFTER_S";
 const SLOT_FILE = /^slot-(\d+)$/;
 const GIB = 1024 ** 3;
 
@@ -218,10 +321,59 @@ export interface Room {
   words: string;
 }
 
+/**
+ * One reading of the machine's room: whether it admits, in words, and
+ * whether it is one of memory's ({@link measureMemoryRoom} reads those
+ * alone).
+ */
+interface Reading {
+  memory: boolean;
+  ok: boolean;
+  words: string;
+}
+
+/** Readings as the queue says them: each in turn, a refusing one marked. */
+const roomOf = (readings: Reading[]): Room => ({
+  ok: readings.every((reading) => reading.ok),
+  words: `this machine's measured room: ${readings.map((reading) => `${reading.words}${reading.ok ? "" : " ✗"}`).join(", ")}`,
+});
+
 const SOME_AVG10 = /^some avg10=([\d.]+)/m;
 const MEM_AVAILABLE = /^MemAvailable:\s+(\d+) kB$/m;
+const SWAP_TOTAL = /^SwapTotal:\s+(\d+) kB$/m;
+const SWAP_FREE = /^SwapFree:\s+(\d+) kB$/m;
 
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;
+
+/**
+ * The whole machine's pressure files. Each is the root group's whatever
+ * cgroup or namespace reads it: kernel/sched/psi.c answers a read of
+ * `/proc/pressure/cpu` with `return psi_show(m, &psi_system, PSI_CPU);`
+ * (git.kernel.org, torvalds/linux, kernel/sched/psi.c), `psi_system` being
+ * the root's, where a cgroup's `cpu.pressure` counts only its own tasks'
+ * waits ("pressure stall information is also tracked for tasks grouped into
+ * cgroups", docs.kernel.org/accounting/psi.html).
+ */
+export const MACHINE_PRESSURE = {
+  cpu: "/proc/pressure/cpu",
+  memory: "/proc/pressure/memory",
+} as const;
+
+/**
+ * THE MACHINE'S CONTENTION, ONE READING: the share of the last 10 s in which
+ * some task anywhere on the machine waited for a CPU, and for memory
+ * ({@link MACHINE_PRESSURE}, "some" avg10, each a percent). Admission reads
+ * it ({@link measureRoom}) and so does every timing leg's gate (the probe
+ * kit's quiet.ts), so the two never read different things. Linux only.
+ */
+export interface MachinePressure {
+  cpu: number;
+  memory: number;
+}
+export const machinePressure = (): MachinePressure => ({
+  cpu: someAvg10(MACHINE_PRESSURE.cpu),
+  memory: someAvg10(MACHINE_PRESSURE.memory),
+});
 
 /** A pressure file's "some avg10", a percent. */
 const someAvg10 = (path: string): number => {
@@ -232,7 +384,40 @@ const someAvg10 = (path: string): number => {
   return Number(found[1]);
 };
 
-const linuxRoom = (): Room => {
+/** A `/proc/meminfo` line's kB, as bytes. */
+const meminfoBytes = (meminfo: string, line: RegExp, name: string): number => {
+  const found = line.exec(meminfo);
+  if (!found) {
+    throw new Error(`/proc/meminfo has no ${name} line`);
+  }
+  return Number(found[1]) * 1024;
+};
+
+/**
+ * Swap's reading from SwapTotal and SwapFree: refused once less than the
+ * least share is left free while memory is short too (MemAvailable under
+ * {@link LINUX_SWAP_FREE_MIN_PCT} of RAM). A full swap beside plenty of
+ * memory is pages nothing uses: obelisk's 0.5 GiB was all in use with
+ * 100 GiB available (2026-10-19), and refused there it would hold every
+ * start on a machine with room.
+ */
+const linuxSwap = (meminfo: string, available: number): Reading => {
+  const total = meminfoBytes(meminfo, SWAP_TOTAL, "SwapTotal");
+  const free = meminfoBytes(meminfo, SWAP_FREE, "SwapFree");
+  const freeMin = threshold(ROOM_ENV.swapFreeMin, LINUX_SWAP_FREE_MIN_PCT);
+  if (total === 0) {
+    return { memory: true, ok: true, words: "no swap" };
+  }
+  const share = (100 * free) / total;
+  const short = (100 * available) / totalmem() < LINUX_SWAP_FREE_MIN_PCT;
+  return {
+    memory: true,
+    ok: share >= freeMin || !short,
+    words: `swap ${gib(free)} free of ${gib(total)}, ${share.toFixed(0)}% (a start needs ${freeMin}% free once under ${LINUX_SWAP_FREE_MIN_PCT}% of memory is available)`,
+  };
+};
+
+const linuxReadings = (peak: number): Reading[] => {
   const memoryMax = threshold(ROOM_ENV.memoryStall, MEMORY_STALL_MAX);
   const cpuMax = threshold(ROOM_ENV.cpuStall, CPU_STALL_MAX);
   const reserve =
@@ -240,22 +425,28 @@ const linuxRoom = (): Room => {
     process.env[ROOM_ENV.reserveGib] !== ""
       ? threshold(ROOM_ENV.reserveGib, 0) * GIB
       : Math.max(RESERVE_FLOOR, totalmem() * RESERVE_SHARE);
-  const memory = someAvg10("/proc/pressure/memory");
-  const cpu = someAvg10("/proc/pressure/cpu");
-  const available = MEM_AVAILABLE.exec(readFileSync("/proc/meminfo", "utf8"));
-  if (!available) {
-    throw new Error("/proc/meminfo has no MemAvailable line");
-  }
-  const free = Number(available[1]) * 1024;
-  const needs = SLOT_MEMORY + reserve;
-  const memoryOk = memory < memoryMax;
-  const cpuOk = cpu < cpuMax;
-  const freeOk = free >= needs;
-  const mark = (ok: boolean) => (ok ? "" : " ✗");
-  return {
-    ok: memoryOk && cpuOk && freeOk,
-    words: `this machine's measured room: memory stall ${memory.toFixed(2)}% of the last 10 s (a run starts under ${memoryMax})${mark(memoryOk)}, CPU stall ${cpu.toFixed(2)}% (under ${cpuMax})${mark(cpuOk)}, ${gib(free)} available (a run needs ${gib(needs)}: ${gib(SLOT_MEMORY)} for it, ${gib(reserve)} kept for the person)${mark(freeOk)}`,
-  };
+  const { memory, cpu } = machinePressure();
+  const meminfo = readFileSync("/proc/meminfo", "utf8");
+  const free = meminfoBytes(meminfo, MEM_AVAILABLE, "MemAvailable");
+  const needs = peak + reserve;
+  return [
+    {
+      memory: true,
+      ok: memory < memoryMax,
+      words: `memory stall ${memory.toFixed(2)}% of the last 10 s (a run starts under ${memoryMax})`,
+    },
+    linuxSwap(meminfo, free),
+    {
+      memory: false,
+      ok: cpu < cpuMax,
+      words: `CPU stall ${cpu.toFixed(2)}% (under ${cpuMax})`,
+    },
+    {
+      memory: false,
+      ok: free >= needs,
+      words: `${gib(free)} available (a run needs ${gib(needs)}: ${gib(peak)} for it, ${gib(reserve)} kept for the person)`,
+    },
+  ];
 };
 
 /**
@@ -366,6 +557,31 @@ const sysctlInt = (name: string): number => {
   return value[0] ?? 0;
 };
 
+/**
+ * `vm.swapusage`, as `sysctl vm.swapusage` prints it: `struct xsw_usage`
+ * (<sys/sysctl.h>: `xsu_total`, `xsu_avail`, `xsu_used`, each a u_int64_t,
+ * then `xsu_pagesize` and `xsu_encrypted`), in bytes.
+ */
+const macSwapUsage = (): { free: number; total: number; used: number } => {
+  const usage = new BigUint64Array(4);
+  const size = new BigUint64Array([BigInt(usage.byteLength)]);
+  const code = machHost().lib.symbols.sysctlbyname(
+    new TextEncoder().encode("vm.swapusage\0"),
+    ptr(usage),
+    ptr(size),
+    null,
+    0
+  );
+  if (code !== 0) {
+    throw new Error(`sysctlbyname vm.swapusage answered ${code}`);
+  }
+  return {
+    total: Number(usage[0]),
+    free: Number(usage[1]),
+    used: Number(usage[2]),
+  };
+};
+
 /** The page size the VM counters count in. */
 const macPageSize = (): number => {
   const size = new BigUint64Array(1);
@@ -409,9 +625,10 @@ const readyRoom = async (): Promise<void> => {
   await Bun.sleep(Math.max(0, first.at + MAC_WINDOW_MS - Date.now()));
 };
 
-const macRoom = (): Room => {
+const macReadings = (peak: number): Reading[] => {
   const busyMax = threshold(ROOM_ENV.cpuBusy, MAC_CPU_BUSY_MAX);
   const swapInMax = threshold(ROOM_ENV.swapInMib, MAC_SWAPIN_MAX_MIB);
+  const swapUsedMax = threshold(ROOM_ENV.swapUsedMax, MAC_SWAP_USED_MAX_PCT);
   const reserve = threshold(ROOM_ENV.reserveGib, 0) * GIB;
   const now = recordMacSample();
   const then = windowStart(now.at);
@@ -427,32 +644,55 @@ const macRoom = (): Room => {
       : 0;
   const swappedIn =
     (Number(now.swapins - then.swapins) * macPageSize()) / 1024 ** 2;
+  const swap = macSwapUsage();
+  const swapShare = (100 * swap.used) / totalmem();
   const free = (sysctlInt("kern.memorystatus_level") / 100) * totalmem();
   const level = sysctlInt("kern.memorystatus_vm_pressure_level");
-  const needs = SLOT_MEMORY + reserve;
-  const busyOk = busy < busyMax;
-  const swapOk = swappedIn < swapInMax;
-  const freeOk = free >= needs;
-  const levelOk = level < MAC_PRESSURE_CRITICAL;
-  const mark = (ok: boolean) => (ok ? "" : " ✗");
-  return {
-    ok: busyOk && swapOk && freeOk && levelOk,
-    words: `this machine's measured room: CPU busy ${busy.toFixed(0)}% of the last ${seconds} s (a run starts under ${busyMax})${mark(busyOk)}, ${swappedIn.toFixed(1)} MiB read back from swap (under ${swapInMax})${mark(swapOk)}, ${gib(free)} available (a run needs ${gib(needs)}${reserve > 0 ? `: ${gib(SLOT_MEMORY)} for it, ${gib(reserve)} kept for the person` : ""})${mark(freeOk)}, memory pressure level ${level} (refused at ${MAC_PRESSURE_CRITICAL}, critical)${mark(levelOk)}`,
-  };
+  const needs = peak + reserve;
+  return [
+    {
+      memory: false,
+      ok: busy < busyMax,
+      words: `CPU busy ${busy.toFixed(0)}% of the last ${seconds} s (a run starts under ${busyMax})`,
+    },
+    {
+      memory: true,
+      ok: swappedIn < swapInMax,
+      words: `${swappedIn.toFixed(1)} MiB read back from swap (under ${swapInMax})`,
+    },
+    {
+      memory: true,
+      ok: swapShare < swapUsedMax,
+      words: `${gib(swap.used)} swapped out, ${swapShare.toFixed(0)}% of memory (under ${swapUsedMax}%; ${gib(swap.free)} free of ${gib(swap.total)} in its swap files)`,
+    },
+    {
+      memory: false,
+      ok: free >= needs,
+      words: `${gib(free)} available (a run needs ${gib(needs)}${reserve > 0 ? `: ${gib(peak)} for it, ${gib(reserve)} kept for the person` : ""})`,
+    },
+    {
+      memory: true,
+      ok: level < MAC_PRESSURE_CRITICAL,
+      words: `memory pressure level ${level} (refused at ${MAC_PRESSURE_CRITICAL}, critical)`,
+    },
+  ];
 };
 
 /**
- * This machine's room for one more heavy run, measured now. A reading that
- * cannot be taken is no room, in words naming why: the gate never admits a
- * run it could not measure for.
+ * The room `pick` keeps of this machine's readings, measured now. A reading
+ * that cannot be taken is no room, in words naming why: the gate never admits
+ * what it could not measure for.
  */
-export const measureRoom = (): Room => {
+const measured = (
+  pick: (reading: Reading) => boolean,
+  peak: number = SLOT_MEMORY
+): Room => {
   try {
     if (process.platform === "linux") {
-      return linuxRoom();
+      return roomOf(linuxReadings(peak).filter(pick));
     }
     if (process.platform === "darwin") {
-      return macRoom();
+      return roomOf(macReadings(peak).filter(pick));
     }
     return {
       ok: false,
@@ -466,6 +706,45 @@ export const measureRoom = (): Room => {
   }
 };
 
+/**
+ * This machine's room for one more heavy run reaching `peak` bytes (a slot's
+ * {@link SLOT_MEMORY} unless given), measured now: every reading.
+ */
+export const measureRoom = (peak?: number): Room => measured(() => true, peak);
+
+/**
+ * This machine's room on memory alone, measured now: what a session start and
+ * a simulator boot wait on (Linux's memory stall and swap left; the Mac's
+ * swap read back, swap out and pressure level), in the words the heavy-run
+ * queue says them. A start needs no slot's 8 GiB, nor idle CPUs.
+ */
+export const measureMemoryRoom = (): Room => {
+  const admitted = process.env[HEAVY_ADMITTED_ENV];
+  if (admitted) {
+    return {
+      ok: true,
+      words: `this machine runs inside an admitted heavy run (${HEAVY_ADMITTED_ENV}=${admitted}), whose memory was taken as it started`,
+    };
+  }
+  return measured(({ memory }) => memory);
+};
+
+/**
+ * Keeps this process's Mac readings a window deep, so {@link
+ * measureMemoryRoom} answers at once in a process that measures now and then
+ * (the agent, at each session start). Nothing elsewhere: Linux's kernel keeps
+ * its own windows. Answers the stop.
+ */
+export const keepRoomSampled = (): (() => void) => {
+  if (process.platform !== "darwin") {
+    return () => undefined;
+  }
+  recordMacSample();
+  const timer = setInterval(recordMacSample, MAC_WINDOW_MS / 2);
+  timer.unref();
+  return () => clearInterval(timer);
+};
+
 const slotsDir = (): string => join(workspaceCacheDir(), "heavy-runs");
 
 /** Who holds a slot, or a gate's ticket, as its file says. */
@@ -473,6 +752,12 @@ export interface HeavyHolder {
   command: string;
   /** The landing gate the run is a step of, in its words ({@link heavyGate}): it goes first. */
   gate?: string;
+  /**
+   * The most memory the run reaches, in bytes: what it is admitted for, one
+   * slot per {@link SLOT_MEMORY} of it ({@link unitsOf}). A slot's
+   * {@link SLOT_MEMORY} when it declares none.
+   */
+  peak?: number;
   pid: number;
   where: string;
 }
@@ -499,8 +784,12 @@ const describe = (path: string): string => {
     return "a run that has not written its name yet";
   }
   const minutes = Math.round((Date.now() - holder.since) / 60_000);
-  return `${holder.gate ? `${holder.gate}, ` : ""}pid ${holder.pid} in ${holder.where}, ${minutes} min: ${holder.command}`;
+  return `${holder.gate ? `${holder.gate}, ` : ""}pid ${holder.pid} in ${holder.where}, ${minutes} min, peak ${gib(holder.peak ?? SLOT_MEMORY)}: ${holder.command}`;
 };
+
+/** The holders of `paths`, each run once however many slots it holds: a run's slots all carry its one record. */
+const describeRuns = (paths: readonly string[]): string =>
+  [...new Set(paths.map(describe))].join("; ");
 
 /** This process's place: a workspace's pids are its boundary's own. */
 export const heavyWhere = (): string => {
@@ -513,7 +802,7 @@ export const heavyWhere = (): string => {
  * of either is said again.
  */
 interface Behind {
-  kind: "slots" | "spacing" | "room" | "gate";
+  kind: "slots" | "spacing" | "room" | "gate" | "reserved" | "reserving";
   ticket?: string;
   words: string;
 }
@@ -525,14 +814,19 @@ interface Ticket {
 }
 
 /**
- * The tickets held in `dir`, oldest first, read under the gate's lock. One
- * whose lock is free has lost its holder, and is deleted. `mine`, this
- * process's own, is not opened again.
+ * The tickets held in `dir` (a gate's, else those `file` names: the
+ * reservations), oldest first, read under the gate's lock. One whose lock is
+ * free has lost its holder, and is deleted. `mine`, this process's own, is
+ * not opened again.
  */
-const liveTickets = (dir: string, mine: string | undefined): string[] => {
+const liveTickets = (
+  dir: string,
+  mine: string | undefined,
+  file: RegExp = TICKET_FILE
+): string[] => {
   const live: string[] = [];
   const names = readdirSync(dir)
-    .filter((name) => TICKET_FILE.test(name))
+    .filter((name) => file.test(name))
     .sort();
   for (const name of names) {
     if (name === mine) {
@@ -617,57 +911,238 @@ const gateAhead = (
   };
 };
 
+/** A reservation: `reserve-<since, ms, 15 digits>-<pid>`, so names sort in the order they were taken. */
+const RESERVE_FILE = /^reserve-(\d{15})-\d+$/;
+
 /**
- * One look at the slots under the gate: the taken slot's descriptor, or what
- * holds the run (nothing when another run holds the gate this tick). While a
- * landing gate's ticket is held, a slot goes only to the oldest ticket's run
- * (`ticket`, this run's own when it is a gate's).
+ * A RUN THAT HAS WAITED {@link RESERVE_AFTER_MS} HOLDS A RESERVATION: a
+ * `reserve-…` file it holds `flock(2)` on, made under the gate's lock. While
+ * it holds the oldest one, each slot that frees goes to it, held from then
+ * on, until it has its count, and every other run but a landing gate's waits
+ * behind it; then it starts, its reservation given up. Until then, runs
+ * that need fewer slots start beside it as they fit. A reservation whose
+ * holder ended (a SIGKILL included) is unlocked, and the next look deletes it.
+ */
+interface Reservation {
+  fd: number;
+  /** The slots it holds so far. */
+  fds: number[];
+  name: string;
+  since: number;
+}
+
+/** What a reservation's file says of it, for a run waiting behind it to name. */
+type ReservedRecord = Written & { got: number; units: number };
+
+/** A reservation for `holder`, made and locked under the gate's lock; nothing when another run holds the gate this tick. */
+const takeReservation = (
+  dir: string,
+  holder: HeavyHolder,
+  units: number
+): Reservation | undefined => {
+  const gate = openLockFile(join(dir, "gate"), true);
+  if (!tryLock(gate)) {
+    closeSync(gate);
+    return;
+  }
+  try {
+    const last = liveTickets(dir, undefined, RESERVE_FILE).at(-1);
+    const after = last ? Number(RESERVE_FILE.exec(last)?.[1] ?? 0) + 1 : 0;
+    const since = Math.max(Date.now(), after);
+    const name = `reserve-${String(since).padStart(15, "0")}-${process.pid}`;
+    const fd = openLockFile(join(dir, name), true);
+    if (!tryLock(fd)) {
+      closeSync(fd);
+      return;
+    }
+    const reservation = { fd, fds: [], name, since };
+    sayReserved(reservation, holder, units);
+    return reservation;
+  } finally {
+    unlock(gate);
+  }
+};
+
+/** Writes what `reservation` holds into its file. */
+const sayReserved = (
+  reservation: Reservation,
+  holder: HeavyHolder,
+  units: number
+): void => {
+  const record: ReservedRecord = {
+    ...holder,
+    since: reservation.since,
+    got: reservation.fds.length,
+    units,
+  };
+  ftruncateSync(reservation.fd, 0);
+  writeSync(reservation.fd, JSON.stringify(record), 0);
+};
+
+/** A reservation given up: its run started, or it is gone. Its slots go too unless `keep`. */
+const dropReservation = (
+  dir: string,
+  reservation: Reservation,
+  keep: boolean
+): void => {
+  try {
+    unlinkSync(join(dir, reservation.name));
+  } catch {
+    // A look under the gate deleted it already.
+  }
+  unlock(reservation.fd);
+  if (!keep) {
+    for (const fd of reservation.fds) {
+      unlock(fd);
+    }
+  }
+};
+
+const clock = (at: number): string => new Date(at).toISOString();
+
+/**
+ * The reservation a run waits behind, read under the gate's lock: the oldest
+ * held, when it is not this run's own; nothing when none is held, or this
+ * run's is the oldest.
+ */
+const reservationAhead = (
+  dir: string,
+  mine: string | undefined
+): Behind | undefined => {
+  const [first] = liveTickets(dir, mine, RESERVE_FILE);
+  if (first === undefined || first === mine) {
+    return;
+  }
+  const record = readHolder(join(dir, first)) as ReservedRecord | undefined;
+  return {
+    kind: "reserved",
+    ticket: first,
+    words: `a run that has waited holds a reservation since ${record ? clock(record.since) : "a moment ago"}, ${record?.got ?? 0} of its ${record?.units ?? "?"} heavy-run slots so far, and each slot that frees goes to it first: ${describe(join(dir, first))}`,
+  };
+};
+
+/**
+ * One look at the slots for the run holding the oldest reservation: every
+ * free slot taken into it, up to its count. Its slots once it has them all;
+ * else what it holds so far, said with when its reservation started.
+ */
+const reserveMore = (
+  dir: string,
+  count: number,
+  units: number,
+  holder: HeavyHolder,
+  reservation: Reservation
+): { fds: number[] } | { behind: Behind } => {
+  const { free } = lookAtSlots(dir, count, units - reservation.fds.length);
+  if (free.length > 0) {
+    const record = JSON.stringify({ ...holder, since: Date.now() });
+    for (const fd of free) {
+      ftruncateSync(fd, 0);
+      writeSync(fd, record, 0);
+    }
+    reservation.fds.push(...free);
+    sayReserved(reservation, holder, units);
+  }
+  if (reservation.fds.length >= units) {
+    return { fds: reservation.fds };
+  }
+  return {
+    behind: {
+      kind: "reserving",
+      ticket: String(reservation.fds.length),
+      words: `this run has waited ${Math.round((Date.now() - reservation.since) / 60_000 + reserveAfter() / 60_000)} min, so it holds a reservation since ${clock(reservation.since)}: each heavy-run slot that frees goes to it, and it holds ${reservation.fds.length} of its ${units} so far`,
+    },
+  };
+};
+
+/** How long a run waits before it holds a reservation ({@link RESERVE_AFTER_MS}). */
+const reserveAfter = (): number => {
+  const raw = process.env[RESERVE_AFTER_ENV];
+  return raw === undefined || raw === ""
+    ? RESERVE_AFTER_MS
+    : threshold(RESERVE_AFTER_ENV, 0) * 1000;
+};
+
+/**
+ * The slots in `dir` as they stand, under the gate's lock: the paths of those
+ * held, every `slot-<i>` file counted, those at i ≥ `count` from a larger
+ * ceiling included, and the locks of up to `units` free ones below `count`,
+ * taken.
+ */
+const lookAtSlots = (
+  dir: string,
+  count: number,
+  units: number
+): { free: number[]; held: string[] } => {
+  const indices = new Set(Array.from({ length: count }, (_, i) => i));
+  for (const name of readdirSync(dir)) {
+    const index = SLOT_FILE.exec(name)?.[1];
+    if (index !== undefined) {
+      indices.add(Number(index));
+    }
+  }
+  const held: string[] = [];
+  const free: number[] = [];
+  for (const index of [...indices].sort((a, b) => a - b)) {
+    const path = join(dir, `slot-${index}`);
+    const fd = openLockFile(path, true);
+    if (!tryLock(fd)) {
+      held.push(path);
+      closeSync(fd);
+    } else if (free.length < units && index < count) {
+      free.push(fd);
+    } else {
+      unlock(fd);
+    }
+  }
+  return { free, held };
+};
+
+/**
+ * One look at the slots under the gate: the descriptors of the `units` slots
+ * taken, all at once, or what holds the run (nothing when another run holds
+ * the gate this tick). It takes them only while `units` more than are held
+ * fit under `count`, so the slots held never come to more than the runs
+ * holding them were admitted for. While a landing gate's ticket is held,
+ * slots go only to the oldest ticket's run (`ticket`, this run's own when it
+ * is a gate's); then, while a reservation is held, only to the oldest
+ * reservation's run (`reservation`, this run's own when it holds one).
  */
 const tryTake = (
   dir: string,
   count: number,
+  units: number,
   holder: HeavyHolder,
-  ticket: string | undefined
-): { fd: number } | { behind?: Behind } => {
+  ticket: string | undefined,
+  reservation: Reservation | undefined
+): { fds: number[] } | { behind?: Behind } => {
   const gate = openLockFile(join(dir, "gate"), true);
   if (!tryLock(gate)) {
     closeSync(gate);
     return {};
   }
   try {
-    const ahead = gateAhead(dir, ticket);
+    const ahead =
+      gateAhead(dir, ticket) ??
+      (ticket ? undefined : reservationAhead(dir, reservation?.name));
     if (ahead) {
       return { behind: ahead };
     }
-    const indices = new Set(Array.from({ length: count }, (_, i) => i));
-    for (const name of readdirSync(dir)) {
-      const index = SLOT_FILE.exec(name)?.[1];
-      if (index !== undefined) {
-        indices.add(Number(index));
-      }
+    if (reservation) {
+      return reserveMore(dir, count, units, holder, reservation);
     }
-    const held: string[] = [];
-    let free: number | undefined;
-    for (const index of [...indices].sort((a, b) => a - b)) {
-      const path = join(dir, `slot-${index}`);
-      const fd = openLockFile(path, true);
-      if (!tryLock(fd)) {
-        held.push(path);
-        closeSync(fd);
-      } else if (free === undefined && index < count) {
-        free = fd;
-      } else {
+    const { held, free } = lookAtSlots(dir, count, units);
+    if (free.length < units || held.length + units > count) {
+      for (const fd of free) {
         unlock(fd);
-      }
-    }
-    if (free === undefined || held.length >= count) {
-      if (free !== undefined) {
-        unlock(free);
       }
       return {
         behind: {
           kind: "slots",
-          words: `all ${count} heavy-run slots (${HEAVY_RUNS_ENV}, else this machine's cores and memory) are held, by ${held.map(describe).join("; ")}`,
+          words:
+            units === 1
+              ? `all ${count} heavy-run slots (${HEAVY_RUNS_ENV}, else this machine's cores and memory) are held, by ${describeRuns(held)}`
+              : `this run's peak of ${gib(holder.peak ?? SLOT_MEMORY)} takes ${units} of the ${count} heavy-run slots (one per ${gib(SLOT_MEMORY)}; ${HEAVY_RUNS_ENV}, else this machine's cores and memory), and ${held.length} are held, by ${describeRuns(held)}`,
         },
       };
     }
@@ -677,7 +1152,9 @@ const tryTake = (
     );
     const ago = Date.now() - newest;
     if (ago < ADMIT_SPACING_MS) {
-      unlock(free);
+      for (const fd of free) {
+        unlock(fd);
+      }
       return {
         behind: {
           kind: "spacing",
@@ -685,17 +1162,20 @@ const tryTake = (
         },
       };
     }
-    ftruncateSync(free, 0);
-    writeSync(free, JSON.stringify({ ...holder, since: Date.now() }), 0);
-    return { fd: free };
+    const record = JSON.stringify({ ...holder, since: Date.now() });
+    for (const fd of free) {
+      ftruncateSync(fd, 0);
+      writeSync(fd, record, 0);
+    }
+    return { fds: free };
   } finally {
     unlock(gate);
   }
 };
 
-/** A slot taken: its descriptor's lock, and whether the run waited for it. */
+/** A run's slots taken: each one's descriptor holding its lock, and whether the run waited for them. */
 export interface HeavyTaken {
-  fd: number;
+  fds: number[];
   waited: boolean;
 }
 
@@ -722,8 +1202,9 @@ const queueGate = async (
 };
 
 /**
- * Takes a slot for `holder` once one is free and the machine has room,
- * waiting as long as that takes; `gone` ends the wait early, with no slot.
+ * Takes `holder`'s slots, one per {@link SLOT_MEMORY} of its peak, once
+ * that many are free and the machine has room for its peak, waiting as long
+ * as that takes; `gone` ends the wait early, with no slot.
  * A landing gate's run (`holder.gate`) holds a ticket while it waits, and
  * goes before every run that is not one. Each marker line goes to `say`
  * (stderr unless given).
@@ -744,7 +1225,14 @@ export async function takeHeavySlot(
   }
   try {
     await readyRoom();
-    return await waitForSlot(dir, count, holder, ticket?.name, { say, gone });
+    return await waitForSlot(
+      dir,
+      count,
+      unitsOf(holder.peak ?? SLOT_MEMORY, count),
+      holder,
+      ticket?.name,
+      { say, gone }
+    );
   } finally {
     if (ticket) {
       dropTicket(dir, ticket);
@@ -760,46 +1248,98 @@ export async function takeHeavySlot(
 async function waitForSlot(
   dir: string,
   count: number,
+  units: number,
   holder: HeavyHolder,
   ticket: string | undefined,
   { say, gone }: { say: (line: string) => void; gone: () => boolean }
 ): Promise<HeavyTaken | undefined> {
-  let said: string | undefined;
-  let room: Room | undefined;
-  let measuredAt = 0;
-  for (;;) {
-    if (!room || Date.now() - measuredAt >= ROOM_POLL_MS) {
-      room = measureRoom();
-      measuredAt = Date.now();
-    }
-    let behind: Behind | undefined;
-    if (room.ok) {
-      const look = tryTake(dir, count, holder, ticket);
-      if ("fd" in look) {
-        if (said) {
-          say(`${QUEUE_MARKER} held heavy`);
-        }
-        return { fd: look.fd, waited: said !== undefined };
+  const wait: Waiting = { began: Date.now(), measuredAt: 0 };
+  try {
+    for (;;) {
+      const taken = lookOnce(dir, count, units, holder, ticket, wait, say);
+      if (taken) {
+        return taken;
       }
-      ({ behind } = look);
-    } else {
-      behind = { kind: "room", words: room.words };
+      // biome-ignore lint/performance/noAwaitInLoops: one look per tick, until a slot and the room are both there
+      await Bun.sleep(wait.room?.ok ? POLL_MS : ROOM_POLL_MS);
+      if (gone()) {
+        return;
+      }
     }
-    const saying = behind && `${behind.kind} ${behind.ticket ?? ""}`;
-    if (behind && saying !== said) {
-      said = saying;
-      say(`${QUEUE_MARKER} wait heavy: ${behind.words}`);
-    }
-    // biome-ignore lint/performance/noAwaitInLoops: one look per tick, until a slot and the room are both there
-    await Bun.sleep(room.ok ? POLL_MS : ROOM_POLL_MS);
-    if (gone()) {
-      return;
+  } finally {
+    // Gone before its count: its reservation and the slots it held so far go.
+    if (wait.reservation) {
+      dropReservation(dir, wait.reservation, false);
     }
   }
 }
 
-/** Lets a taken slot go. */
-export const releaseHeavySlot = (fd: number): void => unlock(fd);
+/** What a run's wait has seen so far ({@link waitForSlot}). */
+interface Waiting {
+  began: number;
+  measuredAt: number;
+  reservation?: Reservation;
+  room?: Room;
+  /** What holds the run, as last said. */
+  said?: string;
+}
+
+/**
+ * One look of {@link waitForSlot}: the room measured again every {@link
+ * ROOM_POLL_MS}, a reservation taken once the run has waited {@link
+ * reserveAfter} (a landing gate's run goes first already, and takes none),
+ * then the slots looked at while the machine has room. Its slots once taken;
+ * else nothing, what holds it said once per change.
+ */
+const lookOnce = (
+  dir: string,
+  count: number,
+  units: number,
+  holder: HeavyHolder,
+  ticket: string | undefined,
+  wait: Waiting,
+  say: (line: string) => void
+): HeavyTaken | undefined => {
+  if (!wait.room || Date.now() - wait.measuredAt >= ROOM_POLL_MS) {
+    wait.room = measureRoom(holder.peak);
+    wait.measuredAt = Date.now();
+  }
+  if (
+    !(wait.reservation || ticket) &&
+    Date.now() - wait.began >= reserveAfter()
+  ) {
+    wait.reservation = takeReservation(dir, holder, units);
+  }
+  let behind: Behind | undefined;
+  if (wait.room.ok) {
+    const look = tryTake(dir, count, units, holder, ticket, wait.reservation);
+    if ("fds" in look) {
+      if (wait.reservation) {
+        dropReservation(dir, wait.reservation, true);
+        wait.reservation = undefined;
+      }
+      if (wait.said) {
+        say(`${QUEUE_MARKER} held heavy`);
+      }
+      return { fds: look.fds, waited: wait.said !== undefined };
+    }
+    ({ behind } = look);
+  } else {
+    behind = { kind: "room", words: wait.room.words };
+  }
+  const saying = behind && `${behind.kind} ${behind.ticket ?? ""}`;
+  if (behind && saying !== wait.said) {
+    wait.said = saying;
+    say(`${QUEUE_MARKER} wait heavy: ${behind.words}`);
+  }
+};
+
+/** Lets a run's taken slots go. */
+export const releaseHeavySlot = (taken: Pick<HeavyTaken, "fds">): void => {
+  for (const fd of taken.fds) {
+    unlock(fd);
+  }
+};
 
 /** `heavy-run.ts count`'s line: the ceiling, and the room over the last window. */
 export const heavyRunsSaid = async (): Promise<string> => {

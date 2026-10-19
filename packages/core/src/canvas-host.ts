@@ -1,20 +1,26 @@
 /**
  * The canvas's host page (Projects spec §5.10, D24): one page the hub serves
  * at a canvas artifact's root, the same in the panel, a tab of its own and
- * the app's web view. Its code is the agent package's `canvas-host/`,
- * bundled by Bun as the preview overlay is (preview-proxy.ts
- * `buildOverlay`): the standalone binary carries it prebuilt under
- * `canvas/` (`build-binary.ts`), and a source checkout bundles it on first
- * request. Excalidraw's fonts stand beside it at `canvas/fonts/`, so the
- * page asks nothing of any other origin (`window.EXCALIDRAW_ASSET_PATH`).
+ * the app's web view. Its code is the agent package's `canvas-host/`, its
+ * JS bundled by Bun as the preview overlay is (preview-proxy.ts
+ * `buildOverlay`) and its stylesheet (`SHEETS`) compiled by Lightning CSS
+ * (page-css.ts): the standalone binary carries both prebuilt under
+ * `canvas/` (`build-binary.ts`), and a source checkout builds them on first
+ * request. Excalidraw's fonts stand beside them at `canvas/fonts/`, so the
+ * page asks nothing of any other origin (`window.EXCALIDRAW_ASSET_PATH`);
+ * its UI face is inlined into the sheet (`INLINED_FONTS`).
  *
  * Paths, under the canvas's root: `/` the page (index.html, which the hub
- * gives the overlay), `/canvas/<file>` the bundle's files and fonts.
+ * gives the overlay), `/canvas/<file>` the bundle's files (`host.css` the
+ * stylesheet) and fonts.
  */
-import { rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { agentReact } from "./agent-react";
+import { refuseSchemeLowering } from "./bundle-css-guard";
+import { bundled } from "./bundled";
 import { HOST_PLUGINS } from "./canvas-host-plugins";
+import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
 /** Where the page's bundle and fonts are served, under the canvas's root. */
@@ -23,8 +29,8 @@ export const CANVAS_ASSETS = "/canvas/";
 const HOST_DIR = new URL("../../agent/src/canvas-host/", import.meta.url)
   .pathname;
 
-/** Excalidraw's own font files, in the agent package's install. */
-const fontsDir = () =>
+/** Excalidraw's production build, in the agent package's install. */
+const excalidrawProd = () =>
   join(
     dirname(
       Bun.resolveSync(
@@ -32,7 +38,35 @@ const fontsDir = () =>
         join(HOST_DIR, "..")
       )
     ),
-    "dist/prod/fonts"
+    "dist/prod"
+  );
+
+/** Excalidraw's own font files. */
+const fontsDir = () => join(excalidrawProd(), "fonts");
+
+/**
+ * The page's stylesheets in cascade order, as host.tsx once imported them:
+ * Excalidraw's own (its package's `./index.css` under the `production`
+ * condition), then ours over it. The kit's tokens are not among them:
+ * host.tsx sets them as written, ahead of this sheet.
+ */
+const SHEETS = () => [
+  join(excalidrawProd(), "index.css"),
+  join(HOST_DIR, "canvas.css"),
+];
+
+/**
+ * Excalidraw's UI face, Assistant, inlined into the sheet as its four
+ * `@font-face`s write it (`url("./fonts/Assistant/…")`, beside its
+ * index.css): there from the first frame, so its `font-display: swap` never
+ * shows the fallback face first. Every other `url()` stays as written.
+ */
+const INLINED_FONTS = () =>
+  new Map(
+    ["Regular", "Medium", "SemiBold", "Bold"].map((weight) => {
+      const file = `fonts/Assistant/Assistant-${weight}.woff2`;
+      return [`./${file}`, join(excalidrawProd(), file)] as const;
+    })
   );
 
 /**
@@ -51,13 +85,21 @@ const overlayYjs: Bun.BunPlugin = {
 };
 
 /**
- * Bundles the host page: written to `outdir` for a release build, else
- * kept in memory. React and Excalidraw built for production; Mermaid's
- * converter is its own chunk, loaded when the agent first sends Mermaid.
- * Yjs is not in it: the overlay's is (`overlayYjs`).
+ * Builds the host page's files, by name: Bun's bundle of its JS and the
+ * stylesheet (`host.css`). React and Excalidraw built for production;
+ * Mermaid's converter is its own chunk, loaded when the agent first sends
+ * Mermaid. Yjs is not in it: the overlay's is (`overlayYjs`).
  */
-export async function buildCanvasHost(outdir?: string) {
-  const result = await Bun.build({
+export async function buildCanvasHost(): Promise<Map<string, Blob>> {
+  const [result, css] = await Promise.all([
+    bundleJs(),
+    compileSheets(SHEETS(), INLINED_FONTS()),
+  ]);
+  return pageFiles("The canvas host", result, css);
+}
+
+async function bundleJs() {
+  const result = await bundled("The canvas host", {
     entrypoints: [join(HOST_DIR, "host.tsx")],
     target: "browser",
     format: "esm",
@@ -73,22 +115,24 @@ export async function buildCanvasHost(outdir?: string) {
       chunk: "chunk-[hash].[ext]",
       asset: "asset-[hash].[ext]",
     },
-    ...(outdir ? { outdir } : {}),
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "Canvas host build failed");
-  }
+  await refuseSchemeLowering("The canvas host", result.outputs);
   return result.outputs;
 }
 
-/** The host page's files for a release build: the page, the bundle's outputs (`outdir`) and the fonts. */
+/** The host page's files for a release build: the page, the built files (written to `outdir`) and the fonts. */
 export async function canvasHostAssets(
   outdir: string,
   filesUnder: (dir: string, prefix: string) => Promise<[string, string][]>
 ): Promise<[string, string][]> {
   // An earlier build's chunks are not this one's.
   await rm(outdir, { recursive: true, force: true });
-  await buildCanvasHost(outdir);
+  await mkdir(outdir, { recursive: true });
+  await Promise.all(
+    [...(await buildCanvasHost())].map(([name, file]) =>
+      Bun.write(join(outdir, name), file)
+    )
+  );
   return [
     ["canvas/index.html", join(HOST_DIR, "index.html")],
     ...(await filesUnder(outdir, "canvas/files")),
@@ -96,27 +140,16 @@ export async function canvasHostAssets(
   ];
 }
 
-const DOT_SLASH = /^\.\//;
 const LEADING_SLASHES = /^\/+/;
 
 let built: Promise<Map<string, Blob>> | undefined;
 
-/** The bundle's files by name, built once per process; a failure clears the slot so the next request retries. */
+/** The page's built files by name, built once per process; a failure clears the slot so the next request retries. */
 const bundle = (): Promise<Map<string, Blob>> => {
-  built ??= buildCanvasHost()
-    .then(
-      (outputs) =>
-        new Map(
-          outputs.map((output) => [
-            output.path.replace(DOT_SLASH, ""),
-            output as Blob,
-          ])
-        )
-    )
-    .catch((error: unknown) => {
-      built = undefined;
-      throw error;
-    });
+  built ??= buildCanvasHost().catch((error: unknown) => {
+    built = undefined;
+    throw error;
+  });
   return built;
 };
 

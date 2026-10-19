@@ -563,6 +563,10 @@
       "$type": "color",
       "$value": "{color.surface-fill}"
     },
+    "surface-pressed": {
+      "$type": "color",
+      "$value": "{color.neutral-5}"
+    },
     "surface-hover": {
       "$type": "color",
       "$value": "{color.neutral-4}"
@@ -1598,15 +1602,6 @@
     }
   },
   "effect": {
-    "tab-rim-mix": {
-      "$type": "number",
-      "$value": 0.64,
-      "$extensions": {
-        "dev.cawco": {
-          "css": "64%"
-        }
-      }
-    },
     "tab-rim-mix-chosen": {
       "$type": "number",
       "$value": 0.78
@@ -1624,6 +1619,10 @@
     "glyph-duo-status-opacity": {
       "$type": "number",
       "$value": 0.46
+    },
+    "breath-floor": {
+      "$type": "number",
+      "$value": 0.58
     }
   },
   "shadow": {

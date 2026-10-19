@@ -156,16 +156,21 @@
       stroke-dashoffset: 0;
     }
   }
-  /* Under way: the live dot breathes in scale, never fading below its
-     contrast. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="dot"][data-plan-pane-live] {
-      animation: plan-breath var(--breath) var(--ease-in-out) infinite;
-    }
+  /* To come: an open ring; under way: the live dot, the house's size and
+     ink (TreeMark's): it breathes on the house's breath. */
+  .dot {
+    inline-size: var(--status-dot-size);
+    block-size: var(--status-dot-size);
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px var(--ink-subtle);
   }
-  @keyframes plan-breath {
-    50% {
-      scale: 0.7;
+  .dot.live {
+    box-shadow: none;
+    background: var(--status-live-glyph);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .dot.live {
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
 </style>

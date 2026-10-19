@@ -20,6 +20,7 @@ import {
   currentExecutable,
   installationPath,
   readInstallation,
+  recordInstall,
   updateStatePath,
   versionExecutable,
   writeJsonAtomic,
@@ -225,6 +226,9 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     installedVersion: runtimeVersion,
     ...(options.releaseHost ? { releaseHost: options.releaseHost } : {}),
   } satisfies BinaryInstallation);
+  // The first build in this machine's install order (core `prune` keeps it
+  // and the two installed after it); a reinstall puts its build at the end.
+  await recordInstall(runtimeVersion);
   await writeJsonAtomic(updateStatePath(), {
     phase: "none",
     installedVersion: runtimeVersion,

@@ -19,7 +19,7 @@
   import AccountName from "../accounts/AccountName.svelte";
   import { cawco, type InstanceRow } from "../client.svelte";
   import OpenCodeLogo from "../OpenCodeLogo.svelte";
-  import { claudeGap, money, speakingReading } from "../usage";
+  import { claudeGap, extraUsageLine, money } from "../usage";
   import Figure from "./Figure.svelte";
   import { startForecast, usage } from "./forecast.svelte";
   import Rings from "./Rings.svelte";
@@ -52,23 +52,12 @@
   const spend = $derived(cawco.spend);
 
   /** Why there is no Claude tile, and what to do about it (usage.ts `claudeGap`). */
-  const claudeUnknown = $derived(
-    claude ? null : claudeGap(cawco.claudeLimits, cawco.machines)
-  );
+  const claudeUnknown = $derived(claude ? null : claudeGap(cawco.claudeLimits));
 
-  /** Claude's extra usage, as the account's Claude Code last said it. */
-  const extra = $derived(
-    speakingReading(cawco.claudeLimits)?.reading.extraUsage ?? null
+  /** Claude's extra usage, as each account's Claude Code last said it. */
+  const extraText = $derived(
+    claude ? extraUsageLine(cawco.claudeLimits, claude.accounts) : ""
   );
-  const extraText = $derived.by(() => {
-    if (!extra) {
-      return "";
-    }
-    if (!extra.on) {
-      return extra.offReason ? `off: ${extra.offReason}` : "off";
-    }
-    return extra.inUse ? "on, in use" : "on";
-  });
 
   /**
    * The lead: Claude's answer, or opencode's when it is the only plan, in

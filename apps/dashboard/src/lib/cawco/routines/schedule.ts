@@ -8,17 +8,12 @@
  * - `whenOf`: a time in the reader's zone, near now said near ("Today 09:00",
  *   "Yesterday 23:30", "Mon 09:00"), further off with its date.
  * - `exactOf`: the same time whole, for a hover ("Thu 15 Oct 2026, 13:30").
+ *
+ * The words are core's (`routinesWords`), which the app reads as `Words.Routines`.
  */
+import { routinesWords as words } from "@cawco/core";
 
-const DAY_NAMES = [
-  "Sundays",
-  "Mondays",
-  "Tuesdays",
-  "Wednesdays",
-  "Thursdays",
-  "Fridays",
-  "Saturdays",
-];
+const DAY_NAMES = words.dayNames;
 
 /** The reader's own zone. */
 export const readerZone = (): string =>
@@ -58,13 +53,13 @@ function daysWords(days: Set<number>): string {
   const sorted = [...days].sort((a, b) => a - b);
   const key = sorted.join(",");
   if (sorted.length === 7) {
-    return "Daily";
+    return words.daily;
   }
   if (key === "1,2,3,4,5") {
-    return "Weekdays";
+    return words.weekdays;
   }
   if (key === "0,6") {
-    return "Weekends";
+    return words.weekends;
   }
   const names = sorted.map((day) => DAY_NAMES[day] ?? "");
   return names.length === 1
@@ -123,29 +118,34 @@ export function scheduleOf(
       const shift = dayIn(undefined, next) - dayIn(zone, next);
       const readerDays = new Set([...days].map((day) => (day + shift + 7) % 7));
       return {
-        words: `${daysWords(readerDays)} at ${TIME.format(next)}`,
+        words: words.daysAt(daysWords(readerDays), TIME.format(next)),
         raw: false,
         local: away
-          ? `${daysWords(days)} at ${two(Number(hour))}:${two(Number(minute))} ${placeOf(zone)} time`
+          ? words.zoneTime(
+              words.daysAt(
+                daysWords(days),
+                `${two(Number(hour))}:${two(Number(minute))}`
+              ),
+              placeOf(zone)
+            )
           : null,
       };
     }
   }
   if (plain && fixed(minute) && hour === "*" && dow === "*") {
     // Every hour: the same minute on every clock but a half-hour zone's.
-    const at = `:${two(new Date(next).getMinutes())}`;
     return {
-      words: `Hourly at ${at}`,
+      words: words.hourlyAt(two(new Date(next).getMinutes())),
       raw: false,
       local: away
-        ? `Hourly at :${two(Number(minute))} ${placeOf(zone)} time`
+        ? words.zoneTime(words.hourlyAt(two(Number(minute))), placeOf(zone))
         : null,
     };
   }
   return {
     words: cron,
     raw: true,
-    local: away ? `${placeOf(zone)} time` : null,
+    local: away ? words.placeTime(placeOf(zone)) : null,
   };
 }
 
@@ -175,13 +175,13 @@ export function whenOf(at: number): string {
   const days = Math.round((dayOf(at) - dayOf(Date.now())) / 86_400_000);
   const time = TIME.format(at);
   if (days === 0) {
-    return `Today ${time}`;
+    return words.today(time);
   }
   if (days === 1) {
-    return `Tomorrow ${time}`;
+    return words.tomorrow(time);
   }
   if (days === -1) {
-    return `Yesterday ${time}`;
+    return words.yesterday(time);
   }
   if (Math.abs(days) < 7) {
     return `${WEEKDAY.format(at)} ${time}`;

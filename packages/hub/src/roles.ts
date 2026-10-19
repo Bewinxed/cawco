@@ -34,6 +34,9 @@
  *   archives the notes that are not lasting facts, and finishes. No edit,
  *   shell or web tools in its harness either (caw.ts `withCawDenials`).
  *
+ * Every session that works (the worker, the delegate, the lead) searches
+ * what was said and made with `find` (find-tool.ts), the dashboard's Find.
+ *
  * Memory (§5.4): the worker, the delegate and the lead write notes into
  * their project's inbox (`memory_note`); only the lead and the curator
  * call `memory_propose` (the lead's commits, the curator's waits for you),
@@ -62,6 +65,12 @@ export const roleOf = (row: InstanceRow): SessionRole => {
  * items too, which every compaction lists after its summary (open-items.ts).
  */
 const CORE = ["handoff", "send_to_user", "set_title", "open_items"] as const;
+
+/**
+ * Asking the person to take over the session's browser for a sign-in, a
+ * code or a payment (browser-tools.ts): every role that drives a browser.
+ */
+const BROWSER = ["browser_ask"] as const;
 
 /** The task tools every role but the worker's and the lead's is limited to. */
 const TASK_READ = ["task_read", "todo_write", "task_comment"] as const;
@@ -153,6 +162,9 @@ const DELEGATE_SESSION = [
   "workflow_steer",
   "workflow_list",
   "generate_image",
+  // An issue, a pull or merge request or a comment on any forge, as its
+  // machine's sign-in there (forge-posts.ts): what gh did inside a workspace.
+  "forge_post",
   "list_delegate_types",
   "list_sessions",
   "start_session",
@@ -176,13 +188,14 @@ const DELEGATE_SESSION = [
 const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   delegate: new Set([
     ...CORE,
+    ...BROWSER,
     ...DELEGATE_SESSION,
     ...TASK_READ,
     // An attempt at a task hands in its result (task-tools.ts).
     "task_result",
     "memory_note",
-    // What its project's past sessions said (session-prose.ts).
-    "memory_recall",
+    // Anything said or made, as the dashboard's Find finds it (find-tool.ts).
+    "find",
     // Its own project's folder, read only (caw.ts): what an earlier delegate
     // handed in, from any machine.
     "folder_read",
@@ -194,12 +207,13 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   ]),
   lead: new Set([
     ...CORE,
+    ...BROWSER,
     ...TASK_READ,
     ...TASK_WRITE,
     ...CAW_TOOLS,
     "memory_note",
     "memory_propose",
-    "memory_recall",
+    "find",
     // Decision pages: Caw builds them from his folder's decisions/<name>/page.oui.
     ...ARTIFACT_TOOLS,
     ...ROUTINE,
@@ -219,6 +233,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   overseer: new Set([...TRIAGE_TOOLS, "task_read", "list_sessions"]),
   "web-facing": new Set([
     ...CORE,
+    ...BROWSER,
     ...TASK_READ,
     "finish_item",
     "wait_item",

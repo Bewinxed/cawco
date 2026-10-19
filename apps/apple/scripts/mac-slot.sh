@@ -112,13 +112,15 @@ for devices in json.load(sys.stdin)["devices"].values():
   done
 }
 end() {
-  if [[ -n $GROUP ]]; then
-    kill -TERM -- "-$GROUP" 2>/dev/null || true
+  # Only a group above 1 (-1 is every process, 0 our own group), named after
+  # the signal with no `--`, a form every shell's `kill` reads.
+  if [ "$GROUP" -gt 1 ] 2>/dev/null; then
+    kill -TERM "-$GROUP" 2>/dev/null || true
     for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-      kill -0 -- "-$GROUP" 2>/dev/null || break
+      kill -0 "-$GROUP" 2>/dev/null || break
       sleep 0.5
     done
-    kill -KILL -- "-$GROUP" 2>/dev/null || true
+    kill -KILL "-$GROUP" 2>/dev/null || true
   fi
   if [[ $MODE == sim && -n $SLOT ]]; then drop_sims; fi
   if [[ -n $LOCK && -f $LOCK && $(cat "$LOCK" 2>/dev/null) == $$ ]]; then

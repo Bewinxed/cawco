@@ -1,0 +1,13 @@
+apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte
+apps/dashboard/src/lib/cawco/preview/CanvasView.svelte
+apps/dashboard/src/lib/cawco/preview/LiveDot.svelte
+apps/dashboard/src/lib/cawco/preview/PinCard.svelte
+apps/dashboard/src/lib/cawco/preview/PinList.svelte
+apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte
+
+# apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s); lint: shadcn/no-restyle ×2
+# apps/dashboard/src/lib/cawco/preview/CanvasView.svelte: after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; lint: shadcn/no-restyle ×2
+# apps/dashboard/src/lib/cawco/preview/LiveDot.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/preview/PinCard.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-var ×3; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/preview/PinList.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×1; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×3; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s); lint: shadcn/no-unknown-classes ×2; lint: shadcn/no-restyle ×1

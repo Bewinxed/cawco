@@ -1,0 +1,13 @@
+apps/dashboard/src/lib/cawco/relay/RelayJourney.svelte
+apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte
+apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte
+apps/dashboard/src/lib/cawco/side/SideSheet.svelte
+apps/dashboard/src/lib/cawco/side/SideSurface.svelte
+apps/dashboard/src/lib/cawco/side/Split.svelte
+
+# apps/dashboard/src/lib/cawco/relay/RelayJourney.svelte: after-M: markup naming a scoped class; after-M: a Tailwind class with a raw value; after-M: a state written as a class; after-M: a new Tailwind class; lint: shadcn/no-arbitrary-values ×25; lint: shadcn/no-unknown-classes ×25; lint: shadcn/no-restyle ×4
+# apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte: after-M: markup naming a scoped class; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×2; relic: style-var ×1; lint: shadcn/no-unknown-classes ×5; lint: shadcn/no-restyle ×6
+# apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte: after-M: markup naming a scoped class; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×3; relic: style-var ×1; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×10; lint: shadcn/no-restyle ×6
+# apps/dashboard/src/lib/cawco/side/SideSheet.svelte: relic: literal ×1; relic: style-var ×3; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/side/SideSurface.svelte: after-M: markup naming a scoped class; after-M: an inline style; after-M: a state written as a class; after-M: a scoped <style> rule; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-reason ×1; lint: shadcn/no-inline-styles ×1; lint: shadcn/no-unknown-classes ×1; lint: shadcn/no-restyle ×2
+# apps/dashboard/src/lib/cawco/side/Split.svelte: relic: literal ×2; relic: style-var ×2; relic: style-reason ×1

@@ -38,13 +38,6 @@ const KNOWN = new Map<string, string>([
     "packages/agent/src/harnesses/opencode-plugin.ts",
     "the plugin's text runs inside OpenCode's own process, which cannot load core: its one group kill keeps the wall's rule by hand (a pid its spawn made, an integer above 1)",
   ],
-  // The SSH leaf (cockpit-93e4494d#8ee3ea2d) is editing these, with
-  // scripts/probe-kit/ssh-target.ts (which sends no signal), and moves their
-  // kills onto core's module once it lands; each comes off this list in the
-  // commit that converts it.
-  ["packages/hub/src/join.ts", "the SSH leaf converts it"],
-  ["packages/hub/src/ssh-tunnels.ts", "the SSH leaf converts it"],
-  ["scripts/probe-kit/specs/ssh-reach.ts", "the SSH leaf converts it"],
 ]);
 
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/;

@@ -20,12 +20,31 @@
  * macOS meets the same case by another rule: Seatbelt never nests
  * ({@link nestedSeatbeltRefusal}), and there is no host change for it.
  */
+import { readFileSync } from "node:fs";
+import { hostEnvironment } from "./session-env";
 
 /** The AppArmor profile that strips capabilities beneath bwrap. */
 export const NESTED_BOUNDARY_PROFILE = "/etc/apparmor.d/bwrap-userns-restrict";
 
 /** The AppArmor profile name a process beneath bwrap carries in its label. */
 export const NESTED_BOUNDARY_LABEL = "unpriv_bwrap";
+
+/**
+ * This process's AppArmor label when it runs beneath bwrap under the
+ * host's {@link NESTED_BOUNDARY_PROFILE} (it carries
+ * {@link NESTED_BOUNDARY_LABEL}), as the kernel names it; none elsewhere, or
+ * where AppArmor is not there.
+ */
+export const nestedBwrapLabel = (): string | undefined => {
+  let label: string;
+  try {
+    label = readFileSync("/proc/self/attr/apparmor/current", "utf8").trim();
+  } catch {
+    // No AppArmor here.
+    return undefined;
+  }
+  return label.includes(NESTED_BOUNDARY_LABEL) ? label : undefined;
+};
 
 /**
  * The host change that lets a boundary start inside another, as root: the
@@ -86,7 +105,12 @@ export const nestedSeatbeltRefusal = (
 ): string | undefined => {
   const tried = Bun.spawnSync(
     [sandboxExec, "-p", "(version 1)(allow default)", "/usr/bin/true"],
-    { stdin: "ignore", stdout: "ignore", stderr: "pipe" }
+    {
+      env: hostEnvironment(),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+    }
   );
   return tried.exitCode !== 0 &&
     tried.stderr.toString().includes(SEATBELT_REFUSED)

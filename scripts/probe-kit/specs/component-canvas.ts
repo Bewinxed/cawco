@@ -7,9 +7,11 @@
  * from pixels: the page's own report, computed styles, boxes,
  * `getAnimations()`, the module requests a page made.
  *
- * On two scratch projects (fixtures/component-canvas: a Svelte 5 one with
- * Tailwind 4, and a React 19 one), each installed in `$TMPDIR` and served
- * by the stage host as the daemon starts it, minus the workspace boundary:
+ * On four scratch projects (fixtures/component-canvas: a Svelte 5 one with
+ * Tailwind 4, a React 19 one, a Vue 3 one and a Solid one), each installed
+ * in `$TMPDIR` and served by the stage host as the daemon starts it, minus
+ * the workspace boundary (Vue and Solid run legs 1, 2, 4 and 12, so each
+ * framework's adapter, its `update` included, is run):
  *
  * 1. Every story is drawn as a live instance: each frame `drawn`, with the
  *    component chain its elements came from.
@@ -28,16 +30,50 @@
  *    requested only once the canvas is moved to it.
  * 9. The stage keeps the report: drawn by the panel, `unseen` once the
  *    states file changes, drawn again on the next load.
- * 10. A mount that throws is `failed`, with its message and file.
+ * 10. A mount that throws is `failed`, with its message and its place in
+ *     the source, mapped through Vite's sourcemap (the throw's own line, not
+ *     the compiled one).
  * 11. At 1440 and 390, light and dark: both schemes drawn side by side; a
- *     phone shows one frame with its state strip, and a step plays the move.
+ *     phone shows one frame with its state strip, and a step plays the move;
+ *     the phone's report says the frame it shows `drawn` and every other
+ *     `unshown`, never `empty`; after it, the stage still keeps every frame
+ *     drawn and the design map still counts them (an unshown frame keeps
+ *     the desk's draw of the same content).
  * 12. No console errors (the throwing story's page aside).
  * 13. With no panel open, the daemon's render (stage-render.ts) draws the
  *     canvas in the machine's own Chromium through a bridge socket shaped
  *     as preview-bridge.ts makes it (socat, unix to the stage's port): the
  *     stage's report says `by: "stage"`, every frame drawn, the move read,
  *     and a frame's picture.
+ * 14. A section on its way (a states file whose helper takes 4 s): opened
+ *     alone, the band names the canvas once and draws no line under it (the
+ *     ask is the panel head's alone; framed, the band says neither:
+ *     canvas-design 8i);
+ *     the section is named in words (its title's last part) in the title
+ *     role over its file in meta ink, never link-styled; one status line
+ *     ("Drawing 2 stories"), the column's head and a skeleton frame per
+ *     story stand from the first, unseen until `--dur-wait-grace` (their
+ *     `cawco-wait` delay,
+ *     scrubbed through the DevTools Animation domain: transparent just
+ *     before the grace, opaque past its fade); the frames land in the
+ *     skeletons' cells, the first row on its skeleton's corner, and the
+ *     skeletons go.
+ * 15. A section that didn't load (its helper throws): it says so where its
+ *     frames would stand, named by its component, with the error and its
+ *     place under Show details, and the report holds the page error; no
+ *     skeleton or status line is left.
+ * 16. A frame never silently draws at its floor (the owner's 24px approval
+ *     card, "this just showed up, dafuq"): a story of a size container
+ *     (`container-type: inline-size`) with no width of its own is reported
+ *     failed, "drawn 24px wide: the story has no width of its own; give it a
+ *     viewport or a width"; the same card with a phone viewport is drawn.
+ * 17. The stage's sweep ends on a story whose animation loops forever
+ *     (`infinite`, a working mark's breath): the probe cancels it rather
+ *     than finishing it, so the hover frame is drawn with its delta; the
+ *     loop is landed before the rest snapshot too, so that delta is the
+ *     hover's background alone, no opacity read mid-breath.
  *
+
  * Captures of the canvas (desk and phone, light and dark, its move's
  * timeline and its dials open) go to `$TMPDIR/caps/` and the clone's
  * `caps/` for a reviewer; this spec never reads them.
@@ -56,6 +92,7 @@ import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { renderCanvas } from "../../../packages/agent/src/stage-render";
 import type {
   CanvasSpec,
+  DesignMap,
   FrameRender,
   RenderReport,
 } from "../../../packages/core/src/stage";
@@ -66,7 +103,7 @@ const FIXTURES = join(ROOT, "scripts/probe-kit/fixtures/component-canvas");
 const SCRATCH = join(process.env.TMPDIR ?? "/tmp", "component-canvas");
 const CAPS = [join(process.env.TMPDIR ?? "/tmp", "caps"), join(ROOT, "caps")];
 
-type Framework = "svelte" | "react";
+type Framework = "svelte" | "react" | "vue" | "solid";
 
 /** A port nothing holds now. */
 const freePort = async (): Promise<number> => {
@@ -221,8 +258,6 @@ const DURATION_KEY = /\.duration$/;
 
 const KIT_SPEC: CanvasSpec = {
   name: "Kit",
-  about:
-    "The kit's button, card, badge and pairing card in every state their CSS reaches, the pairing move, and the radius dial",
   dials: [
     {
       name: "radius",
@@ -603,10 +638,44 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
     await phone.goto(
       canvasUrl(stage, ["src/Pairing.stories.js"], {
         name: "Pairing",
-        about: "The pairing card's two states and the move between them",
       })
     );
-    await reportOn(phone, 2000);
+    const phoneReport = await reportOn(phone, 2000);
+    const states = framesOf(phoneReport).map(
+      (one) => `${one.story}/${one.interaction}:${one.state}`
+    );
+    kit.check(
+      `11d: at 390 (${theme}) the frame on screen reports drawn and every frame the phone does not show reports unshown, none empty (the plan-view builder: "reads like a failure")`,
+      states.filter((one) => one.endsWith(":drawn")).length === 1 &&
+        states.some((one) => one.endsWith(":unshown")) &&
+        states.every(
+          (one) => one.endsWith(":drawn") || one.endsWith(":unshown")
+        ),
+      states.join(", ")
+    );
+    // What the stage keeps and the design map counts after the phone looked: the desk's draw of the same content still stands.
+    const stageKept = (await (
+      await fetch(
+        `${stage.base}/__cawco/report?file=${encodeURIComponent("src/Pairing.stories.js")}`
+      )
+    ).json()) as RenderReport;
+    const mapped = (await (
+      await fetch(
+        `${stage.base}/__cawco/components?component=${encodeURIComponent("src/Pairing.svelte")}`
+      )
+    ).json()) as DesignMap;
+    const [card] = mapped.components;
+    const keptStates = framesOf(stageKept).map(
+      (one) => `${one.story}/${one.interaction}:${one.state}`
+    );
+    kit.check(
+      `11e: after the 390 view (${theme}) the stage still keeps every Pairing frame drawn and the design map still counts them drawn (an unshown frame keeps the desk's draw of the same content)`,
+      keptStates.length > 0 &&
+        keptStates.every((one) => one.endsWith(":drawn")) &&
+        card?.drawn === keptStates.length &&
+        (card?.stories ?? []).every((one) => one.drawn),
+      `kept ${keptStates.join(", ")}; design map ${card?.name} drawn ${card?.drawn}, stories ${JSON.stringify(card?.stories?.map((one) => `${one.name}:${one.drawn}`))}`
+    );
     const shown = await phone.evaluate(() => ({
       phone: document.documentElement.hasAttribute("data-cawco-phone"),
       visible: [
@@ -664,7 +733,6 @@ async function lazy(kit: Kit, stage: Stage): Promise<void> {
   await page.goto(
     canvasUrl(stage, ["src/Tall.stories.js", "src/Far.stories.js"], {
       name: "Screens",
-      about: "A long screen and one past it",
     })
   );
   await reportOn(page, 1500);
@@ -736,7 +804,6 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
   await page.goto(
     canvasUrl(stage, ["src/Badge.stories.js"], {
       name: "Badge",
-      about: "The badge",
     })
   );
   await reportOn(page);
@@ -754,7 +821,6 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
   await again.goto(
     canvasUrl(stage, ["src/Badge.stories.js"], {
       name: "Badge",
-      about: "The badge",
     })
   );
   await reportOn(again);
@@ -778,17 +844,309 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
   await broken.goto(
     canvasUrl(stage, ["src/Throws.stories.js"], {
       name: "Throws",
-      about: "A broken component",
     })
   );
-  const report = await reportOn(broken);
-  const [frame] = framesOf(report);
+  const [onPage] = framesOf(await reportOn(broken));
+  // What the tools answer: the stage's kept report, its place mapped through Vite's sourcemap to the line the component writes.
+  const [frame] = framesOf(await read("src/Throws.stories.js"));
   kit.check(
-    "10: a mount that throws is failed, with its message and its file",
+    "10: a mount that throws is failed, with its message and its place in the source (Throws.svelte:4:11, the throw's `new Error`), not the compiled line",
     frame?.state === "failed" &&
       frame.error?.message === "boom" &&
-      frame.error.file === "src/Throws.svelte",
-    JSON.stringify(frame)
+      frame.error.file === "src/Throws.svelte" &&
+      frame.error.line === 4 &&
+      frame.error.column === 11,
+    `kept ${JSON.stringify(frame?.error)}; as the page said it ${JSON.stringify(onPage?.error)}`
+  );
+  await broken.close();
+}
+
+/** A token's computed values, read off an element that takes it: font for a type role, colour for an ink. */
+const tokenStyle = (page: Page, font: string, color: string) =>
+  page.evaluate(
+    ([type, ink]) => {
+      const probe = document.createElement("span");
+      probe.style.font = `var(${type})`;
+      probe.style.color = `var(${ink})`;
+      document.body.append(probe);
+      const read = getComputedStyle(probe);
+      const resolved = {
+        size: read.fontSize,
+        weight: read.fontWeight,
+        family: read.fontFamily,
+        color: read.color,
+      };
+      probe.remove();
+      return resolved;
+    },
+    [font, color]
+  );
+
+/** An element's own type and ink, as leg 14 compares them to the tokens'. */
+const ownStyle = (page: Page, selector: string) =>
+  page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const read = getComputedStyle(el);
+      return {
+        size: read.fontSize,
+        weight: read.fontWeight,
+        family: read.fontFamily,
+        color: read.color,
+        decoration: read.textDecorationLine,
+        tag: el.tagName,
+      };
+    });
+
+/** Where each stand-in or each rest frame stands, in story order: its grid cell and its box's corner from its grid's (the world moves as the head settles; a place in the grid does not). */
+const placesOf = (page: Page, selector: string) =>
+  page.evaluate(
+    (wanted) =>
+      [...document.querySelectorAll<HTMLElement>(wanted)]
+        .map((el) => {
+          const box = el.getBoundingClientRect();
+          const grid = (
+            el.parentElement as HTMLElement
+          ).getBoundingClientRect();
+          return {
+            cell: `${el.style.gridRow}/${el.style.gridColumn}`,
+            x: Math.round(box.x - grid.x),
+            y: Math.round(box.y - grid.y),
+          };
+        })
+        .sort((a, b) => a.cell.localeCompare(b.cell)),
+    selector
+  );
+
+/** Legs 14 and 15: a section on its way, and one that didn't load. */
+async function waiting(kit: Kit, stage: Stage): Promise<void> {
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Animation.enable");
+  const started: { id: string; name: string }[] = [];
+  cdp.on("Animation.animationStarted", ({ animation }) => {
+    started.push({ id: animation.id, name: animation.name });
+  });
+  const spec = { name: "Waiting canvas" };
+  await page.goto(canvasUrl(stage, ["src/Slow.stories.js"], spec), {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForSelector(".cawco-section-status", { state: "attached" });
+  const seen = await page.evaluate(() => ({
+    band:
+      document
+        .getElementById("cawco-chrome")
+        ?.shadowRoot?.querySelector(".band")?.textContent ?? "",
+    lines:
+      document
+        .getElementById("cawco-chrome")
+        ?.shadowRoot?.querySelectorAll(".band > div:not(.name, .crumb, .tools)")
+        .length ?? -1,
+    page: `${document.body.innerText}\n${document.getElementById("cawco-chrome")?.shadowRoot?.textContent ?? ""}`,
+    title: document.querySelector(".cawco-section-title")?.textContent,
+    file: document.querySelector(".cawco-section-file")?.textContent,
+    status: document.querySelector(".cawco-section-status")?.textContent,
+    standIns: document.querySelectorAll(".cawco-stand-in").length,
+    frames: document.querySelectorAll(".cawco-world .cawco-frame").length,
+  }));
+  const [title, titleWant, file, fileWant] = await Promise.all([
+    ownStyle(page, ".cawco-section-title"),
+    tokenStyle(page, "--type-title", "--ink-strong"),
+    ownStyle(page, ".cawco-section-file"),
+    tokenStyle(page, "--type-meta", "--ink-muted"),
+  ]);
+  const same = (
+    own: Awaited<ReturnType<typeof ownStyle>>,
+    want: Awaited<ReturnType<typeof tokenStyle>>
+  ) =>
+    own.size === want.size &&
+    own.weight === want.weight &&
+    own.family === want.family &&
+    own.color === want.color &&
+    own.decoration === "none" &&
+    own.tag !== "A";
+  kit.check(
+    "14a: alone (not framed), the band names the canvas once and draws no line under it, nothing else naming it; the section is named in words in the title role over its file in meta ink, never link-styled, and no text holds a route",
+    seen.band.includes(spec.name) &&
+      seen.lines === 0 &&
+      seen.page.split(spec.name).length - 1 === 1 &&
+      seen.title === "Late badge" &&
+      seen.file === "src/Slow.stories.js" &&
+      same(title, titleWant) &&
+      same(file, fileWant) &&
+      !seen.page.includes("/@cawco/"),
+    `band ${JSON.stringify(seen.band)}; head ${JSON.stringify(seen.title)} ${JSON.stringify(title)} (title role ${JSON.stringify(titleWant)}) over ${JSON.stringify(seen.file)} ${JSON.stringify(file)} (meta ${JSON.stringify(fileWant)})`
+  );
+
+  // The wait's grace and fade, as the page's tokens resolve them.
+  const ms = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.transitionDuration = "var(--dur-wait-grace), var(--dur-fade)";
+    document.body.append(probe);
+    const [grace, fade] = getComputedStyle(probe)
+      .transitionDuration.split(",")
+      .map((one) => Number.parseFloat(one) * 1000);
+    probe.remove();
+    return { grace: grace ?? 0, fade: fade ?? 0 };
+  });
+  const timings = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((one) => (one as CSSAnimation).animationName === "cawco-wait")
+      .map((one) => {
+        const timing = one.effect?.getTiming();
+        return {
+          on: ((one.effect as KeyframeEffect | null)?.target as Element | null)
+            ?.className,
+          delay: Number(timing?.delay),
+          duration: Number(timing?.duration),
+          start: one.startTime,
+        };
+      })
+  );
+  const ids = started
+    .filter((one) => one.name === "cawco-wait")
+    .map((one) => one.id);
+  await cdp.send("Animation.setPaused", { animations: ids, paused: true });
+  const opacityAt = async (at: number) => {
+    await cdp.send("Animation.seekAnimations", {
+      animations: ids,
+      currentTime: at,
+    });
+    return page.evaluate(() =>
+      [...document.querySelectorAll(".cawco-waiting")].map((el) =>
+        Number(getComputedStyle(el).opacity)
+      )
+    );
+  };
+  const fade = Math.max(...timings.map((one) => one.duration));
+  const early = await opacityAt(ms.grace - 50);
+  const past = await opacityAt(ms.grace + fade + 20);
+  await cdp.send("Animation.setPaused", { animations: ids, paused: false });
+  kit.check(
+    "14b: one status line, the column's head and a skeleton per story stand from the first, on one clock delayed by --dur-wait-grace: transparent just before it, opaque past its fade",
+    seen.status === "Drawing 2 stories" &&
+      seen.standIns === 2 &&
+      seen.frames === 0 &&
+      timings.length === 4 &&
+      timings.every(
+        (one) =>
+          one.delay === ms.grace &&
+          one.duration === timings[0]?.duration &&
+          one.start === timings[0]?.start
+      ) &&
+      ids.length === 4 &&
+      early.length === 4 &&
+      early.every((one) => one === 0) &&
+      past.every((one) => one === 1),
+    `grace ${ms.grace} ms, fade ${ms.fade} ms; animations ${JSON.stringify(timings)}; opacity at ${ms.grace - 50} ms ${JSON.stringify(early)}, at ${ms.grace + fade + 20} ms ${JSON.stringify(past)}; status ${JSON.stringify(seen.status)}`
+  );
+
+  const stood = await placesOf(page, ".cawco-stand-in");
+  await page.waitForFunction(
+    () => document.querySelectorAll(".cawco-world .cawco-frame").length >= 2,
+    null,
+    { timeout: 20_000 }
+  );
+  const landed = await placesOf(
+    page,
+    '.cawco-world .cawco-frame[data-cawco-interaction="rest"]'
+  );
+  const left = await page.evaluate(
+    () =>
+      document.querySelectorAll(".cawco-stand-in, .cawco-section-status").length
+  );
+  kit.check(
+    "14c: the frames land in their skeletons' cells, the first row on its skeleton's corner (the rows under it move by the frames' own heights), and the skeletons go",
+    landed.length === 2 &&
+      landed.every(
+        (one, at) =>
+          one.cell === stood[at]?.cell &&
+          Math.abs(one.x - (stood[at]?.x ?? -99)) <= 1
+      ) &&
+      Math.abs((landed[0]?.y ?? 0) - (stood[0]?.y ?? -99)) <= 1 &&
+      left === 0,
+    `skeletons at ${JSON.stringify(stood)}; frames at ${JSON.stringify(landed)}; ${left} stand-ins left`
+  );
+  await page.close();
+
+  const broken = await kit.page("desk", { init: [BRIDGE] });
+  await broken.goto(
+    canvasUrl(stage, ["src/Broken.stories.js"], {
+      name: "Broken canvas",
+    })
+  );
+  await broken.waitForSelector(".cawco-section-failed", { timeout: 20_000 });
+  const before = await broken.evaluate(() => ({
+    title: document.querySelector(".cawco-section-title")?.textContent,
+    line: document.querySelector(".cawco-section-failed-line")?.textContent,
+    summary: document.querySelector(".cawco-section-failed summary")
+      ?.textContent,
+    open: !!document.querySelector<HTMLDetailsElement>(
+      ".cawco-section-failed details"
+    )?.open,
+    left: document.querySelectorAll(".cawco-stand-in, .cawco-section-status")
+      .length,
+    role: document.querySelector(".cawco-section-failed")?.getAttribute("role"),
+  }));
+  await broken.locator(".cawco-section-failed summary").click();
+  // The details' toggle event is a task after the press: its words follow it.
+  await broken
+    .waitForFunction(
+      () =>
+        document.querySelector(".cawco-section-failed summary")?.textContent ===
+        "Hide details",
+      null,
+      { timeout: 2000 }
+    )
+    .catch(() => undefined);
+  const details = await broken.evaluate(() => {
+    const pre = document.querySelector(".cawco-section-failed pre");
+    const summary = document.querySelector(".cawco-section-failed summary");
+    return {
+      text: pre?.textContent ?? "",
+      height: pre?.getBoundingClientRect().height ?? 0,
+      summary: summary?.textContent ?? "",
+      marker: summary ? getComputedStyle(summary).listStyleType : "",
+    };
+  });
+  const report = await broken
+    .waitForFunction(
+      () =>
+        (
+          window as unknown as {
+            __cawcoCanvas?: { report: RenderReport | null };
+          }
+        ).__cawcoCanvas?.report?.page.errors.length,
+      null,
+      { timeout: 10_000 }
+    )
+    .then(() =>
+      broken.evaluate(
+        () =>
+          (window as unknown as { __cawcoCanvas: { report: RenderReport } })
+            .__cawcoCanvas.report.page.errors
+      )
+    )
+    .catch(() => []);
+  kit.check(
+    "15: a section that didn't load says so in its place, named by its component, its error and place under Show details, the report holding the page error, no skeleton left",
+    before.title === "Badge" &&
+      before.line === "Badge didn't load, so none of its stories are drawn." &&
+      before.summary === "Show details" &&
+      !before.open &&
+      before.role === "alert" &&
+      before.left === 0 &&
+      details.height > 0 &&
+      details.summary === "Hide details" &&
+      details.marker === "none" &&
+      details.text.includes("The states file's helper broke as it loaded") &&
+      details.text.includes("src/broken.js:2:") &&
+      report.some((one) =>
+        one.message.includes("The states file's helper broke as it loaded")
+      ),
+    `before ${JSON.stringify(before)}; details ${JSON.stringify(details)}; report's page errors ${JSON.stringify(report)}`
   );
   await broken.close();
 }
@@ -800,7 +1158,6 @@ async function react(kit: Kit, stage: Stage): Promise<void> {
   await page.goto(
     canvasUrl(stage, ["src/Button.stories.jsx", "src/Toggle.stories.jsx"], {
       name: "React kit",
-      about: "The React button and toggle, and the toggle's move",
     })
   );
   const report = await reportOn(page, 2500);
@@ -848,6 +1205,65 @@ async function react(kit: Kit, stage: Stage): Promise<void> {
   await page.close();
 }
 
+/** Legs 1, 2 and 4 on Vue and Solid: the same kit, each adapter's `update` run on its own reactive props. */
+async function adapterLegs(
+  kit: Kit,
+  stage: Stage,
+  name: "Vue" | "Solid",
+  files: { button: string; toggle: string }
+): Promise<void> {
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  const errors = errorsOf(page);
+  await page.goto(
+    canvasUrl(stage, [files.button, files.toggle], {
+      name: `${name} kit`,
+    })
+  );
+  const report = await reportOn(page, 2500);
+  const all = framesOf(report);
+  const button = framesOf(report, files.button)
+    .map((one) => one.interaction)
+    .sort()
+    .join(",");
+  const hover = framesOf(report, files.button).find(
+    (one) => one.interaction === "hover"
+  );
+  kit.check(
+    `1/2 (${name}): every story drawn with its chain; Button reaches hover and focus and no pressed, its hover delta said`,
+    all.length > 0 &&
+      all.every((one) => one.state === "drawn" && one.parts.length > 0) &&
+      button === "focus,hover,rest" &&
+      !!hover?.delta?.changed.some((one) => one.changed["background-color"]),
+    `${said(all)}; Button columns ${button}`
+  );
+  const move = report.sections.find((one) => one.file === files.toggle)
+    ?.moves[0];
+  kit.check(
+    `4 (${name}): the toggle's move updates the live instance in place and lists its CSS transitions, curve and all`,
+    move?.from === "Off" &&
+      !move.error &&
+      !!move.animations.some(
+        (one) =>
+          one.property === "background-color" &&
+          one.duration === 210 &&
+          one.easing === "ease-out"
+      ) &&
+      !!move.animations.some(
+        (one) =>
+          one.property === "translate" &&
+          one.duration === 230 &&
+          one.easing === "ease-in-out"
+      ),
+    JSON.stringify(move)
+  );
+  kit.check(
+    `12 (${name}): no console errors on the canvas`,
+    errors.length === 0,
+    errors.join(" | ") || "none"
+  );
+  await page.close();
+}
+
 /** Leg 13: the daemon draws the canvas with no panel open. */
 async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
   const port = Number(new URL(stage.base).port);
@@ -865,18 +1281,13 @@ async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
       10_000
     );
     const started = performance.now();
-    // Inside a workspace the boundary already holds the browser, which has no namespaces of its own to make.
-    const rendered = await renderCanvas(
-      socket,
-      port,
-      {
-        files: ["src/Button.stories.js", "src/Pairing.stories.js"],
-        spec: { name: "Kit", about: "The button and the pairing card" },
-        png: true,
-        state: { story: "Primary", interaction: "hover" },
-      },
-      !process.env.CAWCO_WORKSPACE
-    );
+    // Its sandbox follows the rule (agent capabilities.ts `chromiumSandboxed`): off beneath a workspace's boundary.
+    const rendered = await renderCanvas(socket, port, {
+      files: ["src/Button.stories.js", "src/Pairing.stories.js"],
+      spec: { name: "Kit" },
+      png: true,
+      state: { story: "Primary", interaction: "hover" },
+    });
     const frames = framesOf(rendered.report);
     const move = rendered.report.sections.find(
       (one) => one.file === "src/Pairing.stories.js"
@@ -896,6 +1307,61 @@ async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
   }
 }
 
+/** Leg 17: the stage's sweep ends on a story with an `infinite` animation, its hover probed. */
+async function endless(kit: Kit, stage: Stage): Promise<void> {
+  const port = Number(new URL(stage.base).port);
+  const started = performance.now();
+  const rendered = await renderCanvas("host", port, {
+    files: ["src/Breath.stories.js"],
+    spec: { name: "Breath" },
+  }).catch((error: Error) => error);
+  const ms = Math.round(performance.now() - started);
+  const hover =
+    rendered instanceof Error
+      ? undefined
+      : framesOf(rendered.report).find((one) => one.interaction === "hover");
+  const changed = hover?.delta?.changed ?? [];
+  kit.check(
+    "17: the stage's sweep ends on a story whose breath loops forever, within 30 s, and its hover frame's delta is the hover's background alone, nothing from the breath",
+    ms < 30_000 &&
+      hover?.state === "drawn" &&
+      changed.length === 1 &&
+      !!changed[0]?.selector.startsWith("span.breath") &&
+      Object.keys(changed[0]?.changed ?? {}).join() === "background-color" &&
+      (hover.delta?.animations ?? []).every(
+        (one) => !one.property.includes("breath")
+      ),
+    rendered instanceof Error
+      ? `${ms} ms: ${rendered.message.split("\n")[0]}`
+      : `${ms} ms; hover ${JSON.stringify({ state: hover?.state, delta: hover?.delta })}`
+  );
+}
+
+/** Leg 16: a size container with no width of its own fails at the frame's floor, in words; with a viewport it draws. */
+async function floor(kit: Kit, stage: Stage): Promise<void> {
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  await page.goto(
+    canvasUrl(stage, ["src/Approval.stories.js"], { name: "Approval" })
+  );
+  const report = await reportOn(page);
+  const frame = (story: string) =>
+    framesOf(report).find(
+      (one) => one.story === story && one.interaction === "rest"
+    );
+  const unsized = frame("Unsized");
+  const phone = frame("Phone");
+  kit.check(
+    "16: a size container with no width of its own is failed at the frame's floor, said in words; with a phone viewport it is drawn",
+    unsized?.state === "failed" &&
+      unsized.error?.message ===
+        "drawn 24px wide: the story has no width of its own; give it a viewport or a width" &&
+      phone?.state === "drawn" &&
+      phone.box.w === 390,
+    `Unsized ${JSON.stringify({ state: unsized?.state, w: unsized?.box.w, error: unsized?.error })}; Phone ${JSON.stringify({ state: phone?.state, w: phone?.box.w })}`
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "component-canvas",
   run: async (kit) => {
@@ -906,7 +1372,10 @@ const spec: Spec = {
       await views(kit, svelte);
       await lazy(kit, svelte);
       await kept(kit, svelte);
+      await waiting(kit, svelte);
+      await floor(kit, svelte);
       await daemonRender(kit, svelte);
+      await endless(kit, svelte);
     } finally {
       svelte.stop();
     }
@@ -915,6 +1384,24 @@ const spec: Spec = {
       await react(kit, reactStage);
     } finally {
       reactStage.stop();
+    }
+    const vueStage = await stageOf("vue", host);
+    try {
+      await adapterLegs(kit, vueStage, "Vue", {
+        button: "src/Button.stories.js",
+        toggle: "src/Toggle.stories.js",
+      });
+    } finally {
+      vueStage.stop();
+    }
+    const solidStage = await stageOf("solid", host);
+    try {
+      await adapterLegs(kit, solidStage, "Solid", {
+        button: "src/Button.stories.jsx",
+        toggle: "src/Toggle.stories.jsx",
+      });
+    } finally {
+      solidStage.stop();
     }
   },
 };

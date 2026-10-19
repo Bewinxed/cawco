@@ -415,14 +415,68 @@
 </span>
 
 <style>
-  /* residual: foreign-dom — every other child of the box rises over the
-     overlays, the trailing control a host renders (`trail`) included. The
-     fold stands behind at z-index 1 and the hit is not positioned (the box
-     is the containing block of its area): their own classes say so. At
-     the weight `> *` had, so a host's rule on its trailing control still
-     meets it as before. */
-  [data-slot="ff-tab"]
-    > :global(:where(:not([data-slot="fold"], [data-slot="hit"]))) {
+  /* How chosen a folder tab is (`pick`), typed so a choice interpolates the
+     one number and everything drawn from it follows on its clock. Set on
+     the tab and handed down only along the path to the three that read it
+     (the sheet, the rim, the strong ink): inherited by every element under
+     the tab, each frame of a choice restyled all of them, ~50 a tab. */
+  @property --pick {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 0;
+  }
+  .fold,
+  .sheet,
+  .rim,
+  .hit,
+  .label,
+  .strong {
+    --pick: inherit;
+  }
+  /* The measured box: the hit and whatever trails it. The overlays are
+     aimed at this, so a trailing control sits inside the segment. */
+  /* The tab box makes no stacking context of its own: its contents rise
+     above the overlays (the sheet is z-index 2, a segmented list's hover
+     ghost 1), while anything the box paints behind them stays under both.
+     A folder tab, or the box a host wraps round it, is one stack of its
+     own instead, at its rank (TabsList). */
+  .ff-tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    block-size: var(--item);
+    border-radius: var(--shape);
+    color: var(--ink-muted);
+
+    /* Only a tab with something after its hit carries end padding. */
+    &:not(:has(.hit:last-child)) {
+      padding-inline-end: calc(var(--px) - 6px);
+    }
+    /* Chosen, or under the list's hover ghost (the kit highlight marks
+       the row it stands under). A tap leaves no ghost behind to ink. */
+    &.selected {
+      color: var(--ink-strong);
+    }
+    @media (hover: hover) {
+      &[data-ghosted] {
+        color: var(--ink-strong);
+      }
+    }
+
+    /* The press tints the whole segment (trailing controls included), not
+       the label's hit alone. A press on a trailing control leaves it be. */
+    &:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
+      --press: var(--surface-pressed);
+      background-color: var(--press);
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: color var(--dur-ghost) var(--ease-out);
+    }
+  }
+  .ff-tab > :global(*) {
     position: relative;
     z-index: 3;
   }

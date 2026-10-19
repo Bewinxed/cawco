@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/cawco/MessageBody.svelte
+apps/dashboard/src/lib/cawco/NeedsCaw.svelte
+apps/dashboard/src/lib/cawco/OlderRows.svelte
+apps/dashboard/src/lib/cawco/OriginText.svelte
+apps/dashboard/src/lib/cawco/PairingScreen.svelte
+apps/dashboard/src/lib/cawco/PeekPane.svelte
+apps/dashboard/src/lib/cawco/RuleActivity.svelte
+apps/dashboard/src/lib/cawco/RuleTester.svelte
+
+# apps/dashboard/src/lib/cawco/MessageBody.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/NeedsCaw.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/OlderRows.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/OriginText.svelte: after-M: a new Tailwind class
+# apps/dashboard/src/lib/cawco/PairingScreen.svelte: relic: literal ×7; relic: style-var ×7
+# apps/dashboard/src/lib/cawco/PeekPane.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/RuleActivity.svelte: relic: literal ×9; relic: style-var ×10
+# apps/dashboard/src/lib/cawco/RuleTester.svelte: relic: literal ×2; relic: style-var ×2

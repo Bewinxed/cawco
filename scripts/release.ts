@@ -24,7 +24,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { freemem, homedir } from "node:os";
+import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import {
@@ -44,6 +44,7 @@ import {
   signal as signalPid,
 } from "../packages/core/src/signal";
 import { PINNED_BUN, TARGETS } from "./build-binary";
+import { heavySlot } from "./lib/heavy-run";
 import { publishRelease } from "./publish-release";
 import { signingPem, takeSigningKey, underSigningEnv } from "./release-signing";
 
@@ -260,7 +261,11 @@ async function run(
     stdout: capture ? "pipe" : "inherit",
     stderr: "inherit",
     detached: true,
-    ...(env ? { env: { ...process.env, ...env } } : {}),
+    // The live environment, always: Bun hands a child the one this process
+    // started with otherwise ("Defaults to process.env as it was when the
+    // current Bun process launched", bun.com/reference/bun/Spawn/SpawnOptions/env),
+    // and the build's heavy-run admission (`build`) is set in it since.
+    env: { ...process.env, ...env },
   });
   running.add(child);
   const group = { pid: child.pid, started: (await startedOf(child.pid)) ?? "" };
@@ -993,12 +998,35 @@ const versionAndNotes = async (
   };
 };
 
-/** One commit, built, signed and (unless a newer one is queued) promoted. */
+/**
+ * The memory one build reaches, in GiB: its heavy-run admission's peak
+ * (core heavy-run.ts), taken for the whole build, its proofs and compiles
+ * included, each of which takes none of its own beneath it. From the
+ * journal, obelisk, 2026-10-19: "cawco-nightly-7c34d9be6.service: Consumed
+ * 15min 31.083s CPU time over 8min 33.717s wall clock time, 17.2G memory
+ * peak", and 11.8G for the next one, which failed at stage 2.
+ */
+const RELEASE_PEAK_GIB = 18;
+
+/**
+ * One commit, built, signed and (unless a newer one is queued) promoted, as
+ * one of the machine's heavy runs: it starts once the machine admits its
+ * peak ({@link RELEASE_PEAK_GIB}) beside the probes and gates already
+ * running, waiting in the heavy-run queue's words until then, and holds that
+ * admission until it ends.
+ */
 const build = async (current: Request): Promise<void> => {
-  const building = performance.now();
-  if (freemem() < 4 * 1024 ** 3) {
-    throw new Error("Release build refused: less than 4 GiB available memory");
+  const heavy = await heavySlot({ peakGib: RELEASE_PEAK_GIB });
+  try {
+    await buildAdmitted(current);
+  } finally {
+    heavy.release();
   }
+};
+
+/** {@link build} under its admission. */
+const buildAdmitted = async (current: Request): Promise<void> => {
+  const building = performance.now();
   // No build is released unproven: without podman the container proofs cannot run.
   if (!Bun.which("podman")) {
     throw new Error(
@@ -1133,11 +1161,6 @@ const build = async (current: Request): Promise<void> => {
           `${mac}:${macDir}/`,
         ]);
         for (const target of TARGETS) {
-          if (freemem() < 4 * 1024 ** 3) {
-            throw new Error(
-              "Release build refused: less than 4 GiB available memory"
-            );
-          }
           const dir = join(staging, target);
           await mkdir(dir, { recursive: true });
           const binary = join(dir, "cawco");
@@ -1262,6 +1285,20 @@ const build = async (current: Request): Promise<void> => {
       const publishing = performance.now();
       await publishRelease(published, manifest);
       logStep("publish", publishing);
+      // Published: the proof cache keeps this tree's stage 2 builds alone, and
+      // its image store sheds its dangling images (proof-cache-prune.sh).
+      await run(
+        [
+          "bash",
+          "scripts/binary/proof-cache-prune.sh",
+          await run(
+            ["git", "rev-parse", `${current.commit}^{tree}`],
+            checkout,
+            true
+          ),
+        ],
+        checkout
+      );
     }
     logStep(`build of ${current.commit.slice(0, 12)}, in all`, building);
   } catch (error) {

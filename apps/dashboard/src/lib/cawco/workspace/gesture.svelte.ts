@@ -194,7 +194,9 @@ export function createSwipe(
       return [];
     }
     const found: Pane[] = [];
-    for (const el of root.querySelectorAll<HTMLElement>("[data-pane]")) {
+    for (const el of root.querySelectorAll<HTMLElement>(
+      '[data-slot="pane"][data-pane]'
+    )) {
       const delta = Number(el.dataset.delta);
       if (Math.abs(delta) <= 1) {
         found.push({ el, delta });
@@ -460,7 +462,7 @@ export function createSwipe(
     stopSettle();
     clear();
     const out = root.querySelector<HTMLElement>(
-      `:scope > [data-pane="${CSS.escape(from)}"]`
+      `:scope > [data-slot="pane"][data-pane="${CSS.escape(from)}"]`
     );
     panes = gather().filter((pane) => pane.delta !== -dir);
     if (out) {

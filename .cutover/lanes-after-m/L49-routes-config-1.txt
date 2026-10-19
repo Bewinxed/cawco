@@ -1,0 +1,15 @@
+apps/dashboard/src/routes/(app)/config/+layout.svelte
+apps/dashboard/src/routes/(app)/config/browsers/+page.svelte
+apps/dashboard/src/routes/(app)/config/connections/+page.svelte
+apps/dashboard/src/routes/(app)/config/delegate-types/+page.svelte
+apps/dashboard/src/routes/(app)/config/devices/+page.svelte
+apps/dashboard/src/routes/(app)/config/memory/+page.svelte
+apps/dashboard/src/routes/(app)/config/models/+page.svelte
+
+# apps/dashboard/src/routes/(app)/config/+layout.svelte: relic: literal ×1
+# apps/dashboard/src/routes/(app)/config/browsers/+page.svelte: after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk
+# apps/dashboard/src/routes/(app)/config/connections/+page.svelte: after-M: markup naming a scoped class; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×4; relic: style-var ×5; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×13; lint: shadcn/no-restyle ×7
+# apps/dashboard/src/routes/(app)/config/delegate-types/+page.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×2
+# apps/dashboard/src/routes/(app)/config/devices/+page.svelte: relic: literal ×8; relic: style-var ×11
+# apps/dashboard/src/routes/(app)/config/memory/+page.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; lint: shadcn/no-restyle ×1; lint: shadcn/no-unknown-classes ×1
+# apps/dashboard/src/routes/(app)/config/models/+page.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×10; relic: style-var ×10; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)

@@ -233,6 +233,20 @@ public extension HubConnection {
         return parts.url.map { PreviewRoute(origin: $0, byHost: false) }
     }
 
+    /// Where session `instanceId`'s pages are served, asked of the hub
+    /// (`POST /api/instances/:id/preview-address`, PageFrame.svelte): a
+    /// decision page opened in its tab loads from there.
+    func previewAddress(_ instanceId: String) async throws -> PreviewRoute {
+        guard let client else { throw TaskRefusal(message: "No hub is connected.") }
+        let output = try await client.postApiInstancesByIdPreviewAddress(path: .init(id: instanceId))
+        guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+        let address = try answer.body.json
+        guard let route = previewRoute(port: address.port, origin: address.origin) else {
+            throw TaskRefusal(message: Words.Decisions.noAddress)
+        }
+        return route
+    }
+
     /// What a web view loads to show `place`, a page on session `instanceId`'s
     /// preview origin. Port mode: `place` itself. Host mode: every preview
     /// name is locked to the hub's pass (hub preview-access.ts), and each web

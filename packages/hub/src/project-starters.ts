@@ -60,6 +60,7 @@ import { designShaped } from "./design-offers";
 import { jevAccess } from "./jev";
 import { JevFailed, jevStarters, startersOff } from "./jev-placement";
 import { projectDesign } from "./landed";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { AGENTS_FILE, fileOr } from "./memory";
 import { KNOWLEDGE_DIR } from "./memory-facts";
 import { FolderRefusal, listFolder, refused } from "./project-folder";
@@ -105,6 +106,8 @@ export interface ProjectStartersDeps {
   /** Every open dashboard hears a project's new set. */
   broadcast: (frame: StartersChangedFrame) => void;
   db: DbShape;
+  /** The hub's lifetime: each project's quiet runs on it. */
+  lifetime: HubLifetimeShape;
   online: (machineId: string) => boolean;
   run: (
     machineId: string,
@@ -133,7 +136,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
   /** A project's ask waiting out its quiet, and what asked. */
   const waiting = new Map<
     string,
-    { timer: ReturnType<typeof setTimeout>; triggers: Set<StartersTrigger> }
+    { timer: HubTimer; triggers: Set<StartersTrigger> }
   >();
   /** When each project's set was last asked of Jev, or found unchanged. */
   const asked = new Map<string, number>();
@@ -387,18 +390,15 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     const held = waiting.get(projectId);
     const triggers = held?.triggers ?? new Set<StartersTrigger>();
     triggers.add(trigger);
-    if (held) {
-      clearTimeout(held.timer);
-    }
+    deps.lifetime.cancel(held?.timer);
     const now = Date.now();
     const last =
       asked.get(projectId) ??
       db.starters.set(projectId, "board")?.generatedAt.getTime() ??
       0;
     const at = Math.max(now + QUIET_MS, last + GAP_MS);
-    // Not on the hub's lifetime: a timer per project, dropped at the next
-    // ask, as design-offers.ts holds its look.
-    const timer = setTimeout(() => {
+    // A timer per project, dropped at the next ask.
+    const timer = deps.lifetime.after(at - now, () => {
       waiting.delete(projectId);
       if (writing.has(projectId)) {
         touched(projectId, trigger);
@@ -412,7 +412,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
           )
         )
         .finally(() => writing.delete(projectId));
-    }, at - now);
+    });
     waiting.set(projectId, { timer, triggers });
   };
 

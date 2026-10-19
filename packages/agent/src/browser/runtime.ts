@@ -49,8 +49,10 @@ export const runtimeInstallCommand = (): string =>
 
 const UNIX = "unix://";
 
-/** The socket the current Docker context names, when one other than `default` is set. */
-const contextSocket = async (): Promise<string | undefined> => {
+/** The endpoint the current Docker context names, when one other than `default` is set: its name and host. */
+const contextEndpoint = async (): Promise<
+  { name: string; host: string } | undefined
+> => {
   const configDir = process.env.DOCKER_CONFIG ?? join(homedir(), ".docker");
   let name = process.env.DOCKER_CONTEXT;
   if (!name) {
@@ -73,14 +75,15 @@ const contextSocket = async (): Promise<string | undefined> => {
     )
     .catch(() => undefined);
   const host = meta?.Endpoints?.docker?.Host;
-  if (host?.startsWith(UNIX)) {
-    return host.slice(UNIX.length);
-  }
-  if (host) {
-    console.info(
-      `[browser] Docker context ${name} names ${host}; only unix sockets are used`
-    );
-  }
+  return host ? { name, host } : undefined;
+};
+
+/** The unix socket the current Docker context names, when it names one. */
+const contextSocket = async (): Promise<string | undefined> => {
+  const context = await contextEndpoint();
+  return context?.host.startsWith(UNIX)
+    ? context.host.slice(UNIX.length)
+    : undefined;
 };
 
 /** Each runtime's usual socket, in the order they are tried. */
@@ -102,6 +105,26 @@ const usualSockets = (): string[] => {
       "machine",
       "podman.sock"
     ),
+  ];
+};
+
+/**
+ * Every socket {@link findRuntime} may dial on this machine: `DOCKER_HOST`'s
+ * unix path, the current Docker context's and each runtime's usual one
+ * (Colima's under {@link colimaHome}), wherever each lives. The boundary
+ * keeps every workspace from connecting to any of them (boundary.ts
+ * `containerSockets`): a command that reached one would run a container of
+ * its own beside a project's browser, or into it.
+ */
+export const runtimeSockets = async (): Promise<string[]> => {
+  const host = process.env.DOCKER_HOST;
+  const context = await contextSocket();
+  return [
+    ...new Set([
+      ...(host?.startsWith(UNIX) ? [host.slice(UNIX.length)] : []),
+      ...(context ? [context] : []),
+      ...usualSockets(),
+    ]),
   ];
 };
 
@@ -163,6 +186,12 @@ export const findRuntime = async (): Promise<Runtime | { missing: string }> => {
       `[browser] DOCKER_HOST ${host} did not answer (${"refused" in answer ? answer.refused : "no such socket"})`
     );
     return { missing: runtimeMissing() };
+  }
+  const named = await contextEndpoint();
+  if (named && !named.host.startsWith(UNIX)) {
+    console.info(
+      `[browser] Docker context ${named.name} names ${named.host}; only unix sockets are used`
+    );
   }
   const context = await contextSocket();
   const tried = new Set<string>();

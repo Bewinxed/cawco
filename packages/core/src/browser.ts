@@ -8,6 +8,8 @@
  * agent's ports, the daemon's {@link BrowserFrame} and the hub's commands.
  */
 
+import { CAWCO_ENV, readEnv } from "./index";
+
 /** Which browser: a project's, or the machine's for sessions outside any project. */
 export type BrowserKey = `project:${string}` | `machine:${string}`;
 
@@ -15,38 +17,67 @@ export type BrowserKey = `project:${string}` | `machine:${string}`;
 export type BrowserHostKind = "container" | "local";
 
 /**
- * The agent's ports for browsers, four per browser in this order: neko's
- * HTTP, Chromium's DevTools, the gate, and the media port (UDP and TCP, the
- * same number). HTTP, DevTools and the gate listen on 127.0.0.1 alone; media
- * on every address. The local host uses DevTools and the gate only.
+ * The agent's ports for browsers: the machine's one DevTools gate first
+ * ({@link BROWSER_GATE_PORT}), then three per browser started, in this
+ * order: neko's HTTP, Chromium's DevTools, and the media port (UDP and TCP,
+ * the same number). The gate, HTTP and DevTools listen on 127.0.0.1 alone;
+ * media on every address. The local host uses DevTools only. A browser
+ * takes its three when it first starts, not before.
  */
-export const BROWSER_PORTS = { first: 43_000, last: 43_079 } as const;
+export const BROWSER_PORTS = { first: 43_000, last: 43_060 } as const;
+
+/** The machine's DevTools gate: every session's browser tool, every browser, by the path's gate id. */
+export const BROWSER_GATE_PORT = BROWSER_PORTS.first;
+
+/**
+ * The port this machine's agent serves its DevTools gate on:
+ * `CAWCO_BROWSER_GATE_PORT`, else {@link BROWSER_GATE_PORT}. The agent's
+ * listener and every door it writes read it here, so a second agent on one
+ * host (a scratch fleet) runs its gate on a port of its own.
+ */
+export const browserGatePort = (): number => {
+  const named = readEnv(CAWCO_ENV.browserGatePort);
+  const port = named === undefined ? BROWSER_GATE_PORT : Number(named);
+  if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
+    throw new Error(
+      `${CAWCO_ENV.browserGatePort} must be a port number, not "${named}"`
+    );
+  }
+  return port;
+};
+
+/**
+ * The screen of a project's browser on both hosts, and the size of the view
+ * the person takes it over in: neko's desktop on the container host (its
+ * Chromium maximized on it, the browser's own UI in view); on the local
+ * host the headless virtual screen, the window, and the page the take-over
+ * shows, laid out at it (local-host.ts, cdp-takeover.ts).
+ */
+export const BROWSER_SCREEN = { width: 1280, height: 800 } as const;
 
 /** How many ports one browser takes from {@link BROWSER_PORTS}. */
-export const BROWSER_PORTS_EACH = 4;
+export const BROWSER_PORTS_EACH = 3;
 
 /** One browser's ports; `http` and `media` are the container host's alone. */
 export interface BrowserPorts {
   devtools: number;
-  gate: number;
   http?: number;
   media?: number;
 }
 
-/** The ports of the `slot`th browser of {@link BROWSER_PORTS}, from 0. */
+/** The ports of the `slot`th browser of {@link BROWSER_PORTS}, from 0: after the gate's. */
 export const browserPorts = (slot: number): Required<BrowserPorts> => {
-  const first = BROWSER_PORTS.first + slot * BROWSER_PORTS_EACH;
+  const first = BROWSER_GATE_PORT + 1 + slot * BROWSER_PORTS_EACH;
   return {
     http: first,
     devtools: first + 1,
-    gate: first + 2,
-    media: first + 3,
+    media: first + 2,
   };
 };
 
 /** How many browsers {@link BROWSER_PORTS} holds on one machine. */
 export const BROWSER_SLOTS =
-  (BROWSER_PORTS.last - BROWSER_PORTS.first + 1) / BROWSER_PORTS_EACH;
+  (BROWSER_PORTS.last - BROWSER_GATE_PORT) / BROWSER_PORTS_EACH;
 
 export type BrowserState =
   | "pulling"
@@ -107,6 +138,110 @@ export const BROWSER_STOP = "browser.stop";
 
 /** Hub → daemon: stop the browser of `key` and delete its profile (a forgotten project). */
 export const BROWSER_REMOVE = "browser.remove";
+
+/**
+ * Hub → daemon: the person takes over the browser of `key`, privately (the
+ * shield, agent `browser/shield.ts`): every agent connection cut and new
+ * ones refused, the asking workspace's page brought to the front, control
+ * given to the person. `workspaceId` is the asking session's workspace and
+ * `origin` the page it asked about, when a browser ask is taken; `viewer`
+ * is the person's neko session on the container host, once their view has
+ * one. Sent again (with the viewer, or after the daemon restarted) it keeps
+ * the take-over it holds and gives control to that viewer. Answers the
+ * {@link BrowserRow}.
+ */
+export const BROWSER_SHIELD = "browser.shield";
+export interface BrowserShieldArgs {
+  key: BrowserKey;
+  origin?: string;
+  requestId?: string;
+  viewer?: string;
+  workspaceId?: string;
+}
+
+/**
+ * Hub → daemon: the person hands the browser of `key` back: control taken
+ * from them, the front page loaded again by GET, the clipboard emptied,
+ * the gate open. Answers {@link BrowserHandback}.
+ */
+export const BROWSER_HANDBACK = "browser.handback";
+
+/**
+ * Hub → daemon: the machine's browsers as its records hold them now, whole
+ * (a {@link BrowserFrame}): what the hub reads as the machine registers, so
+ * its rows, take-overs included, are the machine's own and never a copy the
+ * hub kept while it was away.
+ */
+export const BROWSER_ROWS = "browser.rows";
+
+/** Hub → daemon: how many views of the browser of `key` are open now; with none for two minutes a take-over is handed back. */
+export const BROWSER_VIEWERS = "browser.viewers";
+export interface BrowserViewersArgs {
+  count: number;
+  key: BrowserKey;
+}
+
+/**
+ * Hub → daemon: a neko session of its own for one viewer of the browser of
+ * `key` (container host), woken first when it sleeps. The hub swaps it in
+ * for whatever credential the viewer's client sent, on every request and
+ * socket of that viewer (hub browser-routes.ts). Answers
+ * {@link BrowserViewerSession}; refused on the local host, which has no neko.
+ */
+export const BROWSER_VIEWER_TOKEN = "browser.viewerToken";
+export interface BrowserViewerSession {
+  /** neko's id for the session: the one `browser.shield`'s `viewer` gives control to. */
+  session: string;
+  token: string;
+}
+
+/**
+ * Hub → daemon: the machine's one browser listener, opened when it has none,
+ * answering only `token` from then on (core `RELAY_HEADER`, as a preview
+ * listener does). It serves {@link browserMount}`/api/*` (neko's REST and
+ * `/api/ws`, container host) and `/cdp` (the take-over view, local host).
+ * Answers `{ port }`.
+ */
+export const BROWSER_LISTEN = "browser.listen";
+export interface BrowserListenArgs {
+  token: string;
+}
+
+/** Where the machine's browser listener serves the browser of `key`. */
+export const browserMount = (key: BrowserKey): string =>
+  `/__cawco/browser/${encodeURIComponent(key)}`;
+
+/**
+ * What every agent's browser tool is told while the person holds the
+ * browser privately (agent shield.ts): the gate's refusal and close reason,
+ * and the line the project's other sessions are told (hub browsers.ts).
+ */
+export const SHIELD_WORDS =
+  "The person is using this browser privately; your browser tool answers again when they hand back.";
+
+/** How long a take-over stands with no view open before the daemon hands it back itself. */
+export const TAKEOVER_UNWATCHED_MS = 2 * 60_000;
+
+/** What a hand-back answers: the front page's origin, and nothing else of it. */
+export interface BrowserHandback {
+  key: BrowserKey;
+  /** The front page's origin as it was handed back; null when no page was in front. */
+  origin: string | null;
+  /** The browser ask the take-over answered, when it answered one. */
+  requestId?: string;
+}
+
+/**
+ * Daemon-originated: a take-over ended on the machine, whichever way: the
+ * person's Hand back, no view open for {@link TAKEOVER_UNWATCHED_MS}, or the
+ * browser stopped. Sent before the record's own frame, so the hub learns
+ * every end the same way and the ask's call answers with the page's origin.
+ */
+export interface BrowserHandedBackFrame extends BrowserHandback {
+  kind: "browser_handback";
+  machineId: string;
+  why: "person" | "unwatched" | "stopped";
+}
 
 /** Whether `value` is a {@link BrowserKey}. */
 export const isBrowserKey = (value: unknown): value is BrowserKey =>

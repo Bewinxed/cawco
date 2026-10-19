@@ -32,6 +32,8 @@ import { hubActor, STAGES_FILE, type Tasks } from "./tasks";
 
 export interface MergeDeps {
   readonly db: Pick<DbShape, "foldProject" | "listProjects">;
+  /** Says a project's folder was moved away: every machine checks its boundaries' access (server.ts `projectFolderMoved`). */
+  readonly folderMoved: () => void;
   /** Says a machine's places changed: its fleet config goes again (project-placements.ts). */
   readonly placesChanged: (machineId: string, projectId: string) => void;
   /** Tells every dashboard the projects changed. */
@@ -194,6 +196,7 @@ const fold = async (
   const moved = deps.db.foldProject(dup.id, keep.id, ids);
   if (await hasProjectFolder(dup.id)) {
     await trashProjectFolder(dup.id);
+    deps.folderMoved();
   }
   log(
     `${dup.name} (${dup.id}) folded into ${keep.name} (${keep.id}), one repository ${keep.remote}: ${ids.size} task(s), ${folder.others.length} other file(s), ${moved.places} place(s), ${moved.sessions} session(s), ${moved.workItems} work item(s), ${moved.threads} thread(s).`

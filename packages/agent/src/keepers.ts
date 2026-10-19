@@ -15,7 +15,11 @@ import {
   machineEndpoint,
 } from "@cawco/core/keepers";
 import type { SessiondProcInfo } from "@cawco/core/sessiond";
-import { ensureSessiond, SessiondClient } from "./sessiond-client";
+import {
+  ensureSessiond,
+  KEEPER_WELCOME_MS,
+  SessiondClient,
+} from "./sessiond-client";
 
 /** A dial that found no keeper there: a file left by one that is gone, or none at all. */
 const NOBODY_THERE = new Set(["ECONNREFUSED", "ENOENT"]);
@@ -102,6 +106,22 @@ export class KeeperPool {
     }
     await ensureSessiond(machine);
     return this.#client(await currentEndpoint(machine));
+  }
+
+  /**
+   * The connection to keeper `keeper` at its own endpoint while it answers
+   * there, current or not: an update's helper starts a build's keeper there
+   * before the machine's endpoint names it. None before it starts, or once
+   * it is gone.
+   */
+  async of(keeper: KeeperName): Promise<SessiondClient | undefined> {
+    const found = (await keeperEndpoints()).find(
+      (one) =>
+        one.keeper.kind === keeper.kind && one.keeper.version === keeper.version
+    );
+    return found
+      ? await this.#client(found.endpoint).catch(() => undefined)
+      : undefined;
   }
 
   /** Connections to every keeper there, the current one first; one that is gone is left out, and one that could not be reached is unknown ({@link notKnown}). */
@@ -326,40 +346,68 @@ export interface KeeperConnection {
   keeper: KeeperName;
 }
 
+/** One keeper there that could not be read, and why: what it holds is not known. */
+export interface UnansweredKeeper {
+  /** Whether the machine's endpoint names it. */
+  current: boolean;
+  endpoint: string;
+  keeper: KeeperName;
+  why: string;
+}
+
 /**
  * A fresh connection to every keeper there, the current one first, for one
- * reading; each is closed once `use` has finished. An endpoint nothing answers
- * on is a keeper that is gone, and is left out; one that is there and gives
- * no welcome in time, or ends before it, makes the reading unknown
- * ({@link notKnown}), never a keeper read as holding nothing.
+ * reading, each keeper's word its own; each connection is closed once `use`
+ * has finished. An endpoint nothing answers on is a keeper that is gone, and
+ * is left out. One that is there and gives no welcome within
+ * {@link KEEPER_WELCOME_MS}, ends before it, or refuses the dial for another
+ * reason is `unanswered`, with why: never a keeper read as holding nothing.
+ * For what decides each keeper by its own reading (the updater's tending of
+ * the retiring keepers); a reading that needs the whole machine is
+ * {@link withKeepers}.
  */
-export async function withKeepers<T>(
-  use: (keepers: KeeperConnection[]) => Promise<T>
+export async function withEachKeeper<T>(
+  use: (
+    answered: KeeperConnection[],
+    unanswered: UnansweredKeeper[]
+  ) => Promise<T>
 ): Promise<T> {
   const found = await keeperEndpoints();
-  const settled = await Promise.allSettled(
-    found.map(async (one) => ({
-      ...one,
-      read: await SessiondClient.connect(one.endpoint),
-    }))
+  const settled = await Promise.all(
+    found.map(async (one) => {
+      try {
+        return {
+          ...one,
+          read: await SessiondClient.connect(one.endpoint, KEEPER_WELCOME_MS),
+        };
+      } catch (error) {
+        return { ...one, refused: error };
+      }
+    })
   );
-  const keepers: KeeperConnection[] = [];
-  const unanswered: string[] = [];
-  for (const result of settled) {
-    if (result.status === "rejected") {
+  const answered: KeeperConnection[] = [];
+  const unanswered: UnansweredKeeper[] = [];
+  for (const { endpoint, keeper, current, ...result } of settled) {
+    const one = { endpoint, keeper, current };
+    if ("refused" in result) {
+      if (!nobodyThere(result.refused)) {
+        unanswered.push({ ...one, why: reasonOf(result.refused) });
+      }
       continue;
     }
-    const { read, ...one } = result.value;
+    const { read } = result;
     switch (read.kind) {
       case "answered":
-        keepers.push({ ...one, client: read.value });
+        answered.push({ ...one, client: read.value });
         break;
       case "unanswered":
-        unanswered.push(
-          read.reason === "timeout"
-            ? `${one.endpoint}: no welcome within ${read.after} ms`
-            : `${one.endpoint}: its connection ended before its welcome`
-        );
+        unanswered.push({
+          ...one,
+          why:
+            read.reason === "timeout"
+              ? `no welcome within ${read.after} ms`
+              : "its connection ended before its welcome",
+        });
         break;
       default: {
         const unhandled: never = read;
@@ -368,20 +416,33 @@ export async function withKeepers<T>(
     }
   }
   try {
-    const failed = settled.find(
-      (result): result is PromiseRejectedResult =>
-        result.status === "rejected" && !nobodyThere(result.reason)
-    );
-    if (failed) {
-      throw failed.reason;
-    }
-    if (unanswered.length > 0) {
-      throw notKnown("what the keepers hold", unanswered);
-    }
-    return await use(keepers);
+    return await use(answered, unanswered);
   } finally {
-    for (const { client } of keepers) {
+    for (const { client } of answered) {
       client.close();
     }
   }
+}
+
+/**
+ * A fresh connection to every keeper there, the current one first, for one
+ * reading of the whole machine ({@link withEachKeeper}); each is closed once
+ * `use` has finished. One keeper there that could not be read makes the
+ * reading unknown ({@link notKnown}), never a keeper read as holding nothing:
+ * for what could take or end a session on it, or must know every keeper
+ * (custody, a session's end on every keeper, an update's look at what the
+ * new agent can speak to).
+ */
+export function withKeepers<T>(
+  use: (keepers: KeeperConnection[]) => Promise<T>
+): Promise<T> {
+  return withEachKeeper((answered, unanswered) => {
+    if (unanswered.length > 0) {
+      throw notKnown(
+        "what the keepers hold",
+        unanswered.map(({ endpoint, why }) => `${endpoint}: ${why}`)
+      );
+    }
+    return use(answered);
+  });
 }

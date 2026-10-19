@@ -20,6 +20,18 @@
    * nothing. Where a page scrolls under the screen's foot (a transcript),
    * the fade would also stand over the composer's glass above it.
    *
+   * The top strip paints only above the safe area, where the status bar is,
+   * through a mask; at a desk (no inset) that is the 7px past the screen's
+   * edge, so it draws nothing over the bar's glass. It keeps its whole box
+   * and its colour, because that is what WebKit reads: "a horizontal
+   * candidate must cover at least 90 percent of the viewport width", and the
+   * direct read of its computed colour needs both border-box sides over
+   * 10px (exsesx.dev/blog/en/safari-26-invisible-tint-sampler). So a
+   * narrower strip drops out and the tint breaks. A mask, because WebKit
+   * hides it from no one: "`mask-image`, not `visibility`/`opacity`/
+   * `display` — the sampler rejects all three of those; it does not look at
+   * masks" (github.com/facebook/astryx/pull/5342).
+   *
    * Which colour each edge is is decided here and nowhere else, from what
    * stands on it:
    *   - the top is the bar (surface-raised), or the session tabs' shelf
@@ -192,5 +204,49 @@
   :global(:root[data-kit-sheet~="rail"]) {
     --edge-top-background: var(--sidebar);
     --edge-bottom-background: var(--sidebar);
+  }
+
+  /* The strips are fixed elements themselves, not a static element's
+     ::after: WebKit finds the colour to extend by hit-testing the middle of
+     each edge of the viewport (ignoring pointer-events) and walking up the
+     hit element's renderer lineage to the first fixed or sticky box, whose
+     own background it takes (LocalFrameView.cpp, fixedContainerEdges:
+     `midpointOnSide`, `findFixedContainer`). A pseudo-element hits as its
+     host, so a static host led the walk to <body> and <html>, found no fixed
+     box, and Safari fell back to the page's background (the body's, the
+     bottom edge): the status bar took the page's ground on the home and the
+     drawer's surface while it was open. */
+  .edge-top,
+  .edge-bottom {
+    position: fixed;
+    inset-inline: 0;
+    /* Over every layer, toasts' (sonner, 1000) included: the strip is the
+       colour of whatever stands on its edge, so it is never seen as itself. */
+    z-index: 1001;
+    pointer-events: none;
+    opacity: var(--edge-shown);
+  }
+  .edge-top {
+    top: -7px;
+    block-size: max(12px, env(safe-area-inset-top));
+    background-color: var(--edge-top-background);
+    /* Painted above the safe area alone: WebKit reads the box and its
+       colour; the screen gets none of it where there is no status bar. */
+    mask-image: linear-gradient(
+      to bottom,
+      #000 calc(7px + env(safe-area-inset-top)),
+      transparent 0
+    );
+    transition:
+      background-color var(--edge-top-fade) var(--ease-out),
+      opacity var(--edge-show-fade) var(--ease-out);
+  }
+  .edge-bottom {
+    bottom: -7px;
+    block-size: max(12px, env(safe-area-inset-bottom));
+    background-color: var(--edge-bottom-background);
+    transition:
+      background-color var(--edge-bottom-fade) var(--ease-out),
+      opacity var(--edge-show-fade) var(--ease-out);
   }
 </style>

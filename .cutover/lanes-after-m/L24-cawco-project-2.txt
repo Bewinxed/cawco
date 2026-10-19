@@ -1,0 +1,11 @@
+apps/dashboard/src/lib/cawco/project/FolderFiles.svelte
+apps/dashboard/src/lib/cawco/project/ProjectDetails.svelte
+apps/dashboard/src/lib/cawco/project/ProjectHead.svelte
+apps/dashboard/src/lib/cawco/project/StarterCards.svelte
+apps/dashboard/src/lib/cawco/project/ViewBar.svelte
+
+# apps/dashboard/src/lib/cawco/project/FolderFiles.svelte: relic: literal ×1; relic: style-var ×2
+# apps/dashboard/src/lib/cawco/project/ProjectDetails.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-var ×2; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s); lint: shadcn/no-restyle ×7; lint: shadcn/no-unknown-classes ×5
+# apps/dashboard/src/lib/cawco/project/ProjectHead.svelte: relic: literal ×1; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/project/StarterCards.svelte: relic: literal ×1
+# apps/dashboard/src/lib/cawco/project/ViewBar.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1

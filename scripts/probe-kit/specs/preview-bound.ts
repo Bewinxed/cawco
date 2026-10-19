@@ -40,7 +40,15 @@
  * 5. Back past the bound, the frame's document fetches none of the page's
  *    files again (Resource Timing, `transferSize` 0): each stands at its
  *    folder's key (core `versionAssets`) and comes from the cache, and so
- *    does the overlay, at its own key (core `keyOverlay`).
+ *    does the overlay, at its own key (core `keyOverlay`). A document the
+ *    page frames on its own origin (the heavy page frames itself, at
+ *    `./index.html?frame`) is no file of the page: every hop serves a
+ *    document `no-store` (core preview-proxy.ts:126, as it names the
+ *    overlay's key when served and a page artifact's carries its doc's
+ *    state), and a frame loaded again "asks the network for its document
+ *    alone" (preview-proxy.ts:338). It is noted, address and bytes, asked at
+ *    most once; the files it loads are the page's, each at its key and from
+ *    the cache.
  * 6. A file of the folder changed on disk, then the pane's Reload: the
  *    page's files stand at a new key, and the changed sheet is fetched
  *    with its new bytes.
@@ -327,14 +335,38 @@ const bornOf = (page: Page, origin: string): Promise<number | null> =>
     ?.evaluate(() => performance.timeOrigin)
     .catch(() => null) ?? Promise.resolve(null);
 
-/** What the frame's document loaded of its origin's files, by Resource Timing: at a key or not, from the cache (`transferSize` 0) or the network. */
+/**
+ * What the frame's document, and every document it frames on its own origin,
+ * loaded of the origin's files, by Resource Timing: at a key or not, from the
+ * cache (`transferSize` 0) or the network.
+ *
+ * A document is not one of the page's files. Every hop serves it `no-store`
+ * (core preview-proxy.ts:126, `keyOverlay`: it names the overlay's key as it
+ * is when served, and a page artifact's carries its doc's state), and "a
+ * frame loaded again (a reload, a tab back from parked) asks the network for
+ * its document alone" (preview-proxy.ts:338). So a document the page frames
+ * (an entry an `iframe` or `frame` started) is said apart in `documents`,
+ * with its address and bytes; its own files are the page's, read in `nested`.
+ */
 interface Fetched {
   cached: number;
+  /** Each framed document's address and bytes over the network. */
+  documents: { at: string; bytes: number }[];
   fetched: string[];
   fetchedBytes: number;
   keys: string[];
+  /** The files the framed documents loaded themselves (theirs, not the hub's), how many at a key and from the cache, and which not. */
+  nested: {
+    cached: number;
+    fetched: string[];
+    files: number;
+    unkeyed: string[];
+    versioned: number;
+  };
   overlayBytes: number;
   overlayKey: string;
+  /** Every load of the overlay, the framed documents' too: its key and its bytes over the network. */
+  overlays: { bytes: number; key: string }[];
   versioned: number;
 }
 
@@ -344,44 +376,97 @@ function fetchedFiles(page: Page, origin: string): Promise<Fetched> {
     return Promise.resolve({
       versioned: 0,
       cached: 0,
+      documents: [],
       fetched: ["no preview frame"],
       fetchedBytes: 0,
+      nested: { files: 0, versioned: 0, cached: 0, fetched: [], unkeyed: [] },
       overlayBytes: 0,
       overlayKey: "",
+      overlays: [],
       keys: [] as string[],
     });
   }
   return frame.evaluate(() => {
-    const own = (
-      performance.getEntriesByType("resource") as PerformanceResourceTiming[]
-    ).filter((entry) => entry.name.startsWith(location.origin));
-    const path = (entry: PerformanceResourceTiming) =>
-      new URL(entry.name).pathname;
-    // The hub's own: the overlay, its ping, the doc's socket and sends.
-    const files = own.filter(
-      (entry) =>
-        !path(entry).startsWith("/__cawco/") ||
-        path(entry).startsWith("/__cawco/v/")
-    );
-    const fetched = files.filter((entry) => entry.transferSize > 0);
-    const overlay = own.find((entry) => path(entry) === "/__cawco/overlay.js");
+    type Entry = PerformanceResourceTiming;
+    /** `win`'s own resource entries on this origin, then each same-origin frame's under it, marked nested. */
+    const entriesUnder = (
+      win: Window,
+      nested: boolean
+    ): { entry: Entry; nested: boolean }[] => {
+      const inner = [...win.document.querySelectorAll("iframe, frame")]
+        .map((el) => {
+          try {
+            const framed = (el as HTMLIFrameElement).contentWindow;
+            return framed?.location.origin === location.origin ? framed : null;
+          } catch {
+            return null;
+          }
+        })
+        .filter((framed): framed is Window => framed !== null);
+      return [
+        ...(win.performance.getEntriesByType("resource") as Entry[])
+          .filter((entry) => entry.name.startsWith(location.origin))
+          .map((entry) => ({ entry, nested })),
+        ...inner.flatMap((framed) => entriesUnder(framed, true)),
+      ];
+    };
+    const all = entriesUnder(window, false);
+    const path = (entry: Entry) => new URL(entry.name).pathname;
+    const isDocument = (entry: Entry) =>
+      entry.initiatorType === "iframe" || entry.initiatorType === "frame";
+    const isOverlay = (entry: Entry) => path(entry) === "/__cawco/overlay.js";
+    const keyed = (entry: Entry) => path(entry).startsWith("/__cawco/v/");
+    // A page's file: neither a document nor the hub's own (the overlay, its
+    // ping, the doc's socket and sends), but its files at their key.
+    const isFile = (entry: Entry) =>
+      !isDocument(entry) &&
+      (!path(entry).startsWith("/__cawco/") || keyed(entry));
+    const files = all.filter((one) => isFile(one.entry) && !one.nested);
+    const nestedFiles = all.filter((one) => isFile(one.entry) && one.nested);
+    const fetched = files.filter((one) => one.entry.transferSize > 0);
+    const overlays = all.filter((one) => isOverlay(one.entry));
+    const overlay = overlays.find((one) => !one.nested)?.entry;
+    const keyOf = (entry: Entry) =>
+      new URL(entry.name).searchParams.get("k") ?? "";
     return {
-      versioned: files.filter((entry) => path(entry).startsWith("/__cawco/v/"))
-        .length,
-      cached: files.filter((entry) => entry.transferSize === 0).length,
-      fetched: fetched.map((entry) => path(entry)),
-      fetchedBytes: fetched.reduce((sum, entry) => sum + entry.transferSize, 0),
+      versioned: files.filter((one) => keyed(one.entry)).length,
+      cached: files.filter((one) => one.entry.transferSize === 0).length,
+      documents: all
+        .filter((one) => isDocument(one.entry))
+        .map((one) => ({
+          at: `${path(one.entry)}${new URL(one.entry.name).search}`,
+          bytes: one.entry.transferSize,
+        })),
+      fetched: fetched.map((one) => path(one.entry)),
+      fetchedBytes: fetched.reduce(
+        (sum, one) => sum + one.entry.transferSize,
+        0
+      ),
+      nested: {
+        files: nestedFiles.length,
+        versioned: nestedFiles.filter((one) => keyed(one.entry)).length,
+        cached: nestedFiles.filter((one) => one.entry.transferSize === 0)
+          .length,
+        fetched: nestedFiles
+          .filter((one) => one.entry.transferSize > 0)
+          .map((one) => path(one.entry)),
+        unkeyed: nestedFiles
+          .filter((one) => !keyed(one.entry))
+          .map((one) => path(one.entry)),
+      },
       overlayBytes: overlay?.transferSize ?? 0,
       // Its address's `?k=<key>`: the overlay's key (core `keyOverlay`).
-      overlayKey: overlay
-        ? (new URL(overlay.name).searchParams.get("k") ?? "")
-        : "",
+      overlayKey: overlay ? keyOf(overlay) : "",
+      overlays: overlays.map((one) => ({
+        key: keyOf(one.entry),
+        bytes: one.entry.transferSize,
+      })),
       // `/__cawco/v/<key>/…`: its third segment.
       keys: [
         ...new Set(
           files
-            .filter((entry) => path(entry).startsWith("/__cawco/v/"))
-            .map((entry) => path(entry).split("/")[3] ?? "")
+            .filter((one) => keyed(one.entry))
+            .map((one) => path(one.entry).split("/")[3] ?? "")
         ),
       ],
     };
@@ -498,6 +583,8 @@ const run = async (kit: Kit) => {
   const heavyOne = await fleet.spawn("claude", "Heavy preview", fleet.repo);
   await fleet.api(`/api/instances/${heavyOne}/artifacts`, {
     kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     name: "heavy",
     dir: folder,
   });
@@ -506,6 +593,8 @@ const run = async (kit: Kit) => {
     const id = await fleet.spawn("claude", `Light ${name}`, fleet.repo);
     await fleet.api(`/api/instances/${id}/artifacts`, {
       kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
       name,
       html: pageOf(name),
     });
@@ -520,6 +609,8 @@ const run = async (kit: Kit) => {
   const fullOne = await fleet.spawn("claude", "Full page", fleet.repo);
   await fleet.api(`/api/instances/${fullOne}/artifacts`, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "full",
     html: fullPage(),
   });
@@ -528,6 +619,8 @@ const run = async (kit: Kit) => {
     const id = await fleet.spawn("claude", `Ticks ${name}`, fleet.repo);
     await fleet.api(`/api/instances/${id}/artifacts`, {
       kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
       name,
       html,
     });
@@ -653,13 +746,29 @@ const run = async (kit: Kit) => {
   await desk.waitForTimeout(LAZY_MS);
   const returned = await fetchedFiles(desk, previewOrigin);
   numbers.returned = returned;
+  const { documents, nested, overlays } = returned;
+  const fetchedDocuments = documents.filter((one) => one.bytes > 0);
+  const documentsOnce =
+    new Set(fetchedDocuments.map((one) => one.at)).size ===
+    fetchedDocuments.length;
+  kit.note(
+    `5: documents the page framed on the return (each asked of the network, as the pane's own: core preview-proxy.ts:126, :338): ${
+      documents.map((one) => `${one.at} ${one.bytes} bytes`).join(", ") ||
+      "none"
+    }`
+  );
   kit.check(
-    "5: back past the bound, none of the page's files nor the overlay is fetched again: each comes from the cache at its key",
+    "5: back past the bound, none of the page's files nor the overlay is fetched again: each comes from the cache at its key, the files a framed document loads too; each framed document is asked at most once",
     returned.versioned > 0 &&
       returned.fetched.length === 0 &&
       !!returned.overlayKey &&
-      returned.overlayBytes === 0,
-    `${returned.versioned} files at a key, ${returned.cached} from the cache; fetched again ${returned.fetched.length} (${returned.fetchedBytes} bytes): ${returned.fetched.slice(0, 6).join(", ") || "none"}; the overlay at key ${returned.overlayKey || "none"}, ${returned.overlayBytes} bytes over the network`
+      returned.overlayBytes === 0 &&
+      overlays.every((one) => !!one.key && one.bytes === 0) &&
+      (documents.length === 0 || nested.files > 0) &&
+      nested.unkeyed.length === 0 &&
+      nested.fetched.length === 0 &&
+      documentsOnce,
+    `${returned.versioned} files at a key, ${returned.cached} from the cache; fetched again ${returned.fetched.length} (${returned.fetchedBytes} bytes): ${returned.fetched.slice(0, 6).join(", ") || "none"}; the overlay at key ${returned.overlayKey || "none"}, ${returned.overlayBytes} bytes over the network; framed documents ${documents.length} (${documents.map((one) => `${one.at} ${one.bytes} bytes`).join(", ") || "none"}), each once ${documentsOnce}; their files ${nested.files}, ${nested.versioned} at a key, ${nested.cached} from the cache, fetched again ${nested.fetched.length}: ${nested.fetched.slice(0, 6).join(", ") || "none"}, not at a key: ${nested.unkeyed.slice(0, 6).join(", ") || "none"}; overlay loads ${overlays.length}, over the network ${overlays.filter((one) => one.bytes > 0).length}`
   );
 
   // 6. A new revision (one file changed on disk) loads the new files.
@@ -772,7 +881,13 @@ const run = async (kit: Kit) => {
   await open(madeDesk, `${base}/session/${made}`, '[data-slot="pane"]');
   asks.set("1", {
     name: CREATE,
-    input: { kind: "page", name: "made", html: pageOf("Made") },
+    input: {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "made",
+      html: pageOf("Made"),
+    },
   });
   await fleet.send(made, "PROBE-CALL:1");
   await until("the page made", () => answered.get("1"), Boolean, 180_000);
@@ -1140,7 +1255,15 @@ const run = async (kit: Kit) => {
   const easel = await kit.page("desk", { init: [watchDashboard] });
   await tabsAt(easel, [drawn, lightOne], drawn);
   await open(easel, `${base}/session/${drawn}`, '[data-slot="pane"]');
-  asks.set("2", { name: CREATE, input: { kind: "canvas", name: "held" } });
+  asks.set("2", {
+    name: CREATE,
+    input: {
+      kind: "canvas",
+      does: "draw",
+      ask: "Draw on this canvas",
+      name: "held",
+    },
+  });
   await fleet.send(drawn, "PROBE-CALL:2");
   await until("the canvas made", () => answered.get("2"), Boolean, 180_000);
   const canvasFrame = easel.locator('iframe[title="Canvas"]').first();

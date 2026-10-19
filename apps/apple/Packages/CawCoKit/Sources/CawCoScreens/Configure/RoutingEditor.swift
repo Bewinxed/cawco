@@ -76,7 +76,7 @@ final class RoutingEditorController: ConfigEditorController {
             order = mine.map(\.id)
             showPicker(animatedFrom: nil)
             if FleetAccounts.limits(provider) {
-                let block = AtLimitView(accounts: (mine[0], mine[1]), terms: provider == FleetAccounts.claude, value: atLimit)
+                let block = AtLimitView(accounts: (mine[0], mine[1]), among: mine, terms: provider == FleetAccounts.claude, value: atLimit)
                 block.onChange = { [weak self] next in
                     self?.atLimit = next
                     self?.drawState()
@@ -308,8 +308,8 @@ final class StrategyPickerView: UIStackView {
     func probeOrder(_ ids: [String]) { cards.first { $0.strategy.id == "fill-first" }?.probeOrder(ids) }
     var probeState: String {
         cards.map { "\($0.strategy.label)\($0.strategy.id == choice.strategy ? " (chosen)" : "")" }.joined(separator: " · ")
-            + (choice.strategy == "pinned" ? " · pinned \(FleetAccounts.pinned(accounts, choice.pinnedAccountId).map(FleetAccounts.name) ?? "-")" : "")
-            + " · order \(order.compactMap { id in accounts.first { $0.id == id }.map(FleetAccounts.name) }.joined(separator: ", "))"
+            + (choice.strategy == "pinned" ? " · pinned \(FleetAccounts.pinned(accounts, choice.pinnedAccountId).map { FleetAccounts.name($0, among: accounts) } ?? "-")" : "")
+            + " · order \(order.compactMap { id in accounts.first { $0.id == id }.map { FleetAccounts.name($0, among: accounts) } }.joined(separator: ", "))"
             + " · figures \(cards.map(\.probeFigure).joined(separator: ", "))"
     }
     #endif
@@ -327,6 +327,8 @@ final class StrategyCard: UIControl {
     private let radio = UIView()
     private let dot = UIView()
     private let pin = KitSelect(small: true)
+    /// The account pinned as last drawn, which the pin's menu checks.
+    private var pinnedId: String?
     private var orderList: OrderListView?
     private let column = UIStackView()
     private let figure: StrategyFigureView
@@ -336,14 +338,15 @@ final class StrategyCard: UIControl {
     /// At most four lanes: a figure is an illustration, not a ledger.
     private var shown: [FleetAccounts.Account] { Array(accounts.prefix(4)) }
 
-    private static func lanes(_ accounts: [FleetAccounts.Account]) -> [FigureLane] {
-        accounts.map { FigureLane(name: FleetAccounts.name($0), hue: $0.hue) }
+    /// The lanes of `shown`, each named beside `accounts`.
+    private static func lanes(_ shown: [FleetAccounts.Account], among accounts: [FleetAccounts.Account]) -> [FigureLane] {
+        shown.map { FigureLane(name: FleetAccounts.name($0, among: accounts), hue: $0.hue) }
     }
 
     init(strategy: FleetAccounts.Strategy, accounts: [FleetAccounts.Account], limits: Bool) {
         self.strategy = strategy
         self.accounts = accounts
-        figure = StrategyFigureView(board: FigureBoard(strategy: strategy.id), lanes: Self.lanes(Array(accounts.prefix(4))), limits: limits)
+        figure = StrategyFigureView(board: FigureBoard(strategy: strategy.id), lanes: Self.lanes(Array(accounts.prefix(4)), among: accounts), limits: limits)
         super.init(frame: .zero)
         layer.cornerRadius = Radius.radiusLg
         layer.cornerCurve = .continuous
@@ -365,6 +368,13 @@ final class StrategyCard: UIControl {
         words.isUserInteractionEnabled = false
         pin.accessibilityLabel = Words.Accounts.RoutingEditor.pinnedAccount
         pin.accessibilityIdentifier = "routing.pin"
+        // Set once and made as it opens: a redraw that set a new menu cancelled one a tap was opening.
+        pin.menuOnOpen { [weak self] in
+            guard let self else { return [] }
+            return accounts.map { account in
+                UIAction(title: FleetAccounts.name(account, among: accounts), state: account.id == pinnedId ? .on : .off) { [weak self] _ in self?.onPin?(account.id) }
+            }
+        }
         pin.isHidden = true
         let top = UIStackView(arrangedSubviews: [radio, words])
         top.spacing = Space.space3
@@ -416,10 +426,8 @@ final class StrategyCard: UIControl {
         top?.accessibilityTraits = now ? [.button, .selected] : .button
         // Only the chosen Pinned card names its account: an unchosen one keeps no room for it.
         if strategy.id == "pinned" {
-            pin.setValue(pinned.map(FleetAccounts.name) ?? "")
-            pin.menu = UIMenu(children: accounts.map { account in
-                UIAction(title: FleetAccounts.name(account), state: account.id == pinned?.id ? .on : .off) { [weak self] _ in self?.onPin?(account.id) }
-            })
+            pin.setValue(pinned.map { FleetAccounts.name($0, among: accounts) } ?? "")
+            pinnedId = pinned?.id
             fold(pin, open: now)
         }
         if strategy.id == "fill-first" {
@@ -452,7 +460,7 @@ final class StrategyCard: UIControl {
         let shown = shown
         let lanes = strategy.id == "fill-first" ? order.compactMap { id in shown.first { $0.id == id } } : shown
         let pin = strategy.id == "pinned" ? max(0, shown.firstIndex { $0.id == pinned?.id } ?? 0) : 0
-        figure.update(lanes: Self.lanes(lanes), pin: pin)
+        figure.update(lanes: Self.lanes(lanes, among: accounts), pin: pin)
         figure.playing = chosen || hovered
     }
 
@@ -527,7 +535,7 @@ final class OrderListView: UIStackView {
         list.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for (place, id) in order.enumerated() {
             guard let row = rows[id], let account = accounts.first(where: { $0.id == id }) else { continue }
-            row.accessibilityLabel = Words.Accounts.RoutingEditor.placeSaid(name: FleetAccounts.name(account), place: place + 1, count: order.count)
+            row.accessibilityLabel = Words.Accounts.RoutingEditor.placeSaid(name: FleetAccounts.name(account, among: accounts), place: place + 1, count: order.count)
             list.addArrangedSubview(row)
         }
     }
@@ -544,7 +552,7 @@ final class OrderListView: UIStackView {
         dot.layer.cornerRadius = 4
         dot.translatesAutoresizingMaskIntoConstraints = false
         let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkRow)
-        name.text = FleetAccounts.name(account)
+        name.text = FleetAccounts.name(account, among: accounts)
         name.lineBreakMode = .byTruncatingTail
         let line = UIStackView(arrangedSubviews: [handle, dot, name])
         line.spacing = Space.space3
@@ -643,10 +651,11 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         FigurePolicy(wait: value.waitMinutes, over: value.moveWholeUnderK)
     }
 
-    /// `accounts`: the one that runs out, then the one that is free.
-    init(accounts: (FleetAccounts.Account, FleetAccounts.Account), terms: Bool, value: FleetAccounts.AtLimit) {
+    /// `accounts`: the one that runs out, then the one that is free, each
+    /// named beside `among`, their provider's accounts.
+    init(accounts: (FleetAccounts.Account, FleetAccounts.Account), among: [FleetAccounts.Account], terms: Bool, value: FleetAccounts.AtLimit) {
         self.value = value
-        lanes = [accounts.0, accounts.1].map { FigureLane(name: FleetAccounts.name($0), hue: $0.hue) }
+        lanes = [accounts.0, accounts.1].map { FigureLane(name: FleetAccounts.name($0, among: among), hue: $0.hue) }
         figure = StrategyFigureView(board: .limit, lanes: lanes, policy: Self.policy(value))
         super.init(frame: .zero)
         axis = .vertical

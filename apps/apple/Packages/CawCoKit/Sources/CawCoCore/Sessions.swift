@@ -24,6 +24,10 @@ public final class SessionTranscript {
     public internal(set) var tail: Components.Schemas.TranscriptTail?
     public internal(set) var facts: Components.Schemas.TranscriptFacts?
     public internal(set) var location: Components.Schemas.TranscriptWhere?
+    /// The session a continuation took this one's work item on in, by its id
+    /// and title, as its newest page said (`TranscriptPage.continuedTo`):
+    /// what its screen reads before the board lists the rows, and after.
+    public internal(set) var continuedTo: (instanceId: String, title: String)?
     /// Where the page older than `blocks` begins: the `before` the hub named,
     /// or nil once the conversation's start is in hand.
     public internal(set) var cursor: String?
@@ -120,9 +124,9 @@ public struct SentText: Sendable, Equatable {
 
 /// A transcript read that failed (client.svelte.ts `pageFault`): the machine
 /// holding it is offline (a 503 naming it), this app is not allowed on the
-/// local network the hub is on, or the read failed. `message` is one
-/// sentence of why, without its closing stop (`Wire.reason`), never a body
-/// as the hub sent it.
+/// local network the hub is on, or the read failed. `message` is why, the
+/// first line of the hub's words without its closing stop (`Wire.reason`),
+/// never a body as the hub sent it.
 public struct ReadFault: Sendable, Equatable {
     public enum Reason: Sendable { case offline, localNetwork, failed }
     public let reason: Reason
@@ -546,6 +550,7 @@ public final class SessionsStore {
                 settleLocal(transcript)
                 transcript.tail = page.tail
                 transcript.facts = page.facts
+                transcript.continuedTo = page.continuedTo.map { ($0.instanceId, $0.title) }
                 transcript.location = page._where
                 transcript.cursor = whole.cursor
                 // A new newest page is a new read: an older page still on its
@@ -665,8 +670,8 @@ public final class SessionsStore {
         }
     }
 
-    /// A refusal as one sentence of why (`Wire.reason`): the hub's words when
-    /// they are one, its status when they are not or could not be read.
+    /// A refusal as why (`Wire.reason`): the hub's words when they are prose,
+    /// its status when they are not or could not be read.
     private nonisolated static func refused(_ body: HTTPBody?, status: Int) async -> ReadFault {
         let data = if let body { try? await Data(collecting: body, upTo: 1_000_000) } else { Data?.none }
         return .failed(Wire.reason(data ?? Data(), status: status))

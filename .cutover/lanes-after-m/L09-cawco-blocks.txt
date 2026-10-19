@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/blocks/Block.svelte
+apps/dashboard/src/lib/cawco/blocks/BlockPage.svelte
+apps/dashboard/src/lib/cawco/canvas/CanvasStages.svelte
+apps/dashboard/src/lib/cawco/join/AddMachineLink.svelte
+apps/dashboard/src/lib/cawco/join/CheckInStatus.svelte
+apps/dashboard/src/lib/cawco/join/CopyBox.svelte
+apps/dashboard/src/lib/cawco/join/JoinedRow.svelte
+
+# apps/dashboard/src/lib/cawco/blocks/Block.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×1
+# apps/dashboard/src/lib/cawco/blocks/BlockPage.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×1; lint: shadcn/no-unknown-classes ×1
+# apps/dashboard/src/lib/cawco/canvas/CanvasStages.svelte: relic: style-var ×5; relic: literal ×1
+# apps/dashboard/src/lib/cawco/join/AddMachineLink.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/join/CheckInStatus.svelte: relic: literal ×3; relic: style-var ×3
+# apps/dashboard/src/lib/cawco/join/CopyBox.svelte: relic: literal ×9; relic: style-var ×8
+# apps/dashboard/src/lib/cawco/join/JoinedRow.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1

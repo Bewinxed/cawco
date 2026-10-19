@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/decisions/graph/DecisionGraph.svelte
+apps/dashboard/src/lib/cawco/decisions/graph/DecisionGroup.svelte
+apps/dashboard/src/lib/cawco/decisions/graph/DecisionNode.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Badge.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Canvas.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Decision.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Decisions.svelte
+
+# apps/dashboard/src/lib/cawco/decisions/graph/DecisionGraph.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/decisions/graph/DecisionGroup.svelte: relic: literal ×1
+# apps/dashboard/src/lib/cawco/decisions/graph/DecisionNode.svelte: relic: literal ×2; relic: style-var ×4; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/decisions/host/Badge.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/decisions/host/Canvas.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/decisions/host/Decision.svelte: after-M: markup naming a scoped class; after-M: a state written as a class
+# apps/dashboard/src/lib/cawco/decisions/host/Decisions.svelte: relic: style-reason ×1

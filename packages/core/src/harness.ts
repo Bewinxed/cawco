@@ -193,7 +193,8 @@ export const COMPACTION_ORIGIN = "compaction";
  * The `system` origin name of the hub's word to a work item's session about
  * its open item (hub work-items.ts): a quiet turn's "still open", the sleep
  * sweep's wake, a declared wait's end. One its account's limit refused is
- * answered by the provider's `atLimit.delegateWork` (core `AtLimit`).
+ * answered as a person's turn is (hub at-limit.ts `turnRefused`): moved to
+ * an account with room, else held until the earliest reset.
  */
 export const WORK_ITEM_ORIGIN = "work-item";
 
@@ -268,6 +269,21 @@ export const CUSTODY_HELD = "custody_held";
  * sentence, the rest under it.
  */
 export const LIMIT_REACHED = "limit_reached";
+
+/**
+ * A session's start waits for its machine's memory: the machine's room on
+ * memory (core heavy-run.ts `measureMemoryRoom`: swap read back, swap left,
+ * memory stall or pressure) fails, so its process is not started yet. The
+ * agent's frame to the hub (`content`, {@link roomHeldSentence}), and the
+ * hub's line in the session's transcript, kept on its row. Drawn as a note
+ * titled by its first sentence, the readings under it. The start goes on by
+ * itself once the room is back.
+ */
+export const ROOM_HELD = "room_held";
+
+/** The words for a start held on its machine's memory ({@link ROOM_HELD}): what happens, then the readings. */
+export const roomHeldSentence = (readings: string): string =>
+  `This session starts once its machine has memory for it, and starts by itself when the room is back. ${readings.charAt(0).toUpperCase()}${readings.slice(1)}.`;
 
 /**
  * A Claude session's process runs a Claude Code other than its machine's
@@ -1812,6 +1828,14 @@ export interface WorkspaceCut {
  */
 export const CONTROL_PLACE_REPO = "placeRepo";
 
+/**
+ * The top of the git checkout a folder is in, or null when it is in none:
+ * what a workspace is cut from when it is cut from that folder. Reads only.
+ * Args `[path]`. Answers `string | null`. Refused when the folder is not
+ * there, or git can't tell. Machine-scoped.
+ */
+export const CONTROL_REPO_ROOT = "repoRoot";
+
 /** The most a place's first commit may weigh; a place past it stays a folder. */
 export const PLACE_REPO_LIMIT_BYTES = 500 * 1024 * 1024;
 
@@ -1820,6 +1844,22 @@ export interface PlaceLeftOut {
   /** From the place's root; a folder ends with `/`. */
   path: string;
   why: string;
+}
+
+/**
+ * Files a place's first commit left out for their size alone, by the
+ * pattern Git LFS would track them under, as `git lfs migrate info` rows
+ * read (extension, count, size): `*.<ext>` for a file with an extension,
+ * its own path from the place's root for one without. git-lfs-faq(7):
+ * "we recommend using patterns rather than `--above`".
+ */
+export interface PlaceLfsRow {
+  bytes: number;
+  /** How many of the left-out files it covers. */
+  count: number;
+  /** Those files, from the place's root. */
+  paths: string[];
+  pattern: string;
 }
 
 /** What {@link CONTROL_PLACE_REPO} found or did. */
@@ -1842,7 +1882,41 @@ export type PlaceRepo =
       /** Every path it takes, from the place's root. */
       staged: string[];
       leftOut: PlaceLeftOut[];
+      /**
+       * What of `leftOut` was left out for its size alone, core
+       * `LARGE_FILE_BYTES` (move.ts) or more, nothing else keeping it out
+       * (the folder's own ignore rules): what Git LFS is offered for, by
+       * pattern.
+       */
+      lfs: PlaceLfsRow[];
     };
+
+/**
+ * A place's left-out large files committed through Git LFS, once the person
+ * accepted the offer (hub lfs-offers.ts): `git lfs track <patterns>`, the
+ * paths taken out of CawCo's block in `.gitignore`, then a second commit as
+ * CawCo by git-lfs-migrate(1)'s no-rewrite path (`git add .gitattributes;
+ * git add --renormalize .; git commit`). Args `[path, PlaceLfsRow[]]`.
+ * Answers {@link PlaceLfsMade}. Refused, with the reason, when the place is
+ * no repository, git-lfs is not on the machine, or a path is no longer a
+ * file there. Machine-scoped.
+ */
+export const CONTROL_PLACE_LFS = "placeLfs";
+
+/** What {@link CONTROL_PLACE_LFS} committed. */
+export interface PlaceLfsMade {
+  bytes: number;
+  commit: string;
+  /** The left-out files it committed through LFS. */
+  files: number;
+  /**
+   * Whether git-lfs's hooks went into the folder's own git, so the person's
+   * own push sends the large files; false when a pre-push hook of the
+   * folder's own was there, which git-lfs does not overwrite.
+   */
+  hooks: boolean;
+  patterns: string[];
+}
 
 /**
  * Pushes a project's place, a git repository, to the hub's own remote of

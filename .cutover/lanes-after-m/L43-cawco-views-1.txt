@@ -1,0 +1,11 @@
+apps/dashboard/src/lib/cawco/views/ViewCalendar.svelte
+apps/dashboard/src/lib/cawco/views/ViewCanvas.svelte
+apps/dashboard/src/lib/cawco/views/ViewMade.svelte
+apps/dashboard/src/lib/cawco/views/ViewPipeline.svelte
+apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte
+
+# apps/dashboard/src/lib/cawco/views/ViewCalendar.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/views/ViewCanvas.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/views/ViewMade.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×2; lint: shadcn/no-unknown-classes ×1
+# apps/dashboard/src/lib/cawco/views/ViewPipeline.svelte: relic: literal ×3; relic: style-var ×2
+# apps/dashboard/src/lib/cawco/views/ViewRoutines.svelte: after-M: markup naming a scoped class; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×2; relic: style-var ×2; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×9; lint: shadcn/no-restyle ×2

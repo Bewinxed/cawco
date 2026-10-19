@@ -24,10 +24,21 @@
   import { mergeProps } from "bits-ui";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconServer } from "#lib/icons.js";
+  import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
   import { home } from "./home/home-state.svelte";
 
-  const count = $derived(cawco.machines.length);
+  /**
+   * How many machines, from the first paint: the layout's count until this
+   * page has heard the list (the first fleet read, or a frame carrying
+   * machines), then the live one, which wins straight from the server's
+   * with no empty moment between.
+   */
+  const count = $derived(
+    cawco.fleetRead || cawco.machines.length > 0
+      ? cawco.machines.length
+      : ((page.data as { machineCount?: number | null }).machineCount ?? 0)
+  );
   /** The glyph's hue: fail when a machine is down, attention when one is in trouble. */
   const tone = $derived.by(() => {
     if (home.exceptions.length === 0) {
@@ -38,7 +49,11 @@
       : "attn";
   });
   const label = $derived.by(() => {
-    const machines = `${count} ${count === 1 ? "machine" : "machines"}`;
+    /* The number only above 0 (DESIGN.md, The Earned Count Rule). */
+    const machines =
+      count > 0
+        ? `${count} ${count === 1 ? "machine" : "machines"}`
+        : "Machines";
     const stuck = home.exceptions.length;
     return stuck > 0
       ? `${machines}, ${stuck} ${stuck === 1 ? "needs" : "need"} attention`
@@ -76,23 +91,23 @@
       aria-expanded={barGlass.open === "machines"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="mark-line touch-hit press-tint gap-space-2 ps-space-2 pe-(--machines-pe)"
+      class="bar-item machines mark-line touch-hit press-tint"
+      data-counted={count > 0 || undefined}
       data-tone={tone}
       style:--machines-pe="calc(var(--space-2) - var(--c-bar-group-pad))"
       type="button"
     >
       <IconServer aria-hidden="true" class="bar-symbol" />
-      <span data-slot="num" class="type-label num">{count}</span>
+      {#if count > 0}
+        <span data-slot="num" class="num">{count}</span>
+      {/if}
     </button>
   {/snippet}
 </Tip>
 
 <style>
-  /* residual: foreign-dom — the glyph's DOM, reached through `.bar-symbol`;
-     unlayered, so it outranks Shell's unlayered foreign-dom rule on the same
-     target (`[data-slot="tools"] .bar-symbol`'s ink), which a utility on
-     the glyph cannot. */
-  [data-machines][data-tone="attn"] :global(.bar-symbol) {
+  /* Named under `.machines` to outrank Shell's `.tools .bar-symbol` ink. */
+  .machines[data-tone="attn"] :global(.bar-symbol) {
     color: var(--status-attn-glyph);
   }
   [data-machines][data-tone="fail"] :global(.bar-symbol) {

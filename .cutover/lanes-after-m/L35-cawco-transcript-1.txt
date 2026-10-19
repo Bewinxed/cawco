@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/transcript/AccountMoveDivider.svelte
+apps/dashboard/src/lib/cawco/transcript/AttachButton.svelte
+apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte
+apps/dashboard/src/lib/cawco/transcript/CatchUp.svelte
+apps/dashboard/src/lib/cawco/transcript/CompactionDivider.svelte
+apps/dashboard/src/lib/cawco/transcript/Composer.svelte
+apps/dashboard/src/lib/cawco/transcript/Delegate.svelte
+
+# apps/dashboard/src/lib/cawco/transcript/AccountMoveDivider.svelte: relic: literal ×3; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/AttachButton.svelte: relic: style-var ×1
+# apps/dashboard/src/lib/cawco/transcript/AttachmentChips.svelte: relic: literal ×1; relic: style-var ×4
+# apps/dashboard/src/lib/cawco/transcript/CatchUp.svelte: after-M: a scoped <style> rule; relic: literal ×1; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/CompactionDivider.svelte: relic: literal ×6; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/Composer.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×7; relic: style-var ×14; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/Delegate.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×16; relic: style-var ×13; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)

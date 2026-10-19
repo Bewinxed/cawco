@@ -221,6 +221,29 @@ public final class HubConnection {
     /// changes (`thread.upsert`): Caw drafts a view in a thread, so the
     /// project's views are read again when it moves, as the web's are.
     public private(set) var threadsMoved: [String: Int] = [:]
+    /// A count per project that moves each time its decision pages change
+    /// (`decisions.changed`: one built, picked on or sent, its record
+    /// written): the Decisions tab and its strip count read them again.
+    public private(set) var decisionsChanged: [String: Int] = [:]
+    /// A count per project that moves each time its arrangement of blocks
+    /// changes (`blocks.changed`), here or on another screen: its pages read it again.
+    public private(set) var blocksChanged: [String: Int] = [:]
+    /// The latest `fleet.fetch` frames (a skill, plugin or marketplace the hub
+    /// fetched, landed), and how many have come since launch: what a fetch
+    /// asked of the hub waits on (fleet.ts `untilFetched`).
+    @ObservationIgnored public private(set) var fleetFetches: [Components.Schemas.FleetFetchFrame] = []
+    @ObservationIgnored public private(set) var fleetFetchCount = 0
+    /// Each project's starters by place, as the hub last wrote them since
+    /// this connection (`starters.changed`): a set written after a page read
+    /// its stages replaces the one they carried (client.svelte.ts `startersOf`).
+    public private(set) var starters: [String: [Components.Schemas.ProjectStarter]] = [:]
+
+    /// A project's starters for `place`: the hub's newest set, else the one its stages read carried.
+    public func startersOf(_ projectId: String, _ place: Components.Schemas.StarterPlace,
+                           read: [Components.Schemas.ProjectStarter]?) -> [Components.Schemas.ProjectStarter] {
+        starters["\(place.rawValue):\(projectId)"] ?? read ?? []
+    }
+
     /// Every project's threads with its Caw, and the messages of those opened here.
     public private(set) var threads: ThreadsStore!
     /// The plans followed beside the sessions streamed: a thread's lead's.
@@ -1145,11 +1168,10 @@ public final class HubConnection {
             default: break
             }
         }
-        let limitRows = readLimits.map { read in read.machines.map { ($0.machineId, $0.limits, $0.openCodeGo) } }
         let hasPending = readPending != nil
         return { [asks, runAsks] hub in
-            if let limitRows {
-                hub.fleet.adopt(limits: limitRows)
+            if let readLimits {
+                hub.fleet.adopt(claude: readLimits.claude, go: readLimits.openCodeGo)
             }
             if let readSpend {
                 hub.fleet.adopt(spend: readSpend)
@@ -1582,7 +1604,7 @@ public final class HubConnection {
             if let requestId { waiters.removeValue(forKey: requestId)?.resume(throwing: ControlError(message: message)) }
         case let .usage(frame):
             // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
-            fleet.adopt(limits: frame.limits.map { ($0.machineId, $0.payload, $0.openCodeGo) })
+            fleet.adopt(claude: frame.claude, go: frame.openCodeGo)
             fleet.adopt(spend: frame.spend)
             // The hub says this when an account's reading, sign-in or catalog moved.
             readAccounts()
@@ -1597,6 +1619,12 @@ public final class HubConnection {
             fleet.moves = jobs
         case let .tasksChanged(projectId):
             tasksChanged[projectId, default: 0] += 1
+        case let .decisionsChanged(projectId):
+            decisionsChanged[projectId, default: 0] += 1
+        case let .blocksChanged(projectId):
+            blocksChanged[projectId, default: 0] += 1
+        case let .startersChanged(frame):
+            starters["\(frame.place.rawValue):\(frame.projectId)"] = frame.starters
         case .projectsChanged:
             readProjects()
         case let .projectStop(frame):
@@ -1609,6 +1637,10 @@ public final class HubConnection {
             fleet.lawsBroken = broken
         case let .fleetUpstream(answer):
             fleet.upstream = .answered(answer)
+        case let .fleetFetched(frame):
+            fleetFetches = Array((fleetFetches + [frame]).suffix(32))
+            fleetFetchCount += 1
+            Task { [configuration] in await configuration.load() }
         case let .tailnetHttps(tailnet):
             // Its step taken while connected: the row ticks, then leaves
             // (client.svelte.ts `tailnetTicked`).

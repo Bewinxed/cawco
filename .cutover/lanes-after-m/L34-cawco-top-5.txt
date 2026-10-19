@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/cawco/StopTray.svelte
+apps/dashboard/src/lib/cawco/ThreadPane.svelte
+apps/dashboard/src/lib/cawco/TreeMark.svelte
+apps/dashboard/src/lib/cawco/UsageMeter.svelte
+apps/dashboard/src/routes/artifact/[id]/+page.svelte
+apps/dashboard/src/routes/dev/finder/+page.svelte
+apps/dashboard/src/routes/project/[id]/view/[name]/+page.svelte
+apps/dashboard/src/routes/(app)/workflows/+page.svelte
+
+# apps/dashboard/src/lib/cawco/StopTray.svelte: relic: literal ×2; relic: style-var ×2
+# apps/dashboard/src/lib/cawco/ThreadPane.svelte: relic: literal ×3; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/TreeMark.svelte: relic: literal ×3; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/UsageMeter.svelte: relic: literal ×20; relic: style-var ×25
+# apps/dashboard/src/routes/artifact/[id]/+page.svelte: relic: style-var ×2; relic: literal ×1
+# apps/dashboard/src/routes/dev/finder/+page.svelte: relic: literal ×4; relic: style-var ×5; relic: style-reason ×1
+# apps/dashboard/src/routes/project/[id]/view/[name]/+page.svelte: relic: style-var ×1
+# apps/dashboard/src/routes/(app)/workflows/+page.svelte: relic: literal ×1; relic: style-var ×7; relic: bang ×3

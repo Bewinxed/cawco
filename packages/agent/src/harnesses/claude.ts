@@ -127,6 +127,7 @@ import {
   accountReports,
   changingSignins,
   claudeSignins,
+  dirIdentity,
   linkProjectMemory,
   probeAccount,
   projectMemoryRoot,
@@ -140,6 +141,7 @@ import {
   launchedHook,
   workspaceHook,
 } from "../boundary";
+import { CHROME_DEVTOOLS, throughGate } from "../browser/door";
 import {
   mcpConfigOffArgv,
   removeMcpConfig,
@@ -1137,7 +1139,8 @@ const scheduledWakeups = (input: unknown): Wakeups | undefined => {
 
 /**
  * The CLI child's environment: the agent's own as a session gets it (core
- * `sessionEnvironment`), the spec's over it, and the session's own identity.
+ * `sessionEnvironment`), the spec's over it, a workspace session's temp root,
+ * and the session's own identity.
  *
  * Claude in Chrome follows the session's mode, like every other tool. The
  * CLI's server-side gate `tengu_cowork_chrome_automode_default` (the
@@ -1160,6 +1163,14 @@ const sessionEnv = (
   ...sessionEnvironment(process.env),
   CLAUDE_CHROME_CLASSIFIER_FLOOR: "0",
   ...specEnv,
+  // A workspace session's temp root, which its shell reads inside the
+  // boundary (boundary.ts `Boundary.claudeTmp`). The CLI's root is
+  // `CLAUDE_CODE_TMPDIR`, else `os.tmpdir()` ("function um(){…let
+  // e=a.CLAUDE_CODE_TMPDIR;if(e)return e;return C()}", Claude Code 2.1.302),
+  // and a background task's output is `<root>/claude-<uid>/…/tasks/<id>.output`:
+  // under the host's /tmp, which the boundary hides, the shell found "No such
+  // file or directory" for every one (leaf 74ec1894, 2026-10-19).
+  ...(ctx.boundary ? { CLAUDE_CODE_TMPDIR: ctx.boundary.claudeTmp } : {}),
   // The session's git reaches the hub's remote as this session (git-credential.ts).
   ...sessionGitEnv({ ...process.env, ...specEnv }),
   // The session's shell acts as this session and no other: `cawco tool`
@@ -1533,6 +1544,128 @@ const withInstructions = (
 };
 
 /**
+ * The MCP servers a session starting in `workdir` would read: the user scope
+ * of `claudeJson`, and its folder's own map over that (where a project's
+ * placed servers go).
+ */
+const configuredMcp = async (
+  claudeJson: string,
+  workdir: string
+): Promise<Record<string, McpServerConfig>> => {
+  let root: {
+    mcpServers?: Record<string, McpServerConfig>;
+    projects?: Record<string, { mcpServers?: Record<string, McpServerConfig> }>;
+  };
+  try {
+    root = JSON.parse(await readFile(claudeJson, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+    root = {};
+  }
+  const projects = root.projects ?? {};
+  let folder: string | undefined;
+  for (let dir = workdir; ; dir = dirname(dir)) {
+    if (projects[dir]) {
+      folder = dir;
+      break;
+    }
+    if (dirname(dir) === dir) {
+      break;
+    }
+  }
+  return {
+    ...root.mcpServers,
+    ...(folder ? projects[folder]?.mcpServers : {}),
+  };
+};
+
+/**
+ * The fleet's chrome-devtools as this session launches it: the entry its
+ * config files hold, through its browser's gate ({@link throughGate}). The
+ * launch's server takes the place of the config files' one of that name, so
+ * no session's browser tool starts a Chromium of its own. A session whose
+ * door could not be made launches with that tool denied: chrome-devtools-mcp
+ * reaches for a browser only at a tool's call. Nothing when the files hold
+ * no local chrome-devtools.
+ */
+const gatedBrowserMcp = async (
+  ctx: HarnessContext,
+  claudeJson: string
+): Promise<{
+  disallowedTools?: string[];
+  mcpServers?: Record<string, McpServerConfig>;
+}> => {
+  const entry: McpServerConfig | undefined = (
+    await configuredMcp(claudeJson, ctx.cwd)
+  )[CHROME_DEVTOOLS];
+  if (!(entry && "command" in entry)) {
+    return {};
+  }
+  const door = await ctx.browserDoor?.().catch((error: unknown) => {
+    console.warn(
+      `[claude] ${ctx.instanceId}: its browser's door could not be made, so it launches without chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  return door
+    ? {
+        mcpServers: {
+          [CHROME_DEVTOOLS]: {
+            ...entry,
+            args: throughGate(entry.args ?? [], door),
+          },
+        },
+      }
+    : { disallowedTools: [`mcp__${CHROME_DEVTOOLS}`] };
+};
+
+/**
+ * The caller's options a session launches with: its account's config dir in
+ * its env, and the fleet's chrome-devtools through its browser's gate
+ * ({@link gatedBrowserMcp}). A fenced session reads no config file's server,
+ * so it launches none.
+ */
+const launchOptions = async (
+  spec: SpawnPayload,
+  ctx: HarnessContext,
+  account: string | undefined
+): Promise<Record<string, unknown>> => {
+  const options = spec.options as
+    | {
+        disallowedTools?: string[];
+        env?: Record<string, string | undefined>;
+        mcpServers?: Record<string, McpServerConfig>;
+      }
+    | undefined;
+  const env = {
+    ...options?.env,
+    ...(account
+      ? accountEnv(account)
+      : {
+          CLAUDE_CONFIG_DIR: undefined,
+          CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
+        }),
+  };
+  const browser =
+    spec.fence === true
+      ? {}
+      : await gatedBrowserMcp(
+          ctx,
+          configDirClaudeJson(sessionEnv(env, ctx).CLAUDE_CONFIG_DIR)
+        );
+  return {
+    ...options,
+    env,
+    mcpServers: { ...options?.mcpServers, ...browser.mcpServers },
+    disallowedTools: [
+      ...(options?.disallowedTools ?? []),
+      ...(browser.disallowedTools ?? []),
+    ],
+  };
+};
+
+/**
  * The MCP servers a session launches with: the caller's and CawCo's, or
  * CawCo's alone for a fenced session.
  */
@@ -1750,6 +1883,8 @@ class ClaudeSession implements HarnessSession {
   readonly #workdir: string;
   /** The `.claude.json` its CLI reads: its account's, or the machine's. */
   readonly #claudeJson: string;
+  /** The config dir its CLI runs in (`CLAUDE_CONFIG_DIR`): its account's, or none for the machine's own. */
+  readonly #configDir: string | undefined;
   /** One fleet MCP change taken at a time, in the order they came. */
   #fleetMcp: Promise<unknown> = Promise.resolve();
 
@@ -1825,6 +1960,7 @@ class ClaudeSession implements HarnessSession {
       ctx
     );
     this.#claudeJson = configDirClaudeJson(env.CLAUDE_CONFIG_DIR);
+    this.#configDir = env.CLAUDE_CONFIG_DIR;
     this.#sessiond = sessiond;
     this.#stored = persistSession !== false;
     this.#conversationKept = conversationKept;
@@ -2084,7 +2220,9 @@ class ClaudeSession implements HarnessSession {
     try {
       const init = await this.#handle.initializationResult();
       this.#runs = init.claude_code_version ?? null;
-      const identity = identityOf(init.account);
+      // Its organization's id is its dir's login's, as `auth status` read it:
+      // initialize names none (accounts.ts `dirIdentity`).
+      const identity = dirIdentity(this.#configDir, identityOf(init.account));
       this.#ctx.frame({
         type: "system",
         subtype: ACCOUNT_READ,
@@ -3021,42 +3159,12 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * The MCP servers a session starting here now would read: the user scope
-   * of its `.claude.json`, and its folder's own map over that (where a
-   * project's placed servers go). The fleet sync has written both before a
+   * The MCP servers a session starting here now would read
+   * ({@link configuredMcp}). The fleet sync has written both scopes before a
    * change reaches the session.
    */
-  async #configuredMcp(): Promise<Record<string, McpServerConfig>> {
-    let root: {
-      mcpServers?: Record<string, McpServerConfig>;
-      projects?: Record<
-        string,
-        { mcpServers?: Record<string, McpServerConfig> }
-      >;
-    };
-    try {
-      root = JSON.parse(await readFile(this.#claudeJson, "utf8"));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
-      }
-      root = {};
-    }
-    const projects = root.projects ?? {};
-    let folder: string | undefined;
-    for (let dir = this.#workdir; ; dir = dirname(dir)) {
-      if (projects[dir]) {
-        folder = dir;
-        break;
-      }
-      if (dirname(dir) === dir) {
-        break;
-      }
-    }
-    return {
-      ...root.mcpServers,
-      ...(folder ? projects[folder]?.mcpServers : {}),
-    };
+  #configuredMcp(): Promise<Record<string, McpServerConfig>> {
+    return configuredMcp(this.#claudeJson, this.#workdir);
   }
 
   /**
@@ -3441,15 +3549,17 @@ class ClaudeSession implements HarnessSession {
       }
       if (read.slot === "refused") {
         throw new Error(
-          "CawCo MCP refused this session's credential (needs-auth)."
+          "This session didn't start: the hub refused its sign-in to CawCo's tools (needs-auth). Start it again; a fresh start signs in afresh."
         );
       }
       if (read.slot === "off") {
-        throw new Error(`CawCo MCP is not connected (${read.status}).`);
+        throw new Error(
+          `This session didn't start: its connection to CawCo's tools is off (${read.status}). Start it again.`
+        );
       }
       if (Date.now() >= deadline) {
         throw new Error(
-          `CawCo MCP did not connect within ${HUB_AWAY_BOUND_MS / 1000} seconds (${read.why}).`
+          `This session didn't start: its connection to CawCo's tools didn't come up within ${HUB_AWAY_BOUND_MS / 1000} seconds (${read.why}). Start it again.`
         );
       }
       await Bun.sleep(read.why === "connecting" ? 250 : 1000);
@@ -3484,7 +3594,9 @@ class ClaudeSession implements HarnessSession {
       cawco?.config?.type !== "http" ||
       cawco.config.headers?.Authorization !== `Bearer ${credential}`
     ) {
-      throw new Error("CawCo MCP launch credential could not be verified.");
+      throw new Error(
+        "This session didn't start: its sign-in to CawCo's tools couldn't be checked. Start it again."
+      );
     }
     await acknowledgeSessionCredential(credential);
     console.info(`[claude] launch credential installed ${this.instanceId}`);
@@ -3520,7 +3632,7 @@ class ClaudeSession implements HarnessSession {
         : undefined;
     if (!header?.startsWith("Bearer ")) {
       throw new Error(
-        "This Claude process was launched without a CawCo session credential."
+        "CawCo couldn't take this session back after a restart: its Claude Code was started without a sign-in to CawCo's tools. Start it again."
       );
     }
     const credential = header.slice("Bearer ".length);
@@ -3543,7 +3655,7 @@ class ClaudeSession implements HarnessSession {
       return { credential, refused: true };
     } else {
       throw new Error(
-        `CawCo MCP is not connected (${cawco?.status ?? "missing"}).`
+        `CawCo couldn't take this session back after a restart: its connection to CawCo's tools is off (${cawco?.status ?? "missing"}). Start it again.`
       );
     }
     return { credential };
@@ -4002,8 +4114,6 @@ export class ClaudeHarness implements Harness {
       account_id: place.accountId,
     } as NeutralMessage);
     const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
-    const options = spec.options as
-      { env?: Record<string, string | undefined> } | undefined;
     // What this process has scheduled is known from its start: nothing until
     // a turn of it ends and says otherwise. Kept, so an agent that attaches
     // to it later knows too, though no turn of it has ended since (one its
@@ -4015,18 +4125,7 @@ export class ClaudeHarness implements Harness {
       ctx.instanceId,
       ctx,
       ctx.cwd,
-      {
-        ...options,
-        env: {
-          ...options?.env,
-          ...(account
-            ? accountEnv(account)
-            : {
-                CLAUDE_CONFIG_DIR: undefined,
-                CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
-              }),
-        },
-      },
+      await launchOptions(spec, ctx, account),
       spec.permissionMode,
       spec.model,
       spec.effort,
@@ -4089,14 +4188,18 @@ export class ClaudeHarness implements Harness {
       const from = Math.max(head - span, 0);
       const activity = new ChildActivity("claude");
       // biome-ignore lint/performance/noAwaitInLoops: each look reaches further back only when the one before it found nothing about a turn
-      const oldest = await readRing(
+      const read = await readRing(
         client,
         procIdFor("claude", instanceId),
         from,
         head,
         (event) => activity.read(parseLine(event.data))
       );
-      if (activity.decided || from === 0 || oldest > from + 1) {
+      // Let go since it was listed: no keeper holds it, so it runs no turn.
+      if (read.kind === "gone") {
+        return false;
+      }
+      if (activity.decided || from === 0 || read.oldest > from + 1) {
         return activity.turnRunning;
       }
     }
@@ -4148,7 +4251,9 @@ export class ClaudeHarness implements Harness {
     // connection for as long as its process runs there.
     const child = await this.#keepers.holding(procId);
     if (!child) {
-      throw new Error(`no keeper holds a live child ${procId}`);
+      throw new Error(
+        "This session's Claude Code process ended before CawCo could reconnect to it after a restart, so the session stopped. What you sent that it hadn't read is kept: start the session again and it goes to the new process."
+      );
     }
     const { client } = child;
     // A CLI keeps the hook it was launched with for life. One whose boundary
@@ -4179,7 +4284,7 @@ export class ClaudeHarness implements Harness {
     // `head` is the listing's, taken before every earlier row was adopted; a
     // ring that has since dropped past it ends the read rather than stalling
     // every later row behind this one ({@link readRing}).
-    const oldest = await readRing(client, procId, RING_START, head, (event) => {
+    const read = await readRing(client, procId, RING_START, head, (event) => {
       const parsed = parseLine(event.data);
       readAsk(asks, parsed, event.data);
       if (
@@ -4198,6 +4303,11 @@ export class ClaudeHarness implements Harness {
         sessionId = parsed.session_id;
       }
     });
+    // Ended and let go while it was read: no keeper holds it any more.
+    if (read.kind === "gone") {
+      throw new Error(`no keeper holds a live child ${procId}`);
+    }
+    const { oldest } = read;
     const replayable =
       options.afterSeq !== undefined && options.afterSeq + 1 >= oldest;
     // What the CLI was handed is all it holds: a send the agent before this

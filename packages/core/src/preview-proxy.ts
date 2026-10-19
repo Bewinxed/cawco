@@ -1,7 +1,15 @@
 import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Server, WebSocketHandler } from "bun";
-import { PREVIEW_DOWN_META, PREVIEW_WHY_META, type PreviewDown } from "./index";
+import { refuseSchemeLowering } from "./bundle-css-guard";
+import { bundled } from "./bundled";
+import { dataUrlBytes, deskCaptures } from "./captures";
+import {
+  PREVIEW_DOWN_META,
+  PREVIEW_WHY_META,
+  type PreviewDown,
+  SHOWN_FAILURES,
+} from "./index";
 import { embeddedFile, standalone } from "./runtime";
 
 /** Where every previewed page loads the overlay from, on its own origin. */
@@ -18,11 +26,20 @@ let overlay: Promise<string> | undefined;
  * standalone binary carries it prebuilt (`build-binary.ts`); a source
  * checkout bundles the agent's overlay on first request.
  */
-async function buildOverlay(): Promise<string> {
+function buildOverlay(): Promise<string> {
   if (standalone) {
     return Bun.file(embeddedFile("preview/overlay.js")).text();
   }
-  const result = await Bun.build({
+  return bundleOverlay();
+}
+
+/**
+ * The overlay's one build: the agent's overlay.ts as a minified browser IIFE,
+ * refused if it lowers `light-dark()`. A source checkout serves it in memory
+ * ({@link buildOverlay}); `build-binary.ts` writes it out to embed.
+ */
+export async function bundleOverlay(): Promise<string> {
+  const result = await bundled("The preview overlay", {
     entrypoints: [
       new URL("../../agent/src/preview-overlay/overlay.ts", import.meta.url)
         .pathname,
@@ -31,16 +48,13 @@ async function buildOverlay(): Promise<string> {
     minify: true,
     format: "iife",
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "Preview overlay build failed");
-  }
+  await refuseSchemeLowering("The preview overlay", result.outputs);
   return result.outputs[0].text();
 }
 
 /**
- * Built once per process and kept, unless the build fails — a missing source
- * file makes `Bun.build` throw rather than answer `success: false`, and a
- * rejected promise left in the cache would turn one bad request into every
+ * Built once per process and kept, unless the build fails — a failed build
+ * throws (bundled.ts), and a rejected promise left in the cache would turn one bad request into every
  * request until restart. A failure clears the slot so the next one retries.
  */
 export function loadOverlay(): Promise<string> {
@@ -101,7 +115,6 @@ export async function keyOverlay(
   parents: readonly string[]
 ): Promise<Response> {
   const at = `${OVERLAY_PATH}?${OVERLAY_KEY}=${await overlayKey(parents)}`;
-  // biome-ignore lint/correctness/noUndeclaredVariables: HTMLRewriter is Bun's own global (bun-types)
   const rewritten = new HTMLRewriter()
     .on(`script[src="${OVERLAY_PATH}"]`, {
       element(element) {
@@ -216,6 +229,47 @@ export function downResponse(
       },
     }
   );
+}
+
+const DOWN_META = new RegExp(
+  `<meta name="${PREVIEW_DOWN_META}" content="([a-z]+)">`
+);
+/** The hops a proxy's page may name: every way a view fails but `page`, which no proxy says. */
+const DOWNS: ReadonlySet<string> = new Set(
+  SHOWN_FAILURES.filter((failure) => failure !== "page")
+);
+const WHY_META = new RegExp(
+  `<meta name="${PREVIEW_WHY_META}" content="([^"]*)">`
+);
+const HTML_UNESCAPES: Record<string, string> = Object.fromEntries(
+  Object.entries(HTML_ESCAPES).map(([char, escaped]) => [escaped, char])
+);
+
+/**
+ * The hop a proxy's own page names ({@link downResponse}) and the machine's
+ * words for it, read back as the pane reads its `cawco:down`: for a reader
+ * on no page (the hub checking a preview no panel shows); null for a page
+ * the previewed server answered.
+ */
+export function downOf(
+  html: string
+): { down: PreviewDown; why: string | null } | null {
+  const named = DOWN_META.exec(html)?.[1];
+  if (!(named && DOWNS.has(named))) {
+    return null;
+  }
+  const down = named as PreviewDown;
+  const why = WHY_META.exec(html)?.[1];
+  return {
+    down,
+    why:
+      why === undefined
+        ? null
+        : why.replaceAll(
+            /&(?:amp|quot|lt|gt);/g,
+            (escaped) => HTML_UNESCAPES[escaped] ?? escaped
+          ),
+  };
 }
 
 /** How long one hop's line for one preview and cause stands for every repeat of it. Our call: a dev server's client retries each second. */
@@ -499,9 +553,11 @@ export async function folderKey(root: string): Promise<string> {
   return BigInt(`0x${hasher.digest("hex").slice(0, 24)}`).toString(36);
 }
 
-/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's. */
+/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`). */
 export interface FolderWeight {
   bytes: number;
+  /** `<img>` on the start page whose file is wider than `DESK_CAPTURE_WIDTH`. */
+  captures: number;
   files: number;
   js: number;
   wasm: number;
@@ -510,9 +566,69 @@ export interface FolderWeight {
 const JS_FILE = /\.[cm]?js$/;
 const WASM_FILE = /\.wasm$/;
 
-/** `root`'s weight, from the same walk as its {@link folderKey}. */
-export async function folderWeight(root: string): Promise<FolderWeight> {
-  const weight: FolderWeight = { files: 0, bytes: 0, js: 0, wasm: 0 };
+const QUERY_OR_HASH = /[?#]/;
+const LEADING_SLASHES = /^\/+/;
+/** A source on another origin or scheme: no file of the folder. */
+const ELSEWHERE = /^[a-z][a-z0-9+.-]*:|^\/\//i;
+
+/** The start page a folder preview opens at `path` (its index.html when the path names a folder), from `root`. */
+const startPage = (path: string | undefined): string => {
+  const at = (path ?? "/").split(QUERY_OR_HASH)[0] ?? "/";
+  return (at.endsWith("/") ? `${at}index.html` : at).replace(
+    LEADING_SLASHES,
+    ""
+  );
+};
+
+/**
+ * The desk captures on `root`'s start page at `path`: each `<img>` a
+ * `data:` URL or a file beside the page, read from its header alone.
+ */
+async function startPageCaptures(
+  root: string,
+  path: string | undefined
+): Promise<number> {
+  const page = join(root, startPage(path));
+  if (!page.startsWith(root)) {
+    return 0;
+  }
+  const file = Bun.file(page);
+  if (!(await file.exists())) {
+    return 0;
+  }
+  const folder = dirname(page);
+  return deskCaptures(await file.text(), async (src) => {
+    const inline = dataUrlBytes(src);
+    if (inline || ELSEWHERE.test(src)) {
+      return inline;
+    }
+    const beside = join(
+      src.startsWith("/") ? root : folder,
+      src.split(QUERY_OR_HASH)[0] ?? ""
+    );
+    if (!beside.startsWith(root)) {
+      return null;
+    }
+    // The header is all the width needs.
+    const head = Bun.file(beside).slice(0, 64 * 1024);
+    return (await Bun.file(beside).exists())
+      ? new Uint8Array(await head.arrayBuffer())
+      : null;
+  });
+}
+
+/** `root`'s weight, from the same walk as its {@link folderKey}; the captures on its start page at `path`. */
+export async function folderWeight(
+  root: string,
+  path?: string
+): Promise<FolderWeight> {
+  const weight: FolderWeight = {
+    files: 0,
+    bytes: 0,
+    js: 0,
+    wasm: 0,
+    captures: await startPageCaptures(root, path),
+  };
   for (const { name, size } of await folderFiles(root)) {
     weight.files += 1;
     weight.bytes += size;
@@ -579,7 +695,6 @@ export function versionAssets(
     }
     return `${mount}__cawco/v/${key}${inside}${url.search}${url.hash}`;
   };
-  // biome-ignore lint/correctness/noUndeclaredVariables: HTMLRewriter is Bun's own global (bun-types)
   let rewriter = new HTMLRewriter();
   for (const [selector, attribute] of FILE_ATTRIBUTES) {
     rewriter = rewriter.on(selector, {

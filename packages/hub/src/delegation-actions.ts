@@ -36,6 +36,7 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { hubHttpUrl, selfFetch } from "./hub-self";
@@ -113,9 +114,9 @@ export async function fetchDelegateTypes(
 /**
  * What a type the caller named adds to a started session. Denied tools come
  * only with a named type: the default type picks what runs, but its deny
- * list is a delegate's (browser checks in isolated chrome-devtools, not the
- * owner's Chrome); a started session is not a delegate and keeps Claude in
- * Chrome. And its toolset (§5.3): the type's `role:`, kept on the row.
+ * list is a delegate's (browser checks in chrome-devtools, through the
+ * DevTools gate to the project's browser, never the owner's Chrome); a
+ * started session is not a delegate and keeps Claude in Chrome. And its toolset (§5.3): the type's `role:`, kept on the row.
  */
 const namedTypeSettings = (
   type: DelegateType | undefined,
@@ -288,6 +289,7 @@ function roster(
   asleep: Peer[];
   own: InstanceRow | undefined;
   hosts: Map<string, string>;
+  rows: InstanceRow[];
 } {
   const { rows, hosts } = fleetInstances(fleet);
   const own = rows.find((row) => row.id === exceptInstanceId);
@@ -316,7 +318,7 @@ function roster(
           row.status === "stopped")
     )
     .map((row) => toPeer(row, hosts));
-  return { peers, asleep, own, hosts };
+  return { peers, asleep, own, hosts, rows };
 }
 
 /**
@@ -343,9 +345,54 @@ function formerOf(
     : undefined;
 }
 
+/**
+ * The session a target names when a continuation took its work item on
+ * (its row's `continuedInto`, the hub's `retireContinued`), followed to the
+ * last: the id its work goes on in now, and the id it was named by. By the
+ * full id, or a short id of six or more characters that names only one of
+ * `rows`. Undefined when the target names no continued session: the old
+ * one never runs again, so nothing is handed to it.
+ */
+function continuedOf(
+  rows: InstanceRow[],
+  target: string,
+  byId: (id: string) => InstanceRow | undefined
+): { now: string; former: string; continued: true } | undefined {
+  const needle = needleOf(target);
+  const idPart = needle.includes("#")
+    ? (needle.split("#").pop() ?? "")
+    : needle;
+  const rowOf = (id: string) => rows.find((row) => row.id === id) ?? byId(id);
+  const short =
+    idPart.length >= 6 ? rows.filter((row) => row.id.startsWith(idPart)) : [];
+  const called = rowOf(needle) ?? (short.length === 1 ? short[0] : undefined);
+  if (!called?.continuedInto) {
+    return undefined;
+  }
+  const seen = new Set([called.id]);
+  let now = called.continuedInto;
+  for (;;) {
+    seen.add(now);
+    const next = rowOf(now)?.continuedInto;
+    if (!next || seen.has(next)) {
+      return { now, former: called.id, continued: true };
+    }
+    now = next;
+  }
+}
+
 /** How a tool's answer names the former id a target was named by. */
-const continuesWords = (followed: { former: string } | undefined): string =>
-  followed ? ` (once ${followed.former.slice(0, 8)})` : "";
+const continuesWords = (
+  followed: { former: string; continued?: true } | undefined
+): string => {
+  if (!followed) {
+    return "";
+  }
+  const former = followed.former.slice(0, 8);
+  return followed.continued
+    ? ` (the continuation of ${former}, which never runs again)`
+    : ` (once ${former})`;
+};
 
 /** An `@` prefix on a target name, optional. */
 const AT_PREFIX = /^@/;
@@ -621,7 +668,10 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * waits for the reset, a move, or its continuation from a summary (`limit`);
  * or Claude Code refused its account's credential and no other account can
  * take it, so it waits for a sign-in or a free account (`signin`); or the
- * owner paused its machine until a time (`paused`, machine-pause.ts); or an
+ * owner paused its machine until a time (`paused`, machine-pause.ts); or its
+ * work item is finishing (`finishing`: its landing gate runs, or the turn
+ * that called `finish_item` is still ending, work-items.ts `finishingFor`),
+ * so the send goes as its next turn and reopens the item if it landed; or an
  * interrupt holds its work item and only its parent, its lead or the person
  * wakes it (`held`); or its workspace retired once its work was over and the
  * hub is cutting its clone again at the same path (`recut`, work-items.ts
@@ -631,6 +681,7 @@ export type SendHold =
   | "agent"
   | "behind"
   | "build"
+  | "finishing"
   | "held"
   | "hub"
   | "limit"
@@ -658,6 +709,8 @@ export interface SendDelivery {
 
 /** Each hold, in the words `handoff` answers with: queued at the hub, and until when. */
 const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
+  finishing:
+    "It called finish_item, and its turn ends with that call, so the message is kept at the hub until the call answers: if the landing gate sends the work back, the message joins the turn that goes on; if the work lands, it goes as the session's next turn once that turn is over, and reopens the item.",
   held: "An interrupt stopped it, and only its parent, its project's lead or the person wakes it, so the message is kept at the hub and goes to it when one of them next writes to it.",
   recut:
     "Its workspace retired once its work was over, so the hub is cutting its clone again at the same path, at the commit its clone was on when it retired, its own commits with it; the message is kept at the hub and goes to the same session, on its transcript, once the clone is there.",
@@ -909,6 +962,15 @@ export interface HandoffActions {
    * lands it, or fails it as blocked. Answers what the hub says of it.
    */
   readonly finishItem: (request: WorkItemSubmission) => Promise<string>;
+  /**
+   * One write on a repository's forge, made on this session's machine with
+   * its own sign-in there, under the project's choice on other people's
+   * repositories (forge-posts.ts). Answers what came of it, in words.
+   */
+  readonly forgePost: (ask: {
+    repo?: string;
+    write: ForgeWrite;
+  }) => Promise<string>;
   readonly generateImage: (
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
@@ -1577,7 +1639,8 @@ export const handoffActions = ({
         `Continued session ${source} in a new ${input.target_harness} session ` +
         `${done.targetInstanceId} on ${input.target_model}. ` +
         openedOnWords(input, done.summariserInstanceId) +
-        `The source session was not touched. The new session opened with:\n\n${done.opening}`,
+        "If the source ran a work item, the new session runs it now and the source is stopped for good: it never runs again, and what is sent to it goes to the new session. Otherwise the source was only read. " +
+        `The new session opened with:\n\n${done.opening}`,
     };
   },
   createWorkflow(name, program) {
@@ -1720,6 +1783,21 @@ export const handoffActions = ({
       }
     }
   },
+  async forgePost(ask) {
+    const response = await fetch(
+      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/forge-post`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(ask),
+      }
+    );
+    const text = (await response.text()).trim();
+    if (!response.ok) {
+      throw new Error(text);
+    }
+    return text;
+  },
   async artifactCall(method, path, body) {
     const response = await fetch(
       `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/artifacts${path}`,
@@ -1799,7 +1877,7 @@ export const handoffActions = ({
     message: string,
     inputs?: string[]
   ): Promise<string> {
-    const { peers, asleep, own, hosts } = roster(fleet, instanceId);
+    const { peers, asleep, own, hosts, rows } = roster(fleet, instanceId);
     // A thread (`thread#1a2b3c4d`, or its id): Caw is handed it there.
     const thread = threadOf(threads, target, [...peers, ...asleep]);
     if (thread) {
@@ -1814,8 +1892,10 @@ export const handoffActions = ({
         message
       );
     }
-    // A session named by a former id is reached by its id now.
-    const followed = formerOf(formerIds(), target);
+    // A session named by a former id is reached by its id now; one a
+    // continuation took the work item of, by its continuation's.
+    const followed =
+      formerOf(formerIds(), target) ?? continuedOf(rows, target, instanceById);
     const addressed = followed?.now ?? target;
     const unlisted =
       followed && ![...peers, ...asleep].some((p) => p.row.id === addressed)

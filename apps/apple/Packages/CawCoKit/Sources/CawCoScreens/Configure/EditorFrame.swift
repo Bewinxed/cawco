@@ -44,6 +44,8 @@ class ConfigEditorController: ObservedViewController {
     private let scroll = UIScrollView()
     private let card = UIView()
     private let footer = UIStackView()
+    /// The footer's ground, under the commit row.
+    private let band = UIView()
     /// The commit row and, over it, the question Delete asked.
     private let commit = UIStackView()
     private let question = AskHere()
@@ -82,14 +84,22 @@ class ConfigEditorController: ObservedViewController {
 
     /// Saves the fields; true when the hub took them.
     func save() async -> Bool { true }
-    /// The question Delete asks, read when it is pressed; nil while there is
-    /// nothing to delete yet.
+    /// The question Delete asks, read when it is pressed; nil for a delete
+    /// that goes through at once, with Undo after it (`deleteNow`).
     func deleteQuestion() -> Question? { nil }
+    /// A delete asked nothing first (deletes.ts): it runs at once, and its toast offers Undo.
+    func deleteNow() {}
     /// Deletes the row; a refusal is thrown in the hub's words, and stays
     /// under the question where it was asked.
     func delete() async throws {}
-    /// Cancel: the fields are dropped and the list comes back.
-    func cancel() { navigationController?.popViewController(animated: true) }
+    /// Where the editor keeps what it changed and has not saved (ConfigDrafts), if it keeps it.
+    var draftPath: String?
+
+    /// Cancel: the fields are dropped, their draft with them, and the list comes back.
+    func cancel() {
+        if let draftPath { ConfigDrafts.shared.drop(draftPath) }
+        navigationController?.popViewController(animated: true)
+    }
 
     // MARK: Frame
 
@@ -104,6 +114,7 @@ class ConfigEditorController: ObservedViewController {
         card.layer.cornerRadius = Radius.radiusLg
         card.layer.cornerCurve = .continuous
         card.translatesAutoresizingMaskIntoConstraints = false
+        card.accessibilityIdentifier = "config.card"
         scroll.addSubview(card)
 
         // The section's tile, the one its row carries in the list: 26pt, raised, centred on the title's line.
@@ -126,8 +137,9 @@ class ConfigEditorController: ObservedViewController {
         head.spacing = 8
         head.alignment = .top
         // `.narrow-menu`: under 640px Delete leaves the commit row for the header's ⋯.
-        if deleteLabel != nil {
+        if let deleteLabel {
             headMenu.showsMenuAsPrimaryAction = true
+            headMenu.menuOnOpen { [weak self] in self?.headMenuItems(deleteLabel) ?? [] }
             headMenu.accessibilityIdentifier = "editor.more"
             headMenu.setContentHuggingPriority(.required, for: .horizontal)
             head.addArrangedSubview(headMenu)
@@ -149,16 +161,30 @@ class ConfigEditorController: ObservedViewController {
         commit.addArrangedSubview(question)
         commit.addArrangedSubview(footer)
         commit.translatesAutoresizingMaskIntoConstraints = false
+        commit.accessibilityIdentifier = "config.commit"
+        scroll.accessibilityIdentifier = "config.scroll"
+        // `.footer`: the commit row in a band of the recess across the page,
+        // 10pt over it to the bottom edge; the page scrolls above the band.
+        band.backgroundColor = Palette.surfaceRecess
+        band.accessibilityIdentifier = "config.band"
+        band.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(band)
         view.addSubview(commit)
 
         let safe = view.safeAreaLayoutGuide
         let wide = card.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -Space.space5 * 2)
-        wide.priority = .defaultHigh
+        // `.body`: the pane's width less its gutters, 980 at most, whatever the
+        // card holds; under the cap only, never as a tie with what it holds.
+        wide.priority = .required - 1
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: safe.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: commit.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: band.topAnchor),
+            band.topAnchor.constraint(equalTo: commit.topAnchor, constant: -10),
+            band.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            band.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            band.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             card.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space2),
             scroll.contentLayoutGuide.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: Space.space5),
             card.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: Space.space5),
@@ -186,6 +212,14 @@ class ConfigEditorController: ObservedViewController {
             editor.drawFooter()
         }
         drawFooter()
+    }
+
+    /// The header's ⋯ as it opens: Delete, as it can run then.
+    private func headMenuItems(_ deleteLabel: String) -> [UIMenuElement] {
+        let blocked = hub.writesBlocked != nil || deleting || saving
+        return [UIAction(title: deleteLabel, image: Glyph.trash.image.resized(to: 16), attributes: blocked ? [.destructive, .disabled] : .destructive) { [weak self] _ in
+            self?.runDelete()
+        }]
     }
 
     private func buildFooter() {
@@ -219,12 +253,6 @@ class ConfigEditorController: ObservedViewController {
         deleteButton?.isHidden = compact
         deleteButton?.isEnabled = down == nil && !saving && !deleting
         headMenu.isHidden = !compact || deleteLabel == nil
-        if let deleteLabel {
-            headMenu.menu = UIMenu(children: [
-                UIAction(title: deleteLabel, image: Glyph.trash.image.resized(to: 16),
-                         attributes: down != nil || deleting || saving ? [.destructive, .disabled] : .destructive) { [weak self] _ in self?.runDelete() },
-            ])
-        }
     }
 
     #if DEBUG
@@ -241,8 +269,9 @@ class ConfigEditorController: ObservedViewController {
 
     /// Where Delete stands as drawn: the header's ⋯ menu and its items, or the commit row's button.
     var probeDelete: String {
-        if !headMenu.isHidden, headMenu.window != nil {
-            let items = headMenu.menu?.children.compactMap { ($0 as? UIAction)?.title } ?? []
+        if !headMenu.isHidden, headMenu.window != nil, let deleteLabel {
+            // What the menu lists as it opens: its items are made then, not held.
+            let items = headMenuItems(deleteLabel).compactMap { ($0 as? UIAction)?.title }
             return "header menu: " + items.joined(separator: ", ")
         }
         if let deleteButton, !deleteButton.isHidden, deleteButton.window != nil {
@@ -277,7 +306,11 @@ class ConfigEditorController: ObservedViewController {
     /// confirm, pending until the hub answers; a refusal stays under it in
     /// the hub's words, the confirm the way to try again.
     private func runDelete() {
-        guard !deleting, let ask = deleteQuestion() else { return }
+        guard !deleting else { return }
+        guard let ask = deleteQuestion() else {
+            deleteNow()
+            return
+        }
         question.ask(AskHere.Request(title: ask.title, body: [ask.body], confirmLabel: ask.confirm, pendingLabel: ask.pending,
                                      destructive: true) { [weak self] in try await self?.delete() })
         drawFooter()

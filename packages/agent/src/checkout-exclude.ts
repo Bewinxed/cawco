@@ -62,7 +62,7 @@ const excludeFileOf = async (clone: string): Promise<string> => {
 };
 
 /** A clone's `info/exclude`: CawCo's block's paths (relative to the clone), and every other line. */
-const readExclude = async (
+export const readExclude = async (
   exclude: string
 ): Promise<{ readonly listed: string[]; readonly rest: string[] }> => {
   const text = await Bun.file(exclude)

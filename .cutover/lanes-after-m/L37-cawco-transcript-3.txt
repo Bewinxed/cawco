@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/transcript/LfsOfferActions.svelte
+apps/dashboard/src/lib/cawco/transcript/LiveRow.svelte
+apps/dashboard/src/lib/cawco/transcript/MessageRow.svelte
+apps/dashboard/src/lib/cawco/transcript/OfferActs.svelte
+apps/dashboard/src/lib/cawco/transcript/Peer.svelte
+apps/dashboard/src/lib/cawco/transcript/ProjectOffer.svelte
+apps/dashboard/src/lib/cawco/transcript/Prompt.svelte
+
+# apps/dashboard/src/lib/cawco/transcript/LfsOfferActions.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/LiveRow.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/MessageRow.svelte: relic: literal ×3; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/OfferActs.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/Peer.svelte: relic: literal ×2; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/ProjectOffer.svelte: relic: literal ×4; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/Prompt.svelte: after-M: markup naming a scoped class; after-M: an inline style; after-M: a Tailwind class with a raw value; after-M: a state written as a class; after-M: a scoped <style> rule; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×14; relic: style-var ×5; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s); lint: shadcn/require-static-classes ×2; lint: shadcn/no-arbitrary-values ×3; lint: shadcn/no-restyle ×9

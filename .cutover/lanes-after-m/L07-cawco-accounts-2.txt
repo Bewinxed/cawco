@@ -1,0 +1,13 @@
+apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte
+apps/dashboard/src/lib/cawco/accounts/AtLimitBlock.svelte
+apps/dashboard/src/lib/cawco/accounts/Check.svelte
+apps/dashboard/src/lib/cawco/accounts/DevicePanel.svelte
+apps/dashboard/src/lib/cawco/accounts/OrderList.svelte
+apps/dashboard/src/lib/cawco/accounts/ProviderMark.svelte
+
+# apps/dashboard/src/lib/cawco/accounts/AccountSwitch.svelte: relic: literal ×2; relic: style-var ×6
+# apps/dashboard/src/lib/cawco/accounts/AtLimitBlock.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×1; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/accounts/Check.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/accounts/DevicePanel.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/accounts/OrderList.svelte: relic: literal ×3; relic: style-var ×4
+# apps/dashboard/src/lib/cawco/accounts/ProviderMark.svelte: relic: style-reason ×1

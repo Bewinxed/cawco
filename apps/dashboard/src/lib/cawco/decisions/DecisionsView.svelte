@@ -10,6 +10,7 @@
    * skeleton stands (The Claim Of Nothing Rule). The page, the card and the
    * mode live in the URL.
    */
+  import { decisionsWords as words } from "@cawco/core";
   import type { DecisionGraph as Graph } from "@cawco/core/decisions";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
@@ -254,27 +255,19 @@
           >
             <EmptyState
               icon={IconDecisions}
-              line="The decision pages for {projectName} could not be read: {decisions.problem}"
-              title="Decisions are not available"
+              line={words.unavailableLine(projectName, decisions.problem)}
+              title={words.unavailable}
             >
               {#snippet action()}
                 <Button onclick={() => decisions.read()} variant="outline"
-                  >Retry</Button
+                  >{words.retry}</Button
                 >
               {/snippet}
             </EmptyState>
           </div>
         {:else if empty && canTalk}
-          <!-- literal: 36rem -->
-          <div
-            data-slot="caw-empty"
-            class="w-full max-w-(--measure)"
-            style:--measure="36rem"
-          >
-            <EmptyState
-              line="Caw writes a decision page: the choices this project needs you to make, each with its options."
-              title="No decisions yet"
-            >
+          <div data-slot="caw-empty" class="state caw-empty">
+            <EmptyState line={words.emptyCaw} title={words.empty}>
               {#snippet mark()}
                 <div
                   data-slot="caw-80"
@@ -304,13 +297,13 @@
           >
             <EmptyState
               icon={IconDecisions}
-              line="A session writes decision pages; start one and ask for a page."
-              title="No decisions yet"
+              line={words.emptySession}
+              title={words.empty}
             >
               {#snippet action()}
                 <Button
                   onclick={() => newSession({ projectId })}
-                  variant="outline">New session</Button
+                  variant="outline">{words.newSession}</Button
                 >
               {/snippet}
             </EmptyState>

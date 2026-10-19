@@ -1,100 +1,16 @@
 <script lang="ts" module>
-  import type { ConnectionAuth } from "@cawco/core";
+  import {
+    CONNECTION_SERVICES,
+    type ConnectionService,
+    type ConnectionWay,
+  } from "@cawco/core";
 
-  /**
-   * One way the hub signs in to a service: how (`auth`), what it is called
-   * where it is picked, and what it takes, said under the pick.
-   */
-  export interface Way {
-    auth: Extract<ConnectionAuth, "oauth" | "bearer" | "app">;
-    /** What the key is, said under its field. */
-    key?: string;
-    label: string;
-    /** What the way is for, under the pick. */
-    says: string;
-  }
+  /** One way the hub signs in to a service (core `ConnectionWay`). */
+  export type Way = ConnectionWay;
+  /** A service the page can start a connection to (core `CONNECTION_SERVICES`, where each one's sources are). */
+  export type Service = ConnectionService;
 
-  /**
-   * A service the page can start a connection to: its MCP server and the
-   * ways the hub signs in there, the first the one offered first.
-   * - GitHub: "To access resources on behalf of an organization, or for
-   *   long-lived integrations, you should use a GitHub App"
-   *   (docs.github.com, managing your personal access tokens); its remote
-   *   MCP server takes the app's `ghs_` token or a token as
-   *   `Authorization: Bearer` (github/github-mcp-server#696). A project's
-   *   tracker needs "Issues" (write) (docs.github.com, create an issue).
-   * - Linear: an app acting as itself ("This option should be used for
-   *   agents and service accounts", linear.app/developers/oauth-2-0-authentication),
-   *   or an API key, both of which its MCP server takes as a bearer
-   *   (linear.app/docs/mcp); or its MCP server's own sign-in, "OAuth 2.1 with
-   *   dynamic client registration", whose token is for its MCP server alone.
-   * - Slack: "We do not support SSE-based connections or Dynamic Client
-   *   Registration at this time" (docs.slack.dev/ai/slack-mcp-server), so a
-   *   user token, as Bearer.
-   */
-  export interface Service {
-    label: string;
-    service: string;
-    url: string;
-    ways: Way[];
-  }
-
-  export const SERVICES: Service[] = [
-    {
-      service: "github",
-      label: "GitHub",
-      url: "https://api.githubcopilot.com/mcp/",
-      ways: [
-        {
-          auth: "app",
-          label: "GitHub App",
-          says: "An app you register and install on the projects' repositories, with Issues: read and write. It acts as itself.",
-        },
-        {
-          auth: "bearer",
-          label: "Token",
-          says: "A fine-grained personal access token limited to the projects' repositories, with Issues: read and write.",
-          key: "It acts as you.",
-        },
-      ],
-    },
-    {
-      service: "linear",
-      label: "Linear",
-      url: "https://mcp.linear.app/mcp",
-      ways: [
-        {
-          auth: "app",
-          label: "Linear app",
-          says: "An OAuth app you create in Linear's settings. It acts as itself, with read and write.",
-        },
-        {
-          auth: "bearer",
-          label: "API key",
-          says: "A personal API key limited to the projects' teams.",
-          key: "It acts as you.",
-        },
-        {
-          auth: "oauth",
-          label: "Sign in",
-          says: "Linear's own sign-in, for agents' Linear tools. A project's tasks need a Linear app or an API key.",
-        },
-      ],
-    },
-    {
-      service: "slack",
-      label: "Slack",
-      url: "https://mcp.slack.com/mcp",
-      ways: [
-        {
-          auth: "bearer",
-          label: "User token",
-          says: "A Slack user token from your Slack app.",
-          key: "A Slack user token (xoxp-…) from your Slack app.",
-        },
-      ],
-    },
-  ];
+  export const SERVICES: readonly Service[] = CONNECTION_SERVICES;
 
   /** What an app connection is set with, before the hub holds it. */
   export interface AppDraft {
@@ -122,6 +38,18 @@
           privateKey: draft.privateKey,
         }
       : { clientId: draft.clientId, clientSecret: draft.clientSecret };
+
+  /** A typed server address as the hub takes one: an http(s) URL, or none. */
+  export const serverUrl = (typed: string): string | undefined => {
+    try {
+      const url = new URL(typed.trim());
+      return url.protocol === "https:" || url.protocol === "http:"
+        ? url.href
+        : undefined;
+    } catch {
+      // Not a URL: no address the hub takes.
+    }
+  };
 
   /** Whether a way signs in through a page of the service's own, in a tab. */
   export const signsInByPage = (service: string, way: Way): boolean =>
@@ -160,7 +88,12 @@
    * checklist) and Remove, which goes through at once with Undo in its toast
    * (JOURNEY.md Flow 5).
    */
-  import type { ConnectionView, Deleted } from "@cawco/core";
+  import {
+    type ConnectionView,
+    configureWords,
+    type Deleted,
+    connectionsWords as words,
+  } from "@cawco/core";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -219,7 +152,7 @@
       loaded = true;
       readError = null;
     } catch (error) {
-      readError = `Could not read the connections — ${failureClause(error)}.`;
+      readError = words.unread(failureClause(error));
     }
   }
 
@@ -255,17 +188,17 @@
 
   /** The hub's state, as the row's word. */
   const STATE = {
-    "signed-in": { label: "Signed in", variant: "done" },
-    "needs-sign-in": { label: "Not signed in", variant: "secondary" },
-    error: { label: "Failing", variant: "attn" },
+    "signed-in": { label: words.stateSignedIn, variant: "done" },
+    "needs-sign-in": { label: words.stateNeedsSignIn, variant: "secondary" },
+    error: { label: words.stateError, variant: "attn" },
   } as const;
 
   /** The hub's reasons the row's own button already says. */
   const SAID_BY_BUTTON = new Set([
-    "Sign in.",
-    "Set its key.",
-    "Set its app.",
-    "A sign-in is under way.",
+    words.saidSignIn,
+    words.saidSetKey,
+    words.saidSetApp,
+    words.saidUnderWay,
   ]);
 
   /** The line under a row: its sign-in under way, its last failure, or the hub's reason. */
@@ -273,7 +206,7 @@
     if (signing[row.name]) {
       return {
         tone: "busy",
-        text: `${labelOf(row)}'s sign-in is open in a new tab; this row turns signed in when you finish there.`,
+        text: words.signingInTab(labelOf(row)),
       };
     }
     const problem = problems[row.name];
@@ -319,13 +252,13 @@
       const { closed } = tab;
       await read();
       const row = rows.find((each) => each.name === name);
-      if (row?.reason !== "A sign-in is under way.") {
+      if (row?.reason !== words.saidUnderWay) {
         stopWatching(name);
         return;
       }
       if (closed) {
         stopWatching(name);
-        problems[name] = "The sign-in tab closed before it finished.";
+        problems[name] = words.signInClosed;
       }
     }, WATCH_MS);
   }
@@ -349,8 +282,7 @@
     await read();
   }
 
-  const BLOCKED =
-    "The browser blocked the sign-in tab. Allow pop-ups for this page, then try again.";
+  const BLOCKED = words.blocked;
 
   function signIn(row: ConnectionView) {
     const tab = window.open("", "_blank");
@@ -434,6 +366,9 @@
   let adding = $state<Service | null>(null);
   let addWay = $state<Way | null>(null);
   let account = $state("");
+  /** The server's address, for a service the person runs one of (core `serverExample`). */
+  let address = $state("");
+  let addressProblem = $state<string | null>(null);
   let addKey = $state("");
   let addApp = $state<AppDraft>(emptyApp());
   let addPending = $state(false);
@@ -443,6 +378,8 @@
     adding = service;
     addWay = service.ways[0] ?? null;
     account = "";
+    address = service.url ?? "";
+    addressProblem = null;
     addKey = "";
     addApp = emptyApp();
     addProblem = null;
@@ -485,6 +422,11 @@
     if (!(service && way)) {
       return;
     }
+    const url = service.serverExample ? serverUrl(address) : service.url;
+    if (!url) {
+      addressProblem = words.serverAddressProblem;
+      return;
+    }
     // The sign-in tab opens on the press, before anything is awaited.
     const byPage = signsInByPage(service.service, way);
     const tab = byPage ? window.open("", "_blank") : null;
@@ -503,7 +445,7 @@
           service: service.service,
           account: account.trim(),
           transport: "http",
-          url: service.url,
+          url,
           auth: way.auth,
         })
       );
@@ -542,8 +484,11 @@
       stopWatching(row.name);
       // The hub puts it back whole, key and projects with it; the list is
       // read again, as after every change here.
-      offerUndo(`deleted:${row.name}`, `Removed ${labelOf(row)}`, deleted, () =>
-        read()
+      offerUndo(
+        `deleted:${row.name}`,
+        configureWords.removed(labelOf(row)),
+        deleted,
+        () => read()
       );
     } catch (error) {
       problems[row.name] = failureWords(error);
@@ -594,7 +539,7 @@
         <Button
           {...props}
           icon={IconPlus}
-          label="Sign in to a service"
+          label={words.signInTo}
           title={blocked ?? undefined}
         />
       {/snippet}
@@ -631,8 +576,8 @@
       <InputGroup.Addon align="inline-end">
         <InputGroup.Button
           aria-label={revealed[id]
-            ? `Hide the ${label.toLowerCase()}`
-            : `Show the ${label.toLowerCase()}`}
+            ? words.hideSecret(label.toLowerCase())
+            : words.showSecret(label.toLowerCase())}
           aria-pressed={revealed[id] ?? false}
           onclick={() => {
             revealed[id] = !revealed[id];
@@ -654,11 +599,7 @@
      Linear app's client id and secret with the callback its settings list. -->
 {#snippet appFields(service: string, draft: AppDraft, at: string)}
   {#if service === "github"}
-    <Field
-      hint="On the GitHub App's settings page: its App ID, or its client ID."
-      id="{at}-app-id"
-      label="App ID"
-    >
+    <Field hint={words.appIdHint} id="{at}-app-id" label={words.appId}>
       <Input
         autocomplete="off"
         id="{at}-app-id"
@@ -669,9 +610,9 @@
       />
     </Field>
     <Field
-      hint="The number at the end of the installation's settings URL."
+      hint={words.installationIdHint}
       id="{at}-installation"
-      label="Installation ID"
+      label={words.installationId}
     >
       <Input
         autocomplete="off"
@@ -684,28 +625,17 @@
     </Field>
     {@render secret(
       `${at}-private-key`,
-      "Private key",
-      "The .pem file's text, from Generate a private key. The hub keeps it sealed.",
+      words.privateKey,
+      words.privateKeyHint,
       draft,
       "privateKey"
     )}
   {:else}
-    <!-- literal: 72ch -->
-    <p
-      data-slot="callback"
-      class="flex min-w-0 max-w-(--app-measure) flex-col gap-space-1 type-meta text-ink-muted"
-      style:--app-measure="72ch"
-    >
-      <span>Add this callback URL to the app in Linear:</span>
-      <code class="min-w-0 font-mono text-ink-strong wrap-anywhere select-all"
-        >{callbackUrl}</code
-      >
+    <p data-slot="callback" class="callback">
+      <span>{words.callbackLine}</span>
+      <code class="callback-url">{callbackUrl}</code>
     </p>
-    <Field
-      hint="On the app's page in Linear's settings."
-      id="{at}-client-id"
-      label="Client ID"
-    >
+    <Field hint={words.clientIdHint} id="{at}-client-id" label={words.clientId}>
       <Input
         autocomplete="off"
         id="{at}-client-id"
@@ -716,8 +646,8 @@
     </Field>
     {@render secret(
       `${at}-client-secret`,
-      "Client secret",
-      "The hub keeps it sealed.",
+      words.clientSecret,
+      words.clientSecretHint,
       draft,
       "clientSecret"
     )}
@@ -730,23 +660,19 @@
   <!-- literal: 72ch -->
   <form
     data-slot="add"
-    aria-label="Sign in to {service.label}"
-    class="mb-space-4 flex max-w-(--measure) flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
+    aria-label={words.signInService(service.label)}
+    class="add"
     onsubmit={add}
     style:--measure="72ch"
     transition:unfold
   >
-    <p
-      class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
-    >
-      <ProviderLogo class="size-icon-md flex-none" provider={service.service} />
-      <span>Sign in to {service.label}</span>
+    <p class="add-head mark-line">
+      <ProviderLogo provider={service.service} />
+      <span>{words.signInService(service.label)}</span>
     </p>
     {#if service.ways.length > 1}
-      <div data-slot="way" class="flex min-w-0 flex-col gap-space-1">
-        <p class="type-meta text-ink-muted" id="connection-way">
-          Signs in with
-        </p>
+      <div data-slot="way" class="way">
+        <p class="way-label" id="connection-way">{words.signsInWith}</p>
         <ToggleGroup.Root
           aria-labelledby="connection-way"
           class="max-w-full flex-wrap self-start"
@@ -775,22 +701,51 @@
         {/if}
       </div>
     {/if}
+    {#if service.serverExample}
+      <Field
+        id="connection-server"
+        label={words.serverAddress}
+        problem={addressProblem ?? undefined}
+      >
+        <Input
+          autocomplete="off"
+          id="connection-server"
+          inputmode="url"
+          oninput={() => {
+            addressProblem = null;
+          }}
+          oninvalid={(event: Event) => {
+            // Said under the field, never as the browser's bubble.
+            event.preventDefault();
+            addressProblem = words.serverAddressProblem;
+          }}
+          placeholder={service.serverExample}
+          spellcheck="false"
+          type="url"
+          bind:value={address}
+        />
+      </Field>
+    {/if}
     <Field
-      hint="Two accounts of one service are two connections."
+      hint={words.accountHint}
       id="connection-account"
-      label="Which {service.label} account"
+      label={words.account(service.label)}
     >
       <Input
         autocomplete="off"
         id="connection-account"
-        placeholder="brand, or your handle"
+        placeholder={words.accountPlaceholder}
         required
         {@attach focusOnOpen}
         bind:value={account}
       />
     </Field>
     {#if addWay?.auth === "bearer"}
-      <Field hint={addWay.key} id="connection-key" label="{service.label} key">
+      <Field
+        hint={addWay.key}
+        id="connection-key"
+        label={words.key(service.label)}
+      >
         <Input
           autocomplete="off"
           id="connection-key"
@@ -814,16 +769,16 @@
     <div class="flex justify-end gap-space-2">
       <Button
         disabled={addPending}
-        label="Cancel"
+        label={words.cancel}
         onclick={stopAdding}
         size="sm"
         variant="ghost"
       />
       <Button
-        press="pressable"
-        label="Sign in"
+        class="pressable"
+        label={words.signIn}
         pending={addPending}
-        pendingLabel="Signing in…"
+        pendingLabel={words.signingIn}
         size="sm"
         type="submit"
       />
@@ -851,30 +806,9 @@
     <!-- The Empty Starts Work Rule, its by-hand branch: a sign-in is the
          service asking you, so Caw can't start it. The line says so, and
          each card signs in to one service, its row then saying how it goes. -->
-    <!-- literal: 72ch -->
-    <div
-      data-slot="connections-page-empty"
-      class="@container flex flex-col gap-space-3"
-    >
-      <p
-        data-slot="empty-line"
-        class="type-body max-w-(--measure) text-pretty text-ink-muted"
-        style:--measure="72ch"
-      >
-        Each service asks you, not Caw, to let the hub in, so signing in is
-        yours. The projects you allow then read from it and act through it.
-      </p>
-      <!-- The starter cards' recipe (StarterCards.svelte): raised, the tile
-           shadow, every card one height, one column when narrow. -->
-      <!-- literal: minmax(0, 1fr), 1fr; auto-fill tracks of min(100%, the starter's width) -->
-      <ul
-        data-slot="cards"
-        aria-label="Services"
-        class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-(--cards-cols) gap-space-2 p-0 @details:grid-cols-(--cards-cols-wide)"
-        style:--cards-cols="minmax(0, 1fr)"
-        style:--cards-cols-wide={"repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"}
-        style:--cards-rows="1fr"
-      >
+    <div data-slot="connections-page-empty" class="empty">
+      <p data-slot="empty-line" class="empty-line">{words.emptyLine}</p>
+      <ul data-slot="cards" aria-label={words.servicesLabel} class="cards">
         {#each SERVICES as service (service.service)}
           <li>
             <button
@@ -883,11 +817,8 @@
               onclick={() => startAdding(service)}
               type="button"
             >
-              <ProviderLogo
-                class="size-icon-md flex-none"
-                provider={service.service}
-              />
-              <span>Sign in to {service.label}</span>
+              <ProviderLogo provider={service.service} />
+              <span>{words.signInService(service.label)}</span>
             </button>
           </li>
         {/each}
@@ -897,21 +828,21 @@
       {/if}
     </div>
   {:else}
-    <RowList label="Connections">
+    <RowList label={words.list}>
       {#each rows as row (row.id)}
         {@const shown = shownOf(row)}
         {@const marked = MARKED.has(row.service.toLowerCase())}
         <SectionRow
           actions={[
             {
-              label: "Projects…",
+              label: words.projects,
               icon: IconToolTodo,
               onselect: () => chooseFor(row),
             },
             ...(row.auth === "app"
               ? [
                   {
-                    label: "Set app…",
+                    label: words.setApp,
                     icon: IconConnection,
                     onselect: () => {
                       rowApp = emptyApp();
@@ -921,7 +852,7 @@
                 ]
               : []),
             {
-              label: "Remove",
+              label: words.remove,
               icon: IconTrash,
               destructive: true,
               disabled: removing === row.name,
@@ -944,8 +875,8 @@
               <!-- literal: 72ch -->
               <form
                 data-slot="row-app"
-                aria-label="{labelOf(row)} app"
-                class="m-0 flex min-w-0 max-w-(--app-measure) flex-col gap-space-3 py-space-2"
+                aria-label={words.appOf(labelOf(row))}
+                class="row-app"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveApp(row);
@@ -962,7 +893,7 @@
                   <Button
                     press="pressable"
                     disabled={appPending}
-                    label="Cancel"
+                    label={words.cancel}
                     onclick={() => {
                       appFor = null;
                       rowApp = emptyApp();
@@ -971,10 +902,10 @@
                     variant="ghost"
                   />
                   <Button
-                    press="pressable"
-                    label="Save app"
+                    class="pressable"
+                    label={words.saveApp}
                     pending={appPending}
-                    pendingLabel="Saving…"
+                    pendingLabel={words.saving}
                     size="xs"
                     type="submit"
                   />
@@ -985,8 +916,8 @@
               <!-- literal: 14rem, 24rem -->
               <form
                 data-slot="row-ask"
-                aria-label="{labelOf(row)} key"
-                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none border-current p-0 type-meta text-ink-strong"
+                aria-label={words.key(labelOf(row))}
+                class="row-ask"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveKey(row);
@@ -996,7 +927,7 @@
                 transition:unfold
               >
                 <Input
-                  aria-label="{labelOf(row)} key for {row.account}"
+                  aria-label={words.rowKey(labelOf(row), row.account)}
                   autocomplete="off"
                   required
                   type="password"
@@ -1004,16 +935,16 @@
                   bind:value={key}
                 />
                 <Button
-                  press="pressable"
-                  label="Save key"
+                  class="pressable"
+                  label={words.saveKey}
                   pending={keyPending}
-                  pendingLabel="Saving…"
+                  pendingLabel={words.saving}
                   size="xs"
                   type="submit"
                 />
                 <Button
-                  press="pressable"
-                  label="Cancel"
+                  class="pressable"
+                  label={words.cancel}
                   onclick={() => {
                     keying = null;
                     key = "";
@@ -1031,14 +962,15 @@
           {/snippet}
           {#snippet trailing()}
             {#if shown.chips.length > 0}
-              <span class="inline-flex flex-wrap items-center gap-space-1">
-                <span class="sr-only">Projects that may use it:</span>
+              <span class="projects">
+                <span class="sr-only">{words.projectsMayUse}</span>
                 {#each shown.chips as chip (chip)}
                   <Badge variant="secondary"><span>{chip}</span></Badge>
                 {/each}
                 {#if shown.more > 0}
                   <Badge variant="ghost"
-                    ><span data-slot="num" class="num">+{shown.more}</span
+                    ><span data-slot="num" class="num"
+                      >{words.more(shown.more)}</span
                     ></Badge
                   >
                 {/if}
@@ -1046,8 +978,8 @@
             {/if}
             {#if row.state !== "signed-in" && needsApp(row) && appFor !== row.name}
               <Button
-                press="pressable"
-                label="Set app"
+                class="pressable"
+                label={words.setAppNow}
                 onclick={() => {
                   rowApp = emptyApp();
                   appFor = row.name;
@@ -1057,18 +989,18 @@
               />
             {:else if row.state !== "signed-in" && signsIn(row)}
               <Button
-                press="pressable"
-                label="Sign in"
+                class="pressable"
+                label={words.signIn}
                 onclick={() => signIn(row)}
                 pending={signing[row.name] ?? false}
-                pendingLabel="Signing in…"
+                pendingLabel={words.signingIn}
                 size="sm"
                 variant="outline"
               />
             {:else if row.state !== "signed-in" && takesKey(row) && keying !== row.name}
               <Button
-                press="pressable"
-                label="Set key"
+                class="pressable"
+                label={words.setKey}
                 onclick={() => {
                   key = "";
                   keying = row.name;
@@ -1097,10 +1029,8 @@
   <Popover.Content align="end" customAnchor={chooseAnchor} width="narrow">
     {#if choosing}
       {@const row = choosing}
-      <p class="type-label px-space-2 pt-space-2 pb-space-1 text-ink-strong">
-        Projects that may use {labelOf(row)}
-      </p>
-      <ul class="m-0 flex list-none flex-col p-0">
+      <p class="pick-head">{words.projectsFor(labelOf(row))}</p>
+      <ul class="checklist">
         {#each cawco.projects as project (project.id)}
           <li>
             <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Checkbox renders the control the label names -->

@@ -948,23 +948,35 @@
         }
       }
     },
-    "/api/stream-relay": {
+    "/api/browsers": {
       "get": {
-        "operationId": "getApiStreamRelay",
+        "operationId": "getApiBrowsers",
         "responses": {
           "200": {
-            "description": "getApiStreamRelay 200",
+            "description": "getApiBrowsers 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
+                  "$ref": "#/components/schemas/getApiBrowsers200"
                 }
               }
             }
           }
         }
-      },
+      }
+    },
+    "/api/browsers/{key}/takeover": {
       "post": {
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -976,32 +988,38 @@
                     "minLength": 1,
                     "type": "string"
                   },
-                  "hostname": {
-                    "maxLength": 253,
+                  "requestId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "instanceId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "viewer": {
+                    "minLength": 1,
+                    "maxLength": 200,
                     "type": "string"
                   }
-                },
-                "required": [
-                  "machineId"
-                ]
+                }
               }
             }
           }
         },
-        "operationId": "postApiStreamRelay",
+        "operationId": "postApiBrowsersByKeyTakeover",
         "responses": {
           "200": {
-            "description": "postApiStreamRelay 200",
+            "description": "postApiBrowsersByKeyTakeover 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyTakeover200"
                 }
               }
             }
           },
           "422": {
-            "description": "postApiStreamRelay 422",
+            "description": "postApiBrowsersByKeyTakeover 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1011,16 +1029,54 @@
             }
           }
         }
-      },
-      "delete": {
-        "operationId": "deleteApiStreamRelay",
+      }
+    },
+    "/api/browsers/{key}/handback": {
+      "post": {
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyHandback",
         "responses": {
           "200": {
-            "description": "deleteApiStreamRelay 200",
+            "description": "postApiBrowsersByKeyHandback 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
+                  "$ref": "#/components/schemas/BrowserHandback"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyHandback 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1028,16 +1084,52 @@
         }
       }
     },
-    "/api/stream-relay/start": {
+    "/api/browsers/{key}/start": {
       "post": {
-        "operationId": "postApiStreamRelayStart",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyStart",
         "responses": {
           "200": {
-            "description": "postApiStreamRelayStart 200",
+            "description": "postApiBrowsersByKeyStart 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
+                  "$ref": "#/components/schemas/BrowserRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyStart 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1045,16 +1137,266 @@
         }
       }
     },
-    "/api/stream-relay/stop": {
+    "/api/browsers/{key}/stop": {
       "post": {
-        "operationId": "postApiStreamRelayStop",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyStop",
         "responses": {
           "200": {
-            "description": "postApiStreamRelayStop 200",
+            "description": "postApiBrowsersByKeyStop 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StreamRelayAnswer"
+                  "$ref": "#/components/schemas/BrowserRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyStop 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream-relay": {
+      "get": {
+        "operationId": "getApiStreamRelay",
+        "responses": {
+          "200": {
+            "description": "getApiStreamRelay 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream-relay/act": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
+                        "type": "string",
+                        "enum": [
+                          "set-up",
+                          "later",
+                          "skip-name",
+                          "add-name",
+                          "open-ports",
+                          "retry",
+                          "start-again",
+                          "check-again",
+                          "done-for-now",
+                          "start",
+                          "stop",
+                          "remove"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "act"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
+                        "type": "string",
+                        "const": "add-record"
+                      },
+                      "token": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "act",
+                      "token"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
+                        "type": "string",
+                        "const": "pick"
+                      },
+                      "machineId": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "act",
+                      "machineId"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
+                        "type": "string",
+                        "const": "name"
+                      },
+                      "name": {
+                        "maxLength": 253,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "act",
+                      "name"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiStreamRelayAct",
+        "responses": {
+          "200": {
+            "description": "postApiStreamRelayAct 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayAnswer"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiStreamRelayAct 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream-relay/try": {
+      "get": {
+        "operationId": "getApiStreamRelayTry",
+        "responses": {
+          "200": {
+            "description": "getApiStreamRelayTry 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayTry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream-relay/proof": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answered": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "refused": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "seenAs": {
+                    "maxLength": 64,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "answered",
+                  "refused",
+                  "seenAs"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiStreamRelayProof",
+        "responses": {
+          "200": {
+            "description": "postApiStreamRelayProof 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayAnswer"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiStreamRelayProof 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4864,9 +5206,18 @@
                       "sheet"
                     ]
                   },
-                  "about": {
+                  "does": {
+                    "type": "string",
+                    "enum": [
+                      "pick",
+                      "judge",
+                      "try",
+                      "draw"
+                    ]
+                  },
+                  "ask": {
                     "minLength": 1,
-                    "maxLength": 240,
+                    "maxLength": 160,
                     "type": "string"
                   },
                   "edges": {
@@ -5146,6 +5497,131 @@
         }
       }
     },
+    "/api/instances/{id}/artifacts/search": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdArtifactsSearch",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdArtifactsSearch 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdArtifactsSearch200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiInstancesByIdArtifactsSearch 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/thumbnail": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "light": {
+                    "maxLength": 4194304,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "dark": {
+                    "maxLength": 4194304,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "single": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "light",
+                  "dark",
+                  "single"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiInstancesByIdArtifactsByArtifactThumbnail",
+        "responses": {
+          "200": {
+            "description": "putApiInstancesByIdArtifactsByArtifactThumbnail 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactThumbnail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiInstancesByIdArtifactsByArtifactThumbnail 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/artifacts/status": {
       "get": {
         "parameters": [
@@ -5280,6 +5756,21 @@
           },
           {
             "name": "render",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "name": "verify",
             "in": "query",
             "required": false,
             "schema": {
@@ -5475,6 +5966,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "agent"
+            }
           }
         ],
         "operationId": "deleteApiInstancesByIdArtifactsByArtifact",
@@ -5488,285 +5988,9 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "/api/instances/{id}/artifacts/{artifact}/component": {
-      "patch": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "artifact",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "args": {
-                    "type": "object",
-                    "properties": {
-                      "story": {
-                        "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                        "type": "string"
-                      },
-                      "values": {
-                        "type": "object",
-                        "patternProperties": {
-                          "^.*$": {}
-                        },
-                        "maxProperties": 100
-                      },
-                      "unset": {
-                        "maxItems": 100,
-                        "type": "array",
-                        "items": {
-                          "minLength": 1,
-                          "maxLength": 100,
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "required": [
-                      "story",
-                      "values"
-                    ]
-                  },
-                  "story": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "add": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          },
-                          "args": {
-                            "type": "object",
-                            "patternProperties": {
-                              "^.*$": {}
-                            },
-                            "maxProperties": 100
-                          }
-                        },
-                        "required": [
-                          "add"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "duplicate": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          },
-                          "as": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "duplicate",
-                          "as"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "remove": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "remove"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "move": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          },
-                          "before": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "move",
-                          "before"
-                        ]
-                      }
-                    ]
-                  },
-                  "about": {
-                    "minLength": 1,
-                    "maxLength": 240,
-                    "type": "string"
-                  },
-                  "edges": {
-                    "maxItems": 100,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "from": {
-                          "minLength": 1,
-                          "maxLength": 1100,
-                          "type": "string"
-                        },
-                        "to": {
-                          "minLength": 1,
-                          "maxLength": 1100,
-                          "type": "string"
-                        },
-                        "label": {
-                          "maxLength": 80,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "from",
-                        "to"
-                      ]
-                    }
-                  },
-                  "group": {
-                    "type": "object",
-                    "patternProperties": {
-                      "^.*$": {
-                        "minLength": 1,
-                        "maxLength": 1100,
-                        "type": "string"
-                      }
-                    },
-                    "maxProperties": 200
-                  },
-                  "dials": {
-                    "maxItems": 24,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "minLength": 1,
-                          "maxLength": 60,
-                          "pattern": "^[A-Za-z][\\w-]*$",
-                          "type": "string"
-                        },
-                        "label": {
-                          "maxLength": 80,
-                          "type": "string"
-                        },
-                        "kind": {
-                          "type": "string",
-                          "enum": [
-                            "number",
-                            "color",
-                            "select",
-                            "toggle"
-                          ]
-                        },
-                        "min": {
-                          "type": "number"
-                        },
-                        "max": {
-                          "type": "number"
-                        },
-                        "step": {
-                          "exclusiveMinimum": 0,
-                          "type": "number"
-                        },
-                        "unit": {
-                          "maxLength": 10,
-                          "type": "string"
-                        },
-                        "options": {
-                          "maxItems": 24,
-                          "type": "array",
-                          "items": {
-                            "maxLength": 100,
-                            "type": "string"
-                          }
-                        },
-                        "target": {
-                          "anyOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "cssVar": {
-                                  "pattern": "^--[\\w-]+$",
-                                  "maxLength": 100,
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "cssVar"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "arg": {
-                                  "minLength": 1,
-                                  "maxLength": 100,
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "arg"
-                              ]
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "kind",
-                        "target"
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "operationId": "patchApiInstancesByIdArtifactsByArtifactComponent",
-        "responses": {
-          "200": {
-            "description": "patchApiInstancesByIdArtifactsByArtifactComponent 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/patchApiInstancesByIdArtifactsByArtifactComponent200"
-                }
-              }
-            }
           },
           "422": {
-            "description": "patchApiInstancesByIdArtifactsByArtifactComponent 422",
+            "description": "deleteApiInstancesByIdArtifactsByArtifact 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5994,6 +6218,76 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/map": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdArtifactsByArtifactMap",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdArtifactsByArtifactMap 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasMap"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/verify": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstancesByIdArtifactsByArtifactVerify",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactVerify 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactVerify200"
                 }
               }
             }
@@ -6337,6 +6631,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "agent"
+            }
           }
         ],
         "operationId": "postApiInstancesByIdArtifactsByArtifactShow",
@@ -6347,6 +6650,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactShow200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsByArtifactShow 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -6565,6 +6878,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiArtifactsByArtifact200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/artifacts/{artifact}/thumbnail/{scheme}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scheme",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "light",
+                "dark"
+              ]
+            }
+          }
+        ],
+        "operationId": "getApiArtifactsByArtifactThumbnailByScheme",
+        "responses": {
+          "200": {
+            "description": "getApiArtifactsByArtifactThumbnailByScheme 200",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiArtifactsByArtifactThumbnailByScheme 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -8226,6 +8589,387 @@
           },
           "504": {
             "description": "postApiProjectsByIdDesignOfferBuild 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lfs-offers/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiLfsOffersById",
+        "responses": {
+          "200": {
+            "description": "getApiLfsOffersById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LfsOfferState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiLfsOffersById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiLfsOffersById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiLfsOffersById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiLfsOffersById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiLfsOffersById 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiLfsOffersById 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiLfsOffersById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiLfsOffersById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiLfsOffersById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiLfsOffersById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lfs-offers/{id}/dismiss": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiLfsOffersByIdDismiss",
+        "responses": {
+          "200": {
+            "description": "postApiLfsOffersByIdDismiss 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LfsOfferState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiLfsOffersByIdDismiss 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiLfsOffersByIdDismiss 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiLfsOffersByIdDismiss 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiLfsOffersByIdDismiss 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiLfsOffersByIdDismiss 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiLfsOffersByIdDismiss 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiLfsOffersByIdDismiss 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiLfsOffersByIdDismiss 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiLfsOffersByIdDismiss 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiLfsOffersByIdDismiss 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lfs-offers/{id}/track": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiLfsOffersByIdTrack",
+        "responses": {
+          "200": {
+            "description": "postApiLfsOffersByIdTrack 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LfsOfferState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiLfsOffersByIdTrack 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiLfsOffersByIdTrack 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiLfsOffersByIdTrack 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiLfsOffersByIdTrack 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiLfsOffersByIdTrack 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiLfsOffersByIdTrack 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiLfsOffersByIdTrack 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiLfsOffersByIdTrack 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiLfsOffersByIdTrack 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiLfsOffersByIdTrack 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -11605,6 +12349,32 @@
                   },
                   "target": {
                     "type": "string"
+                  },
+                  "githubProject": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "map": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^.*$": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "map"
+                    ]
                   }
                 },
                 "required": [
@@ -11716,6 +12486,61 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections/{name}/github-projects": {
+      "get": {
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiConnectionsByNameGithubProjects",
+        "responses": {
+          "200": {
+            "description": "getApiConnectionsByNameGithubProjects 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GithubProjectsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiConnectionsByNameGithubProjects 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiConnectionsByNameGithubProjects 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -19236,6 +20061,73 @@
         }
       }
     },
+    "/api/instances/{id}/attachments": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdAttachments",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdAttachments 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdAttachments200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiInstancesByIdAttachments 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiInstancesByIdAttachments 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiInstancesByIdAttachments 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiInstancesByIdAttachments 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/seen": {
       "post": {
         "requestBody": {
@@ -19832,6 +20724,9 @@
                         "win32"
                       ]
                     }
+                  },
+                  "shared": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -23241,6 +24136,26 @@
                       "ask",
                       "on"
                     ]
+                  },
+                  "lfs": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "url": {
+                        "maxLength": 2000,
+                        "type": "string"
+                      },
+                      "connection": {
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "url",
+                      "connection"
+                    ]
                   }
                 }
               }
@@ -24129,14 +25044,6 @@
                         "minimum": 0,
                         "maximum": 100,
                         "type": "integer"
-                      },
-                      "delegateWork": {
-                        "type": "string",
-                        "enum": [
-                          "resume",
-                          "move",
-                          "leave"
-                        ]
                       }
                     },
                     "required": [
@@ -25364,6 +26271,45 @@
           "types"
         ]
       },
+      "getApiBrowsers200": {
+        "type": "array",
+        "items": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/StoredBrowser"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "machineName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "machineName"
+              ]
+            }
+          ]
+        }
+      },
+      "postApiBrowsersByKeyTakeover200": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "row": {
+            "$ref": "#/components/schemas/BrowserRow"
+          }
+        },
+        "required": [
+          "artifactId",
+          "row"
+        ]
+      },
       "getApiProjectsByIdGate200": {
         "type": "object",
         "properties": {
@@ -25427,36 +26373,27 @@
           "$ref": "#/components/schemas/ArtifactSummary"
         }
       },
+      "getApiInstancesByIdArtifactsSearch200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ArtifactHit"
+        }
+      },
       "getApiInstancesByIdArtifactsStatus200": {
         "type": "array",
         "items": {
           "$ref": "#/components/schemas/ArtifactStatus"
         }
       },
-      "patchApiInstancesByIdArtifactsByArtifactComponent200": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/ComponentWritten"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "revision": {
-                "type": "number"
-              },
-              "spec": {
-                "$ref": "#/components/schemas/CanvasSpec"
-              }
-            },
-            "required": [
-              "id",
-              "revision",
-              "spec"
-            ]
+      "postApiInstancesByIdArtifactsByArtifactVerify200": {
+        "type": "object",
+        "properties": {
+          "verify": {
+            "type": "string"
           }
+        },
+        "required": [
+          "verify"
         ]
       },
       "postApiInstancesByIdArtifactsCommentsByPinReply200": {
@@ -27227,11 +28164,18 @@
                   "null",
                   "string"
                 ]
+              },
+              "continuedInto": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               }
             },
             "required": [
               "accountId",
               "canDelegate",
+              "continuedInto",
               "createdAt",
               "cwd",
               "delegateType",
@@ -27468,6 +28412,12 @@
                     "string"
                   ]
                 },
+                "continuedInto": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "damaged": {
                   "$ref": "#/components/schemas/DamagedRow",
                   "description": "What the hub lays over a session row whose record, or whose workspace's\nrecord, is damaged on its machine ({@link DamagedRecordReport}): the file,\nwhy, and the way out that removes it (`archive`: archive workspace\n`workspaceId`; `end`: end the session)."
@@ -27479,6 +28429,7 @@
               "required": [
                 "accountId",
                 "canDelegate",
+                "continuedInto",
                 "createdAt",
                 "cwd",
                 "delegateType",
@@ -27588,6 +28539,24 @@
           "name",
           "ref",
           "size"
+        ]
+      },
+      "getApiInstancesByIdAttachments200": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionAttachment"
+            }
+          }
+        },
+        "required": [
+          "attachments",
+          "harness"
         ]
       },
       "postApiSeen200": {
@@ -28617,6 +29586,18 @@
             "upstreamPosts": {
               "$ref": "#/components/schemas/FleetChoicesUpstream"
             },
+            "lfsUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lfsConnection": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "createdAt": {
               "type": "string",
               "format": "date-time"
@@ -28641,6 +29622,8 @@
             "lands",
             "leadCostSeen",
             "leadInstanceId",
+            "lfsConnection",
+            "lfsUrl",
             "maxAttempts",
             "name",
             "places",
@@ -28831,6 +29814,18 @@
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -28855,6 +29850,8 @@
           "lands",
           "leadCostSeen",
           "leadInstanceId",
+          "lfsConnection",
+          "lfsUrl",
           "maxAttempts",
           "name",
           "place",
@@ -29032,6 +30029,18 @@
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -29056,6 +30065,8 @@
           "lands",
           "leadCostSeen",
           "leadInstanceId",
+          "lfsConnection",
+          "lfsUrl",
           "maxAttempts",
           "name",
           "places",
@@ -29253,6 +30264,18 @@
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -29277,6 +30300,8 @@
           "lands",
           "leadCostSeen",
           "leadInstanceId",
+          "lfsConnection",
+          "lfsUrl",
           "maxAttempts",
           "name",
           "place",
@@ -29426,6 +30451,18 @@
           "upstreamPosts": {
             "$ref": "#/components/schemas/FleetChoicesUpstream"
           },
+          "lfsUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lfsConnection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -29450,6 +30487,8 @@
           "lands",
           "leadCostSeen",
           "leadInstanceId",
+          "lfsConnection",
+          "lfsUrl",
           "maxAttempts",
           "name",
           "places",
@@ -29679,7 +30718,10 @@
                 "type": "number"
               },
               "delegateWork": {
-                "$ref": "#/components/schemas/DelegateWork"
+                "type": "string",
+                "enum": [
+                  "move"
+                ]
               },
               "move": {
                 "type": "boolean"
@@ -30664,6 +31706,22 @@
               "$ref": "#/components/schemas/TranscriptPageBranch"
             }
           },
+          "continuedTo": {
+            "description": "Newest page only: the session a continuation took this one's work item\non in (`InstanceRow.continuedInto`, followed to the last), by its id and\ntitle: its page says where the work went in its composer's place, from\nits first paint and for a reader whose board no longer lists either row.",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instanceId",
+              "title"
+            ]
+          },
           "cursor": {
             "description": "Pass as `before` for the page older than this; null at the conversation's start.",
             "type": [
@@ -30762,6 +31820,12 @@
             "$ref": "#/components/schemas/HubAuthFrame"
           },
           {
+            "$ref": "#/components/schemas/BrowserFrame"
+          },
+          {
+            "$ref": "#/components/schemas/BrowserHandedBackFrame"
+          },
+          {
             "$ref": "#/components/schemas/StageFrame"
           },
           {
@@ -30769,6 +31833,9 @@
           },
           {
             "$ref": "#/components/schemas/FleetMcpFrame"
+          },
+          {
+            "$ref": "#/components/schemas/FleetReportFrame"
           },
           {
             "$ref": "#/components/schemas/PreviewFrame"
@@ -30897,10 +31964,10 @@
             "$ref": "#/components/schemas/AccountBorrowFrame"
           },
           {
-            "$ref": "#/components/schemas/BrowserFrame"
+            "$ref": "#/components/schemas/RelayFrame"
           },
           {
-            "$ref": "#/components/schemas/RelayFrame"
+            "$ref": "#/components/schemas/RelayJourneyFrame"
           },
           {
             "$ref": "#/components/schemas/WorkflowFrame"
@@ -30910,9 +31977,12 @@
           "propertyName": "kind",
           "mapping": {
             "hub_auth": "#/components/schemas/HubAuthFrame",
+            "browsers": "#/components/schemas/BrowserFrame",
+            "browser_handback": "#/components/schemas/BrowserHandedBackFrame",
             "stage": "#/components/schemas/StageFrame",
             "stage-clone": "#/components/schemas/StageCloneFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
+            "fleet_report": "#/components/schemas/FleetReportFrame",
             "preview": "#/components/schemas/PreviewFrame",
             "frame": "#/components/schemas/MessageFrame",
             "send": "#/components/schemas/SendFrame",
@@ -30955,8 +32025,8 @@
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "command_queue": "#/components/schemas/CommandQueueFrame",
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
-            "browsers": "#/components/schemas/BrowserFrame",
             "stream_relay": "#/components/schemas/RelayFrame",
+            "stream_relay.journey": "#/components/schemas/RelayJourneyFrame",
             "workflow": "#/components/schemas/WorkflowFrame"
           }
         }
@@ -30982,7 +32052,7 @@
             ]
           },
           "bootstrap": {
-            "description": "Start from a repository instead of a directory that is already there: the\nagent clones `repo` — `owner/name`, or any URL git understands — into a\nsubdirectory of `baseDir` and runs the session in the clone.",
+            "description": "Start from a repository instead of a directory that is already there: the\nagent clones `repo`, a git URL on any host ({@link isGitUrl}), with plain\ngit into a subdirectory of `baseDir` and runs the session in the clone.",
             "type": "object",
             "properties": {
               "repo": {
@@ -31258,6 +32328,11 @@
             "description": "Explicitly abort unadopted custody too, then tear down spin-off resources.",
             "type": "boolean"
           },
+          "forget": {
+            "description": "The hub forgets the session once this stop is confirmed (its end is a\ndelete or a transcript delete): the machine lets go of what it kept for\nthe session to be reattached, its browser door among it.",
+            "const": true,
+            "type": "boolean"
+          },
           "from": {
             "description": "The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate.",
             "type": "string"
@@ -31299,7 +32374,7 @@
         ]
       },
       "ControlPayload": {
-        "description": "`control`: invoke a named method on a live session, or on the machine when\n`instanceId` is absent. The method is one of the neutral names in harness.ts\n({@link CONTROL_INTERRUPT}, …) plus {@link RESOLVE_PERMISSION}; the reply\ncomes back as a `control_result` frame carrying the same `requestId`.\n\nMachine-scoped, `method` names either a session-catalog operation — routed to\nwhichever harness owns the id (`harness`, or merged across all when listing)\n— or a machine feature (`listRepos`, `installTool`, the fleet controls). With\nno `instanceId` and no `harness`, `listSessions` merges every harness.",
+        "description": "`control`: invoke a named method on a live session, or on the machine when\n`instanceId` is absent. The method is one of the neutral names in harness.ts\n({@link CONTROL_INTERRUPT}, …) plus {@link RESOLVE_PERMISSION}; the reply\ncomes back as a `control_result` frame carrying the same `requestId`.\n\nMachine-scoped, `method` names either a session-catalog operation — routed to\nwhichever harness owns the id (`harness`, or merged across all when listing)\n— or a machine feature (`installTool`, the fleet controls). With\nno `instanceId` and no `harness`, `listSessions` merges every harness.",
         "type": "object",
         "properties": {
           "args": {
@@ -31455,28 +32530,6 @@
         "required": [
           "instanceId",
           "message"
-        ]
-      },
-      "ReposResult": {
-        "description": "What the machine-scoped `listRepos` control answers with. The GitHub CLI is\nthe machine's own credential store — cawco never holds a token.",
-        "anyOf": [
-          {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RepoInfo"
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "error": {
-                "$ref": "#/components/schemas/ReposResultError"
-              }
-            },
-            "required": [
-              "error"
-            ]
-          }
         ]
       },
       "UpdateReport": {
@@ -32374,43 +33427,18 @@
           "tools"
         ]
       },
-      "StreamRelayAnswer": {
-        "description": "What `GET /api/stream-relay` answers.",
+      "StoredBrowser": {
+        "description": "One browser as the hub keeps it.",
         "type": "object",
         "properties": {
-          "candidates": {
-            "description": "Every machine that could run it.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RelayCandidate"
-            }
+          "host": {
+            "$ref": "#/components/schemas/BrowserHostKind"
           },
-          "relay": {
-            "$ref": "#/components/schemas/StreamRelayView"
-          }
-        },
-        "required": [
-          "candidates"
-        ]
-      },
-      "RelayCandidate": {
-        "description": "A machine that could run the relay: its capability report holds a public address.",
-        "type": "object",
-        "properties": {
-          "address": {
-            "description": "The address the relay would be reached at: the hub's seen address where it is public and differs, else the first global IPv4.",
-            "type": "string"
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
           },
-          "addresses": {
-            "description": "Every global unicast address its interfaces hold (capability `public-address`).",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "externalIp": {
-            "description": "coturn's `external-ip`, when the address is not one of its interfaces'.",
-            "type": "string"
+          "lastUsedAt": {
+            "type": "number"
           },
           "machineId": {
             "type": "string"
@@ -32418,65 +33446,105 @@
           "name": {
             "type": "string"
           },
-          "online": {
-            "type": "boolean"
-          },
-          "seen": {
-            "description": "The public address the hub sees its agent connect from, when it differs from its own.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "address",
-          "addresses",
-          "machineId",
-          "name",
-          "online"
-        ]
-      },
-      "StreamRelayView": {
-        "description": "The relay as Settings shows it: the record without its secret.",
-        "type": "object",
-        "properties": {
-          "address": {
-            "type": "string"
-          },
-          "certificateEndsAt": {
-            "description": "The certificate's end (ms epoch), while one stands.",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "checkedAt": {
-            "description": "When the hub last asked each port (ms epoch); null before it has.",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "health": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RelayPortHealth"
-            }
-          },
-          "hostname": {
+          "projectId": {
             "type": [
               "null",
               "string"
             ]
           },
-          "machineId": {
-            "type": "string"
+          "state": {
+            "$ref": "#/components/schemas/BrowserState"
           },
-          "machineName": {
+          "takeover": {
+            "description": "Who holds it privately: the asking workspace, `\"\"` when nobody asked; null while nobody does.",
+            "type": "object",
+            "properties": {
+              "by": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "since": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "by",
+              "requestId",
+              "since"
+            ]
+          }
+        },
+        "required": [
+          "host",
+          "key",
+          "lastUsedAt",
+          "machineId",
+          "name",
+          "projectId",
+          "state"
+        ]
+      },
+      "BrowserHostKind": {
+        "description": "Which host runs a browser on its machine: a container where a runtime answers, a local Chromium where none does.",
+        "type": "string",
+        "enum": [
+          "container",
+          "local"
+        ]
+      },
+      "BrowserKey": {
+        "description": "Which browser: a project's, or the machine's for sessions outside any project.",
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^project:.*$"
+          },
+          {
+            "type": "string",
+            "pattern": "^machine:.*$"
+          }
+        ]
+      },
+      "BrowserState": {
+        "type": "string",
+        "enum": [
+          "asleep",
+          "building",
+          "failed",
+          "live",
+          "pulling",
+          "starting",
+          "stopping"
+        ]
+      },
+      "BrowserRow": {
+        "description": "One browser as its machine reports it.",
+        "type": "object",
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/BrowserHostKind"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "lastUsedAt": {
+            "description": "ms epoch of the last agent connection or viewer.",
+            "type": "number"
+          },
+          "name": {
             "type": "string"
           },
           "ports": {
-            "$ref": "#/components/schemas/RelayPorts"
+            "$ref": "#/components/schemas/BrowserPorts",
+            "description": "One browser's ports; `http` and `media` are the container host's alone."
           },
           "progress": {
+            "description": "How far an image build is, while `state` is `pulling` or `building`.",
             "type": "object",
             "properties": {
               "done": {
@@ -32484,21 +33552,552 @@
               },
               "total": {
                 "type": "number"
+              },
+              "what": {
+                "type": "string",
+                "enum": [
+                  "image"
+                ]
               }
             },
             "required": [
               "done",
-              "total"
+              "total",
+              "what"
             ]
           },
           "state": {
-            "$ref": "#/components/schemas/StreamRelayState"
+            "$ref": "#/components/schemas/BrowserState"
+          },
+          "takeover": {
+            "description": "Who holds the browser privately, since when, and the ask it answers; null while no one does.",
+            "type": "object",
+            "properties": {
+              "by": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "since": {
+                "type": "number"
+              },
+              "requestId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "by",
+              "since"
+            ]
+          },
+          "viewers": {
+            "type": "number"
+          },
+          "why": {
+            "description": "Why it is `failed`, one sentence.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "key",
+          "lastUsedAt",
+          "name",
+          "state",
+          "viewers"
+        ]
+      },
+      "BrowserPorts": {
+        "description": "One browser's ports; `http` and `media` are the container host's alone.",
+        "type": "object",
+        "properties": {
+          "devtools": {
+            "type": "number"
+          },
+          "http": {
+            "type": "number"
+          },
+          "media": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "devtools"
+        ]
+      },
+      "BrowserHandback": {
+        "description": "What a hand-back answers: the front page's origin, and nothing else of it.",
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "origin": {
+            "description": "The front page's origin as it was handed back; null when no page was in front.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestId": {
+            "description": "The browser ask the take-over answered, when it answered one.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "origin"
+        ]
+      },
+      "RelayAnswer": {
+        "description": "What `GET /api/stream-relay` and every act answer.",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "description": "The domain the asking page reached CawCo through, seen through a proxy\n(a tunnel, Cloudflare): the lead line, the name's suggestion and the\ntake-over's entry name it. Null by IP, the tailnet or a name of the hub's.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "journey": {
+            "$ref": "#/components/schemas/RelayJourneyView"
+          }
+        },
+        "required": [
+          "domain",
+          "journey"
+        ]
+      },
+      "RelayJourneyView": {
+        "description": "The journey as the hub holds it, whole: what `GET /api/stream-relay`\nanswers (with the asking page's {@link RelayAnswer.domain}) and every\n`stream_relay.journey` frame carries, so every place that draws the card\nshows the same ticks.",
+        "type": "object",
+        "properties": {
+          "asks": {
+            "description": "Needs you holds its row: set up, not put away (Later, Done for now), and not yet live and proven from outside.",
+            "type": "boolean"
+          },
+          "candidates": {
+            "description": "How many machines could run it, for the row's meta before a pick.",
+            "type": "number"
+          },
+          "done": {
+            "description": "Live and proven from outside: the row's tick.",
+            "type": "boolean"
+          },
+          "machine": {
+            "description": "The machine picked, or null before a pick.",
+            "$ref": "#/components/schemas/RelayMachine"
+          },
+          "open": {
+            "description": "Someone set it up (the setup card, Settings, a take-over through a domain); false before.",
+            "type": "boolean"
+          },
+          "steps": {
+            "description": "Every step that applies, in order, with where each stands.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelayStep"
+            }
+          },
+          "summary": {
+            "description": "The relay once it has gone live, as Settings shows it; null before.",
+            "$ref": "#/components/schemas/RelaySummary"
           },
           "urls": {
+            "description": "The relay's URLs, for this screen's proof; empty while it is not live.",
             "type": "array",
             "items": {
               "type": "string"
             }
+          }
+        },
+        "required": [
+          "asks",
+          "candidates",
+          "done",
+          "open",
+          "steps",
+          "urls"
+        ]
+      },
+      "RelayMachine": {
+        "description": "The machine the relay runs on, as step 1 found it.",
+        "type": "object",
+        "properties": {
+          "address": {
+            "description": "Its public address: an interface's, the hub's view of it, or STUN's.",
+            "type": "string"
+          },
+          "lan": {
+            "description": "Behind a router: its address on the router's network, for the forwards.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "lan",
+          "name"
+        ]
+      },
+      "RelayStep": {
+        "description": "One step on the path, by what it is and where it stands. A step that does\nnot apply to this machine is not in the list (the router on a machine with\na public interface, the low ports on a root runtime, the certificate with\nno name).",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "machine"
+                ]
+              },
+              "state": {
+                "description": "`needs`: two or more machines could run it, `choices` the ask; `none`: no machine can.",
+                "enum": [
+                  "done",
+                  "needs",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "choices": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RelayChoice"
+                }
+              },
+              "notLinux": {
+                "description": "`none` only: the machines the internet reaches that aren't Linux, so can't run it (hub stream-relay.ts `hostsRelay`).",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "name"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "checking",
+                  "done",
+                  "needs",
+                  "skipped",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "name": {
+                "description": "The name suggested, or the one that stands; empty when none is known yet (the field asks for one).",
+                "type": "string"
+              },
+              "askedAt": {
+                "description": "When the hub last asked DNS (ms epoch), while it checks.",
+                "type": "number"
+              },
+              "finding": {
+                "$ref": "#/components/schemas/RelayStepFinding",
+                "description": "What the name check last found while the name stands."
+              },
+              "answers": {
+                "description": "What the name answers instead, for `elsewhere`.",
+                "type": "string"
+              },
+              "tokenWhy": {
+                "description": "Cloudflare refused the token, or the record: its words, the token field open under \"Let CawCo add it\".",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "router"
+                ]
+              },
+              "state": {
+                "description": "`refused`: no UPnP or NAT-PMP answered; `partial`: the router opened\n443 and capped the relay range; `by-hand`: forwarded by hand, proven\nonly by the last step.",
+                "enum": [
+                  "asking",
+                  "by-hand",
+                  "done",
+                  "needs",
+                  "partial",
+                  "refused",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "how": {
+                "$ref": "#/components/schemas/RelayStepHow"
+              },
+              "http": {
+                "description": "TCP 80 is forwarded too: the certificate is issued and renewed over HTTP.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "runtime"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "checking",
+                  "done",
+                  "needs",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "lowest": {
+                "description": "The lowest port the relay will ever bind: 443, or 80 with a certificate over HTTP.",
+                "enum": [
+                  443,
+                  80
+                ],
+                "type": "number"
+              }
+            },
+            "required": [
+              "lowest",
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "certificate"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "done",
+                  "failed",
+                  "running",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "why": {
+                "description": "Its failure, in the error formula's words.",
+                "type": "string"
+              },
+              "endsAt": {
+                "description": "When the certificate ends (ms epoch).",
+                "type": "number"
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "start"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "done",
+                  "failed",
+                  "running",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "progress": {
+                "description": "\"Pulling 3 of 7\", while it runs.",
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              },
+              "command": {
+                "description": "The command `why` names as its fix, word for word inside it.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "prove"
+                ]
+              },
+              "state": {
+                "description": "`inside`: it answered from a screen on the relay's own network only; `checking`: this screen asks now (drawn by the screen itself).",
+                "enum": [
+                  "checking",
+                  "done",
+                  "failed",
+                  "inside",
+                  "waiting"
+                ],
+                "type": "string"
+              },
+              "device": {
+                "description": "The device that proved it, or failed it.",
+                "type": "string"
+              },
+              "at": {
+                "description": "When (ms epoch).",
+                "type": "number"
+              },
+              "outside": {
+                "description": "The device that failed it was outside the relay's network.",
+                "type": "boolean"
+              },
+              "ports": {
+                "description": "The ports that answered it, \"udp 443, tcp 443, tls\".",
+                "type": "string"
+              },
+              "refused": {
+                "description": "It failed by a refused credential (a 401), not by no answer.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "state",
+              "step"
+            ]
+          }
+        ]
+      },
+      "RelayChoice": {
+        "description": "One machine step 1 offers when two or more could run the relay.",
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "address": {
+            "description": "Its public address: an interface's, the hub's view of it, or STUN's.",
+            "type": "string"
+          },
+          "lan": {
+            "description": "Behind a router: its address on the router's network, for the forwards.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "lan",
+          "machineId",
+          "name",
+          "online"
+        ]
+      },
+      "RelaySummary": {
+        "description": "The relay once it has gone live: Settings' summary.",
+        "type": "object",
+        "properties": {
+          "endsAt": {
+            "description": "When the certificate ends (ms epoch), with a name.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "machine": {
+            "$ref": "#/components/schemas/RelayMachine"
+          },
+          "name": {
+            "description": "Its name, or null when the name was skipped.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelayPortChip"
+            }
+          },
+          "progress": {
+            "description": "How far an image pull is, while it pulls.",
+            "type": "string"
+          },
+          "proven": {
+            "description": "Who proved it from outside and when, or null while nobody has.",
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "string"
+              },
+              "at": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "at",
+              "device"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/StreamRelayState"
           },
           "why": {
             "type": [
@@ -32507,7 +34106,7 @@
             ]
           },
           "whyCommand": {
-            "description": "The command `why` names as its fix, word for word inside it: shown as code.",
+            "description": "The command `why` names as its fix.",
             "type": [
               "null",
               "string"
@@ -32515,28 +34114,23 @@
           }
         },
         "required": [
-          "address",
-          "certificateEndsAt",
-          "checkedAt",
-          "health",
-          "hostname",
-          "machineId",
-          "machineName",
+          "endsAt",
+          "machine",
+          "name",
+          "ports",
           "state",
-          "urls",
           "why",
           "whyCommand"
         ]
       },
-      "RelayPortHealth": {
-        "description": "One port's answer to the hub's STUN binding request.",
+      "RelayPortChip": {
+        "description": "One port's last STUN answer, as Settings' chips show it.",
         "type": "object",
         "properties": {
           "error": {
-            "description": "Why it did not answer, as the request failed.",
             "type": "string"
           },
-          "port": {
+          "name": {
             "$ref": "#/components/schemas/RelayPortName"
           },
           "up": {
@@ -32544,7 +34138,7 @@
           }
         },
         "required": [
-          "port",
+          "name",
           "up"
         ]
       },
@@ -32552,35 +34146,9 @@
         "description": "One port the hub's health check asks, by its chip's words.",
         "type": "string",
         "enum": [
-          "tcp 3478",
           "tcp 443",
           "tls",
-          "udp 3478"
-        ]
-      },
-      "RelayPorts": {
-        "description": "What the relay's machine has bound: each listening port, and whether a certificate stands for TLS.",
-        "type": "object",
-        "properties": {
-          "tcp443": {
-            "type": "boolean"
-          },
-          "tcp3478": {
-            "type": "boolean"
-          },
-          "tls": {
-            "description": "A certificate stands: 443 and 5349 answer TLS.",
-            "type": "boolean"
-          },
-          "udp3478": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "tcp3478",
-          "tcp443",
-          "tls",
-          "udp3478"
+          "udp 443"
         ]
       },
       "StreamRelayState": {
@@ -32592,6 +34160,29 @@
           "pulling",
           "starting",
           "stopped"
+        ]
+      },
+      "RelayTry": {
+        "description": "A credential for this screen's proof (`GET /api/stream-relay/try`): good for 60 s.",
+        "type": "object",
+        "properties": {
+          "credential": {
+            "type": "string"
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential",
+          "urls",
+          "username"
         ]
       },
       "FolderListing": {
@@ -34242,8 +35833,16 @@
         "description": "One artifact as the panel's list shows it, newest first.",
         "type": "object",
         "properties": {
+          "ask": {
+            "description": "The one line the panel's head shows under its name: what the person does here, in their words. Empty on one made before asks were kept.",
+            "type": "string"
+          },
           "createdAt": {
             "type": "string"
+          },
+          "does": {
+            "$ref": "#/components/schemas/ArtifactDoes",
+            "description": "What the person does on it."
           },
           "id": {
             "type": "string"
@@ -34258,6 +35857,10 @@
             "description": "Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one.",
             "$ref": "#/components/schemas/ArtifactPromotion"
           },
+          "sent": {
+            "description": "The person pressed Send on it since the session last revised it or changed its ask.",
+            "type": "boolean"
+          },
           "shownAt": {
             "description": "When it was last brought to the front of the panel.",
             "type": [
@@ -34265,23 +35868,45 @@
               "string"
             ]
           },
+          "thumbnail": {
+            "description": "Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one.",
+            "$ref": "#/components/schemas/ArtifactThumbnail"
+          },
           "updatedAt": {
             "type": "string"
+          },
+          "waiting": {
+            "description": "The person has something to do on it now (`artifact_list`'s `waitingOn` person): its row wears a dot.",
+            "type": "boolean"
           }
         },
         "required": [
+          "ask",
           "createdAt",
+          "does",
           "id",
           "kind",
           "name",
+          "sent",
           "shownAt",
-          "updatedAt"
+          "updatedAt",
+          "waiting"
+        ]
+      },
+      "ArtifactDoes": {
+        "type": "string",
+        "enum": [
+          "draw",
+          "judge",
+          "pick",
+          "try"
         ]
       },
       "ArtifactKind": {
-        "description": "The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev\nserver or folder shown live, and a sheet: a story file's stories, each a\nreal component mounted by the project's own toolchain (core `stage.ts`).",
+        "description": "The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev\nserver or folder shown live, a sheet: a story file's stories, each a\nreal component mounted by the project's own toolchain (core `stage.ts`),\nand the project's browser, listed for every session of the project (or of\nthe machine, for the machine's browser). A browser's source is its key as\na page (`{ page: \"project:<id>\" }`): the hub holds it, no machine's\npreview listener serves it, and every installed app reads that shape.",
         "type": "string",
         "enum": [
+          "browser",
           "canvas",
           "component",
           "page",
@@ -34302,6 +35927,32 @@
         "required": [
           "at",
           "commit"
+        ]
+      },
+      "ArtifactThumbnail": {
+        "description": "An artifact's latest picture: a page's or preview's thumbnail as the\ndashboard's pane took it (both schemes, or one when the page draws the\nsame in both), a canvas's own picture. `at` changes with every new one.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "height": {
+            "description": "Its pixels, as its PNG says: the card is laid out at its shape before it loads.",
+            "type": "number"
+          },
+          "single": {
+            "description": "The page draws the same in both schemes: `light` is its one picture.",
+            "type": "boolean"
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "at",
+          "height",
+          "single",
+          "width"
         ]
       },
       "Created": {
@@ -34677,13 +36328,14 @@
         ]
       },
       "FrameState": {
-        "description": "What a browser drew of one frame: `unseen` until one drew it since its file last changed.",
+        "description": "What a browser drew of one frame: `unseen` until one drew it since its\nfile last changed; `unshown` when the page did not show it at its width (a\nphone's canvas shows one frame at a time), so it is neither drawn nor\nempty: `empty` is a frame shown that drew nothing.",
         "type": "string",
         "enum": [
           "drawn",
           "empty",
           "failed",
-          "unseen"
+          "unseen",
+          "unshown"
         ]
       },
       "Interaction": {
@@ -35106,10 +36758,14 @@
         ]
       },
       "FolderWeight": {
-        "description": "What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's.",
+        "description": "What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`).",
         "type": "object",
         "properties": {
           "bytes": {
+            "type": "number"
+          },
+          "captures": {
+            "description": "`<img>` on the start page whose file is wider than `DESK_CAPTURE_WIDTH`.",
             "type": "number"
           },
           "files": {
@@ -35124,15 +36780,43 @@
         },
         "required": [
           "bytes",
+          "captures",
           "files",
           "js",
           "wasm"
+        ]
+      },
+      "ArtifactHit": {
+        "description": "One of a session's artifacts a Files search matched\n(`GET /api/instances/:id/artifacts/search`), best first: what matched,\nand where the words on its page did, the words around the first hit with\neach hit between 「 and 」 (the finder's excerpt).",
+        "type": "object",
+        "properties": {
+          "excerpt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "excerpt",
+          "id"
         ]
       },
       "ArtifactStatus": {
         "description": "One artifact as `artifact_list` answers it.",
         "type": "object",
         "properties": {
+          "ask": {
+            "description": "Its line in the panel's head.",
+            "type": "string"
+          },
+          "does": {
+            "$ref": "#/components/schemas/ArtifactDoes",
+            "description": "What the person does on it."
+          },
           "id": {
             "type": "string"
           },
@@ -35178,6 +36862,10 @@
             "description": "Pins the person left open.",
             "type": "number"
           },
+          "sent": {
+            "description": "The person pressed Send since your last change (a revision, or a new ask).",
+            "type": "boolean"
+          },
           "session": {
             "description": "The session that made it, when it is not the caller's own (a lead reading its project's).",
             "type": "string"
@@ -35194,7 +36882,7 @@
             "type": "string"
           },
           "waitingOn": {
-            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks or a canvas's changes unread).",
+            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it by a delegate and not opened yet).",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ArtifactStatusWaitingOn"
@@ -35202,12 +36890,15 @@
           }
         },
         "required": [
+          "ask",
+          "does",
           "id",
           "kind",
           "name",
           "opened",
           "picksAwaiting",
           "pins",
+          "sent",
           "shown",
           "unread",
           "updatedAt",
@@ -35357,6 +37048,10 @@
           "state": {
             "type": "object",
             "description": "Every key, or with `since` only those changed after it."
+          },
+          "verify": {
+            "description": "A component canvas's design system round, as `verify: true` asked it: what the ask did.",
+            "type": "string"
           },
           "weight": {
             "description": "What a sheet loads, from its stage's module graph; null until a view has loaded it.",
@@ -35542,233 +37237,6 @@
           }
         }
       },
-      "ComponentWritten": {
-        "description": "What `artifact_update` answers for a component canvas's write: nothing past the story it wrote (component canvas §4, G2).",
-        "type": "object",
-        "properties": {
-          "file": {
-            "type": "string"
-          },
-          "formatted": {
-            "description": "The project's formatter that shaped the lines, like \"prettier 3.9.10\"; null when the project has none.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lines": {
-            "type": "object",
-            "properties": {
-              "from": {
-                "type": "number"
-              },
-              "to": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "from",
-              "to"
-            ]
-          },
-          "render": {
-            "anyOf": [
-              {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/PageError"
-                    },
-                    "state": {
-                      "$ref": "#/components/schemas/FrameState"
-                    },
-                    "box": {
-                      "type": "object",
-                      "properties": {
-                        "w": {
-                          "type": "number"
-                        },
-                        "h": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "h",
-                        "w"
-                      ]
-                    },
-                    "scheme": {
-                      "const": "dark",
-                      "type": "string"
-                    },
-                    "story": {
-                      "type": "string"
-                    },
-                    "label": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
-                    },
-                    "form": {
-                      "type": "string"
-                    },
-                    "interaction": {
-                      "$ref": "#/components/schemas/Interaction"
-                    }
-                  },
-                  "required": [
-                    "box",
-                    "form",
-                    "interaction",
-                    "label",
-                    "state",
-                    "story"
-                  ]
-                }
-              },
-              {
-                "const": "unseen",
-                "type": "string"
-              }
-            ]
-          },
-          "story": {
-            "type": "object",
-            "properties": {
-              "args": {
-                "type": "object"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "args",
-              "name"
-            ]
-          }
-        },
-        "required": [
-          "file",
-          "formatted",
-          "lines",
-          "render"
-        ]
-      },
-      "CanvasSpec": {
-        "description": "What a canvas page is told besides its files: what it is for, the agent's edges and groups, its dials.",
-        "type": "object",
-        "properties": {
-          "about": {
-            "type": "string"
-          },
-          "dials": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CanvasDial"
-            }
-          },
-          "edges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CanvasEdge"
-            }
-          },
-          "group": {
-            "type": "object",
-            "description": "Story → the parent story or section heading it groups under."
-          },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
-      "CanvasDial": {
-        "description": "A property dial an agent declares on a canvas: a CSS variable on every frame, or an arg re-rendered through `update`.",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "$ref": "#/components/schemas/CanvasDialKind"
-          },
-          "label": {
-            "type": "string"
-          },
-          "max": {
-            "type": "number"
-          },
-          "min": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "step": {
-            "type": "number"
-          },
-          "target": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "cssVar": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "cssVar"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "arg": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "arg"
-                ]
-              }
-            ]
-          },
-          "unit": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "name",
-          "target"
-        ]
-      },
-      "CanvasEdge": {
-        "description": "A layout edge an agent declares between two frames (by story, `file:Story` when the canvas has several sections).",
-        "type": "object",
-        "properties": {
-          "from": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "to": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "from",
-          "to"
-        ]
-      },
       "Revised": {
         "description": "What a decision page's revision (`statements`) answers: what it changed,\nnot the page. The person's picks are read with `artifact_read`.",
         "type": "object",
@@ -35859,6 +37327,126 @@
           "added",
           "removed",
           "replaced"
+        ]
+      },
+      "CanvasMap": {
+        "description": "A component canvas's map (component canvas §3c): its component, what renders it above, what it renders below.",
+        "type": "object",
+        "properties": {
+          "center": {
+            "$ref": "#/components/schemas/CanvasMapNode"
+          },
+          "madeOf": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CanvasMapNode"
+            }
+          },
+          "usedIn": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CanvasMapNode"
+            }
+          }
+        },
+        "required": [
+          "center",
+          "madeOf",
+          "usedIn"
+        ]
+      },
+      "CanvasMapNode": {
+        "description": "One component on a canvas's map: what it is, where it is called, and its states as drawn.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "Where it is called from the canvas's component (made of) or where it calls it (used in); null when no draw saw it.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "drawn": {
+            "description": "Frames a browser drew of its states.",
+            "type": "number"
+          },
+          "file": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "states": {
+            "description": "Stories across its states files.",
+            "type": "number"
+          },
+          "statesFiles": {
+            "description": "Its states files, from the toolchain root, as a canvas address names them; none, it has no canvas to draw live.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "thumb": {
+            "description": "Its frames as last drawn, in miniature; null before a browser drew them.",
+            "$ref": "#/components/schemas/DesignThumb"
+          }
+        },
+        "required": [
+          "at",
+          "drawn",
+          "file",
+          "name",
+          "states",
+          "statesFiles"
+        ]
+      },
+      "DesignThumb": {
+        "description": "A component's frames as a browser last drew them, in miniature: each one's box on its canvas and its state, from its canvas's top left.",
+        "type": "object",
+        "properties": {
+          "frames": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "h": {
+                  "type": "number"
+                },
+                "state": {
+                  "$ref": "#/components/schemas/FrameState"
+                },
+                "w": {
+                  "type": "number"
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "h",
+                "state",
+                "w",
+                "x",
+                "y"
+              ]
+            }
+          },
+          "h": {
+            "description": "The canvas the frames stand on: their union's extent.",
+            "type": "number"
+          },
+          "w": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "frames",
+          "h",
+          "w"
         ]
       },
       "DesignMap": {
@@ -36001,6 +37589,10 @@
               ]
             }
           },
+          "thumb": {
+            "description": "With `thumbs`: its frames in miniature; null before a browser drew them.",
+            "$ref": "#/components/schemas/DesignThumb"
+          },
           "usedIn": {
             "anyOf": [
               {
@@ -36034,11 +37626,27 @@
               "string"
             ]
           },
+          "drawn": {
+            "description": "With `thumbs`: its own frames drawn, states, states files and thumbnail.",
+            "type": "number"
+          },
           "file": {
             "type": "string"
           },
           "name": {
             "type": "string"
+          },
+          "states": {
+            "type": "number"
+          },
+          "statesFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "thumb": {
+            "$ref": "#/components/schemas/DesignThumb"
           }
         },
         "required": [
@@ -36525,6 +38133,15 @@
               "position": {
                 "type": "string"
               },
+              "display": {
+                "type": "string"
+              },
+              "margin": {
+                "type": "string"
+              },
+              "padding": {
+                "type": "string"
+              },
               "backgroundColor": {
                 "type": "string"
               },
@@ -36538,15 +38155,6 @@
                 "type": "string"
               },
               "lineHeight": {
-                "type": "string"
-              },
-              "display": {
-                "type": "string"
-              },
-              "padding": {
-                "type": "string"
-              },
-              "margin": {
                 "type": "string"
               },
               "borderRadius": {
@@ -36590,7 +38198,7 @@
             "type": "string"
           },
           "by": {
-            "$ref": "#/components/schemas/ThreadEntryBy"
+            "$ref": "#/components/schemas/SessionAttachmentWho"
           },
           "files": {
             "description": "Files an agent's reply names as changed.",
@@ -37241,6 +38849,10 @@
         "description": "One option of a card, as the page labelled it.",
         "type": "object",
         "properties": {
+          "cost": {
+            "description": "What picking it costs the person (the Option's `cost`); empty when it has none.",
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -37261,6 +38873,7 @@
           }
         },
         "required": [
+          "cost",
           "id",
           "keycap",
           "label",
@@ -37510,6 +39123,73 @@
         "required": [
           "answer",
           "builtTaskId"
+        ]
+      },
+      "LfsOfferState": {
+        "description": "Where a place's offer of Git LFS stands (`GET /api/lfs-offers/:id`, hub lfs-offers.ts).",
+        "type": "object",
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/LfsOfferStateAnswer",
+            "description": "`open` while unanswered; `tracked`: its files are committed through LFS; `dismissed`: Not now."
+          },
+          "commit": {
+            "description": "The commit that took them through LFS; null until then.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "root": {
+            "description": "The folder's root on its machine.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "What is offered, a row per pattern.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceLfsRow"
+            }
+          }
+        },
+        "required": [
+          "answer",
+          "commit",
+          "id",
+          "root",
+          "rows"
+        ]
+      },
+      "PlaceLfsRow": {
+        "description": "Files a place's first commit left out for their size alone, by the\npattern Git LFS would track them under, as `git lfs migrate info` rows\nread (extension, count, size): `*.<ext>` for a file with an extension,\nits own path from the place's root for one without. git-lfs-faq(7):\n\"we recommend using patterns rather than `--above`\".",
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "count": {
+            "description": "How many of the left-out files it covers.",
+            "type": "number"
+          },
+          "paths": {
+            "description": "Those files, from the place's root.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pattern": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "count",
+          "paths",
+          "pattern"
         ]
       },
       "SessionPlan": {
@@ -38796,11 +40476,19 @@
                       "repo"
                     ]
                   },
+                  "lfsOffer": {
+                    "description": "The large files its first commit left out, offered to Git LFS: the\noffer, read and answered at `/api/lfs-offers/:id` (hub\nlfs-offers.ts). Absent when nothing was left out for its size.",
+                    "type": "string"
+                  },
+                  "lfsRefused": {
+                    "description": "An LFS endpoint the repository's `.lfsconfig` names that is neither\nits origin's nor the project's declared one: its large files stayed\npointers, and nothing was fetched from there (agent host-lfs.ts).",
+                    "type": "string"
+                  },
                   "machineId": {
                     "type": "string"
                   },
                   "root": {
-                    "description": "The folder made a repository.",
+                    "description": "The folder made a repository, or the clone the refusal was in.",
                     "type": "string"
                   }
                 },
@@ -39606,6 +41294,17 @@
             "description": "The connection's name (hub connections.ts).",
             "type": "string"
           },
+          "githubProject": {
+            "description": "GitHub: the Project its stages show on through Status; null when none is set.",
+            "$ref": "#/components/schemas/GithubProject"
+          },
+          "githubProjectReason": {
+            "description": "GitHub: why stages do not show on a Project, in GitHub's words (the\nconnection may not read or write the owner's Projects); null when\nnothing stops them. Issues sync either way.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "linked": {
             "description": "Issues linked to the project's tasks.",
             "type": "number"
@@ -39645,6 +41344,7 @@
         "required": [
           "boundAt",
           "connection",
+          "githubProjectReason",
           "linked",
           "polledAt",
           "provider",
@@ -39653,6 +41353,69 @@
           "target",
           "targetName",
           "targetUrl"
+        ]
+      },
+      "GithubProject": {
+        "description": "A GitHub Project (v2) a GitHub binding carries its stages on, through the\nProject's single-select field named Status (PRD §5.2: \"With GitHub, stages\nmap onto a Projects single-select field\"). Issues' open and closed carry\nonly open against done or dropped; Status carries every stage.",
+        "type": "object",
+        "properties": {
+          "fieldId": {
+            "description": "Its Status field's node id; null when the Project has no single-select Status.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "description": "GitHub's node id for the Project.",
+            "type": "string"
+          },
+          "map": {
+            "type": "object",
+            "description": "Each stage's Status option by the stage's name, as set in the binding's form; null leaves Status alone for that stage. A stage missing here takes the option named as it."
+          },
+          "number": {
+            "type": "number"
+          },
+          "options": {
+            "description": "Its Status field's options, in GitHub's order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusOption"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fieldId",
+          "id",
+          "map",
+          "number",
+          "options",
+          "title",
+          "url"
+        ]
+      },
+      "StatusOption": {
+        "description": "One option of a GitHub Project's single-select Status field.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "GitHub's option id (`ProjectV2SingleSelectFieldOption.id`).",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
         ]
       },
       "TrackerSyncState": {
@@ -39683,6 +41446,72 @@
         "required": [
           "id",
           "name",
+          "url"
+        ]
+      },
+      "GithubProjectsView": {
+        "description": "What a GitHub connection reaches of a repository owner's Projects: its Projects, or GitHub's refusal in its words.",
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GithubProjectChoice"
+            }
+          },
+          "refused": {
+            "description": "GitHub's words when the connection may not read the owner's Projects; null when it may.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "projects",
+          "refused"
+        ]
+      },
+      "GithubProjectChoice": {
+        "description": "A GitHub Project a connection reaches, offered in the binding's form.",
+        "type": "object",
+        "properties": {
+          "fieldId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "linked": {
+            "description": "Linked to the bound repository on GitHub: the form's first pick.",
+            "type": "boolean"
+          },
+          "number": {
+            "type": "number"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusOption"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fieldId",
+          "id",
+          "linked",
+          "number",
+          "options",
+          "title",
           "url"
         ]
       },
@@ -42683,6 +44512,13 @@
               "$ref": "#/components/schemas/RetiringKeeper"
             }
           },
+          "sessiondKept": {
+            "description": "The current session keeper stopped answering, and the watchdog does not\nrestart it while its unit holds these processes CawCo did not start: no\nsession starts on the machine until they end, and the next look after\nthat restarts it. Absent while it answers.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeptProcess"
+            }
+          },
           "sessiondVersion": {
             "description": "The build of the current session keeper, the one every new session starts on: the `keeper` link.",
             "type": "string"
@@ -42793,6 +44629,18 @@
         "description": "A keeper of an earlier build still holding sessions while the current one takes every new start.",
         "type": "object",
         "properties": {
+          "kept": {
+            "description": "Processes in its unit CawCo did not start, while they keep it from going: its hand-over finishes once they end.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeptProcess"
+            }
+          },
+          "notAnswering": {
+            "description": "It is there and gave no welcome on the updater's last look: it is left\nas it is, and `sessions` is what it held when it last answered (0 when\nit never did).",
+            "const": true,
+            "type": "boolean"
+          },
           "sessions": {
             "description": "Its sessions, and any other process it holds (a workspace's boundary, an OpenCode server).",
             "type": "number"
@@ -42805,6 +44653,23 @@
         "required": [
           "sessions",
           "version"
+        ]
+      },
+      "KeptProcess": {
+        "description": "A process in a session keeper's unit that neither the keeper nor one of\nits sessions runs: while one is there, the keeper is not stopped (agent\nkeeper-jobs.ts), and the next look after it ends stops it.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "Its command line, from `/proc/<pid>/cmdline`.",
+            "type": "string"
+          },
+          "pid": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "command",
+          "pid"
         ]
       },
       "BuildInfo": {
@@ -43166,18 +45031,27 @@
         ]
       },
       "AccountIdentity": {
-        "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them.",
+        "description": "Who an account is: an email in an organization, the organization known by\nits id (`orgId`), never its name, which is a display name: an org renamed\nis the same org, and two orgs can share a name. Claude: as `claude auth\nstatus --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the\naccess token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization` and its\nid, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),\nthe workspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization` and its id, a fingerprint of\nit (`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them.",
         "type": "object",
         "properties": {
           "email": {
             "type": "string"
           },
           "organization": {
+            "description": "The organization's name, for a screen.",
             "type": "string"
+          },
+          "orgId": {
+            "description": "The organization's id: what tells two identities apart. Null where\nnothing read one (Claude Code's initialize response names none, an agent\nolder than this field sends none): such an identity is the same as no\nother ({@link sameIdentity}).",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "email",
+          "orgId",
           "organization"
         ]
       },
@@ -43413,6 +45287,22 @@
           "media": {
             "$ref": "#/components/schemas/MachineCapabilityMedia",
             "description": "`container-runtime` only: what the runtime forwards to the browser's media port. Short of `udp+tcp`, `reason` says how to get both."
+          },
+          "nat": {
+            "description": "`public-address` only, on a machine with none of its own: the public\naddress its router maps it to, as a STUN binding answered it, and its\naddress on the router's network (core stream-relay.ts `STUN_SERVER`).",
+            "type": "object",
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "lan": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "address",
+              "lan"
+            ]
           },
           "path": {
             "type": "string"
@@ -44755,6 +46645,18 @@
           "isRedactedThinking": {
             "type": "boolean"
           },
+          "lfsOffer": {
+            "description": "A thread's note that a folder was made a repository with files left out\nfor their size: the offer of Git LFS for them (ThreadEvent `repo`'s\n`lfsOffer`), whose Track with LFS and Not now the note draws under it.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          },
           "model": {
             "type": "string"
           },
@@ -45102,7 +47004,7 @@
         ]
       },
       "WaitReason": {
-        "description": "Why a session at its account's limit waits for the reset rather than\nmoving: it is a fork (it reads its origin's cache, on its origin's\naccount), moving is switched off, no other account has room, the reset\ncomes sooner than re-reading its context elsewhere is worth, or the limit\nrefused the hub's word to a live work item and the routing has that carry\non after the reset ({@link DelegateWork} `resume`).",
+        "description": "Why a session at its account's limit waits for the reset rather than\nmoving: it is a fork (it reads its origin's cache, on its origin's\naccount), moving is switched off, no other account has room, the reset\ncomes sooner than re-reading its context elsewhere is worth. `work` is\nhistory only: lines a hub stored while a delegate's work could be set to\ncarry on after its own account's reset, never moved, still read.",
         "type": "string",
         "enum": [
           "fork",
@@ -45682,6 +47584,66 @@
           "harness",
           "machineId",
           "sessionKey"
+        ]
+      },
+      "SessionAttachment": {
+        "description": "One attachment a session's conversation carried, as Files lists them\n(`GET /api/instances/:id/attachments`, newest first): a text pasted at\nlength, a file the hub stores, or a picture, read off the whole\ntranscript on the hub, whatever pages a reader has loaded.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When its message was, ISO-8601; null when the harness gave no time.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "content": {
+            "description": "A text's words, for reading it in place.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Its message's id and its place within that message: the same however the list grows.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SessionAttachmentKind"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "messageId": {
+            "description": "The message it rode, for Show in conversation (`?at=`).",
+            "type": "string"
+          },
+          "name": {
+            "description": "A file's or text's name; a picture's is its place among the conversation's pictures (\"Picture 3\").",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Where the hub serves a file (`/api/files/<sha256>`); absent when the harness's copy names only part of its hash.",
+            "type": "string"
+          },
+          "size": {
+            "description": "A file's length in bytes.",
+            "type": "number"
+          },
+          "src": {
+            "description": "A picture's address.",
+            "type": "string"
+          },
+          "who": {
+            "$ref": "#/components/schemas/SessionAttachmentWho",
+            "description": "Who sent it: the person, or the session's agent."
+          }
+        },
+        "required": [
+          "at",
+          "id",
+          "kind",
+          "mediaType",
+          "messageId",
+          "name",
+          "who"
         ]
       },
       "Verb": {
@@ -47163,6 +49125,13 @@
               "string"
             ]
           },
+          "stalled": {
+            "description": "While its account's limit (or a refused sign-in) has stopped its\nsession: \"Stopped at A's limit; continues on B\", \"…; continues at\n15:40\" (core `accountsWords.stalled`). It runs no turn until then; null\notherwise.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "state": {
             "$ref": "#/components/schemas/WorkItemState"
           },
@@ -47195,6 +49164,7 @@
           "machinePaused",
           "parentInstanceId",
           "replacedBy",
+          "stalled",
           "state",
           "title",
           "waitReason",
@@ -47458,6 +49428,10 @@
           },
           "proxied": {
             "description": "The config points at the hub's authenticated forwarder.",
+            "type": "boolean"
+          },
+          "shared": {
+            "description": "One instance on each machine serves every session there, started at its\nfirst call (the agent's MCP gateway, packages/agent mcp-host.ts), rather\nthan one per session started with it. A stdio fleet server only, and\nonly one whose tools keep nothing per session and resolve no path\nagainst its working directory. Absent: one per session, as the harness\nstarts it.",
             "type": "boolean"
           },
           "cwd": {
@@ -49018,11 +50992,15 @@
         ]
       },
       "AtLimit": {
-        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move whole to an account known to have room (the hub's\n`decideAtLimit`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), also files its open items and is compacted by\nClaude Code's own `/compact` as its first steps there, before anything it\nis owed. `delegateWork`: what a turn the limit refused is answered with\nwhen it was the hub's own word to a live work item's session\n({@link DelegateWork}); every other word of the hub's a limit refused is\nleft until a person or the session's parent writes.",
+        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move whole to an account known to have room (the hub's\n`decideAtLimit`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), also files its open items and is compacted by\nClaude Code's own `/compact` as its first steps there, before anything it\nis owed. A live work item's session is answered so whoever started its\nrefused turn, the hub's own word to it included; every other word of the\nhub's a limit refused is left until a person or the session's parent\nwrites.",
         "type": "object",
         "properties": {
           "delegateWork": {
-            "$ref": "#/components/schemas/DelegateWork"
+            "description": "Read by nothing: a delegate's work at its limit is answered as any\nsession's is, moved to an account with room or held until the earliest\nreset. Sent as `move`, which is what the hub does, only because the\nTestFlight builds 20261017 and 20261018 require it, which the hub's wire\ncheck holds to (packages/hub/scripts/openapi.ts). It goes in the change\nthat expires them.",
+            "type": "string",
+            "enum": [
+              "move"
+            ]
           },
           "move": {
             "type": "boolean"
@@ -49044,15 +51022,6 @@
           "moveWholeUnderK",
           "prepareAtPct",
           "waitMinutes"
-        ]
-      },
-      "DelegateWork": {
-        "description": "When a delegate's work reaches its account's limit: the hub's word to a\nlive work item's session (\"Your work item is still open\", the sleep\nsweep's wake, a wait's end; core `WORK_ITEM_ORIGIN`) was refused there.\n`resume`: that word is sent again once, when the account's limit resets;\nnothing moves it meanwhile. `move`: it is answered as a person's turn is,\nmoved whole to an account with room by the routing. `leave`: it waits\nuntil a person or its parent writes to it.",
-        "type": "string",
-        "enum": [
-          "leave",
-          "move",
-          "resume"
         ]
       },
       "StrategyChoice": {
@@ -49657,7 +51626,7 @@
         "properties": {
           "identity": {
             "$ref": "#/components/schemas/AccountIdentity",
-            "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
+            "description": "Who an account is: an email in an organization, the organization known by\nits id (`orgId`), never its name, which is a display name: an org renamed\nis the same org, and two orgs can share a name. Claude: as `claude auth\nstatus --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the\naccess token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization` and its\nid, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),\nthe workspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization` and its id, a fingerprint of\nit (`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
           },
           "models": {
             "type": "array",
@@ -49769,7 +51738,7 @@
         "properties": {
           "identity": {
             "$ref": "#/components/schemas/AccountIdentity",
-            "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
+            "description": "Who an account is: an email in an organization, the organization known by\nits id (`orgId`), never its name, which is a display name: an org renamed\nis the same org, and two orgs can share a name. Claude: as `claude auth\nstatus --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the\naccess token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization` and its\nid, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),\nthe workspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization` and its id, a fingerprint of\nit (`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
           },
           "kind": {
             "$ref": "#/components/schemas/AccountKind",
@@ -49830,9 +51799,15 @@
         ]
       },
       "UsageLimitsResponse": {
-        "description": "What `/api/usage/limits` returns: every machine's latest readings. A\nmachine's Claude limits are those of the account it runs Claude Code on by\ndefault (its `~/.claude` login), else of the first account signed in there.",
+        "description": "What `/api/usage/limits` returns: each Claude account's own limits, and\neach machine's OpenCode Go plan. Claude's limits are an account's, never a\nmachine's: a machine signed in to several accounts has no one reading.\n`machines` is a BRIDGE (hub scripts/wire-compat.ts) for TestFlight builds\nthat read limits per machine (Claude's there the first account signed in\non it); nothing on this build reads it.",
         "type": "object",
         "properties": {
+          "claude": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountLimits"
+            }
+          },
           "machines": {
             "type": "array",
             "items": {
@@ -49857,10 +51832,34 @@
                 "machineId"
               ]
             }
+          },
+          "openCodeGo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineGoLimits"
+            }
           }
         },
         "required": [
-          "machines"
+          "claude",
+          "machines",
+          "openCodeGo"
+        ]
+      },
+      "AccountLimits": {
+        "description": "One Claude account's own limits, named by its account.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/ClaudeLimits"
+          }
+        },
+        "required": [
+          "accountId",
+          "limits"
         ]
       },
       "ClaudeLimits": {
@@ -49876,18 +51875,18 @@
           },
           "errorKind": {
             "$ref": "#/components/schemas/ClaudeLimitsErrorKind",
-            "description": "Why there are no windows, typed: `not-signed-in`, no account on the\nmachine is signed in to Claude; `no-reading`, nothing on the account has\nreported any yet. Null when there are windows."
+            "description": "Why there are no windows, typed: `not-signed-in`, the account is signed\nin on no machine; `no-reading`, nothing on the account has reported any\nyet. Null when there are windows."
           },
           "extraUsage": {
             "description": "Extra usage as the last `rate_limit_event` said; null: it never said.",
             "$ref": "#/components/schemas/ClaudeExtraUsage"
           },
           "fetchedAt": {
-            "description": "When Claude Code last reported on the account.",
+            "description": "When the windows were last known to be so: Claude Code's last report on\nthe account, or a later turn on it that changed nothing.",
             "type": "number"
           },
           "stale": {
-            "description": "No session runs on the account, so use from anywhere else goes unseen\nand the windows are as of `fetchedAt`.",
+            "description": "Nothing on the account has confirmed the windows for\n{@link CLAUDE_READING_CURRENT_MS}: they are as of `fetchedAt`.",
             "type": "boolean"
           },
           "subscription": {
@@ -49972,6 +51971,26 @@
           "error",
           "fetchedAt",
           "windows"
+        ]
+      },
+      "MachineGoLimits": {
+        "description": "One machine's OpenCode Go plan, read with that machine's Go key.",
+        "type": "object",
+        "properties": {
+          "hostname": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/OpenCodeGoLimits"
+          }
+        },
+        "required": [
+          "hostname",
+          "machineId",
+          "plan"
         ]
       },
       "UsageSpend": {
@@ -50401,9 +52420,12 @@
         "type": "object",
         "properties": {
           "artifact": {
-            "description": "The artifact the session's panel shows (Projects spec §5.10).",
+            "description": "The artifact the session's panel shows (Projects spec §5.10), with its\nask: the head's line under its name from the first frame, while its\npage is still on its way. None on one made before asks were kept.",
             "type": "object",
             "properties": {
+              "ask": {
+                "type": "string"
+              },
               "id": {
                 "type": "string"
               },
@@ -52240,6 +54262,21 @@
                   "resetsAt",
                   "utilization"
                 ]
+              },
+              "seven_day_overage_included": {
+                "type": "object",
+                "properties": {
+                  "utilization": {
+                    "type": "number"
+                  },
+                  "resetsAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "resetsAt",
+                  "utilization"
+                ]
               }
             }
           },
@@ -52558,6 +54595,110 @@
           "waiting"
         ]
       },
+      "BrowserFrame": {
+        "description": "Daemon-originated: the machine's runtime and every browser on it, whole, on each change.",
+        "type": "object",
+        "properties": {
+          "browsers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrowserRow"
+            }
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "browsers"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/BrowserRuntime"
+          }
+        },
+        "required": [
+          "browsers",
+          "kind",
+          "machineId",
+          "runtime"
+        ]
+      },
+      "BrowserRuntime": {
+        "description": "The machine's container runtime as the agent found it, or the sentence that names the install.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "$ref": "#/components/schemas/BrowserRuntimeKind"
+              },
+              "endpoint": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "endpoint",
+              "kind",
+              "version"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "missing": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "missing"
+            ]
+          }
+        ]
+      },
+      "BrowserHandedBackFrame": {
+        "description": "Daemon-originated: a take-over ended on the machine, whichever way: the\nperson's Hand back, no view open for {@link TAKEOVER_UNWATCHED_MS}, or the\nbrowser stopped. Sent before the record's own frame, so the hub learns\nevery end the same way and the ask's call answers with the page's origin.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "browser_handback"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "why": {
+            "$ref": "#/components/schemas/BrowserHandedBackFrameWhy"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "origin": {
+            "description": "The front page's origin as it was handed back; null when no page was in front.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestId": {
+            "description": "The browser ask the take-over answered, when it answered one.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "machineId",
+          "origin",
+          "why"
+        ]
+      },
       "StageFrame": {
         "description": "The daemon's word on each change of a stage: every artifact of the workspace's that previews its port hears it.",
         "type": "object",
@@ -52656,6 +54797,25 @@
         "required": [
           "kind",
           "servers"
+        ]
+      },
+      "FleetReportFrame": {
+        "description": "Machine-originated: the machine's fleet report (what `fleetStatus`\nanswers), sent unasked when a harness's reading of a fleet MCP server moved\nwith no fleet change: a server OpenCode held failed connected when CawCo\nstarted it again. The hub keeps it as `agents.fleet`, as it keeps a sync's.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fleet_report"
+            ]
+          },
+          "report": {
+            "$ref": "#/components/schemas/FleetSyncReport"
+          }
+        },
+        "required": [
+          "kind",
+          "report"
         ]
       },
       "RejectedFrame": {
@@ -52918,6 +55078,31 @@
           "chosenEffort": {
             "$ref": "#/components/schemas/EffortLevel",
             "description": "The effort the operator chose for the session: its spawn's level, or the\nlast `setEffort` sent it. The hub starts every process of the session at\nit, whatever brings it back; a reading never moves it. Null: nobody\nchose, and the harness runs its model's default."
+          },
+          "continuedInto": {
+            "description": "The session a continuation moved this one's work item to: this one never\nruns again ({@link relaunchOf} refuses it), and what is sent to it goes\nthere. Null on every other session.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "description": "When the hub first opened its row: when it was started.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
           },
           "cwd": {
             "description": "The directory the session was launched in; see `launchDir`.",
@@ -53273,6 +55458,10 @@
       "PermissionRequestFrame": {
         "type": "object",
         "properties": {
+          "browserAsk": {
+            "$ref": "#/components/schemas/BrowserAskFrame",
+            "description": "A browser ask's browser, reason and origin; absent on every other ask."
+          },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -53339,6 +55528,38 @@
           "toolName"
         ]
       },
+      "BrowserAskFrame": {
+        "description": "A browser ask (Projects spec §5.11): a session asks the person to take\nover its project's browser, with one sentence of reason and the page's\norigin. It parks as a `permission_request` for {@link BROWSER_ASK_TOOL}\ncarrying this beside the tool's input, so it lands in Needs you, the\ntranscript and push as every ask does. Take over answers it as taken\n(`POST /api/browsers/:key/takeover`, an Approve from an app that has no\nTake over yet); Decline denies it with the person's words. The tool's\ncall waits on until the person hands back.",
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "description": "The browser artifact in the asking session's panel: Take over opens the panel on it.",
+            "type": "string"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "machineId": {
+            "description": "The machine the browser runs on: the asking session's.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "The page's origin the agent named, `scheme://host[:port]`.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "One sentence: what the person is needed for.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactId",
+          "key",
+          "machineId",
+          "origin",
+          "reason"
+        ]
+      },
       "PermissionPresentation": {
         "type": "object",
         "properties": {
@@ -53367,6 +55588,10 @@
             "items": {
               "$ref": "#/components/schemas/PermissionField"
             }
+          },
+          "post": {
+            "$ref": "#/components/schemas/HeldPostNaming",
+            "description": "A post to another person's repository held for the person: Needs you\nnames it by its own title (a comment's, its body's first line) over\nwhere it goes (`owner/repo#12`). Absent for any other ask."
           },
           "project": {
             "description": "The project the asker works in, by name; absent for a session in none. The card's head reads \"Caw · cockpit\".",
@@ -53431,6 +55656,24 @@
         "required": [
           "key",
           "value"
+        ]
+      },
+      "HeldPostNaming": {
+        "description": "A held post as Needs you names it: what it is, and where it goes.",
+        "type": "object",
+        "properties": {
+          "target": {
+            "description": "`owner/repo`, the host too off GitHub, with `#n` for the issue or pull request it is on.",
+            "type": "string"
+          },
+          "title": {
+            "description": "The post's own title; a comment's first line.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "title"
         ]
       },
       "PermissionUpdate": {
@@ -53603,17 +55846,30 @@
       "UsageFrame": {
         "type": "object",
         "properties": {
+          "claude": {
+            "description": "Hub-originated: every Claude account's own limits, every machine's Go plan, and the fleet's spend.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountLimits"
+            }
+          },
           "kind": {
-            "description": "Hub-originated: every machine's latest limits and the fleet's spend.",
             "type": "string",
             "enum": [
               "usage"
             ]
           },
           "limits": {
+            "description": "BRIDGE (hub scripts/wire-compat.ts): limits per machine, for TestFlight builds that read them so.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/UsageLimitsReading"
+            }
+          },
+          "openCodeGo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineGoLimits"
             }
           },
           "spend": {
@@ -53621,13 +55877,15 @@
           }
         },
         "required": [
+          "claude",
           "kind",
           "limits",
+          "openCodeGo",
           "spend"
         ]
       },
       "UsageLimitsReading": {
-        "description": "One machine's latest limit reading, as the hub stores it (`usage_limits`)\nand broadcasts it in a `kind: 'usage'` frame. `fetchedAt` is a `Date` inside\nthe hub and the ISO string it serialises to on the wire.",
+        "description": "One machine's line in a `kind: 'usage'` frame's `limits`, a BRIDGE (hub\nscripts/wire-compat.ts) for TestFlight builds that read limits per\nmachine: its OpenCode Go plan, and the limits of the first Claude account\nsigned in there. Nothing on this build reads it: Claude's limits are each\naccount's ({@link AccountLimits}), Go's each machine's ({@link MachineGoLimits}).",
         "type": "object",
         "properties": {
           "fetchedAt": {
@@ -54742,212 +57000,6 @@
           "requestId"
         ]
       },
-      "BrowserFrame": {
-        "description": "Daemon-originated: the machine's runtime and every browser on it, whole, on each change.",
-        "type": "object",
-        "properties": {
-          "browsers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/BrowserRow"
-            }
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "browsers"
-            ]
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "runtime": {
-            "$ref": "#/components/schemas/BrowserRuntime"
-          }
-        },
-        "required": [
-          "browsers",
-          "kind",
-          "machineId",
-          "runtime"
-        ]
-      },
-      "BrowserRow": {
-        "description": "One browser as its machine reports it.",
-        "type": "object",
-        "properties": {
-          "host": {
-            "$ref": "#/components/schemas/BrowserHostKind"
-          },
-          "key": {
-            "$ref": "#/components/schemas/BrowserKey"
-          },
-          "lastUsedAt": {
-            "description": "ms epoch of the last agent connection or viewer.",
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "ports": {
-            "$ref": "#/components/schemas/BrowserPorts",
-            "description": "One browser's ports; `http` and `media` are the container host's alone."
-          },
-          "progress": {
-            "description": "How far an image build is, while `state` is `pulling` or `building`.",
-            "type": "object",
-            "properties": {
-              "done": {
-                "type": "number"
-              },
-              "total": {
-                "type": "number"
-              },
-              "what": {
-                "type": "string",
-                "enum": [
-                  "image"
-                ]
-              }
-            },
-            "required": [
-              "done",
-              "total",
-              "what"
-            ]
-          },
-          "state": {
-            "$ref": "#/components/schemas/BrowserState"
-          },
-          "takeover": {
-            "description": "Who holds the browser privately, since when, and the ask it answers; null while no one does.",
-            "type": "object",
-            "properties": {
-              "by": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "since": {
-                "type": "number"
-              },
-              "requestId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "by",
-              "since"
-            ]
-          },
-          "viewers": {
-            "type": "number"
-          },
-          "why": {
-            "description": "Why it is `failed`, one sentence.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "host",
-          "key",
-          "lastUsedAt",
-          "name",
-          "state",
-          "viewers"
-        ]
-      },
-      "BrowserHostKind": {
-        "description": "Which host runs a browser on its machine: a container where a runtime answers, a local Chromium where none does.",
-        "type": "string",
-        "enum": [
-          "container",
-          "local"
-        ]
-      },
-      "BrowserKey": {
-        "description": "Which browser: a project's, or the machine's for sessions outside any project.",
-        "anyOf": [
-          {
-            "type": "string",
-            "pattern": "^project:.*$"
-          },
-          {
-            "type": "string",
-            "pattern": "^machine:.*$"
-          }
-        ]
-      },
-      "BrowserPorts": {
-        "description": "One browser's ports; `http` and `media` are the container host's alone.",
-        "type": "object",
-        "properties": {
-          "devtools": {
-            "type": "number"
-          },
-          "gate": {
-            "type": "number"
-          },
-          "http": {
-            "type": "number"
-          },
-          "media": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "devtools",
-          "gate"
-        ]
-      },
-      "BrowserState": {
-        "type": "string",
-        "enum": [
-          "asleep",
-          "building",
-          "failed",
-          "live",
-          "pulling",
-          "starting",
-          "stopping"
-        ]
-      },
-      "BrowserRuntime": {
-        "description": "The machine's container runtime as the agent found it, or the sentence that names the install.",
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "$ref": "#/components/schemas/BrowserRuntimeKind"
-              },
-              "endpoint": {
-                "type": "string"
-              },
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "endpoint",
-              "kind",
-              "version"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "missing": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "missing"
-            ]
-          }
-        ]
-      },
       "RelayFrame": {
         "description": "Daemon-originated: the stream relay on this machine, whole, on each change.",
         "type": "object",
@@ -55001,6 +57053,46 @@
           "machineId",
           "ports",
           "state"
+        ]
+      },
+      "RelayPorts": {
+        "description": "What the relay's machine has bound: its listener on UDP and TCP 443, and whether a certificate stands for TLS on it.",
+        "type": "object",
+        "properties": {
+          "tcp443": {
+            "type": "boolean"
+          },
+          "tls": {
+            "description": "A certificate stands and TCP 443 is bound: the listener answers TLS.",
+            "type": "boolean"
+          },
+          "udp443": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tcp443",
+          "tls",
+          "udp443"
+        ]
+      },
+      "RelayJourneyFrame": {
+        "description": "Hub-originated: the journey changed.",
+        "type": "object",
+        "properties": {
+          "journey": {
+            "$ref": "#/components/schemas/RelayJourneyView"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stream_relay.journey"
+            ]
+          }
+        },
+        "required": [
+          "journey",
+          "kind"
         ]
       },
       "WorkflowFrame": {
@@ -55406,30 +57498,6 @@
           "path"
         ]
       },
-      "RepoInfo": {
-        "description": "One repository a machine can {@link SpawnPayload.bootstrap} from.",
-        "type": "object",
-        "properties": {
-          "description": {
-            "type": "string"
-          },
-          "nameWithOwner": {
-            "type": "string"
-          },
-          "updatedAt": {
-            "type": "string"
-          },
-          "visibility": {
-            "$ref": "#/components/schemas/RepoInfoVisibility"
-          }
-        },
-        "required": [
-          "description",
-          "nameWithOwner",
-          "updatedAt",
-          "visibility"
-        ]
-      },
       "ToolState": {
         "description": "What a probe or an install attempt found. The unit every surface renders.",
         "type": "string",
@@ -55540,20 +57608,19 @@
           "manual"
         ]
       },
+      "BrowserHandedBackFrameWhy": {
+        "type": "string",
+        "enum": [
+          "person",
+          "stopped",
+          "unwatched"
+        ]
+      },
       "BrowserRuntimeKind": {
         "type": "string",
         "enum": [
           "docker",
           "podman"
-        ]
-      },
-      "CanvasDialKind": {
-        "type": "string",
-        "enum": [
-          "color",
-          "number",
-          "select",
-          "toggle"
         ]
       },
       "CatalogTypeSource": {
@@ -55830,6 +57897,14 @@
           "5m"
         ]
       },
+      "LfsOfferStateAnswer": {
+        "type": "string",
+        "enum": [
+          "dismissed",
+          "open",
+          "tracked"
+        ]
+      },
       "MachineCapabilityId": {
         "type": "string",
         "enum": [
@@ -55960,19 +58035,19 @@
           "back"
         ]
       },
-      "RepoInfoVisibility": {
+      "RelayStepFinding": {
         "type": "string",
         "enum": [
-          "INTERNAL",
-          "PRIVATE",
-          "PUBLIC"
+          "elsewhere",
+          "proxied",
+          "unresolved"
         ]
       },
-      "ReposResultError": {
+      "RelayStepHow": {
         "type": "string",
         "enum": [
-          "gh-missing",
-          "gh-unauthenticated"
+          "NAT-PMP",
+          "UPnP"
         ]
       },
       "RoutineMadeEventBy": {
@@ -55990,6 +58065,21 @@
           "delivered",
           "failed",
           "silent"
+        ]
+      },
+      "SessionAttachmentKind": {
+        "type": "string",
+        "enum": [
+          "file",
+          "image",
+          "text"
+        ]
+      },
+      "SessionAttachmentWho": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "person"
         ]
       },
       "SessionPulseActivity": {
@@ -56052,13 +58142,6 @@
           "routine",
           "session",
           "you"
-        ]
-      },
-      "ThreadEntryBy": {
-        "type": "string",
-        "enum": [
-          "agent",
-          "person"
         ]
       },
       "TranscriptBlockState": {

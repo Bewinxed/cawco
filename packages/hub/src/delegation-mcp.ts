@@ -18,6 +18,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
+import { BROWSER_TOOLS, type BrowserAsks } from "./browser-tools";
 import type { Caw } from "./caw";
 import type { Connections } from "./connections";
 import type {
@@ -28,10 +29,10 @@ import type {
   SendDelivery,
 } from "./delegation-actions";
 import {
-  ALWAYS_LOAD,
   handoffInstructions,
   handoffTools,
   type Listable,
+  loadsUpfront,
 } from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
@@ -49,7 +50,14 @@ import {
 import { PROJECT_SETTINGS, type ProjectSettings } from "./project-settings";
 import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
-import { allows, CAW_TOOLS, refusal, roleOf, TRIAGE_TOOLS } from "./roles";
+import {
+  allows,
+  CAW_TOOLS,
+  memoryRoleOf,
+  refusal,
+  roleOf,
+  TRIAGE_TOOLS,
+} from "./roles";
 import { ROUTINE_TOOLS, type Routines } from "./routines";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
@@ -65,6 +73,7 @@ type MemoryTool = ReturnType<Memory["tools"]>[number];
 type TriageTool = ReturnType<FleetWatch["tools"]>[number];
 /** One of the hub's own session tools (hub-tools.ts). */
 type HubTool = ReturnType<ReturnType<typeof createHubTools>>[number];
+type BrowserTool = ReturnType<BrowserAsks["tools"]>[number];
 
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
@@ -111,30 +120,38 @@ const ASKING = "Waiting for the person to approve this fleet-settings change";
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
+/** Whether `row` is a session that searches most: an orchestrator or a project's Caw ({@link loadsUpfront}). */
+const searcher = (row: InstanceRow | undefined): boolean =>
+  row !== undefined && memoryRoleOf(row) === "orchestrator";
+
 /**
- * A tool as `tools/list` answers it. One of {@link ALWAYS_LOAD} asks Claude
- * Code to load it upfront: "To control how one of your server's tools
- * loads, set "anthropic/alwaysLoad" in that tool's _meta object"
- * (code.claude.com/docs/en/mcp#per-tool-alwaysload). The server's config
- * sets no `alwaysLoad` (agent delegation.ts), so every other tool stays
- * deferred.
+ * A tool as `tools/list` answers it to `row`. One that loads upfront for it
+ * ({@link loadsUpfront}) asks Claude Code to: "To control how one of your
+ * server's tools loads, set "anthropic/alwaysLoad" in that tool's _meta
+ * object" (code.claude.com/docs/en/mcp#per-tool-alwaysload). The server's
+ * config sets no `alwaysLoad` (agent delegation.ts), so every other tool
+ * stays deferred.
  */
-const listed = ({
-  name,
-  description,
-  inputSchema,
-  ...entry
-}: {
-  description: string;
-  inputSchema: unknown;
-  name: string;
-}) => ({
-  name,
-  description,
-  inputSchema: inputSchema as { type: "object" },
-  ...("annotations" in entry ? { annotations: entry.annotations } : {}),
-  ...(ALWAYS_LOAD.has(name) ? { _meta: { "anthropic/alwaysLoad": true } } : {}),
-});
+const listedFor =
+  (row: InstanceRow | undefined) =>
+  ({
+    name,
+    description,
+    inputSchema,
+    ...entry
+  }: {
+    description: string;
+    inputSchema: unknown;
+    name: string;
+  }) => ({
+    name,
+    description,
+    inputSchema: inputSchema as { type: "object" },
+    ...("annotations" in entry ? { annotations: entry.annotations } : {}),
+    ...(loadsUpfront(name, searcher(row))
+      ? { _meta: { "anthropic/alwaysLoad": true } }
+      : {}),
+  });
 
 /**
  * Tools that act on the caller's project: a session in none is never listed
@@ -278,6 +295,11 @@ export function createDelegationMcp(options: {
    * requires paired devices, and writing its project's design system.
    */
   hubTools?: (actor: InstanceRow | undefined, toolUseId?: string) => HubTool[];
+  /** `browser_ask` (browser-tools.ts): the session asks the person to take over its browser. */
+  browserTools?: (
+    actor: InstanceRow | undefined,
+    toolUseId?: string
+  ) => BrowserTool[];
   /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
@@ -405,6 +427,7 @@ export function createDelegationMcp(options: {
           options.memoryTools,
           options.triageTools,
           options.hubTools,
+          options.browserTools,
         ] as (
           | ((actor: undefined) => (ProjectTool | CawTool | TriageTool)[])
           | undefined
@@ -725,8 +748,11 @@ export function createDelegationMcp(options: {
     input: Record<string, unknown>,
     toolUseId: string | undefined
   ): Promise<CallToolResult | undefined> => {
-    let group: (ProjectTool | HubTool)[] | undefined;
-    if (HUB_TOOLS.has(name)) {
+    let group: (ProjectTool | HubTool | BrowserTool)[] | undefined;
+    if (BROWSER_TOOLS.has(name)) {
+      // The call's id: the ask it parks is drawn at that call.
+      group = options.browserTools?.(actor, toolUseId);
+    } else if (HUB_TOOLS.has(name)) {
       // The call's id: a design proposal it parks is drawn at that call.
       group = options.hubTools?.(actor, toolUseId);
     } else if (MEMORY_TOOLS.has(name)) {
@@ -881,7 +907,7 @@ export function createDelegationMcp(options: {
 
   /** The hash of what a connection bound to `row` is listed now. */
   const toolsHash = (row: InstanceRow | undefined): string =>
-    hashOf(toolsFor(row).map(listed));
+    hashOf(toolsFor(row).map(listedFor(row)));
 
   /**
    * Each connection's open GET stream, where the client hears what the server
@@ -966,19 +992,25 @@ export function createDelegationMcp(options: {
   const listableOf = (bound: InstanceRow | undefined): Listable => {
     const namesOf = (row: InstanceRow | undefined) =>
       toolsFor(row).map((tool) => tool.name);
+    const upfrontOf = (listed: string[]) =>
+      new Set(listed.filter((name) => loadsUpfront(name, searcher(bound))));
     if (!bound) {
+      const names = namesOf(undefined);
       return {
-        names: namesOf(undefined),
+        names,
         inProject: new Set(),
         outsideProject: new Set(),
+        upfront: upfrontOf(names),
       };
     }
     const inside = namesOf({ ...bound, projectId: bound.projectId ?? "-" });
     const outside = namesOf({ ...bound, projectId: null });
+    const names = [...new Set([...inside, ...outside])];
     return {
-      names: [...new Set([...inside, ...outside])],
+      names,
       inProject: new Set(inside.filter((name) => !outside.includes(name))),
       outsideProject: new Set(outside.filter((name) => !inside.includes(name))),
+      upfront: upfrontOf(names),
     };
   };
 
@@ -1044,7 +1076,8 @@ export function createDelegationMcp(options: {
     // lists the superset; each invocation resolves its actor and enforces role.
     server.setRequestHandler(ListToolsRequestSchema, () => {
       // Read fresh, so a re-list after list_changed answers the new role.
-      const answered = toolsFor(boundRow(binding)).map(listed);
+      const row = boundRow(binding);
+      const answered = toolsFor(row).map(listedFor(row));
       options.putToolListing(listingOf(binding), hashOf(answered));
       return Promise.resolve({ tools: answered });
     });
@@ -1258,7 +1291,7 @@ export function createDelegationMcp(options: {
     if (instanceId !== undefined && !actor) {
       return;
     }
-    const answered = toolsFor(actor).map(listed);
+    const answered = toolsFor(actor).map(listedFor(actor));
     if (own && actor) {
       options.putToolListing(actor.id, hashOf(answered));
     }

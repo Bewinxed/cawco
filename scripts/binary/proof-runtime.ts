@@ -3,6 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
+import { renderCanvas } from "../../packages/agent/src/stage-render";
 import { readWithin } from "../../packages/core/src/bounded";
 import {
   type ReleaseManifest,
@@ -11,6 +12,7 @@ import {
 } from "../../packages/core/src/release-manifest";
 import { runtimeTree } from "../../packages/core/src/runtime";
 import { SESSIOND_V1 } from "../../packages/core/src/sessiond";
+import { REPORT_PATH, type RenderReport } from "../../packages/core/src/stage";
 import {
   programInputs,
   typecheckProgram,
@@ -220,6 +222,40 @@ if (verb === "proof-stack") {
     }
   }
   console.log("workflow typecheck, input worker, effect and result passed");
+} else if (verb === "proof-render") {
+  // The component canvas's renderer (agent stage-render.ts) driving the
+  // machine's Chromium through the bundled playwright-core, on a loopback
+  // page that answers as a stage's canvas and report do. Chromium's own
+  // sandbox is off: the proof runs inside a workspace's boundary.
+  const report: RenderReport = {
+    at: new Date().toISOString(),
+    by: "stage",
+    page: { errors: [] },
+    sections: [],
+    unnamed: [],
+  };
+  const page = `<!doctype html><div class="cawco-frame" data-cawco-story="Proof" data-cawco-interaction="rest" data-cawco-key="proof"><div class="cawco-frame-body" style="width:120px;height:40px;background:#c33">proof</div></div><script>globalThis.__cawcoCanvas={go(){},reports:1,swept:true}</script>`;
+  const stage = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request) =>
+      new URL(request.url).pathname === REPORT_PATH
+        ? Response.json(report)
+        : new Response(page, { headers: { "content-type": "text/html" } }),
+  });
+  try {
+    const rendered = await renderCanvas(
+      "host",
+      Number(stage.port),
+      { files: ["proof.stories.ts"], png: true, state: { story: "Proof" } },
+      false
+    );
+    console.log(
+      `stage-render drew the canvas: report by ${rendered.report.by}, frame PNG ${Buffer.from(rendered.png ?? "", "base64").length} bytes`
+    );
+  } finally {
+    stage.stop(true);
+  }
 } else if (verb === "proof-child") {
   process.stdin.resume();
   process.stdin.on("data", (chunk) => process.stdout.write(chunk));

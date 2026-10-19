@@ -23,9 +23,10 @@
  *
  * - **relay**: the fleet's stream relay (stream-relay.ts), offered once on a
  *   new project's setup page as the card `fleet-relay` while the fleet has
- *   none and nobody has answered it (`supervisor_config.relay_asked_at`): one
- *   option per machine whose capability report holds a public address, and
- *   Later. Settings › Browsers is where it is finished.
+ *   none, no journey, and nobody has answered it
+ *   (`supervisor_config.relay_asked_at`): Set up the stream relay, which
+ *   opens its guided journey (relay-journey.ts) in Needs you, or Later.
+ *   Settings › Browsers is where it is finished.
  *
  * Names are Claude Code's, the list every daemon already writes into
  * `~/.claude/settings.json` (Claude Code refuses a rule whose tool name is
@@ -35,10 +36,7 @@
  */
 import type { ChoiceEntry } from "@cawco/core";
 import { NATIVE_TOOLS } from "@cawco/core";
-import {
-  type RelayCandidate,
-  STREAM_RELAY_WORDS,
-} from "@cawco/core/stream-relay";
+import { STREAM_RELAY_WORDS } from "@cawco/core/stream-relay";
 import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import { Elysia, t } from "elysia";
 
@@ -169,45 +167,32 @@ export const fleetChoicesRoutes = (store: FleetChoicesStore) =>
       ({ body }) => setFleetChoices(store, body)
     );
 
-/** The relay card's id, its Later option, a machine's option, and the DNS name field's id. */
+/** The relay card's id and its two options. */
 export const RELAY_CARD = {
   id: "fleet-relay",
+  setUp: "set-up",
   later: "later",
-  machine: (machineId: string) => `run:${machineId}`,
-  hostname: "fleet-relay-hostname",
 } as const;
 
-const RUN = /^run:(.+)$/;
-
 /**
- * The `fleet-relay` card, for Caw's setup page (setup.ts): the step's words
- * (core `STREAM_RELAY_WORDS`), an option per machine that could run it, and
- * Later; with no such machine, the line that says how to get one, and Later.
+ * The `fleet-relay` card, for Caw's setup page (setup.ts): the step's lead
+ * (core `STREAM_RELAY_WORDS`), and two options, Set up the stream relay and
+ * Later; Set up recommended when the person reached CawCo through a domain,
+ * which carries pages and not streams.
  */
-export const relayCard = (candidates: readonly RelayCandidate[]): string => {
+export const relayCard = (domain: string | null): string => {
   const words = STREAM_RELAY_WORDS;
-  const machines =
-    candidates.length > 0
-      ? `One option per machine, each labelled "${words.runHere}" beside the machine's name and its address in code type: ${candidates.map((one) => `${one.name} (\`${one.address}\`) as \`${RELAY_CARD.machine(one.machineId)}\``).join(", ")}; and \`${RELAY_CARD.later}\` labelled "${words.later}". Under the options a text field labelled "${words.hostnameLabel}", its hint "${words.hostnameHint}", stored with \`cawco.set("${RELAY_CARD.hostname}", <its text>)\` on every edit. Say on the card that picking a machine starts the relay there once the page is sent: ${words.startBody}`
-      : `Say "${words.none}" and give one option, \`${RELAY_CARD.later}\` labelled "${words.later}".`;
-  return `- \`${RELAY_CARD.id}\`: "${words.title}" — ${words.lead} ${machines} It is the fleet's, asked once, and Settings › Browsers is where it is finished: say so on the card.`;
+  const lead = domain ? words.leadDomain(domain) : words.leadPlain;
+  return `- \`${RELAY_CARD.id}\`: "${words.title}" — ${lead} Options \`${RELAY_CARD.setUp}\` labelled "${words.setUp}"${domain ? " (recommended)" : ""} and \`${RELAY_CARD.later}\` labelled "${words.later}". Say on the card that Set up opens a short guided set-up in Needs you, each step ticking by itself, and that Settings › Browsers is where it is finished and seen. It is the fleet's, asked once: say so on the card.`;
 };
 
-/** What the person picked on the relay card: a machine (and the DNS name typed), Later, or nothing. */
+/** What the person picked on the relay card: Set up, Later, or nothing. */
 export const relayPickOf = (
   state: Record<string, ChoiceEntry>
-): { machineId: string; hostname?: string } | "later" | undefined => {
+): "set-up" | "later" | undefined => {
   const card: ChoiceEntry | undefined = state[RELAY_CARD.id];
   const [option] = card?.options ?? [];
-  if (option === RELAY_CARD.later) {
-    return "later";
+  if (option === RELAY_CARD.setUp || option === RELAY_CARD.later) {
+    return option;
   }
-  const machineId = option ? RUN.exec(option)?.[1] : undefined;
-  if (!machineId) {
-    return;
-  }
-  const field: ChoiceEntry | undefined = state[RELAY_CARD.hostname];
-  const typed = field?.value;
-  const hostname = typeof typed === "string" ? typed.trim() : "";
-  return hostname ? { machineId, hostname } : { machineId };
 };

@@ -1,0 +1,11 @@
+apps/dashboard/src/lib/cawco/home/NoticeRow.svelte
+apps/dashboard/src/lib/cawco/home/PeekSheet.svelte
+apps/dashboard/src/lib/cawco/home/StatusLine.svelte
+apps/dashboard/src/lib/cawco/home/UpdateCard.svelte
+apps/dashboard/src/lib/cawco/home/WorkTabs.svelte
+
+# apps/dashboard/src/lib/cawco/home/NoticeRow.svelte: relic: literal ×1; relic: style-var ×3; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/home/PeekSheet.svelte: relic: literal ×1
+# apps/dashboard/src/lib/cawco/home/StatusLine.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/home/UpdateCard.svelte: relic: literal ×6; relic: style-var ×4; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/home/WorkTabs.svelte: relic: literal ×6; relic: style-var ×8; relic: style-reason ×1

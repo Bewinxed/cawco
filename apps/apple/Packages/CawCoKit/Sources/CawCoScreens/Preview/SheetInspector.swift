@@ -296,6 +296,16 @@ final class SheetInspectorView: UIView {
     private func storyRow(_ sheet: SheetOnPage) -> UIView {
         let pick = KitSelect(small: true)
         pick.accessibilityLabel = Words.Artifacts.story
+        // Set once and made as it opens, from the sheet as it stands then: a repaint that set a new menu cancelled one a tap was opening.
+        pick.menuOnOpen { [weak self] in
+            guard let self, let sheet = inspection.sheet else { return [] }
+            return sheet.stories.map { one in
+                UIAction(title: Words.Artifacts.storyOption(name: one.name, edited: inspection.dirty(one.name)),
+                         state: one.name == inspection.chosen ? .on : .off) { [weak self] _ in
+                    self?.inspection.choose(one.name)
+                }
+            }
+        }
         storyPick = pick
         pick.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let duplicate = Self.iconButton(.copy, said: Words.Artifacts.duplicateStory, tip: Words.Artifacts.duplicate) { [weak self] in
@@ -348,14 +358,8 @@ final class SheetInspectorView: UIView {
     /// Everything that moves without the body being built again: values, Reset, the buttons' states, the refusal.
     private func paint() {
         let writing = inspection.writing
-        if let pick = storyPick, let sheet = inspection.sheet {
+        if let pick = storyPick, inspection.sheet != nil {
             pick.setValue(Words.Artifacts.storyOption(name: inspection.chosen ?? "", edited: inspection.dirty(inspection.chosen)))
-            pick.menu = UIMenu(children: sheet.stories.map { one in
-                UIAction(title: Words.Artifacts.storyOption(name: one.name, edited: inspection.dirty(one.name)),
-                         state: one.name == inspection.chosen ? .on : .off) { [weak self] _ in
-                    self?.inspection.choose(one.name)
-                }
-            })
         }
         duplicateButton?.isEnabled = writing == nil
         removeButton?.isEnabled = writing == nil
@@ -523,6 +527,17 @@ private final class PropRow: UIStackView {
         case .select:
             let made = KitSelect(small: true)
             made.accessibilityLabel = name
+            // Set once and made as it opens, the prop's value checked as it stands then.
+            made.menuOnOpen { [weak self] in
+                guard let self else { return [] }
+                let chosen = inspection.value(prop)?.shown ?? prop.bareDefault ?? ""
+                return options.map { option in
+                    UIAction(title: option.shown, state: option.shown == chosen ? .on : .off) { [weak self] _ in
+                        guard let self else { return }
+                        inspection.set(prop, option)
+                    }
+                }
+            }
             select = made
             return made
         case .toggle:
@@ -603,12 +618,6 @@ private final class PropRow: UIStackView {
         }
         if let select {
             select.setValue(chosen)
-            select.menu = UIMenu(children: options.map { option in
-                UIAction(title: option.shown, state: option.shown == chosen ? .on : .off) { [weak self] _ in
-                    guard let self else { return }
-                    inspection.set(prop, option)
-                }
-            })
         }
         if let toggle {
             let on = value.map { $0 == .bool(true) } ?? (prop.defaultValue == "true")

@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/cawco/AddMachineDialog.svelte
+apps/dashboard/src/lib/cawco/AskHere.svelte
+apps/dashboard/src/lib/cawco/AskItems.svelte
+apps/dashboard/src/lib/cawco/Coded.svelte
+apps/dashboard/src/lib/cawco/EdgePull.svelte
+apps/dashboard/src/lib/cawco/ErrorDialog.svelte
+apps/dashboard/src/lib/cawco/FleetFault.svelte
+apps/dashboard/src/lib/cawco/GlassCard.svelte
+
+# apps/dashboard/src/lib/cawco/AddMachineDialog.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×13; relic: style-var ×15; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/AskHere.svelte: relic: literal ×1
+# apps/dashboard/src/lib/cawco/AskItems.svelte: relic: literal ×2
+# apps/dashboard/src/lib/cawco/Coded.svelte: after-M: a new Tailwind class
+# apps/dashboard/src/lib/cawco/EdgePull.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/ErrorDialog.svelte: relic: style-var ×1
+# apps/dashboard/src/lib/cawco/FleetFault.svelte: relic: literal ×7; relic: style-var ×8
+# apps/dashboard/src/lib/cawco/GlassCard.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk

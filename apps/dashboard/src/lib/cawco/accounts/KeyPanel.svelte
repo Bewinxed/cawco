@@ -6,7 +6,7 @@
    * machine made of it stands on its row; the field empties once it is sent.
    * With one machine (the account page's popover) there is nothing to tick.
    */
-  import { accountsWords } from "@cawco/core";
+  import { type AccountJoined, accountsWords } from "@cawco/core";
   import { untrack } from "svelte";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { sendAccountKey } from "#lib/cawco/client.svelte.js";
@@ -26,12 +26,15 @@
   let {
     account,
     machines,
+    onjoined,
     onsent,
     primary = true,
   }: {
     /** The account's id, making it first where the setup has not yet. */
     account: () => Promise<string>;
     machines: AccountMachine[];
+    /** The key came out as an account the hub already had: it is that account's now. */
+    onjoined?: (joined: AccountJoined) => void;
     /** The key landed on at least one machine. */
     onsent?: () => void;
     /** Send key is the step's primary; once a key is on a machine, Continue is. */
@@ -81,6 +84,9 @@
           results.set(answer.machineId, { ok: false, why: answer.error });
         } else if (answer.result.state === "signed-in") {
           results.set(answer.machineId, { ok: true });
+          if (answer.result.joined) {
+            onjoined?.(answer.result.joined);
+          }
         } else {
           results.set(answer.machineId, {
             ok: false,

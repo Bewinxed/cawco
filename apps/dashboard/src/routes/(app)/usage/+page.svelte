@@ -98,8 +98,21 @@
         if (!cawco.usageLimitsRead) {
           return { claude: undefined, opencode: undefined };
         }
+        // Each Claude account has its own 5-hour window: the range opens
+        // with the earliest of those still running, so it holds them all.
+        const opened = Object.values(cawco.claudeLimits)
+          .filter((reading) =>
+            reading.windows.some(
+              (w) =>
+                w.group === "session" &&
+                w.resetsAt !== null &&
+                Date.parse(w.resetsAt) > Date.now()
+            )
+          )
+          .map((reading) => fiveHourStart(reading))
+          .filter((opens): opens is number => opens !== null);
         return {
-          claude: fiveHourStart(speakingReading(cawco.claudeLimits)?.reading),
+          claude: opened.length > 0 ? Math.min(...opened) : null,
           opencode: fiveHourStart(
             speakingReading(cawco.openCodeGoLimits)?.reading
           ),

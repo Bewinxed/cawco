@@ -31,7 +31,7 @@ const decisionPage = (name: string, title: string): SeedPage => ({
   name,
   title,
   writer: "Price the plan",
-  lede: "Two choices before the pricing page is built.",
+  ask: "Pick how the hosted plan is priced",
   cards: [
     {
       id: "shape",
@@ -53,7 +53,12 @@ const decisionPage = (name: string, title: string): SeedPage => ({
       why: "The trial's length is in the page's call to action.",
       options: [
         { id: "week", label: "A week", line: "Seven days, then pay." },
-        { id: "month", label: A_MONTH, line: "Thirty days, then pay." },
+        {
+          id: "month",
+          label: A_MONTH,
+          line: "Thirty days, then pay.",
+          recommended: true,
+        },
       ],
     },
   ],
@@ -94,6 +99,8 @@ async function walk(leg: Leg): Promise<void> {
   });
   await fleet.api(`/api/instances/${writer}/artifacts`, {
     kind: "page",
+    does: "pick",
+    ask: "Pick one option on each card",
     name,
     program: pageProgram(decisionPage(name, title)),
   });

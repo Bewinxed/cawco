@@ -20,6 +20,7 @@ import Commit from "~icons/solar/code-square-bold-duotone";
 import Report from "~icons/solar/document-bold-duotone";
 import Page from "~icons/solar/document-text-bold-duotone";
 import Project from "~icons/solar/folder-bold-duotone";
+import Browser from "~icons/solar/global-bold-duotone";
 import NeedsYou from "~icons/solar/hand-shake-bold-duotone";
 import Decision from "~icons/solar/list-check-bold-duotone";
 import Sleeping from "~icons/solar/moon-sleep-bold-duotone";
@@ -233,6 +234,7 @@ const ARTIFACT: Record<ArtifactKind, { glyph: Component; noun: string }> = {
   canvas: { glyph: Canvas, noun: "canvas" },
   preview: { glyph: Preview, noun: "preview" },
   component: { glyph: Sheet, noun: "component" },
+  browser: { glyph: Browser, noun: "browser" },
 };
 
 const STAGE_KIND_WORD: Record<string, string> = {

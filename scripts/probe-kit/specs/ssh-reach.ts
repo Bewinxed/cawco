@@ -71,6 +71,13 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { SshJoinJob } from "../../../packages/core/src/join";
+import {
+  listedPid,
+  ownPid,
+  type Pid,
+  signal,
+  spawnedPid,
+} from "../../../packages/core/src/signal";
 import { until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { machineBin } from "../ssh-target";
@@ -119,22 +126,12 @@ const processList = (): { argv: string; pid: number; ppid: number }[] =>
     });
 
 /**
- * Signals one process this spec started or found running for it, by a pid
- * read from that live process. Never a sentinel: anything but an integer
- * above 1 (and never this process) is refused, since `kill(-1)` signals
- * every process the user owns.
+ * Signals one process this spec started or found running for it, through
+ * core's wall: a pid made by the wall's makers from that live process (its
+ * spawn, or /proc read now), and never this process.
  */
-const signalOwn = (pid: number, signal: NodeJS.Signals): boolean => {
-  if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) {
-    return false;
-  }
-  try {
-    process.kill(pid, signal);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const signalOwn = (pid: Pid, sig: NodeJS.Signals): boolean =>
+  pid !== ownPid() && signal(pid, sig) === "sent";
 
 /** One shell word for `value`. */
 const quoted = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
@@ -589,7 +586,7 @@ async function reconnects(
   // (d) The connection killed: the one master this spec found running, by its own pid.
   const [held] = tunnels();
   if (held) {
-    signalOwn(held.pid, "SIGKILL");
+    signalOwn(listedPid(held.pid), "SIGKILL");
     const offline = await until(
       "the machine offline once its connection is gone",
       () => status(),
@@ -682,7 +679,7 @@ async function silentDrop(
     return;
   }
   const from = Date.now();
-  signalOwn(fork.pid, "SIGSTOP");
+  signalOwn(listedPid(fork.pid), "SIGSTOP");
   try {
     const back = await until(
       "the machine online again on a new connection",
@@ -709,7 +706,7 @@ async function silentDrop(
     );
   } finally {
     // The frozen bridge, which this spec found and froze: it goes.
-    signalOwn(fork.pid, "SIGKILL");
+    signalOwn(listedPid(fork.pid), "SIGKILL");
   }
 }
 
@@ -862,7 +859,7 @@ const sweep = (box: Box): void => {
       argv.includes(box.controlDir) ||
       (pid === written && argv.includes(agentEntry));
     if (ours) {
-      signalOwn(pid, "SIGKILL");
+      signalOwn(listedPid(pid), "SIGKILL");
     }
   }
 };
@@ -893,8 +890,9 @@ async function run(kit: Kit): Promise<void> {
     await keepLogs(kit, fleet, box);
     sweep(box);
     // The box's bwrap, which this spec started: its own pid.
-    if (child) {
-      signalOwn(child.pid, "SIGKILL");
+    const bwrap = child ? spawnedPid(child) : undefined;
+    if (bwrap) {
+      signalOwn(bwrap, "SIGKILL");
     }
   }
 }

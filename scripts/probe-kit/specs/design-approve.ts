@@ -203,7 +203,13 @@ const attempts = new Map<string, Call[]>([
       { name: DESIGN_WRITE, input: { files: SYSTEM } },
       {
         name: ARTIFACT,
-        input: { kind: "page", name: "foundations", html: FOUNDATIONS },
+        input: {
+          kind: "page",
+          does: "judge",
+          ask: "Judge this page: pin anything that reads wrong",
+          name: "foundations",
+          html: FOUNDATIONS,
+        },
       },
       {
         name: RESULT,

@@ -1,0 +1,9 @@
+apps/dashboard/src/lib/cawco/views/canvas/TaskNode.svelte
+apps/dashboard/src/lib/cawco/views/openui/ViewBoard.svelte
+apps/dashboard/src/lib/cawco/views/openui/ViewStat.svelte
+apps/dashboard/src/lib/cawco/views/openui/ViewTable.svelte
+
+# apps/dashboard/src/lib/cawco/views/canvas/TaskNode.svelte: relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/views/openui/ViewBoard.svelte: relic: literal ×1
+# apps/dashboard/src/lib/cawco/views/openui/ViewStat.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/views/openui/ViewTable.svelte: relic: literal ×1; relic: style-reason ×1

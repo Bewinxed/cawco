@@ -34,6 +34,7 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconBox,
+    IconFiles,
     IconPlus,
     IconSearch,
     IconSettings,
@@ -54,6 +55,7 @@
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
   import ForgetProjectTray from "./ForgetProjectTray.svelte";
+  import { files, filesCount } from "./files/files.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { forgetAtRail } from "./forget.svelte";
   import Home from "./home/Home.svelte";
@@ -93,12 +95,15 @@
 
   let {
     onsearch,
+    onfiles,
     narrow,
     sheet = false,
     scroller,
   }: {
     /** Opens Jump, from the phone's Search field (Shell owns the palette). */
     onsearch?: () => void;
+    /** Opens Files for the conversation on screen, from the phone's Files row (Shell owns its drawer). */
+    onfiles?: () => void;
     /** The Shell's live narrow answer: a phone opens Configure on its list. */
     narrow: boolean;
     /**
@@ -850,6 +855,41 @@
           >
         </button>
       </div>
+    {/if}
+    {#if sheet && onfiles && files.session}
+      {@const count = filesCount(files.session)}
+      <!-- The conversation on screen's Files, where the phone keeps the
+           bar's other items: one row under the search, its count on the
+           row's badge as Fleet's stands. Its drawer is Shell's. -->
+      <Sidebar.Group pad="rail">
+        <Sidebar.Menu aria-label="This conversation" gap="tight">
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton class="h-c-nav-h" isActive={false} row="nav">
+              {#snippet child({ props })}
+                <button
+                  {...props}
+                  class="{props.class} mark-line"
+                  aria-label={count ? `Files, ${count}` : "Files"}
+                  data-sidebar-files
+                  onclick={() => onfiles()}
+                  type="button"
+                >
+                  <span class={SLOT} data-box
+                    ><IconFiles class={SLOT_GLYPH} /></span
+                  ><span>Files</span>
+                </button>
+              {/snippet}
+            </Sidebar.MenuButton>
+            {#if count}
+              <!-- Centred on its nav row, as Fleet's count stands. -->
+              <Sidebar.MenuBadge
+                class="peer-data-[size=default]/menu-button:top-1/2 -translate-y-1/2"
+                >{count}</Sidebar.MenuBadge
+              >
+            {/if}
+          </Sidebar.MenuItem>
+        </Sidebar.Menu>
+      </Sidebar.Group>
     {/if}
     <!-- On a wide screen the home is the sidebar: what needs you, what is
          working, what finished, and the rest, while the transcripts take the

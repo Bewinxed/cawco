@@ -163,14 +163,8 @@
 <style>
   /* residual: keyframes */
   @media (prefers-reduced-motion: no-preference) {
-    [data-breathes] {
-      animation: find-breathe var(--breath) var(--ease-in-out) infinite
-        alternate;
-    }
-  }
-  @keyframes find-breathe {
-    to {
-      opacity: 0.45;
+    .breathes {
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
 </style>

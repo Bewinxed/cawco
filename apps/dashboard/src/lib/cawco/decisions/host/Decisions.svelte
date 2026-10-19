@@ -1,5 +1,5 @@
 <!--
-  The page (the root): Caw, the title and why, the count picked, every
+  The page (the root): Caw, the title, the count picked, every
   decision and piece of media the program puts on it, and Send picks. The
   kit's hero, meter and footer (page.css `.dp-hero`, `.dp-meter`, `.dp-done`).
 -->
@@ -17,7 +17,6 @@
   }: OpenUIRenderProps<{
     title: unknown;
     children: unknown[];
-    intro?: unknown;
   }> = $props();
 
   const ids = $derived(
@@ -60,7 +59,6 @@
     </span>
     <div>
       <h1>{String(props.title ?? "")}</h1>
-      {#if props.intro}<p>{String(props.intro)}</p>{/if}
     </div>
     <div class="dp-meter" aria-live="polite">
       <span><b>{count}</b> of <span>{ids.length}</span> picked</span>

@@ -262,7 +262,7 @@ export function stagedData(
     email: seed.email,
     hue: HUES[i % HUES.length],
     id: `acc-${i}`,
-    identity: { email: seed.email, organization: orgAt(i) },
+    identity: { email: seed.email, organization: orgAt(i), orgId: orgAt(i) },
     kind: "subscription",
     label: null,
     neverBackup: false,

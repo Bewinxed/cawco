@@ -283,4 +283,11 @@ export const configureWords = {
   gone: (what: string) => `That ${what} is gone`,
   goneLine: "It was deleted, or the link is from another hub.",
   backTo: (section: string) => `Back to ${section}`,
+  /** The toast after a delete, which goes through at once: Undo for as long as the hub keeps it. */
+  undo: "Undo",
+  /** A row's refused action, said under it, offers it again. */
+  tryAgain: "Try again",
+  deleted: (what: string) => `Deleted ${what}`,
+  removed: (what: string) => `Removed ${what}`,
+  unlinked: (what: string) => `Unlinked ${what}`,
 };

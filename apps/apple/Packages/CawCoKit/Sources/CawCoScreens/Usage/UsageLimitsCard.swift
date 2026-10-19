@@ -78,12 +78,12 @@ final class UsageLimitsCard: UsageCard {
             body.addArrangedSubview(TileGrid(claude.accounts.map { ring in
                 tile(ring, figure: Rings.tileFigure(ring, claude, now: now), say: Rings.tileSentence(ring, claude, now: now), fleet: fleet)
             }))
-            if let extra = Usage.speaking(fleet.claudeLimits, error: \.error, stale: \.stale, windows: \.windows)?.extraUsage {
-                let text = extra.on ? (extra.inUse ? "on, in use" : "on") : extra.offReason.map { "off: \($0)" } ?? "off"
+            let text = Usage.extraUsageLine(fleet.claudeLimits, names: claude.accounts.map { (id: $0.id, name: $0.name) })
+            if !text.isEmpty {
                 body.addArrangedSubview(line("Extra usage", NSAttributedString(string: text, attributes: TypeScale.typeBody.attributes(color: Palette.inkRow))))
             }
         } else {
-            body.addArrangedSubview(unknown(Usage.claudeGap(fleet.claudeLimits, machines: fleet.machines)))
+            body.addArrangedSubview(unknown(Usage.claudeGap(fleet.claudeLimits)))
         }
         let spend = fleet.spend.flatMap { $0.all > 0 ? $0 : nil }
         if view.openCode != nil || spend != nil {
@@ -228,7 +228,9 @@ final class UsageLimitsCard: UsageCard {
         dot.heightAnchor.constraint(equalToConstant: 8).isActive = true
         let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
         name.lineBreakMode = .byCharWrapping
-        name.text = ring.nick ?? ring.email ?? "Not signed in yet"
+        // Its nickname, else its name, which names its organization when
+        // another account signs in as the same email (`accountNames`).
+        name.text = ring.nick ?? (ring.email == nil ? "Not signed in yet" : ring.name)
         let names = UIStackView(arrangedSubviews: [name])
         names.axis = .vertical
         if ring.nick != nil, let email = ring.email {

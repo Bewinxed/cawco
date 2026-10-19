@@ -16,6 +16,8 @@
  *    starts.
  * c. An idle fleet for 10 minutes: no Jev question, no model request, no
  *    triage, counted from the hub's log, the Jev mock and the model mock.
+ *    The count starts once d's project has had its starters asked (60 s
+ *    after it was made, project-starters.ts QUIET_MS): that ask is d's.
  * d. A Caw-off project (Jev on): its looping session raises a needs-you
  *    notice, wakes no Jev question and starts no triage.
  * e. A reply rule and a meaning rule made before it all still fire.
@@ -45,6 +47,8 @@ const IDLE_MS = 10 * 60_000;
 const SPENDS = /\[fleet-watch\].*(asked Jev|triage started|signal:)/;
 /** A hub log line for a Caw session started. */
 const CAW_STARTED = /\[caw\].*started Caw/;
+/** A hub log line for any placement ask of Jev (jev-placement.ts `askRow`) or a starters write. */
+const PLACEMENT = /\[(jev|starters)\] /;
 
 const results: Record<string, string> = {};
 let failed = false;
@@ -342,6 +346,7 @@ try {
   });
 
   // ── d: a Caw-off project, Jev on ─────────────────────────────────────────
+  let cawOff = "";
   await section("d", async () => {
     const src = join(fleet.sandbox, "caw-off");
     await mkdir(src, { recursive: true });
@@ -359,6 +364,7 @@ try {
       cwd: src,
       caw: false,
     });
+    cawOff = project.id;
     const before = overseers().length;
     const asked = stuckAsks();
     const looper = await fleet.spawn("claude", "Probe looper d", src, {
@@ -412,6 +418,23 @@ try {
 
   // ── c: an idle fleet for 10 minutes ──────────────────────────────────────
   await section("c", async () => {
+    // The fleet's last act was d's project being made: its starters are
+    // asked of Jev after their quiet (project-starters.ts QUIET_MS, 60 s),
+    // which can outlast d, e and the settle. That ask answers d, not the
+    // idle fleet, so it is heard before the count starts.
+    if (cawOff) {
+      // `[starters] project=<id>` once written, else askRow's
+      // `[jev] Starters project=<id>` line when Jev failed or went unanswered.
+      const asked = new RegExp(
+        `(\\[starters\\]|\\[jev\\] Starters) project=${cawOff}`
+      );
+      await until(
+        "the Caw-off project's starters asked",
+        () => hubLog(),
+        (log) => asked.test(log),
+        180_000
+      );
+    }
     // Settle: every session's last turn over.
     await delay(30_000);
     const models = fleet.seen.length;
@@ -423,21 +446,24 @@ try {
         .filter(
           (line) =>
             SPENDS.test(line) ||
+            PLACEMENT.test(line) ||
             line.includes("[meaning]") ||
             CAW_STARTED.test(line)
-        ).length;
-    const logged = await spendLines();
+        );
+    const logged = (await spendLines()).length;
     console.log(
       `… idle for ${IDLE_MS / 60_000} min from ${new Date().toISOString()}`
     );
     await delay(IDLE_MS);
+    const idleLines = (await spendLines()).slice(logged);
+    const idleAsks = jevHits.slice(questions).map((hit) => hit.keys.join(","));
     check(
       "c: an idle fleet for 10 minutes: no Jev question, no model request, no triage",
       fleet.seen.length === models &&
-        jevHits.length === questions &&
+        idleAsks.length === 0 &&
         overseers().length === runs &&
-        (await spendLines()) === logged,
-      `model requests ${models} → ${fleet.seen.length}, Jev questions ${questions} → ${jevHits.length}, triage runs ${runs} → ${overseers().length}, hub log lines (Jev asks, signals, triage, meaning, Caw starts) ${logged} → ${await spendLines()}`
+        idleLines.length === 0,
+      `model requests ${models} → ${fleet.seen.length}, Jev questions ${questions} → ${jevHits.length} ${JSON.stringify(idleAsks)}, triage runs ${runs} → ${overseers().length}, hub log lines (Jev and starters asks, signals, triage, meaning, Caw starts) ${logged} → ${logged + idleLines.length} ${JSON.stringify(idleLines)}`
     );
   });
 } catch (error) {

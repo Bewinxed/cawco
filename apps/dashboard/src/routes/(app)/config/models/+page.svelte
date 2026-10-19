@@ -651,15 +651,9 @@
     }
   }
   /* Finishing the connection: the dot breathes while the hub works. */
-  /* residual: keyframes */
-  [data-pulse] {
+  .pulse {
     @media (prefers-reduced-motion: no-preference) {
-      animation: breathe var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes breathe {
-    50% {
-      opacity: 0.2;
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
 </style>

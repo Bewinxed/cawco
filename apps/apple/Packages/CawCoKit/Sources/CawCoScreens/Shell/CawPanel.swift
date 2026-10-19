@@ -308,10 +308,9 @@ private final class PanelScroll: UIScrollView {
 // MARK: The sections' rule
 
 /// The hairline between Needs you and Notices (DESIGN.md, Caw's panel): 1pt
-/// of the brand's vermillion (`brand-solid`) at the session tabs' rim
-/// strength (`tab-rim-mix`, by day or by night), across the rows' width, no
-/// glow and no fade; solid under Increase Contrast. `color-mix(in oklab,
-/// brand-solid N%, transparent)` is the vermillion itself at alpha N.
+/// of the brand's vermillion (`brand-solid`), solid, as Files draws it
+/// (CawPanel.svelte `1px solid var(--brand-solid)`), across the rows' width,
+/// no glow and no fade.
 private final class SectionRule: UIView {
     static let thickness = 1.0
 
@@ -321,10 +320,7 @@ private final class SectionRule: UIView {
         isUserInteractionEnabled = false
         isAccessibilityElement = false
         accessibilityIdentifier = "caw-section-rule"
-        backgroundColor = UIColor { traits in
-            let solid = Palette.brandSolid.resolvedColor(with: traits)
-            return traits.accessibilityContrast == .high ? solid : solid.withAlphaComponent(Effect.tabRimMix.value(for: traits))
-        }
+        backgroundColor = Palette.brandSolid
         heightAnchor.constraint(equalToConstant: Self.thickness).isActive = true
     }
 
@@ -332,7 +328,29 @@ private final class SectionRule: UIView {
     required init?(coder _: NSCoder) {
         fatalError("SectionRule is built in code")
     }
+
+    #if DEBUG
+    /// The rule's fill as each scheme resolves it, beside `brand-solid`'s (ParityProbe).
+    static func probe(_ style: UIUserInterfaceStyle) -> String {
+        let traits = UITraitCollection(userInterfaceStyle: style)
+        let hex = { (color: UIColor?) -> String in
+            var (red, green, blue, alpha) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+            guard color?.resolvedColor(with: traits).getRed(&red, green: &green, blue: &blue, alpha: &alpha) == true else { return "none" }
+            let byte = { (part: CGFloat) in Int((part * 255).rounded()) }
+            return String(format: "#%02x%02x%02x a=%.2f", byte(red), byte(green), byte(blue), Double(alpha))
+        }
+        let rule = SectionRule()
+        return "\(style == .dark ? "dark" : "light") fill=\(hex(rule.backgroundColor)) brand-solid=\(hex(Palette.brandSolid)) height=\(Self.thickness)"
+    }
+    #endif
 }
+
+#if DEBUG
+/// Caw's panel's section rule, as ParityProbe reads it.
+enum CawPanelProbe {
+    static func sectionRule(_ style: UIUserInterfaceStyle) -> String { SectionRule.probe(style) }
+}
+#endif
 
 /// The hairline between two notices: 1pt of `border-hairline` across the rows' width.
 private final class NoticeRule: UIView {
@@ -394,9 +412,16 @@ private final class NeedRow: UIControl {
         let inFlight = sent.map { $0.stage != .failed } ?? false
         switch item.kind {
         case let .ask(parked):
-            ask.text = parked.summary
+            // A held post (NeedsCard.svelte): its title is the row's, where
+            // it goes its one line, and the session that asked ends the place
+            // line, so a long name gives way before the machine's.
+            let post = parked.presentation.post
+            ask.text = post?.target ?? parked.summary
+            if post != nil, let asker = HomeModel.asker(parked) {
+                place.text = "\(place.text ?? item.place) · \(asker)"
+            }
             // What runs, under why: Approve here is made on the command too.
-            if !parked.isQuestion, let line = parked.commandLine {
+            if post == nil, !parked.isQuestion, let line = parked.commandLine {
                 column.addArrangedSubview(PromptCardView.commandLine(line))
             }
             let actions = UIStackView()
@@ -411,8 +436,10 @@ private final class NeedRow: UIControl {
                 let approve = KitButton.make("Approve", glyph: .tick, variant: .done, height: .sm) { [weak self] in
                     self?.onAnswer(parked, .allow)
                 }
-                deny.accessibilityLabel = "Deny \(parked.summary) on \(item.title)"
-                approve.accessibilityLabel = "Approve \(parked.summary) on \(item.title)"
+                // A held post by its title and where it goes (NeedsCard.svelte `answered`).
+                let answered = post.map { "\(item.title) to \($0.target)" } ?? "\(parked.summary) on \(item.title)"
+                deny.accessibilityLabel = "Deny \(answered)"
+                approve.accessibilityLabel = "Approve \(answered)"
                 deny.accessibilityIdentifier = "caw-need-deny"
                 approve.accessibilityIdentifier = "caw-need-approve"
                 for peer in [deny, approve] {

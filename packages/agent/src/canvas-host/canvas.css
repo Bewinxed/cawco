@@ -149,9 +149,10 @@ body {
 }
 
 /* A tool: 34px at the concentric 5px radius (the group's 12px less its
-   7px inset), the chosen one on the kit Toggle's on step (a step past the
-   hover by day, surface-fill by night), so it never reads as hovered; 44px
-   under a finger. */
+   7px inset), the chosen one on the kit Toggle's on step (surface-pressed:
+   a step past the hover by day, surface-fill by night), so it never reads
+   as hovered; 44px under a finger. The step is a token (DESIGN.md), as
+   every colour here is. */
 .rail-box {
   display: grid;
   width: var(--rail-box);
@@ -169,7 +170,7 @@ body {
     scale var(--dur-control) var(--ease-out);
 
   &[data-chosen] {
-    background: light-dark(var(--surface-fill-strong), var(--surface-fill));
+    background: var(--surface-pressed);
     color: var(--ink-strong);
   }
   &:active {

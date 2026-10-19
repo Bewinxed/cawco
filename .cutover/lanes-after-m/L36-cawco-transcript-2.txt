@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/transcript/DelegateTail.svelte
+apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte
+apps/dashboard/src/lib/cawco/transcript/DesignOfferActions.svelte
+apps/dashboard/src/lib/cawco/transcript/DocThumb.svelte
+apps/dashboard/src/lib/cawco/transcript/FootFade.svelte
+apps/dashboard/src/lib/cawco/transcript/HeadFade.svelte
+apps/dashboard/src/lib/cawco/transcript/InlineTranscript.svelte
+
+# apps/dashboard/src/lib/cawco/transcript/DelegateTail.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/DelegateTray.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×14; relic: style-var ×12; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×1
+# apps/dashboard/src/lib/cawco/transcript/DesignOfferActions.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk
+# apps/dashboard/src/lib/cawco/transcript/DocThumb.svelte: relic: literal ×1; relic: style-var ×6; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/FootFade.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/transcript/HeadFade.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/InlineTranscript.svelte: relic: style-reason ×1

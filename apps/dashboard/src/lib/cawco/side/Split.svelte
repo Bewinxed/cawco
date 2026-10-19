@@ -30,6 +30,7 @@
   import { waiting as departing, land } from "../motion/share.svelte";
   import { store, stored, unstore } from "../storage";
   import { setSideExpand } from "./expand";
+  import { SIDE_FLOOR_PX } from "./floor";
 
   let {
     open,
@@ -94,9 +95,9 @@
    * left of the split beside it, so their percentages are of that.
    */
   const DIVIDER = 1;
-  /** The surface's floor, 320px, as a share of the panes' room; null until measured. */
+  /** The surface's floor (SIDE_FLOOR_PX), as a share of the panes' room; null until measured. */
   const sideMin = $derived(
-    width > DIVIDER ? (320 / (width - DIVIDER)) * 100 : null
+    width > DIVIDER ? (SIDE_FLOOR_PX / (width - DIVIDER)) * 100 : null
   );
   /** The split can hold the surface at its floor. */
   const fits = $derived(sideMin !== null && sideMin <= SIDE_MAX);
@@ -133,9 +134,6 @@
     },
     get expanded() {
       return expanded;
-    },
-    get moving() {
-      return moving;
     },
     get backLabel() {
       return backLabel;
@@ -229,12 +227,6 @@
   });
   /** The split is sliding: the reader is watching it open or close. */
   let sliding = $state(false);
-  /**
-   * The panes are on the way to the size last asked of them: from the ask
-   * until they land (the slide's runs finished, or the frame after a size
-   * taken at once). Unsized until the split is measured, so on the way.
-   */
-  let moving = $state(true);
   let mounted = $state(false);
   /** A surface opening out of a departed row: it clips open from it. */
   let fromRow = $state(false);
@@ -265,7 +257,6 @@
     const seen =
       untrack(() => visible && !fromRow) && motionOk.current && !snapped;
     sliding = seen;
-    moving = true;
     let settle = 0;
     let gone = false;
     // The size is this page's own, held to the floor (`sideSize`): paneforge
@@ -290,11 +281,8 @@
           Promise.allSettled(runs.map((run) => run.finished)).then(() => {
             if (!gone) {
               sliding = false;
-              moving = false;
             }
           });
-        } else {
-          moving = false;
         }
       });
     });

@@ -194,7 +194,7 @@
     {
       "idx": 27,
       "version": "6",
-      "when": 1787866655058,
+      "when": 1788000000015,
       "tag": "0027_solid_mauler",
       "breakpoints": true
     },
@@ -1743,6 +1743,90 @@
       "version": "6",
       "when": 1792363420564,
       "tag": "0256_stream_relay_why_command",
+      "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "6",
+      "when": 1792377117550,
+      "tag": "0257_tracker_github_project",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "6",
+      "when": 1792387754616,
+      "tag": "0258_prose_gone",
+      "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "6",
+      "when": 1792400000000,
+      "tag": "0259_purged_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "6",
+      "when": 1792400001000,
+      "tag": "0260_design_check_artifact",
+      "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "6",
+      "when": 1792400002000,
+      "tag": "0261_mcp_server_shared",
+      "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "6",
+      "when": 1792407982297,
+      "tag": "0262_hold_moves",
+      "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "6",
+      "when": 1792410093209,
+      "tag": "0263_lfs",
+      "breakpoints": true
+    },
+    {
+      "idx": 264,
+      "version": "6",
+      "when": 1792411328322,
+      "tag": "0264_account_org_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "6",
+      "when": 1792411428322,
+      "tag": "0265_browsers",
+      "breakpoints": true
+    },
+    {
+      "idx": 266,
+      "version": "6",
+      "when": 1792411528322,
+      "tag": "0266_continued_into",
+      "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "6",
+      "when": 1792411628322,
+      "tag": "0267_artifact_does_ask",
+      "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "6",
+      "when": 1792420940827,
+      "tag": "0268_stream_relay_journey",
       "breakpoints": true
     }
   ]

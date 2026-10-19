@@ -7,7 +7,7 @@
    * sign-in tab closed before it finished, or a start the hub refused, is
    * said under the button, which tries again.
    */
-  import type { FleetMcpServer } from "@cawco/core";
+  import { type FleetMcpServer, mcpWords as words } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconKey } from "#lib/icons.js";
@@ -53,7 +53,7 @@
       setTimeout(() => {
         if (waiting && !signedIn) {
           waiting = false;
-          problem = "The sign-in tab closed before it finished.";
+          problem = words.signInClosed;
         }
       }, 2000);
     }, 500);
@@ -62,18 +62,16 @@
 
 {#if server.auth?.mode === "oauth"}
   {#if signedIn}
-    <span class="type-meta text-ink-muted" role="status"
-      >Signed in for the fleet</span
-    >
+    <span class="state" role="status">{words.signedIn}</span>
   {:else}
     <Button
       disabled={!server.enabled}
       failed={problem !== null}
       icon={IconKey}
-      label="Sign in"
+      label={words.signIn}
       onclick={signIn}
       pending={waiting}
-      pendingLabel="Waiting for {server.name}…"
+      pendingLabel={words.signingIn(server.name)}
       size="sm"
       variant="outline"
     />

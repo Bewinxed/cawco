@@ -15,12 +15,10 @@
  *    never makes one): `git checkout|reset|stash|clean|rebase|push`, `git add -A`
  *    and `git add .`, wherever they sit in the command (after `&&`, in a
  *    pipe, under `sh -c`, `eval`, `xargs`, `env`, a substitution). Refused:
- *    "file a task". And anywhere, while the project keeps its sessions off
- *    other people's repositories (upstream.ts): a `gh`, `hub`, `glab` or
- *    `curl` that names another repository as the one it writes to (core
- *    upstream-guard.ts), refused with the guard's reason rather than put on
- *    your card. One whose target only the place's git remotes name is left
- *    to the place's shims, which read them as it runs.
+ *    "file a task". Other people's repositories are not judged here: his
+ *    place, like every workspace, holds no forge's credential, and what it
+ *    writes with one goes through its doors on the machine, which keep to
+ *    the project's upstream choice (core upstream-guard.ts).
  * 3. **Caw edits and size**: the files Caw may edit are the ones his project
  *    declares (gate.md's `Caw edits:` globs, gate-file.ts). With a list, an
  *    edit of a file it does not match is refused: "is not in this project's
@@ -63,12 +61,6 @@ import {
   type ThreadNote,
   unboundedCommand,
 } from "@cawco/core";
-import {
-  GUARDED_PROGRAMS,
-  type UpstreamRule,
-  upstreamRefusal,
-  upstreamWrite,
-} from "@cawco/core/upstream-guard";
 import type { DbShape, LeadCallRow } from "./db";
 import type { CawEdits } from "./gate-file";
 import type { WebContext } from "./web-reads";
@@ -926,41 +918,6 @@ export const allowlisted = (command: string, shared: boolean): boolean =>
 export const sharedRefusal = (command: string): string | undefined =>
   sharedDenial(commandsOf(command).argvs);
 
-/**
- * Why a shell line does not run under the project's upstream rule: the
- * guard's reason for the first `gh`, `hub`, `glab` or `curl` it runs that
- * names another repository; none when none does. The place's remotes are
- * not read here (it is on its machine): what only they name is the place's
- * shims' to judge.
- */
-export const upstreamDenial = (
-  command: string,
-  rule: UpstreamRule,
-  env: Readonly<Record<string, string | undefined>> = {}
-): string | undefined => {
-  // Ask me first: his place's shims hold the post for the person as it runs
-  // (agent upstream-shim.ts), so the line is no refusal here.
-  if (rule.posts === "ask") {
-    return;
-  }
-  for (const argv of commandsOf(command).argvs) {
-    const [program = "", ...args] = argv;
-    if (!GUARDED_PROGRAMS.includes(baseName(program))) {
-      continue;
-    }
-    const call = { program, args, env, cwdRemotes: () => [] };
-    // A query the hub cannot read (a file on the place's machine) is the
-    // place's shims' to read as the call runs.
-    if (upstreamWrite(call)?.unread) {
-      continue;
-    }
-    const refused = upstreamRefusal(rule, call);
-    if (refused) {
-      return refused;
-    }
-  }
-};
-
 /** The programs whose path arguments are files a shell line changes. */
 const CHANGERS: ReadonlySet<string> = new Set([
   "rm",
@@ -1092,8 +1049,6 @@ export interface LeadGateDeps {
   readonly shared: (lead: InstanceRow) => boolean;
   /** The thread the lead's turn answers now (caw.ts `askThread`). */
   readonly thread: (lead: InstanceRow) => string | undefined;
-  /** The lead's project's upstream rule (upstream.ts). */
-  readonly upstream: (lead: InstanceRow) => UpstreamRule;
   /** What a web read is judged by (web-reads.ts). */
   readonly webContext: () => WebContext;
 }
@@ -1281,7 +1236,6 @@ export const createLeadGate = ({
   note,
   shared,
   thread,
-  upstream,
   webContext,
 }: LeadGateDeps) => {
   /** Each lead's wake under way, by session. */
@@ -1317,8 +1271,8 @@ export const createLeadGate = ({
 
   /**
    * The verdict on one of a lead's calls, from the rules in order: budget,
-   * shared checkout and upstream, the project's Caw edits and size, wake
-   * source. `edits` is what the project declares, for an edit.
+   * shared checkout, the project's Caw edits and size, wake source. `edits`
+   * is what the project declares, for an edit.
    */
   const judge = (
     lead: InstanceRow,
@@ -1331,8 +1285,7 @@ export const createLeadGate = ({
     const refused =
       overBudget(wake) ??
       (call.shell
-        ? (sharedDenied(call, isShared) ??
-          upstreamDenial(call.command, upstream(lead)))
+        ? sharedDenied(call, isShared)
         : editDenied(call, wake, edits));
     if (refused) {
       return { kind: "deny", message: refused };

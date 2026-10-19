@@ -34,6 +34,7 @@
     type ServerTail,
     syncSubscriptions,
   } from "#lib/cawco/client.svelte.js";
+  import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import Home from "#lib/cawco/home/Home.svelte";
   import {
@@ -77,13 +78,14 @@
    *
    * The media query cannot run on the server, so its answer there is the
    * `cawco-narrow` cookie this browser wrote last time (or, on a first
-   * visit, what its headers suggest). On the client the query is right
-   * synchronously, so hydration on a phone finds the page already painted.
+   * visit, what its headers suggest). The first client render keeps that
+   * answer, so hydration keeps the page the server drew; the query's own
+   * answer takes over a frame after mount (first-render.svelte.ts).
    */
   const narrowQuery = new MediaQuery(NARROW_QUERY);
 
   const homePage = $derived(
-    browser ? narrowQuery.current : (page.data.narrow as boolean)
+    firstRender.held ? Boolean(page.data.narrow) : narrowQuery.current
   );
 
   /**
@@ -91,7 +93,7 @@
    * phone always, a tablet held upright as the `ipad` choice says.
    */
   const narrow = $derived(
-    browser ? layoutPolicy.deck : (page.data.narrow as boolean)
+    firstRender.held ? Boolean(page.data.narrow) : layoutPolicy.deck
   );
 
   /** What a wide screen's detail area says while nothing is open. */
@@ -214,7 +216,7 @@
      most recently active one. Replaced in the history rather than pushed,
      so Back never walks into a conversation the app picked. */
   $effect(() => {
-    if (!(browser && shown) || homePage) {
+    if (!(browser && shown && workspace.restored) || homePage) {
       return;
     }
     if (workspace.leaves.some((leaf) => !leaf.active && leaf.tabs.length > 0)) {
@@ -246,7 +248,7 @@
   /* ── A layout that allows fewer groups folds the tree to fit ── */
   $effect(() => {
     const max = layoutPolicy.maxLeaves;
-    if (browser && Number.isFinite(max)) {
+    if (browser && workspace.restored && Number.isFinite(max)) {
       untrack(() => workspace.capLeaves(max));
     }
   });
@@ -366,6 +368,9 @@
   $effect(() => {
     const index = cawco.instanceIndex;
     const former = cawco.formerIds;
+    if (!workspace.restored) {
+      return;
+    }
     untrack(() => {
       for (const id of workspace.openIds) {
         const now = former[id];

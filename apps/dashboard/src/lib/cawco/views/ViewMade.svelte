@@ -7,6 +7,7 @@
    * an image's thumbnail). One press opens the task, where each is drawn
    * whole.
    */
+  import { madeWords } from "@cawco/core";
   import { IconNeedsYou } from "#lib/icons.js";
   import { stageLabel, type TaskSummary } from "../project-tasks";
   import TaskOutput from "../tasks/TaskOutput.svelte";
@@ -33,12 +34,7 @@
   );
 </script>
 
-<!-- literal: repeat(auto-fill, minmax(18rem, 1fr)) -->
-<ul
-  aria-label="Made"
-  class="m-0 grid list-none grid-cols-(--made-cols) items-box-start gap-space-3 p-0"
-  style:--made-cols="repeat(auto-fill, minmax(18rem, 1fr))"
->
+<ul aria-label={madeWords.tab} class="made">
   {#each made as task (task.id)}
     <!-- literal: inset 0 0 0 1px var(--border-hairline); inset 0 0 0 1px var(--border-control) -->
     <li

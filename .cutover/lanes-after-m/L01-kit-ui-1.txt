@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/components/ui/badge/badge.svelte
+apps/dashboard/src/lib/components/ui/button/button.svelte
+apps/dashboard/src/lib/components/ui/button/pending-content.svelte
+apps/dashboard/src/lib/components/ui/collapsible/collapsible-trigger.svelte
+apps/dashboard/src/lib/components/ui/copy-button/copy-button.svelte
+apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte
+apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-content.svelte
+apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-label.svelte
+
+# apps/dashboard/src/lib/components/ui/badge/badge.svelte: relic: bang ×1
+# apps/dashboard/src/lib/components/ui/button/button.svelte: relic: bang ×3; kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/button/pending-content.svelte: relic: literal ×2; relic: style-var ×1
+# apps/dashboard/src/lib/components/ui/collapsible/collapsible-trigger.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/copy-button/copy-button.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte: relic: bang ×1; kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-content.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-label.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here

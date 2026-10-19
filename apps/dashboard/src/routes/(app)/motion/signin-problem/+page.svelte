@@ -10,7 +10,6 @@
    */
   import SigninPanel from "#lib/cawco/accounts/SigninPanel.svelte";
   import { SigninFlow } from "#lib/cawco/accounts/signin.svelte.js";
-  import "#lib/cawco/spawn/ns-theme.css";
 
   const LONG =
     `${"Error: the OAuth exchange with console.anthropic.com returned 400 invalid_grant for the pasted authorization code; ".repeat(3)}`.slice(

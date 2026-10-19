@@ -72,6 +72,7 @@ import {
   workspaceStateDir,
   xdgDataHome,
 } from "@cawco/core/paths";
+import { hostEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { writeStateFile } from "@cawco/core/state-file";
 import type {
@@ -80,6 +81,7 @@ import type {
   SessionMessageInfo,
   V2Event,
 } from "@opencode/client";
+import { CHROME_DEVTOOLS } from "../browser/door";
 import { gitIn } from "../checkout-exclude";
 import { harnessMcpUrl } from "../delegation";
 import {
@@ -98,7 +100,7 @@ import {
 } from "../harness";
 import { KeeperPool } from "../keepers";
 import { isMachineAgent } from "../machine-agent";
-import { MCP_CONNECT_MS } from "../mcp-status";
+import { fleetMcpMoved, MCP_CONNECT_MS } from "../mcp-status";
 import { gaugeTables } from "../memory";
 import { probeStarted } from "../probe-count";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
@@ -120,8 +122,14 @@ import type { SessiondClient } from "../sessiond-client";
 import { listStandIns } from "../stand-ins";
 import { installAdviceText, onToolsMoved, sawTool } from "../tools";
 import { cloneHolding, workspaceRefs } from "../workspace-records";
-import { readJson, readSidecar, writeJson } from "./fleet-common";
-import { OpencodeActivity } from "./opencode-activity";
+import {
+  hashText,
+  readJson,
+  readSidecar,
+  syncMemory,
+  writeJson,
+} from "./fleet-common";
+import { type ActivitySnapshot, OpencodeActivity } from "./opencode-activity";
 import {
   answerOf,
   assertPluginLoaded,
@@ -144,7 +152,6 @@ import {
 } from "./opencode-models";
 import {
   buildPluginSource,
-  CHROME_DEVTOOLS,
   OPENCODE_DIR,
   OPENCODE_PLACED_MCP,
   PLAN_AGENT_OFF,
@@ -192,6 +199,26 @@ interface RecoveryWave {
 
 const OPENCODE_CONFIG = join(OPENCODE_DIR, "opencode.json");
 const OPENCODE_SIDECAR = join(OPENCODE_DIR, "cawco-fleet.json");
+
+/**
+ * The fleet's MCP servers for OpenCode, by name, in 2.0's
+ * `mcp.servers.<name>` shape: read into each server's launch config
+ * ({@link OpencodeHarness.#launchConfig}), never by OpenCode itself (a
+ * config dir's files it reads are `opencode.json` and `opencode.jsonc`, core
+ * config/discovery.ts `names`, v2.0.29). Why not `opencode.json`:
+ * {@link syncOpencodeMcp}.
+ */
+const OPENCODE_FLEET_MCP = join(OPENCODE_DIR, "cawco-fleet-mcp.json");
+
+/**
+ * The fleet's memory document for OpenCode: its global instructions file,
+ * which every session loads before the `AGENTS.md` files from its folder up
+ * ("OpenCode loads the global file followed by every `AGENTS.md` from the
+ * current workspace directory toward the home directory",
+ * opencode.ai/v2/docs/instructions). A project's own `AGENTS.md` OpenCode
+ * finds itself.
+ */
+const OPENCODE_MEMORY = join(OPENCODE_DIR, "AGENTS.md");
 
 /**
  * The static policy every server is launched with
@@ -290,6 +317,7 @@ const startInputs = async (launch: ServerLaunch): Promise<string> => {
     launch.spec.command,
     await stamp(launch.spec.command),
     await stamp(OPENCODE_CONFIG),
+    await stamp(OPENCODE_FLEET_MCP),
     await stamp(join(data, "opencode.db")),
   ]);
 };
@@ -367,16 +395,6 @@ const CONFIG_SETTLE_TIMEOUT_MS = 90_000;
  */
 const RECOVERY_RETRY_BUDGET_MS = 120_000;
 
-/** The generations a recovery round asked, as a custody line names them. */
-const generationsAsked = async (round: RecoveryRound): Promise<string> => {
-  const asked = await round.generations.catch(() => [] as ServerIdentity[]);
-  return asked.length > 0 ? asked.map(generationName).join(", ") : "none live";
-};
-
-/** One server generation, as a custody line names it. */
-const generationName = (identity: ServerIdentity): string =>
-  `${identity.procId}/${identity.pid} at ${identity.url}`;
-
 /** How long before a directory's deferred release is tried again. Ours: a held turn or a recovery is over in minutes, not seconds. */
 const DIRECTORY_RELEASE_RETRY_MS = 30_000;
 
@@ -403,9 +421,12 @@ const canonicalizeJson = (value: unknown): string => {
 };
 
 /**
- * The fingerprint of the machine's `opencode.json` as a server reads it at
- * start: the whole document, canonical, and the static policy. A server
- * reads its global config only when it starts, so a change needs a new one.
+ * The fingerprint of the machine's `opencode.json`: the whole document,
+ * canonical, and the static policy. A running server reloads a changed
+ * `opencode.json` in its booted locations itself ({@link syncOpencodeMcp});
+ * CawCo still replaces the server on a change, as on a launch-config one,
+ * so the generation answering is one whose start was checked against this
+ * hash (its `CAWCO_CONFIG` launch flag).
  */
 const configHash = (config: Record<string, unknown>): string =>
   createHash("sha256")
@@ -515,13 +536,14 @@ const announceOpencodeServer = async (
     (signal) =>
       new Promise<string>((resolve, reject) => {
         let settled = false;
+        let stop = (): void => undefined;
         const settle = (finish: () => void): void => {
           if (settled) {
             return;
           }
           settled = true;
           signal.removeEventListener("abort", aborted);
-          client.unsubscribe(procId);
+          stop();
           finish();
         };
         const aborted = () => settle(() => reject(signal.reason));
@@ -532,7 +554,7 @@ const announceOpencodeServer = async (
         }
         // From seq 0: the announce line is printed once, at boot, and a returning
         // agent reads it out of the replay ring long after it was written.
-        client.subscribe(
+        stop = client.subscribe(
           procId,
           {
             line: (event) => {
@@ -541,14 +563,16 @@ const announceOpencodeServer = async (
                 settle(() => resolve(announced));
               }
             },
-            exit: (exitCode) =>
-              settle(() =>
+            exit: (exitCode, _signal, pid) =>
+              settle(() => {
+                // A server that never announced serves nobody: its end is read here.
+                client.release(procId, pid);
                 reject(
                   new Error(
                     `[opencode] serve exited (code ${exitCode}) before announcing a port`
                   )
-                )
-              ),
+                );
+              }),
             // The ring outran the announce line: the URL is unrecoverable from here.
             reset: (nextSeq) =>
               settle(() =>
@@ -605,16 +629,55 @@ const toOpencodeMcp = (config: FleetMcpConfig): Record<string, unknown> => {
       };
 };
 
+/**
+ * When CawCo starts again a fleet server OpenCode holds `failed`, as OpenCode
+ * 2.0 never does: its `startServer` runs only for a config add or change, a
+ * `connect`, a credential switch and an expired HTTP session, and a start
+ * that failed ends at `entry.status = { status: "failed", error }` with no
+ * retry (packages/core/src/mcp/index.ts, the same at v2.0.29 and v2.0.32).
+ * `failed` carries only the error's words, so a server that will never start
+ * reads as one that was slow once, and both are tried again. Ours: the first
+ * try 15 s on (a start that timed out on a loaded machine is usually moments
+ * from connecting), then each wait doubled up to 5 min, so a server that
+ * never starts costs at most twelve launches an hour.
+ */
+const MCP_RETRY_FIRST_MS = 15_000;
+const MCP_RETRY_MAX_MS = 5 * 60_000;
+
+/**
+ * How long one `connect` of a fleet server may take to answer: OpenCode
+ * answers once its start settles, which is bounded by the `startup` and
+ * `catalog` timeouts each is written with ({@link toOpencodeMcp}), plus 30 s
+ * of CawCo's own margin for a loaded machine, as {@link MCP_CONNECT_MS}'s
+ * status read has.
+ */
+const MCP_START_AGAIN_MS = 2 * MCP_CONNECT_MS + 30_000;
+
+/** A fleet server's reading that is not a lasting verdict: it is read again until it is. */
+const unsettledState = (item: FleetItemState): boolean =>
+  item.state === "failed" || item.state === "pending";
+
 const recordOf = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
     ? { ...(value as Record<string, unknown>) }
     : {};
 
 /**
- * The fleet's servers merged into `opencode.json`'s `mcp.servers`, every
- * other key kept. A managed name 1.x's flat `mcp.<name>` held goes from
- * there: 2.0 reads both, and each server is named once. CawCo's own server is
- * every server's by its launch config, never the file's.
+ * The fleet's servers written whole to {@link OPENCODE_FLEET_MCP}, which
+ * each server takes in its launch config, and none of them in
+ * `opencode.json`. OpenCode watches its config dirs from every location of
+ * every server running and reloads a changed `opencode.json` there (core
+ * config.ts: `watcher.subscribe(target, requestReload)`, then `reload()`
+ * publishes `config.updated`, on which config/plugin/mcp.ts reloads MCP;
+ * v2.0.29), so a server named there was started in each booted location of
+ * each generation, the one being replaced too, beside the new generation's
+ * own start. A launch config is read once, as its server starts: a changed
+ * set starts a new generation ({@link OpencodeHarness.#hashConfig}), and
+ * that generation alone runs it, each session taking it as it moves there
+ * at rest. A name CawCo manages goes from `opencode.json`, from its
+ * `mcp.servers` and 1.x's flat `mcp.<name>` alike, which is written only
+ * when it held one (or does not exist yet); CawCo's own server is every
+ * server's by its launch config.
  */
 const syncOpencodeMcp = async (
   desired: { name: string; config: FleetMcpConfig; enabled: boolean }[],
@@ -622,29 +685,32 @@ const syncOpencodeMcp = async (
   report: Record<string, FleetItemState>
 ): Promise<string[]> => {
   const wanted = desired.filter((server) => server.enabled);
-  const stored =
-    (await readJson<Record<string, unknown>>(OPENCODE_CONFIG)) ?? {};
-  const mcp = recordOf(stored.mcp);
-  const servers = recordOf(mcp.servers);
-  for (const name of ["cawco", ...managed, ...wanted.map((one) => one.name)]) {
-    delete mcp[name];
-  }
-  for (const server of wanted) {
-    servers[server.name] = toOpencodeMcp(server.config);
-  }
   const names = wanted.map((server) => server.name);
   for (const name of managed) {
-    if (names.includes(name)) {
-      continue;
+    if (!names.includes(name)) {
+      report[name] = { state: "removed" };
     }
-    delete servers[name];
-    report[name] = { state: "removed" };
   }
-  const { cawco: _cawco, ...fleet } = servers;
-  await writeOpencodeConfig("fleet sync", {
-    ...stored,
-    mcp: { ...mcp, servers: fleet },
-  });
+  const stored = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
+  const mcp = recordOf(stored?.mcp);
+  const servers = recordOf(mcp.servers);
+  const ours = ["cawco", ...managed, ...names];
+  if (!stored || ours.some((name) => name in mcp || name in servers)) {
+    for (const name of ours) {
+      delete mcp[name];
+      delete servers[name];
+    }
+    await writeOpencodeConfig("fleet sync", {
+      ...stored,
+      mcp: { ...mcp, servers },
+    });
+  }
+  await writeJson(
+    OPENCODE_FLEET_MCP,
+    Object.fromEntries(
+      wanted.map((server) => [server.name, toOpencodeMcp(server.config)])
+    )
+  );
   return names;
 };
 
@@ -1263,7 +1329,7 @@ export class OpencodeHarness implements Harness {
       (sessiond, procId, spec, signal) =>
         attachOpencodeServer({ sessiond, procId, spec, signal }),
       isMachineAgent,
-      (identity) => this.#generationIdle(identity),
+      (identity) => this.#whyNotIdle(identity),
       account
     );
   }
@@ -1356,7 +1422,34 @@ export class OpencodeHarness implements Harness {
   }
   #verifiedProcId: string | null = null;
   #opening = 0;
+  /**
+   * MCP mutations running against a server's client (a fleet server's
+   * `connect`, {@link #startFailedAt}): a lease, so no cutover closes that
+   * client mid-call (e1ce75227) and no location it runs in is evicted
+   * ({@link #operationsPending}). Reads are not leased.
+   */
   #mutatingMcp = 0;
+  /** Fleet syncs running: a pass waits for them ({@link #mendFleetMcp}), an agent restart too ({@link restartHolds}). */
+  #syncing = 0;
+  /** The locations a release is waiting on, by generation and directory ({@link #releaseDirectory}). */
+  readonly #releasing = new Set<string>();
+  /**
+   * A pass's reading the hub has not been sent yet, and the generation it
+   * was read on: the report that follows it says it, rather than booting
+   * the location again to read it ({@link #readFleetMcp}).
+   */
+  #passReading: {
+    procId: string;
+    states: Record<string, FleetItemState>;
+  } | null = null;
+  /** Each fleet server's state as last reported for the machine, by name ({@link #heardFleetMcp}). */
+  readonly #fleetMcpReported = new Map<string, FleetItemState["state"]>();
+  /** The next pass that reads unsettled fleet servers again ({@link #mendFleetMcp}). */
+  #mendTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Passes in a row that left a fleet server unsettled: the backoff's exponent. */
+  #mendAttempt = 0;
+  /** Fleet MCP reads and passes, one at a time ({@link #fleetMcpTurn}). */
+  #fleetMcpQueue: Promise<unknown> = Promise.resolve();
   readonly #activities = new Map<string, OpencodeActivity>();
   readonly #generationClients = new Map<string, OpencodeClient>();
   readonly #sessionOwners = new Map<string, ServerIdentity>();
@@ -1570,14 +1663,23 @@ export class OpencodeHarness implements Harness {
     }
     // The placed servers too: a location takes them only as it boots.
     const placed = await readJson<PlacedMcp>(OPENCODE_PLACED_MCP);
+    // The fleet's servers too: a server takes them in its launch config.
+    const fleet = await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP);
     // The catalog too: a server reads it only as it starts.
     const catalog = holdsCatalog() ? await this.#catalogDigest() : "";
-    if (!((placed && Object.keys(placed).length > 0) || catalog)) {
+    const held = [placed, fleet].filter(
+      (one): one is NonNullable<typeof one> =>
+        !!one && Object.keys(one).length > 0
+    );
+    if (held.length === 0 && !catalog) {
       return configHash(config);
     }
     const hash = createHash("sha256").update(configHash(config));
     if (placed && Object.keys(placed).length > 0) {
       hash.update(canonicalizeJson(placed));
+    }
+    if (fleet && Object.keys(fleet).length > 0) {
+      hash.update(`fleet:${canonicalizeJson(fleet)}`);
     }
     return hash.update(catalog).digest("hex");
   }
@@ -1660,7 +1762,10 @@ export class OpencodeHarness implements Harness {
             `${OPENCODE_BIN} not found: CawCo runs OpenCode ${OPENCODE_VERSION} (${await installAdviceText("opencode")})`
           );
         }
-        const ran = await Bun.$`${binary} --version`.quiet().nothrow();
+        const ran = await Bun.$`${binary} --version`
+          .env(hostEnvironment())
+          .quiet()
+          .nothrow();
         const version = versionOf(ran.stdout.toString());
         sawTool("opencode", version ?? "unsaid");
         if (ran.exitCode !== 0 || !version) {
@@ -2001,7 +2106,7 @@ export class OpencodeHarness implements Harness {
     if (!client) {
       if (isV1(identity) || identity.password === undefined) {
         throw new Error(
-          `OpenCode generation ${identity.procId} is a 1.x server: 2.0's client cannot reach it.`
+          "An OpenCode server on this machine is an older version (1.x) that CawCo can't reach. CawCo ends it once nothing runs on it and starts the current version in its place; try again then."
         );
       }
       client = opencodeClient({
@@ -2037,7 +2142,9 @@ export class OpencodeHarness implements Harness {
         (await this.#activity(old).sessionState(oldClient, sessionId)).kind ===
           "decided" && this.#activity(old).state(sessionId) === "idle";
       if (!(await idleOn())) {
-        throw new Error("OpenCode turn remains in its incumbent generation.");
+        throw new Error(
+          "This message wasn't sent: this session's OpenCode server is being replaced, and its last turn is still running on the old one. Send it again."
+        );
       }
       if (
         [...this.#children].some(
@@ -2048,7 +2155,7 @@ export class OpencodeHarness implements Harness {
         )
       ) {
         throw new Error(
-          "OpenCode child turn remains in its incumbent generation."
+          "This message wasn't sent: this session's OpenCode server is being replaced, and a subagent's turn is still running on the old one. Send it again."
         );
       }
       if (session.turnInFlight) {
@@ -2056,10 +2163,25 @@ export class OpencodeHarness implements Harness {
       }
       if (session.turnInFlight) {
         throw new Error(
-          "OpenCode dispatch custody is still pending in the incumbent."
+          "This message wasn't sent: this session's OpenCode server is being replaced, and its last turn is still running on the old one. Send it again."
         );
       }
       const client = this.#clientForGeneration(target);
+      // The session's location on the target, ready as a spawn's is before
+      // its first prompt: CawCo's plugin loaded there and its MCP servers
+      // done connecting. The target boots it on its first request, and a
+      // prompt before its servers connect loses their tools for that turn
+      // (anomalyco/opencode#54794).
+      await assertPluginLoaded(
+        client,
+        session.directory,
+        this.#lifetimeSignal()
+      );
+      const unconnected = await waitForMcp(
+        client,
+        session.directory,
+        this.#lifetimeSignal()
+      );
       // Both generations read one database: the newest message each sees is
       // the same, or the candidate has not caught up with the incumbent.
       const histories = await Promise.all(
@@ -2081,21 +2203,25 @@ export class OpencodeHarness implements Harness {
       });
       if (settled[0] !== settled[1]) {
         throw new Error(
-          "OpenCode candidate has not observed the incumbent's settled turn history."
+          "This message wasn't sent: this session's new OpenCode server hasn't caught up with its last turn yet. Send it again."
         );
       }
       if (!(await idleOn())) {
-        throw new Error("OpenCode incumbent resumed during idle migration.");
+        throw new Error(
+          "This message wasn't sent: this session's OpenCode server is being replaced, and a turn started on the old one. Send it again."
+        );
       }
       if (
         this.#sessions.get(session.instanceId) !== session ||
         this.#sessionOwners.get(session.instanceId)?.procId !== old.procId
       ) {
-        throw new Error("OpenCode attachment changed during idle migration.");
+        throw new Error(
+          "This message wasn't sent: this session's OpenCode server changed while the message was on its way. Send it again."
+        );
       }
       if (slot.owner.active?.procId !== target.procId) {
         throw new Error(
-          "OpenCode active generation changed during idle migration."
+          "This message wasn't sent: this session's OpenCode server changed while the message was on its way. Send it again."
         );
       }
       this.#activity(old).unbind(sessionId, session.instanceId);
@@ -2112,8 +2238,11 @@ export class OpencodeHarness implements Harness {
       );
       await this.#ensurePump(target);
       if (this.#sessions.get(session.instanceId) !== session) {
-        throw new Error("OpenCode attachment ended during idle migration.");
+        throw new Error(
+          "This message wasn't sent: this session stopped or restarted while its OpenCode server was being replaced. Send it again."
+        );
       }
+      await session.mcpUnconnected(unconnected);
     })().finally(() => this.#migrations.delete(session.instanceId));
     this.#migrations.set(session.instanceId, migrating);
     return migrating;
@@ -2132,11 +2261,15 @@ export class OpencodeHarness implements Harness {
     }
     await this.#migrate(session);
     if (this.#sessions.get(session.instanceId) !== session) {
-      throw new Error("OpenCode dispatch attachment has ended.");
+      throw new Error(
+        "This message wasn't sent: this session stopped or restarted while the message was on its way. Send it again."
+      );
     }
     const identity = this.#sessionOwners.get(session.instanceId);
     if (!(identity && session.sessionId)) {
-      throw new Error("OpenCode dispatch has no generation custody.");
+      throw new Error(
+        "This message wasn't sent: no OpenCode server holds this session right now. Send it again."
+      );
     }
     this.#activity(identity).observeBusy(session.sessionId);
   }
@@ -2195,18 +2328,31 @@ export class OpencodeHarness implements Harness {
   }
 
   #operationsPending(): boolean {
-    return (
-      !this.#custodyReadiness() ||
-      this.#applyGate !== null ||
-      this.#pendingSpawns.length > 0 ||
-      this.#opening > 0 ||
-      this.#mutatingMcp > 0 ||
-      this.#migrations.size > 0 ||
-      this.#moves.size > 0 ||
-      this.#pendingRecoveries.size > 0 ||
+    return this.#pendingOperations().length > 0;
+  }
+
+  /** The operations still pending against this adapter's servers, in words. */
+  #pendingOperations(): string[] {
+    return [
+      ...(this.#custodyReadiness() ? [] : ["custody not decided"]),
+      ...(this.#applyGate === null ? [] : ["a config apply"]),
+      ...(this.#pendingSpawns.length > 0
+        ? [`${this.#pendingSpawns.length} start(s) queued`]
+        : []),
+      ...(this.#opening > 0 ? [`${this.#opening} session(s) opening`] : []),
+      ...(this.#mutatingMcp > 0 ? ["an MCP change"] : []),
+      ...(this.#migrations.size > 0
+        ? [`handoff of ${[...this.#migrations.keys()].join(", ")}`]
+        : []),
+      ...(this.#moves.size > 0
+        ? [`move of ${[...this.#moves.keys()].join(", ")}`]
+        : []),
+      ...(this.#pendingRecoveries.size > 0 ||
       this.#recovering > 0 ||
       this.#recoveryWaiters.length > 0
-    );
+        ? ["a recovery"]
+        : []),
+    ];
   }
 
   /**
@@ -2229,6 +2375,7 @@ export class OpencodeHarness implements Harness {
             { length: this.#mutatingMcp },
             (_, n) => `mcp-change:${n}`
           ),
+          ...Array.from({ length: this.#syncing }, (_, n) => `fleet-sync:${n}`),
           ...[...this.#migrations.keys()].map((id) => `handoff:${id}`),
           ...[...this.#moves.keys()].map((id) => `move:${id}`),
         ],
@@ -2301,42 +2448,63 @@ export class OpencodeHarness implements Harness {
     return observed.kind !== "decided" || observed.state !== "idle";
   }
 
-  /** Two complete reads of this exact generation, with a real sampling gap. */
-  async #generationIdle(identity: ServerIdentity): Promise<boolean> {
+  /**
+   * Why this exact generation is not idle, in words for the retirement's
+   * log line; undefined once two complete reads with a real sampling gap say
+   * it runs nothing, no operation is pending and no session is bound to it.
+   */
+  async #whyNotIdle(identity: ServerIdentity): Promise<string | undefined> {
     if (isV1(identity)) {
-      return await this.#v1Idle(identity);
+      return (await this.#v1Idle(identity))
+        ? undefined
+        : "the 1.x server runs something or was not read (its own line says which)";
     }
-    if (this.#operationsPending()) {
-      return false;
+    const pending = (): string | undefined => {
+      const operations = this.#pendingOperations();
+      return operations.length > 0
+        ? `operations pending: ${operations.join(", ")}`
+        : undefined;
+    };
+    const unread = (snapshot: ActivitySnapshot): string | undefined => {
+      if (!snapshot.known) {
+        return "its activity is not known";
+      }
+      return snapshot.instances.length > 0
+        ? `its activity is busy: ${snapshot.instances.join(", ")}`
+        : undefined;
+    };
+    const before = pending();
+    if (before) {
+      return before;
     }
     const activity = this.#activity(identity);
     const client = this.#clientForGeneration(identity);
     const first = await activity.sample(client, true);
-    if (!first.known || first.instances.length || this.#operationsPending()) {
-      return false;
+    const firstWhy = unread(first) ?? pending();
+    if (firstWhy) {
+      return firstWhy;
     }
     await Bun.sleep(2000);
     const second = await activity.sample(client, true);
+    const secondWhy = unread(second);
+    if (secondWhy) {
+      return secondWhy;
+    }
     if (
-      second.known &&
-      second.instances.length === 0 &&
       this.#slotOfGeneration(identity)?.owner.active?.procId !== identity.procId
     ) {
       await this.#handoffIdle();
-      if (
-        [...this.#sessionOwners.values()].some(
-          (owner) => owner.procId === identity.procId
-        )
-      ) {
-        return false;
+      const bound = [...this.#sessionOwners]
+        .filter(([, owner]) => owner.procId === identity.procId)
+        .map(([instanceId]) => instanceId);
+      if (bound.length > 0) {
+        return `session(s) still bound to it: ${bound.join(", ")}`;
       }
     }
-    return (
-      second.known &&
-      second.instances.length === 0 &&
-      second.sampledAt >= first.sampledAt + 2000 &&
-      !this.#operationsPending()
-    );
+    if (second.sampledAt < first.sampledAt + 2000) {
+      return "its two readings were less than 2 s apart";
+    }
+    return pending();
   }
 
   /** What each 1.x server was last seen running, so a wait on one is said once per change. */
@@ -2396,8 +2564,11 @@ export class OpencodeHarness implements Harness {
    * Prepare and publish a verified candidate while incumbent turns keep
    * running. New turns use the active generation; existing turns keep their
    * client and subscription until idle handoff, and only then may the owner
-   * retire their generation. A server reads its global config only as it
-   * starts, so a new one is the only way to apply a change.
+   * retire their generation. What only a new server takes is its launch
+   * config (`OPENCODE_CONFIG_CONTENT`, read once as it starts), which
+   * carries the fleet's MCP servers ({@link syncOpencodeMcp}); a changed
+   * `opencode.json` every running server reloads in its booted locations
+   * itself, and is replaced the same way ({@link configHash}).
    */
   async #attemptConfigApply(): Promise<void> {
     if (
@@ -2501,6 +2672,9 @@ export class OpencodeHarness implements Harness {
           this.#configError = null;
           // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
           void this.#handoffIdle().catch(console.warn);
+          // What was reported of the fleet's servers was read on the
+          // generation this one replaces: it is read again on this one.
+          this.#mendLater(true);
         }
       );
       if (
@@ -2955,7 +3129,7 @@ export class OpencodeHarness implements Harness {
   #adopt(slot: ServerSlot, identity: ServerIdentity): OpencodeClient {
     if (isV1(identity) || identity.password === undefined) {
       throw new Error(
-        `OpenCode generation ${identity.procId} is a 1.x server: 2.0's client cannot reach it.`
+        "An OpenCode server on this machine is an older version (1.x) that CawCo can't reach. CawCo ends it once nothing runs on it and starts the current version in its place; try again then."
       );
     }
     const dropWhenGone = async (
@@ -3442,8 +3616,10 @@ export class OpencodeHarness implements Harness {
   /**
    * What this agent's servers launch with: the fleet's static policy, CawCo's
    * plugin, its own hub's MCP server, and — the machine agent's — the fleet's
-   * managed MCP servers as the disk config names them, so fleet-owned
-   * definitions win over a user's own.
+   * MCP servers ({@link OPENCODE_FLEET_MCP}). The launch config is the
+   * highest of a server's config documents but managed settings (core
+   * config.ts `load`: `...content, ...managedSettings`), so a fleet server
+   * wins over a user's own of the same name.
    */
   async #launchConfig(): Promise<Record<string, unknown>> {
     // A server starts only on the catalog the agent holds, never on one
@@ -3452,20 +3628,14 @@ export class OpencodeHarness implements Harness {
       await opencodeModels.ready();
     }
     const plugin = await this.#plugin();
-    const managed = (await isMachineAgent())
-      ? new Set((await readSidecar(OPENCODE_SIDECAR)).mcp ?? [])
-      : new Set<string>();
-    const disk = recordOf(
-      recordOf((await readJson<{ mcp?: unknown }>(OPENCODE_CONFIG))?.mcp)
-        .servers
-    );
+    const fleet = (await isMachineAgent())
+      ? recordOf(await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP))
+      : {};
     return {
       ...STATIC_POLICY,
       mcp: {
         servers: {
-          ...Object.fromEntries(
-            Object.entries(disk).filter(([name]) => managed.has(name))
-          ),
+          ...fleet,
           cawco: cawcoMcp(),
         },
       },
@@ -3501,21 +3671,35 @@ export class OpencodeHarness implements Harness {
    * while the adapter is opening, migrating or recovering anything, and while
    * the server runs any session there or cannot say.
    */
-  #releaseDirectory(directory: string, identity: ServerIdentity): void {
-    this.#disposeUnused(directory, identity, "directory release")
+  #releaseDirectory(
+    directory: string,
+    identity: ServerIdentity,
+    caller = "directory release"
+  ): void {
+    // One release of a location at a time: a second asked while one waits
+    // is that one.
+    const key = `${identity.procId}\u0000${directory}`;
+    if (this.#releasing.has(key)) {
+      return;
+    }
+    this.#releasing.add(key);
+    this.#disposeUnused(directory, identity, caller)
       .then((settled) => {
         if (!settled) {
-          setTimeout(
-            () => this.#releaseDirectory(directory, identity),
-            DIRECTORY_RELEASE_RETRY_MS
-          ).unref();
+          setTimeout(() => {
+            this.#releasing.delete(key);
+            this.#releaseDirectory(directory, identity, caller);
+          }, DIRECTORY_RELEASE_RETRY_MS).unref();
+          return;
         }
+        this.#releasing.delete(key);
       })
-      .catch((error: unknown) =>
+      .catch((error: unknown) => {
+        this.#releasing.delete(key);
         console.warn(
           `[opencode] ${directory}: releasing its location failed: ${errorText(error)}`
-        )
-      );
+        );
+      });
   }
 
   /** Whether the location is settled: evicted, or in use again and not this call's to evict. */
@@ -3883,7 +4067,9 @@ export class OpencodeHarness implements Harness {
       // Positive idle receipt precedes resource release.
       const after = await active(client);
       if (sessionKey in after) {
-        throw new Error(`OpenCode turn ${sessionKey} has not ended`);
+        throw new Error(
+          "This session didn't end: OpenCode still runs its turn after it was interrupted. End it again."
+        );
       }
       for (const [id, session] of this.#sessions) {
         if (id === instanceId && session.sessionId === sessionKey) {
@@ -3906,7 +4092,9 @@ export class OpencodeHarness implements Harness {
       }
     }
     if (this.#operationsPending()) {
-      throw new Error("OpenCode ownership changed during its end reading.");
+      throw new Error(
+        "This session didn't end: this machine's OpenCode servers changed while CawCo was ending it. End it again."
+      );
     }
   }
 
@@ -3930,12 +4118,12 @@ export class OpencodeHarness implements Harness {
       )
     ) {
       throw new Error(
-        "OpenCode runner reading is incomplete: no complete recorded generation custody."
+        "CawCo couldn't read which sessions OpenCode runs on this machine: an OpenCode server is running that CawCo has no record of. Try again."
       );
     }
     if (generations.length > 0 && this.#operationsPending()) {
       throw new Error(
-        "OpenCode runner reading is incomplete while ownership operations are pending."
+        "CawCo couldn't read which sessions OpenCode runs on this machine while its OpenCode servers are changing. Try again in a moment."
       );
     }
     return generations;
@@ -4031,7 +4219,9 @@ export class OpencodeHarness implements Harness {
       })
     );
     if (this.#operationsPending()) {
-      throw new Error("OpenCode ownership changed during its runner reading.");
+      throw new Error(
+        "CawCo couldn't read which sessions OpenCode runs on this machine: its OpenCode servers changed during the reading. Try again."
+      );
     }
     return { count: unclaimed.size, readStartedAt };
   }
@@ -4112,7 +4302,7 @@ export class OpencodeHarness implements Harness {
         if (Date.now() >= deadline && !(error instanceof ReattachUnanswered)) {
           await this.#decideFailed(spec, round);
           throw new ReattachFailed(
-            `OpenCode could not be reached to reattach session ${spec.resume?.sessionKey ?? ctx.instanceId} within ${RECOVERY_RETRY_BUDGET_MS / 1000} s on generation ${await generationsAsked(round)}: ${errorText(error)}`,
+            `CawCo couldn't take this session back after a restart: OpenCode didn't answer within ${RECOVERY_RETRY_BUDGET_MS / 1000} s (${errorText(error)}). Start it again.`,
             { cause: error }
           );
         }
@@ -4179,21 +4369,21 @@ export class OpencodeHarness implements Harness {
       const busy = states.filter((state) => state.running);
       if (busy.length > 1) {
         throw new HarnessRecoveryRefused(
-          `OpenCode session ${resume.sessionKey} is running in multiple generations: ${busy.map(({ identity: owner }) => generationName(owner)).join(", ")}. Interrupt the duplicate runner explicitly before resuming; no runner was replaced.`
+          `CawCo didn't take this session back after a restart: its conversation is running on ${busy.length} OpenCode servers at once, and CawCo stops none of them by itself. Stop the session, then start it again.`
         );
       }
       if (busy.length === 0) {
         for (const generation of states) {
           if (generation.state.kind === "refused") {
             throw new ReattachFailed(
-              `OpenCode session ${resume.sessionKey} cannot be reattached on generation ${generationName(generation.identity)}: ${generation.state.reason}`
+              `CawCo couldn't take this session back after a restart: its OpenCode server refused it (${generation.state.reason}). Start it again.`
             );
           }
         }
         for (const generation of states) {
           if (generation.state.kind === "unreachable") {
             throw new Error(
-              `OpenCode generation ${generation.identity.procId} is temporarily unreachable: ${generation.state.reason}`
+              `its OpenCode server isn't reachable: ${generation.state.reason}`
             );
           }
           if (generation.state.kind === "unanswered") {
@@ -4231,9 +4421,7 @@ export class OpencodeHarness implements Harness {
             })
           : undefined);
       if (!chosen) {
-        throw new Error(
-          "OpenCode has no live active generation for idle recovery."
-        );
+        throw new Error("no OpenCode server is running for it");
       }
       const { identity, running } = chosen;
       const server = this.#clientForGeneration(identity);
@@ -4250,7 +4438,7 @@ export class OpencodeHarness implements Harness {
           throw error;
         }
         throw new ReattachFailed(
-          `OpenCode generation ${generationName(identity)} refused session ${resume.sessionKey}: ${errorText(error)}`,
+          `CawCo couldn't take this session back after a restart: its OpenCode server refused it (${errorText(error)}). Start it again.`,
           { cause: error }
         );
       }
@@ -4312,8 +4500,9 @@ export class OpencodeHarness implements Harness {
    * OpenCode saves a tool output it cuts in its server's data dir, every
    * session's together ("[showing … of M; full output saved to <file>]",
    * 2.0.29), and its `read` cuts each line at 2000 characters, so the model
-   * reads a long one by the shell. CawCo's plugin copies each into the
-   * session's own folder and names the copy (opencode-plugin.ts `spilled`).
+   * reads a long one by the shell. CawCo's plugin cuts a workspace
+   * session's output itself, saving it whole in the session's own folder
+   * and naming it there (opencode-plugin.ts `cutInto`).
    */
   // biome-ignore lint/suspicious/useAwait: implements Harness.spill's Promise contract
   async spill(
@@ -4354,6 +4543,19 @@ export class OpencodeHarness implements Harness {
       await (account === undefined
         ? this.#ensure(true)
         : this.#ensureAccount(account, true));
+    }
+    // Its workspace's browser door, before the location boots: OpenCode's
+    // MCP servers are its location's, so a workspace's location launches its
+    // chrome-devtools through the workspace's door (the plugin reads it), and
+    // a location in no workspace launches none.
+    if (ctx.boundary && ctx.browserDoor) {
+      await ctx
+        .browserDoor()
+        .catch((error: unknown) =>
+          console.warn(
+            `[opencode] ${ctx.instanceId}: its workspace's browser door could not be made, so its location launches no chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
     }
     if (spec.resume && !spec.resume.fork) {
       const recovered = await this.reattach(spec, ctx);
@@ -4518,7 +4720,9 @@ export class OpencodeHarness implements Harness {
         : this.#ensureAccount(account)));
     const identity = existing?.identity ?? slot.owner.active;
     if (!identity) {
-      throw new Error("OpenCode open has no generation custody.");
+      throw new Error(
+        "This session didn't start: OpenCode's server on this machine isn't running. Start it again to try the server again."
+      );
     }
     if (existing?.running && spec.resume?.atMessage && !spec.resume.fork) {
       throw new Error("OpenCode cannot rewind a running incumbent turn.");
@@ -4766,7 +4970,9 @@ export class OpencodeHarness implements Harness {
       // active generation was published while this attachment was prepared.
       const owner = this.#sessionOwners.get(ctx.instanceId);
       if (!owner) {
-        throw new Error("OpenCode attachment has no generation custody.");
+        throw new Error(
+          "This session stopped: its OpenCode server went away as the session started. Start it again; what you sent and it hadn't read waits for it."
+        );
       }
       session.rebindClient(this.#clientForGeneration(owner));
       this.#sessions.set(ctx.instanceId, session);
@@ -5009,6 +5215,10 @@ export class OpencodeHarness implements Harness {
       clearTimeout(this.#handoffTimer);
     }
     this.#handoffTimer = null;
+    if (this.#mendTimer) {
+      clearTimeout(this.#mendTimer);
+    }
+    this.#mendTimer = null;
     this.#stopPumps();
     this.#keepers.close();
     for (const slot of this.#slots()) {
@@ -5018,11 +5228,11 @@ export class OpencodeHarness implements Harness {
   }
 
   async syncFleet(config: MachineFleetConfig): Promise<FleetSyncReport> {
-    this.#mutatingMcp += 1;
+    this.#syncing += 1;
     try {
       return await this.#syncFleet(config);
     } finally {
-      this.#mutatingMcp -= 1;
+      this.#syncing -= 1;
     }
   }
 
@@ -5047,9 +5257,16 @@ export class OpencodeHarness implements Harness {
     // Before the poke below: a placement that changed restarts the server as
     // opencode.json changing does (`#hashConfig`).
     const placed = await placeOpencodeMcp(config.placedMcp);
+    const memory = await syncMemory(
+      OPENCODE_MEMORY,
+      config.memory,
+      sidecar.memory,
+      report
+    );
     await writeJson(OPENCODE_SIDECAR, {
       mcp,
       ...(planAgentDisabled ? { planAgentDisabled: true } : {}),
+      ...(memory ? { memory } : {}),
     });
     // Poke the watcher now rather than up to 2 s later.
     await this.#configTick();
@@ -5058,82 +5275,50 @@ export class OpencodeHarness implements Harness {
     await this.#ensure();
     const unsettled = await this.#configSettled();
     if (unsettled) {
-      report.mcp = {
-        ...placed,
-        ...Object.fromEntries(mcp.map((name) => [name, unsettled])),
-      };
+      const states = Object.fromEntries(mcp.map((name) => [name, unsettled]));
+      this.#heardFleetMcp(states, "report");
+      report.mcp = { ...placed, ...states };
       return report;
     }
-    // Every running server here, for the locations its sessions run in. An
-    // account's never for its own directory: a location connects every
-    // configured MCP server, a second copy of the fleet's local servers held
-    // for nobody.
-    const machine = await this.#ensure();
-    const places = [
-      {
-        client: machine,
-        directories: new Set(
-          [...this.#sessions.values()]
-            .filter((session) => session.account === undefined)
-            .map((session) => session.directory)
-        ),
-      },
-      ...[...this.#accounts.values()].flatMap((slot) =>
-        slot.client
-          ? [
-              {
-                client: slot.client,
-                directories: new Set(
-                  [...this.#sessions.values()]
-                    .filter((session) => session.account === slot.account)
-                    .map((session) => session.directory)
-                ),
-              },
-            ]
-          : []
-      ),
-    ];
-    for (const server of config.mcp.filter(
-      (row) => row.proxied && row.enabled
-    )) {
-      for (const { client, directory } of places.flatMap((place) =>
-        [...place.directories].map((one) => ({
-          client: place.client,
-          directory: one,
-        }))
-      )) {
-        // biome-ignore lint/performance/noAwaitInLoops: replace each location's connection before reporting runtime state
-        await client.mcp.add({
-          server: server.name,
-          config: toOpencodeMcp(server.config) as never,
-          ...at(directory),
-        });
-        await client.mcp.connect({ server: server.name, ...at(directory) });
-      }
-      // And the machine server's own location, the one this report reads. A
-      // proxied server answers 503 until the hub signs in, and 2.0 does not
-      // try a failed server again on its own; the hub's sync after a sign-in
-      // is what connects it. Added first: a location just booted on a new
-      // config may not hold it yet ("MCP server not found").
-      await machine.mcp.add({
-        server: server.name,
-        config: toOpencodeMcp(server.config) as never,
-      });
-      await machine.mcp.connect({ server: server.name });
-    }
-    Object.assign(report.mcp, placed, await this.#readFleetMcp(mcp));
+    // A fleet server OpenCode holds failed where it runs here is started again
+    // now, not at the next pass: a proxied one answers 503 until the hub signs
+    // in, and the hub's sync after a sign-in is what connects it. A location
+    // booted on the config just written holds every fleet server already, in
+    // its launch config; one still connecting is left to connect.
+    await this.#fleetMcpTurn(() => this.#startFailed(mcp));
+    Object.assign(report.mcp, placed, await this.#readFleetMcp(mcp, "fresh"));
     return report;
   }
 
   async fleetStatus(): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(OPENCODE_SIDECAR);
-    return {
-      mcp: await this.#readFleetMcp(sidecar.mcp ?? []),
+    const report: FleetSyncReport = {
+      mcp: await this.#readFleetMcp(sidecar.mcp ?? [], "latest"),
       marketplaces: {},
       plugins: {},
       skills: {},
       at: Date.now(),
     };
+    if (sidecar.memory !== undefined) {
+      const file = Bun.file(OPENCODE_MEMORY);
+      const hash = (await file.exists()) ? hashText(await file.text()) : null;
+      if (hash === sidecar.memory) {
+        report.memory = { state: "applied" };
+      } else if (hash === null) {
+        report.memory = {
+          state: "failed",
+          cause: "absent",
+          detail: "not on disk",
+        };
+      } else {
+        report.memory = {
+          state: "failed",
+          cause: "drifted",
+          detail: "edited on this machine",
+        };
+      }
+    }
+    return report;
   }
 
   /**
@@ -5237,60 +5422,299 @@ export class OpencodeHarness implements Harness {
     }
   }
 
-  async #readFleetMcp(names: string[]): Promise<FleetSyncReport["mcp"]> {
+  /** Runs `work` once every fleet MCP read and pass before it has ended. */
+  #fleetMcpTurn<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.#fleetMcpQueue.then(work, work);
+    this.#fleetMcpQueue = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
+   * The fleet servers' states on the machine's active generation, as a
+   * report says them, one read at a time. `latest` (a status report) takes
+   * a pass's reading the hub has not had, when it was read on the generation
+   * active now: that report is the one the pass asked for
+   * ({@link fleetMcpMoved}), and reading again would boot the location the
+   * pass released and start every fleet server there once more. Anything
+   * else, and `fresh` (a sync), is read now ({@link #readFleetMcpNow}).
+   */
+  #readFleetMcp(
+    names: string[],
+    use: "fresh" | "latest"
+  ): Promise<FleetSyncReport["mcp"]> {
+    return this.#fleetMcpTurn(() => {
+      const taken = this.#passReading;
+      this.#passReading = null;
+      if (
+        use === "latest" &&
+        taken &&
+        taken.procId === this.#serverOwner.active?.procId &&
+        names.every((name) => name in taken.states)
+      ) {
+        const states = Object.fromEntries(
+          names.map((name) => [name, taken.states[name] as FleetItemState])
+        );
+        this.#heardFleetMcp(states, "report");
+        return Promise.resolve(states);
+      }
+      return this.#readFleetMcpNow(names, "report");
+    });
+  }
+
+  /**
+   * What `states` says against what was last reported. A report's reading
+   * is recorded as reported. A pass's that differs from it is news the hub
+   * has not had: the agent sends it a report ({@link fleetMcpMoved}), which
+   * says this reading, and this answers true. Any reading not a lasting
+   * verdict (failed, or still pending) has the next pass scheduled; one
+   * where every server settled ends the backoff.
+   */
+  #heardFleetMcp(
+    states: Record<string, FleetItemState>,
+    by: "report" | "pass"
+  ): boolean {
+    const entries = Object.entries(states);
+    const moved =
+      by === "pass" &&
+      entries.some(
+        ([name, item]) => this.#fleetMcpReported.get(name) !== item.state
+      );
+    if (by === "report") {
+      this.#fleetMcpReported.clear();
+      for (const [name, item] of entries) {
+        this.#fleetMcpReported.set(name, item.state);
+      }
+    }
+    const unsettled = entries.filter(([, item]) => unsettledState(item));
+    if (unsettled.length > 0) {
+      console.info(
+        `[opencode] fleet MCP read again later: ${unsettled.map(([name, item]) => `${name} ${item.state} (${item.detail ?? "no detail"})`).join("; ")}`
+      );
+      this.#mendLater();
+    } else {
+      this.#mendAttempt = 0;
+    }
+    if (moved) {
+      fleetMcpMoved();
+    }
+    return moved;
+  }
+
+  /**
+   * Schedules the next pass ({@link #mendFleetMcp}): `restart` from the first
+   * wait, else after the backoff's next one ({@link MCP_RETRY_FIRST_MS}). A
+   * pass already scheduled stands unless restarted.
+   */
+  #mendLater(restart = false): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set by dispose()
+    if (this.#disposed || !this.#converging) {
+      return;
+    }
+    if (restart) {
+      this.#mendAttempt = 0;
+      if (this.#mendTimer) {
+        clearTimeout(this.#mendTimer);
+        this.#mendTimer = null;
+      }
+    }
+    if (this.#mendTimer) {
+      return;
+    }
+    const wait = Math.min(
+      MCP_RETRY_FIRST_MS * 2 ** this.#mendAttempt,
+      MCP_RETRY_MAX_MS
+    );
+    this.#mendAttempt += 1;
+    this.#mendTimer = setTimeout(() => {
+      this.#mendTimer = null;
+      this.#fleetMcpTurn(() => this.#mendFleetMcp()).catch((error: unknown) =>
+        console.warn(`[opencode] fleet MCP pass: ${errorText(error)}`)
+      );
+    }, wait);
+    this.#mendTimer.unref();
+  }
+
+  /**
+   * One pass over the fleet's servers on this machine: each OpenCode holds
+   * failed is started again ({@link #startFailed}), then the machine's
+   * reading is taken as a report's is, against the generation serving now.
+   * A fleet sync running reads and reports them itself: the pass waits for it.
+   */
+  async #mendFleetMcp(): Promise<void> {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set by dispose()
+    if (this.#disposed || !this.#converging) {
+      return;
+    }
+    if (this.#syncing > 0) {
+      this.#mendAttempt = Math.max(0, this.#mendAttempt - 1);
+      this.#mendLater();
+      return;
+    }
+    const names = (await readSidecar(OPENCODE_SIDECAR)).mcp ?? [];
+    if (names.length === 0) {
+      this.#mendAttempt = 0;
+      return;
+    }
+    await this.#startFailed(names);
+    await this.#readFleetMcpNow(names, "pass");
+  }
+
+  /**
+   * Starts again each of `names` that OpenCode holds failed, wherever it
+   * runs here: in each location a live session runs in, on the generation
+   * serving that session, so the session gains its tools (OpenCode publishes
+   * them as the server connects), and in the machine server's own location,
+   * the one the status read reads. A location's MCP servers are its own, so
+   * each is started where it failed. A place that does not answer its list
+   * is left to the next pass.
+   */
+  async #startFailed(names: string[]): Promise<void> {
+    const places = new Map<
+      string,
+      { client: OpencodeClient; directory?: string }
+    >();
+    if (this.#client) {
+      places.set("machine", { client: this.#client });
+    }
+    for (const session of this.#sessions.values()) {
+      const owner = this.#sessionOwners.get(session.instanceId);
+      if (owner && !isV1(owner) && owner.password !== undefined) {
+        places.set(`${owner.procId}\u0000${session.directory}`, {
+          client: this.#clientForGeneration(owner),
+          directory: session.directory,
+        });
+      }
+    }
+    for (const { client, directory } of places.values()) {
+      // biome-ignore lint/performance/noAwaitInLoops: one place at a time, so a pass is never a burst of server starts on a loaded machine
+      await this.#startFailedAt(client, directory, names);
+    }
+  }
+
+  /** {@link #startFailed} in one location: the machine server's own when `directory` is none. */
+  async #startFailedAt(
+    client: OpencodeClient,
+    directory: string | undefined,
+    names: string[]
+  ): Promise<void> {
+    const where = directory ? at(directory) : {};
+    const place = directory ?? "the machine's server";
+    const listed = await askOpencode((options) =>
+      client.mcp.list(where, options)
+    );
+    if (listed.kind !== "answered") {
+      console.warn(
+        `[opencode] fleet MCP pass: ${notAnswered(`its MCP list at ${place}`, listed)}`
+      );
+      return;
+    }
+    const failed = listed.value.data.flatMap((server) =>
+      names.includes(server.name) && server.status.status === "failed"
+        ? [{ name: server.name, error: server.status.error }]
+        : []
+    );
+    for (const { name, error } of failed) {
+      // The call holds the client: leased, as e1ce75227 leased the sync's.
+      this.#mutatingMcp += 1;
+      // biome-ignore lint/performance/noAwaitInLoops: one start at a time, so a pass is never a burst of server starts on a loaded machine
+      const started = await readWithin(MCP_START_AGAIN_MS, (signal) =>
+        client.mcp.connect({ server: name, ...where }, { signal })
+      )
+        .then(
+          (read) =>
+            read.kind === "answered"
+              ? "settled"
+              : notAnswered("the start", read),
+          (thrown: unknown) => errorText(thrown)
+        )
+        .finally(() => {
+          this.#mutatingMcp -= 1;
+        });
+      console.info(
+        `[opencode] ${name} at ${place}: OpenCode held it failed (${error}); started again: ${started}`
+      );
+    }
+  }
+
+  /**
+   * The fleet servers' states on the machine's active generation, read on
+   * the location of its own directory once none is still connecting
+   * ({@link #settledMcpList}), each in OpenCode's own words. A server
+   * OpenCode holds failed is said so, with the pass that starts it again
+   * ({@link #heardFleetMcp}). The location is borrowed for the read: the
+   * read boots it when none runs, and it is released after, as a session's
+   * directory is ({@link #releaseDirectory}), so no copy of the fleet's
+   * servers runs on in it for nobody. A pass's reading that moved is kept
+   * for the report it asks for ({@link #readFleetMcp}).
+   */
+  async #readFleetMcpNow(
+    names: string[],
+    by: "report" | "pass"
+  ): Promise<FleetSyncReport["mcp"]> {
     if (names.length === 0) {
       return {};
     }
+    let states: Record<string, FleetItemState>;
+    let read: { directory: string; identity: ServerIdentity } | undefined;
     try {
       await this.#ensure();
       const unsettled = await this.#configSettled();
       if (unsettled) {
-        return Object.fromEntries(names.map((name) => [name, unsettled]));
-      }
-      const client = await this.#ensure();
-      const identity = this.#serverOwner.active;
-      if (!identity) {
-        throw new Error("OpenCode MCP probe has no verified server custody.");
-      }
-      // The server's own directory: a read there boots its location, which
-      // may also hold live sessions. Its release shares the location
-      // release's attachment and running checks.
-      const listed = await this.#settledMcpList(client, names);
-      await this.#disposeUnused(
-        listed.location.directory,
-        identity,
-        "fleet MCP status"
-      );
-      const byName = new Map(
-        listed.data.map((server) => [server.name, server.status] as const)
-      );
-      return Object.fromEntries(
-        names.map((name) => {
-          const status = byName.get(name);
-          return [
-            name,
-            mcpFleetState(
+        states = Object.fromEntries(names.map((name) => [name, unsettled]));
+      } else {
+        const client = await this.#ensure();
+        const identity = this.#serverOwner.active;
+        if (!identity) {
+          throw new Error(
+            "OpenCode's server isn't running, so its MCP servers couldn't be checked."
+          );
+        }
+        // The server's own directory: a read there boots its location, which
+        // may also hold live sessions. Its release shares the location
+        // release's attachment and running checks.
+        const listed = await this.#settledMcpList(client, names);
+        read = { directory: listed.location.directory, identity };
+        const byName = new Map(
+          listed.data.map((server) => [server.name, server.status] as const)
+        );
+        states = Object.fromEntries(
+          names.map((name) => {
+            const status = byName.get(name);
+            const item = mcpFleetState(
               status
                 ? {
-                    status:
-                      status.status === "needs_auth"
-                        ? "needs_auth"
-                        : status.status,
+                    status: status.status,
                     ...("error" in status ? { error: status.error } : {}),
                   }
                 : undefined
-            ),
-          ];
-        })
-      );
+            );
+            return [
+              name,
+              status?.status === "failed"
+                ? {
+                    ...item,
+                    detail: `${item.detail} (OpenCode does not start a failed server again; CawCo does, until it connects)`,
+                  }
+                : item,
+            ];
+          })
+        );
+      }
     } catch (error) {
       const failed: FleetItemState = {
         state: "failed",
         cause: "unknown",
         detail: String(error),
       };
-      return Object.fromEntries(names.map((name) => [name, failed]));
+      states = Object.fromEntries(names.map((name) => [name, failed]));
     }
+    if (read) {
+      this.#releaseDirectory(read.directory, read.identity, "fleet MCP status");
+    }
+    if (this.#heardFleetMcp(states, by) && read) {
+      this.#passReading = { procId: read.identity.procId, states };
+    }
+    return states;
   }
 }
 

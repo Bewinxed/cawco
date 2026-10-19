@@ -72,9 +72,9 @@
   import { MediaQuery } from "svelte/reactivity";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { browser } from "$app/env";
   import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
+  import { firstRender } from "./first-render.svelte";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { cawNotices } from "./home/caw-notices.svelte";
@@ -86,12 +86,12 @@
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
 
   /**
-   * The phone bar, where his glass is his own (Shell). The server has the
-   * width cookie's guess (`narrow`) for the first paint.
+   * The phone bar, where his glass is his own (Shell). The first paint, on
+   * both sides, has the width cookie's guess (`narrow`; first-render.svelte.ts).
    */
   const phoneQuery = new MediaQuery(DRAWER_QUERY);
   const phone = $derived(
-    browser ? phoneQuery.current : Boolean(page.data.narrow)
+    firstRender.held ? Boolean(page.data.narrow) : phoneQuery.current
   );
   /**
    * His head's side, px: the compacted still fills it. In the wide bar's
@@ -142,13 +142,16 @@
   /** The glass's own edge, px: its hairline border (Shell `.tools::before`). */
   const GLASS_EDGE = 1;
   /**
-   * The arcs lie ON the glass's rim, a dial's ticks on its edge (owner:
-   * "lines along the rim of the circle … just like a dial thing"): the
-   * stroke's outer edge just inside the glass's hairline, so even one arc
-   * reads as a tick on the rim and not a mark inside it. Laid across the
-   * hairline itself, its outer half met the bar and read as cut off.
+   * The arcs lie on the glass's rim, a dial's ticks at its edge (owner:
+   * "lines along the rim of the circle … just like a dial thing"), one
+   * hairline of glass inside the glass's own hairline, so even one arc
+   * reads as a tick at the rim and not a mark inside it, and the rim never
+   * reads as cutting it. Laid across the hairline itself, its outer half
+   * met the bar and read as cut off; laid flush against it, at 1x the
+   * hairline ran straight along the stroke's outer edge and the 12 o'clock
+   * cap touched the glass's top row, and it still read as cut (round 4).
    */
-  const RIM = RING_BOX / 2 - GLASS_EDGE - RIM_STROKE / 2;
+  const RIM = RING_BOX / 2 - 2 * GLASS_EDGE - RIM_STROKE / 2;
   /** The first lap's arcs, the second lap's on top of them, and past both the closed ring. */
   const ringClosed = $derived(count > 2 * ARCS);
   const arcCount = $derived(ringClosed ? 0 : Math.min(count, ARCS));
@@ -197,8 +200,11 @@
   const MID = RING_BOX / 2;
   /** The phone's glass, px (`--c-bar-caw-glass-phone`). */
   const STAND_BOX = 32;
-  /** The outline's half height on the path, half the stroke in from inside the glass's hairline. */
-  const STAND = STAND_BOX / 2 - GLASS_EDGE - RIM_STROKE / 2;
+  /**
+   * The outline's half height on the path: half the stroke in from one
+   * hairline of glass inside the glass's own hairline, as on the circle.
+   */
+  const STAND = STAND_BOX / 2 - 2 * GLASS_EDGE - RIM_STROKE / 2;
   const OUTLINE_LENGTH = (4 + Math.PI) * STAND;
   /** The point `s` px along the outline from 12 o'clock. */
   function onOutline(s: number): [number, number] {

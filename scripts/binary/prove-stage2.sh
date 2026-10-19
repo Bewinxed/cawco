@@ -12,12 +12,17 @@
 # builds only the proof's images (host and machine) into the proof cache's store, prints their tags, and exits 0, or
 # with the build's error; it needs podman and bun, and no binaries. Its recipes go in OUTPUT (default: image-only in the
 # proof cache).
+#   bash scripts/binary/prove-stage2.sh --tags-only OUTPUT
+# writes the images' recipes into OUTPUT and prints the tags they carry (`NAME=TAG`), building nothing: it needs bun,
+# and no podman (proof-cache-prune.sh keeps the images they name).
 set -uo pipefail
 IMAGE_ONLY=
-if [[ ${1:-} == --image-only ]]; then
+TAGS_ONLY=
+if [[ ${1:-} == --image-only || ${1:-} == --tags-only ]]; then
   IMAGE_ONLY=1
+  [[ $1 == --tags-only ]] && TAGS_ONLY=1
   shift
-  (( $# <= 1 )) || { echo "usage: $0 --image-only [output]" >&2; exit 2; }
+  (( $# <= 1 )) || { echo "usage: $0 --image-only|--tags-only [output]" >&2; exit 2; }
   set -- "${1:-${CAWCO_PROOF_CACHE:-$HOME/.cache/cawco-proof}/image-only}"
 else
   [[ $# == 2 && "$1" = /* && "$2" = /* ]] || { echo "usage: $0 /absolute/fresh/output /absolute/binaries" >&2; exit 2; }
@@ -130,7 +135,10 @@ EOF
   # root cgroup pids.max", systemd-system.conf(5)), give every unit of the user's 307 tasks, under one session's own
   # limit of 8,192. So each machine holds 65,536 tasks (`boot`), and these drop-ins give each unit of the user's 49,152,
   # with no lower limit on the user's slice or manager. The user's service manager runs every unit and job (hub,
-  # dashboard, agent, keepers, update helpers) with the proof's pace for the update's timed steps.
+  # dashboard, agent, keepers, update helpers) with the proof's pace for the update's timed steps, and inside this
+  # proof's heavy-run admission (CAWCO_HEAVY_ADMITTED, core heavy-run.ts): the proof was admitted for its machines as
+  # it started, and a session start in one waits on no reading of the host's memory, which its own rigs move (on
+  # 2026-10-19 a run's session starts were held 63 s on the host's memory stall while its 24 machines ran).
   # No system service takes a kernel keyring of its own (KeyringMode=inherit for every service, a top-level `service.d`
   # drop-in: systemd.unit(5), "a top-level drop-in with type.d/ … allows altering or adding to the settings of all
   # corresponding unit files"). systemd.exec(5): KeyringMode "Defaults to private for services of the system service
@@ -178,7 +186,7 @@ RUN apt-get update \\
  && printf '[Service]\\nKeyringMode=inherit\\n' > /etc/systemd/system/service.d/proof-keyring.conf \\
  && printf '[Service]\\nTasksMax=infinity\\n' > /etc/systemd/system/user@.service.d/proof-tasks.conf \\
  && printf '[Slice]\\nTasksMax=infinity\\n' > /etc/systemd/system/user-.slice.d/proof-tasks.conf \\
- && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE CAWCO_PROOF_RETIRING_LIST_MS=$PROOF_RETIRING_LIST_MS\\n' > /etc/systemd/user.conf.d/proof.conf
+ && printf '[Manager]\\nDefaultTasksMax=49152\\nDefaultEnvironment=CAWCO_PROOF_TIME_SCALE=$PROOF_TIME_SCALE CAWCO_PROOF_RETIRING_LIST_MS=$PROOF_RETIRING_LIST_MS CAWCO_HEAVY_ADMITTED=stage2-proof\\n' > /etc/systemd/user.conf.d/proof.conf
 COPY --from=claude --chown=cawco:cawco /home/cawco/.local /home/cawco/.local
 RUN HOME=/tmp/claude-check /home/cawco/.local/bin/claude --version | grep -F '$claude_version' \\
  && rm -rf /tmp/claude-check && ! command -v openssl
@@ -195,10 +203,13 @@ orchestrate() {
   done
   free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
   (( free_gb >= 25 )) || { echo "only ${free_gb}G is free where $out is; the proof needs 25G (each rig's machines are vfs copies of the image; a full disk made podman fail with 'database or disk is full' in an earlier run)" >&2; exit 2; }
-  # A heavy run: one of the machine's slots (scripts/lib/heavy-run.ts) for this shell's whole life, its cleanup included.
+  # A heavy run (scripts/lib/heavy-run.ts) for this shell's whole life, its cleanup included, admitted for its own peak:
+  # 18 GiB, from obelisk's journal on 2026-10-19, "cawco-nightly-7c34d9be6.service: Consumed 15min 31.083s CPU time
+  # over 8min 33.717s wall clock time, 17.2G memory peak", a release whose run held a whole stage 2. Under
+  # scripts/release.ts it takes nothing of its own (CAWCO_HEAVY_RUN_HELD: the release's admission holds it).
   # shellcheck source=../lib/heavy-run.sh
   source "$here/../lib/heavy-run.sh"
-  heavy_run bash "$0" "$@"
+  CAWCO_HEAVY_PEAK_GIB=18 heavy_run bash "$0" "$@"
   STARTED=$SECONDS
   mkdir -p "$out/tmp" "$out/shared" "$out/feeds" "$out/rigs" "$out/logs" "$out/images"
   orchestrator_done() {
@@ -486,6 +497,10 @@ if [[ -n $IMAGE_ONLY ]]; then
   command -v flock > /dev/null || { echo "flock (util-linux) is needed: one proof at a time builds into the image store" >&2; exit 2; }
   trap 'rm -f "$TMPDIR"' EXIT
   write_images || exit 1
+  if [[ -n $TAGS_ONLY ]]; then
+    for name in host machine; do echo "$name=$(proof_image_tag "$out/images" "$name")"; done
+    exit 0
+  fi
   proof_images "$out/images" host machine || { echo "the images failed to build" >&2; exit 1; }
   exit 0
 fi
@@ -692,6 +707,32 @@ phase() { hub_api /api/binary-updates/machines | json "d => d.machines['$1']?.ph
 field() { hub_api /api/binary-updates/machines | json "d => d.machines['$1']?.$2"; }
 # The keepers of earlier builds still holding something on a machine, as its update state says: `<build>:<held> ...`.
 retiring() { hub_api /api/binary-updates/machines | json "d => (d.machines['$1']?.retiringKeepers ?? []).map(k => k.version + ':' + k.sessions).join(' ')"; }
+# The pids that keep machine $1's retiring keeper of build $2, as its update state says (`retiringKeepers[].kept`).
+kept_of() { hub_api /api/binary-updates/machines | json "d => (d.machines['$1']?.retiringKeepers ?? []).find(k => k.version === '$2')?.kept?.map(p => p.pid).join(' ')"; }
+# Machine $1's Update cell, in the words the dashboard draws it with (apps/dashboard updates/model.ts `cellFor`).
+update_row() {
+  hub_api /api/binary-updates/machines | bun -e "const { cellFor } = await import('$here/../../apps/dashboard/src/lib/cawco/updates/model.ts'); const d = JSON.parse(await Bun.stdin.text()); console.log(cellFor({ machineId: '$1', hostname: '$1', status: 'online', binaryUpdate: d.machines['$1'] }, { autoUpdate: true, channel: 'stable' }).text)"
+}
+# A process CawCo did not start, put into the cgroup of keeper pid $2 on machine $1, as podman left conmon in a keeper's
+# unit for a session that carried its INVOCATION_ID: `sleep 86400`, started in a scope of its own and then moved, its
+# parent outside every keeper's tree. Prints its pid. systemd-run is told not to expand `$` (systemd-run(1)
+# --expand-environment: "Disabling variable expansion is useful if the specified command includes or may include a $
+# sign").
+plant_in_unit() {
+  put_executable "$1" /home/cawco/cawco-plant.sh <<'PLANT'
+#!/bin/sh
+set -eu
+group=$(sed -n 's/^0:://p' "/proc/$1/cgroup")
+rm -f /home/cawco/cawco-planted.pid
+nohup systemd-run --user --scope --quiet --collect --expand-environment=no --unit="cawco-planted-$1" -- sh -c 'echo $$ > /home/cawco/cawco-planted.pid; exec sleep 86400' > /dev/null 2>&1 < /dev/null &
+i=0
+until [ -s /home/cawco/cawco-planted.pid ]; do i=$((i + 1)); [ "$i" -lt 100 ] || exit 1; sleep 0.1; done
+pid=$(cat /home/cawco/cawco-planted.pid)
+echo "$pid" > "/sys/fs/cgroup$group/cgroup.procs"
+echo "$pid"
+PLANT
+  as_user "$1" /home/cawco/cawco-plant.sh "$2"
+}
 wait_until() {
   local seconds=$1; shift
   local end=$((SECONDS + seconds))
@@ -866,6 +907,7 @@ keeper_link() { as_user "$1" readlink /home/cawco/.local/share/cawco/binary/keep
 current_link() { as_user "$1" readlink /home/cawco/.local/share/cawco/binary/current; }
 has_file() { as_user "$1" test -e "/home/cawco/.local/share/cawco/binary/$2"; }
 has_version() { as_user "$1" test -d "/home/cawco/.local/share/cawco/binary/versions/$2"; }
+install_order() { as_user "$1" sh -c 'cat /home/cawco/.local/share/cawco/binary/install-order.json 2> /dev/null || true' | json "d => d.join(' ')"; }
 custody_of() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.custody?.state"; }
 apply_log_count() { as_user "$hubc" sh -c "grep -c '$1' /home/cawco/.local/share/cawco/binary/apply.log || true"; }
 # The machine has an IPv6 loopback (`::1` on lo), as the installer judges before it names [::1] in the dashboard socket.
@@ -887,11 +929,11 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # (binary-update.ts `#drain` → `#tellHub`), before any helper starts.
 settled() { [[ "$(phase "$1")" =~ ^(none|available|installed|failed|failed-rolled-back|waiting-for-channel|waiting-sessions)$ ]]; }
 export PROOF_RUNNER
-export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl machine_id build_version phase field retiring wait_until use_feed \
+export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl machine_id build_version phase field retiring kept_of update_row plant_in_unit wait_until use_feed \
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
-  end_all_sessions keeper_dropin keeper_link current_link has_file has_version custody_of apply_log_count \
+  end_all_sessions keeper_dropin keeper_link current_link has_file has_version install_order custody_of apply_log_count \
   has_ipv6_loopback started_at_most_twice stub_when_staged settled
 
 # ---------------------------------------------------------------- a rig's machines
@@ -1680,8 +1722,8 @@ handover_on_joined_machine() {
   update_outcomes_start "$joinerc" "$jid" handover-1
   on_exit update_sends_stop
   # The new build reaches the hub's machine. While the helper decides its trial, the build it would restore is still on
-  # disk; once the build is confirmed the trial is gone, the keeper has been handed over to it, and nothing runs or
-  # names the build before, so it is pruned.
+  # disk; once the build is confirmed the trial is gone, the keeper has been handed over to it, and the build before
+  # stays as one of the three installed builds the machine keeps (the install order names both).
   use_feed next
   learn
   install_now_request "$hid" > /dev/null
@@ -1689,7 +1731,8 @@ handover_on_joined_machine() {
   has_version "$hubc" "$old"
   wait_until 400 '[[ "$(build_version $hid)" == $NEXT && "$(phase $hid)" == installed ]] && ! has_file "$hubc" trial.json'
   wait_until 120 '[[ "$(keeper_link "$hubc")" == "versions/$NEXT" && "$(current_endpoint "$hubc")" == "$(endpoint_of $NEXT)" ]]'
-  wait_until 120 '! has_version "$hubc" '"$old"
+  wait_until 120 '[[ "$(install_order "$hubc")" == *"'"$old"' $NEXT" ]]'
+  has_version "$hubc" "$old"
   # The joined machine looks at what its hub offers now, and installs it with its sessions running.
   learn
   wait_until 120 '[[ "$(field $jid availableVersion)" == $NEXT ]]'
@@ -1725,11 +1768,24 @@ handover_on_joined_machine() {
   stop_session "$jid" "$id"
   wait_until 60 '! as_user "$joinerc" kill -0 "'"$pid"'" 2> /dev/null'
   wait_until 60 '[[ "$(retiring $jid)" == "'"$old"':2" ]]'
-  # The other two end; the keeper before then goes by itself, its process, unit and endpoint, and the new keeper's
-  # session runs on.
+  # A process CawCo did not start, in the keeper before's unit. The other two sessions end: the keeper before is kept,
+  # the same process with its unit, its update state names the process, and the machine's Update cell says what keeps
+  # it, never "handing over". The process ends: the keeper before then goes by itself, its process, unit and endpoint,
+  # and the new keeper's session runs on.
+  local planted row
+  planted=$(plant_in_unit "$joinerc" "$oldpid")
+  [[ -n $planted ]] || { echo "ASSERTION FAILED: no process was planted in $oldunit"; return 1; }
+  echo "planted in $oldunit: $planted"
   for pid in $(tail -n +2 "$rigdir/handover-before.txt" | awk '{print $2}'); do
     as_user "$joinerc" kill "$pid"
   done
+  wait_until 180 '[[ "$(kept_of $jid "'"$old"'")" == "'"$planted"'" ]]'
+  row=$(update_row "$jid")
+  echo "update row: $row"
+  [[ "$row" == *"is still running: a process CawCo didn't start (sleep, pid $planted) runs inside it"* && "${row,,}" != *"keeper"* && "${row,,}" != *"sessiond"* && "${row,,}" != *"custody"* && "$row" != *"handing over"* ]] || { echo "ASSERTION FAILED: the Update cell does not say what keeps the keeper before"; return 1; }
+  [[ "$(keeper_pid "$joinerc" "$oldunit")" == "$oldpid" ]] || { echo "ASSERTION FAILED: the keeper before was stopped with a process CawCo did not start in its unit"; return 1; }
+  as_user "$joinerc" test -e "/home/cawco/.config/systemd/user/$oldunit"
+  as_user "$joinerc" kill "$planted"
   wait_until 180 '! as_user "$joinerc" kill -0 "'"$oldpid"'" 2> /dev/null'
   wait_until 60 'as_user "$joinerc" test ! -e "/home/cawco/.config/systemd/user/'"$oldunit"'"'
   wait_until 60 'as_user "$joinerc" test ! -e "/run/user/1000/cawco/'"$oldend"'"'
@@ -1748,7 +1804,7 @@ export -f env_is_clean handover_on_joined_machine
 rig_handover() {
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
-  check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once (carrying only the CAWCO_* its tools read), the old sessions run on and answer through an agent restart, and the old keeper goes when they end; the hub's machine keeps the build its trial would restore until the trial is confirmed" handover_on_joined_machine 1200
+  check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once (carrying only the CAWCO_* its tools read), the old sessions run on and answer through an agent restart, the old keeper is kept while its unit holds a process CawCo did not start (its update state and Update cell name it) and goes once that ends; the hub's machine keeps the build its trial would restore until the trial is confirmed" handover_on_joined_machine 1200
   check "every message sent to a session on the joined machine while the hub's machine and then the joined machine update, the hub restarting under some, reaches the session once the machine is back, once each" update_sends_delivered 600
   check "the joined machine's Claude account reads signed in all through its update, though its Claude Code answers auth status past the agent's bound" update_signin_kept 600
 }
@@ -2078,7 +2134,7 @@ ws_served_pid() { as_user "$joinerc" pgrep -o -f "^socat TCP-LISTEN:$WS_SERVED_P
 # shell through the workspace's tool door (`cawco tool`, packages/cli/src/tools.ts), naming what serves the port. Its
 # answer is kept in $rigdir/ws-preview-open (its id closes it). The hub's preview port for it is read as the dashboard
 # learns it.
-ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
+ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create '{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
 # The delegate removes that preview (artifact_delete): its server's last artifact, so the stage stops it.
 ws_preview_close() {
   local id
@@ -2710,7 +2766,7 @@ keeper_children_capped_on() {
   [[ $ack == *'"stage":"applied"'* ]]
   forker=$(child_pids "$c" cg-forker)
   echo "forker: $forker"
-  [[ -n $forker ]]
+  [[ $forker =~ ^[0-9]+$ ]] && (( forker > 1 ))
   wait_until 60 '(( $(counter_on "$c" "'"$group"'/pids.events" max) > 0 ))'
   # The most the children ever held, pids.peak, never pids.current, which a refused fork lifts past the cap for an
   # instant (see "one session's runaway is its own" above).
@@ -2724,8 +2780,11 @@ keeper_children_capped_on() {
   ack=$(keeper_spawn "$c" cg-refused sleep '["3000"]')
   echo "spawn cg-refused: $ack"
   [[ $ack == *'"stage":"failed"'* && $ack == *'"reason":"process-limit: '* ]]
-  # Once the forker and all it started are gone, a child starts again.
-  as_user "$c" kill -KILL -- "-$forker"
+  # Once the forker and all it started are gone, a child starts again. The group kill goes through the machine's `sh`
+  # (dash), whose builtin reads `-KILL "-$forker"` as the group, never through `podman exec kill`: that runs noble's
+  # procps `kill` (4.0.4-4ubuntu3), which reads `-629` after a signal as options and signals `-9`, the last digit
+  # (`kill(-9, SIGKILL) = -1 ESRCH`), and exits 0, so the forker lived on (nightly be51be0a3, pids.current 136).
+  as_user "$c" sh -c 'kill -KILL "-$1"' sh "$forker"
   wait_until 60 '(( $(as_user "$c" cat "$group/pids.current") <= 2 ))'
   ack=$(keeper_spawn "$c" cg-after sleep '["3000"]')
   echo "spawn cg-after: $ack"

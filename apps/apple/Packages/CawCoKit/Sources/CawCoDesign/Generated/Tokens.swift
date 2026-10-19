@@ -153,6 +153,8 @@ public enum Palette {
     public static let surfaceFillStrong = Palette.named("surface-fill-strong")
     /// A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill.
     public static let pressFill = Palette.named("press-fill")
+    /// The kit Toggle's on step, where a pressed or chosen control stands (a chosen canvas tool, a pressed head button, a held tab): by day the surface-fill-strong step, a step past the hover; at night the surface-fill step, so it never reads as hovered.
+    public static let surfacePressed = Palette.named("surface-pressed")
     /// Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike.
     public static let surfaceHover = Palette.named("surface-hover")
     /// The reader's well edge: darker than the well by day, the ink at 8% at night.
@@ -244,7 +246,7 @@ public enum Palette {
     /// Status glyphs: the hue itself, not the near-black text ink, so a row's state reads in colour at a glance. Each holds 3:1 or more (non-text) on raised, page, fill, hover, the selected wash and the needs-you wash, in both themes; idle stays neutral.
     public static let statusLiveGlyph = Palette.named("status-live-glyph")
     public static let statusAttnGlyph = Palette.named("status-attn-glyph")
-    /// A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim in it (tab-rim-mix) cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own.
+    /// A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim mixed from it cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own.
     public static let tabRimAttn = Palette.named("tab-rim-attn")
     public static let statusDoneGlyph = Palette.named("status-done-glyph")
     public static let statusFailGlyph = Palette.named("status-fail-glyph")
@@ -457,6 +459,8 @@ public enum TypeScale {
     /// A menu item's keyboard shortcut (the kit's command, dropdown and context menu shortcuts, Tailwind's widest).
     /// In em: multiply by the font size for points.
     public static let trackWidest: Double = 0.1
+    /// How far under its words a text link's underline stands, when it is drawn (its hover).
+    public static let underlineOffset: Double = 3
     /// Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric.
     public static let typeMeta = TypeRole(weight: .regular, size: 12...12, leading: 1.35, family: FontFamily.fontBody)
     public static let typeLabel = TypeRole(weight: .medium, size: 13...13, leading: 1.3, family: FontFamily.fontBody)
@@ -542,6 +546,14 @@ public enum Size {
     public static let cSheetInspectorW: Double = 296
     /// The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink).
     public static let cSheetInspectorHeadH: Double = 44
+    /// A component canvas's frame on its way, where its story names no form width: the skeleton's width, a button-to-card component's own (DESIGN.md Artifact panel, canvas and ink; Skeleton).
+    public static let cCanvasSkeletonW: Double = 240
+    /// A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (DESIGN.md Artifact panel, canvas and ink; Skeleton).
+    public static let cCanvasSkeletonH: Double = 96
+    /// An edge's stroke on a graph canvas: the decision graph's and a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink).
+    public static let cGraphEdge: Double = 1.5
+    /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink).
+    public static let cMapNodeW: Double = 264
     /// The preview's Comments panel, floating over the page's top-right: its share of the pane's width (Magnific's floating panel, about 22%), held between c-pin-list-min and c-pin-list-max.
     public static let cPinListShare: Double = 0.22
     /// The Comments panel at its narrowest: a row's disc, anchor line and last reply's first line.
@@ -643,6 +655,10 @@ public enum Size {
     public static let cStartersW: Double = 725
     /// A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after.
     public static let cRowLead: Double = 28
+    /// A section's head inside a floating panel (Files' Artifacts and Attachments, as Caw's panel heads his): its glyph, its name in the label role and its count, one line.
+    public static let cSectionHeadH: Double = 32
+    /// A list row's inline inset inside a floating panel (Files' rows and heads, as the menu item's 10px padding): its lead column's glyph stands this far in from the row's edge.
+    public static let cRowInset: Double = 10
     /// A routines-page row's pitch: the whole row is its own 44px opener on every pointer.
     public static let cRowH: Double = 44
     /// The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and "23h ago", or "Tomorrow 13:30", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say.
@@ -781,9 +797,6 @@ public enum Effect {
     /// Relative tints for rows inside any surface: hover +6%, selected +10% ink.
     public static let surfaceHoverMix: Double = 0.06
     public static let surfaceSelectedMix: Double = 0.1
-    /// The strength of Caw's panel's vermillion hairline between its sections (CawPanel, web and iOS), and of an unchosen session tab's rim in the iOS app (PaneTabsView); the dashboard's unchosen tabs wear tab-rim-mix-subtle. At this strength a status rim holds 3:1 against the tab's fill and the shelf in both themes: by day 83% clears the working and failed tones, by night 64% the failed tone, the hardest.
-    /// By day and by night: read it with `value(for:)`.
-    public static let tabRimMix = SchemeValue(light: 0.83, dark: 0.64)
     /// The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle.
     /// By day and by night: read it with `value(for:)`.
     public static let tabRimMixChosen = SchemeValue(light: 0.97, dark: 0.78)
@@ -897,6 +910,9 @@ public enum Motion {
     public static let echoScale: Double = 1.45
     /// A working session's echo as it leaves the tile.
     public static let echoOpacity: Double = 0.45
+    /// The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1).
+    /// By day and by night: read it with `value(for:)`.
+    public static let breathFloor = SchemeValue(light: 0.8, dark: 0.58)
     /// The duotone second layer (the disc) of a status glyph in an alert row (join/JoinedRow), drawn in ink-strong, status-done-ink or status-attn-ink. It holds two conditions in both schemes: the disc 3:1 or more on the recess, and the glyph's full layer (the check, the strokes) 3:1 or more on the disc, so the glyph reads as a mark on a disc, not a solid one. The two multiply to the ink's own contrast on the recess, so the ink needs about 9:1 there and no hue glyph ink holds it by day. By day 0.57 (the attn ink's disc the floor, 3.18:1); at night 0.46 (the done ink's check the floor, 3.24:1). Every other Solar glyph keeps 0.5.
     /// By day and by night: read it with `value(for:)`.
     public static let glyphDuoStatusOpacity = SchemeValue(light: 0.57, dark: 0.46)

@@ -5,8 +5,9 @@
    * marketplace.json gives, read by the hub as the source is typed: that is
    * the one name Claude Code registers it and installs its plugins by.
    */
-  import type { FleetMarketplace } from "@cawco/core";
+  import { type FleetMarketplace, skillsWords as words } from "@cawco/core";
   import { tick } from "svelte";
+  import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
@@ -118,9 +119,7 @@
 </script>
 
 {#snippet callsItself()}
-  This marketplace calls itself <span class="font-mono">{own}</span>, and links
-  as <span class="font-mono">{own}</span>: its plugins install as
-  <span class="font-mono">plugin@{own}</span>.
+  <Coded text={words.callsItself(own ?? "")} />
 {/snippet}
 
 <Popover.Root
@@ -141,7 +140,7 @@
         variant="outline"
       >
         <IconShop />
-        <span>Link marketplace</span>
+        <span>{words.linkMarketplace}</span>
       </Button>
     {/snippet}
   </Popover.Trigger>
@@ -153,40 +152,31 @@
     style="--pop-w: 380px; --pop-max: calc(100vw - 2rem)"
     bind:ref={surface}
   >
-    <!-- literal: 12px -->
-    <form
-      class="flex flex-col gap-(--form-gap)"
-      onsubmit={link}
-      style:--form-gap="12px"
-    >
-      <Field id="market-source" label="Source" problem={unread}>
+    <form class="form" onsubmit={link}>
+      <Field id="market-source" label={words.source} problem={unread}>
         {#snippet hint()}
-          A GitHub <span class="font-mono">owner/repo</span>, a git URL, or a
-          URL that ends in <span class="font-mono">marketplace.json</span>.
-          Anthropic publishes <span class="font-mono">anthropics/skills</span>
-          and <span class="font-mono">anthropics/claude-plugins-official</span>.
+          <Coded text={words.marketSourceHint} />
         {/snippet}
         <Input
           autocomplete="off"
           face="mono"
           id="market-source"
-          placeholder="anthropics/skills"
+          placeholder={words.marketSourcePlaceholder}
           spellcheck="false"
           bind:value={source}
         />
       </Field>
       <Field
         id="market-name"
-        label="Name"
-        problem={clash ? `"${own}" is already linked.` : undefined}
+        label={words.name}
+        problem={clash ? words.alreadyLinked(own ?? "") : undefined}
         warn={differs ? callsItself : undefined}
       >
         {#snippet hint()}
           {#if reading}
-            Reading its marketplace.json…
+            {words.readingManifest}
           {:else}
-            What its plugins are installed as —
-            <span class="font-mono">plugin@{own ?? "name"}</span>.
+            <Coded text={words.installsAs(own ?? "name")} />
           {/if}
         {/snippet}
         <Input
@@ -194,7 +184,7 @@
           autocomplete="off"
           face="mono"
           id="market-name"
-          placeholder="skills"
+          placeholder={words.marketNamePlaceholder}
           spellcheck="false"
           bind:value={name}
         />
@@ -212,9 +202,9 @@
         class="self-end"
         disabled={down !== null || !ready}
         failed={failed !== undefined}
-        label="Link"
+        label={words.link}
         pending={busy}
-        pendingLabel="Linking…"
+        pendingLabel={words.linking}
         title={down ?? undefined}
         type="submit"
       />

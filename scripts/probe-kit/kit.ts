@@ -61,6 +61,8 @@ export const VIEWS = {
   /** An iPhone 15 Pro, portrait: the owner's phone. */
   iphone15Pro: { width: 393, height: 852, touch: true },
   ipad: { width: 1032, height: 1376, touch: true },
+  /** An iPad Pro 11-inch (M4), portrait: the simulator ios-config and ios-views pair with. */
+  ipad11: { width: 834, height: 1194, touch: true },
   /** The same iPad in landscape. Either way up it is an iPad's regular width, so the web stands
    *  the side panel beside the conversation (layoutPolicy.sideDrawer) as the app does. */
   ipadWide: { width: 1376, height: 1032, touch: true },
@@ -187,8 +189,29 @@ export interface Spec {
   host?: string;
   /** The spec's name: its file's, its baselines' folder. */
   name: string;
+  /**
+   * Why the spec stands up its own git and HOME, when it does: it runs in a
+   * process of its own (run.ts {@link OWN_HOME_ENV}), with a scratch HOME set
+   * as that process starts (Bun's `os.homedir()` reads HOME once, at start,
+   * and never a HOME set later) and none of an enclosing workspace's git or
+   * gh settings, which would send its own setup pushes through that
+   * workspace's git door.
+   */
+  ownHome?: string;
   run: (kit: Kit) => Promise<void>;
 }
+
+/** Set on the process run.ts starts for an {@link Spec.ownHome} spec: its scratch HOME. */
+export const OWN_HOME_ENV = "CAWCO_PROBE_OWN_HOME";
+
+/**
+ * The variables of an enclosing workspace's git and gh an
+ * {@link Spec.ownHome} spec runs without: its git config words
+ * (`GIT_CONFIG_*`, with `pushInsteadOf` to the workspace's door), the door's
+ * own (`CAWCO_GIT_*`), its ssh, LFS and template settings, and gh's config dir.
+ */
+export const ENCLOSING_GIT_ENV =
+  /^(?:GIT_CONFIG_\w+|CAWCO_GIT_\w+|GIT_SSH_COMMAND|GIT_LFS_SKIP_PUSH|GIT_TEMPLATE_DIR|GH_CONFIG_DIR)$/;
 
 /**
  * Why a spec cannot start a boundary of its own where this run is: inside a
@@ -848,6 +871,11 @@ export class Run {
     // would read as this run's evidence.
     await rm(out, { recursive: true, force: true });
     await mkdir(out, { recursive: true });
+    // A fleet whose spec failed keeps its sandbox for reading (its hub's log
+    // and database); the spec's next run removes it (scratch-fleet.ts
+    // `removeKept`). One that passed goes with the spec.
+    const failedBefore = this.failures;
+    const failedHere = () => this.failures > failedBefore;
     const kit: Kit = {
       spec: spec.name,
       approve: approval !== null,
@@ -918,7 +946,7 @@ export class Run {
             this.failed.push(line);
           }
           await fleet.close();
-          await fleet.clean(false);
+          await fleet.clean(failedHere());
         });
         return Object.assign(fleet, {
           dashboard: () => {
@@ -962,8 +990,13 @@ export class Run {
             : {}),
         });
         contexts.push(context);
+        // Every frame runs it; one with an opaque origin (a browser error
+        // page in a frame whose server went away, a sandboxed document) has
+        // no storage, and reading it there throws a SecurityError.
         await context.addInitScript((t) => {
-          localStorage.setItem("cawco-theme", t);
+          if (self.origin !== "null") {
+            localStorage.setItem("cawco-theme", t);
+          }
         }, options.theme ?? "light");
         await context.addInitScript(installRuns);
         for (const script of options.init ?? []) {
@@ -1123,21 +1156,45 @@ export async function open(
 
 /** Waits until every finite animation on the page has landed. */
 export async function settle(page: Page, ms = 150): Promise<void> {
-  // A finite run still going after 10s will not land (a timeline held
-  // still): named, as a failure, never waited on for ever.
+  // A finite run still going after 10s will not land: named, as a failure,
+  // never waited on for ever. A run lands when it finishes or stops running:
+  // one paused after the wait began (a faded cover's skeleton holds still)
+  // moves no more, and its `finished` never settles. Each run waited on is
+  // kept with whether it landed, so one that didn't is named with its state.
   const landed = await readWithin(10_000, () =>
     page.evaluate(async () => {
+      const waits = window
+        .kitRuns()
+        .filter(
+          (run) =>
+            run.playState === "running" &&
+            Number.isFinite(
+              Number(run.effect?.getComputedTiming().endTime ?? 0)
+            )
+        )
+        .map((run) => ({ run, settled: false }));
+      (window as unknown as { __kitWaits: typeof waits }).__kitWaits = waits;
+      /** Resolves once `run` no longer runs (paused, idle), read each frame. */
+      const stops = (run: Animation) =>
+        new Promise<void>((done) => {
+          const look = () => {
+            if (run.playState === "running") {
+              requestAnimationFrame(look);
+            } else {
+              done();
+            }
+          };
+          requestAnimationFrame(look);
+        });
       await Promise.all(
-        window
-          .kitRuns()
-          .filter(
-            (run) =>
-              run.playState === "running" &&
-              Number.isFinite(
-                Number(run.effect?.getComputedTiming().endTime ?? 0)
-              )
-          )
-          .map((run) => run.finished.catch(() => undefined))
+        waits.map((wait) =>
+          Promise.race([
+            wait.run.finished.catch(() => undefined),
+            stops(wait.run),
+          ]).then(() => {
+            wait.settled = true;
+          })
+        )
       );
     })
   );
@@ -1146,32 +1203,39 @@ export async function settle(page: Page, ms = 150): Promise<void> {
       break;
     case "unanswered": {
       const stuck = await page.evaluate(() =>
-        window
-          .kitRuns()
-          .filter(
-            (run) =>
-              run.playState === "running" &&
-              Number.isFinite(
-                Number(run.effect?.getComputedTiming().endTime ?? 0)
-              )
-          )
-          .map((run) => {
+        (
+          (
+            window as unknown as {
+              __kitWaits?: { run: Animation; settled: boolean }[];
+            }
+          ).__kitWaits ?? []
+        )
+          .filter((wait) => !wait.settled)
+          .map(({ run }) => {
             const target = (run.effect as KeyframeEffect | null)?.target;
-            const what =
-              run instanceof CSSTransition
-                ? `transition ${run.transitionProperty}`
-                : `${run.constructor.name} ${run.id}`;
+            let what = `${run.constructor.name} ${run.id}`;
+            if (run instanceof CSSTransition) {
+              what = `transition ${run.transitionProperty}`;
+            } else if (run instanceof CSSAnimation) {
+              what = `animation ${run.animationName}`;
+            }
             // The element by its hook, when it has one; its first class otherwise.
             const slot = target?.getAttribute("data-slot");
             const name = slot
               ? `[data-slot="${slot}"]`
               : `.${String(target?.className).split(" ")[0]}`;
-            return `${what} on ${target?.tagName.toLowerCase()}${name}`;
+            return `${what} on ${target?.tagName.toLowerCase()}${name} (${run.playState}${target?.isConnected === false ? ", detached" : ""})`;
           })
       );
-      throw new Error(
-        `animations never landed within ${landed.after} ms: ${stuck.slice(0, 6).join("; ")}`
-      );
+      // The wait awaited the runs going when it began: one paused since
+      // never settles its promise, and a busy machine can answer late, yet
+      // nothing is moving now. Only a run still going never landed.
+      if (stuck.length > 0) {
+        throw new Error(
+          `animations never landed within ${landed.after} ms: ${stuck.slice(0, 6).join("; ")}`
+        );
+      }
+      break;
     }
     default: {
       const unhandled: never = landed;

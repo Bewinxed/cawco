@@ -1,6 +1,7 @@
 <script lang="ts">
   /**
-   * Location (§1.5, §2.8): Existing files | Clone from GitHub. The directory
+   * Location (§1.5, §2.8): Existing files | Clone a repository, by its git
+   * URL on any host. The directory
    * browser lists the selected machine's real filesystem through `machineFs`.
    * No branch API exists, so the design's branch panel is not rendered.
    */
@@ -8,12 +9,12 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
-  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import Up from "~icons/solar/alt-arrow-up-linear";
   import Left from "~icons/solar/arrow-left-linear";
   import Right from "~icons/solar/arrow-right-linear";
   import Folder from "~icons/solar/folder-bold-duotone";
+  import FolderGit from "~icons/solar/folder-git-bold-duotone";
   import FolderOpen from "~icons/solar/folder-open-bold-duotone";
   import Search from "~icons/solar/magnifer-bold-duotone";
   import Refresh from "~icons/solar/refresh-bold-duotone";
@@ -186,7 +187,7 @@
       class={embedded ? "justify-self-box-start" : ""}
       items={[
         { value: "dir", label: "Existing files" },
-        { value: "repo", label: "Clone from GitHub" },
+        { value: "repo", label: "Clone a repository" },
       ]}
       label="Location source"
       onchange={onmode}
@@ -196,11 +197,7 @@
         {#if value === "dir"}
           <Folder class="text-hue-amber-500" />
         {:else}
-          <ProviderLogo
-            provider="github"
-            size={null}
-            style={`opacity:${on ? 1 : 0.6}`}
-          />
+          <FolderGit style={`opacity:${on ? 1 : 0.6}`} />
         {/if}
       {/snippet}
     </Segmented>
@@ -471,26 +468,9 @@
         style:opacity={mode === "repo" ? 1 : 0}
         style:pointer-events={mode === "repo" ? "auto" : "none"}
       >
-        <div
-          data-slot="location-section-field"
-          class="overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-xs transition-control"
-        >
-          <!-- literal: 8px gap, 42px / 46px height, 0 12px padding -->
-          <div
-            data-slot="row"
-            class="flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) pr-(--pad-x) pl-(--pad-x)"
-            style:--gap="8px"
-            style:--h="42px"
-            style:--h-phone="46px"
-            style:--pad-x="12px"
-          >
-            <ProviderLogo
-              class="size-icon-md flex-none"
-              provider="github"
-              fade="dim"
-              size={null}
-            />
-            <!-- literal: 30px / 44px minimum height, 1.4 line height, 1rem on a phone -->
+        <div data-slot="location-section-field" class="field">
+          <div data-slot="row" class="row repo-row">
+            <FolderGit class="lead" />
             <input
               aria-label="Repository"
               autocapitalize="off"
@@ -498,7 +478,7 @@
               id="session-repo"
               oninput={(event) => onrepo(event.currentTarget.value)}
               onkeydown={commitOnEnter}
-              placeholder="owner/repository"
+              placeholder="https://host/owner/repository.git"
               spellcheck="false"
               style:--fs-phone="1rem"
               style:--lh="1.4"
@@ -544,8 +524,98 @@
 </section>
 
 <style>
-  /* residual: keyframes */
-  [data-slot="browse"]:disabled {
+  .loc {
+    display: grid;
+    gap: 8px;
+  }
+  .loc.embedded {
+    padding: 4px;
+  }
+  .loc.embedded > :global(.segmented) {
+    justify-self: start;
+  }
+  .field {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xs);
+    overflow: hidden;
+    transition: var(--transition-control);
+  }
+  .field.locked {
+    background: var(--surface-recess);
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 42px;
+    padding: 0 6px 0 12px;
+  }
+  .repo-row {
+    padding-right: 12px;
+  }
+  .row :global(svg.lead) {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    color: var(--hue-amber-500);
+  }
+  input {
+    flex: 1;
+    min-width: 0;
+    min-height: 30px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: var(--weight-body) var(--text-label) / 1.4 var(--font-mono);
+    color: var(--ink-strong);
+    padding: 0;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: var(--radius-sm);
+    background: var(--status-live-bg);
+    color: var(--status-live-ink);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
+    white-space: nowrap;
+  }
+  .override {
+    flex: none;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
+    color: var(--ink-muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .browse {
+    display: inline-flex;
+    flex: none;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--border-control);
+    background: var(--surface-recess);
+    box-shadow:
+      inset 0 0 0 1px var(--neutral-8),
+      var(--shadow-raised);
+    border-radius: var(--radius-sm);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
+    color: var(--ink-strong);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .browse:disabled {
     animation: none;
   }
 </style>

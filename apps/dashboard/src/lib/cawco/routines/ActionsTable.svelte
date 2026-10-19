@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { ApprovedActionView } from "@cawco/core";
+  import { type ApprovedActionView, routinesWords as words } from "@cawco/core";
   import type { Status } from "./RunStatus.svelte";
 
   /**
@@ -20,23 +20,31 @@
     const ended = action.endedAt ?? action.createdAt;
     switch (action.state) {
       case "proposed":
-        return { status: "waiting", word: "Waiting on you", at: null };
+        return { status: "waiting", word: words.actionWaiting, at: null };
       case "approved":
-        return { status: "done", word: "Approved", at: action.approvedAt };
+        return {
+          status: "done",
+          word: words.actionApproved,
+          at: action.approvedAt,
+        };
       case "running":
-        return { status: "running", word: "Running", at: action.startedAt };
+        return {
+          status: "running",
+          word: words.actionRunning,
+          at: action.startedAt,
+        };
       case "done":
-        return { status: "done", word: "Ran", at: ended };
+        return { status: "done", word: words.actionRan, at: ended };
       case "failed":
-        return { status: "failed", word: "Failed", at: ended };
+        return { status: "failed", word: words.actionFailed, at: ended };
       case "unknown":
-        return { status: "waiting", word: "Outcome unknown", at: ended };
+        return { status: "waiting", word: words.actionUnknown, at: ended };
       case "denied":
-        return { status: "neutral", word: "Denied", at: ended };
+        return { status: "neutral", word: words.actionDenied, at: ended };
       case "cancelled":
         break;
     }
-    return { status: "neutral", word: "Cancelled", at: ended };
+    return { status: "neutral", word: words.actionCancelled, at: ended };
   }
 </script>
 
@@ -91,29 +99,21 @@
     spacing="flush"
   >
     <Table.Header>
-      <Table.Row variant="band">
-        <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head
-          class="h-c-toolbar-ctl w-(--lead-w)"
-          scope="col"
-          variant="caps"><span class="sr-only">Service</span></Table.Head
+      <Table.Row class="band border-0">
+        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+        <Table.Head class="col-mark" scope="col"
+          ><span class="sr-only">{words.columnService}</span></Table.Head
         >
-        <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
-          >Action</Table.Head
+        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+        <Table.Head class="col-action" scope="col"
+          >{words.columnAction}</Table.Head
         >
-        <Table.Head
-          data-slot="actions-table-col-status"
-          class="h-c-toolbar-ctl w-c-routine-time-w"
-          scope="col"
-          variant="caps">Status</Table.Head
+        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+        <Table.Head class="col-status" scope="col"
+          >{words.columnStatus}</Table.Head
         >
-        <Table.Head
-          data-slot="actions-table-col-when"
-          class="h-c-toolbar-ctl w-(--when-w)"
-          scope="col"
-          variant="caps">When</Table.Head
-        >
-        <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
+        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+        <Table.Head class="col-when" scope="col">{words.columnWhen}</Table.Head>
       </Table.Row>
     </Table.Header>
     <Table.Body>
@@ -147,11 +147,7 @@
               title="{action.service} · {action.tool}">{action.reason}</span
             >
             {#if from}
-              <span
-                data-slot="from"
-                class="block truncate type-meta text-ink-muted"
-                >From {from}</span
-              >
+              <span data-slot="from" class="from">{words.from(from)}</span>
             {/if}
           </Table.Cell>
           <Table.Cell

@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/cawco/config/ConfigRail.svelte
+apps/dashboard/src/lib/cawco/config/EditorFooter.svelte
+apps/dashboard/src/lib/cawco/config/EditorFrame.svelte
+apps/dashboard/src/lib/cawco/config/EditorSection.svelte
+apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte
+apps/dashboard/src/lib/cawco/config/Field.svelte
+apps/dashboard/src/lib/cawco/config/LinkMarketplacePopover.svelte
+apps/dashboard/src/lib/cawco/config/McpSignIn.svelte
+
+# apps/dashboard/src/lib/cawco/config/ConfigRail.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×2; relic: style-var ×8; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/config/EditorFooter.svelte: relic: literal ×1; relic: style-var ×5
+# apps/dashboard/src/lib/cawco/config/EditorFrame.svelte: relic: literal ×1; relic: style-var ×3; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/config/EditorSection.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/config/FetchSkillPopover.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×1; lint: shadcn/no-unknown-classes ×2
+# apps/dashboard/src/lib/cawco/config/Field.svelte: relic: literal ×1; relic: style-var ×2
+# apps/dashboard/src/lib/cawco/config/LinkMarketplacePopover.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; lint: shadcn/no-unknown-classes ×1
+# apps/dashboard/src/lib/cawco/config/McpSignIn.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; lint: shadcn/no-unknown-classes ×1

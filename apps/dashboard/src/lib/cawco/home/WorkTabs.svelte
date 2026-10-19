@@ -794,8 +794,9 @@
             {@const count = topOf(tab.id).length}
             <TabItem label={tab.label} value={tab.id}>
               {#snippet trail()}
-                <!-- No count until it is read: a 0 here would be a claim. -->
-                {#if !waiting}
+                <!-- No count until it is read, and only above 0 (DESIGN.md,
+                     The Earned Count Rule). -->
+                {#if !waiting && count > 0}
                   {#key count}
                     <!-- The count is the kit's badge in its tab's status
                          pair (DESIGN.md, Badge), its numeral meta in tabular

@@ -24,7 +24,31 @@
  *     transcript asks under that rail row, pends, and deletes the session;
  * (m) the gone machine's keychain unlock opens under its row, the hub's
  *     refusal of the password said in it; the hub's refusal of an install
- *     stands under the same row with Try again; nothing presented.
+ *     stands under the same row with Try again; nothing presented;
+ *
+ * and, from the app alone before it waits on the fleet:
+ *
+ * (h) the artifact panel's head for a component canvas whose page holds
+ *     picks, at 330, 390, 523 and 720pt head widths (PreviewController
+ *     `placeHeadItems`, the web's side/head.ts `standing()`): every control
+ *     the panel wants stands or is in More, once; each slot 44×44 at least,
+ *     inside the head, in head order, the canvas view between Open in new
+ *     tab and Inspect; a wider head holds every control a narrower one does;
+ *     the mode is its pick only where its segments have no room left; More
+ *     holds the canvas view as its "Canvas view" submenu. Every 1pt from 300
+ *     to 800, at 0 open pins and at 2: each width lays out the same frame
+ *     after frame; at 0 More keeps its plain width; with pins open, a fit
+ *     that leaves Comments in More is fitted again with More's count, and a
+ *     width where that changes what stands is read;
+ * (v) that canvas's view (CanvasView.svelte): its button, its menu's
+ *     entries, and for each entry pressed, and on the page's ready, the
+ *     `cawco:canvas-view` message the app hands the page, as the web posts
+ *     it; the choice kept for the session;
+ * (w) eb42f1374: the round Caw button's rim on its 36pt glass, radius 15pt,
+ *     its stroke's outer edge one hairline inside the glass's own; Caw's
+ *     panel's section rule brand-solid, alpha 1, in light and dark; the
+ *     web's 111bec1fb: the phone's 32pt standing glass's outline the same
+ *     hairline in, half height 13pt on its path.
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-parity
@@ -68,6 +92,132 @@ const INSTALL_REFUSED = /fault\('.*nothing was installed.*' \+ Try again\)/;
 const GHOST = "parity-ghost";
 /** The compact log's head, up to the `[subsystem:category] ` tag: the probe's own lines carry `[id]` tags. */
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
+
+/** (h) The head widths ParityProbe lays the panel out at. */
+const HEAD_WIDTHS = [330, 390, 523, 720];
+/** The head's order after the name (PreviewController `HeadItem`), More and Close last. */
+const HEAD_ORDER = [
+  "send",
+  "newCanvas",
+  "undock",
+  "openTab",
+  "view",
+  "inspect",
+  "mode",
+  "modePick",
+  "comments",
+  "reload",
+  "expand",
+  "more",
+  "close",
+];
+/** What a component canvas's panel beside a transcript wants, its page holding picks. */
+const WANTED = [
+  "send",
+  "newCanvas",
+  "openTab",
+  "view",
+  "inspect",
+  "mode",
+  "comments",
+  "reload",
+  "expand",
+];
+const STANDING =
+  /width=(\d+) name=(\d+) left=(-?\d+) segments=(\d+) open=(\d+) first=(\S+) shown=(.*) more=(\S+)$/;
+/** (h) A sweep's line: the widths whose layout moved between frames, those More's count changed, and where a wider head lost a control. */
+const SWEEP = /widths=300-800 unsettled=(\S+) recount=(\S+) drops=(\S+)$/;
+/** (h) The first width at which More's count changed what stands. */
+const RECOUNT_LINE = /head standing \[(\d+) open 2\] /;
+const SLOT = /^(\w+):(\w+)@(-?\d+),(-?\d+),(\d+)x(\d+)$/;
+/** (w) A `caw rule` line's fill and brand-solid, each as `#rrggbb a=N`. */
+const RULE_FILL = /fill=(#[0-9a-f]{6} a=[\d.]+)/;
+const RULE_BRAND = /brand-solid=(#[0-9a-f]{6} a=[\d.]+)/;
+
+interface Slot {
+  form: string;
+  height: number;
+  key: string;
+  width: number;
+  x: number;
+}
+
+/** A `head standing` line's parts. */
+function standingOf(said: string) {
+  const parts = STANDING.exec(said);
+  if (!parts) {
+    return;
+  }
+  const slots: Slot[] = (parts[7] ?? "")
+    .split(" ")
+    .map((one) => SLOT.exec(one))
+    .filter((one): one is RegExpExecArray => one !== null)
+    .map((one) => ({
+      key: one[1] ?? "",
+      form: one[2] ?? "",
+      x: Number(one[3]),
+      width: Number(one[5]),
+      height: Number(one[6]),
+    }));
+  return {
+    head: Number(parts[1]),
+    left: Number(parts[3]),
+    segments: Number(parts[4]),
+    open: Number(parts[5]),
+    first: parts[6] === "-" ? undefined : (parts[6] ?? "").split(","),
+    slots,
+    more: parts[8] === "-" ? [] : (parts[8] ?? "").split(","),
+  };
+}
+
+/** (v) The canvas view's entries, in its menu's order, and what each does to the view. */
+interface View {
+  motion: "on" | "reduce";
+  scheme: string;
+  width: string;
+}
+const CHOICES: [string, (view: View) => View, ("fit" | 1)?][] = [
+  ["As the page", (v) => ({ ...v, scheme: "page" })],
+  ["Light", (v) => ({ ...v, scheme: "light" })],
+  ["Dark", (v) => ({ ...v, scheme: "dark" })],
+  ["Light and dark", (v) => ({ ...v, scheme: "both" })],
+  ["Each story's own", (v) => ({ ...v, width: "own" })],
+  ["Phone, 390", (v) => ({ ...v, width: "390" })],
+  ["Tablet, 768", (v) => ({ ...v, width: "768" })],
+  ["Desk, 1280", (v) => ({ ...v, width: "1280" })],
+  ["Every width", (v) => ({ ...v, width: "all" })],
+  [
+    "Reduced motion",
+    (v) => ({ ...v, motion: v.motion === "on" ? "reduce" : "on" }),
+  ],
+  ["Zoom to fit", (v) => v, "fit"],
+  ["Zoom to 100%", (v) => v, 1],
+  [
+    "Reduced motion",
+    (v) => ({ ...v, motion: v.motion === "on" ? "reduce" : "on" }),
+  ],
+];
+const VIEW_MENU =
+  "Scheme[As the page*, Light, Dark, Light and dark] | Width[Each story's own*, Phone, 390, Tablet, 768, Desk, 1280, Every width] | Reduced motion | Zoom to fit, Zoom to 100%";
+const VIEW_MENU_CHOSEN =
+  "Scheme[As the page, Light, Dark, Light and dark*] | Width[Each story's own, Phone, 390, Tablet, 768, Desk, 1280, Every width*] | Reduced motion | Zoom to fit, Zoom to 100%";
+
+/** CanvasView.svelte's `send`: the message as the web posts it, its keys sorted as the app's log writes them. */
+function posted(view: View, zoom?: "fit" | 1): string {
+  return JSON.stringify({
+    type: "cawco:canvas-view",
+    view: {
+      all: view.width === "all",
+      motion: view.motion,
+      scheme: view.scheme,
+      widths:
+        view.width === "own" || view.width === "all"
+          ? null
+          : [Number(view.width)],
+      ...(zoom === undefined ? {} : { zoom }),
+    },
+  });
+}
 
 interface Pushed {
   payload: {
@@ -123,6 +273,216 @@ const respond = (request: Seen): Reply => {
   }
   return text("ok");
 };
+
+/** (h), (v) and (w): the app's own lines, logged before it waits on the fleet. */
+function appLegs(kit: Kit, tag: string, heard: string[]): void {
+  const find = (start: string) =>
+    heard.find((one) => one.includes(start)) ?? "";
+  const after = (said: string, start: string) =>
+    said.slice(said.indexOf(start) + start.length);
+
+  // (h) The head at each width.
+  let narrower: { set: Set<string>; width: number } | undefined;
+  for (const width of HEAD_WIDTHS) {
+    const said = find(`head standing [${width}] `);
+    const stood = standingOf(said);
+    if (!stood) {
+      kit.check(`${tag}: h ${width}: the head's standing line`, false, said);
+      continue;
+    }
+    const shown = stood.slots.map((slot) => slot.key);
+    const controls = shown
+      .filter((key) => key !== "more" && key !== "close")
+      .map((key) => (key === "modePick" ? "mode" : key));
+    const every = [...controls, ...stood.more].sort();
+    const order = shown.map((key) => HEAD_ORDER.indexOf(key));
+    const mode = stood.slots.find(
+      (slot) => slot.key === "mode" || slot.key === "modePick"
+    );
+    const reach = Math.max(...stood.slots.map((slot) => slot.x + slot.width));
+    kit.check(
+      `${tag}: h ${width}: every control stands or is in More, once, each slot 44x44 or more inside the head, in head order, Close last, More standing only while it holds some`,
+      stood.head === width &&
+        JSON.stringify(every) === JSON.stringify([...WANTED].sort()) &&
+        stood.slots.every((slot) => slot.width >= 44 && slot.height >= 44) &&
+        reach <= width &&
+        order.every(
+          (at, index) =>
+            at >= 0 && (index === 0 || at > (order[index - 1] ?? -1))
+        ) &&
+        shown.at(-1) === "close" &&
+        shown.includes("more") === stood.more.length > 0,
+      after(said, `head standing [${width}] `)
+    );
+    kit.check(
+      `${tag}: h ${width}: the mode is its pick only where its segments have no room left`,
+      mode !== undefined &&
+        (mode.key === "modePick"
+          ? stood.left < stood.segments
+          : stood.left >= 0),
+      `mode=${mode?.form ?? "none"} left=${stood.left} segments=${stood.segments}`
+    );
+    if (stood.more.includes("view")) {
+      const menu = find(`head more menu [${width}] `);
+      kit.check(
+        `${tag}: h ${width}: More holds the canvas view as its submenu`,
+        menu.includes(`Canvas view[${VIEW_MENU.replaceAll(" | ", ", ")}]`),
+        after(menu, `head more menu [${width}] `)
+      );
+    }
+    const set = new Set(controls);
+    if (narrower) {
+      const lost = [...narrower.set].filter((key) => !set.has(key));
+      kit.check(
+        `${tag}: h ${width}: it holds every control the ${narrower.width}pt head does`,
+        lost.length === 0,
+        lost.length ? `lost ${lost.join(",")}` : [...set].join(",")
+      );
+    }
+    narrower = { set, width };
+  }
+
+  // (h) More's count: every 1pt from 300 to 800, at 0 open pins and at 2.
+  for (const open of [0, 2]) {
+    const said = find(`head sweep [open ${open}] `);
+    const sweep = SWEEP.exec(said);
+    kit.check(
+      `${tag}: h sweep ${open} open: every width lays out the same frame after frame${open === 0 ? ", and More keeps its plain width (no second fit)" : ""}`,
+      sweep?.[1] === "none" && (open > 0 || sweep?.[2] === "none"),
+      after(said, `head sweep [open ${open}] `)
+    );
+  }
+  const recount = heard.find((one) => RECOUNT_LINE.test(one)) ?? "";
+  const counted = standingOf(recount);
+  const stoodKeys = (counted?.slots ?? [])
+    .map((slot) => (slot.key === "modePick" ? "mode" : slot.key))
+    .filter((key) => key !== "more" && key !== "close");
+  const firstKeys = (counted?.first ?? []).map((key) =>
+    key === "modePick" ? "mode" : key
+  );
+  kit.check(
+    `${tag}: h: with pins open, a width where More's count changes what stands: Comments in More, its count's room taken from a control the first fit stood`,
+    counted !== undefined &&
+      counted.open === 2 &&
+      counted.more.includes("comments") &&
+      firstKeys.some((key) => !stoodKeys.includes(key)),
+    recount
+      ? `${recount.slice(recount.indexOf("head standing"))}`
+      : "no width found"
+  );
+
+  // (v) The canvas view.
+  const button = find("canvas view button [head] ");
+  kit.check(
+    `${tag}: v: the canvas view is the head's ghost, Canvas view, layers, its menu its primary action`,
+    button.includes("label=Canvas view glyph=layers-bold-duotone menu=primary"),
+    after(button, "canvas view button [head] ")
+  );
+  const fresh = after(
+    find("canvas view menu [fresh] "),
+    "canvas view menu [fresh] "
+  );
+  kit.check(
+    `${tag}: v: its entries, as the web's: Scheme, Width, Reduced motion, the zooms; the session's first view checked`,
+    fresh === VIEW_MENU,
+    fresh
+  );
+  let view: View = { scheme: "page", width: "own", motion: "on" };
+  // Reduced motion is pressed twice: its first line, then its second.
+  let motions = 0;
+  for (const [words, next, zoom] of CHOICES) {
+    view = next(view);
+    const want = posted(view, zoom);
+    const said = heard
+      .filter((one) => one.includes(`canvas view chose [${words}] sent=`))
+      .at(words === "Reduced motion" ? motions : 0);
+    if (words === "Reduced motion") {
+      motions += 1;
+    }
+    const sent = said ? after(said, `canvas view chose [${words}] sent=`) : "";
+    kit.check(
+      `${tag}: v: ${words} hands the page the web's message`,
+      sent === want,
+      sent === want ? sent : `${sent || "nothing"}  (want ${want})`
+    );
+  }
+  const chosen = after(
+    find("canvas view menu [chosen] "),
+    "canvas view menu [chosen] "
+  );
+  kit.check(
+    `${tag}: v: the menu checks what was chosen`,
+    chosen === VIEW_MENU_CHOSEN,
+    chosen
+  );
+  const kept = after(
+    find("canvas view kept [session] "),
+    "canvas view kept [session] "
+  );
+  let keptView: Record<string, unknown> = {};
+  try {
+    keptView = JSON.parse(kept) as Record<string, unknown>;
+  } catch {
+    // Unreadable: the check below says so.
+  }
+  kit.check(
+    `${tag}: v: the view is kept for the session under cawco-canvas-view:<session>, as the web stores it`,
+    Object.keys(keptView).sort().join(",") === "motion,scheme,width" &&
+      keptView.scheme === view.scheme &&
+      keptView.width === view.width &&
+      keptView.motion === view.motion,
+    kept
+  );
+  const ready = after(
+    find("canvas view ready [page] "),
+    "canvas view ready [page] sent="
+  );
+  kit.check(
+    `${tag}: v: the page's ready hands it the kept view once`,
+    ready === posted(view),
+    ready
+  );
+
+  // (w) eb42f1374.
+  const rim = find("caw rim [round] ");
+  kit.check(
+    `${tag}: w: the round Caw rim on its 36pt glass, radius 15pt, its stroke one hairline inside the glass's own`,
+    [
+      "glass=36.0x36.0",
+      "path=3.0,3.0,30.0x30.0",
+      "radius=15.0",
+      "inset=3.0",
+      "strokeOuter=2.0",
+      "glassEdge=1.0",
+    ].every((part) => rim.includes(part)),
+    after(rim, "caw rim [round] ")
+  );
+  // The web's 111bec1fb: the phone's 32pt glass's outline the same hairline
+  // in, NeedsCaw.svelte `STAND = STAND_BOX / 2 - 2 * GLASS_EDGE - RIM_STROKE / 2`.
+  const stand = find("caw rim [standing] ");
+  kit.check(
+    `${tag}: w: the phone's standing Caw outline on its 32pt glass, half height 13pt on its path (14pt at the stroke's outer edge), one hairline inside the glass's own`,
+    [
+      "glass=32.0x32.0",
+      "half=13.0",
+      "halfOuter=14.0",
+      "inset=3.0",
+      "strokeOuter=2.0",
+      "glassEdge=1.0",
+    ].every((part) => stand.includes(part)),
+    after(stand, "caw rim [standing] ")
+  );
+  for (const scheme of ["light", "dark"]) {
+    const rule = find(`caw rule [${scheme}] `);
+    const fill = RULE_FILL.exec(rule)?.[1];
+    const brand = RULE_BRAND.exec(rule)?.[1];
+    kit.check(
+      `${tag}: w: Caw's panel's section rule is brand-solid, alpha 1, ${scheme}`,
+      fill !== undefined && fill === brand && fill.endsWith("a=1.00"),
+      after(rule, `caw rule [${scheme}] `)
+    );
+  }
+}
 
 async function sh(script: string): Promise<string> {
   const child = Bun.spawn(["bash", "-s"], {
@@ -458,6 +818,8 @@ async function run(kit: Kit): Promise<void> {
       };
       const free = "over the page: none";
       const p = ask.instanceId;
+
+      appLegs(kit, tag, heard);
 
       expect(
         "a: the push's fields route to the session that made the proposal",

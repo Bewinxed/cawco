@@ -47,6 +47,7 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
+import type { HubLifetimeShape } from "./lifetime";
 import { firstLine, runTailscale } from "./tailscale-cli";
 
 /** How often the hub reads Tailscale's state and certificate again, for a renewal or a change. Our choice. */
@@ -144,11 +145,14 @@ export interface TailnetHttpsDeps {
   readonly bin?: string;
   /** The dashboard's port: its TLS listener relays to the dashboard there on loopback. */
   dashboardPort: number;
+  /** The hub's lifetime: the next check runs on it. */
+  lifetime: HubLifetimeShape;
 }
 
 export const createTailnetHttps = ({
   bin = "tailscale",
   dashboardPort,
+  lifetime,
 }: TailnetHttpsDeps) => {
   const run = (args: string[]) => runTailscale(bin, args, CALL_MS);
   let state: TailnetHttps = { state: "absent", host };
@@ -457,11 +461,10 @@ export const createTailnetHttps = ({
       const tick = (): void => {
         detach(
           checkOnce().finally(() => {
-            // Never what keeps a process up: the hub's listeners do that.
-            setTimeout(
-              tick,
-              state.state === "needs" ? NEEDS_CHECK_MS : CHECK_MS
-            ).unref();
+            lifetime.after(
+              state.state === "needs" ? NEEDS_CHECK_MS : CHECK_MS,
+              tick
+            );
           }),
           "tailnet check"
         );

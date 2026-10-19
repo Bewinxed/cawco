@@ -135,7 +135,7 @@ const unsafeWords = (root: ElementNode | null): string[] => {
   return found;
 };
 
-/** A decision's own id and its options': lowercase, each its own. */
+/** A decision's own id and its options': lowercase, each its own; each option with its cost, and one recommended with its why. */
 const cardProblems = (
   card: ProgramRead["cards"][number],
   seen: Set<string>
@@ -168,6 +168,26 @@ const cardProblems = (
       );
     }
     options.add(option.id);
+    if (!option.cost.trim()) {
+      problems.push(
+        `Decision "${card.id}", option "${option.id}" has no cost: say what picking it costs them, in one line.`
+      );
+    }
+  }
+  // The interview's shape: exactly one recommended, and why it, on every card (multiple ones too).
+  const recommended = card.options.filter((option) => option.recommended);
+  if (recommended.length === 0) {
+    problems.push(
+      `Decision "${card.id}" recommends nothing: mark exactly one option recommended, and say why in the decision's why.`
+    );
+  } else if (recommended.length > 1) {
+    problems.push(
+      `Decision "${card.id}" recommends ${recommended.length} options: mark exactly one.`
+    );
+  } else if (!card.why.trim()) {
+    problems.push(
+      `Decision "${card.id}" has no why: one sentence on why its recommended option.`
+    );
   }
   return problems;
 };

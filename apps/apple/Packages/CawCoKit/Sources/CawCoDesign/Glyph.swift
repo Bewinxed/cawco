@@ -110,6 +110,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     // The new-session dialog (spawn/*.svelte).
     case chatRound = "chat-round-line-bold-duotone"
     case folderOpen = "folder-open-bold-duotone"
+    /// Clone a repository (LocationSection.svelte, LocationChip.svelte).
+    case folderGit = "folder-git-bold-duotone"
     case database = "database-bold-duotone"
     case tuning = "tuning-2-bold-duotone"
     case notes = "notes-bold-duotone"
@@ -165,6 +167,16 @@ public enum Glyph: String, CaseIterable, Sendable {
     // The task sheet's result kinds (tasks/ResultView.svelte).
     case dataLayers = "layers-bold-duotone" // IconLayers
     case fileTable = "clipboard-list-bold-duotone" // IconFileTable
+    // A project's pages (ViewRoutines.svelte, Block.svelte, StarterCards.svelte).
+    case hourglass = "hourglass-bold-duotone" // IconHourglass
+    case arrowDownLine = "arrow-down-linear" // IconArrowDown
+    case calendar = "calendar-bold-duotone" // IconCalendar
+    case columns = "widget-2-bold-duotone" // IconColumns
+    case rulerPen = "ruler-cross-pen-bold-duotone" // IconRulerPen
+    case mic = "microphone-bold-duotone" // IconMic
+    case minusCircle = "minus-circle-bold-duotone" // IconMinusCircle
+    case shop = "shop-bold-duotone" // IconShop
+    case history = "history-bold-duotone" // IconHistory
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)
@@ -224,11 +236,14 @@ public enum BrandLogo: String, Sendable {
     case kimi = "logo-kimi"
     case vercel = "logo-vercel"
     case xiaomi = "logo-xiaomi"
+    case linear = "logo-linear"
+    case slack = "logo-slack"
+    case gmail = "logo-gmail"
 
     /// ProviderLogo.svelte's `INK` and accounts/marks.ts: upstream these carry
     /// a fixed dark fill that vanishes on the dark theme, or no colour of
     /// their own; they follow the ink, as glyphs do.
-    public var inked: Bool { [.openai, .github, .grok, .moonshot, .copilot, .openrouter, .bedrock, .vercel].contains(self) }
+    public var inked: Bool { [.openai, .github, .grok, .moonshot, .copilot, .openrouter, .bedrock, .vercel, .linear].contains(self) }
 
     /// An account provider's mark (accounts/marks.ts `SOURCES`), by the
     /// account's provider id (pi-ai's, or OpenCode's own); nil when nobody
@@ -273,9 +288,15 @@ public enum BrandLogo: String, Sendable {
         return image.withRenderingMode(inked ? .alwaysTemplate : .alwaysOriginal)
     }
 
-    /// ProviderLogo.svelte's LOGOS, by the lab `providerOf` names.
+    /// ProviderLogo.svelte's LOGOS, by the lab `providerOf` names, or a
+    /// service named outright (a routine's source, an approved action's);
+    /// nil for one nobody draws, which then shows no mark.
     public static func provider(_ lab: String?) -> BrandLogo? {
         switch lab {
+        case "github": .github
+        case "linear": .linear
+        case "slack": .slack
+        case "gmail": .gmail
         case "anthropic": .claude
         case "openai": .openai
         case "deepseek": .deepseek

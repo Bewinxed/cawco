@@ -7,6 +7,7 @@
  */
 
 import { EFFORT_LEVELS, type EffortLevel, type HarnessKind } from "./harness";
+import { delegateTypesWords } from "./words/delegate-types";
 
 /** One named preset. `name` is the key a `delegate` call's `type` asks for. */
 export interface DelegateType {
@@ -89,18 +90,18 @@ export const delegateTypeProblem = (
   draft: Partial<DelegateType>
 ): string | undefined => {
   if (!(draft.name && DELEGATE_TYPE_NAME.test(draft.name))) {
-    return "a delegate type needs a name: lowercase letters, digits and hyphens only";
+    return delegateTypesWords.problemName;
   }
   if (!draft.description?.trim()) {
-    return "a delegate type needs a description — it is the whole of how the calling model routes to it";
+    return delegateTypesWords.problemDescription;
   }
   if (!(
     draft.harness && ["claude", "opencode", "pi"].includes(draft.harness)
   )) {
-    return `“${draft.harness}” is not a harness a delegate type can run on`;
+    return delegateTypesWords.problemHarness(String(draft.harness));
   }
   if (!draft.model?.trim()) {
-    return "a delegate type needs a model";
+    return delegateTypesWords.problemModel;
   }
   if (draft.effort && !EFFORT_LEVELS.includes(draft.effort)) {
     return `“${draft.effort}” is not an effort level`;

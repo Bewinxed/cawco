@@ -21,6 +21,27 @@ public struct HubAPI: Sendable {
     public var push: Push { Push(client: client) }
     public var updates: Updates { Updates(client: client) }
     public var pairings: Pairings { Pairings(client: client) }
+    public var spend: Spend { Spend(client: client) }
+    public var connections: Connections { Connections(client: client) }
+
+    /// Configure › Connections (routes/config/connections): the outside services the hub holds a key for.
+    public struct Connections: Sendable {
+        let client: Client
+        public func list(_ input: Operations.GetApiConnections.Input = .init()) async throws -> Operations.GetApiConnections.Output { try await client.getApiConnections(input) }
+        public func create(_ input: Operations.PostApiConnections.Input) async throws -> Operations.PostApiConnections.Output { try await client.postApiConnections(input) }
+        public func update(_ input: Operations.PatchApiConnectionsByName.Input) async throws -> Operations.PatchApiConnectionsByName.Output { try await client.patchApiConnectionsByName(input) }
+        public func remove(_ input: Operations.DeleteApiConnectionsByName.Input) async throws -> Operations.DeleteApiConnectionsByName.Output { try await client.deleteApiConnectionsByName(input) }
+        public func setKey(_ input: Operations.PutApiConnectionsByNameKey.Input) async throws -> Operations.PutApiConnectionsByNameKey.Output { try await client.putApiConnectionsByNameKey(input) }
+        public func signIn(_ input: Operations.PostApiConnectionsByNameSignIn.Input) async throws -> Operations.PostApiConnectionsByNameSignIn.Output { try await client.postApiConnectionsByNameSignIn(input) }
+        public func setApp(_ input: Operations.PutApiConnectionsByNameApp.Input) async throws -> Operations.PutApiConnectionsByNameApp.Output { try await client.putApiConnectionsByNameApp(input) }
+    }
+
+    /// Configure › Spend (routes/config/spend): what reaching a project's budget does where the project sets nothing of its own.
+    public struct Spend: Sendable {
+        let client: Client
+        public func settings(_ input: Operations.GetApiSpendSettings.Input = .init()) async throws -> Operations.GetApiSpendSettings.Output { try await client.getApiSpendSettings(input) }
+        public func save(_ input: Operations.PutApiSpendSettings.Input) async throws -> Operations.PutApiSpendSettings.Output { try await client.putApiSpendSettings(input) }
+    }
 
     /// A hub that requires paired devices (hub-auth.svelte.ts): what this app
     /// is to it, its own pairing (RFC 8628's ask and poll), and the person's
@@ -155,6 +176,11 @@ public struct HubAPI: Sendable {
         public func deleteSkill(_ input: Operations.DeleteApiFleetSkillsByName.Input) async throws -> Operations.DeleteApiFleetSkillsByName.Output { try await client.deleteApiFleetSkillsByName(input) }
         public func refreshSkill(_ input: Operations.PostApiFleetSkillsByNameRefresh.Input) async throws -> Operations.PostApiFleetSkillsByNameRefresh.Output { try await client.postApiFleetSkillsByNameRefresh(input) }
         public func pushSkill(_ input: Operations.PostApiFleetSkillsByNamePush.Input) async throws -> Operations.PostApiFleetSkillsByNamePush.Output { try await client.postApiFleetSkillsByNamePush(input) }
+        public func switchSkill(_ input: Operations.PatchApiFleetSkillsByName.Input) async throws -> Operations.PatchApiFleetSkillsByName.Output { try await client.patchApiFleetSkillsByName(input) }
+        public func switchPlugin(_ input: Operations.PatchApiFleetPluginsById.Input) async throws -> Operations.PatchApiFleetPluginsById.Output { try await client.patchApiFleetPluginsById(input) }
+        public func skillHistory(_ input: Operations.GetApiFleetSkillsHistory.Input) async throws -> Operations.GetApiFleetSkillsHistory.Output { try await client.getApiFleetSkillsHistory(input) }
+        public func restoreSkill(_ input: Operations.PostApiFleetSkillsRestore.Input) async throws -> Operations.PostApiFleetSkillsRestore.Output { try await client.postApiFleetSkillsRestore(input) }
+        public func readMarketplace(_ input: Operations.GetApiFleetMarketplaceRead.Input) async throws -> Operations.GetApiFleetMarketplaceRead.Output { try await client.getApiFleetMarketplaceRead(input) }
         public func putAgent(_ input: Operations.PutApiFleetAgentsByName.Input) async throws -> Operations.PutApiFleetAgentsByName.Output { try await client.putApiFleetAgentsByName(input) }
         public func deleteAgent(_ input: Operations.DeleteApiFleetAgentsByName.Input) async throws -> Operations.DeleteApiFleetAgentsByName.Output { try await client.deleteApiFleetAgentsByName(input) }
         public func pushAgents(_ input: Operations.PostApiFleetAgentsPush.Input) async throws -> Operations.PostApiFleetAgentsPush.Output { try await client.postApiFleetAgentsPush(input) }

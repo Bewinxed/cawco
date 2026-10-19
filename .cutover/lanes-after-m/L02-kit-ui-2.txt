@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-sub-content.svelte
+apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-trigger.svelte
+apps/dashboard/src/lib/components/ui/empty/empty-state.svelte
+apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte
+apps/dashboard/src/lib/components/ui/fluid-tabs/TabsList.svelte
+apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte
+apps/dashboard/src/lib/components/ui/input-group/input-group-button.svelte
+apps/dashboard/src/lib/components/ui/input-group/input-group-input.svelte
+
+# apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-sub-content.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-trigger.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/empty/empty-state.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×2; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/components/ui/fluid-tabs/TabsList.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte: relic: literal ×1
+# apps/dashboard/src/lib/components/ui/input-group/input-group-button.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/input-group/input-group-input.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here

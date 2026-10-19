@@ -1,20 +1,23 @@
 /**
- * A guarded workspace's door to GitHub's API (core upstream-guard.ts): the
- * one place its `gh` reaches GitHub through, on the host, so no GitHub token
- * ever enters its boundary.
+ * A workspace's door to GitHub's API (core upstream-guard.ts): the one place
+ * its `gh` reaches GitHub through, on the host, so no GitHub token ever
+ * enters its boundary, whatever the project's upstream rule.
  *
- * A guarded workspace's commands run with a gh config dir of their own
- * (boundary.ts `guardedEnv`), whose `http_unix_socket` names this door and
+ * Every workspace's commands run with a gh config dir of their own
+ * (boundary.ts `commandEnv`), whose `http_unix_socket` names this door and
  * whose login is a placeholder. gh then sends every request over the socket
  * in the clear: go-gh reads `http_unix_socket` from gh's config when no
  * socket is passed (pkg/api/client_options.go `resolveOptions`), and dials
  * the socket for TLS too (`DialTLSContext: dial`, pkg/api/http_client.go).
- * The door reads each request as the guard reads an argv
- * (`upstreamHttpWrite`): a write against `/repos/<owner>/<repo>`, or a
- * GraphQL mutation, whose repository it names or whose node ids it resolves
- * here (`nodes(ids:)`), is refused unless it is the project's own. What it
- * lets through goes to GitHub with the host's own token in place of the
- * placeholder; a read too. It forwards to GitHub's hosts alone, never
+ * The door reads what each request writes (`upstreamHttpWrite`): a write
+ * against `/repos/<owner>/<repo>`, or a GraphQL mutation, whose repository it
+ * names or whose node ids it resolves here (`nodes(ids:)`), and the project's
+ * rule decides it as it decides every write (core `decideWrite`): the
+ * project's own goes, another's is held under "Ask me first" or refused, and
+ * under "Let agents post upstream" every write goes. What it lets through
+ * goes to GitHub with the host's own token in place of the placeholder; a
+ * read too. It forwards gh's requests as they came (it is gh's transport,
+ * not a client of its own), to GitHub's hosts alone, never
  * following a redirect itself, and signs in only to its API hosts.
  *
  * A process that speaks to the socket by hand is judged the same way: the
@@ -25,20 +28,16 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { workspaceDoorDir, workspaceUpstreamRuleFile } from "@cawco/core/paths";
 import {
-  askRefusal,
+  decideWrite,
   GITHUB_API,
-  ghPostProblem,
   type HttpWrite,
-  isGuarded,
-  otherWrite,
   owns,
   readUpstreamRule,
   type UpstreamRule,
   upstreamHttpWrite,
-  upstreamWrite,
-  writeRefusal,
 } from "@cawco/core/upstream-guard";
-import { type HttpPost, isUpstreamPost } from "@cawco/core/upstream-post";
+import type { HttpPost } from "@cawco/core/upstream-post";
+import { Octokit } from "@octokit/rest";
 import { hostGhToken } from "./host-gh";
 import { socketPlace } from "./tool-door";
 import { raiseUpstreamAsk } from "./upstream-posts";
@@ -97,31 +96,38 @@ const ACTORS: ReadonlySet<string> = new Set([
   "EnterpriseUserAccount",
 ]);
 
+/** GitHub's answer to {@link RESOLVE}. */
+interface ResolvedNodes {
+  nodes?: (ResolvedNode | null)[];
+}
+
 interface ResolvedNode {
   __typename?: string;
   nameWithOwner?: string;
   repository?: { nameWithOwner?: string };
 }
 
-/** The repositories `ids` belong to, `host/owner/repo`; `unknown` when the read failed, or a node is neither an actor nor any repository's. */
+/**
+ * The repositories `ids` belong to, `host/owner/repo`, read through
+ * Octokit's GraphQL client (`octokit.graphql`, github.com/octokit/graphql.js:
+ * "GitHub GraphQL API client for browsers and Node"); `unknown` when the read
+ * failed, or a node is neither an actor nor any repository's. GitHub answers
+ * an id it does not resolve as a null node beside an error, which Octokit
+ * throws with the data it came with (`GraphqlResponseError.data`): those
+ * nodes are read as any others.
+ */
 const resolveNodes = async (
   ids: readonly string[],
   token: string
 ): Promise<{ repos: string[]; unknown: boolean }> => {
-  const answer = await fetch("https://api.github.com/graphql", {
-    method: "POST",
-    headers: {
-      authorization: `token ${token}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ query: RESOLVE, variables: { ids } }),
-  });
-  const read = (await answer.json().catch(() => ({}))) as {
-    data?: { nodes?: (ResolvedNode | null)[] };
-    errors?: unknown[];
-  };
-  const nodes = read.data?.nodes;
-  if (!(answer.ok && Array.isArray(nodes)) || nodes.length !== ids.length) {
+  const nodes = await new Octokit({ auth: token, userAgent: "CawCo" })
+    .graphql<ResolvedNodes>(RESOLVE, { ids })
+    .then(
+      (read) => read.nodes,
+      (error: unknown) =>
+        (error as { data?: ResolvedNodes } | null)?.data?.nodes
+    );
+  if (!Array.isArray(nodes) || nodes.length !== ids.length) {
     return { repos: [], unknown: true };
   }
   const repos: string[] = [];
@@ -182,23 +188,19 @@ interface Asked {
 }
 
 /**
- * A guarded workspace's request that does not go ahead as it is: why, in
- * `off`'s words, and, for a write to another repository, the write and the
- * repository it lands in (none when the door cannot name it), which `ask`
- * holds for the person instead. None when it goes ahead.
+ * What a workspace's request writes, for the decision (core
+ * `decideWrite`): the write and the repository it lands in, or none when the
+ * door cannot name it; undefined when it writes nothing, or only to the
+ * project's own repository by node ids that all resolve there. `off-api` is
+ * a write to a GitHub host that is not its API, which names no repository:
+ * the door forwards it only where agents may post.
  */
-interface Verdict {
-  readonly refusal: string;
-  readonly repo?: string;
-  readonly write?: HttpWrite;
-}
-
-const judged = async (
+const writeOf = async (
   rule: UpstreamRule,
   request: Request,
   asked: Asked,
   token: string | undefined
-): Promise<Verdict | undefined> => {
+): Promise<HttpWrite | "off-api" | undefined> => {
   const write = upstreamHttpWrite({
     method: request.method,
     host: asked.host,
@@ -209,27 +211,19 @@ const judged = async (
     return;
   }
   if (!GITHUB_API.has(asked.host)) {
-    return {
-      refusal: `cawco: \`${write.what}\` did not run: a guarded workspace writes to GitHub through its API alone.`,
-    };
+    return "off-api";
   }
-  if (write.nodeIds) {
-    const target = await nodesTarget(rule, write, token ?? "");
-    return target.own
-      ? undefined
-      : {
-          write,
-          ...(target.repo ? { repo: target.repo } : {}),
-          refusal: writeRefusal(rule, {
-            what: write.what,
-            ...(target.repo ? { repo: target.repo } : {}),
-          }) as string,
-        };
+  if (!write.nodeIds) {
+    return write;
   }
-  const refusal = writeRefusal(rule, write);
-  return refusal
-    ? { write, ...(write.repo ? { repo: write.repo } : {}), refusal }
-    : undefined;
+  const target = await nodesTarget(rule, write, token ?? "");
+  if (target.own) {
+    return;
+  }
+  return {
+    what: write.what,
+    ...(target.repo ? { repo: target.repo } : {}),
+  };
 };
 
 /**
@@ -241,18 +235,9 @@ const hold = async (
   id: string,
   request: Request,
   asked: Asked,
-  verdict: Verdict
+  write: HttpWrite,
+  repo: string
 ): Promise<Response> => {
-  const what = verdict.write?.what ?? `${request.method} ${asked.host}`;
-  if (!verdict.repo || verdict.write?.unread) {
-    return refused(
-      asked.graphql,
-      askRefusal(
-        what,
-        "it names no repository the owner could be shown (a mutation acts on node ids it does not resolve)"
-      )
-    );
-  }
   const body =
     typeof asked.body === "string"
       ? asked.body
@@ -267,57 +252,11 @@ const hold = async (
     ...(body ? { body } : {}),
     ...(contentType ? { contentType } : {}),
   };
-  const raised = await raiseUpstreamAsk(id, post, verdict.repo, what);
+  const raised = await raiseUpstreamAsk(id, post, repo, write.what);
   console.warn(
     `[github-door] ${id}: held ${request.method} ${asked.host}${asked.url.pathname} for the owner`
   );
   return refused(asked.graphql, raised.text);
-};
-
-/** The shim's hand-over of a gh post under `ask` (upstream-shim.ts): judged again here, then raised as the person's ask. */
-const takeGhPost = async (id: string, request: Request): Promise<Response> => {
-  const rule = upstreamRule(id);
-  const said = (text: string, status: number) =>
-    new Response(`${text}\n`, { status });
-  const asked = (await request.json().catch(() => ({}))) as {
-    post?: unknown;
-    what?: unknown;
-  };
-  const { post } = asked;
-  const what = typeof asked.what === "string" ? asked.what : "gh";
-  if (rule?.posts !== "ask") {
-    return said(
-      `cawco: \`${what}\` did not run: this workspace no longer asks the owner first; run it again to go by its rule as it is now.`,
-      409
-    );
-  }
-  if (!(isUpstreamPost(post) && post.via === "gh")) {
-    return said(
-      `cawco: \`${what}\` did not run: no gh post was handed over.`,
-      400
-    );
-  }
-  const problem = ghPostProblem(post);
-  if (problem) {
-    return said(askRefusal(what, problem), 400);
-  }
-  const write = otherWrite(
-    rule,
-    upstreamWrite({
-      program: "gh",
-      args: post.args,
-      env: { GH_REPO: post.repo, GH_HOST: post.host },
-      cwdRemotes: () => [],
-    })
-  );
-  if (!write?.repo) {
-    return said(
-      `cawco: \`${what}\` did not run: it writes to no other repository, so there is nothing to ask the owner.`,
-      400
-    );
-  }
-  const raised = await raiseUpstreamAsk(id, post, write.repo, write.what);
-  return said(raised.text, raised.ok ? 200 : 502);
 };
 
 /** The request sent on to GitHub: the placeholder login dropped, the host's token on an API host, no redirect followed. */
@@ -360,13 +299,6 @@ const serve = async (id: string, request: Request): Promise<Response> => {
   const host = (request.headers.get("host") ?? url.host)
     .replace(PORT, "")
     .toLowerCase();
-  if (
-    host === "cawco" &&
-    request.method === "POST" &&
-    url.pathname === "/upstream/ask"
-  ) {
-    return await takeGhPost(id, request);
-  }
   if (!FORWARDED.test(host)) {
     return Response.json(
       {
@@ -386,20 +318,34 @@ const serve = async (id: string, request: Request): Promise<Response> => {
   };
   const token = await hostGhToken();
   const rule = upstreamRule(id);
-  const verdict =
-    rule && isGuarded(rule)
-      ? await judged(rule, request, asked, token)
-      : undefined;
-  if (rule?.posts === "ask" && verdict?.write) {
-    return await hold(id, request, asked, verdict);
+  // Every request is decided by the project's rule as every door decides
+  // (core decideWrite): under "Let agents post upstream" each write goes.
+  const write = rule ? await writeOf(rule, request, asked, token) : undefined;
+  const what = `${request.method} ${host}${url.pathname}`;
+  if (write === "off-api") {
+    return decideWrite(rule, { what }).kind === "go"
+      ? forward(request, asked, token)
+      : refused(
+          graphql,
+          `cawco: \`${what}\` did not run: a workspace kept off other people's repositories, or asking first, writes to GitHub through its API alone.`
+        );
   }
-  if (verdict) {
-    console.warn(
-      `[github-door] ${id}: refused ${request.method} ${host}${url.pathname}`
-    );
-    return refused(graphql, verdict.refusal);
+  const decision = write ? decideWrite(rule, write) : { kind: "go" as const };
+  switch (decision.kind) {
+    case "go":
+      return forward(request, asked, token);
+    case "hold":
+      return await hold(id, request, asked, write as HttpWrite, decision.repo);
+    case "refuse":
+      console.warn(
+        `[github-door] ${id}: refused ${request.method} ${host}${url.pathname}`
+      );
+      return refused(graphql, decision.why);
+    default: {
+      const unhandled: never = decision;
+      throw new Error(`unhandled decision: ${JSON.stringify(unhandled)}`);
+    }
   }
-  return forward(request, asked, token);
 };
 
 const doors = new Map<string, ReturnType<typeof Bun.serve>>();

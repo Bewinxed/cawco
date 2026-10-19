@@ -233,7 +233,13 @@ const run = async (kit: Kit) => {
     )) as string;
   };
 
-  const created = await call(CREATE, { kind: "page", name: NAME, html: PAGE });
+  const created = await call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: NAME,
+    html: PAGE,
+  });
   const id = created.match(ANSWERED_ID)?.[1];
   if (!id) {
     kit.check("the place page is made", false, created.slice(0, 400));

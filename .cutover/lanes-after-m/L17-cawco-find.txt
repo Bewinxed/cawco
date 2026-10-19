@@ -1,0 +1,13 @@
+apps/dashboard/src/lib/cawco/find/FindField.svelte
+apps/dashboard/src/lib/cawco/find/FindPeek.svelte
+apps/dashboard/src/lib/cawco/find/FindRow.svelte
+apps/dashboard/src/lib/cawco/find/Finder.svelte
+apps/dashboard/src/lib/cawco/find/MentionField.svelte
+apps/dashboard/src/lib/cawco/find/MentionMenu.svelte
+
+# apps/dashboard/src/lib/cawco/find/FindField.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/find/FindPeek.svelte: relic: literal ×1; relic: style-var ×4
+# apps/dashboard/src/lib/cawco/find/FindRow.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×2; relic: style-var ×10; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/find/Finder.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×24; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/find/MentionField.svelte: relic: literal ×2; relic: style-var ×10; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/find/MentionMenu.svelte: relic: literal ×1; relic: style-var ×5

@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/components/ui/input/input.svelte
+apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte
+apps/dashboard/src/lib/components/ui/markdown/markdown.svelte
+apps/dashboard/src/lib/components/ui/morph-text/morph-text.svelte
+apps/dashboard/src/lib/components/ui/native-select/native-select.svelte
+apps/dashboard/src/lib/components/ui/section-header/section-header.svelte
+apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte
+apps/dashboard/src/lib/components/ui/sidebar/sidebar-menu-badge.svelte
+
+# apps/dashboard/src/lib/components/ui/input/input.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte: relic: literal ×3; relic: style-var ×3
+# apps/dashboard/src/lib/components/ui/markdown/markdown.svelte: relic: style-reason ×1; relic: important ×3
+# apps/dashboard/src/lib/components/ui/morph-text/morph-text.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/components/ui/native-select/native-select.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/section-header/section-header.svelte: relic: literal ×2; relic: style-var ×2
+# apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/components/ui/sidebar/sidebar-menu-badge.svelte: relic: bang ×1

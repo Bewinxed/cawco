@@ -47,6 +47,8 @@ import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { darwinSocketRoot } from "@cawco/core/paths";
+import { hostEnvironment } from "@cawco/core/session-env";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -127,8 +129,6 @@ const controlDir = (): string => {
 };
 const controlPath = (id: string): string => join(controlDir(), id);
 
-/** What a machine's server says when it will not forward: `remote port forwarding failed for listen port 0`. */
-const REFUSED = /remote port forwarding failed for listen port/;
 const CARRIAGE_RETURN = /\r$/;
 const PORT_LINE = /^\d+$/;
 /** A listener's address as `ss` and `lsof` print it: its host, then `:<port>`. */
@@ -264,6 +264,7 @@ const control = async (
 ): Promise<Answer | null> => {
   const ran = await readWithin(CONTROL_MS, async (signal) => {
     const child = Bun.spawn(argv, {
+      env: hostEnvironment(),
       stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin),
       stdout: "pipe",
       stderr: "pipe",
@@ -322,7 +323,13 @@ const master = (
       "--",
       row.target,
     ],
-    { stdin: "ignore", stdout: "ignore", stderr: "pipe", detached: true }
+    {
+      env: hostEnvironment(),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+      detached: true,
+    }
   );
 
 /** One command on the machine over the master at `path`: `sh -c` and one single-quoted word, as join.ts runs its own. */
@@ -367,22 +374,14 @@ const eachLine = async (
 };
 
 /**
- * Ends `ssh`'s process group, when it still runs. Only a real pid's group:
- * `kill(-1)` signals every process this user owns.
+ * Ends `ssh`'s process group, when it still runs: `ssh` was spawned
+ * `detached`, so it leads its own group.
  */
 const end = (child: Bun.Subprocess | null): void => {
-  if (
-    !child ||
-    child.exitCode !== null ||
-    !Number.isInteger(child.pid) ||
-    child.pid <= 1
-  ) {
-    return;
-  }
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {
-    // ESRCH: it exited between the check and the signal.
+  const leader =
+    child && child.exitCode === null ? spawnedPid(child) : undefined;
+  if (leader) {
+    signalGroup(leader, "SIGTERM");
   }
 };
 
@@ -437,6 +436,19 @@ const masterReady = async (
 };
 
 /**
+ * Whether a `-O forward` that exited non-zero was the machine's server
+ * refusing it, read from the master's state, never from `ssh`'s words: the
+ * forward asked is well formed, so when the master still answers `-O check`
+ * (exit 0) it carried the request and the server said no; when it does not,
+ * the connection itself failed.
+ */
+const refusedByServer = async (
+  path: string,
+  target: string
+): Promise<boolean> =>
+  (await control(["ssh", "-S", path, "-O", "check", "--", target]))?.code === 0;
+
+/**
  * Where the machine binds a forward, before the hub is forwarded there: a
  * probe forward whose far end is a port nothing on this host answers (so
  * nothing behind it answers anyone), its listeners read, then cancelled by
@@ -461,7 +473,7 @@ const checkBinding = async (
     target,
   ]);
   if (probed?.code !== 0) {
-    return REFUSED.test(probed?.err ?? "")
+    return (await refusedByServer(path, target))
       ? { kind: "forwarding" }
       : {
           kind: "failed",
@@ -647,7 +659,7 @@ export const createSshTunnels = ({
       row.target,
     ]);
     if (answer?.code !== 0) {
-      if (!REFUSED.test(answer?.err ?? "")) {
+      if (!(await refusedByServer(path, row.target))) {
         return {
           refusal: {
             kind: "failed",

@@ -48,6 +48,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
 import { useHubCredentialHelper } from "./git-credential";
+import { notAProject, placeSettled, placeTurn } from "./place-repo";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
 
@@ -113,11 +114,28 @@ const basicOf = (): string => {
  */
 const remoteSecrets = new Map<string, number>();
 
+/**
+ * Projects' declared LFS credentials this agent was handed (host-lfs.ts
+ * `declaredLfs`): taken out of anything a step says for as long as it runs.
+ */
+const declaredSecrets = new Set<string>();
+
 /** Every form a credential could take in text a tool printed. */
 const secretsOf = (): string[] => [
   ...(hubCredential ? [hubCredential.credential, basicOf()] : []),
   ...remoteSecrets.keys(),
+  ...declaredSecrets,
 ];
+
+/** A declared LFS credential (HTTP Basic), and each part it decodes to, taken out of what git says from now on. */
+export const holdDeclaredSecret = (basic: string): void => {
+  declaredSecrets.add(basic);
+  for (const part of Buffer.from(basic, "base64").toString().split(":")) {
+    if (part.length >= 8) {
+      declaredSecrets.add(part);
+    }
+  }
+};
 
 /**
  * A remote's URL with any credential it carries taken off, and that
@@ -200,7 +218,9 @@ export const withoutCredential = (text: string): string => {
  * the daemon already carries. Large-file filters are named so a snapshot's
  * clean filter runs in a repository whose LFS hooks were never installed.
  */
-const configEnv = (pairs: [string, string][]): Record<string, string> => {
+export const configEnv = (
+  pairs: [string, string][]
+): Record<string, string> => {
   const first = Number.parseInt(process.env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
   const env: Record<string, string> = {
     GIT_CONFIG_COUNT: String(first + pairs.length),
@@ -233,12 +253,116 @@ const hubEnv = (
  * one ending in `.git`, `<url>.git/info/lfs` otherwise
  * (lfsapi/endpoint_finder.go `NewEndpointFromCloneURL`).
  */
-const lfsEndpointOf = (repo: string): string => {
+export const lfsEndpointOf = (repo: string): string => {
   const url = repo.replace(TRAILING_SLASH, "");
   return url.endsWith(".git") ? `${url}/info/lfs` : `${url}.git/info/lfs`;
 };
 
 const TRAILING_SLASH = /\/+$/;
+
+/** An LFS endpoint as two of them are compared: no trailing slash. */
+export const sameEndpoint = (a: string, b: string): boolean =>
+  a.replace(TRAILING_SLASH, "") === b.replace(TRAILING_SLASH, "");
+
+/**
+ * Where a project declared its large files live (hub `GET
+ * /api/lfs/projects/:id`, its Large files setting): the LFS endpoint, and
+ * the credential of the fleet connection it is bound to, as HTTP Basic.
+ */
+export interface DeclaredLfs {
+  basic: string;
+  endpoint: string;
+}
+
+/**
+ * git-lfs held to `endpoint` alone, env-only, whatever a repository's
+ * committed `.lfsconfig` names: `.lfsconfig` still permits `lfs.url`,
+ * `lfs.pushurl`, `remote.<name>.lfsurl` and `lfs.<url>.access`, and
+ * "Settings from Git configuration files override the `.lfsconfig` file"
+ * (git-lfs-config(5)). `lfs.url` and `lfs.pushurl` come before every other
+ * source of an endpoint (lfsapi/endpoint_finder.go `getEndpoint`). At that
+ * endpoint, lock checks off, and, when `signed` (CawCo hands git-lfs the
+ * endpoint's credential, or the host's own helpers answer for it), the
+ * access mode as `basic`, so the credential goes up front: both at the
+ * endpoint's own URL, so no more specific key in `.lfsconfig` outranks
+ * them. Otherwise a 401 or a missing locks API has git-lfs persist what it
+ * learned into the clone's own `.git/config` by lock-and-rename (`SetAccess`
+ * is `gitConfig.SetLocal`; lockverifier.go `disableFor`). Unsigned, the
+ * access is left alone: `basic` with no credential to give fails every
+ * transfer ("credential fill errors", git-lfs 3.7.1).
+ */
+export const lfsPins = (
+  endpoint: string,
+  signed: boolean
+): [string, string][] => [
+  ["lfs.url", endpoint],
+  ["lfs.pushurl", endpoint],
+  [`lfs.${endpoint}.locksverify`, "false"],
+  ...(signed
+    ? ([[`lfs.${endpoint}.access`, "basic"]] as [string, string][])
+    : []),
+];
+
+/**
+ * git-lfs held to a project's declared endpoint ({@link lfsPins}), its
+ * connection's credential sent to that endpoint alone as an `Authorization`
+ * header (`http.<endpoint>.extraHeader`, matched on whole path segments,
+ * which git-lfs reads for its own requests, lfshttp/client.go): git's own
+ * requests to the origin keep the origin's credential, though both be on one
+ * host. A request that carries it asks no credential helper, and the host's
+ * helpers for the endpoint's host are emptied (`helper =` resets the list,
+ * git-config(1)) unless that host is the origin's (`originHost`), whose
+ * credential git needs: nothing of the machine's own is asked, or handed
+ * the credential to keep.
+ */
+export const declaredPins = (
+  declared: DeclaredLfs,
+  originHost: string | undefined
+): [string, string][] => {
+  const host = new URL(declared.endpoint).origin;
+  return [
+    ...lfsPins(declared.endpoint, true),
+    [
+      `http.${declared.endpoint}.extraHeader`,
+      `Authorization: Basic ${declared.basic}`,
+    ],
+    ...(host === originHost
+      ? []
+      : ([[`credential.${host}.helper`, ""]] as [string, string][])),
+  ];
+};
+
+/** The origin (`scheme://host[:port]`) of a remote URL; undefined for one that is no URL (`git@host:…`). */
+export const urlOrigin = (url: string): string | undefined => {
+  try {
+    return new URL(url).origin;
+  } catch {
+    // An scp-like remote is no URL, so it has no origin.
+  }
+};
+
+/** An scp-like remote (`git@host:owner/repo.git`): user, host and path. */
+const SCP_LIKE = /^(?:[^@/]+@)?([^:/]+):(.+)$/;
+const LEADING_SLASHES = /^\/+/;
+
+/**
+ * The LFS endpoint git-lfs derives from `origin`: `<url>/info/lfs` for an
+ * http(s) one; for an ssh one (`ssh://…`, `git@host:…`), the https URL of the
+ * same host and path's (lfsapi/endpoint_finder.go `NewEndpointFromCloneURL`).
+ */
+export const originEndpoint = (origin: string): string => {
+  if (urlOrigin(origin)?.startsWith("http")) {
+    return lfsEndpointOf(origin);
+  }
+  const ssh = origin.startsWith("ssh://") ? new URL(origin) : undefined;
+  const scp = ssh ? undefined : SCP_LIKE.exec(origin);
+  const host = ssh?.hostname ?? scp?.[1] ?? "";
+  const path = (ssh?.pathname ?? `/${scp?.[2] ?? ""}`).replace(
+    LEADING_SLASHES,
+    ""
+  );
+  return lfsEndpointOf(`https://${host}/${path}`);
+};
 
 /**
  * git's environment for a command that reaches the hub's repository `repo`
@@ -260,26 +384,27 @@ const TRAILING_SLASH = /\/+$/;
  * (`SetAccess` is `gitConfig.SetLocal`; lockverifier.go `disableFor`). The
  * rename drops a workspace sandbox's read-only bind on `.git/config`, which
  * stops the sandbox, and the key is one `repositoryConfigProblem` refuses.
+ * A project that declared where its large files live (`declared`) has
+ * git-lfs held there instead, with its connection's credential
+ * ({@link declaredPins}).
  */
 export const hubGitEnv = (
   repo: string,
-  extra: [string, string][] = []
-): Record<string, string> => {
-  const lfs = lfsEndpointOf(repo);
-  return {
+  extra: [string, string][] = [],
+  declared?: DeclaredLfs
+): Record<string, string> =>
+  ({
     ...hostEnvironment(),
     ...GIT_LOCALE,
     GIT_TERMINAL_PROMPT: "0",
     ...configEnv([
       [`http.${repo}.extraHeader`, `Authorization: Basic ${basicOf()}`],
-      ["lfs.url", lfs],
-      ["lfs.pushurl", lfs],
-      [`lfs.${lfs}.locksverify`, "false"],
-      [`lfs.${lfs}.access`, "basic"],
+      ...(declared
+        ? declaredPins(declared, urlOrigin(repo))
+        : lfsPins(lfsEndpointOf(repo), true)),
       ...extra,
     ]),
-  } as Record<string, string>;
-};
+  }) as Record<string, string>;
 
 /**
  * git's environment for anything else. `GIT_OPTIONAL_LOCKS=0`: a read
@@ -844,6 +969,8 @@ const inspectPlain = async (
  * what is there. `path` is absolute: the hub sends only a MachinePath.
  */
 export const moveInspect = async (path: string): Promise<MoveInspection> => {
+  // Read once no step that may make it a repository is under way in it.
+  await placeSettled(path);
   const info = await stat(path).catch(() => undefined);
   const base = {
     path,
@@ -972,64 +1099,81 @@ export const moveRemoteCredential = async (
 
 /**
  * What "Move it" runs on the source: `git init` and one commit of the folder
- * as it is when it was no repository; its large files tracked by LFS first
+ * as it is when it is no repository; its large files tracked by LFS first
  * either way. Ignored files stay out of the commit, as `.gitignore` says,
- * and so do secrets ({@link SECRETS_STAY}).
+ * and so do secrets ({@link SECRETS_STAY}). It takes the folder's turn
+ * (place-repo.ts `placeTurn`), so it never runs beside the place's own first
+ * commit, and whether it inits is read from the folder in that turn, as
+ * {@link moveInspect} reads it: a place made a repository since the plan
+ * gets no second `git init` and no second first commit.
  */
 export const movePrepare = (
   request: MovePrepareRequest
 ): Promise<{ commit: string | null }> =>
-  runStep(request.jobId, "prepare", async (run) => {
-    const { path } = request;
-    const env = plainEnv(LFS_FILTERS);
-    if (request.gitInit) {
-      await must(run, path, ["init", "-q"], "git init failed", env);
+  runStep(request.jobId, "prepare", (run) =>
+    placeTurn(request.path, () => prepareNow(run, request))
+  );
+
+const prepareNow = async (
+  run: Run,
+  request: MovePrepareRequest
+): Promise<{ commit: string | null }> => {
+  const { path } = request;
+  const env = plainEnv(LFS_FILTERS);
+  const gitInit = !(await exists(join(path, ".git")));
+  if (gitInit) {
+    // The rule every first commit keeps (place-repo.ts): no home or cache folder.
+    const refused = notAProject(path);
+    if (refused) {
+      throw new StepFailed(refused);
     }
-    if (request.bigFiles.length > 0) {
-      const tracking = await exec(
-        run,
-        ["git", "lfs", "track", "--filename", "--", ...request.bigFiles],
-        { cwd: path, env }
+    await must(run, path, ["init", "-q"], "git init failed", env);
+  }
+  if (request.bigFiles.length > 0) {
+    const tracking = await exec(
+      run,
+      ["git", "lfs", "track", "--filename", "--", ...request.bigFiles],
+      { cwd: path, env }
+    );
+    if (tracking.code !== 0) {
+      throw new StepFailed(
+        "Git LFS could not track the large files",
+        lastLine(tracking.stderr) || lastLine(tracking.stdout)
       );
-      if (tracking.code !== 0) {
-        throw new StepFailed(
-          "Git LFS could not track the large files",
-          lastLine(tracking.stderr) || lastLine(tracking.stdout)
-        );
-      }
-      await must(
-        run,
-        path,
-        ["lfs", "install", "--local"],
-        "Git LFS could not be set up in the folder",
-        env
-      );
-    }
-    if (!request.gitInit) {
-      return { commit: null };
     }
     await must(
       run,
       path,
-      ["add", "-A", "--", ".", ...SECRETS_STAY],
-      "git add failed",
+      ["lfs", "install", "--local"],
+      "Git LFS could not be set up in the folder",
       env
     );
-    await must(
-      run,
-      path,
-      [
-        "commit",
-        "-q",
-        "--no-verify",
-        "-m",
-        "The folder as it was when CawCo first moved it",
-      ],
-      "git commit failed",
-      { ...env, ...CAWCO_IDENTITY() }
-    );
-    return { commit: await maybe(path, ["rev-parse", "HEAD"]) };
-  });
+  }
+  if (!gitInit) {
+    return { commit: null };
+  }
+  await must(
+    run,
+    path,
+    ["add", "-A", "--", ".", ...SECRETS_STAY],
+    "git add failed",
+    env
+  );
+  await must(
+    run,
+    path,
+    [
+      "commit",
+      "-q",
+      "--no-verify",
+      "-m",
+      "The folder as it was when CawCo first moved it",
+    ],
+    "git commit failed",
+    { ...env, ...CAWCO_IDENTITY() }
+  );
+  return { commit: await maybe(path, ["rev-parse", "HEAD"]) };
+};
 
 // ── Snapshot ───────────────────────────────────────────────────────────────
 

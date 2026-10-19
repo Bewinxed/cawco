@@ -13,6 +13,7 @@ import {
   type SessionRole,
 } from "@cawco/core";
 import { createActions } from "./actions";
+import { createBrowserAsks } from "./browser-tools";
 import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createFleetWatch } from "./fleet-watch";
@@ -185,7 +186,7 @@ import type { Tasks } from "./tasks";
  * 2026-10-16/17). About 60 tokens for the delegate (7,392 measured), the
  * words already cut twice. Raised deliberately for the delegate; the
  * worker's and the lead's fit as they stand.
- * 2026-10-18: `memory_recall` (session-prose.ts), the owner's pick of the
+ * 2026-10-18: `memory_recall` (since replaced by `find`), the owner's pick of the
  * memory upgrade ("core and session search"): "have we tried this before",
  * answered from a project's past sessions, for the worker, the delegate and
  * the lead. memory_note gains `since`, memory_propose takes `files` and
@@ -221,11 +222,61 @@ import type { Tasks } from "./tasks";
  * 26,577, delegate 8,956, lead 17,533 measured beside the decision
  * programs, memory_recall and discard_workspace). Raised deliberately, by
  * that, for each.
+ * 2026-10-19: `find` (find-tool.ts) in place of `memory_recall`, the owner's
+ * ask ("why not give yourself the tool to do this?"): the dashboard's Find
+ * as a tool, every kind it finds across the fleet, narrowed by project,
+ * machine, since and who said it, paged, with `around` to read a hit's
+ * turns. One tool where there was one; its description cut to what it finds
+ * and when to reach for it, each parameter to a few words, the kinds the
+ * engine's own enum. About 233 tokens more than memory_recall's for the
+ * worker, the delegate and the lead (worker 26,810, delegate 9,189, lead
+ * 17,766 measured). Raised deliberately, by that, for each.
+ * 2026-10-19, after it: `forge_post` (forge-posts.ts, docs/forge-adapters.md),
+ * the owner's "an obvious yes" to GitLab and Gitea: an issue, a pull or merge
+ * request or a comment on any forge with the machine's own sign-in, which
+ * only gh inside a workspace did before, for GitHub alone. Its fields carry
+ * no description their names already give. About 329 tokens for the worker
+ * and the delegate (worker 27,142, delegate 9,520 measured beside
+ * `find`). Raised deliberately, by that, for both.
+ * 2026-10-19, after that: `find`'s `before` (YYYY-MM-DD, evidence at or
+ * before that day: past.dev's `queryTimestamp`), the memory audit's dated
+ * recall moved onto find; its description names the dated branch in four
+ * words. About 28 tokens for the worker, the delegate and the lead (worker
+ * 27,170, delegate 9,549, lead 17,794 measured beside
+ * `forge_post`). Raised deliberately, by that, for each.
+ * 2026-10-19, after it: artifact_read's `verify` (component canvas E1, a
+ * design system round asked in a chat), the read's words cut to make room
+ * for it: about 5 tokens for each, inside the budgets above (worker 27,178,
+ * delegate 9,557, lead 17,802 measured). No raise.
+ * 2026-10-19, after those: `browser_ask` (browser-tools.ts, Projects spec
+ * §5.11, the owner's approved browser take-over): a session asks the person
+ * to take over its browser for a sign-in, a code or a payment, with a
+ * reason and an origin. Three sentences and two one-line arguments, about
+ * 235 tokens for every role that drives a browser (worker 27,415,
+ * delegate 9,792, lead 18,044, web-facing 3,149 measured beside `verify`). Raised
+ * deliberately, by that, for the worker, the delegate and the lead;
+ * web-facing fits.
+ * 2026-10-19, after it: artifact_create's `to: "parent"` hands up unopened
+ * (the owner's "this just showed up" on a delegate's canvas): its sentence
+ * says the parent opens it with artifact_show and the delegate keeps update
+ * and read, no longer show. About 15 tokens for the delegate (9,807
+ * measured beside `browser_ask`). Raised deliberately, by that; the worker
+ * and the lead have no parent and do not change.
+ * 2026-10-19, after `to: "parent"`: every artifact carries its ask (the
+ * artifact purpose spec, the owner's "any agent trying to use the artifact
+ * tool to show me something actually has something for me to do"):
+ * artifact_create's `does` and `ask` in place of `about`, its description
+ * rewritten around what the person does there and the nothing branch,
+ * artifact_update's `ask`, artifact_list's `does`, `ask` and `sent`, and the
+ * group line's pointer to the `show` skill, each the spec's own words. About
+ * 157 tokens for the worker, the delegate and the lead (worker 27,572,
+ * delegate 9,964, lead 18,201 measured beside `to: "parent"`). Raised
+ * deliberately, by that, for each.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 26_580,
-  delegate: 8960,
-  lead: 17_540,
+  worker: 27_580,
+  delegate: 9970,
+  lead: 18_210,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -396,7 +447,6 @@ export const measureRoles = (): RoleSize[] => {
         folderChanged: () => undefined,
         notice: () => undefined,
         park: () => undefined,
-        recall: () => Promise.reject(new Error("measuring")),
         settle: () => undefined,
         threadOf: () => undefined,
         watch: createTurnWatch({
@@ -438,9 +488,20 @@ export const measureRoles = (): RoleSize[] => {
       askPerson: () => Promise.reject(new Error("measuring")),
       designVerdict: () => Promise.reject(new Error("measuring")),
       designWrite: () => Promise.reject(new Error("measuring")),
+      find: () => Promise.reject(new Error("measuring")),
       machineIds: () => [],
       pairing: () => false,
     }),
+    // The browser ask, from the one list the server gives sessions.
+    browserTools: (actor) =>
+      createBrowserAsks({
+        browserFor: () => {
+          throw new Error("measuring");
+        },
+        park: () => undefined,
+        settle: () => undefined,
+        takeOver: () => Promise.reject(new Error("measuring")),
+      }).tools(actor),
   });
   try {
     return SESSION_ROLES.map((role) => {

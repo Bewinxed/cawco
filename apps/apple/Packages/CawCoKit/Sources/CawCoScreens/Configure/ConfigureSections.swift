@@ -82,11 +82,29 @@ struct ConfigSection {
 /// badge, and does not open: nothing in the list leads to an empty page.
 @MainActor
 enum ConfigSections {
+    /// The web's `rail` breakpoint (config/+layout.svelte `@media (max-width:
+    /// 900px)`, design.json `rail`): at or under it Configure's list is the
+    /// page, a section is pushed over it and the bar says its title. The Mac
+    /// draws no system bar to come back by (MacBar): its rail stays at every width.
+    static func listed(_ view: UIView) -> Bool {
+        #if targetEnvironment(macCatalyst)
+        false
+        #else
+        (view.window?.bounds.width ?? view.bounds.width) <= 900
+        #endif
+    }
+
     /// The screens the app has, by section.
     private static let screens: [String: (ConfigSection, ShellContext) -> UIViewController] = [
         "accounts": { section, context in AccountsSectionController(section: section, context: context) },
+        "connections": { section, context in ConnectionsSectionController(section: section, context: context) },
+        "delegate-types": { section, context in DelegateTypesSectionController(section: section, context: context) },
+        "mcp": { section, context in McpSectionController(section: section, context: context) },
+        "memory": { section, context in MemorySectionController(section: section, context: context) },
         "models": { section, context in ModelsSectionController(section: section, context: context) },
         "phone": { section, context in PhoneSectionController(section: section, context: context) },
+        "skills": { section, context in SkillsSectionController(section: section, context: context) },
+        "spend": { section, context in SpendSectionController(section: section, context: context) },
         "updates": { section, context in UpdatesSectionController(section: section, context: context) },
     ]
 

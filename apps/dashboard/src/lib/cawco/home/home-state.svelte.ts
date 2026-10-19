@@ -18,6 +18,7 @@ import type {
   NeutralSessionInfo,
   PairingRequest,
   ProjectCap,
+  RelayJourneyView,
   TailnetHttps,
   WaitingMachine,
   WorkflowRun,
@@ -27,6 +28,7 @@ import {
   machineLabel,
   projectsFor,
   questionsOf,
+  STREAM_RELAY_WORDS,
   tailnetWords,
   topsIn,
 } from "@cawco/core";
@@ -66,6 +68,7 @@ import { threadIdOf, threadTabId } from "../thread-tabs";
 import { hasParent, rooted, tree } from "../tree";
 import { runHref, runIdOf } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
+import { askNaming } from "./ask-naming";
 import { choices } from "./choices.svelte";
 
 /* ── Seen, on the hub ──────────────────────────────────────────────────
@@ -272,7 +275,7 @@ export function span(ms: number): string {
 /* ── Shapes ────────────────────────────────────────────────────────── */
 
 export interface AskItem {
-  /** What it asks, in plain words. */
+  /** What it asks, in plain words; a held post, where it goes (`owner/repo#12`). */
   ask: string;
   /** Where the session runs: its mark's hue, the seed every list uses. */
   cwd: string;
@@ -394,6 +397,23 @@ export interface TailnetItem {
 }
 
 /**
+ * The stream relay's guided journey (hub relay-journey.ts), while it asks:
+ * set up from Caw's setup card, Settings › Browsers or a take-over through a
+ * domain, and not yet live and proven from outside, nor put away with Later
+ * or Done for now. Drawn as the journey's card itself (RelayJourney `row`);
+ * once proven while this page stood, its tick, until the next open.
+ */
+export interface RelayItem {
+  done: boolean;
+  journey: RelayJourneyView;
+  key: string;
+  kind: "relay";
+  place: string;
+  raisedAt: undefined;
+  title: string;
+}
+
+/**
  * A device asking to pair (hub hub-auth.ts): approved here, it runs the
  * fleet as you. Its code is the one on that device's screen.
  */
@@ -448,6 +468,7 @@ export type NeedsItem =
   | WatchItem
   | ChoiceItem
   | TailnetItem
+  | RelayItem
   | PairingItem
   | AdmissionItem
   | TaskItem;
@@ -992,6 +1013,16 @@ class Home {
       const thread = item.request.threadId
         ? cawco.threadOf(threadTabId(item.request.threadId))
         : undefined;
+      // A held post is named by itself; an ask no session row stands behind
+      // (a memory proposal) is titled by who asked, as the hub named them.
+      const { title, ask } = askNaming(
+        item.request.presentation,
+        () =>
+          thread?.title ??
+          (row
+            ? instanceTitle(row)
+            : item.request.presentation.asker || item.hostname)
+      );
       return {
         kind: "ask",
         key: `${item.instanceId}:${item.request.requestId}`,
@@ -1000,13 +1031,7 @@ class Home {
         origin: item.request.originInstanceId ?? null,
         thread: thread ? threadTabId(thread.id) : null,
         machineId: item.machineId,
-        // An ask no session row stands behind (a memory proposal) is titled
-        // by who asked, as the hub named them.
-        title:
-          thread?.title ??
-          (row
-            ? instanceTitle(row)
-            : item.request.presentation.asker || item.hostname),
+        title,
         place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
         project: projectAt(
           top?.machineId ?? item.machineId,
@@ -1019,7 +1044,7 @@ class Home {
               ?.os ?? "",
         },
         isQuestion: Boolean(questions),
-        ask: item.request.presentation.summary,
+        ask,
         raisedAt: item.request.raisedAt,
         request: item.request,
         stale: item.stale,
@@ -1123,6 +1148,22 @@ class Home {
             },
           ]
         : [];
+    // The stream relay's journey: its row while it asks, its tick a moment after.
+    const journey = cawco.relayJourney;
+    const relaying: NeedsItem[] =
+      journey && (journey.asks || (journey.done && cawco.relayTicked))
+        ? [
+            {
+              kind: "relay",
+              key: "relay:journey",
+              journey,
+              done: !journey.asks && journey.done,
+              title: STREAM_RELAY_WORDS.title,
+              place: "Onboarding",
+              raisedAt: undefined,
+            },
+          ]
+        : [];
     // Devices asking to pair and machines waiting to be admitted
     // (hub-auth.svelte.ts): answered here or in Configure › Devices.
     const pairings: NeedsItem[] = hubAuth.requests.map((request) => ({
@@ -1166,6 +1207,7 @@ class Home {
       ...watched,
       ...unanswered,
       ...secured,
+      ...relaying,
       ...pairings,
       ...admissions,
       ...waitingTasks,

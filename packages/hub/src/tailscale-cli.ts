@@ -3,6 +3,7 @@
  * (funnel.ts) and HTTPS on the tailnet name (tailnet-https.ts) both run.
  */
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { hostEnvironment } from "@cawco/core/session-env";
 
 /** What one call printed and how it ended; `missing` when there is no CLI to run. */
 export interface Ran {
@@ -41,6 +42,7 @@ export const runTailscale = (
     let child: Bun.Subprocess<"ignore", "pipe", "pipe">;
     try {
       child = Bun.spawn([bin, ...args], {
+        env: hostEnvironment(),
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",

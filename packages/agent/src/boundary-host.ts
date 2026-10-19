@@ -59,8 +59,8 @@ import {
   type SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
 import {
-  NESTED_BOUNDARY_LABEL,
   nestedBoundaryReason,
+  nestedBwrapLabel,
 } from "@cawco/core/boundary-nesting";
 import { projectClaudeRelative, TREE_STORE_DIR } from "@cawco/core/claude-dirs";
 import { isGitDirSync } from "@cawco/core/git-dir";
@@ -575,28 +575,13 @@ interface Unstarted {
 }
 
 /**
- * This process's AppArmor label, as the kernel names it; none where AppArmor
- * is not there.
- */
-const apparmorLabel = (): string | undefined => {
-  try {
-    return readFileSync("/proc/self/attr/apparmor/current", "utf8").trim();
-  } catch {
-    // No AppArmor here.
-    return undefined;
-  }
-};
-
-/**
  * Why no sandbox can start here, when this process already runs inside a
  * bwrap sandbox under the host's `bwrap-userns-restrict` profile: a host
  * setting, said as one (`boundary-nesting.ts`).
  */
 const nestedRefusal = (): string | undefined => {
-  const label = apparmorLabel();
-  return label?.includes(NESTED_BOUNDARY_LABEL)
-    ? nestedBoundaryReason(label)
-    : undefined;
+  const label = nestedBwrapLabel();
+  return label ? nestedBoundaryReason(label) : undefined;
 };
 
 // What the runner starts with: nothing of this process's own environment but
@@ -871,6 +856,14 @@ for (;;) {
   const lost = current?.detached;
   SandboxManager.cleanupAfterCommand();
   if (stopping || !lost) {
+    if (!stopping) {
+      // On stdout, as a line, as below: a sandbox that ends unasked (its
+      // runner exited, its outer bwrap killed) ends this boundary, and the
+      // agent's log is where that is said.
+      console.log(
+        `cawco: the sandbox ${current?.inner ?? "starting"} ended with status ${status}, so the workspace's boundary closes`
+      );
+    }
     await finish({ status });
   }
   // On stdout, as a line: the keeper drains stderr unread, and the agent

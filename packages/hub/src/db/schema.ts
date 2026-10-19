@@ -646,6 +646,15 @@ export const projects = sqliteTable("projects", {
    * answer ({@link upstreamSettings}).
    */
   upstreamPosts: text("upstream_posts", { enum: UPSTREAM_POSTS }),
+  /**
+   * Where its large files live (its Large files setting): an LFS endpoint
+   * every git-lfs run on a machine for it is held to (agent host-lfs.ts),
+   * with {@link lfsConnection}'s credential. Null: each repository's own
+   * origin's LFS.
+   */
+  lfsUrl: text("lfs_url"),
+  /** The fleet connection whose key signs in to {@link lfsUrl}, by name; set with it. */
+  lfsConnection: text("lfs_connection"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1214,6 +1223,12 @@ export const instances = sqliteTable("instances", {
    * a delegate from before work items existed.
    */
   workItemId: text("work_item_id"),
+  /**
+   * The session a continuation moved this one's work item to (server.ts
+   * `retireContinued`): this one never runs again (core `relaunchOf`
+   * refuses it), and what is sent to it goes there. Null on every other.
+   */
+  continuedInto: text("continued_into"),
 });
 
 /** Only hashes reach disk; installing a replacement does not revoke a live credential before ACK. */
@@ -1395,6 +1410,13 @@ export type WorkItemState =
 
 /** What a work item's landing put where ({@link workItems} `landed`). */
 export interface WorkLanding {
+  /**
+   * When it was pushed (ms), for a push to a branch of its own: the newest
+   * is the commit the hub's next push there leases on (work-items.ts
+   * `lastBranchPush`). Unset on landings on the base, and on branch pushes
+   * before 2026-10-19.
+   */
+  at?: number;
   /** The base commit its commits were rebased onto; null for a push to a branch of its own. */
   onto: string | null;
   sha: string;
@@ -1837,6 +1859,11 @@ export const mcpServers = sqliteTable("mcp_servers", {
    * of any other is never sent it. Null: every machine.
    */
   platforms: text("platforms", { mode: "json" }).$type<McpPlatform[]>(),
+  /**
+   * One instance per machine for every session (`FleetMcpServer.shared`),
+   * started at its first call, rather than one per session at its start.
+   */
+  shared: integer("shared", { mode: "boolean" }).notNull().default(false),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2185,11 +2212,15 @@ export const accounts = sqliteTable(
     reservePct: integer("reserve_pct"),
     /**
      * The identity (core `AccountIdentity`) its first sign-in reported: the
-     * email, any case, and the organization. Both null until then. One
-     * identity is one account of a provider (core `sameIdentity`).
+     * email, any case, the organization's name, and its id. Null until then;
+     * the id also on a Claude account named before ids were read, until its
+     * own login's next read fills it (accounts.ts `withOrgIdFrom`). One
+     * identity, keyed on the email and the id, is one account of a provider
+     * (core `sameIdentity`).
      */
     email: text("email"),
     organization: text("organization"),
+    orgId: text("org_id"),
     createdAt: timestamp("created_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -2198,7 +2229,7 @@ export const accounts = sqliteTable(
     index("accounts_identity").on(
       table.provider,
       sql`lower(${table.email})`,
-      table.organization
+      table.orgId
     ),
   ]
 );
@@ -2257,6 +2288,7 @@ export const loginMoves = sqliteTable(
     /** The identity the credential is signed in as (core `AccountIdentity`). */
     email: text("email").notNull(),
     organization: text("organization").notNull(),
+    orgId: text("org_id"),
     provider: text("provider").$type<AccountProvider>().notNull(),
     since: timestamp("since").notNull(),
   },
@@ -2394,13 +2426,6 @@ export const limitHolds = sqliteTable("limit_holds", {
   instanceId: text("instance_id").primaryKey(),
   /** The account at its limit. */
   accountId: text("account_id").notNull(),
-  /**
-   * The hub's word to the session's live work item its limit refused, sent
-   * again once at `until`; such a hold never moves the session (core
-   * `DelegateWork` `resume`). Null for a hold that moves it once an account
-   * has room.
-   */
-  nudge: text("nudge"),
   until: timestamp("until"),
   createdAt: timestamp("created_at")
     .notNull()
@@ -3004,11 +3029,16 @@ export const continuations = sqliteTable("continuations", {
  * - `moved`: it started on a machine its project was moved to for it (core
  *   `MOVED_HERE`), the move's ready line: what moved and what stayed. Its
  *   transcript opens on it; one per session.
+ * - `room`: its start waits for its machine's memory (core `ROOM_HELD`),
+ *   the line its machine said, with the machine's readings.
  */
-export type SessionLineKind = "limit" | "outdated" | "watch" | "moved";
+export type SessionLineKind = "limit" | "outdated" | "watch" | "moved" | "room";
 
 /** The lines a session's machine says about it, which the hub keeps as said. */
-export type MachineLineKind = Extract<SessionLineKind, "limit" | "outdated">;
+export type MachineLineKind = Extract<
+  SessionLineKind,
+  "limit" | "outdated" | "room"
+>;
 
 /**
  * Lines the hub writes into a session's transcript, each where it happened,
@@ -3285,6 +3315,47 @@ export const designOffers = sqliteTable("design_offers", {
   builtTaskId: text("built_task_id"),
 });
 
+/**
+ * Git LFS offered for the large files a place's first commit left out
+ * (lfs-offers.ts): one row per offer, written as it is made. `answer` stays
+ * null while the card stands; `tracked` once its files are committed
+ * through LFS (`commit`), `dismissed` for Not now.
+ */
+export const lfsOffers = sqliteTable("lfs_offers", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  machineId: text("machine_id").notNull(),
+  /** The folder made a repository, on its machine. */
+  root: text("root").notNull(),
+  /** The thread the card went to. */
+  threadId: text("thread_id").notNull(),
+  /** What is offered, a row per pattern (core `PlaceLfsRow`). */
+  rows: text("rows", { mode: "json" })
+    .$type<import("@cawco/core").PlaceLfsRow[]>()
+    .notNull(),
+  offeredAt: timestamp("offered_at").notNull(),
+  answer: text("answer").$type<"tracked" | "dismissed">(),
+  answeredAt: timestamp("answered_at"),
+  /** The commit that took them through LFS. */
+  commit: text("commit"),
+});
+
+/**
+ * The LFS endpoints a repository's `.lfsconfig` named that a project's
+ * thread was told git-lfs refused (server.ts `/api/lfs/projects/:id/refused`,
+ * agent host-lfs.ts): one row per project and endpoint, so the thread is
+ * told once, whatever restarts and however many fetches meet it.
+ */
+export const lfsRefusals = sqliteTable(
+  "lfs_refusals",
+  {
+    projectId: text("project_id").notNull(),
+    endpoint: text("endpoint").notNull(),
+    notedAt: timestamp("noted_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.endpoint] })]
+);
+
 /** One must-fix finding of a design check, tied to an element (design-verify.ts). */
 export interface DesignFinding {
   file: string;
@@ -3321,6 +3392,14 @@ export const designChecks = sqliteTable(
     head: text("head_sha").notNull(),
     /** The verifier's own work item, once it started. */
     verifierItemId: text("verifier_item_id"),
+    /**
+     * A round asked of an artifact in a chat (component canvas E1): the
+     * artifact it judges; `itemId` is then its key (`artifact:<id>`), and
+     * `projectId` and `taskId` are the empty string. Null for a task's round.
+     */
+    artifactId: text("artifact_id"),
+    /** The session that asked a chat round: it hears the verdict. Null for a task's round. */
+    requesterId: text("requester_id"),
     state: text("state")
       .$type<"checking" | "passed" | "findings" | "failed">()
       .notNull(),
@@ -3494,8 +3573,8 @@ export const artifacts = sqliteTable(
       .references(() => instances.id, { onDelete: "cascade" }),
     /**
      * The session whose `artifact_create` last made it: the owner itself, or
-     * a delegate that put it in its parent's panel (`to: "parent"`), which
-     * may go on updating, reading and showing it. Null on one made before it
+     * a delegate that handed it to its parent (`to: "parent"`), which may
+     * go on updating and reading it. Null on one made before it
      * was kept.
      */
     madeBy: text("made_by").references(() => instances.id, {
@@ -3505,6 +3584,13 @@ export const artifacts = sqliteTable(
     projectId: text("project_id"),
     kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),
     name: text("name").notNull(),
+    /** What the person does on it (core `ARTIFACT_DOES`): pick, judge, try or draw. Every create names it; rows made before it were set to judge. */
+    does: text("does")
+      .$type<import("@cawco/core").ArtifactDoes>()
+      .notNull()
+      .default("judge"),
+    /** The panel head's one line under its name: what the person does here, in their words. Empty on a row made before it, and on the person's own composer canvas. */
+    ask: text("ask").notNull().default(""),
     /** The machine a preview's dev server or folder is on; null for a page, which the hub serves. */
     machineId: text("machine_id"),
     /**
@@ -3642,11 +3728,120 @@ export const streamRelay = sqliteTable("stream_relay", {
     .notNull()
     .default(sql`'[]'`),
   checkedAt: timestamp("checked_at"),
-  /** When its certificate ends, as its last renewal said. */
-  certificateEndsAt: timestamp("certificate_ends_at"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
+});
+
+/**
+ * The fleet's browsers (Projects spec §5.11, browsers.ts): one row per key
+ * per machine, as that machine's last `browsers` frame said, and who holds
+ * it privately. A project that runs on two machines has a browser on each.
+ * The hub reads it to list each browser in its sessions' panels and to send
+ * a take-over again to a machine that registers while one stands.
+ */
+export const browsers = sqliteTable(
+  "browsers",
+  {
+    key: text("key")
+      .$type<import("@cawco/core/browser").BrowserKey>()
+      .notNull(),
+    machineId: text("machine_id")
+      .notNull()
+      .references(() => agents.machineId, { onDelete: "cascade" }),
+    /** The project of a `project:` key; null for a machine's own browser. */
+    projectId: text("project_id"),
+    name: text("name").notNull(),
+    host: text("host")
+      .$type<import("@cawco/core/browser").BrowserHostKind>()
+      .notNull(),
+    state: text("state")
+      .$type<import("@cawco/core/browser").BrowserState>()
+      .notNull(),
+    /** The workspace whose browser ask the person took, or `""` for a take-over nobody asked for; null while nobody holds it. */
+    takeoverBy: text("takeover_by"),
+    /** The browser ask the take-over answers. */
+    takeoverRequestId: text("takeover_request_id"),
+    takeoverSince: timestamp("takeover_since"),
+    lastUsedAt: timestamp("last_used_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.machineId, table.key] })]
+);
+
+/**
+ * The stream relay's guided journey (relay-journey.ts) — one row, keyed
+ * `'journey'`, made when someone sets it up (Caw's setup card, Settings ›
+ * Browsers, a take-over through a domain) and gone with Remove relay. What
+ * the person and the machine settled on each step: the machine picked and
+ * the addresses it was found at, the name and how it stands, the Cloudflare
+ * token (sealed), what the router answered, the low ports allowed, the
+ * certificate, and whether the row was put away. What the hub checks again
+ * on its own (DNS, the low ports) lives in memory.
+ */
+export const streamRelayJourney = sqliteTable("stream_relay_journey", {
+  /** Always `'journey'`. */
+  id: text("id").primaryKey(),
+  /** The machine picked; null before a pick. */
+  machineId: text("machine_id").references(() => agents.machineId, {
+    onDelete: "set null",
+  }),
+  /** Its public address, and its address on its router's network when behind one, as last found. */
+  address: text("address"),
+  lan: text("lan"),
+  /** The domain the person reached CawCo through when they set it up: the name's suggestion. */
+  domain: text("domain"),
+  /** The relay's DNS name, suggested or given; null while none is known. */
+  name: text("name"),
+  /** `open` while it stands, `pointed` once it answered with the machine's address, `skipped`. */
+  nameState: text("name_state")
+    .$type<"open" | "pointed" | "skipped">()
+    .notNull()
+    .default("open"),
+  /** Sealed: the person's Cloudflare API token (Zone · DNS · Edit), for the record and the certificate's DNS challenge. */
+  cloudflareToken: sealedText("cloudflare_token"),
+  /** What the router answered "Open the ports" with; null before it was asked. */
+  router: text("router").$type<"mapped" | "partial" | "refused">(),
+  routerHow: text("router_how").$type<"UPnP" | "NAT-PMP">(),
+  /** The machine's runtime may bind the relay's lowest port, as last read. */
+  lowPorts: integer("low_ports", { mode: "boolean" }).notNull().default(false),
+  /** The name the certificate stands for, and when it ends. */
+  certificateName: text("certificate_name"),
+  certificateEndsAt: timestamp("certificate_ends_at"),
+  /** Why the certificate was not issued, in the error formula's words. */
+  certificateWhy: text("certificate_why"),
+  /** Put away from Needs you: `later` or `done-for-now`. */
+  closed: text("closed").$type<"later" | "done-for-now">(),
+  /** When the relay first went live on this journey: Settings shows its summary from then. */
+  liveAt: timestamp("live_at"),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
+ * Each device's last proof of the stream relay (relay-journey.ts): which
+ * URLs gave a relay candidate there, and whether the device was outside the
+ * relay's network. A fleet machine on another network proves it the same way
+ * (its id, `machine:<id>`). Gone with the relay.
+ */
+export const streamRelayProofs = sqliteTable("stream_relay_proofs", {
+  /** A paired device's id, a browser's own key, or `machine:<machineId>`. */
+  deviceId: text("device_id").primaryKey(),
+  /** "Chrome on Linux", "CawCo on iPhone", a machine's name. */
+  device: text("device").notNull(),
+  /** The public address it asked from, when it had one. */
+  address: text("address"),
+  /** Its public address differs from the relay's. */
+  outside: integer("outside", { mode: "boolean" }).notNull(),
+  /** The chips of the URLs that answered; empty when none did. */
+  ports: text("ports", { mode: "json" })
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'`),
+  /** A URL refused its credential (a 401), not unreachable. */
+  refused: integer("refused", { mode: "boolean" }).notNull().default(false),
+  at: timestamp("at").notNull(),
 });
 
 /**
@@ -3806,42 +4001,6 @@ export const factUses = sqliteTable(
 );
 
 /**
- * The prose cut of a project's sessions (session-prose.ts): the person's
- * words a session read and the agent's own text, one row per message, no
- * tool calls, no tool output, no thinking. Kept on the hub, never in the
- * project's folder, for `memory_recall`.
- */
-export const sessionProse = sqliteTable(
-  "session_prose",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
-    instanceId: text("instance_id").notNull(),
-    at: timestamp("at").notNull(),
-    /** `person`: words the person sent it; `agent`: its own text. */
-    who: text("who", { enum: ["person", "agent"] }).notNull(),
-    text: text("text").notNull(),
-  },
-  (table) => [index("session_prose_project_at").on(table.projectId, table.at)]
-);
-
-/**
- * The project sessions whose stored transcripts were cut into
- * `session_prose` after the fact (session-prose.ts `backfill`): one row per
- * session done, with how many messages it gave, so a backfill stopped part
- * way resumes where it was.
- */
-export const proseBackfills = sqliteTable("prose_backfills", {
-  instanceId: text("instance_id")
-    .primaryKey()
-    .references(() => instances.id, { onDelete: "cascade" }),
-  at: timestamp("at").notNull(),
-  messages: integer("messages").notNull(),
-});
-
-/**
  * A knowledge file's prose the person declined to have rewritten as fact
  * lines (memory.ts `proposeConversions`), by the hash of the words declined:
  * its rewrite is proposed again only once the file says something else.
@@ -3858,6 +4017,24 @@ export const declinedRewrites = sqliteTable(
     at: timestamp("at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.path] })]
+);
+
+/**
+ * Each session the person purged (its transcript deleted, from the
+ * dashboard), by its machine and harness session id: what an agent's `find`
+ * leaves out (find.ts `FindWhere.unpurged`), since the machine's transcript
+ * index keeps the words it read. No foreign key: the hub's row for the
+ * session goes with the purge, and a machine removed later leaves its
+ * purges standing.
+ */
+export const purgedSessions = sqliteTable(
+  "purged_sessions",
+  {
+    machineId: text("machine_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    purgedAt: timestamp("purged_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.machineId, table.sessionId] })]
 );
 
 /**
@@ -4465,6 +4642,12 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   polledAt: timestamp("polled_at"),
   /** The tracker's rate limit holds polls back until then. */
   resumeAt: timestamp("resume_at"),
+  /** GitHub: the Project its stages show on through Status (tracker-github-project.ts); null when none. */
+  githubProject: text("github_project", {
+    mode: "json",
+  }).$type<import("@cawco/core").GithubProject>(),
+  /** GitHub: why stages do not show on a Project, in GitHub's words; set, that part of the sync does not run. */
+  githubProjectReason: text("github_project_reason"),
 });
 
 /**
@@ -4479,6 +4662,11 @@ export interface TrackerSynced {
   stage: string;
   /** The issue's state, as tracker.ts names it (`open`, `closed:completed`, a Linear state's id). */
   state: string;
+  /**
+   * GitHub: the Status option its Project item stood in (null: not on the
+   * Project, or no Status); absent until the binding had a Project.
+   */
+  status?: string | null;
   title: string;
 }
 

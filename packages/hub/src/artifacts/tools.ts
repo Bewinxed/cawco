@@ -5,7 +5,12 @@
  * bounded, answers that say only what the hub stored. Their handlers call
  * the artifact routes (delegation-actions.ts).
  */
-import { ARTIFACT_NAME, PREVIEW_START_PATH } from "@cawco/core";
+import {
+  ARTIFACT_DOES,
+  ARTIFACT_NAME,
+  ASK_LIMIT,
+  PREVIEW_START_PATH,
+} from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import {
@@ -71,16 +76,19 @@ const elements = z
 /** A story on a canvas: its export, or `file:Story` across states files. */
 const storyRef = z.string().min(1).max(1100);
 
-/** A component canvas's about, edges, groups and dials, as create and update take them. */
+const does = z
+  .enum(ARTIFACT_DOES)
+  .describe("What the person does here: pick, judge, try or draw.");
+const ask = z
+  .string()
+  .min(1)
+  .max(ASK_LIMIT)
+  .describe(
+    'Their one line in the panel\'s head, in their words: the act and its object, like "Pick the head for the phone project page".'
+  );
+
+/** A component canvas's edges, groups and dials, as create and update take them. */
 const canvasFields = {
-  about: z
-    .string()
-    .min(1)
-    .max(CANVAS_SPEC_LIMITS.about)
-    .optional()
-    .describe(
-      "A component canvas's purpose, one sentence. Required on create."
-    ),
   edges: z
     .array(
       z.object({
@@ -132,17 +140,20 @@ const mermaid = z
 export const artifactCreate = {
   name: "artifact_create",
   description:
-    "Make an artifact and open it in your panel. A page is `program` (a decision page, decision-page skill) or " +
-    "`html`, or `dir` holding page.oui or page.html; in a project, neither builds decisions/<name>/ from its folder. " +
-    "A component is its canvas: `file`, the CSF 3 states file beside it (or a list), and " +
-    "`about`; every story drawn live in every state its CSS reaches (component-canvas skill). " +
-    "A preview is a whole app: a folder (`dir`) or a server on `port`; in a workspace `serve` is its command, which " +
-    "CawCo runs there with PORT and keeps up (never start it yourself). Options to pick between: " +
-    "design-explore skill first. A canvas is `elements` or `mermaid`, " +
-    "or empty for the person. The same kind and name again replaces it, picks kept. " +
-    "Answers its id and `opened` (false: `why`); a folder preview, its `weight`; a component, each frame as drawn.",
+    "Open something in the person's panel for them to act on. `does` says what: pick, judge, try or draw; `ask` " +
+    "says it in one line in their words, which heads the panel while it loads and until they act. The `show` skill " +
+    "chooses both and the kind before you build. A pick is a page with `program` (decision-page skill). A judgement " +
+    "is a component canvas: `file`, its CSF 3 states file, every story drawn live (component-canvas skill); or a " +
+    "preview or page when the whole surface is judged. A try is a preview at `path`: a server on `port` (in a " +
+    "workspace `serve` is its command, which CawCo runs there with PORT and keeps up) or a folder (`dir`). A drawing " +
+    "is a canvas: `elements`, `mermaid`, or empty. A page is also `html`, or `dir` holding page.oui or page.html. " +
+    "Proof, references, a plan or finished work go in your words, not here. The same kind and name again replaces " +
+    "it, picks kept. Answers its id and `opened` (false: `why`); a folder preview its `weight`; a component each " +
+    "frame as drawn.",
   input: {
     kind: z.enum(["page", "component", "preview", "canvas"]),
+    does,
+    ask,
     name: z
       .string()
       .regex(ARTIFACT_NAME)
@@ -208,8 +219,8 @@ export const artifactCreate = {
 /** What artifact_create adds for a session that has a parent (a delegate): `to`, and its words. */
 export const artifactCreateToParent = {
   description:
-    ' to: "parent" puts it in your parent\'s panel; they are told once and get its picks and pins. ' +
-    "You keep update, read and show.",
+    ' to: "parent" hands it to your parent unopened: they are told once per hand-off, open it in their panel with artifact_show, and get its picks and pins. ' +
+    "You keep update and read.",
   input: { to: z.literal("parent").optional() },
 };
 
@@ -224,7 +235,7 @@ export const artifactUpdate = {
     'the one of the id given), `delete` (ids) or `mermaid` (added below); it answers its outline and "<id> changed ' +
     "under you\" for what you replaced that the person changed since your last read. A component's `args` sets a " +
     "story's values, `story` adds, duplicates, removes or moves one; each answers the lines and the story's frames. " +
-    "`about`, `edges`, `group`, `dials` change the canvas.",
+    "`ask` changes the head's line for any kind; `edges`, `group`, `dials` change a component canvas.",
   input: {
     id,
     elements,
@@ -255,6 +266,7 @@ export const artifactUpdate = {
       .optional(),
     statements: z.string().min(1).max(PROGRAM_MAX).optional(),
     html: z.string().min(1).max(PAGE_LIMIT).optional(),
+    ask: ask.optional(),
     ...canvasFields,
     patch: z
       .array(
@@ -278,9 +290,9 @@ export const artifactRead = {
     "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. " +
     "When the person sends picks, you are told the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
-    "the person changed since `since` or your last read; `png: true` adds its picture. A component answers each " +
-    "frame as drawn, its moves' animations, its stories, the person's `dials` and `tuned` motion; `state` adds a " +
-    "frame's style delta, `detail: \"story\"` a story's args, `render` draws it now.",
+    "the person changed since `since` or your last read; `png: true` adds its picture. A component answers its " +
+    "frames as drawn, moves, stories, the person's `dials` and `tuned`; `state` adds a frame's style delta, " +
+    '`detail: "story"` a story\'s args, `render` draws it, `verify` asks the design verifier.',
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),
@@ -296,14 +308,16 @@ export const artifactRead = {
       })
       .optional(),
     render: z.boolean().optional(),
+    verify: z.boolean().optional(),
   },
 };
 
 export const artifactList = {
   name: "artifact_list",
   description:
-    "Your artifacts (a lead: its project's too), newest first: shown, opened, open pins, unread changes, " +
-    "picks, and `waitingOn` person or session. `waiting: true` keeps those waiting on someone.",
+    "Your artifacts (a lead: its project's too), newest first: each with its `does` and `ask`, shown, opened, open " +
+    "pins, unread changes, picks, `sent` (the person pressed Send since your last change) and `waitingOn` person or " +
+    "session. `waiting: true` keeps those waiting on someone.",
   input: { waiting: z.boolean().optional() },
 };
 
@@ -335,7 +349,7 @@ export const artifactDelete = {
 export const designMap = {
   name: "design_map",
   description:
-    "The project's component library: each component's states, frames drawn, and what it is made of and used in. " +
+    "The project's component library: each component's states, frames drawn, what it is made of and used in. " +
     "`component` (a file) answers its card: props, stories, moves, call sites. Mount what it lists.",
   input: {
     dir: z

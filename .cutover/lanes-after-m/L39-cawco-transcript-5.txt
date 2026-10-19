@@ -1,0 +1,11 @@
+apps/dashboard/src/lib/cawco/transcript/SystemLine.svelte
+apps/dashboard/src/lib/cawco/transcript/Thinking.svelte
+apps/dashboard/src/lib/cawco/transcript/ToolGroup.svelte
+apps/dashboard/src/lib/cawco/transcript/Transcript.svelte
+apps/dashboard/src/lib/cawco/transcript/TranscriptSkeleton.svelte
+
+# apps/dashboard/src/lib/cawco/transcript/SystemLine.svelte: relic: literal ×2; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/Thinking.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/transcript/ToolGroup.svelte: relic: literal ×21; relic: style-var ×19; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/transcript/Transcript.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1; relic: important ×2
+# apps/dashboard/src/lib/cawco/transcript/TranscriptSkeleton.svelte: relic: literal ×4; relic: style-var ×7

@@ -18,7 +18,18 @@ import UIKit
 /// 2. on a wide screen, the rail's session row carries the session's menu,
 ///    and Delete transcript asks under that row, in the page, then deletes;
 /// 3. a machine's keychain unlock opens under its row, and the hub's refusal
-///    of an install stands under that row too, nothing presented over the page.
+///    of an install stands under that row too, nothing presented over the page;
+///
+/// and, before the fleet is waited on, what needs none of it:
+///
+/// 4. the artifact panel's head for a component canvas, its page holding
+///    picks, at four head widths: each control standing (its key, its form,
+///    its frame) by the web's `standing()`, and what More holds;
+/// 5. that canvas's view: its menu's entries, and the message `deliver`
+///    hands the page for each entry pressed and on the page's ready;
+/// 6. eb42f1374: the round Caw button's rim, and Caw's panel's section rule
+///    in light and dark; the web's 111bec1fb: the phone's standing glass's
+///    outline the same hairline in.
 @MainActor
 enum ParityProbe {
     static let on = ProcessInfo.processInfo.arguments.contains("-parity-probe")
@@ -64,7 +75,149 @@ enum ParityProbe {
         shell.presentedViewController.map { String(describing: type(of: $0)) } ?? "none"
     }
 
+    /// A menu as its words: a titled submenu as `Title[…]`, an untitled one
+    /// inline, a checked entry with `*`, entries `, `, sections ` | `.
+    private static func words(_ elements: [UIMenuElement]) -> String {
+        func said(_ element: UIMenuElement) -> String {
+            if let menu = element as? UIMenu {
+                let inner = menu.children.map(said).joined(separator: ", ")
+                return menu.title.isEmpty ? inner : "\(menu.title)[\(inner)]"
+            }
+            return (element as? UIAction).map { $0.title + ($0.state == .on ? "*" : "") } ?? "?"
+        }
+        return elements.map(said).joined(separator: " | ")
+    }
+
+    /// A message as JSON, its keys sorted.
+    private static func json(_ message: [String: Any]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: message, options: [.sortedKeys, .withoutEscapingSlashes]) else { return "?" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Sorted widths as runs: `300-310,415`.
+    private static func spans(_ widths: [Int]) -> String {
+        var runs: [(Int, Int)] = []
+        for width in widths {
+            if let last = runs.last, last.1 + 1 == width { runs[runs.count - 1].1 = width } else { runs.append((width, width)) }
+        }
+        return runs.map { $0 == $1 ? "\($0)" : "\($0)-\($1)" }.joined(separator: ",")
+    }
+
+    /// The head widths read: a phone's drawer, a phone's full width, a narrow split and a desk's card.
+    private static let headWidths = [330.0, 390, 523, 720]
+
+    /// 4 and 5: a preview controller of its own, at each head width, then its canvas view's entries pressed.
+    private static func head(_ shell: ShellController) async {
+        let session = "parity-probe-head"
+        for key in ["cawco-canvas-view:", "cawco-preview-mode:", "cawco-preview-inspect:"] {
+            UserDefaults.standard.removeObject(forKey: key + session)
+        }
+        let preview = PreviewController(hub: shell.hub, instanceId: session)
+        shell.addChild(preview)
+        preview.view.isHidden = true
+        shell.view.addSubview(preview.view)
+        preview.didMove(toParent: shell)
+        defer {
+            preview.willMove(toParent: nil)
+            preview.view.removeFromSuperview()
+            preview.removeFromParent()
+        }
+        preview.probeAsComponent(name: "Card.stories.js")
+        for width in headWidths {
+            // The head stands `space-2` in from the card's sides.
+            preview.view.frame = CGRect(x: 0, y: 0, width: width + 2 * Space.space2, height: 640)
+            var standing = ""
+            for _ in 0 ..< 4 {
+                preview.view.setNeedsLayout()
+                preview.view.layoutIfNeeded()
+                let now = preview.probeStanding()
+                if now == standing { break }
+                standing = now
+            }
+            log.notice("head standing [\(Int(width), privacy: .public)] \(standing, privacy: .public)")
+            log.notice("head more menu [\(Int(width), privacy: .public)] \(words(preview.probeOverflow), privacy: .public)")
+            await wait(0.1)
+        }
+
+        // More's count: at 0 More keeps its plain width; with pins open, a fit
+        // that leaves Comments in More is fitted again with the count's room.
+        // Every 1pt from 300 to 800, each layout laid out twice more: what
+        // stands must not move between frames, nor a control a narrower head
+        // stands go from a wider one.
+        for open in [0, 2] {
+            preview.probeOpen = open
+            var unsettled: [Int] = []
+            var recounts: [Int] = []
+            var drops: [String] = []
+            var narrower: (width: Int, stood: Set<String>)?
+            for width in 300 ... 800 {
+                preview.view.frame = CGRect(x: 0, y: 0, width: Double(width) + 2 * Space.space2, height: 640)
+                preview.view.setNeedsLayout()
+                preview.view.layoutIfNeeded()
+                let first = preview.probeStood
+                var lines: [String] = []
+                for _ in 0 ..< 2 {
+                    preview.view.setNeedsLayout()
+                    preview.view.layoutIfNeeded()
+                    lines.append(preview.probeStanding())
+                }
+                let stood = preview.probeStood
+                if first != stood || lines[0] != lines[1] { unsettled.append(width) }
+                if preview.probeRecounted {
+                    if recounts.isEmpty {
+                        log.notice("head standing [\(width, privacy: .public) open \(open, privacy: .public)] \(lines[1], privacy: .public)")
+                    }
+                    recounts.append(width)
+                }
+                if let narrower, !narrower.stood.isSubset(of: stood) {
+                    drops.append("\(width):\(narrower.stood.subtracting(stood).sorted().joined(separator: "+"))")
+                }
+                narrower = (width, stood)
+            }
+            log.notice("head sweep [open \(open, privacy: .public)] widths=300-800 unsettled=\(unsettled.isEmpty ? "none" : spans(unsettled), privacy: .public) recount=\(recounts.isEmpty ? "none" : spans(recounts), privacy: .public) drops=\(drops.isEmpty ? "none" : drops.joined(separator: ","), privacy: .public)")
+        }
+        preview.probeOpen = nil
+
+        let view = preview.probeCanvasView
+        log.notice("canvas view button [head] label=\(view.button.accessibilityLabel ?? "-", privacy: .public) glyph=\(Glyph.dataLayers.rawValue, privacy: .public) menu=\(view.button.showsMenuAsPrimaryAction ? "primary" : "no", privacy: .public)")
+        log.notice("canvas view menu [fresh] \(words(view.entries()), privacy: .public)")
+        var sent: [String] = []
+        preview.probeDelivered = { message in
+            if message["type"] as? String == "cawco:canvas-view" { sent.append(json(message)) }
+        }
+        // Each entry, as its press runs it; Reduced motion twice, on then off.
+        for choice in CanvasViewControl.choices + [.motion] {
+            sent = []
+            view.pick(choice)
+            log.notice("canvas view chose [\(choice.words, privacy: .public)] sent=\(sent.joined(separator: " + "), privacy: .public)")
+        }
+        log.notice("canvas view menu [chosen] \(words(view.entries()), privacy: .public)")
+        log.notice("canvas view kept [session] \(UserDefaults.standard.string(forKey: "cawco-canvas-view:\(session)") ?? "-", privacy: .public)")
+        sent = []
+        preview.probeReady()
+        log.notice("canvas view ready [page] sent=\(sent.joined(separator: " + "), privacy: .public)")
+        preview.probeDelivered = nil
+    }
+
+    /// 6: the Caw button laid out at its own size, round and the phone's
+    /// standing glass, and the section rule in each scheme.
+    private static func caw() {
+        for standing in [false, true] {
+            let button = NeedsCawButton(standing: standing)
+            let side = button.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+            button.frame = CGRect(origin: .zero, size: side)
+            button.setNeedsLayout()
+            button.layoutIfNeeded()
+            log.notice("caw rim [\(standing ? "standing" : "round", privacy: .public)] \(button.probeRim, privacy: .public)")
+        }
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            log.notice("caw rule [\(style == .dark ? "dark" : "light", privacy: .public)] \(CawPanelProbe.sectionRule(style), privacy: .public)")
+        }
+    }
+
     private static func run(_ shell: ShellController, home: HomeModel) async {
+        await head(shell)
+        caw()
         let hub = shell.hub
         let ids = ids
         guard let proposal = ids["proposal"], let origin = ids["origin"], let ghost = ids["ghost"] else {

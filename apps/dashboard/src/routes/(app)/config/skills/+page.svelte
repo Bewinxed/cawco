@@ -5,6 +5,7 @@
     type FleetSkillMeta,
     type MarketplacePluginInfo,
     machineLabel,
+    skillsWords as words,
   } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import {
@@ -118,7 +119,7 @@
   }
 
   /** What a skill or plugin row says while the hub fetches it, the words a fetch button says. */
-  const FETCHING = "Fetching…";
+  const FETCHING = words.fetching;
 
   /**
    * What a row's last action came to when the hub refused it, by the row's
@@ -216,7 +217,7 @@
   /** Where a kept version came from: the fleet's own row, or a machine's edited copy. */
   function sourceLabel(source: string): string {
     if (!source.startsWith("machine:")) {
-      return "the fleet";
+      return words.theFleet;
     }
     const machineId = source.slice("machine:".length);
     const machine = machines.find((row) => row.machineId === machineId);
@@ -352,10 +353,10 @@
         disabled={hubDown() !== null}
         failed={refetchFailed}
         icon={IconRefresh}
-        label="Fetch all {hubBroken.length} again"
+        label={words.fetchAllAgain(hubBroken.length)}
         onclick={refetchAll}
         pending={refetching}
-        pendingLabel="Fetching…"
+        pendingLabel={words.fetching}
         size="sm"
         title={hubDown() ?? undefined}
         variant="outline"
@@ -377,30 +378,17 @@
     />
   {/snippet}
 
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
-  <div
-    data-slot="group"
-    class="flex flex-col gap-(--gap)"
-    style:--gap="8px"
-    style:--note-measure="72ch"
-  >
-    <SectionHeader hue={HUE} icon={IconBolt} label="Skills" />
+  <div data-slot="group" class="group">
+    <SectionHeader hue={HUE} icon={IconBolt} label={words.skills} />
     {#if skills.length === 0}
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--note-measure) text-ink-muted"
-      >
-        No skills fetched yet. Paste what you would otherwise have run and the
-        hub downloads the files itself.
-      </p>
+      <p data-slot="note" class="note">{words.noSkills}</p>
     {:else}
-      <RowList label="Skills">
+      <RowList label={words.skills}>
         {#each skills as row (row.name)}
           <SectionRow
             actions={[
               {
-                label: row.fetching ? FETCHING : "Fetch again",
+                label: row.fetching ? FETCHING : words.fetchAgain,
                 icon: IconRefresh,
                 disabled: busy[row.name] === true || row.fetching === true,
                 onselect: () => refetchSkill(row),
@@ -408,13 +396,13 @@
               {
                 label:
                   historyOf === row.name
-                    ? "Hide previous versions"
-                    : "Previous versions",
+                    ? words.hidePreviousVersions
+                    : words.previousVersions,
                 icon: IconHistory,
                 onselect: () => toggleHistory(row),
               },
               {
-                label: "Remove everywhere",
+                label: words.removeEverywhere,
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[row.name] === true,
@@ -460,8 +448,8 @@
                 {#if versionsOf[row.name] === undefined && !versionsFailed[row.name]}
                   <div
                     data-slot="listing"
-                    aria-label="Reading {row.name}'s previous versions"
-                    class="m-0 flex list-none flex-col gap-space-row p-0"
+                    aria-label={words.readingVersions(row.name)}
+                    class="listing"
                     role="status"
                   >
                     {#each [0, 1] as line (line)}
@@ -484,36 +472,20 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
-      CawCo installs a skill's files. A skill that also ships hooks or subagents
-      runs in its degraded mode until those are set up by hand.
-    </p>
+    <p data-slot="note" class="note">{words.degraded}</p>
   </div>
 
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
-  <div
-    data-slot="group"
-    class="flex flex-col gap-(--gap) border-t border-t-border-hairline pt-space-5"
-    style:--gap="8px"
-    style:--note-measure="72ch"
-  >
-    <SectionHeader hue={HUE} icon={IconShop} label="Marketplaces" />
+  <div data-slot="group" class="group">
+    <SectionHeader hue={HUE} icon={IconShop} label={words.marketplaces} />
     {#if marketplaces.length === 0}
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--note-measure) text-ink-muted"
-      >
-        No marketplaces linked yet. Link one and its plugins become browsable
-        here.
-      </p>
+      <p data-slot="note" class="note">{words.noMarketplaces}</p>
     {:else}
-      <RowList label="Marketplaces">
+      <RowList label={words.marketplaces}>
         {#each marketplaces as row (row.name)}
           <SectionRow
             actions={[
               {
-                label: "Unlink",
+                label: words.unlink,
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[row.name] === true,
@@ -538,11 +510,11 @@
                 data-ghost
                 onclick={() => browse(row)}
                 size="sm"
-                title={`Read from ${row.source}`}
+                title={words.readFrom(row.source)}
                 variant="ghost"
               >
                 <IconSearch />
-                <span>{browsing === row.name ? "Hide" : "Browse"}</span>
+                <span>{browsing === row.name ? words.hide : words.browse}</span>
               </Button>
             {/snippet}
             {#snippet below()}
@@ -560,8 +532,8 @@
                 {#if reading[row.name]}
                   <div
                     data-slot="listing"
-                    aria-label="Reading {row.name}"
-                    class="m-0 flex list-none flex-col gap-space-row p-0"
+                    aria-label={words.reading(row.name)}
+                    class="listing"
                     role="status"
                   >
                     {#each [0, 1, 2] as line (line)}
@@ -573,12 +545,7 @@
                     {unread[row.name]}
                   </p>
                 {:else if (listings[row.name] ?? []).length === 0}
-                  <p
-                    data-slot="note"
-                    class="type-meta max-w-(--note-measure) text-ink-muted"
-                  >
-                    This marketplace lists no plugins.
-                  </p>
+                  <p data-slot="note" class="note">{words.listsNothing}</p>
                 {:else}
                   <ul
                     data-slot="listing"
@@ -628,18 +595,16 @@
                           {/if}
                         </span>
                         {#if installed(id)}
-                          <span
-                            data-slot="note"
-                            class="type-meta max-w-(--note-measure) text-ink-muted"
-                            >Added</span
+                          <span data-slot="note" class="note"
+                            >{words.added}</span
                           >
                         {:else}
                           <Button
                             failed={id in installFailed}
-                            label="Install"
+                            label={words.install}
                             onclick={() => install(plugin, row.name)}
                             pending={busy[id] === true}
-                            pendingLabel="Adding…"
+                            pendingLabel={words.adding}
                             size="sm"
                             variant="outline"
                           />
@@ -657,35 +622,23 @@
     {/if}
   </div>
 
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
-  <div
-    data-slot="group"
-    class="flex flex-col gap-(--gap) border-t border-t-border-hairline pt-space-5"
-    style:--gap="8px"
-    style:--note-measure="72ch"
-  >
-    <SectionHeader hue={HUE} icon={IconLayers} label="Plugins" />
+  <div data-slot="group" class="group">
+    <SectionHeader hue={HUE} icon={IconLayers} label={words.plugins} />
     {#if plugins.length === 0}
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--note-measure) text-ink-muted"
-      >
-        Nothing installed yet. Browse a marketplace above and add a plugin.
-      </p>
+      <p data-slot="note" class="note">{words.noPlugins}</p>
     {:else}
-      <RowList label="Plugins">
+      <RowList label={words.plugins}>
         {#each plugins as row (row.id)}
           <SectionRow
             actions={[
               {
-                label: row.fetching ? FETCHING : "Fetch again",
+                label: row.fetching ? FETCHING : words.fetchAgain,
                 icon: IconRefresh,
                 disabled: busy[row.id] === true || row.fetching === true,
                 onselect: () => refetchPlugin(row),
               },
               {
-                label: "Remove everywhere",
+                label: words.removeEverywhere,
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[row.id] === true,
@@ -698,7 +651,7 @@
             icon={IconLayers}
             meta={row.fetching
               ? FETCHING
-              : sized(row).join(" · ") || "No bytes resolved yet"}
+              : sized(row).join(" · ") || words.noBytes}
             mono
             name={row.id}
             ontoggle={(next) => togglePlugin(row.id, next)}
@@ -731,9 +684,7 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
-      Disabling a plugin uninstalls it from the machines and keeps its row here.
-    </p>
+    <p data-slot="note" class="note">{words.pluginOff}</p>
   </div>
 
   <MachineInventory

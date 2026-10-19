@@ -1,0 +1,13 @@
+apps/dashboard/src/lib/cawco/home/CawMark.svelte
+apps/dashboard/src/lib/cawco/home/CawPanel.svelte
+apps/dashboard/src/lib/cawco/home/Home.svelte
+apps/dashboard/src/lib/cawco/home/HomeRecent.svelte
+apps/dashboard/src/lib/cawco/home/MovedLogins.svelte
+apps/dashboard/src/lib/cawco/home/NeedsCard.svelte
+
+# apps/dashboard/src/lib/cawco/home/CawMark.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/home/CawPanel.svelte: relic: literal ×5; relic: style-var ×3
+# apps/dashboard/src/lib/cawco/home/Home.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/home/HomeRecent.svelte: relic: literal ×3; relic: style-var ×3
+# apps/dashboard/src/lib/cawco/home/MovedLogins.svelte: relic: literal ×3; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/home/NeedsCard.svelte: after-M: a ! override; after-M: markup naming a scoped class; after-M: an inline style; after-M: a Tailwind class with a raw value; after-M: a scoped <style> rule; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: bang ×1; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×3; lint: shadcn/no-restyle ×6

@@ -3,36 +3,35 @@
  * (core upstream-post.ts), on the machine whose workspace held them: each is
  * raised to the hub as the person's ask ({@link raiseUpstreamAsk}), and made
  * here once they approve it ({@link makeUpstreamPost}), with this machine's
- * own GitHub sign-in, which no guarded workspace ever holds.
+ * own sign-in, which no guarded workspace ever holds.
  *
- * What is made is exactly what was asked: the held gh argv run by the host's
- * gh in an empty folder of CawCo's own, the repository it resolved to in the
- * workspace pinned (`GH_REPO`, `GH_HOST`); the held request sent again to
- * GitHub's API with the host's token; the held commits pushed from the
- * workspace's clone to the same URL and refs. Nothing is retried.
+ * What is made is exactly what was asked: the held request sent again to
+ * GitHub's API with the host's token, through Octokit's `request`; the held commits pushed from the
+ * workspace's clone to the same URL and refs, on any host, with the host's
+ * own git credential, their large files first to that repository's own LFS.
+ * Nothing is retried.
  */
-import { mkdir, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { CAWCO_ENV } from "@cawco/core";
+import { join } from "node:path";
+import { CAWCO_ENV, type WorkspaceRef } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { cawcoDataDir } from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,
   safeGitArgv,
 } from "@cawco/core/safe-git";
-import { hostEnvironment } from "@cawco/core/session-env";
-import type { GhPost } from "@cawco/core/upstream-guard";
-import { GITHUB_API, ghPostProblem } from "@cawco/core/upstream-guard";
-import type {
-  GitPost,
-  HttpPost,
-  PostMade,
-  UpstreamPost,
+import { GITHUB_API } from "@cawco/core/upstream-guard";
+import {
+  FORGE_NAMES,
+  type GitPost,
+  type HttpPost,
+  type PostMade,
+  type UpstreamPost,
 } from "@cawco/core/upstream-post";
+import { Octokit } from "@octokit/rest";
 import { toHttpBase } from "./discovery";
-import { hostGh, hostGhToken } from "./host-gh";
-import { hostGithubGitEnv } from "./hub-git";
+import { forgeLocation, forgeOn, makeForgePost } from "./forges/forge";
+import { hostGhToken } from "./host-gh";
+import { hostGitEnv, isNetworkRemote, pushLfs } from "./hub-git";
 import { provenFetch } from "./hub-proof";
 import { workspaceRefs } from "./workspace-records";
 
@@ -41,7 +40,7 @@ const MAKE_MS = 5 * 60_000;
 /** How much of what the post's program said is kept for the session. */
 const SAID_MAX = 4000;
 
-/** How long `gh api user` may take to name the login. Our choice. */
+/** How long a forge may take to name the login. Our choice. */
 const ACCOUNT_MS = 15_000;
 
 /** What a program said: its exit, and its stdout and stderr together. */
@@ -92,27 +91,27 @@ const madeBy = (read: Bounded<Ran>, what: string): PostMade => {
   }
 };
 
-/** The GitHub login this machine's gh posts as; a plain phrase when gh cannot say in time. */
-export const hostAccount = async (): Promise<string> => {
-  const gh = await hostGh();
-  if (!gh) {
-    return "this machine's GitHub sign-in";
+/**
+ * Who a post to `repo` (`host/owner/repo`) is made as: the login of the
+ * host's own sign-in on that host's forge, as its adapter reads it (gh, glab
+ * or tea, forges/), found as `forge_post` finds it (forges/forge.ts
+ * `forgeOn`: the one forge whose CLI signs in there), or that forge's
+ * sign-in in words when the login cannot be read in time; on a host no
+ * forge CLI alone signs in to, this machine's own git sign-in there, which
+ * only its credential helper or ssh knows.
+ */
+export const hostAccount = async (repo: string): Promise<string> => {
+  const at = repo.indexOf("/");
+  const found = await forgeOn(repo.slice(0, at));
+  if (typeof found === "string") {
+    return "this machine's git sign-in";
   }
-  const read = await runWithin(
-    ACCOUNT_MS,
-    [gh, "api", "user", "--jq", ".login"],
-    {
-      env: hostEnvironment(),
-      stdin: "ignore",
-    }
-  );
-  const login =
-    read.kind === "answered" && read.value.code === 0
-      ? read.value.said.split("\n")[0]?.trim()
-      : undefined;
-  return login && !login.includes(" ")
-    ? `@${login}`
-    : "this machine's GitHub sign-in";
+  const read = await readWithin(ACCOUNT_MS, () =>
+    found.adapter.client(found.signIn, repo.slice(at + 1)).account()
+  ).catch(() => undefined);
+  return read?.kind === "answered" && !read.value.includes(" ")
+    ? `@${read.value}`
+    : `this machine's ${FORGE_NAMES[found.adapter.forge]} sign-in`;
 };
 
 /**
@@ -133,7 +132,10 @@ export const raiseUpstreamAsk = async (
       text: `cawco: \`${what}\` did not run: this machine has no hub to ask the owner through. Nothing was posted.`,
     };
   }
-  const account = await hostAccount();
+  // A push names its host with its port, as a forge CLI's login does; the
+  // repository's identity, as the rule compares it, names none.
+  const at = post.via === "git" ? forgeLocation(post.url) : undefined;
+  const account = await hostAccount(at ? `${at.host}/${at.path}` : repo);
   try {
     const answer = await provenFetch(`${hub}/api/upstream/asks`, {
       method: "POST",
@@ -152,43 +154,20 @@ export const raiseUpstreamAsk = async (
 const cut = (text: string): string =>
   text.length > SAID_MAX ? `${text.slice(0, SAID_MAX)}…` : text;
 
-/** A held gh post, run by the host's gh in an empty folder of CawCo's own, so nothing of the workspace's is read. */
-const makeGh = async (post: GhPost): Promise<PostMade> => {
-  const problem = ghPostProblem(post);
-  if (problem) {
-    return { ok: false, said: `CawCo did not run it: ${problem}.` };
-  }
-  const gh = await hostGh();
-  if (!gh) {
-    return { ok: false, said: "This machine has no gh to post with." };
-  }
-  const dir = join(cawcoDataDir(), "upstream-posts", crypto.randomUUID());
-  await mkdir(dir, { recursive: true, mode: 0o700 });
-  try {
-    const read = await runWithin(MAKE_MS, [gh, ...post.args], {
-      cwd: dir,
-      env: {
-        ...hostEnvironment(),
-        GH_REPO: post.repo,
-        GH_HOST: post.host,
-        GH_PROMPT_DISABLED: "1",
-        GH_NO_UPDATE_NOTIFIER: "1",
-        // No checkout above the empty folder is ever read as gh's.
-        GIT_CEILING_DIRECTORIES: dirname(dir),
-      },
-      stdin:
-        post.stdin === undefined ? "ignore" : Buffer.from(post.stdin, "utf8"),
-    });
-    return madeBy(read, "gh");
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-};
-
 const WRITE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 const TRAILING_SLASHES = /\/+$/;
 
-/** A held request, sent again to GitHub's API with the host's token. */
+/** What @octokit/endpoint reads as its URL template's own (`:name`, `{name}`): kept as the URL's escapes, which GitHub reads alike. */
+const TEMPLATE_MARKS = /[:{}]/g;
+
+/**
+ * A held request, sent again to GitHub's API with the host's token through
+ * Octokit's `request` (github.com/octokit/request.js): the method, path,
+ * query, content type and body exactly as the person approved them (a body
+ * given as text is sent as it is, @octokit/endpoint `parse`: "if ("data" in
+ * remainingParameters) body = remainingParameters.data"), no redirect
+ * followed.
+ */
 const makeHttp = async (post: HttpPost): Promise<PostMade> => {
   if (!(GITHUB_API.has(post.host) && WRITE_METHODS.has(post.method))) {
     return {
@@ -200,29 +179,43 @@ const makeHttp = async (post: HttpPost): Promise<PostMade> => {
   if (!token) {
     return { ok: false, said: "This machine's gh is not signed in to GitHub." };
   }
+  const octokit = new Octokit({
+    auth: token,
+    baseUrl: `https://${post.host}`,
+    userAgent: "CawCo",
+  });
   const read = await readWithin(MAKE_MS, async (signal) => {
-    const answer = await fetch(
-      `https://${post.host}${post.path}${post.search}`,
-      {
+    try {
+      const answer = await octokit.request({
         method: post.method,
-        headers: {
-          authorization: `token ${token}`,
-          accept: "application/vnd.github+json",
-          ...(post.contentType ? { "content-type": post.contentType } : {}),
-        },
-        ...(post.body === undefined ? {} : { body: post.body }),
-        redirect: "manual",
-        signal,
+        url: `${post.path}${post.search}`.replace(TEMPLATE_MARKS, (mark) =>
+          encodeURIComponent(mark)
+        ),
+        headers: post.contentType ? { "content-type": post.contentType } : {},
+        ...(post.body === undefined ? {} : { data: post.body }),
+        request: { redirect: "manual", signal },
+      });
+      return { status: answer.status, data: answer.data as unknown };
+    } catch (error) {
+      // Octokit throws GitHub's own answer for any status of 300 or more
+      // (@octokit/request-error `RequestError`: its `status` and `response`).
+      const refused = error as {
+        response?: { data?: unknown };
+        status?: unknown;
+      } | null;
+      if (typeof refused?.status === "number" && refused.response) {
+        return { status: refused.status, data: refused.response.data };
       }
-    );
-    return { answer, text: await answer.text() };
+      throw error;
+    }
   });
   switch (read.kind) {
     case "answered": {
-      const { answer, text } = read.value;
+      const { status, data } = read.value;
+      const text = typeof data === "string" ? data : JSON.stringify(data ?? "");
       return {
-        ok: answer.ok && !graphqlErrors(post, text),
-        said: cut(`${answer.status} ${text}`.trim()),
+        ok: status >= 200 && status < 300 && !graphqlErrors(post, data),
+        said: cut(`${status} ${text}`.trim()),
       };
     }
     case "unanswered":
@@ -238,28 +231,34 @@ const makeHttp = async (post: HttpPost): Promise<PostMade> => {
 };
 
 /** Whether a GraphQL answer carries errors: GitHub answers 200 with them. */
-const graphqlErrors = (post: HttpPost, text: string): boolean => {
+const graphqlErrors = (post: HttpPost, data: unknown): boolean => {
   if (post.path.replace(TRAILING_SLASHES, "") !== "/graphql") {
     return false;
   }
-  try {
-    return Array.isArray((JSON.parse(text) as { errors?: unknown }).errors);
-  } catch {
-    // Not JSON: GitHub answered something no GraphQL call ends in.
-    return true;
-  }
+  // Not an object: GitHub answered something no GraphQL call ends in.
+  return typeof data === "object" && data !== null
+    ? Array.isArray((data as { errors?: unknown }).errors)
+    : true;
 };
 
-const GITHUB_HTTPS = /^https:\/\/github\.com\//;
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const REF = /^refs\/[A-Za-z0-9._/-]+$/;
 
-/** A held push, made from the workspace's clone to the same URL and refs, with the host's gh credential. */
-const makeGit = async (id: string, post: GitPost): Promise<PostMade> => {
-  if (!GITHUB_HTTPS.test(post.url)) {
+/**
+ * A held push, made from the clone of workspace `ref` to the same URL and
+ * refs, with the host's own credential for its host and transport: the
+ * large files its commits reach go first to that repository's own LFS, by
+ * its URL alone (hub-git.ts `pushLfs`), and when they do not go nothing is
+ * pushed.
+ */
+export const makeHeldPush = async (
+  ref: WorkspaceRef,
+  post: GitPost
+): Promise<PostMade> => {
+  if (!isNetworkRemote(post.url)) {
     return {
       ok: false,
-      said: `CawCo did not push: ${post.url} is not GitHub.`,
+      said: `CawCo did not push: ${post.url} is no remote across the network, which is all a held push goes to.`,
     };
   }
   const bad = post.refs.find(
@@ -271,17 +270,20 @@ const makeGit = async (id: string, post: GitPost): Promise<PostMade> => {
       said: `CawCo did not push: ${bad.sha}:${bad.dst} is not a commit and a ref.`,
     };
   }
-  const ref = (await workspaceRefs()).find((each) => each.id === id);
-  if (!ref) {
-    return {
-      ok: false,
-      said: "CawCo did not push: the workspace's clone is gone from this machine.",
-    };
-  }
   const gitDir = join(ref.path, ".git");
   const problem = await repositoryConfigProblem(gitDir);
   if (problem) {
     return { ok: false, said: `CawCo did not push: ${problem}.` };
+  }
+  const env = await hostGitEnv();
+  const lfsRefused = await pushLfs(
+    ref,
+    post.refs.map((each) => each.sha),
+    env,
+    post.url
+  );
+  if (lfsRefused) {
+    return { ok: false, said: `CawCo did not push: ${lfsRefused}.` };
   }
   const read = await runWithin(
     MAKE_MS,
@@ -294,7 +296,7 @@ const makeGit = async (id: string, post: GitPost): Promise<PostMade> => {
     ]),
     {
       cwd: ref.path,
-      env: { ...(await hostGithubGitEnv()), ...SAFE_GIT_ENV, GIT_DIR: gitDir },
+      env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: gitDir },
       stdin: "ignore",
     }
   );
@@ -302,21 +304,29 @@ const makeGit = async (id: string, post: GitPost): Promise<PostMade> => {
 };
 
 /**
- * Makes one approved post for workspace `id`, once (the hub's
- * `CONTROL_UPSTREAM_POST`): answers whether it went and what was said.
+ * Makes one post once (the hub's `CONTROL_UPSTREAM_POST`), approved or the
+ * project's own: a held request or push for workspace `id`, or a forge write,
+ * which needs no workspace. Answers whether it went and what was said.
  */
 export const makeUpstreamPost = async (
-  id: string,
+  id: string | null,
   post: UpstreamPost
 ): Promise<PostMade> => {
   console.log(`[upstream] ${id}: making an approved ${post.via} post`);
   switch (post.via) {
-    case "gh":
-      return await makeGh(post);
     case "http":
       return await makeHttp(post);
-    case "git":
-      return await makeGit(id, post);
+    case "forge":
+      return await makeForgePost(post);
+    case "git": {
+      const ref = (await workspaceRefs()).find((each) => each.id === id);
+      return ref
+        ? await makeHeldPush(ref, post)
+        : {
+            ok: false,
+            said: "CawCo did not push: the workspace's clone is gone from this machine.",
+          };
+    }
     case "mcp":
       return {
         ok: false,

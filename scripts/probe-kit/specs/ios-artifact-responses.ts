@@ -180,6 +180,8 @@ async function run(kit: Kit): Promise<void> {
   };
   const created = await call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "coconut-song",
     html: PAGE,
   });

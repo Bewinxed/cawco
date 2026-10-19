@@ -258,11 +258,49 @@ interface On {
 
 const [template] = HOOK_TEMPLATES;
 
+/**
+ * The config rail's count on `slug`'s row once read (no dash left): its
+ * text, or "none" when it is not drawn.
+ */
+const railCount = (page: Page, slug: string): Promise<string> =>
+  page
+    .waitForFunction(
+      (href) => {
+        const row = document.querySelector(
+          `a[data-slot="row"][href="${href}"]`
+        );
+        const count = row?.querySelector('[data-slot="count"]');
+        if (!row || count?.textContent === "—") {
+          return null;
+        }
+        return count?.textContent ?? "none";
+      },
+      `/config/${slug}`,
+      { timeout: 30_000 }
+    )
+    .then((handle) => handle.jsonValue() as Promise<string>)
+    .catch(() => "never read");
+
 async function hooks({ kit, fleet, page, base }: On) {
   const hookId = "probe-undo-hook";
+  // The rail's Hooks count, only above 0 (DESIGN.md, The Earned Count Rule).
+  await open(page, `${base}/config/hooks`, 'a[data-slot="row"]');
+  const none = (await hooksOf(fleet)).length;
+  const atNone = await railCount(page, "hooks");
+  kit.check(
+    `hooks: the rail's Hooks row draws no count with ${none} hooks`,
+    none === 0 && atNone === "none",
+    `hub holds ${none}; the rail's count ${atNone}`
+  );
   await hubSend(fleet, "PUT", `/api/fleet/hooks/${hookId}`, template.draft);
   const hookName = template.draft.name;
   await open(page, `${base}/config/hooks`, `text=${hookName}`);
+  const atOne = await railCount(page, "hooks");
+  kit.check(
+    "hooks: with one hook, the rail's Hooks row counts 1",
+    atOne === "1",
+    `the rail's count ${atOne}`
+  );
   const hookHeld = async () =>
     (await hooksOf(fleet)).some((one) => one.id === hookId);
   const hookDelete = await deleteFromMenu(

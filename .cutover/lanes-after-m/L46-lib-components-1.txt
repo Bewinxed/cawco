@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/components/features/DiffModal.svelte
+apps/dashboard/src/lib/components/features/DirectoryPicker.svelte
+apps/dashboard/src/lib/components/features/MarkdownEditor.svelte
+apps/dashboard/src/lib/components/features/ProviderLogo.svelte
+apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte
+apps/dashboard/src/lib/components/features/tool-cards/OutputBlock.svelte
+apps/dashboard/src/lib/components/features/tool-cards/ToolProse.svelte
+
+# apps/dashboard/src/lib/components/features/DiffModal.svelte: relic: literal ×1; relic: style-var ×6
+# apps/dashboard/src/lib/components/features/DirectoryPicker.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/components/features/MarkdownEditor.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×1; relic: style-reason ×1; relic: important ×14; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/components/features/ProviderLogo.svelte: relic: style-reason ×1; relic: important ×1
+# apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte: relic: literal ×2; relic: style-var ×3
+# apps/dashboard/src/lib/components/features/tool-cards/OutputBlock.svelte: relic: literal ×1; relic: style-var ×2
+# apps/dashboard/src/lib/components/features/tool-cards/ToolProse.svelte: relic: style-reason ×1

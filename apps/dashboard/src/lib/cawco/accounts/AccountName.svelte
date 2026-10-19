@@ -15,7 +15,7 @@
     row = false,
     wrap = false,
   }: {
-    account: Pick<Account, "email" | "id" | "label"> &
+    account: Pick<Account, "email" | "id" | "identity" | "label" | "provider"> &
       Partial<Pick<Account, "kind">>;
     row?: boolean;
     wrap?: boolean;

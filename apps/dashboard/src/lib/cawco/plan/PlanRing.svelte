@@ -42,11 +42,18 @@
 </button>
 
 <style>
-  /* residual: pseudo — the kit Toggle's on state: by day a step past the hover. */
-  [data-slot="plan-ring"][aria-pressed="true"]::before {
-    background-color: light-dark(
-      var(--surface-fill-strong),
-      var(--surface-fill)
-    );
+  .plan-ring {
+    color: var(--ink-muted);
+  }
+  .plan-ring[aria-pressed="true"] {
+    color: var(--ink-strong);
+
+    /* The kit Toggle's on state: by day a step past the hover. */
+    &::before {
+      background-color: var(--surface-pressed);
+    }
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
   }
 </style>

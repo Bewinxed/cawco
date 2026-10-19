@@ -1,25 +1,36 @@
 /**
- * The upstream guard (core upstream-guard.ts, agent upstream-shim.ts, hub
- * upstream.ts), its choice made where the owner put it: Caw's Needs you
- * while the fleet's is unanswered (the onboarding row, NeedsCard), and each
- * project's ⋯ menu (UpstreamMenu). While the choice keeps agents off other
- * people's repositories, a write to one does not run, and the session reads
- * why. On a scratch fleet (real hub, agent and sessiond; Claude Code against
- * the mock model), boundaries included: run it where a workspace boundary
- * can start (not inside another one).
+ * The upstream guard (core upstream-guard.ts, agent github-door.ts and
+ * hub-git.ts, hub upstream.ts), its choice made where the owner put it:
+ * Caw's Needs you while the fleet's is unanswered (the onboarding row,
+ * NeedsCard), and each project's ⋯ menu (UpstreamMenu). While the choice
+ * keeps agents off other people's repositories, a write to one does not go
+ * out, and the session reads why. It is held where the credential is: a
+ * guarded workspace holds no forge's token, and what it writes with a
+ * credential goes through its GitHub door or its git door, on the host. On
+ * a scratch fleet (real hub, agent and sessiond; Claude Code against the
+ * mock model), boundaries included: run it where a workspace boundary can
+ * start (not inside another one).
  *
  * A fake `gh` first on the services' PATH records each call it runs, with
  * the GitHub token it ran with and whether its config sends it through the
- * workspace's GitHub door, in the workspace's TMPDIR; the boundary's guard
- * shim stands before it. On the host it is the agent's gh too, whose
- * `gh auth token` answers `probe-host-token`. The services run with a
- * caller's `GH_TOKEN` (`probe-caller-token`), as a person's shell may. The
- * project is a checkout with no origin of its own, so the hub is its remote
- * and a workspace's push goes through the workspace's git door, as it does
- * for every project whose remote is the hub. (A clone keeps its source's
- * own origin, clone.ts, and a local path outside the clone is no origin a
+ * workspace's GitHub door, in the workspace's TMPDIR. On the host it is the
+ * agent's gh too, whose `gh auth token` answers `probe-host-token` for
+ * github.com and, as the real gh does, nothing for any other host. The
+ * host's gh config names a unix socket (`http_unix_socket`, as go-gh reads
+ * it) where a stand-in of GitHub's API answers `/user` as `probe-person`:
+ * the GitHub adapter reads the login there (agent forges/github.ts). The
+ * host's real gh, by its path, is what posts through the door. The services run with a caller's token for every forge
+ * (`GH_TOKEN` `probe-caller-token`, `GITLAB_TOKEN`, `OAUTH_TOKEN`,
+ * `CI_JOB_TOKEN`, `GITEA_TOKEN`), as a person's shell may. The project is a
+ * checkout with no origin of its own, so the hub is its remote and a
+ * workspace's push goes through the workspace's git door, as it does for
+ * every project whose remote is the hub. (A clone keeps its source's own
+ * origin, clone.ts, and a local path outside the clone is no origin a
  * boundary can write, guarded or not.) Its remote is recorded as
  * github.com/probe-owner/probe-repo, as a GitHub checkout's would be.
+ * "Another person's repository" on a host that is not GitHub is a bare
+ * repository the probe serves over http with git's own http-backend, on
+ * the host's loopback, counting each push it takes.
  *
  * Every choice is pressed in the built dashboard, at the desk (1440, a
  * mouse) and on the phone (390, a finger: a tap at the control's centre),
@@ -40,49 +51,54 @@
  *     other repositories" the one checked, each the hit test's at its centre.
  * (b) One delegate of the project, its workspace's rule guarded by the
  *     fleet's answer the onboarding row gave (the project inherits), runs:
- *     A `gh issue create -R someone/else`: refused with the guard's reason,
- *       and the fake gh never ran;
- *     B `gh issue create -R probe-owner/probe-repo`: runs;
- *     C `gh api repos/x/y/issues -f title=t`: refused, fake gh never ran;
- *     D `gh api repos/x/y/issues` (a GET): runs;
- *     T no GitHub token variable is in a command's environment;
- *     G a `gh api graphql` mutation naming no repository: refused, fake gh
- *       never ran;
- *     H a mutation naming the project's own repository: runs;
- *     X the real gh by its absolute path, `api repos/x/y/issues -f title=t`:
- *       its request reaches the workspace's GitHub door, which refuses it;
+ *     T no forge's token variable is in a command's environment;
+ *     B `gh issue create -R probe-owner/probe-repo` (the fake): runs with no
+ *       token at all, its config naming the GitHub door;
+ *     G the real gh's `api graphql` mutation naming no repository: refused
+ *       by the GitHub door;
+ *     X the real gh, `api repos/x/y/issues -f title=t`: refused by the door;
  *     Z the real curl straight to the door's socket, the same POST: refused;
- *     P `git commit` and `git push` to the clone's origin: lands;
- *     and B's gh ran with no token at all, its config naming the door.
+ *     S `git push git@other.probe.test:…` (ssh): refused at the git door in
+ *       the guard's words, with the draft line;
+ *     L the same under another login, `alice@other.probe.test:…`: git's ssh
+ *       inside says the workspace holds no key, and nothing goes;
+ *     P `git commit` and `git push` to the clone's origin: lands.
  * (c) ⋯ › "Let agents post upstream" at the desk: the hub has the project's
  *     own `true` over the fleet's; its rule turns unguarded within a beat,
- *     and E, A again, runs; U its commands carry the caller's token again.
+ *     and E, the real gh's POST to repos/someone/else/issues, is not stopped
+ *     by CawCo; U its commands still carry no forge token: the GitHub door
+ *     posts for them with the host's.
  * (d) ⋯ › "Same as the fleet" on the phone: the project's own answer goes
  *     (null) and it follows the fleet's, keep off: its rule turns guarded
- *     within a beat, and F, A again, is refused.
+ *     within a beat, and F, E again, is refused by the door.
  * (e) The fleet's answer turned to "Let agents post upstream" (PUT, as a
  *     setup page's card sends it): the project, still the fleet's, turns
- *     unguarded within a beat and I, A again, runs; the desk's ⋯ names the
- *     fleet's new answer beside "Same as the fleet".
+ *     unguarded within a beat and I, E again, is not stopped; the desk's ⋯
+ *     names the fleet's new answer beside "Same as the fleet".
  * (f) ⋯ › "Keep agents off other repositories" at the desk: the project's
  *     own `off` over the fleet's `on`; its rule turns guarded within a
- *     beat, and K, A again, is refused.
+ *     beat, and K, E again, is refused.
  * (g) ⋯ › "Ask me first" at the desk: the project's own `ask`; its rule
  *     reads `ask` within a beat. Then (hub upstream-asks.ts):
- *     S1 `gh issue create -R someone/else --title 'Probe deny' --body …`:
- *       not run in the workspace; the session reads that it waits in the
- *       owner's Needs you, and exit 0;
+ *     S1 the real gh's `api repos/someone/else/issues` with title 'Probe
+ *       deny' and a body: held at the GitHub door, sent nowhere; the
+ *       session reads that it waits in the owner's Needs you;
  *     S2 the same again: the session reads it is already waiting, and no
- *       second ask parks;
- *     S3 the same with --title 'Probe approve': a second ask.
+ *       second ask parks for it;
+ *     S3 a commit pushed to the http-backend's someone/else.git, on a host
+ *       that is not GitHub: held at the git door, sent nowhere;
+ *     S4 the real gh's comment on someone/else's issue 12, two lines long:
+ *       held at the GitHub door.
+ *     Each held post's row in the desk's Needs you names it: its own title
+ *     ('Probe deny'; the comment's first line, 'Probe comment') over where
+ *     it goes (someone/else, someone/else#12), the session that asked on
+ *     its last line.
  *     Each parks as the delegate's permission ask (`UPSTREAM_POST_TOOL`),
- *     its card naming the repository, the kind, the title, the body, the
- *     account (the host's gh login) and the command; the workspace's gh
- *     never ran either. Deny on S1's row in the desk's Needs you: the
- *     host's gh never runs it, and the session is told it was denied.
- *     Approve on S3's row on the phone: the host's gh runs it exactly once
- *     (`GH_REPO` someone/else, in no checkout), and the session is told
- *     what it said.
+ *     its card naming the repository, the kind, the title, the account it
+ *     posts as on its host, and the post. Deny on S1's row in the desk's
+ *     Needs you: the ask goes, and the session is told it was denied.
+ *     Approve on S3's row on the phone: the host pushes exactly that commit
+ *     there once, and the session is told what it said.
  *
  *   bun scripts/probe-kit/run.ts upstream-guard
  */
@@ -97,56 +113,79 @@ import {
 } from "../../../packages/core/src/upstream-guard";
 import { UPSTREAM_POST_TOOL } from "../../../packages/core/src/upstream-post";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { serveGitHttp } from "../git-http";
 import { type Kit, open, type Spec, settle } from "../kit";
 
 const TAG = "PROBE-UPSTREAM";
 const OWN = "probe-owner/probe-repo";
 const NAME = "Upstream guard";
-/** The guard's refusal, as the session reads it (upstream-guard.ts `upstreamRefusal`). */
-const REFUSED = (what: string, repo: string) =>
-  `cawco: \`${what}\` did not run: it writes to ${repo}, and this project's repository is github.com/${OWN}.`;
-const DRAFT = "Put what you would have posted";
 
-/** The real gh on this host, found before the fake goes first on PATH: what step X runs by its path. */
+/** The real gh on this host, found before the fake goes first on PATH: what posts through the GitHub door. */
 const REAL_GH = Bun.which("gh") ?? "/usr/bin/gh";
-/** The real curl, by its path past the guard's shim: what step Z sends by hand. */
+/** The real curl, by its path: what step Z sends by hand. */
 const REAL_CURL = Bun.which("curl") ?? "/usr/bin/curl";
-/** The door's refusal of a POST to repos/x/y/issues (github-door.ts). */
-const DOOR_REFUSED =
-  "cawco: `POST api.github.com/repos/x/y/issues` did not run: it writes to github.com/x/y";
+/** The GitHub door's refusal of `what` writing to `repo` (github-door.ts `judged`, upstream-guard.ts `writeRefusal`). */
+const DOOR_REFUSED = (what: string, repo: string) =>
+  `cawco: \`${what}\` did not run: it writes to ${repo}`;
+const XY_REFUSED = DOOR_REFUSED(
+  "POST api.github.com/repos/x/y/issues",
+  "github.com/x/y"
+);
+const ELSEWHERE_REFUSED = DOOR_REFUSED(
+  "POST api.github.com/repos/someone/else/issues",
+  "github.com/someone/else"
+);
+/** The door's refusal of a mutation that names no repository. */
+const NO_REPO_REFUSED =
+  "cawco: `a GraphQL mutation` did not run: it names no repository the guard can check";
+/** Git's ssh inside a workspace (hub-git.ts `SSH_REFUSAL`). */
+const SSH_REFUSED = "cawco: git over ssh did not run here";
+const DRAFT = "Put what you would have posted";
+/** Every forge's token variable the services carry. */
+const FORGE_TOKENS =
+  "GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN|GITLAB_TOKEN|OAUTH_TOKEN|CI_JOB_TOKEN|GITEA_TOKEN";
 const TOKEN_VARS = (id: string) =>
-  `echo "TOKENVARS-${id}=$(env | grep -cE '^(GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)=')"`;
+  `echo "TOKENVARS-${id}=$(env | grep -cE '^(${FORGE_TOKENS})=')"`;
 const TOKEN_COUNT = (id: string) => new RegExp(`TOKENVARS-${id}=(\\d+)`);
-const MUTATION_NO_REPO = `gh api graphql -f 'query=mutation { addComment(input: {subjectId: "X", body: "hi"}) { clientMutationId } }'`;
-const MUTATION_OWN = `gh api graphql -F owner=probe-owner -F name=probe-repo -f 'query=mutation($owner: String!, $name: String!) { r: repository(owner: $owner, name: $name) { id } }'`;
-const ELSEWHERE = "gh issue create -R someone/else --title t --body b";
+const MUTATION_NO_REPO = `${REAL_GH} api graphql -f 'query=mutation { addComment(input: {subjectId: "X", body: "hi"}) { clientMutationId } }' 2>&1`;
+/** A post to someone else's repository on GitHub, by the real gh through whatever its config names. */
+const ELSEWHERE = `${REAL_GH} api repos/someone/else/issues -f title=t 2>&1`;
 /** Waits inside the boundary until the workspace's rule reads `posts`. */
 const RULE_READS = (posts: UpstreamPosts) =>
   `until grep -q '"posts":"${posts}"' "$HOME/.cawco/workspaces/$CAWCO_WORKSPACE/ro/upstream.json"; do sleep 1; done`;
-/** Step S's posts under Ask: one to deny (asked twice), one to approve. */
-const DENIED =
-  "gh issue create -R someone/else --title 'Probe deny' --body 'Denied body'";
-const APPROVED =
-  "gh issue create -R someone/else --title 'Probe approve' --body 'Approved body'";
+/** Step S1's post under Ask, asked twice: held at the GitHub door. */
+const DENIED = `${REAL_GH} api repos/someone/else/issues -f title='Probe deny' -f body='Denied body' 2>&1`;
+/** Step S4's comment on someone/else's issue 12, two lines long: held at the GitHub door. */
+const COMMENTED = `${REAL_GH} api repos/someone/else/issues/12/comments -f body="$(printf 'Probe comment\\nIts second line')" 2>&1`;
+/** The branch step S3 pushes to the http-backend's repository. */
+const APPROVED_BRANCH = "probe-approve";
 /** What the session reads as its post is held (upstream-guard.ts `heldWords`). */
 const HELD = "was not posted yet: it waits in the owner's Needs you";
 const AGAIN = "is already waiting for the owner's answer";
 /** The host's gh login, as the fake answers `gh api user`. */
 const PERSON = "probe-person";
+/** The http-backend's someone/else.git, once it serves: the other host's repository. */
+let otherUrl = "";
 
 /** Each step's command, in order; each ends by echoing its marker and the exit. */
 const STEPS = [
-  { id: "A", command: ELSEWHERE },
-  { id: "B", command: `gh issue create -R ${OWN} --title t --body b` },
-  { id: "C", command: "gh api repos/x/y/issues -f title=t" },
-  { id: "D", command: "gh api repos/x/y/issues" },
   { id: "T", command: TOKEN_VARS("T") },
+  { id: "B", command: `gh issue create -R ${OWN} --title t --body b` },
   { id: "G", command: MUTATION_NO_REPO },
-  { id: "H", command: MUTATION_OWN },
   { id: "X", command: `${REAL_GH} api repos/x/y/issues -f title=t 2>&1` },
   {
     id: "Z",
     command: `sock=$(sed -n 's/^http_unix_socket: "\\(.*\\)"$/\\1/p' "$GH_CONFIG_DIR/config.yml"); ${REAL_CURL} -s --unix-socket "$sock" -X POST http://api.github.com/repos/x/y/issues -d '{"title":"t"}'`,
+  },
+  {
+    id: "S",
+    command:
+      "git push git@other.probe.test:someone/else.git HEAD:refs/heads/probe-ssh 2>&1",
+  },
+  {
+    id: "L",
+    command:
+      "git push alice@other.probe.test:someone/else.git HEAD:refs/heads/probe-alice 2>&1",
   },
   {
     id: "P",
@@ -165,9 +204,14 @@ const STEPS = [
   { id: "Q", command: RULE_READS("off") },
   { id: "K", command: ELSEWHERE },
   { id: "R", command: RULE_READS("ask") },
-  { id: "1", command: `${DENIED} 2>&1` },
-  { id: "2", command: `${DENIED} 2>&1` },
-  { id: "3", command: `${APPROVED} 2>&1` },
+  { id: "1", command: DENIED },
+  { id: "2", command: DENIED },
+  {
+    id: "3",
+    command: () =>
+      `git -c user.name=Delegate -c user.email=d@probe.test commit -q --allow-empty -m 'Probe approve' && git push ${otherUrl} HEAD:refs/heads/${APPROVED_BRANCH} 2>&1`,
+  },
+  { id: "4", command: COMMENTED },
 ] as const;
 type StepId = (typeof STEPS)[number]["id"];
 /** The waits, each let go once the probe has pressed the choice it waits on. */
@@ -207,7 +251,7 @@ const respond = (request: Seen): Reply => {
         input: held
           ? { command: "sleep 3; echo WAITING", description: "Wait" }
           : {
-              command: `${step.command}; echo "${marker(step.id)} exit=$?"`,
+              command: `${typeof step.command === "function" ? step.command() : step.command}; echo "${marker(step.id)} exit=$?"`,
               description: `Step ${step.id}`,
             },
       },
@@ -245,21 +289,24 @@ const said = (from: StepId, id: StepId): string => {
 };
 
 const FAKE_GH = `#!/bin/sh
-# The probe's stand-in for gh: the host's token and login, or the call
-# recorded with the token it ran with where the probe reads it: a workspace's
-# in its TMPDIR, the host's (an approved post, upstream-posts.ts) in
-# PROBE_HOST_GH_LOG with the repository it was pinned to and where it ran.
-if [ "$1 $2" = "auth token" ]; then echo probe-host-token; exit 0; fi
-if [ "$1 $2" = "api user" ]; then echo ${PERSON}; exit 0; fi
-if [ -z "$CAWCO_WORKSPACE" ]; then
-  printf '%s repo=%s cwd=%s\\n' "$*" "\${GH_REPO:-none}" "$(pwd)" >> "$PROBE_HOST_GH_LOG"
-  echo "FAKE-GH-HOST-RAN $*"
-  exit 0
+# The probe's stand-in for gh: the host's token for github.com (none for any
+# other --hostname, as the real gh answers), or the call recorded with the
+# token it ran with in the workspace's TMPDIR, where the probe reads it. On
+# the host it answers nothing else.
+if [ "$1 $2" = "auth token" ]; then
+  if [ "$3" = --hostname ] && [ "$4" != github.com ]; then echo "no oauth token found for $4" >&2; exit 1; fi
+  echo probe-host-token; exit 0
 fi
+if [ -z "$CAWCO_WORKSPACE" ]; then exit 1; fi
 case "$(cat "$GH_CONFIG_DIR/config.yml" 2>/dev/null)" in *http_unix_socket*) door=yes ;; *) door=no ;; esac
 printf '%s token=%s door=%s\\n' "$*" "\${GH_TOKEN:-none}" "$door" >> "$TMPDIR/fake-gh.log"
 echo "FAKE-GH-RAN $*"
 `;
+
+/** A forced ref's mark before its commit, on a held push's card. */
+const FORCED = /^\+/;
+/** The other host's repository, under the http-backend's root. */
+const ELSE_REPO = "someone/else.git";
 
 type View = "desk" | "phone";
 const VIEWS: readonly View[] = ["desk", "phone"];
@@ -449,10 +496,36 @@ const run = async (kit: Kit) => {
   await writeFile(join(fakeBin, "gh"), FAKE_GH);
   await chmod(join(fakeBin, "gh"), 0o755);
   fleet.env.PATH = `${fakeBin}:${fleet.env.PATH}`;
-  fleet.env.GH_TOKEN = "probe-caller-token";
-  // Where the host's gh records an approved post it made (FAKE_GH).
-  const hostLog = join(fleet.sandbox, "host-gh.log");
-  fleet.env.PROBE_HOST_GH_LOG = hostLog;
+  // GitHub's API for the host's gh sign-in: `/user` names the person, over
+  // the socket the host's gh config names.
+  const githubSocket = join(
+    process.env.TMPDIR ?? "/tmp",
+    `ug-${crypto.randomUUID().slice(0, 8)}.sock`
+  );
+  const githubApi = Bun.serve({
+    unix: githubSocket,
+    fetch: (request) =>
+      new URL(request.url).pathname === "/user"
+        ? Response.json({ login: PERSON })
+        : Response.json({ message: "Not Found" }, { status: 404 }),
+  });
+  const hostGhConfig = join(fleet.sandbox, "host-gh");
+  await mkdir(hostGhConfig, { recursive: true });
+  await writeFile(
+    join(hostGhConfig, "config.yml"),
+    `version: "1"\nhttp_unix_socket: ${JSON.stringify(githubSocket)}\n`
+  );
+  fleet.env.GH_CONFIG_DIR = hostGhConfig;
+  Object.assign(fleet.env, {
+    GH_TOKEN: "probe-caller-token",
+    GITLAB_TOKEN: "probe-gitlab-token",
+    OAUTH_TOKEN: "probe-oauth-token",
+    CI_JOB_TOKEN: "probe-ci-token",
+    GITEA_TOKEN: "probe-gitea-token",
+  });
+  // Another person's repository, on a host that is not GitHub.
+  const elsewhere = serveGitHttp(join(fleet.sandbox, "other"));
+  otherUrl = await elsewhere.bare(ELSE_REPO);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -683,11 +756,6 @@ const run = async (kit: Kit) => {
   );
   const logged = async (): Promise<string> =>
     await readFile(fakeLog, "utf8").catch(() => "");
-  /** How many times the fake gh ran a write to someone/else: each one the guard let through. */
-  const elsewhereRan = async () =>
-    (await logged())
-      .split("\n")
-      .filter((line) => line.startsWith("issue create -R someone/else")).length;
   const stepRan = (id: StepId, within: number) =>
     until(
       `step ${id} ran`,
@@ -708,75 +776,64 @@ const run = async (kit: Kit) => {
   );
   const calls = await logged();
   const text = latest();
-  const lines = calls.split("\n");
-  check(
-    "b: A `gh issue create -R someone/else` is refused with the reason, and the fake gh never ran",
-    text.includes(REFUSED("gh issue create", "github.com/someone/else")) &&
-      text.includes(DRAFT) &&
-      exitOf("A") === 1 &&
-      !calls.includes("-R someone/else"),
-    `exit ${exitOf("A")}; fake gh calls:\n${calls}`
-  );
-  check(
-    "b: B `gh issue create` against the project's own remote runs, with no token, its config naming the GitHub door",
-    exitOf("B") === 0 &&
-      lines.some(
-        (line) =>
-          line.startsWith(`issue create -R ${OWN}`) &&
-          line.endsWith("token=none door=yes")
-      ),
-    `exit ${exitOf("B")}; fake gh calls:\n${calls}`
-  );
-  check(
-    "b: C `gh api repos/x/y/issues -f title=t` is refused, and the fake gh never ran",
-    text.includes(REFUSED("gh api POST repos/x/y/issues", "github.com/x/y")) &&
-      exitOf("C") === 1 &&
-      !calls.includes("-f title=t"),
-    `exit ${exitOf("C")}; fake gh calls:\n${calls}`
-  );
-  check(
-    "b: D `gh api repos/x/y/issues` (a GET) runs",
-    exitOf("D") === 0 &&
-      lines.some((line) => line.startsWith("api repos/x/y/issues token=")),
-    `exit ${exitOf("D")}; fake gh calls:\n${calls}`
-  );
   const guardedCount = TOKEN_COUNT("T").exec(text)?.[1];
   check(
-    "b: T with the guard on, no GitHub token variable is in a command's environment (the caller's GH_TOKEN included)",
+    "b: T with the guard on, no forge's token variable is in a command's environment (the caller's GH_TOKEN, GITLAB_TOKEN, OAUTH_TOKEN, CI_JOB_TOKEN and GITEA_TOKEN included)",
     guardedCount === "0",
     `TOKENVARS-T=${guardedCount}`
   );
   check(
-    "b: G a `gh api graphql` mutation naming no repository is refused, and the fake gh never ran",
-    text.includes(
-      "cawco: `gh api graphql mutation` did not run: it names no repository the guard can check"
-    ) &&
-      exitOf("G") === 1 &&
-      !calls.includes("addComment"),
-    `exit ${exitOf("G")}; fake gh calls:\n${calls}`
+    "b: B `gh issue create` runs with no token at all, its config naming the GitHub door",
+    exitOf("B") === 0 &&
+      calls
+        .split("\n")
+        .some(
+          (line) =>
+            line.startsWith(`issue create -R ${OWN}`) &&
+            line.endsWith("token=none door=yes")
+        ),
+    `exit ${exitOf("B")}; fake gh calls:\n${calls}`
   );
   check(
-    "b: H a mutation naming the project's own repository runs",
-    exitOf("H") === 0 && calls.includes("owner=probe-owner"),
-    `exit ${exitOf("H")}; fake gh calls:\n${calls}`
+    `b: G ${REAL_GH}'s \`api graphql\` mutation naming no repository is refused by the GitHub door, with the draft line`,
+    exitOf("G") !== 0 &&
+      said("B", "G").includes(NO_REPO_REFUSED) &&
+      said("B", "G").includes(DRAFT),
+    `exit ${exitOf("G")}; said:\n${said("B", "G")}`
   );
   check(
     `b: X ${REAL_GH} by its path, api repos/x/y/issues -f title=t, is refused by the GitHub door`,
-    exitOf("X") !== 0 &&
-      exitOf("X") !== undefined &&
-      text.includes(DOOR_REFUSED),
-    `exit ${exitOf("X")}`
+    exitOf("X") !== 0 && said("G", "X").includes(XY_REFUSED),
+    `exit ${exitOf("X")}; said:\n${said("G", "X")}`
   );
   check(
     `b: Z ${REAL_CURL} straight to the door's socket, POST repos/x/y/issues, is refused`,
-    text.includes(DOOR_REFUSED) && text.split(DOOR_REFUSED).length > 2,
-    `exit ${exitOf("Z")}`
+    said("X", "Z").includes(XY_REFUSED),
+    `exit ${exitOf("Z")}; said:\n${said("X", "Z")}`
+  );
+  check(
+    "b: S a push over ssh to another host's repository is refused at the git door in the guard's words",
+    exitOf("S") !== 0 &&
+      said("Z", "S").includes(
+        "cawco: `git push git@other.probe.test:someone/else.git` did not run: it writes to other.probe.test/someone/else"
+      ) &&
+      said("Z", "S").includes(DRAFT),
+    `exit ${exitOf("S")}; said:\n${said("Z", "S")}`
+  );
+  check(
+    "b: L a push over ssh under another login: git's ssh says the workspace holds no key, and the push fails",
+    exitOf("L") !== 0 && said("S", "L").includes(SSH_REFUSED),
+    `exit ${exitOf("L")}; said:\n${said("S", "L")}`
   );
   check(
     "b: P git push to the clone's origin (the hub, through the git door) lands",
     exitOf("P") === 0 && PUSHED.test(text),
     `exit ${exitOf("P")}; git said:\n${(text.match(PUSH_LINES) ?? []).join("\n")}`
   );
+
+  /** Whether CawCo let step `id`'s post go: nothing of the guard's in what it said. */
+  const letGo = (from: StepId, id: StepId) =>
+    !said(from, id).includes("cawco:");
 
   // (c)
   await choose("desk", UPSTREAM_WORDS.allow);
@@ -793,14 +850,14 @@ const run = async (kit: Kit) => {
   );
   await stepRan("U", 300_000);
   check(
-    "c: with the project's own answer, E `gh issue create -R someone/else` runs",
-    exitOf("E") === 0 && (await elsewhereRan()) === 1,
-    `exit ${exitOf("E")}; fake gh calls:\n${await logged()}`
+    "c: with the project's own answer, E the real gh's POST to repos/someone/else/issues is not stopped by CawCo",
+    exitOf("E") !== undefined && letGo("W", "E"),
+    `exit ${exitOf("E")}; said:\n${said("W", "E")}`
   );
   const openCount = TOKEN_COUNT("U").exec(latest())?.[1];
   check(
-    "c: U unguarded, commands carry the caller's GH_TOKEN as before",
-    openCount === "1",
+    "c: U where agents may post, commands still carry none of the caller's five forge tokens: the GitHub door posts for them",
+    openCount === "0",
     `TOKENVARS-U=${openCount}`
   );
 
@@ -819,13 +876,9 @@ const run = async (kit: Kit) => {
   );
   await stepRan("F", 300_000);
   check(
-    "d: following the fleet's keep off, F `gh issue create -R someone/else` is refused, and the fake gh never ran it",
-    exitOf("F") === 1 &&
-      said("V", "F").includes(
-        REFUSED("gh issue create", "github.com/someone/else")
-      ) &&
-      (await elsewhereRan()) === 1,
-    `exit ${exitOf("F")}; fake gh calls:\n${await logged()}`
+    "d: following the fleet's keep off, F, E again, is refused by the GitHub door",
+    exitOf("F") !== 0 && said("V", "F").includes(ELSEWHERE_REFUSED),
+    `exit ${exitOf("F")}; said:\n${said("V", "F")}`
   );
 
   // (e)
@@ -837,12 +890,9 @@ const run = async (kit: Kit) => {
   released.add("Y");
   await stepRan("I", 300_000);
   check(
-    "e: the fleet's answer turned to “Let agents post upstream”, the project, still the fleet's, follows: I runs",
-    turned.status === 200 &&
-      projectPosts() === null &&
-      exitOf("I") === 0 &&
-      (await elsewhereRan()) === 2,
-    `PUT ${turned.status}; exit ${exitOf("I")}; fake gh calls:\n${await logged()}`
+    "e: the fleet's answer turned to “Let agents post upstream”, the project, still the fleet's, follows: I, E again, is not stopped by CawCo",
+    turned.status === 200 && projectPosts() === null && letGo("Y", "I"),
+    `PUT ${turned.status}; exit ${exitOf("I")}; said:\n${said("Y", "I")}`
   );
   await open(pages.desk, projectUrl, `[aria-label="More for ${NAME}"]`);
   await settle(pages.desk, 400);
@@ -870,13 +920,9 @@ const run = async (kit: Kit) => {
   );
   await stepRan("K", 300_000);
   check(
-    "f: kept off by its own answer while the fleet lets agents post, K `gh issue create -R someone/else` is refused, and the fake gh never ran it",
-    exitOf("K") === 1 &&
-      said("Q", "K").includes(
-        REFUSED("gh issue create", "github.com/someone/else")
-      ) &&
-      (await elsewhereRan()) === 2,
-    `exit ${exitOf("K")}; fake gh calls:\n${await logged()}`
+    "f: kept off by its own answer while the fleet lets agents post, K, E again, is refused by the GitHub door",
+    exitOf("K") !== 0 && said("Q", "K").includes(ELSEWHERE_REFUSED),
+    `exit ${exitOf("K")}; said:\n${said("Q", "K")}`
   );
 
   // (g)
@@ -892,68 +938,121 @@ const run = async (kit: Kit) => {
     ).catch(projectPosts)) === "ask",
     `project ${JSON.stringify(projectPosts())}`
   );
-  await stepRan("3", 300_000);
-  const hostLogged = async (): Promise<string> =>
-    await readFile(hostLog, "utf8").catch(() => "");
+  await stepRan("4", 300_000);
   const heldAsks = async () =>
     (await fleet.api<HeldAsk[]>("/api/pending")).filter(
       (one) => one.payload.toolName === UPSTREAM_POST_TOOL
     );
   const parked = await until(
-    "g: both posts parked",
+    "g: the three posts parked",
     heldAsks,
-    (all) => all.length >= 2,
+    (all) => all.length >= 3,
     30_000
   ).catch(heldAsks);
   const titled = (title: string) =>
     parked.find((one) => one.payload.input.title === title);
   const deniedAsk = titled("Probe deny");
-  const approvedAsk = titled("Probe approve");
-  const inWorkspace = await logged();
+  const approvedAsk = titled(APPROVED_BRANCH);
+  const otherRepo = "127.0.0.1/someone/else";
   check(
-    "g: S1 is held, not run: the session reads that it waits in the owner's Needs you, it exits 0, and the workspace's gh never ran it",
-    exitOf("1") === 0 &&
-      said("R", "1").includes(HELD) &&
-      !inWorkspace.includes("Probe"),
-    `exit ${exitOf("1")}; said:\n${said("R", "1")}\nworkspace gh:\n${inWorkspace}`
+    "g: S1 is held at the GitHub door, not sent: the session reads that it waits in the owner's Needs you",
+    said("R", "1").includes(HELD),
+    `exit ${exitOf("1")}; said:\n${said("R", "1")}`
   );
   check(
-    "g: S2, the same post again, is that one ask: the session reads it is already waiting, and two asks park in all",
-    exitOf("2") === 0 && said("1", "2").includes(AGAIN) && parked.length === 2,
+    "g: S2, the same post again, is that one ask: the session reads it is already waiting",
+    said("1", "2").includes(AGAIN) &&
+      parked.filter((one) => one.payload.input.title === "Probe deny")
+        .length === 1,
     `exit ${exitOf("2")}; ${parked.length} asks; said:\n${said("1", "2")}`
   );
   check(
-    "g: each post is one permission ask whose card names the repository, the kind, the title, the body, the account it posts as and the command",
+    "g: S3, a push to someone/else.git on a host that is not GitHub, is held at the git door, sent nowhere: the session reads that it waits, and the repository took no push",
+    said("2", "3").includes(HELD) && elsewhere.pushes(ELSE_REPO) === 0,
+    `exit ${exitOf("3")}; pushes ${elsewhere.pushes(ELSE_REPO)}; said:\n${said("2", "3")}`
+  );
+  check(
+    "g: S1's card names github.com/someone/else, an issue, its title and body, the host's GitHub login, and the request",
     Boolean(
       deniedAsk &&
-      approvedAsk &&
-      [deniedAsk, approvedAsk].every(
-        (one) =>
-          one.payload.input.repo === "github.com/someone/else" &&
-          one.payload.input.kind === "issue" &&
-          one.payload.input.account === `@${PERSON}` &&
-          one.payload.presentation?.summary ===
-            "Post an issue on github.com/someone/else" &&
-          one.payload.presentation.detail === `As @${PERSON} on GitHub` &&
-          (one.payload.presentation.command ?? "").startsWith(
-            "gh issue create -R someone/else --title 'Probe"
-          )
-      ) &&
+      deniedAsk.payload.input.repo === "github.com/someone/else" &&
+      deniedAsk.payload.input.kind === "issue" &&
       deniedAsk.payload.input.body === "Denied body" &&
-      approvedAsk.payload.input.body === "Approved body"
+      deniedAsk.payload.input.account === `@${PERSON}` &&
+      deniedAsk.payload.presentation?.summary ===
+        "Post an issue on github.com/someone/else" &&
+      deniedAsk.payload.presentation.detail === `As @${PERSON} on GitHub` &&
+      deniedAsk.payload.presentation.command ===
+        "POST api.github.com/repos/someone/else/issues"
     ),
-    JSON.stringify(
-      parked.map((one) => ({
-        input: one.payload.input,
-        presentation: one.payload.presentation,
-      }))
-    )
+    JSON.stringify(deniedAsk?.payload)
   );
-  /** A held post's row in Caw's Needs you, its button `name` pressed as `view`'s hand presses it. */
-  const answerRow = async (view: View, title: string, name: string) => {
+  check(
+    `g: S3's card names ${otherRepo}, a push of ${APPROVED_BRANCH}, the host's own git sign-in on that host, and the push`,
+    Boolean(
+      approvedAsk &&
+      approvedAsk.payload.input.repo === otherRepo &&
+      approvedAsk.payload.input.kind === "push" &&
+      approvedAsk.payload.input.account === "this machine's git sign-in" &&
+      approvedAsk.payload.presentation?.summary ===
+        `Post a push on ${otherRepo}` &&
+      approvedAsk.payload.presentation.detail ===
+        "As this machine's git sign-in on 127.0.0.1" &&
+      (approvedAsk.payload.presentation.command ?? "").startsWith(
+        `git push ${otherUrl} `
+      )
+    ),
+    JSON.stringify(approvedAsk?.payload)
+  );
+  const commentAsk = parked.find((one) => one.payload.input.kind === "comment");
+  check(
+    "g: S4, a comment on someone/else's issue 12, is held at the GitHub door: the session reads that it waits",
+    said("3", "4").includes(HELD) && Boolean(commentAsk),
+    `exit ${exitOf("4")}; said:\n${said("3", "4")}`
+  );
+  // Each held post's row in the desk's Needs you names the post: its own
+  // title (a comment's first line) over where it goes, owner/repo#n, and the
+  // session that asked on its last line.
+  await openNeeds(pages.desk, "desk", base);
+  await pages.desk
+    .locator(ASK_ROW)
+    .filter({ hasText: "Probe comment" })
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .catch(() => undefined);
+  const heldRows = await pages.desk.evaluate((selector) => {
+    const line = (row: Element, slot: string) =>
+      (row.querySelector(`[data-slot="${slot}"]`)?.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+    return [...document.querySelectorAll(selector)].map((row) => ({
+      name: line(row, "name"),
+      want: line(row, "want"),
+      meta: line(row, "meta"),
+    }));
+  }, ASK_ROW);
+  const rowOf = (name: string) => heldRows.find((row) => row.name === name);
+  const asker = (ask: HeldAsk | undefined) =>
+    ask?.payload.presentation?.asker ?? "";
+  check(
+    "g: a held post's row in Needs you shows its title and owner/repo#n, and the session that asked: S1 'Probe deny' over someone/else, S4 'Probe comment' over someone/else#12",
+    rowOf("Probe deny")?.want === "someone/else" &&
+      rowOf("Probe comment")?.want === "someone/else#12" &&
+      asker(deniedAsk) !== "" &&
+      Boolean(rowOf("Probe deny")?.meta.includes(asker(deniedAsk))) &&
+      Boolean(rowOf("Probe comment")?.meta.includes(asker(commentAsk))) &&
+      !rowOf("Probe comment")?.meta.includes("Permission"),
+    `asker ${JSON.stringify(asker(deniedAsk))}; rows ${JSON.stringify(heldRows)}`
+  );
+  /**
+   * A held post's row in Caw's Needs you, found by what the row draws (its
+   * title), its button `name`
+   * pressed as `view`'s hand presses it.
+   */
+  const answerRow = async (view: View, drawn: string, name: string) => {
     const page = pages[view];
     await openNeeds(page, view, base);
-    const row = page.locator(ASK_ROW).filter({ hasText: title });
+    const row = page.locator(ASK_ROW).filter({ hasText: drawn });
     await row.first().waitFor({ timeout: 30_000 });
     await row
       .first()
@@ -962,6 +1061,7 @@ const run = async (kit: Kit) => {
     await press(page, view, "[data-probe-pick]");
     await settle(page, 300);
   };
+  // S1's row: its title.
   await answerRow("desk", "Probe deny", "Deny");
   const toldDenied = await until(
     "g: the session hears the denial",
@@ -973,13 +1073,12 @@ const run = async (kit: Kit) => {
     () => false
   );
   check(
-    "g: Deny on S1's row at the desk: nothing is posted (the host's gh never ran it), and the session is told",
+    "g: Deny on S1's row at the desk: its ask goes, and the session is told",
     toldDenied &&
-      !(await hostLogged()).includes("Probe deny") &&
       !(await heldAsks()).some((one) => one.requestId === deniedAsk?.requestId),
-    `told ${toldDenied}; host gh:\n${await hostLogged()}`
+    `told ${toldDenied}`
   );
-  await answerRow("phone", "Probe approve", "Approve");
+  await answerRow("phone", APPROVED_BRANCH, "Approve");
   const toldApproved = await until(
     "g: the session hears it was posted",
     () => seen,
@@ -989,24 +1088,26 @@ const run = async (kit: Kit) => {
     () => true,
     () => false
   );
-  // Posted once: a second run would land within the wait.
+  // Posted once: a second push would land within the wait.
   await Bun.sleep(5000);
-  const made = (await hostLogged())
-    .split("\n")
-    .filter((line) =>
-      line.startsWith(
-        "issue create -R someone/else --title Probe approve --body Approved body"
-      )
-    );
+  const landed = (
+    await Bun.$`git -C ${elsewhere.dir(ELSE_REPO)} rev-parse --verify --quiet refs/heads/${APPROVED_BRANCH}`
+      .nothrow()
+      .text()
+  ).trim();
+  const heldSha = (approvedAsk?.payload.input.body as string | undefined)
+    ?.split(" ")[0]
+    ?.replace(FORCED, "");
   check(
-    "g: Approve on S3's row on the phone: the host's gh posts exactly that once, pinned to someone/else in no checkout, and the session is told what it said",
+    "g: Approve on S3's row on the phone: the host pushes exactly that commit to someone/else.git once, and the session is told",
     toldApproved &&
-      made.length === 1 &&
-      (made[0] ?? "").includes("repo=someone/else") &&
-      (made[0] ?? "").includes("/upstream-posts/") &&
-      seen.includes("FAKE-GH-HOST-RAN issue create -R someone/else"),
-    `told ${toldApproved}; host gh:\n${await hostLogged()}`
+      elsewhere.pushes(ELSE_REPO) === 1 &&
+      landed !== "" &&
+      landed === heldSha,
+    `told ${toldApproved}; pushes ${elsewhere.pushes(ELSE_REPO)}; landed ${landed}, held ${heldSha}`
   );
+  elsewhere.stop();
+  githubApi.stop(true);
   kit.note(`captures: ${kit.out}`);
 };
 
@@ -1015,7 +1116,12 @@ interface HeldAsk {
   instanceId: string;
   payload: {
     input: Record<string, unknown>;
-    presentation?: { command?: string; detail?: string; summary?: string };
+    presentation?: {
+      asker?: string;
+      command?: string;
+      detail?: string;
+      summary?: string;
+    };
     toolName: string;
   };
   requestId: string;

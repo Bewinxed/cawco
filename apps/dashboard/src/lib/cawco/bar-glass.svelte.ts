@@ -1,6 +1,6 @@
 /**
  * The cards that hang from the top bar's glass (Shell `[data-bar-group]`):
- * Caw's panel, the machines and the Jump palette, shown one at a time in the
+ * Caw's panel, the machines, the Jump palette and Files, shown one at a time in the
  * glass's one card (GlassCard). Opening one while another hangs swaps what
  * the card shows in place: the card stays hung, its contents cross-fade and
  * its box tweens to the new size (motion/morph). While the card stands drawn
@@ -11,7 +11,7 @@
  * arcs change with it, at once (`instant`).
  */
 
-export type GlassCard = "caw" | "machines" | "jump";
+export type GlassCard = "caw" | "machines" | "jump" | "files";
 
 class BarGlass {
   /** The card asked for: what the glass's card shows, or null for shut. */

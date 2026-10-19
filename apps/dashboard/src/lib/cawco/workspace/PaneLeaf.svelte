@@ -252,6 +252,10 @@
   $effect.pre(() => {
     const id = viewId;
     untrack(() => {
+      // Shown, it is no longer reached for (warm.svelte.ts `reached`).
+      if (id) {
+        warm.chosen(id);
+      }
       const from = shownId;
       if (!(from && id) || from === id) {
         return;
@@ -451,34 +455,16 @@
            or focusable" (`content-visibility: hidden`, `.pane-hidden`) — and a
            pane laid out off screen is hidden (`.pane-settling`). Said again
            with `inert`, an inherited style (CSS `interactivity`), every switch
-           set and lifted it on two panes, restyling each of their elements.
-
-           `visibility`, never `display`: a hidden pane still lays out, so
-           the virtualiser keeps its measurements and revealing one costs
-           nothing. Note what is NOT here — the pane does not declare
-           `visibility: visible`. Visibility inherits, but a descendant that
-           re-declares `visible` un-hides ITSELF through a hidden ancestor,
-           so writing it here made every pane paint straight through the
-           surface hiding this whole group, and the fleet board and the
-           transcripts rendered on top of each other. Only the hidden state
-           is ever stated; the visible one is inherited.
-           A pane off screen that has not drawn its first picture yet
-           (dock.svelte.ts `settling`) is laid out but not painted, so its
-           transcript measures its rows and draws before its tab is chosen;
-           once drawn it is skipped (`content-visibility: hidden`: it keeps
-           its DOM, its scroll and its rows, still streaming, but the
-           browser skips its style, layout and paint; `visibility: hidden`
-           left every hidden transcript in each restyle and reflow of the
-           group, which is what a tab switch paid for). So is the
-           pane whose tab the reader is reaching for (warm.svelte.ts), so the
-           switch that shows it only paints. Only the hidden state is
-           declared, as on the surfaces (see `.groups.hidden-surface` in
-           SessionSurface). Hidden, it takes no pointer, so nothing else is
-           said: every property the switch changes on this box is one more
-           its elements are restyled for. -->
+           set and lifted it on two panes, restyling each of their elements. -->
+      <!-- Put away, it is also `data-offscreen` (motion/rest.ts): a skipped
+           subtree still runs its loops, and a skeleton's sweep went on in a
+           pane put away (tab-return, leg 3), so app.css's rest rule holds
+           them still. Set and lifted with `.pane-hidden`, in the one update
+           that already restyles the pane whole. -->
       <div
         data-pane-settling={(!shown && laidOut) || undefined}
         data-pane-hidden={!(shown || laidOut) || undefined}
+        data-offscreen={!(shown || laidOut) || undefined}
         data-slot="pane"
         class="absolute inset-0 flex group-data-swipe/stack:not-data-pane-hidden:not-data-pane-settling:will-change-transform group-data-swipe/stack:delta--1:transform-(--park-left) group-data-swipe/stack:delta-0:transform-(--park-here) group-data-swipe/stack:delta-1:transform-(--park-right) data-pane-hidden:pointer-events-none data-pane-hidden:content-visibility-hidden data-pane-settling:invisible"
         data-delta={delta}

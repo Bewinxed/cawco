@@ -1,0 +1,11 @@
+apps/dashboard/eslint.config.mjs
+apps/dashboard/src/app.css
+apps/dashboard/src/lib/cawco/spawn/ns-theme.css
+apps/dashboard/src/lib/components/features/workflows/workflows.css
+apps/dashboard/src/lib/tokens/theme.css
+
+# apps/dashboard/eslint.config.mjs: kit: no-restyle's HOUSE allowance and the triggers' allow-list are contracts to clear
+# apps/dashboard/src/app.css: after-M: a stylesheet rule; relic: important ×11; kit: app.css's import graph (the kit lane owns it)
+# apps/dashboard/src/lib/cawco/spawn/ns-theme.css: after-M: a stylesheet rule; after-M: the merge took main's unconverted lines in a conflicting hunk; kit: app.css's import graph (the kit lane owns it)
+# apps/dashboard/src/lib/components/features/workflows/workflows.css: kit: app.css's import graph (the kit lane owns it)
+# apps/dashboard/src/lib/tokens/theme.css: kit: app.css's import graph (the kit lane owns it)

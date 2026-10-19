@@ -1,8 +1,11 @@
 /** Named frame shapes keep schema and generated-client names independent of union order. */
+
+import type { BrowserKey } from "./browser";
 import type {
   FleetMcpServer,
   FleetPlugin,
   FleetSkillMeta,
+  FleetSyncReport,
   MarketplaceLink,
   MarketplaceRead,
 } from "./fleet";
@@ -34,16 +37,37 @@ import {
   type TailnetOrigin,
 } from "./tailnet-https";
 import type { ThreadMessage, ThreadSummary } from "./threads";
-import type { UsageLimitsReading, UsageSpend } from "./usage";
+import type {
+  AccountLimits,
+  MachineGoLimits,
+  UsageLimitsReading,
+  UsageSpend,
+} from "./usage";
 
 export interface FleetMcpFrame {
   kind: "fleet_mcp";
   servers: FleetMcpServer[];
 }
 
+/**
+ * Machine-originated: the machine's fleet report (what `fleetStatus`
+ * answers), sent unasked when a harness's reading of a fleet MCP server moved
+ * with no fleet change: a server OpenCode held failed connected when CawCo
+ * started it again. The hub keeps it as `agents.fleet`, as it keeps a sync's.
+ */
+export interface FleetReportFrame {
+  instanceId?: undefined;
+  kind: "fleet_report";
+  report: FleetSyncReport;
+}
+
 export interface PreviewFrame {
-  /** The artifact the session's panel shows (Projects spec §5.10). */
-  artifact: { id: string; kind: ArtifactKind; name: string };
+  /**
+   * The artifact the session's panel shows (Projects spec §5.10), with its
+   * ask: the head's line under its name from the first frame, while its
+   * page is still on its way. None on one made before asks were kept.
+   */
+  artifact: { ask?: string; id: string; kind: ArtifactKind; name: string };
   /**
    * Every artifact the session holds, by id, newest first: republished when
    * one is removed, so a panel's open list drops it at once.
@@ -359,7 +383,34 @@ export interface InstancesDeltaFrame {
   upserts: InstanceRow[];
 }
 
+/** The tool a browser ask parks under (hub browser-tools.ts). */
+export const BROWSER_ASK_TOOL = "mcp__cawco__browser_ask";
+
+/**
+ * A browser ask (Projects spec §5.11): a session asks the person to take
+ * over its project's browser, with one sentence of reason and the page's
+ * origin. It parks as a `permission_request` for {@link BROWSER_ASK_TOOL}
+ * carrying this beside the tool's input, so it lands in Needs you, the
+ * transcript and push as every ask does. Take over answers it as taken
+ * (`POST /api/browsers/:key/takeover`, an Approve from an app that has no
+ * Take over yet); Decline denies it with the person's words. The tool's
+ * call waits on until the person hands back.
+ */
+export interface BrowserAskFrame {
+  /** The browser artifact in the asking session's panel: Take over opens the panel on it. */
+  artifactId: string;
+  key: BrowserKey;
+  /** The machine the browser runs on: the asking session's. */
+  machineId: string;
+  /** The page's origin the agent named, `scheme://host[:port]`. */
+  origin: string;
+  /** One sentence: what the person is needed for. */
+  reason: string;
+}
+
 export interface PermissionRequestFrame {
+  /** A browser ask's browser, reason and origin; absent on every other ask. */
+  browserAsk?: BrowserAskFrame;
   harness: HarnessKind;
   input: Record<string, unknown>;
   instanceId: string;
@@ -450,9 +501,12 @@ export interface PermissionSettledFrame {
 }
 
 export interface UsageFrame {
-  /** Hub-originated: every machine's latest limits and the fleet's spend. */
+  /** Hub-originated: every Claude account's own limits, every machine's Go plan, and the fleet's spend. */
+  claude: AccountLimits[];
   kind: "usage";
+  /** BRIDGE (hub scripts/wire-compat.ts): limits per machine, for TestFlight builds that read them so. */
   limits: UsageLimitsReading[];
+  openCodeGo: MachineGoLimits[];
   spend: UsageSpend;
 }
 

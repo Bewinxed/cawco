@@ -13,10 +13,16 @@
    * so its email is known and becomes its name. Each step's box takes the
    * next step's height (morph) while the step rises into it. Cancel takes
    * back an account no machine signed in.
+   *
+   * A sign-in that comes out as an account the hub already has is joined
+   * into it (hub `joinExisting`): the account made for it is gone, and the
+   * setup carries on with the one it joined, said on the Sign in step, Name
+   * it starting from that account's own name and colour.
    */
   import {
     type Account,
     type AccountHue,
+    type AccountJoined,
     accountsWords,
     CLAUDE_PROVIDER,
     configureWords,
@@ -129,7 +135,10 @@
   let existing = $state<Account | null>(null);
   const provider = $derived(choice?.provider ?? null);
   const limits = $derived(provider !== null && providerLimits(provider));
-  const full = $derived(existing !== null);
+  /** A second account of its provider: not one whose sign-in joined the first. */
+  const full = $derived.by(
+    () => existing !== null && existing.id !== accountId
+  );
   /** A step, as the rail names it (`words.steps`). */
   type Step = keyof typeof words.steps;
   const STEPS = $derived<Step[]>([
@@ -153,6 +162,7 @@
   let toward = 1;
 
   // ── Sign in ────────────────────────────────────────────────────────────
+  /** The account made for this setup by its first sign-in. */
   let createdId = $state<string | null>(null);
   let creating: Promise<string> | null = null;
   /** The colour the account is made in: the first its provider's accounts don't wear. */
@@ -160,8 +170,8 @@
 
   /** The account's id, making it first: it is made by its first sign-in. */
   function ensureAccount(): Promise<string> {
-    if (createdId) {
-      return Promise.resolve(createdId);
+    if (accountId) {
+      return Promise.resolve(accountId);
     }
     const row = choice;
     if (!row) {
@@ -184,12 +194,23 @@
     return creating;
   }
 
-  const account = $derived(
-    cawco.accounts?.accounts.find((one) => one.id === createdId) ?? null
-  );
   const machines = $derived(choice ? runsOn(choice.harnesses) : []);
   const pastes = new SvelteMap<string, SigninFlow>();
   const devices = new SvelteMap<string, DeviceFlow>();
+  /** The account the hub already had that a key sent here came out as (KeyPanel). */
+  let keyJoined = $state<AccountJoined | null>(null);
+  /** The account the hub already had that a sign-in here came out as. */
+  const joined = $derived(
+    keyJoined ??
+      [...pastes.values(), ...devices.values()].find((flow) => flow.joined)
+        ?.joined ??
+      null
+  );
+  /** The account being added: the one its sign-in joined, else the one made for it. */
+  const accountId = $derived(joined?.accountId ?? createdId);
+  const account = $derived(
+    cawco.accounts?.accounts.find((one) => one.id === accountId) ?? null
+  );
   $effect.pre(() => {
     const kind = choice?.signin;
     for (const machine of machines) {
@@ -210,7 +231,7 @@
 
   const signins = $derived(cawco.accounts?.signins ?? []);
   const stateOn = (machineId: string) =>
-    createdId ? signinState(signins, createdId, machineId) : "signed-out";
+    accountId ? signinState(signins, accountId, machineId) : "signed-out";
   const doneOn = (machineId: string) =>
     stateOn(machineId) === "signed-in" ||
     pastes.get(machineId)?.phase === "signed-in" ||
@@ -229,10 +250,12 @@
   // ── Name it ────────────────────────────────────────────────────────────
   let nickname = $state("");
   const shown = $derived({
-    id: createdId ?? "new",
+    id: accountId ?? "new",
     email,
+    identity: account?.identity ?? null,
     label: nickname.trim() || null,
     kind: choice?.kind,
+    provider: provider ?? "",
   });
 
   // ── Routing (a provider's second account) ──────────────────────────────
@@ -242,7 +265,9 @@
   let atLimit = $state({ ...DEFAULT_AT_LIMIT });
   /** Both accounts, the one there was first; the new one goes last. */
   const pair = $derived(
-    existing && account ? ([existing, account] as [Account, Account]) : null
+    full && existing && account
+      ? ([existing, account] as [Account, Account])
+      : null
   );
   /** Fill-first order as dragged here; until then, the one there was first. */
   let dragged = $state<string[] | null>(null);
@@ -287,6 +312,7 @@
       busy = false;
       createdId = null;
       creating = null;
+      keyJoined = null;
       pastes.clear();
       for (const flow of devices.values()) {
         flow.dispose();
@@ -324,8 +350,8 @@
     refused = null;
     busy = true;
     try {
-      if (at === "nameIt" && createdId) {
-        await patchAccount(createdId, {
+      if (at === "nameIt" && accountId) {
+        await patchAccount(accountId, {
           label: nickname.trim() || null,
           hue,
         });
@@ -348,6 +374,12 @@
     if (step === LAST) {
       await goto("/config/accounts");
       return;
+    }
+    // Joined into an account the hub had: Name it starts from its own name
+    // and colour, so Continue with nothing typed keeps them.
+    if (at === "signIn" && joined && account) {
+      ({ hue } = account);
+      nickname = account.label ?? "";
     }
     toward = 1;
     step += 1;
@@ -372,9 +404,9 @@
     }
   }
 
-  /** Cancel takes back an account no machine signed in; one signed in stays. */
+  /** Cancel takes back an account no machine signed in; one signed in, or joined, stays. */
   async function cancel() {
-    if (createdId && signedIn === 0) {
+    if (createdId && !joined && signedIn === 0) {
       busy = true;
       try {
         await deleteAccount(createdId);
@@ -675,25 +707,35 @@
         <span>{choiceLabel(choice)}</span>
       </h2>
     {/if}
-    {#if signedIn > 0 && choice?.signin !== "device-code"}
+    {#if joined || (signedIn > 0 && choice?.signin !== "device-code")}
       <div
-        class="mark-line mb-space-4 flex items-center gap-space-3 rounded-md bg-surface-raised px-space-4 py-space-3"
+        data-slot="signed-as"
+        class="signed-as mark-line"
         in:unfold
         out:unfold
       >
-        <IconSuccess
-          aria-hidden="true"
-          class="size-icon-md flex-none text-status-done-glyph"
-        />
-        <span
-          >{accountsWords.signin.signedInAs}
-          <b class="font-medium">{email ?? accountsWords.signin.theAccount}</b
-          ></span
-        >
+        <span class="mark-cell"><IconSuccess aria-hidden="true" /></span>
+        {#if joined}
+          <span data-slot="joined"
+            >{words.joined(email ?? accountsWords.signin.theAccount)}</span
+          >
+        {:else}
+          <span data-slot="signed-in"
+            >{accountsWords.signin.signedInAs}
+            <b>{email ?? accountsWords.signin.theAccount}</b></span
+          >
+        {/if}
       </div>
     {/if}
     {#if choice?.signin === "api-key"}
-      <KeyPanel account={ensureAccount} {machines} primary={keyFirst} />
+      <KeyPanel
+        account={ensureAccount}
+        {machines}
+        onjoined={(one) => {
+          keyJoined = one;
+        }}
+        primary={keyFirst}
+      />
     {:else}
       <!-- literal: 150px minmax(0, 1fr) auto, 14px -->
       <ul
@@ -979,5 +1021,341 @@
   }
   [data-cur] [data-step-dot]::after {
     background: var(--selected-icon);
+  }
+  .step.done {
+    color: var(--ink-row);
+  }
+  .work {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .box {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border-well);
+    border-radius: var(--radius-lg);
+    background: var(--surface-well);
+    --swatch-ground: var(--surface-well);
+  }
+  .in {
+    padding: var(--space-6);
+  }
+  .foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    margin-block-start: var(--space-5);
+  }
+  .problem {
+    margin-block-start: var(--space-3);
+    font: var(--type-meta);
+    color: var(--status-fail-ink);
+  }
+  .sec {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .sec h2 {
+    margin-block-end: var(--space-5);
+    font: var(--type-title);
+    letter-spacing: var(--track-title);
+    color: var(--ink-strong);
+    text-wrap: balance;
+  }
+  .sec h2.titled {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .lead {
+    color: var(--ink-muted);
+    text-wrap: pretty;
+  }
+
+  /* The provider picker: flat rows in the step's one container, in two
+     groups under their headings. */
+  .sec :global(.search) {
+    margin-block-end: var(--space-4);
+  }
+  .ghead {
+    padding: var(--space-4) var(--space-3) var(--space-1);
+    font: var(--type-label);
+    color: var(--ink-muted);
+  }
+  .ghead:first-of-type {
+    padding-block-start: 0;
+  }
+  .choices {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .crow + .crow {
+    border-block-start: 1px solid var(--border-hairline);
+  }
+  .choice {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: var(--c-btn-h-lg);
+    padding: 0 var(--space-4) 0 var(--space-3);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+  .choice:active:not([aria-disabled="true"]) {
+    background-color: var(--surface-fill);
+  }
+  .choice:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-inset);
+  }
+  .choice[aria-disabled="true"] {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .ptile {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+  .plabel {
+    min-inline-size: 0;
+    overflow: clip;
+    font: var(--type-label);
+    color: var(--ink-row);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chev {
+    display: flex;
+    color: var(--ink-subtle);
+  }
+  .chev :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+
+  .fld {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    min-width: 0;
+    margin: 0 0 var(--space-5);
+    padding: 0;
+    border: 0;
+  }
+  .label {
+    padding: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .optional {
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
+  }
+  .fld :global(.nickname) {
+    max-width: 280px;
+  }
+  /* Its one line of words wraps, an unbroken address included, its mark on
+     the first line (.mark-cell). */
+  .signed-as {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-block-end: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+  }
+  .signed-as :global(svg) {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    color: var(--status-done-glyph);
+  }
+  .signed-as > span:not(.mark-cell) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+  .signed-as b {
+    font-weight: var(--weight-strong);
+  }
+  .machines {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .mrow {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name controls st"
+      ". problem problem";
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) 0;
+    border-block-start: 1px solid var(--border-hairline);
+  }
+  /* Claude's rows: the name and its one control; asked, the link, the paste
+     field and Done open on the line under them. */
+  .mrow.paste {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name st"
+      "controls controls"
+      "problem problem";
+  }
+  .mrow.device {
+    align-items: start;
+  }
+  .mname {
+    grid-area: name;
+    min-width: 0;
+    overflow: hidden;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mrow.device .mname {
+    line-height: var(--c-btn-h-sm);
+  }
+  .controls {
+    grid-area: controls;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    min-width: 0;
+  }
+  .mrow.paste .controls {
+    padding-block-start: var(--space-2);
+  }
+  /* The code fills the line, so Done ends on the edge every row's Sign in
+     ends on, wrapped under the link or beside it. */
+  .controls :global(.code) {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  .st {
+    grid-area: st;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    justify-self: end;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  .st.ok {
+    color: var(--status-done-ink);
+  }
+  .st.warn {
+    color: var(--status-attn-ink);
+  }
+  .st :global(svg) {
+    width: 14px;
+    height: 14px;
+  }
+  .st.ok :global(svg) {
+    color: var(--status-done-glyph);
+  }
+  .row-problem,
+  .row-warn {
+    grid-area: problem;
+    font: var(--type-meta);
+    color: var(--status-fail-ink);
+  }
+  .row-warn {
+    color: var(--status-attn-ink);
+  }
+  .none {
+    padding: var(--space-3) var(--space-4);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .machines .none {
+    padding-inline: 0;
+    border-block-start: 1px solid var(--border-hairline);
+  }
+  .preview {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+    max-width: 360px;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+  }
+
+  /* A narrow page: the rail becomes a row of marks with the current step
+     named, and each machine's controls go under its name. */
+  @container setup (width < 640px) {
+    .setup {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-4);
+    }
+    .steps {
+      position: static;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: var(--space-1);
+    }
+    .step {
+      padding: 0 var(--space-2);
+    }
+    .step:not(.cur) .name {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: clip;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .in {
+      padding: var(--space-4);
+    }
+    /* Back and Continue stay in reach on a phone: pinned to the foot of what
+       scrolls (the section's ground), across the card's width on its own
+       surface, and over a keyboard (aboveKeyboard). The shell already keeps
+       the home indicator clear under the ground, so no safe area here. A
+       tall step scrolls between the steps and them. */
+    .foot {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+      margin-inline: calc(-1 * var(--space-7));
+      padding: var(--space-3) var(--space-7) var(--space-2);
+      background: var(--surface-raised);
+    }
+    .mrow {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "name st"
+        "controls controls"
+        "problem problem";
+    }
+    .controls {
+      padding-block-start: var(--space-2);
+    }
   }
 </style>

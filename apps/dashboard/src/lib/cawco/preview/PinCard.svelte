@@ -47,6 +47,7 @@
   import Turn from "../turn/Turn.svelte";
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
+  import LiveDot from "./LiveDot.svelte";
   import PinDisc from "./PinDisc.svelte";
   import { pinName, pinSelector } from "./pin-name";
 
@@ -336,12 +337,7 @@
       {/if}
     </span>
     {#if live}
-      <span
-        data-slot="live"
-        aria-label="The agent is working on it"
-        class="shrink-0 size-(--live-dot) rounded-pill bg-status-live-glyph"
-        role="img"
-      ></span>
+      <LiveDot label="The agent is working on it" />
     {/if}
     {#if pin.resolvedAt}
       <Button
@@ -497,14 +493,98 @@
       transform: translateY(var(--pop-rise)) scale(0.96);
     }
   }
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="live"] {
-      animation: pin-card-live var(--dur-loop) var(--ease-in-out) infinite;
+  .head {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  /* The one scroller: past the card's cap it gives up height, never the
+     head or the foot. The card itself scrolls only when the head and foot
+     alone outgrow its room (a phone's keyboard over a short well). It holds
+     what the rows place absolutely (a grouped speaker line's name, kept for
+     a screen reader), which otherwise stood on the card and made it scroll. */
+  .room {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* Squeezed (the head and foot alone outgrow the card): the thread keeps
+     its whole height inside the card's own scroll, never shrinking away. */
+  .room.whole {
+    flex-shrink: 0;
+  }
+  .foot {
+    display: flex;
+    flex-shrink: 0;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .anchor {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+  }
+  .name,
+  .source {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .name {
+    color: var(--ink-strong);
+    font: var(--type-label);
+  }
+  .source {
+    /* rtl only to put the ellipsis at the start; the line stays at the left. */
+    direction: rtl;
+    text-align: left;
+    color: var(--ink-muted);
+    font: var(--text-meta) var(--font-mono);
+  }
+  /* The rows keep the transcript's rhythm: a turn --space-4 under the one
+     before, its speaker line --space-2 over its words. The first turn starts
+     at the room's own top. */
+  .thread {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .entry:first-child > :global(.turn) {
+    margin-block-start: 0;
+  }
+  .files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin: var(--space-1) 0 0;
+
+    & code {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      padding: 0 var(--space-1);
+      border-radius: var(--radius-xs);
+      background: var(--code-bg);
+      font: var(--text-meta) var(--font-mono);
     }
   }
-  @keyframes pin-card-live {
-    50% {
-      opacity: 0.4;
-    }
+  /* 16px on a phone, so iOS does not zoom the page into the field. */
+  .sheet :global(.field) {
+    font-size: 16px;
+  }
+  .error {
+    margin: 0;
+    color: var(--data-bad);
+    font-size: var(--text-meta);
+  }
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
   }
 </style>

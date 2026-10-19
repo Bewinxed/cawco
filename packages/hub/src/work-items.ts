@@ -96,6 +96,11 @@ import {
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import {
+  CONTROL_FORGE_POST,
+  type ForgeVerdict,
+  type ForgeWrite,
+} from "@cawco/core/upstream-post";
+import {
   excludedPaths,
   IGNORED_STATUS,
   stageCloneId,
@@ -133,13 +138,12 @@ import {
   type LandingTurn,
   land,
   landingQueue,
-  openPullRequest,
   pushBranch,
   quote,
   type Refusal,
   statusCommand,
 } from "./landing";
-import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import {
   type CommandOptions,
   CommandStopped,
@@ -786,6 +790,11 @@ export interface WorkItemDeps {
    */
   readonly end: (instanceId: string, waitMs?: number) => Promise<void>;
   /**
+   * The {@link WorkItems.finishingFor} hold on `instanceId` is over: what it
+   * kept at the hub goes now, in order (server.ts `releaseOwed`).
+   */
+  readonly finishOver: (instanceId: string) => void;
+  /**
    * THE gate on input to a session (server.ts `inputRefusal`): why a message
    * from `origin` may not reach it now, or nothing when it may.
    */
@@ -856,6 +865,15 @@ export interface WorkItemDeps {
   readonly planSteps: (instanceId: string) => Promise<PlanStep[]>;
   readonly publish: (item: WorkItemSummary) => void;
   /**
+   * The session called `finish_item`, and its turn ends with that call: each
+   * send its harness was handed and has not read, from a sender the
+   * {@link WorkItems.finishingFor} hold keeps, is taken back from the harness
+   * and kept at the hub, so it goes as the session's next turn and never
+   * into the turn that is ending (server.ts `reclaimUnread`). Settles once
+   * each has answered; never throws.
+   */
+  readonly reclaimUnread: (instanceId: string) => Promise<void>;
+  /**
    * The retired workspace of `instanceId`'s item is cut again
    * ({@link WorkItems.recutFor}): what was kept at the hub for the session
    * meanwhile goes to it now, waking it (server.ts `releaseOwed`).
@@ -913,6 +931,11 @@ export interface WorkItemDeps {
    * Nothing once every stage of the place sleeps, failed or was never heard.
    */
   readonly stageRuns?: (placeId: string) => string | undefined;
+  /**
+   * "Stopped at A's limit; continues on B" while `instanceId` is stopped at
+   * its account's limit (hub at-limit.ts `stall`); undefined while it runs.
+   */
+  readonly stalled: (instanceId: string) => string | undefined;
   /** A task's title as its project's index has it: a pull request's title. */
   readonly taskTitle?: (
     projectId: string,
@@ -1747,10 +1770,11 @@ const refusedLine = (
     "push check": `the push check (git push --dry-run to ${target}, before any landing gate step)`,
     push: `the push to ${target}`,
     read: "reading the workspace's git",
-    "pull request": "opening the pull request",
   };
   let said = `${step[refusal.step]} on ${machine} failed`;
-  if (refusal.cause === "race") {
+  if (refusal.cause === "taken") {
+    said = `${target} on origin was moved by someone other than the hub, so it was not replaced`;
+  } else if (refusal.cause === "race") {
     said = `${target} moved on origin before each of the hub's ${refusal.tries} pushes, so every one was turned down as behind it`;
   } else if (refusal.cause === "cut-off") {
     said = `${step.push} was cut off, and ${target} does not hold the commits`;
@@ -1887,12 +1911,14 @@ export const createWorkItems = ({
   designHeld,
   designHold,
   end,
+  finishOver,
   itemEnded,
   lifetime,
   pauses,
   placeAhead,
   planSteps,
   publish,
+  reclaimUnread,
   recutDone,
   recutFailed,
   report,
@@ -1904,6 +1930,7 @@ export const createWorkItems = ({
   machinePaused,
   modelRefusal,
   online,
+  stalled,
   send,
   sendWakes,
   sessionUrl,
@@ -1956,6 +1983,51 @@ export const createWorkItems = ({
   };
   /** Items whose landing this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
+  /**
+   * Items whose session called `finish_item` (to land, or blocked) in the
+   * turn still under way: that call is the turn's last step, and the turn
+   * ends as it answers. While an item is here, or its landing runs, a send
+   * from one who may reopen it waits at the hub ({@link finishingFor}) and
+   * goes once the turn is over ({@link closeTurn}). In memory: after a hub
+   * restart a landing's `landingSince` holds alone.
+   */
+  const lastTurns = new Set<string>();
+  /**
+   * The {@link finishingFor} hold on `item` ends if nothing keeps it: not
+   * its landing, and not its session's last turn, unless `turnOver` (that
+   * turn has ended) or the item is live (a gate sent it back, and the turn
+   * goes on). What the hold kept goes now.
+   */
+  const closeTurn = (item: WorkItemRow, turnOver: boolean): void => {
+    const now = db.workItem(item.id) ?? item;
+    if (now.landingSince) {
+      if (turnOver) {
+        lastTurns.delete(item.id);
+      }
+      return;
+    }
+    const [row] = db.getInstancesByIds([now.instanceId]);
+    if (
+      !(turnOver || LIVE.has(now.state)) &&
+      lastTurns.has(item.id) &&
+      row &&
+      inTurn(row)
+    ) {
+      return;
+    }
+    lastTurns.delete(item.id);
+    finishOver(now.instanceId);
+  };
+  /**
+   * `item`'s session called `finish_item`, and the call ends its turn: from
+   * here its reopeners' sends wait at the hub ({@link finishingFor}), and
+   * what its harness holds of theirs unread is taken back to wait with them
+   * ({@link WorkItemDeps.reclaimUnread}).
+   */
+  const lastTurn = async (item: WorkItemRow): Promise<void> => {
+    lastTurns.add(item.id);
+    await reclaimUnread(item.instanceId);
+  };
   /**
    * Each landing this hub process runs, by item: aborted as its item ends
    * ({@link finish}), which cancels every command the landing has running,
@@ -2048,7 +2120,7 @@ export const createWorkItems = ({
         itemEnded?.(after);
         // After the step that ended it, and after the failure report the
         // caller sends in that same step.
-        queueMicrotask(() => afterEnd(after));
+        soon(() => afterEnd(after));
       }
       return after;
     }
@@ -2117,6 +2189,7 @@ export const createWorkItems = ({
     machinePaused: LIVE.has(item.state)
       ? (pausedWorkspace(item.workspaceId) ?? null)
       : null,
+    stalled: LIVE.has(item.state) ? (stalled(item.instanceId) ?? null) : null,
     queued: null,
     createdAt: item.createdAt.getTime(),
     endedAt: item.endedAt?.getTime() ?? null,
@@ -2182,6 +2255,7 @@ export const createWorkItems = ({
       title: queued.title,
       state: "starting",
       machinePaused: null,
+      stalled: null,
       queued: {
         owns: [...new Set((request.owns ?? []).map(globOf))],
         paused: (machineId && machinePaused(machineId)) || null,
@@ -3420,7 +3494,7 @@ export const createWorkItems = ({
 
   /** {@link settleNow}, off the caller's step. */
   const settleSoon = (id: string): void => {
-    queueMicrotask(() => detach(settleNow(id), `settle ${id}`));
+    soon(() => detach(settleNow(id), `settle ${id}`));
   };
 
   /**
@@ -5099,10 +5173,10 @@ export const createWorkItems = ({
   /**
    * Whether a done item's workspace holds work since it landed: commits no
    * branch of `origin` has, or changes not committed (its outputs passed
-   * over). Its session made them after the item ended, on a word that
-   * reopened nothing (one sent while it was landing, {@link reopen}), and a
-   * `finish_item` lands them. A call repeated after its landing settled (a
-   * hub restarted under it) finds none: everything it landed is on `origin`.
+   * over). Its session made them after the item ended, in the turn that
+   * landed it, and a `finish_item` lands them. A call repeated after its
+   * landing settled (a hub restarted under it) finds none: everything it
+   * landed is on `origin`.
    * A held workspace holds such work by its record. Git inside its boundary,
    * never waiting; a read git cannot answer throws its words.
    */
@@ -5918,6 +5992,33 @@ export const createWorkItems = ({
   };
 
   /**
+   * The commit the hub last pushed to `item`'s own branch
+   * ({@link landingBranch}): the newest branch landing of every attempt at
+   * its task in its project, the item's own earlier rounds among them, or of
+   * the item alone when it is no task's. Undefined: the hub never pushed there.
+   */
+  const lastBranchPush = (item: WorkItemRow): string | undefined => {
+    const now = db.workItem(item.id) ?? item;
+    const sharing =
+      now.projectId && now.taskId
+        ? db
+            .projectAttempts(now.projectId)
+            .filter((attempt) => attempt.taskId === now.taskId)
+        : [now];
+    let last: WorkLanding | undefined;
+    for (const { landed } of sharing) {
+      if (
+        landed &&
+        landed.onto === null &&
+        (!last || (landed.at ?? 0) > (last.at ?? 0))
+      ) {
+        last = landed;
+      }
+    }
+    return last?.sha;
+  };
+
+  /**
    * Lands an item that lands `branch` or `pr`: its commits pushed as they are
    * to `cawco/<task or item>`, and for `pr`, a pull request against the base
    * branch opened, or the open one found. gh turning the pull request down
@@ -5933,6 +6034,7 @@ export const createWorkItems = ({
     const { base } = workspace;
     const branch = landingBranch(item);
     const pushed = await pushBranch(base, branch, {
+      last: lastBranchPush(item),
       run: runIn(workspace, item),
       turn: turnOf(item),
       queue: landings,
@@ -5954,7 +6056,11 @@ export const createWorkItems = ({
       );
     }
     const at = `${branch} at ${pushed.sha.slice(0, 9)}`;
-    const landed: WorkLanding = { sha: pushed.sha, onto: null };
+    const landed: WorkLanding = {
+      sha: pushed.sha,
+      onto: null,
+      at: Date.now(),
+    };
     if (item.lands !== "pr") {
       return {
         kind: "done",
@@ -5966,7 +6072,13 @@ export const createWorkItems = ({
     return pullRequestFor(workspace, item, summary, gate, at, landed);
   };
 
-  /** Opens the pull request for an item's pushed branch, or finds the open one. */
+  /**
+   * Opens the pull or merge request for an item's pushed branch, or finds
+   * the open one: the workspace's machine makes it through the forge adapter
+   * of its origin's host with its own sign-in there (agent forges/,
+   * `CONTROL_FORGE_POST`, the project's own repository, so no rule holds
+   * it). A forge that turns it down refuses the landing in its words.
+   */
   const pullRequestFor = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
@@ -5977,31 +6089,58 @@ export const createWorkItems = ({
   ): Promise<Landed> => {
     const { base } = workspace;
     const branch = landingBranch(item);
+    const machine = machineName(workspace.machineId);
     const title =
       (item.projectId && item.taskId
         ? taskTitle?.(item.projectId, item.taskId)
         : undefined) ?? item.title;
-    const pr = await openPullRequest(
-      { base, branch, title, body: pullRequestBody(item, summary, gate) },
-      runIn(workspace, item)
-    );
-    if (pr.kind === "refused") {
-      const why = `gh on ${machineName(workspace.machineId)} did not open the pull request`;
+    const origin = (
+      await runIn(workspace, item)("git remote get-url origin", GIT_TIMEOUT_MS)
+    ).stdout.trim();
+    const write: ForgeWrite = {
+      op: "pull_request",
+      base,
+      head: branch,
+      title,
+      body: pullRequestBody(item, summary, gate),
+    };
+    let verdict: ForgeVerdict;
+    try {
+      verdict = (await call(workspace.machineId, CONTROL_FORGE_POST, [
+        null,
+        { repo: origin, write },
+      ])) as ForgeVerdict;
+    } catch (error) {
+      verdict = {
+        kind: "refused",
+        why: error instanceof Error ? error.message : String(error),
+      };
+    }
+    const made =
+      verdict.kind === "made"
+        ? verdict.made
+        : {
+            ok: false,
+            said:
+              verdict.kind === "refused"
+                ? verdict.why
+                : "it was held, which a project's own repository never is",
+          };
+    if (!(made.ok && made.url)) {
       return {
         kind: "refused",
         gate,
-        line: `Pushed to branch ${at}, but ${why}. gh said:${fenced(pr.detail)}\nOpen it by hand from ${branch} into ${base}, or start the task again once gh can.`,
+        line: `Pushed to branch ${at}, but ${machine} did not open the pull or merge request. It said:${fenced(made.said)}\nOpen it by hand from ${branch} into ${base}, or start the task again once ${machine} can.`,
       };
     }
     return {
       kind: "done",
       gate,
       landed,
-      prUrl: pr.url,
-      line:
-        pr.kind === "opened"
-          ? `Pushed to branch ${at} and opened a pull request against ${base}: ${pr.url}`
-          : `Pushed to branch ${at}, which updates its open pull request: ${pr.url}`,
+      prUrl: made.url,
+      line: made.existing
+        ? `Pushed to branch ${at}, which updates its open pull or merge request: ${made.url}`
+        : `Pushed to branch ${at} and opened a pull or merge request against ${base}: ${made.url}`,
     };
   };
 
@@ -6410,6 +6549,9 @@ export const createWorkItems = ({
       if (!LIVE.has((db.workItem(item.id) ?? item).state)) {
         settleSoon(item.workspaceId);
       }
+      // What waited out the landing goes: into the turn a failed gate hands
+      // back, or, landed, once the turn that called finish_item is over.
+      closeTurn(item, false);
     }
   };
 
@@ -6493,7 +6635,11 @@ export const createWorkItems = ({
       return;
     }
     const branch = landingBranch(item);
-    const refused = await branchPushCheck(runIn(workspace, item), branch);
+    const refused = await branchPushCheck(
+      runIn(workspace, item),
+      branch,
+      lastBranchPush(item)
+    );
     return refused
       ? {
           kind: "refused",
@@ -7040,7 +7186,9 @@ export const createWorkItems = ({
       const item = row ? itemOf(row) : undefined;
       // Only a send made to finished work reopens it: one accepted while the
       // item was live and read after it ended was never addressed to a
-      // finished item.
+      // finished item. A reopener's send made while the item was finishing
+      // waited at the hub ({@link finishingFor}) and is accepted again as it
+      // goes, after the end, so it reopens it.
       if (
         item &&
         !LIVE.has(item.state) &&
@@ -7222,6 +7370,7 @@ export const createWorkItems = ({
       clearWait(item);
 
       if (request.blocked) {
+        await lastTurn(item);
         const error = `Blocked: ${request.blocked.command}${fenced(request.blocked.error)}`;
         const ended = finish(item, {
           state: "failed",
@@ -7253,8 +7402,43 @@ export const createWorkItems = ({
       if (held) {
         return held;
       }
+      await lastTurn(item);
       update(item.id, { submission: request, landingSince: new Date() });
       return (await settleLanding(item, request)).text;
+    },
+
+    /**
+     * Whether a send from `origin` waits at the hub because the session's
+     * item is finishing: its landing runs, or its session is in the turn
+     * that called `finish_item` ({@link lastTurns}). Only the words of one
+     * who may reopen the item wait (its parent, its lead, the reader): such
+     * a send handed to the harness now would join a turn that ends as
+     * `finish_item` answers, and read after the item ended it would reopen
+     * nothing ({@link reopen}: it was accepted while the item was live). Kept,
+     * it goes once that turn is over ({@link closeTurn}), as the next turn:
+     * a send the item's landing ended before reopens it.
+     */
+    finishingFor(instanceId: string, origin: NeutralOrigin): boolean {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      return (
+        !!item &&
+        (!!item.landingSince || lastTurns.has(item.id)) &&
+        mayReopen(item, origin)
+      );
+    },
+
+    /**
+     * A turn of `instanceId` ended: when it was the one that called
+     * `finish_item`, what the {@link finishingFor} hold kept goes now, unless
+     * its landing still runs (it goes as that settles).
+     */
+    turnOver(instanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item && lastTurns.has(item.id)) {
+        closeTurn(item, true);
+      }
     },
 
     /**
@@ -7366,6 +7550,18 @@ export const createWorkItems = ({
 
     /** One item, as `stop_delegate` and its callers read it. */
     item: (id: string): WorkItemRow | undefined => db.workItem(id),
+
+    /**
+     * `instanceId`'s stop at its account's limit began, changed or ended:
+     * its live item goes out again, its chip saying so.
+     */
+    stallChanged(instanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item && LIVE.has(item.state)) {
+        publish(summaryOf(item));
+      }
+    },
 
     /** One item as its tray reads it (a tray's Retry answers with it). */
     summary(id: string): WorkItemSummary | undefined {

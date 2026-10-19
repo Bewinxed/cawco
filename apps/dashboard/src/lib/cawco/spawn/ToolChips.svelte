@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
+  import { accountsWords } from "@cawco/core";
 
   /** Why the effort chip offers no level, in the chip's words and its title's. */
   export interface EffortOff {
@@ -13,11 +14,7 @@
     reason: "This model has no effort setting",
   };
 
-  const HARNESS_NAMES: Record<HarnessKind, string> = {
-    claude: "Claude Code",
-    opencode: "OpenCode",
-    pi: "Pi",
-  };
+  const HARNESS_NAMES: Record<HarnessKind, string> = accountsWords.harnesses;
 
   /** A harness that can neither report nor change effort. */
   export const effortNotExposed = (harness: HarnessKind): EffortOff => ({

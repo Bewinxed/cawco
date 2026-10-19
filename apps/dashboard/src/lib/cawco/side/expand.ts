@@ -1,10 +1,9 @@
 /**
  * The side surface taking the whole split (Split): the split gives its
  * head's Expand control what it needs through this context, so the panes
- * that draw the head (PlanPane, PreviewPane, TaskPane) need not carry it,
- * and says whether its panes are still on the way to their size. Outside a
- * split (the artifact's own tab, a task's phone page) there is none, and
- * the head has no Expand.
+ * that draw the head (PlanPane, PreviewPane, TaskPane) need not carry it.
+ * Outside a split (the artifact's own tab, a task's phone page) there is
+ * none, and the head has no Expand.
  */
 import { getContext, setContext } from "svelte";
 
@@ -17,12 +16,6 @@ export interface SideExpand {
   readonly collapse: () => boolean;
   /** The surface has the whole split; the conversation is put away. */
   readonly expanded: boolean;
-  /**
-   * The panes are on the way to a size (the split opening, closing,
-   * expanding or going back) and have not landed: what a surface measures
-   * of itself now is a size it passes through.
-   */
-  readonly moving: boolean;
   readonly toggle: () => void;
 }
 

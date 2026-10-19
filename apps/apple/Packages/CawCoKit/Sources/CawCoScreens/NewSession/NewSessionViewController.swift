@@ -534,7 +534,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     }
 
     private var repoValid: Bool {
-        repo.map { $0.trimmingCharacters(in: .whitespaces).wholeMatch(of: /[\w.\-]+\/[\w.\-]+/) != nil } ?? true
+        repo.map(ModelCatalog.isGitUrl) ?? true
     }
 
     private var cantStart: Bool {
@@ -1136,7 +1136,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             locationChip.accessibilityValue = moveDestination
         } else if let repo {
             let named = repo.trimmingCharacters(in: .whitespaces)
-            locationChip.show(BrandLogo.github.image, label: named.isEmpty ? "Clone from GitHub" : named, mono: !named.isEmpty)
+            locationChip.show(Glyph.folderGit.image, tint: Palette.hueAmber500, label: named.isEmpty ? "Clone a repository" : named, mono: !named.isEmpty)
             locationChip.empty = named.isEmpty
             locationChip.accessibilityValue = named.isEmpty ? "No repository" : named
         } else {
@@ -1400,7 +1400,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private func validate() -> String {
         if machineIds.isEmpty { return "Choose a machine to run this session on." }
-        if !repoValid { return "Enter a repository as owner/repository." }
+        if !repoValid { return "Enter the repository's git URL." }
         if path.isEmpty { return "Enter the directory this session should work in." }
         if unreadable || offlineMachine != nil { return locationReading }
         return locationUnverified ? "Reading…" : ""

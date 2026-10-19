@@ -12,7 +12,8 @@
  *   repositories (core upstream-guard.ts), asked once, while nobody has
  *   answered it (`upstream_settings`).
  * - `fleet-relay`: the fleet's stream relay (fleet-choices.ts `relayCard`),
- *   offered once, while the fleet has none and nobody has answered it.
+ *   Set up or Later, offered once, while the fleet has none and nobody has
+ *   answered it.
  * - `stages`: the template's stages, names editable (`cawco.set`).
  * - `delegates`: delegate types the template suggests beyond the ones its
  *   stages run (already written with it), several picks; none, no card.
@@ -20,7 +21,6 @@
  *   stored as `{ machineId, label, path }`).
  */
 import type { ChoiceEntry } from "@cawco/core";
-import type { RelayCandidate } from "@cawco/core/stream-relay";
 import {
   UPSTREAM_POSTS,
   UPSTREAM_WORDS,
@@ -62,11 +62,10 @@ export interface SetupApply {
     place: { machineId: string; path: string }
   ) => Promise<void>;
   /**
-   * The relay card's answer: the relay set up on the machine picked (its
-   * outcome is the relay's to say, in Settings › Browsers), or Later. Never
-   * refuses the page: a relay that does not start leaves the project set up.
+   * The relay card's answer: Set up opens the relay's journey (its row
+   * stands in Needs you), Later answers the card. Never refuses the page.
    */
-  relay: (pick: { machineId: string; hostname?: string } | "later") => void;
+  relay: (pick: "set-up" | "later") => void;
 }
 
 const onOff = (
@@ -136,6 +135,11 @@ export const applySetupPicks = async (
   }
 };
 
+/** The relay card as it is offered: the domain the person last reached CawCo through, which makes Set up the recommended option. */
+export interface RelayOffer {
+  domain: string | null;
+}
+
 export interface SetupAsk {
   /** Whether the fleet's two choices were never set, so the page asks for them. */
   askFleet: boolean;
@@ -146,8 +150,8 @@ export interface SetupAsk {
   /** It has its checkout already (made from a folder): no card asks for its place. */
   placed: boolean;
   projectName: string;
-  /** The machines the relay card offers, while it is to be asked; null when it is not. */
-  relay: readonly RelayCandidate[] | null;
+  /** The relay card, while it is to be asked; null when it is not. */
+  relay: RelayOffer | null;
   /** The template it was made from; the code template stands in when none. */
   template: StagesTemplate | null;
   threadId: string;
@@ -179,11 +183,11 @@ export const setupEvent = (ask: SetupAsk): string => {
         ? ", and their words are the first message of the Setup thread"
         : " from a session's offer, noted in the Setup thread"
     } (thread ${ask.threadId}). ${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`,
-    `1. Load the decision-page skill and build one decision page named "${SETUP_PAGE}". The page lives in the project's folder on the hub, which your own edit tools do not write: write decisions/${SETUP_PAGE}/page.html there with folder_write (start from the skill's kit/page.html; read it with your Read tool), then call artifact_create({ kind: "page", name: "${SETUP_PAGE}" }). Its cards, with exactly these ids:`,
+    `1. Load the decision-page skill and build one decision page named "${SETUP_PAGE}". The page lives in the project's folder on the hub, which your own edit tools do not write: write decisions/${SETUP_PAGE}/page.html there with folder_write (start from the skill's kit/page.html; read it with your Read tool), then call artifact_create({ kind: "page", name: "${SETUP_PAGE}", does: "pick", ask: "Pick how this project is set up" }). Its cards, with exactly these ids:`,
     [
       ...(ask.askFleet ? [fleetCards] : []),
       ...(ask.askUpstream ? [upstreamCard] : []),
-      ...(ask.relay ? [relayCard(ask.relay)] : []),
+      ...(ask.relay ? [relayCard(ask.relay.domain)] : []),
       `- \`stages\`: the project's stages, from the ${template} template below, adjusted to their words. Show each stage's name in an editable text field and store the list with \`cawco.set("stages", [{ "name": …, "kind": … }, …])\` on every edit (kinds stay as the template has them; show each kind in words: to do, active, waiting, you, done, dropped).`,
       ...(types.length > 0
         ? [

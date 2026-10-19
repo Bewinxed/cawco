@@ -18,8 +18,8 @@
  *     it a second time over anonymous https.
  * (d) Placement with every account it may run on at its 5-hour limit:
  *     refused, naming the account back first in the words the account
- *     surfaces use ("resets in 1h 30m") and its clock. Main started it on
- *     the pinned account "anyway".
+ *     surfaces use ("in 1h 30m") and its clock. Main started it on the
+ *     pinned account "anyway".
  *
  *   bun scripts/probe-kit/run.ts fallback-refusals
  */
@@ -146,10 +146,19 @@ exit 128
       cloning,
       `import { syncFleetConfig } from ${JSON.stringify(join(AGENT, "fleet.ts"))};
 const report = await syncFleetConfig({
-  mcp: [],
-  marketplaces: [{ name: "probe-market", source: ${JSON.stringify(source)} }],
-  plugins: [],
+  cawcoTodos: false,
   deniedTools: [],
+  hooks: [],
+  hubOnlyMarketplaces: [],
+  marketplaces: [{ name: "probe-market", source: ${JSON.stringify(source)} }],
+  mcp: [],
+  memory: null,
+  placedMcp: [],
+  placedMemory: [],
+  placedSkills: [],
+  pluginPayloads: [],
+  plugins: [],
+  skills: [],
 });
 console.log(JSON.stringify(report.marketplaces["probe-market"] ?? {}));
 process.exit(0);`,
@@ -242,7 +251,7 @@ process.exit(0);`,
     );
     check(
       "(d) the refusal names the account back first and when, as the account surfaces say a reset",
-      refusal.includes(`beta resets in 1h 30m (${clockWords(soon)})`),
+      refusal.includes(`beta is back first, in 1h 30m (${clockWords(soon)})`),
       refusal
     );
   },

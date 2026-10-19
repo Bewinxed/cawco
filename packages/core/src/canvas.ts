@@ -70,7 +70,29 @@ export const CANVAS_LIMITS = {
   imageBytes: 4 * 1024 * 1024,
   /** Bytes of one picture. Our call. */
   pictureBytes: 32 * 1024 * 1024,
+  /**
+   * How long the hub machine's headless screen stays on a canvas after its
+   * last write, waiting for the picture that follows a quiet 2 s; the daemon
+   * closes one the hub has not held on for twice this. Our call.
+   */
+  screenHoldMs: 15_000,
+  /** How long the hub waits for the daemon to launch its Chromium and load the canvas page. Our call. */
+  screenOpenMs: 45_000,
+  /** How long the daemon gives the canvas page to load, inside {@link CANVAS_LIMITS.screenOpenMs}. Our call. */
+  screenLoadMs: 30_000,
 } as const;
+
+/**
+ * The daemon's control methods that hold a canvas's host page open in its
+ * machine's Chromium (agent canvas-screen.ts), so it joins the canvas's doc
+ * as a screen and converts the agent's writes where no person's screen shows
+ * it: a delegate's canvas handed to its parent, not opened yet. Open takes
+ * `{ url, token, canvas: { id, name, sync } }` and answers once the page
+ * has loaded and been told which canvas it is; an open naming a token
+ * already open holds that page on. Close takes `{ token }`.
+ */
+export const CANVAS_SCREEN_OPEN = "canvasScreenOpen";
+export const CANVAS_SCREEN_CLOSE = "canvasScreenClose";
 
 /** The images a screen adds to a canvas (pasted, dropped or picked), by MIME type, with the name a refusal lists. */
 export const CANVAS_IMAGE_TYPES: Readonly<Record<string, string>> = {

@@ -4,7 +4,7 @@
  * (`UsageSummary`, `UsageLimitsResponse`); this module reads them.
  */
 import type {
-  AgentRow,
+  ClaudeExtraUsage,
   ClaudeLimits,
   LimitWindow,
   ProjectCap,
@@ -126,10 +126,11 @@ export function windowStart(w: LimitWindow): number | null {
 }
 
 /**
- * The reading that speaks for a provider. Limits are account-scoped: every
- * machine signed in to one account reads the same numbers, so the first good
- * reading speaks for all of them, else one that failed but kept its last good
- * windows (served stale). Null when no machine has a reading with windows.
+ * The OpenCode Go plan's reading, out of each machine's (read with that
+ * machine's Go key): the first good one, else one that failed but kept its
+ * last good windows (served stale). Null when no machine has a reading with
+ * windows. Claude's limits are never picked this way: each is its account's
+ * own (`cawco.claudeLimits`, by account id).
  */
 export function speakingReading<
   T extends { error: string | null; stale?: boolean; windows: LimitWindow[] },
@@ -355,56 +356,64 @@ export const planName = (subscription: string | null): string | null =>
 /**
  * Why Claude's limits cannot be shown, and what fixes it: the one source of
  * those words for the Usage page's Limits block and the usage strip, so the
- * two say the same thing. `signIn`: signing an account in on the machine
- * fixes it, in Configure → Accounts; otherwise there is nothing to do but
- * wait for a read.
+ * two say the same thing. `signIn`: signing an account in fixes it, in
+ * Configure → Accounts; otherwise there is nothing to do but wait for a
+ * session to report.
  */
 export interface LimitsGap {
-  machine: AgentRow | null;
   /** The whole why: the Limits block and the strip's popover say it. */
   reason: string;
   /** What the rail's strip says in its one line; the popover says the why. */
   short: string;
   signIn: boolean;
 }
+/** Why no Claude account has limits to show, from each account's own (by account id). */
 export function claudeGap(
-  readings: Readonly<Record<string, ClaudeLimits>>,
-  machines: readonly AgentRow[]
+  readings: Readonly<Record<string, ClaudeLimits>>
 ): LimitsGap {
-  const [first] = Object.entries(readings);
-  if (!first) {
+  const all = Object.values(readings);
+  if (all.every((reading) => reading.errorKind === "not-signed-in")) {
     return {
-      machine: null,
-      reason: "No machine has reported a Claude reading yet.",
-      short: "No limits yet",
-      signIn: false,
-    };
-  }
-  const [machineId, reading] = first;
-  const machine = machines.find((m) => m.machineId === machineId) ?? null;
-  const host = machine?.hostname ?? "a removed machine";
-  // A machine the hub cannot reach can neither be read nor signed in on:
-  // its last word is not offered as something to act on.
-  if (machine && machine.status !== "online") {
-    return {
-      machine,
-      reason: `${host} is offline. Its Claude limits are read again once it's back.`,
-      short: "Machine offline",
-      signIn: false,
-    };
-  }
-  if (reading.error === "not signed in") {
-    return {
-      machine,
-      reason: `No Claude account is signed in on ${host}.`,
+      reason: "No Claude account is signed in on any machine.",
       short: "Sign in to see limits",
       signIn: true,
     };
   }
   return {
-    machine,
-    reason: `Claude Code hasn't reported the limits of ${host}'s account yet; they appear once a session runs there.`,
+    reason:
+      "Claude Code hasn't reported any account's limits yet; they appear once a session runs on one.",
     short: "No limits yet",
     signIn: false,
   };
+}
+
+/** Extra usage as one account's Claude Code last said it, in words; "" when it never said. */
+const extraUsageWords = (extra: ClaudeExtraUsage | null): string => {
+  if (!extra) {
+    return "";
+  }
+  if (!extra.on) {
+    return extra.offReason ? `off: ${extra.offReason}` : "off";
+  }
+  return extra.inUse ? "on, in use" : "on";
+};
+
+/**
+ * Extra usage across the Claude accounts, each its own: one phrase when
+ * every account that said says the same ("off: turned off by the
+ * organization"), else each account by name ("a@x.com: on; b@y.com: off").
+ * `names`: the accounts as their tiles name them, in their order.
+ */
+export function extraUsageLine(
+  readings: Readonly<Record<string, ClaudeLimits>>,
+  names: readonly { id: string; name: string }[]
+): string {
+  const said = names.flatMap(({ id, name }) => {
+    const words = extraUsageWords(readings[id]?.extraUsage ?? null);
+    return words ? [{ name, words }] : [];
+  });
+  if (said.every((one) => one.words === said[0]?.words)) {
+    return said[0]?.words ?? "";
+  }
+  return said.map((one) => `${one.name}: ${one.words}`).join("; ");
 }

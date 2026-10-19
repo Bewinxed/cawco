@@ -1,0 +1,17 @@
+apps/dashboard/src/routes/(app)/motion/artifact-head/+page.svelte
+apps/dashboard/src/routes/(app)/motion/breath-floor/+page.svelte
+apps/dashboard/src/routes/(app)/motion/caw-notices/+page.svelte
+apps/dashboard/src/routes/(app)/motion/caw/+page.svelte
+apps/dashboard/src/routes/(app)/motion/chosen-hover/+page.svelte
+apps/dashboard/src/routes/(app)/motion/delegate-tray/+page.svelte
+apps/dashboard/src/routes/(app)/motion/echo/+page.svelte
+apps/dashboard/src/routes/(app)/motion/folder-proof/+page.svelte
+
+# apps/dashboard/src/routes/(app)/motion/artifact-head/+page.svelte: after-M: markup naming a scoped class; after-M: an inline style; after-M: a scoped <style> rule; relic: style-reason ×1; lint: shadcn/no-inline-styles ×1
+# apps/dashboard/src/routes/(app)/motion/breath-floor/+page.svelte: after-M: markup naming a scoped class; after-M: an inline style; after-M: a scoped <style> rule; relic: style-reason ×1; lint: shadcn/no-inline-styles ×1
+# apps/dashboard/src/routes/(app)/motion/caw-notices/+page.svelte: relic: literal ×2; relic: style-var ×3
+# apps/dashboard/src/routes/(app)/motion/caw/+page.svelte: relic: literal ×1; relic: style-var ×2
+# apps/dashboard/src/routes/(app)/motion/chosen-hover/+page.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×3; relic: style-var ×4
+# apps/dashboard/src/routes/(app)/motion/delegate-tray/+page.svelte: relic: literal ×1
+# apps/dashboard/src/routes/(app)/motion/echo/+page.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/routes/(app)/motion/folder-proof/+page.svelte: relic: literal ×5; relic: style-var ×4; relic: style-reason ×1; relic: important ×1

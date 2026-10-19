@@ -14,6 +14,8 @@
  *   already had is a proposal the person approves.
  * - `design_verdict`: a design check's verifier's one answer (design-verify.ts):
  *   its must-fix findings, each tied to an element, or none for a pass.
+ * - `find`, for `GET /api/find`: the dashboard's Finder, the same engine,
+ *   narrowed and read as a session needs it (find-tool.ts).
  *
  * One list, made here: the MCP server lists it to sessions (server.ts) and
  * the role budgets measure it (role-budgets.ts).
@@ -23,6 +25,7 @@ import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { DesignFinding, DesignPick } from "./db/schema";
 import { DESIGN_WRITE_FILES, type DesignFileIn } from "./design-system";
+import { FIND_TOOL, findToolDefinition } from "./find-tool";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
 
@@ -34,6 +37,7 @@ export const HUB_TOOLS: ReadonlySet<string> = new Set([
   "update_machines",
   "design_write",
   DESIGN_VERDICT,
+  FIND_TOOL,
 ]);
 
 /** A verifier's verdict as `design_verdict` takes it. */
@@ -62,6 +66,8 @@ export interface HubToolsDeps {
     why: string | undefined,
     toolUseId: string | undefined
   ) => Promise<unknown>;
+  /** One `find` call for the calling session (find-tool.ts `call`). */
+  find: (actor: InstanceRow, input: unknown) => Promise<unknown>;
   /** The machines registered now: an install naming none goes to each. */
   machineIds: () => string[];
   /** Whether the hub requires paired devices (hub-auth.ts): an install asks the person first. */
@@ -202,5 +208,6 @@ export const createHubTools =
         },
         async (verdict) => ok(await deps.designVerdict(me(), verdict))
       ),
+      findToolDefinition(async (input) => ok(await deps.find(me(), input))),
     ];
   };

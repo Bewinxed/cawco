@@ -107,17 +107,17 @@ final class ProjectCawLead {
     }
 }
 
-/// Caw at 48pt on the project head's leading edge (CawSeat.svelte): what he
-/// is doing, and his panel on a tap.
+/// Caw at 48pt on the project head's leading edge, or standing at 80 over
+/// an empty tab (CawSeat.svelte `size`): what he is doing, and his panel on a tap.
 final class ProjectCawSeat: UIControl {
     private let caw = CawView(status: .loading)
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(side: Double = 48) {
+        super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         caw.isUserInteractionEnabled = false
         hold(caw)
-        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 48), heightAnchor.constraint(equalToConstant: 48)])
+        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: side), heightAnchor.constraint(equalToConstant: side)])
         isAccessibilityElement = true
         accessibilityTraits = .button
         accessibilityLabel = "Caw"
@@ -187,10 +187,16 @@ final class ProjectCawPanel: KitPopoverController {
         case running([Components.Schemas.CawRunning])
     }
 
-    init(lead: ProjectCawLead, hub: HubConnection, projectName: String, openThread: @escaping (String) -> Void) {
+    /// A starter's sentence (caw-lead.svelte.ts `ask`): the panel opens with
+    /// it in his field, the caret after it; nothing is sent.
+    private let asked: String?
+
+    init(lead: ProjectCawLead, hub: HubConnection, projectName: String, ask: String? = nil, openThread: @escaping (String) -> Void) {
         self.lead = lead
         self.hub = hub
         self.projectName = projectName
+        asked = ask
+        talking = ask != nil
         self.openThread = openThread
         super.init()
     }
@@ -258,6 +264,30 @@ final class ProjectCawPanel: KitPopoverController {
         }
         harness.accessibilityLabel = "Harness"
         model.accessibilityLabel = "Model"
+        // Set once and made as they open, from Caw as he stands then: a redraw that
+        // set a new menu cancelled one a tap was opening.
+        harness.menuOnOpen(options: .singleSelection) { [weak self] in
+            guard let self else { return [] }
+            let current = lead.view?.harness.rawValue ?? ""
+            return ["claude", "opencode"].map { value in
+                UIAction(title: ModelCatalog.harnessName(value), state: value == current ? .on : .off) { [weak self] _ in
+                    guard value != current else { return }
+                    Task { await self?.lead.configure(harness: value) }
+                }
+            }
+        }
+        model.menuOnOpen(options: .singleSelection) { [weak self] in
+            guard let self else { return [] }
+            let chosen = lead.view?.model
+            let models = ModelCatalog.models(hub.fleet, harness: lead.view?.harness.rawValue ?? "", machineIds: [])
+            return [UIAction(title: "Default", state: chosen == nil ? .on : .off) { [weak self] _ in
+                Task { await self?.lead.configure(model: .some(nil)) }
+            }] + models.map { row in
+                UIAction(title: ModelCatalog.modelName(row.value, displayName: row.displayName).name, state: row.value == chosen ? .on : .off) { [weak self] _ in
+                    Task { await self?.lead.configure(model: .some(row.value)) }
+                }
+            }
+        }
         stack.addArrangedSubview(row([runsOn, harness, model]))
 
         talk = KitButton.make("Message Caw", variant: .outline, height: .sm) { [weak self] in
@@ -291,6 +321,10 @@ final class ProjectCawPanel: KitPopoverController {
             await lead.read()
         }
         render()
+        if let asked {
+            field.text = asked
+            DispatchQueue.main.async { [weak self] in self?.field.becomeFirstResponder() }
+        }
     }
 
     private func row(_ views: [UIView]) -> UIStackView {
@@ -329,24 +363,10 @@ final class ProjectCawPanel: KitPopoverController {
             lead.moving ? "Moving…" : view.map { _ in ModelCatalog.harnessName(current) } ?? "Reading…",
             attributes: TypeScale.typeLabel.container(color: Palette.inkStrong))
         harness.isEnabled = !lead.moving && view != nil
-        harness.menu = UIMenu(options: .singleSelection, children: ["claude", "opencode"].map { value in
-            UIAction(title: ModelCatalog.harnessName(value), state: value == current ? .on : .off) { [weak self] _ in
-                guard value != current else { return }
-                Task { await self?.lead.configure(harness: value) }
-            }
-        })
         model.isHidden = view == nil
         let chosen = view?.model
         model.configuration?.attributedTitle = AttributedString(chosen.map { ModelCatalog.modelName($0).name } ?? "Default",
                                                                 attributes: TypeScale.typeLabel.container(color: Palette.inkStrong))
-        let models = ModelCatalog.models(hub.fleet, harness: current, machineIds: [])
-        model.menu = UIMenu(options: .singleSelection, children: [UIAction(title: "Default", state: chosen == nil ? .on : .off) { [weak self] _ in
-            Task { await self?.lead.configure(model: .some(nil)) }
-        }] + models.map { row in
-            UIAction(title: ModelCatalog.modelName(row.value, displayName: row.displayName).name, state: row.value == chosen ? .on : .off) { [weak self] _ in
-                Task { await self?.lead.configure(model: .some(row.value)) }
-            }
-        })
         switch asking {
         case let .turn(turn)?:
             turnWords.text = "\(turn.title ?? "Answering an event"). Off, it can finish or stop now."

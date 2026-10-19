@@ -3,17 +3,24 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
-/// What each machine really has, whoever put it there (MachineInventory.svelte,
-/// `kind="mcp"` as the project page uses it): read live, never stored, and
-/// anything the fleet does not manage can be adopted into it. A hairline
-/// above, then the amber laptop and "On each machine", the note, and a row
-/// per machine: its chevron, OS mark and name, and "Show what it has",
-/// "Hide" or "Offline" in meta. A machine keeps its row up or down, so
-/// nothing under the list moves; it opens only while it is up.
+/// What each machine really has, whoever put it there (MachineInventory.svelte):
+/// its MCP servers or its skills, read live, never stored, and anything the
+/// fleet does not manage can be adopted into it. A hairline above, then the
+/// amber laptop and "On each machine", the note, and a row per machine: its
+/// chevron, OS mark and name, and "Show what it has", "Hide" or "Offline" in
+/// meta. A machine keeps its row up or down, so nothing under the list
+/// moves; it opens only while it is up.
 final class MachineInventoryView: UIStackView {
+    enum Kind { case mcp, skills }
+
     private let hub: HubConnection
+    private let kind: Kind
     private let list = UIStackView()
     private var machines: [MachineRow] = []
+    /// The fleet's own names: one a machine has too is "In the fleet".
+    private var taken: [String] = []
+    /// Why an adopt was refused, by row.
+    private var adoptReason: [String: String] = [:]
     private var open: Set<String> = []
     private var found: [String: Components.Schemas.ConfigInspection] = [:]
     private var reading: Set<String> = []
@@ -24,8 +31,9 @@ final class MachineInventoryView: UIStackView {
     /// Tells the page its height changed, so it can move what is under it.
     var onResize: () -> Void = {}
 
-    init(hub: HubConnection) {
+    init(hub: HubConnection, kind: Kind = .mcp) {
         self.hub = hub
+        self.kind = kind
         super.init(frame: .zero)
         axis = .vertical
         spacing = 8
@@ -35,13 +43,13 @@ final class MachineInventoryView: UIStackView {
         addArrangedSubview(rule)
         setCustomSpacing(18, after: rule)
         let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-        label.text = "On each machine"
+        label.text = Words.Skills.onEachMachine
         label.accessibilityTraits = .header
         let head = UIStackView(arrangedSubviews: [GlyphView(.laptop, size: 16, tint: Palette.hueAmber500), label, UIView()])
         head.spacing = 8
         head.alignment = .center
         addArrangedSubview(head)
-        addArrangedSubview(note("What each machine really has, whoever put it there — read live, never stored. Anything the fleet does not manage can be adopted into it."))
+        addArrangedSubview(note(Words.Skills.inventoryNote))
         list.axis = .vertical
         list.spacing = 2
         addArrangedSubview(list)
@@ -59,15 +67,17 @@ final class MachineInventoryView: UIStackView {
         return label
     }
 
-    func configure(machines next: [MachineRow]) {
+    func configure(machines next: [MachineRow], taken names: [String] = []) {
+        guard next != machines || names != taken else { return }
         machines = next
+        taken = names
         render()
     }
 
     private func render() {
         list.arrangedSubviews.forEach { $0.removeFromSuperview() }
         guard !machines.isEmpty else {
-            list.addArrangedSubview(note("No machine is registered to ask."))
+            list.addArrangedSubview(note(Words.Skills.noMachines + Words.Skills.noMachinesAfter))
             return
         }
         for machine in machines {
@@ -82,7 +92,7 @@ final class MachineInventoryView: UIStackView {
         let up = machine.status == "online"
         let head = InventoryHead()
         head.configure(open: isOpen, os: machine.os, host: machine.name,
-                       note: isOpen ? "Hide" : (up ? "Show what it has" : "Offline"))
+                       note: isOpen ? Words.Skills.hide : (up ? Words.Skills.showWhatItHas : Words.Skills.offline))
         head.isEnabled = up || isOpen
         head.addAction(UIAction { [weak self] _ in self?.expand(machine) }, for: .primaryActionTriggered)
         let column = UIStackView(arrangedSubviews: [head])
@@ -95,53 +105,117 @@ final class MachineInventoryView: UIStackView {
         body.isLayoutMarginsRelativeArrangement = true
         body.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 8, bottom: 6, trailing: 8)
         if reading.contains(id) {
-            let busyRow = UIStackView(arrangedSubviews: [KitSpinner(side: 16), note("Asking this machine…")])
+            let busyRow = UIStackView(arrangedSubviews: [KitSpinner(side: 16), note(Words.Skills.asking)])
             busyRow.spacing = 8
             busyRow.alignment = .center
             busyRow.accessibilityTraits = .updatesFrequently
             body.addArrangedSubview(busyRow)
         } else if let failure = unread[id] {
             body.addArrangedSubview(KitAlert(failure, tone: .warning))
-        } else if let inspection = found[id], inspection.mcp.isEmpty {
-            body.addArrangedSubview(note("This machine has no MCP servers at all."))
         } else if let inspection = found[id] {
-            for entry in inspection.mcp { body.addArrangedSubview(self.entry(entry, machine: machine)) }
+            switch kind {
+            case .mcp where inspection.mcp.isEmpty:
+                body.addArrangedSubview(note(Words.Skills.noMcpAtAll))
+            case .mcp:
+                for row in inspection.mcp {
+                    body.addArrangedSubview(entry(name: row.name, scope: row.scope.rawValue, managed: row.managed, shadowedBy: row.shadowedBy?.rawValue,
+                                                  description: nil, machine: machine) { [weak self] key in self?.adopt(row, key: key) })
+                }
+            case .skills where (inspection.skills ?? []).isEmpty:
+                body.addArrangedSubview(note(Words.Skills.noSkillsAtAll))
+            case .skills:
+                for row in inspection.skills ?? [] {
+                    body.addArrangedSubview(entry(name: row.name, scope: row.scope.rawValue, managed: row.managed, shadowedBy: nil,
+                                                  description: row.description, machine: machine) { [weak self] key in
+                        self?.adoptSkill(row.name, machine: machine, key: key)
+                    })
+                }
+            }
         }
         column.addArrangedSubview(body)
         return column
     }
 
-    /// One server it has: the name in mono meta, its scope, "fleet" when the fleet manages it,
-    /// "shadowed by …" when another scope hides it; Adopt for one the fleet does not have.
-    private func entry(_ row: Components.Schemas.DiscoveredMcp, machine: MachineRow) -> UIView {
-        let key = "\(machine.machineId):\(row.scope.rawValue):\(row.name)"
+    /// One thing it has: the name in mono meta, its scope, "fleet" when the fleet manages it,
+    /// "shadowed by …" when another scope hides it, its description (two lines);
+    /// Adopt for one the fleet does not have, "In the fleet" for one it has by that name.
+    private func entry(name words: String, scope: String, managed: Bool, shadowedBy: String?, description: String?, machine: MachineRow,
+                       adopt: @escaping (String) -> Void) -> UIView {
+        let key = "\(machine.machineId):\(scope):\(words)"
         let name = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkStrong)
-        name.text = row.name
-        var badges: [UIView] = [name, KitBadge(row.scope.rawValue, variant: .outline)]
-        if row.managed { badges.append(KitBadge("fleet", variant: .secondary)) }
-        if let shadow = row.shadowedBy?.rawValue { badges.append(KitBadge("shadowed by \(shadow)", variant: .attn)) }
+        name.text = words
+        var badges: [UIView] = [name, KitBadge(scope, variant: .outline)]
+        if managed { badges.append(KitBadge(Words.Skills.fleetBadge, variant: .secondary)) }
+        if let shadowedBy { badges.append(KitBadge(Words.Skills.shadowedBy(scope: shadowedBy), variant: .attn)) }
         let line = UIStackView(arrangedSubviews: badges + [UIView()])
         line.spacing = 6
         line.alignment = .center
-        let stack = UIStackView(arrangedSubviews: [line])
+        let text = UIStackView(arrangedSubviews: [line])
+        text.axis = .vertical
+        text.spacing = 2
+        if let description, !description.isEmpty {
+            let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 2)
+            said.text = description
+            text.addArrangedSubview(said)
+        }
+        let stack = UIStackView(arrangedSubviews: [text])
         stack.spacing = 8
         stack.alignment = .center
-        if !row.managed {
+        if !(managed || taken.contains(words)) {
             let adopting = busy.contains(key)
-            let adopt = KitButton.make(adopting ? "Adopting…" : "Adopt", variant: .outline, height: .sm) { [weak self] in
-                self?.adopt(row, key: key)
-            }
-            adopt.configuration?.showsActivityIndicator = adopting
-            adopt.isEnabled = !adopting
-            if adoptFailed.contains(key) { adopt.configuration?.background.strokeColor = Palette.destructive }
-            stack.addArrangedSubview(adopt)
+            let button = KitButton.make(adopting ? Words.Skills.adopting : Words.Skills.adopt, variant: .outline, height: .sm) { adopt(key) }
+            button.configuration?.showsActivityIndicator = adopting
+            button.isEnabled = !adopting
+            if adoptFailed.contains(key) { button.configuration?.background.strokeColor = Palette.destructive }
+            button.setContentHuggingPriority(.required, for: .horizontal)
+            stack.addArrangedSubview(button)
+        } else if taken.contains(words), !managed {
+            let note = note(Words.Skills.inTheFleet)
+            note.setContentHuggingPriority(.required, for: .horizontal)
+            stack.addArrangedSubview(note)
         }
-        stack.isLayoutMarginsRelativeArrangement = true
-        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10)
-        stack.backgroundColor = Palette.surfaceRecess
-        stack.layer.cornerRadius = Radius.radiusSm
-        stack.layer.cornerCurve = .continuous
-        return stack
+        let box = UIStackView(arrangedSubviews: [stack])
+        box.axis = .vertical
+        box.spacing = 4
+        // A refused adopt, on a line of its own under the entry's words.
+        if let reason = adoptReason[key] { box.addArrangedSubview(RowFault(reason, again: nil)) }
+        box.isLayoutMarginsRelativeArrangement = true
+        box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10)
+        box.backgroundColor = Palette.surfaceRecess
+        box.layer.cornerRadius = Radius.radiusSm
+        box.layer.cornerCurve = .continuous
+        return box
+    }
+
+    #if DEBUG
+    /// The machine's row opened, what it has read, and the skill's Adopt run as its button runs it.
+    func probeAdopt(_ name: String, machine: MachineRow) async {
+        if !open.contains(machine.machineId) { expand(machine) }
+        let end = ContinuousClock.now + .seconds(30)
+        while found[machine.machineId] == nil, unread[machine.machineId] == nil, ContinuousClock.now < end {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        guard let row = found[machine.machineId]?.skills.first(where: { $0.name == name }) else { return }
+        adoptSkill(row.name, machine: machine, key: "\(machine.machineId):\(row.scope.rawValue):\(row.name)")
+    }
+    #endif
+
+    /// Takes a skill somebody wrote on one machine into the fleet: the hub reads its files off that machine.
+    private func adoptSkill(_ name: String, machine: MachineRow, key: String) {
+        busy.insert(key)
+        adoptFailed.remove(key)
+        adoptReason[key] = nil
+        render()
+        Task { @MainActor [weak self, hub] in
+            do {
+                try await FleetSkills.adopt(name, machineId: machine.machineId, hub: hub)
+            } catch {
+                self?.adoptFailed.insert(key)
+                self?.adoptReason[key] = ThreadsStore.failureWords(error)
+            }
+            self?.busy.remove(key)
+            self?.render()
+        }
     }
 
     private func expand(_ machine: MachineRow) {

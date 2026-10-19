@@ -192,6 +192,9 @@
 @custom-variant aria-readonly-false (&[aria-readonly="false"]);
 @custom-variant aria-required-false (&[aria-required="false"]);
 @custom-variant aria-selected-false (&[aria-selected="false"]);
+@custom-variant artifacts-floor-cards (&[data-artifacts-floor="cards"]);
+@custom-variant attachments-floor-one (&[data-attachments-floor="one"]);
+@custom-variant attachments-floor-two (&[data-attachments-floor="two"]);
 @custom-variant axis-row (&[data-axis="row"]);
 @custom-variant axis-x (&[data-axis="x"]);
 @custom-variant axis-y (&[data-axis="y"]);
@@ -218,9 +221,11 @@
 @custom-variant for-busy (&[data-for="busy"]);
 @custom-variant for-done (&[data-for="done"]);
 @custom-variant for-fail (&[data-for="fail"]);
+@custom-variant form-compact (&[data-form="compact"]);
 @custom-variant gap-large (&[data-gap="large"]);
 @custom-variant gap-none (&[data-gap="none"]);
 @custom-variant gap-small (&[data-gap="small"]);
+@custom-variant glass-card-frame-files-pop (&[data-glass-card-frame="files-pop"]);
 @custom-variant glyph-busy (&[data-glyph="busy"]);
 @custom-variant glyph-done (&[data-glyph="done"]);
 @custom-variant glyph-fail (&[data-glyph="fail"]);
@@ -413,6 +418,8 @@
 @custom-variant slot-listing (&[data-slot="listing"]);
 @custom-variant slot-live (&[data-slot="live"]);
 @custom-variant slot-livetool (&[data-slot="livetool"]);
+@custom-variant slot-map-card (&[data-slot="map-card"]);
+@custom-variant slot-map-thumb (&[data-slot="map-thumb"]);
 @custom-variant slot-mark (&[data-slot="mark"]);
 @custom-variant slot-markdown (&[data-slot="markdown"]);
 @custom-variant slot-md (&[data-slot="md"]);
@@ -426,6 +433,7 @@
 @custom-variant slot-more-slot (&[data-slot="more-slot"]);
 @custom-variant slot-msg (&[data-slot="msg"]);
 @custom-variant slot-name (&[data-slot="name"]);
+@custom-variant slot-name-lead (&[data-slot="name-lead"]);
 @custom-variant slot-needs (&[data-slot="needs"]);
 @custom-variant slot-node-card (&[data-slot="node-card"]);
 @custom-variant slot-note (&[data-slot="note"]);
@@ -510,6 +518,7 @@
 @custom-variant slot-stack (&[data-slot="stack"]);
 @custom-variant slot-stage (&[data-slot="stage"]);
 @custom-variant slot-starters (&[data-slot="starters"]);
+@custom-variant slot-step-command (&[data-slot="step-command"]);
 @custom-variant slot-step-number (&[data-slot="step-number"]);
 @custom-variant slot-strategy-picker-card (&[data-slot="strategy-picker-card"]);
 @custom-variant slot-strip (&[data-slot="strip"]);
@@ -585,6 +594,8 @@
 @custom-variant state-active (&[data-state="active"]);
 @custom-variant state-checked (&[data-state="checked"]);
 @custom-variant state-closed (&[data-state="closed"]);
+@custom-variant state-empty (&[data-state="empty"]);
+@custom-variant state-failed (&[data-state="failed"]);
 @custom-variant state-mismatch (&[data-state="mismatch"]);
 @custom-variant state-near (&[data-state="near"]);
 @custom-variant state-on (&[data-state="on"]);
@@ -592,6 +603,8 @@
 @custom-variant state-over (&[data-state="over"]);
 @custom-variant state-reached (&[data-state="reached"]);
 @custom-variant state-stale (&[data-state="stale"]);
+@custom-variant state-unseen (&[data-state="unseen"]);
+@custom-variant state-unshown (&[data-state="unshown"]);
 @custom-variant status-ahead (&[data-status="ahead"]);
 @custom-variant status-asked (&[data-status="asked"]);
 @custom-variant status-cancelled (&[data-status="cancelled"]);

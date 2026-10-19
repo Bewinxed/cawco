@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/files/ArtifactCards.svelte
+apps/dashboard/src/lib/cawco/files/FilesFace.svelte
+apps/dashboard/src/lib/cawco/files/FilesFloat.svelte
+apps/dashboard/src/lib/cawco/files/FilesItem.svelte
+apps/dashboard/src/lib/cawco/files/FilesList.svelte
+apps/dashboard/src/lib/cawco/files/FilesSheet.svelte
+apps/dashboard/src/lib/cawco/files/files.svelte.ts
+
+# apps/dashboard/src/lib/cawco/files/ArtifactCards.svelte: after-M: markup naming a scoped class; after-M: an inline style; after-M: a scoped <style> rule; relic: style-reason ×1; lint: shadcn/no-inline-styles ×5; lint: shadcn/no-restyle ×2
+# apps/dashboard/src/lib/cawco/files/FilesFace.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/files/FilesFloat.svelte: after-M: markup naming a scoped class; after-M: an inline style; after-M: a scoped <style> rule; relic: style-reason ×1; lint: shadcn/no-inline-styles ×3
+# apps/dashboard/src/lib/cawco/files/FilesItem.svelte: after-M: markup naming a scoped class; after-M: a new Tailwind class; lint: shadcn/no-unknown-classes ×2
+# apps/dashboard/src/lib/cawco/files/FilesList.svelte: after-M: markup naming a scoped class; after-M: an inline style; after-M: a scoped <style> rule; after-M: a new Tailwind class; relic: style-reason ×1; lint: shadcn/no-restyle ×9; lint: shadcn/no-inline-styles ×1
+# apps/dashboard/src/lib/cawco/files/FilesSheet.svelte: after-M: markup naming a scoped class; after-M: an inline style; after-M: a scoped <style> rule; relic: style-reason ×1; lint: shadcn/no-restyle ×1
+# apps/dashboard/src/lib/cawco/files/files.svelte.ts: after-M: a new Tailwind class

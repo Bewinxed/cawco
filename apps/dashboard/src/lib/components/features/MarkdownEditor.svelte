@@ -281,9 +281,8 @@
      surface-fill's own step, with its glyph in the strong ink. Styled here
      and not through --crepe-color-selected, which is also the document's
      text selection. */
-  [data-slot="crepe-host"]
-    :global(.milkdown .milkdown-block-handle .operation-item.active) {
-    background: light-dark(var(--surface-fill-strong), var(--surface-fill));
+  .crepe-host :global(.milkdown .milkdown-block-handle .operation-item.active) {
+    background: var(--surface-pressed);
 
     & :global(svg) {
       fill: light-dark(var(--ink-strong), var(--ink-muted));

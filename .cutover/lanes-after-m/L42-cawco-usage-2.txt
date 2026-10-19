@@ -1,0 +1,13 @@
+apps/dashboard/src/lib/cawco/usage/Rings.svelte
+apps/dashboard/src/lib/cawco/usage/RingsKey.svelte
+apps/dashboard/src/lib/cawco/usage/SessionsChip.svelte
+apps/dashboard/src/lib/cawco/usage/WeekMark.svelte
+apps/dashboard/src/lib/cawco/usage/WhereItGoes.svelte
+apps/dashboard/src/lib/cawco/usage/Words.svelte
+
+# apps/dashboard/src/lib/cawco/usage/Rings.svelte: relic: literal ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/usage/RingsKey.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/usage/SessionsChip.svelte: relic: literal ×1; relic: style-var ×2
+# apps/dashboard/src/lib/cawco/usage/WeekMark.svelte: relic: literal ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/usage/WhereItGoes.svelte: relic: literal ×1; relic: style-var ×3
+# apps/dashboard/src/lib/cawco/usage/Words.svelte: relic: literal ×1; relic: style-var ×2

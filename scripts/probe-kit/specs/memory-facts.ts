@@ -1,6 +1,6 @@
 /**
- * A project's fact lines and its session search (Projects PRD §5.4, hub
- * memory.ts, memory-facts.ts, session-prose.ts), on a scratch fleet (real
+ * A project's fact lines (Projects PRD §5.4, hub memory.ts,
+ * memory-facts.ts), on a scratch fleet (real
  * hub, agent and sessiond; Claude Code against the mock model) with Jev from
  * the kit's mock, deterministic. Nothing here delegates: a curator run that
  * finds every note proposed by Jev's sort starts no session, and the
@@ -25,9 +25,6 @@
  * g. A brief admits current lines, then a conflict whole and marked, then
  *    Formerly, with their dates and sources, and leaves out the line Jev
  *    said does not bear on the task; each admitted line is a use.
- * h. Session search returns a dated excerpt, with its session id, from
- *    another session's prose.
- * i. A question no past session answers: "not found in past sessions".
  * j. A knowledge file written as prose before fact lines: the curator's run
  *    proposes one card that rewrites it as fact lines, every line reading,
  *    every claim kept word for word, `since` its git-blame day, `from` the
@@ -39,16 +36,27 @@
  * k. A memory proposal kept in the one-file shape from before (`path`,
  *    `before`, `content`) is rewritten in the files shape as the hub starts,
  *    and parked as a card with its diff.
- * l. A session whose prose was never cut (stored before the table) is cut
- *    from its stored transcript when its machine registers, and found by
- *    memory_recall; a session cut live keeps nothing twice.
- * n. A made-up password the person typed in prose, and a made-up credential
- *    in a URL, are kept as `[redacted]`, in the prose cut live and in the
- *    cut from the stored transcript alike.
  * Jev off: the curator's run gets the note with the line grep found and no
- * card is made; a brief keeps grep's order; search says it is unranked, and
- * a question grep finds nothing for is not found; a withdrawal still
- * retires and keeps.
+ * card is made; a brief keeps grep's order; a withdrawal still retires and
+ * keeps. (What past sessions said is `find`'s: probe-kit spec `find-tool`.)
+ *
+ * The memory audit's legs (cockpit-1fea49b2#af39ccbe), Jev off:
+ * 1. A made-up password typed into a note is committed `[redacted]`, the
+ *    note marked secret (secret-filter.ts); so are `token: …` and
+ *    `password=…` set to a value.
+ * 2. Purging a session (its transcript deleted from the dashboard) proposes
+ *    withdrawing its note: one card retires the fact resting on it alone.
+ * 3. A ruling survives a withdrawal (the person re-grounds the fact as a
+ *    ruling in the card's diff before approving) and disuse (a ruling from
+ *    2025 is proposed for no archive).
+ * 4. A fold that rewords a line is refused, and the curator's change to
+ *    AGENTS.md's `## Notes` (the person's) is refused.
+ * 5. A second replacement moves the older Formerly line to the archive, in
+ *    Jev's same card (checked in b and c).
+ * 6. A current line whose `until` has passed is proposed under Formerly as
+ *    the curator's run starts.
+ * 7. Below 15 fact files a reshape that merges files is refused, a split is
+ *    proposed; the curator's brief asks it to judge two descriptions.
  *
  *   bun scripts/probe-kit/run.ts memory-facts
  */
@@ -58,8 +66,9 @@ import { type JevAsked, type JevCall, jevMock, jevOn } from "../jev-mock";
 import type { Kit, Spec } from "../kit";
 
 const NOTE = "mcp__cawco__memory_note";
-const RECALL = "mcp__cawco__memory_recall";
 const PROPOSE = "mcp__cawco__memory_propose";
+/** A made-up password, password-shaped (secret-filter.ts `passwordShaped`): never a real one. */
+const PASSWORD = "Zq7!vRt9Lm";
 
 /** The notes the facts first rest on, in the archive; and the notes Jev sorts. */
 const ID = {
@@ -138,32 +147,9 @@ const NOTE_TEXT: Record<string, string> = {
 const SAY = {
   cache: "PROBE-FACTS-CACHE did caching the bun install in CI help?",
   backfill: "PROBE-FACTS-BACKFILL note how deploys went out before",
-  recall: "PROBE-FACTS-RECALL-ON",
-  docker: "PROBE-FACTS-RECALL-DOCKER",
-  recallOff: "PROBE-FACTS-RECALL-OFF",
-  none: "PROBE-FACTS-RECALL-NONE",
-  old: "PROBE-FACTS-OLD what about the flaky e2e suite?",
-  /** The person's credentials, made up, typed in prose (n). */
-  secret: `The CI login password is ${"Zq9!"}fakeProbe, and the mirror is https://probe:${"Mock"}Only77@mirror.example.com/e2e if you need it.`,
-  recallOld: "PROBE-FACTS-RECALL-OLD",
 } as const;
-/** The made-up credentials of {@link SAY.secret}: none may be kept. */
-const SECRETS = [`${"Zq9!"}fakeProbe`, `${"Mock"}Only77`];
-const OLD_REPLY =
-  "We quarantined the flaky e2e suite behind a nightly job; the PR checks skip it.";
 const CACHE_REPLY =
   "We tried caching the bun install in CI: builds went from 9 to 4 minutes, but the cache broke on every lockfile change, so we dropped it.";
-const QUESTION: Record<string, string> = {
-  [SAY.recall]: "have we tried caching the install in CI?",
-  [SAY.docker]: "have we tried caching the docker images in CI?",
-  [SAY.recallOff]: "have we tried caching the install in CI?",
-  [SAY.none]: "did anyone try kubernetes?",
-  [SAY.recallOld]: "what did we do about the flaky e2e suite?",
-};
-const NOT_FOUND = "not found in past sessions";
-
-/** What each recall call answered, by its marker. */
-const recalled = new Map<string, Record<string, unknown>>();
 /** Markers whose tool was looked up once already: a tool the hub does not offer is said so, never looked up twice. */
 const lookedUp = new Set<string>();
 
@@ -191,16 +177,6 @@ const call = (
   return tool("ToolSearch", { query: `select:${name}`, max_results: 1 });
 };
 
-/** The JSON a recall answered with, from the tool result in the conversation. */
-const ANSWER_JSON = /\{"answer":.*?"has_more":(?:true|false)[^}]*\}/s;
-
-/** Which mocked session a conversation is: the earliest marker in it. */
-const kindOf = (all: string): string | undefined =>
-  [SAY.cache, SAY.recall, SAY.old]
-    .map((marker) => ({ marker, at: all.indexOf(marker) }))
-    .filter(({ at }) => at >= 0)
-    .sort((a, b) => a.at - b.at)[0]?.marker;
-
 /** Whether the talker called memory_note: it does once. */
 let noted = false;
 
@@ -223,41 +199,11 @@ const talker = (request: Seen): Reply => {
   return reply;
 };
 
-/** The asker: one memory_recall per marker, its answer kept. */
-const asker = (request: Seen): Reply => {
-  const { all } = request;
-  const newest = Object.keys(QUESTION)
-    .map((each) => ({ each, at: all.lastIndexOf(each) }))
-    .filter(({ at }) => at >= 0)
-    .sort((a, b) => b.at - a.at)[0]?.each;
-  if (!newest) {
-    return text("ok");
-  }
-  const after = all.slice(all.lastIndexOf(newest));
-  const answered = ANSWER_JSON.exec(after)?.[0];
-  if (answered) {
-    recalled.set(newest, JSON.parse(answered) as Record<string, unknown>);
-    return text("Read.");
-  }
-  if (after.includes("is not offered") || after.includes("Error")) {
-    recalled.set(newest, { error: after.slice(0, 400) });
-    return text("No recall.");
-  }
-  return call(request, newest, RECALL, { question: QUESTION[newest] });
-};
-
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Memory facts probe");
   }
-  const kind = kindOf(request.all);
-  if (kind === SAY.cache) {
-    return talker(request);
-  }
-  if (kind === SAY.old) {
-    return text(OLD_REPLY);
-  }
-  return kind === SAY.recall ? asker(request) : text("ok");
+  return request.all.includes(SAY.cache) ? talker(request) : text("ok");
 };
 
 const SPACES = /\s+/g;
@@ -269,18 +215,8 @@ const DEPLOYS_PATH = "knowledge/deploys.md";
 const pathsOf = (ask: Ask | undefined): string[] =>
   ask?.payload.input.files?.map((file) => file.path) ?? [];
 
-/** The mocked Jev's choices: each inbox note lasting, each pair as {@link SORTS} says, the excerpt that answers. */
+/** The mocked Jev's choices: each inbox note lasting, each pair as {@link SORTS} says. */
 const choose = (call_: JevCall, id: string, asked: JevAsked) => {
-  if (id === "where") {
-    const excerpts = call_.state.excerpts as Record<string, { text: string }>;
-    const answer = String(call_.state.question).includes("e2e")
-      ? "quarantined"
-      : "dropped it";
-    const found = Object.entries(excerpts).find(([, each]) =>
-      each.text.includes(answer)
-    );
-    return found ? { choice: found[0], p: 0.9 } : undefined;
-  }
   if (id.startsWith("pair")) {
     const { question } = asked.instructions as { question: string };
     const noteId = NOTE_REF.exec(question)?.[1] ?? "";
@@ -305,9 +241,6 @@ const choose = (call_: JevCall, id: string, asked: JevAsked) => {
 
 /** Whether a fact bears on the probe's task, as the mocked Jev answers: the backfilled line does not. */
 const bears = (call_: JevCall, id: string): number => {
-  if (id === "exists") {
-    return String(call_.state.question).includes("docker") ? 0.05 : 0.95;
-  }
   if (!("task" in call_.state)) {
     return 0.05;
   }
@@ -478,11 +411,56 @@ const standUp = async (kit: Kit, jevUrl: string) => {
     );
     return notes.find((note) => note.content.includes(words));
   };
+  /** A session in the project, its credential read from its process. */
+  const session = async (title: string) => {
+    const id = await fleet.spawn("claude", title, fleet.workdir, {
+      projectId,
+    });
+    const environ = await Bun.file(
+      `/proc/${await fleet.sessionPid(id)}/environ`
+    ).text();
+    const credential =
+      environ
+        .split("\0")
+        .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
+        ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+    return { id, credential };
+  };
+  /** One tool call through the hub's REST door, as `as`: refused or not, and its words. */
+  const callTool = async (
+    as: { credential: string; id: string },
+    name: string,
+    args: object
+  ) => {
+    const response = await fetch(`${fleet.base}/api/delegation/call/${as.id}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${as.credential}`,
+      },
+      body: JSON.stringify({ name, arguments: args }),
+    });
+    const raw = await response.text();
+    try {
+      const result = JSON.parse(raw) as {
+        content?: { text?: string }[];
+        isError?: boolean;
+      };
+      return {
+        refused: !response.ok || result.isError === true,
+        text: (result.content ?? []).map((block) => block.text ?? "").join(""),
+      };
+    } catch {
+      return { refused: true, text: `${response.status} ${raw}` };
+    }
+  };
   return {
     fleet,
     projectId,
     put,
     read,
+    session,
+    tool: callTool,
     proposals,
     answer,
     approve,
@@ -526,15 +504,13 @@ const talk = async (kit: Kit, probe: Probe, talkerId: string) => {
   const { fleet } = probe;
   await fleet.send(talkerId, SAY.cache);
   await until(
-    "the talker's reply in its prose",
+    "the talker's reply",
     () =>
-      fleet.query<{ n: number }>(
-        "SELECT count(*) AS n FROM session_prose WHERE instance_id = ? AND who = 'agent'",
-        talkerId
-      )[0]?.n ?? 0,
-    (n) => n > 0,
+      fleet.seen.some((request) => request.last.includes(SAY.cache)) &&
+      fleet.instance(talkerId)?.turn_open_at === null,
+    Boolean,
     60_000
-  ).catch(() => 0);
+  ).catch(() => false);
   await fleet.send(talkerId, SAY.backfill);
   const backfill = await until(
     "the backfill note in the inbox",
@@ -617,13 +593,21 @@ const sortLegs = async (kit: Kit, probe: Probe, backfillId: string) => {
       at(RELEASE) < formerly,
     deploys
   );
+  const archive = await probe.read("knowledge/archive/deploys.md");
   kit.check(
-    "c: a backfilled older fact slots under Formerly by its since, before the line that replaced it",
-    lineWith(BACKFILL) ===
-      `- ${BACKFILL} (since 2026-09-01, until 2026-10-01, from ${backfillId}, replaced by ${ID.ship})` &&
-      at(BACKFILL) > formerly &&
-      at(BACKFILL) < at(SHIP),
-    deploys
+    "c: a backfilled older fact slots into the line's history by its since, closed where the line that replaced it began",
+    archive.includes(
+      `- ${BACKFILL} (since 2026-09-01, until 2026-10-01, from ${backfillId}, replaced by ${ID.ship})`
+    ),
+    `archive:\n${archive}\n${deploys}`
+  );
+  kit.check(
+    "5: a second replacement keeps one Formerly line and moves the older to knowledge/archive/, in the same card",
+    at(BACKFILL) < 0 &&
+      at(SHIP) > formerly &&
+      pathsOf(card).includes("knowledge/archive/deploys.md") &&
+      archive.includes(BACKFILL),
+    `card files ${JSON.stringify(pathsOf(card))}\n${deploys}\narchive:\n${archive}`
   );
   kit.check(
     "d: a same-period conflict keeps both lines under Conflict, each with its sources",
@@ -896,41 +880,12 @@ const briefLeg = async (kit: Kit, probe: Probe, parent: string) => {
 };
 
 /**
- * k, l: what the hub converts and cuts as it starts and its machine
- * registers again. A session whose prose was never cut (its rows gone, as
- * for a session stored before the table) and a proposal kept in the
- * one-file shape are put in place while the hub is down; then the hub and
- * its agent come back.
+ * k: what the hub converts as it starts. A proposal kept in the one-file
+ * shape is put in place while the hub is down; then the hub and its agent
+ * come back.
  */
-const restartLegs = async (
-  kit: Kit,
-  probe: Probe,
-  askerId: string,
-  talkerId: string
-) => {
+const restartLeg = async (kit: Kit, probe: Probe) => {
   const { fleet, projectId } = probe;
-  const oldId = await fleet.spawn("claude", "Flaky e2e", fleet.workdir, {
-    projectId,
-  });
-  await fleet.send(oldId, `${SAY.old} ${SAY.secret}`);
-  const proseOf = (instanceId: string): number =>
-    fleet.query<{ n: number }>(
-      "SELECT count(*) AS n FROM session_prose WHERE instance_id = ?",
-      instanceId
-    )[0]?.n ?? 0;
-  await until(
-    "the old session's reply in its prose",
-    () => proseOf(oldId),
-    (n) => n >= 2,
-    60_000
-  ).catch(() => 0);
-  const personSaid = (): string =>
-    fleet.query<{ text: string }>(
-      "SELECT text FROM session_prose WHERE instance_id = ? AND who = 'person'",
-      oldId
-    )[0]?.text ?? "";
-  const live = personSaid();
-  const talked = proseOf(talkerId);
   await probe.put(
     `memory/proposals/${OLD_PROPOSAL_ID}.json`,
     `${JSON.stringify(
@@ -952,12 +907,6 @@ const restartLegs = async (
     )}\n`
   );
   await fleet.stop("hub");
-  fleet.write("DELETE FROM session_prose WHERE instance_id = ?", oldId);
-  try {
-    fleet.write("DELETE FROM prose_backfills WHERE instance_id = ?", oldId);
-  } catch {
-    // A hub from before the backfill keeps no marks.
-  }
   fleet.launch("hub");
   await fleet.hubUp();
   await fleet.agentUp();
@@ -988,95 +937,10 @@ const restartLegs = async (
       !("path" in kept),
     `card ${JSON.stringify(parked?.payload.input.files?.map((file) => file.path))}, diff ${change?.path}\n${onDisk.slice(0, 400)}`
   );
-  const cut = await until(
-    "the old session's prose cut from its stored transcript",
-    () => proseOf(oldId),
-    (n) => n >= 2,
-    60_000
-  ).catch(() => 0);
-  const found = await recallFor(probe, askerId, SAY.recallOld);
-  const [excerpt] = (found.excerpts ?? []) as {
-    session: string;
-    text: string;
-  }[];
-  kit.check(
-    "l: a session whose prose was never cut is cut from its stored transcript when its machine registers, and found by memory_recall",
-    cut >= 2 &&
-      found.answer === "answered" &&
-      excerpt?.session === oldId &&
-      excerpt.text.includes("quarantined the flaky e2e suite"),
-    `${cut} rows; ${JSON.stringify(found).slice(0, 600)}`
-  );
-  const backfilled = personSaid();
-  kit.check(
-    "n: a made-up password typed in prose and a made-up credential in a URL are kept as [redacted], live and from the stored transcript",
-    [live, backfilled].every(
-      (said) =>
-        said.includes("flaky e2e suite") &&
-        said.includes(
-          "The CI login password is [redacted], and the mirror is [redacted]"
-        ) &&
-        !SECRETS.some((secret) => said.includes(secret))
-    ),
-    `live: ${live}\nfrom the transcript: ${backfilled}`
-  );
-  kit.check(
-    "l: a session cut live keeps nothing twice when its stored transcript is read",
-    proseOf(talkerId) === talked,
-    `the talker had ${talked} rows, now ${proseOf(talkerId)}`
-  );
-};
-
-/** A recall the asker makes for `marker`: what the tool answered. */
-const recallFor = async (probe: Probe, askerId: string, marker: string) => {
-  await probe.fleet.send(askerId, marker);
-  return until(
-    `the recall for ${marker}`,
-    () => recalled.get(marker),
-    Boolean,
-    90_000
-  ).catch(() => ({ error: "no answer" }) as Record<string, unknown>);
-};
-
-/** h, i: session search with Jev on. */
-const recallLegs = async (
-  kit: Kit,
-  probe: Probe,
-  askerId: string,
-  talkerId: string
-) => {
-  const today = new Date().toISOString().slice(0, 10);
-  const found = await recallFor(probe, askerId, SAY.recall);
-  const [excerpt] = (found.excerpts ?? []) as {
-    session: string;
-    sitting: string;
-    text: string;
-  }[];
-  kit.check(
-    "h: session search returns a dated excerpt from another session, with its session id",
-    found.answer === "answered" &&
-      excerpt?.session === talkerId &&
-      excerpt.sitting === today &&
-      excerpt.text.includes("we dropped it"),
-    JSON.stringify(found).slice(0, 800)
-  );
-  const docker = await recallFor(probe, askerId, SAY.docker);
-  kit.check(
-    'i: a question no past session answers is "not found in past sessions"',
-    docker.answer === NOT_FOUND &&
-      Array.isArray(docker.excerpts) &&
-      docker.excerpts.length === 0,
-    JSON.stringify(docker).slice(0, 400)
-  );
 };
 
 /** The same legs with Jev off. */
-const offLegs = async (
-  kit: Kit,
-  probe: Probe,
-  askerId: string,
-  talkerId: string
-) => {
+const offLegs = async (kit: Kit, probe: Probe, talkerId: string) => {
   const { fleet, projectId } = probe;
   await fetch(`${fleet.base}/api/jev/typesafe-key`, { method: "DELETE" });
   await probe.put(
@@ -1120,8 +984,8 @@ const offLegs = async (
     talkerId
   );
   kit.check(
-    "Jev off: a brief carries the lines grep finds, the backfilled one Jev left out too",
-    [RELEASE, BACKFILL, SHIP, LIMIT_100].every((line) =>
+    "Jev off: a brief carries the lines grep finds, the Formerly one Jev left out too",
+    [RELEASE, SHIP, LIMIT_100].every((line) =>
       brief.carried.has(keyOf(line))
     ) &&
       (await fleet.logs("hub")).includes(
@@ -1132,25 +996,10 @@ const offLegs = async (
   if (brief.written) {
     kit.check(
       "Jev off: the brief says its facts are in grep's order",
-      brief.words.includes("Jev is off") && brief.words.includes(BACKFILL),
+      brief.words.includes("Jev is off") && brief.words.includes(SHIP),
       brief.words.slice(0, 1600)
     );
   }
-  const unranked = await recallFor(probe, askerId, SAY.recallOff);
-  kit.check(
-    "Jev off: session search returns grep's shortlist and says it was not ranked",
-    unranked.answer === "unranked" &&
-      String(unranked.more).includes("Jev is off") &&
-      ((unranked.excerpts ?? []) as { session: string }[])[0]?.session ===
-        talkerId,
-    JSON.stringify(unranked).slice(0, 600)
-  );
-  const none = await recallFor(probe, askerId, SAY.none);
-  kit.check(
-    'Jev off: a question grep finds nothing for is "not found in past sessions"',
-    none.answer === NOT_FOUND,
-    JSON.stringify(none).slice(0, 300)
-  );
   const { route, card, after } = await withdraw(probe, ID.conflicts, LIMIT_60);
   kit.check(
     "Jev off: a withdrawal still retires the fact its note alone grounded",
@@ -1160,6 +1009,344 @@ const offLegs = async (
       after.includes(LIMIT_100),
     `${route.status} ${JSON.stringify(pathsOf(card))}\n${after}`
   );
+};
+
+interface Caller {
+  credential: string;
+  id: string;
+}
+
+const NOTED_ID = /"id":"(n-[^"]+)"/;
+
+/** The card that appears after `before` (a set of request ids) whose files include `path`. */
+const newCard = (
+  probe: Probe,
+  before: Set<string>,
+  path: string,
+  what: string
+) =>
+  until(
+    what,
+    async () =>
+      (await probe.proposals()).find(
+        (ask) => !before.has(ask.requestId) && pathsOf(ask).includes(path)
+      ),
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+
+const requestIds = async (probe: Probe) =>
+  new Set((await probe.proposals()).map((ask) => ask.requestId));
+
+/** 1: a password typed into a note is committed redacted, the note marked secret. */
+const noteSecretLeg = async (kit: Kit, probe: Probe, writer: Caller) => {
+  const said = await probe.tool(writer, "memory_note", {
+    text: `The build box's sudo password is ${PASSWORD}, as the person typed it.`,
+  });
+  const note = await until(
+    "the password note in the inbox",
+    () => probe.inboxNote("build box's sudo password"),
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+  kit.check(
+    "1: a made-up password typed in a note is committed as [redacted], the note marked secret",
+    Boolean(
+      note?.content.includes("[redacted]") &&
+      !note.content.includes(PASSWORD) &&
+      note.content.includes("verdict: secret")
+    ),
+    `memory_note: ${said.text}\n${note?.content ?? "no note"}`
+  );
+  const shapes = await probe.tool(writer, "memory_note", {
+    text: "The staging token: abcd1234efgh and the admin password=hunter2hunter2 are set.",
+  });
+  const valued = await until(
+    "the key-value note in the inbox",
+    () => probe.inboxNote("The staging token:"),
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+  kit.check(
+    "1: `token: abcd1234efgh` and `password=hunter2hunter2` in a note are committed as [redacted]",
+    Boolean(
+      valued?.content.includes("token: [redacted]") &&
+      valued.content.includes("password=[redacted]") &&
+      !valued.content.includes("abcd1234efgh") &&
+      !valued.content.includes("hunter2hunter2")
+    ),
+    `memory_note: ${shapes.text}\n${valued?.content ?? "no note"}`
+  );
+};
+
+const PURGED_FACT = "The purge probe cache lives in /var/cache/purge-probe.";
+
+/** 2: purging a session proposes withdrawing its note, retiring the fact resting on it alone. */
+const purgeLeg = async (kit: Kit, probe: Probe) => {
+  const { fleet } = probe;
+  const writer = await probe.session("Purge source");
+  await fleet.send(writer.id, "PROBE-FACTS-PURGE hello");
+  await until(
+    "the purge source's first turn",
+    () => fleet.instance(writer.id)?.turn_open_at === null,
+    Boolean,
+    60_000
+  ).catch(() => false);
+  const written = await probe.tool(writer, "memory_note", {
+    text: PURGED_FACT,
+  });
+  const id = NOTED_ID.exec(written.text)?.[1] ?? "";
+  const today = new Date().toISOString().slice(0, 10);
+  await probe.put(
+    "knowledge/purge.md",
+    `Purge: what a purged session left.\n\n- ${PURGED_FACT} (since ${today}, from ${id})\n`
+  );
+  const [row] = fleet.query<{ cwd: string; session_id: string | null }>(
+    "SELECT session_id, cwd FROM instances WHERE id = ?",
+    writer.id
+  );
+  const before = await requestIds(probe);
+  const requestId = crypto.randomUUID();
+  await fleet.post({
+    verb: "control",
+    machineId: MACHINE,
+    requestId,
+    payload: {
+      requestId,
+      method: "deleteSession",
+      args: [row?.session_id ?? "", { dir: row?.cwd }],
+      harness: "claude",
+    },
+  });
+  const card = await newCard(
+    probe,
+    before,
+    "knowledge/purge.md",
+    "the purged session's withdrawal card"
+  );
+  kit.check(
+    "2: purging a session proposes withdrawing its note: one card retires the fact resting on it alone",
+    Boolean(id) &&
+      card !== undefined &&
+      pathsOf(card).includes("knowledge/archive/purge.md") &&
+      !(
+        card.payload.input.files?.find(
+          (file) => file.path === "knowledge/purge.md"
+        )?.content ?? PURGED_FACT
+      ).includes(PURGED_FACT),
+    `note ${written.text}\nsession ${row?.session_id}\ncard ${JSON.stringify(card?.payload.input.files)}`
+  );
+};
+
+const RULINGS_PATH = "knowledge/rulings.md";
+const RULED = "Releases need the person's sign-off.";
+const WARMED = "The probe cache is warmed nightly.";
+const WARMED_ID = "n-20261004-090000-f1f1f1";
+
+/** 3: a ruling survives the withdrawal of a fact's only note (re-grounded in the card's diff) and disuse. */
+const rulingLeg = async (kit: Kit, probe: Probe) => {
+  const today = new Date().toISOString().slice(0, 10);
+  await probe.put(
+    `memory/archive/${WARMED_ID}.md`,
+    noteFile(WARMED_ID, WARMED, timeOf(WARMED_ID))
+  );
+  await probe.put(
+    RULINGS_PATH,
+    `Rulings: the person's word.\n\n- ${RULED} (ruling 2025-01-01)\n- ${WARMED} (since 2026-10-04, from ${WARMED_ID})\n`
+  );
+  const before = await requestIds(probe);
+  await fetch(
+    `${probe.fleet.base}/api/projects/${probe.projectId}/memory/notes/${WARMED_ID}/withdraw`,
+    { method: "POST" }
+  );
+  const card = await newCard(
+    probe,
+    before,
+    RULINGS_PATH,
+    "the withdrawal card"
+  );
+  const proposed =
+    card?.payload.input.files?.find((file) => file.path === RULINGS_PATH)
+      ?.content ?? "";
+  // The person re-grounds the fact as their own word before approving.
+  const edited = proposed.replace(
+    `- ${RULED} (ruling 2025-01-01)`,
+    `- ${RULED} (ruling 2025-01-01)\n- ${WARMED} (ruling ${today})`
+  );
+  if (card) {
+    await probe.answer(card, {
+      behavior: "allow",
+      updatedInput: { edits: [{ path: RULINGS_PATH, content: edited }] },
+    });
+  }
+  const after = await until(
+    `${RULINGS_PATH} as approved`,
+    () => probe.read(RULINGS_PATH),
+    (content) => !content.includes(WARMED_ID),
+    20_000
+  ).catch(() => "(not approved)");
+  const disuse = await requestIds(probe);
+  await probe.curatorRun().catch(() => undefined);
+  const archived = await newCard(
+    probe,
+    disuse,
+    RULINGS_PATH,
+    "no archive card for the rulings"
+  );
+  kit.check(
+    "3: a ruling survives a withdrawal (re-grounded in the card's diff) and disuse (a 2025 ruling is proposed for no archive)",
+    after.includes(`- ${RULED} (ruling 2025-01-01)`) &&
+      after.includes(`- ${WARMED} (ruling ${today})`) &&
+      archived === undefined,
+    `${after}\narchive card: ${JSON.stringify(archived?.payload.input.files?.map((file) => file.path))}`
+  );
+};
+
+/** 4: a fold that rewords a line is refused; so is the curator's change to AGENTS.md's ## Notes. */
+const foldLeg = async (kit: Kit, probe: Probe, curator: Caller) => {
+  const deploys = await probe.read(DEPLOYS_PATH);
+  const reworded = deploys.replace(
+    RELEASE,
+    "Releases ship with `bun run release`."
+  );
+  const fold = await probe.tool(curator, "memory_propose", {
+    files: [{ path: DEPLOYS_PATH, content: reworded }],
+    notes: [],
+    why: "Fold knowledge/deploys.md",
+  });
+  const cited = "n-20261014-090000-c0c0c5";
+  await probe.put(
+    "AGENTS.md",
+    "# Agents\n\n## Notes\n\n- The person's own note.\n"
+  );
+  await probe.put(
+    `memory/inbox/${cited}.md`,
+    noteFile(cited, "Builds run on the big box.", timeOf(cited))
+  );
+  const notes = await probe.tool(curator, "memory_propose", {
+    files: [
+      {
+        path: "AGENTS.md",
+        content:
+          "# Agents\n\nBuilds run on the big box.\n\n## Notes\n\n- An agent's rewording of the note.\n",
+      },
+    ],
+    notes: [cited],
+    why: "Builds run on the big box",
+  });
+  kit.check(
+    "4: a fold proposal that rewords a fact line is refused; the curator's change to AGENTS.md's ## Notes is refused",
+    fold.refused &&
+      fold.text.includes("fold") &&
+      notes.refused &&
+      notes.text.includes("## Notes"),
+    `fold: ${fold.text}\nnotes: ${notes.text}`
+  );
+};
+
+const KEYS_PATH = "knowledge/keys.md";
+const KEY_FACT = "The staging key is k1.";
+
+/** 6: a current line whose until has passed is proposed under Formerly as the curator's run starts. */
+const untilLeg = async (kit: Kit, probe: Probe) => {
+  await probe.put(
+    KEYS_PATH,
+    `Keys: when they rotate.\n\n- ${KEY_FACT} (since 2026-10-01, until 2026-10-02, from n-20261001-110000-a2a2a2)\n`
+  );
+  const before = await requestIds(probe);
+  await probe.curatorRun().catch(() => undefined);
+  const card = await newCard(probe, before, KEYS_PATH, "the retirement card");
+  const content =
+    card?.payload.input.files?.find((file) => file.path === KEYS_PATH)
+      ?.content ?? "";
+  const lines = content.split("\n");
+  kit.check(
+    "6: a current line whose until has passed is proposed under Formerly, with its window",
+    lines.indexOf("## Formerly") >= 0 &&
+      lines.indexOf(
+        `- ${KEY_FACT} (since 2026-10-01, until 2026-10-02, from n-20261001-110000-a2a2a2)`
+      ) > lines.indexOf("## Formerly"),
+    `card by ${card?.payload.proposer}:\n${content}`
+  );
+};
+
+/** 7: below 15 fact files a merging reshape is refused and a split is proposed; the curator's brief asks for the two-description judgment. */
+const reshapeLeg = async (kit: Kit, probe: Probe, curator: Caller) => {
+  const queue =
+    "- The alpha queue drains hourly. (since 2026-10-05, from n-20261005-090000-a3a3a3)";
+  const bucket =
+    "- The beta bucket is private. (since 2026-10-05, from n-20261005-090000-b3b3b3)";
+  const job =
+    "- The gamma job runs daily. (since 2026-10-05, from n-20261005-090000-c3c3c3)";
+  await probe.put(
+    "knowledge/alpha.md",
+    `Alpha: the queue.\n\n${queue}\n${bucket}\n`
+  );
+  await probe.put("knowledge/gamma.md", `Gamma: the job.\n\n${job}\n`);
+  const merge = await probe.tool(curator, "memory_propose", {
+    files: [
+      {
+        path: "knowledge/alpha.md",
+        content: `Alpha: the queue and the job.\n\n${queue}\n${bucket}\n${job}\n`,
+      },
+      { path: "knowledge/gamma.md", content: "" },
+    ],
+    notes: [],
+    why: "Reshape: merge gamma into alpha",
+  });
+  const split = await probe.tool(curator, "memory_propose", {
+    files: [
+      {
+        path: "knowledge/alpha.md",
+        content: `Alpha: the queue.\n\n${queue}\n`,
+      },
+      {
+        path: "knowledge/beta.md",
+        content: `Beta: the bucket.\n\n${bucket}\n`,
+      },
+    ],
+    notes: [],
+    why: "Reshape: alpha's facts fall under two descriptions",
+  });
+  kit.check(
+    "7: below 15 fact files a reshape that merges files is refused, and one that splits a two-description file is proposed",
+    merge.refused && merge.text.includes("only splits") && !split.refused,
+    `merge: ${merge.text}\nsplit: ${split.text}`
+  );
+  const [brief] = probe.fleet.query<{ brief: string }>(
+    "SELECT w.brief FROM routine_runs r JOIN work_items w ON w.id = r.work_item_id WHERE r.routine_id = (SELECT id FROM routines WHERE project_id = ? AND target = 'curator') ORDER BY r.started_at DESC LIMIT 1",
+    probe.projectId
+  );
+  if (brief) {
+    kit.check(
+      "7: the curator's brief asks it to judge whether a file's facts fall under two descriptions",
+      brief.brief.includes("fall under two descriptions"),
+      brief.brief.slice(
+        Math.max(0, brief.brief.indexOf("## What the files ask")),
+        1200
+      )
+    );
+  } else {
+    kit.note(
+      "7: the curator's brief is checked only where its run starts a session"
+    );
+  }
+};
+
+/** The memory audit's legs, Jev off. */
+const auditLegs = async (kit: Kit, probe: Probe) => {
+  const writer = await probe.session("Note writer");
+  await noteSecretLeg(kit, probe, writer);
+  await purgeLeg(kit, probe);
+  await rulingLeg(kit, probe);
+  const curator = await probe.session("Curator stand-in");
+  probe.fleet.write(
+    "UPDATE instances SET role = 'curator' WHERE id = ?",
+    curator.id
+  );
+  await foldLeg(kit, probe, curator);
+  await untilLeg(kit, probe);
+  await reshapeLeg(kit, probe, curator);
 };
 
 const run = async (kit: Kit) => {
@@ -1179,15 +1366,9 @@ const run = async (kit: Kit) => {
     await rejectLeg(kit, probe);
     await withdrawLeg(kit, probe);
     await briefLeg(kit, probe, talkerId);
-    const askerId = await probe.fleet.spawn(
-      "claude",
-      "Asker",
-      probe.fleet.workdir,
-      { projectId: probe.projectId }
-    );
-    await recallLegs(kit, probe, askerId, talkerId);
-    await restartLegs(kit, probe, askerId, talkerId);
-    await offLegs(kit, probe, askerId, talkerId);
+    await restartLeg(kit, probe);
+    await offLegs(kit, probe, talkerId);
+    await auditLegs(kit, probe);
   } finally {
     jev.stop();
   }

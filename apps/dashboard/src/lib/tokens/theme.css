@@ -127,6 +127,7 @@
   --color-surface-fill: var(--surface-fill);
   --color-surface-fill-strong: var(--surface-fill-strong);
   --color-press-fill: var(--press-fill);
+  --color-surface-pressed: var(--surface-pressed);
   --color-surface-hover: var(--surface-hover);
   --color-well-edge: var(--well-edge);
   --color-seam: var(--seam);
@@ -297,6 +298,10 @@
   --spacing-c-pin-card-w: var(--c-pin-card-w);
   --spacing-c-sheet-inspector-w: var(--c-sheet-inspector-w);
   --spacing-c-sheet-inspector-head-h: var(--c-sheet-inspector-head-h);
+  --spacing-c-canvas-skeleton-w: var(--c-canvas-skeleton-w);
+  --spacing-c-canvas-skeleton-h: var(--c-canvas-skeleton-h);
+  --spacing-c-graph-edge: var(--c-graph-edge);
+  --spacing-c-map-node-w: var(--c-map-node-w);
   --spacing-c-pin-list-min: var(--c-pin-list-min);
   --spacing-c-pin-list-max: var(--c-pin-list-max);
   --spacing-c-review-words: var(--c-review-words);
@@ -350,6 +355,8 @@
   --spacing-c-starter-h: var(--c-starter-h);
   --spacing-c-starters-w: var(--c-starters-w);
   --spacing-c-row-lead: var(--c-row-lead);
+  --spacing-c-section-head-h: var(--c-section-head-h);
+  --spacing-c-row-inset: var(--c-row-inset);
   --spacing-c-row-h: var(--c-row-h);
   --spacing-c-routine-time-w: var(--c-routine-time-w);
   --spacing-c-grid-4: var(--c-grid-4);

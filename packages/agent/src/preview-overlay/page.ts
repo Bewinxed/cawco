@@ -39,7 +39,7 @@ import {
   rectOf,
   watchFrames,
 } from "./frames";
-import { hold } from "./hold";
+import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
@@ -1947,7 +1947,16 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:release": () => holdPage(false),
   };
 
+/**
+ * Held or let go, with every same-origin frame in it, and the pane told. A
+ * hold of a held page, or a release of one let go, changes nothing and says
+ * nothing: the pane lets the page go as its tab is reached for, and the
+ * switch that chooses the tab releases it again (PreviewPane).
+ */
 function holdPage(on: boolean) {
+  if (on === isHeld()) {
+    return;
+  }
   hold(on);
   for (const view of frameWindows(document)) {
     markOf(view)?.hold(on);

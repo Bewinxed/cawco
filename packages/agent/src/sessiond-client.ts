@@ -40,6 +40,7 @@ import { standalone } from "@cawco/core/runtime";
 import {
   notAliveReason,
   type ProcSpec,
+  SESSIOND_RELEASE,
   SESSIOND_V1,
   type SessiondAck,
   type SessiondClientMessage,
@@ -67,14 +68,35 @@ export const heldSessions = (procs: readonly SessiondProcInfo[]): number =>
   }).length;
 
 /**
- * How long a probe of the endpoint, and the register's own reading of the
- * keepers ({@link SessiondClient.connect}'s default), may take before the
- * agent reads the endpoint as not answering. Our choice: a unix socket on the
- * same machine answers in microseconds, and the ad-hoc path needs a bound
- * before it decides to spawn a replacement. What a session's custody is
- * decided by waits on the keeper's own word instead ({@link keeperEnded}).
+ * How long a probe of the endpoint ({@link SessiondClient.connect}'s default)
+ * may take before the agent reads the endpoint as not answering. Our choice:
+ * a unix socket on the same machine answers in microseconds, and the ad-hoc
+ * path needs a bound before it decides to spawn a replacement. What a
+ * session's custody is decided by waits on the keeper's own word instead
+ * ({@link keeperEnded}), and a reading of what every keeper holds gives each
+ * {@link KEEPER_WELCOME_MS}.
  */
 export const DIAL_TIMEOUT_MS = 2000;
+
+/**
+ * How long a keeper's welcome is waited on before the keeper is read as not
+ * answering: by the watchdog's dials (keeper-watchdog.ts), and by every
+ * reading of what the keepers hold (keepers.ts `withKeepers`). The keeper
+ * writes its welcome in the same turn of its loop as the accept, so a healthy
+ * one answers in microseconds, and a keeper that is merely loaded (a GC
+ * pause, a machine in swap) answers inside ten seconds.
+ *
+ * THE BOUND IS KEPT BY A TIMER IN THIS PROCESS'S LOOP, AND THAT LOOP STALLS
+ * TOO. Under Bun (1.4.3) a timer that came due while the loop was busy runs
+ * before the socket's data is read, so a welcome that arrived at once is not
+ * seen: the dial is "no welcome within" however long the stall ran. With two
+ * seconds, an agent whose loop stalled through them read a retiring keeper as
+ * not answering 67 times in one log (the Mac, 2026-10-19, "no welcome within
+ * 2077 ms" to 3375 ms, the keeper idle in `kevent64`), and each of those
+ * readings of what the keepers hold was not known: the register's custody,
+ * the heartbeat's, and the updater's look at which retiring keeper to remove.
+ */
+export const KEEPER_WELCOME_MS = 10_000;
 
 /**
  * The keeper's connection ended before it answered: the keeper ended (the
@@ -407,13 +429,33 @@ export interface SessiondWelcomeInfo {
   procs: SessiondProcInfo[];
 }
 
+/** One subscription to a child on a connection: its listener, and whether the keeper's answer to it (its backlog or reset) has come. */
+interface Subscription {
+  answered: boolean;
+  listener: ProcListener;
+}
+
 interface ProcListener {
   /**
    * The child is gone. Both arguments `null` means sessiond reported it dead
    * without saying how: a listing from a sessiond that predates the `signal`
    * field describes a child killed by a signal exactly that way.
    */
-  exit?: (exitCode: number | null, signal: NodeJS.Signals | null) => void;
+  exit?: (
+    exitCode: number | null,
+    signal: NodeJS.Signals | null,
+    /** The process that exited, when its keeper says (what {@link SessiondClient.release} names). */
+    pid: number | undefined
+  ) => void;
+  /**
+   * The keeper holds no child under the id: the listing that answers this
+   * subscribe, read after it on the same ordered socket, does not name it
+   * (one dead and still listed is told as an `exit`). Its end, if it had
+   * one, was read and released elsewhere ({@link SessiondClient.release}).
+   * Only for a listener that follows a child known to have been there: a
+   * subscribe before a spawn lands is answered the same way.
+   */
+  gone?: () => void;
   line?: (event: SessiondLine) => void;
   /**
    * `nextSeq` is where this subscription resumes; `oldest` is the earliest
@@ -455,7 +497,24 @@ export class SessiondClient {
    * with the connection.
    */
   readonly #holds = new Map<string, () => void>();
-  readonly #listeners = new Map<string, ProcListener>();
+  /**
+   * EVERY SUBSCRIPTION TO A CHILD ON THIS CONNECTION HEARS IT, each until its
+   * own unsubscribe ({@link subscribe}). It was one listener per id, and a
+   * second subscribe took the first one's place: the first heard nothing
+   * more, its `gone` and its `exit` included, and waited for good (two ring
+   * reads of one child at once; a pi host's state read, which then
+   * unsubscribed the session's own listener with its own).
+   */
+  readonly #subscriptions = new Map<string, Set<Subscription>>();
+  /**
+   * The subscriptions of each id still waiting on the keeper's answer to
+   * their subscribe, oldest first. sessiond answers every subscribe with
+   * exactly one `proc.backlog` or `proc.reset`, in the order it read them
+   * (server.ts `#subscribe`), so the head is the one an answer belongs to:
+   * one that unsubscribed meanwhile still holds its place, and its answer is
+   * dropped.
+   */
+  readonly #awaitingAnswer = new Map<string, Subscription[]>();
   /** Listeners already told their child is gone: a death reaches each once. */
   readonly #toldExit = new WeakSet<ProcListener>();
   #closed = false;
@@ -621,9 +680,13 @@ export class SessiondClient {
         // child with its backlog alone. The welcome {@link subscribe} asks for
         // is where that death is learned.
         for (const proc of message.procs) {
-          const listener = this.#listeners.get(proc.procId);
-          if (!proc.alive && listener) {
-            this.#exit(listener, proc.exitCode ?? null, proc.signal ?? null);
+          if (!proc.alive) {
+            this.#tellExit(
+              proc.procId,
+              proc.exitCode ?? null,
+              proc.signal ?? null,
+              proc.pid
+            );
           }
         }
         this.#welcomeWaiters.shift()?.resolve(this.#welcome);
@@ -640,25 +703,29 @@ export class SessiondClient {
         this.#draining = true;
         return;
       case "proc.line":
-        this.#listeners.get(message.event.procId)?.line?.(message.event);
+        this.#tellLine(message.event);
         return;
-      case "proc.backlog":
-        for (const event of message.events) {
-          this.#listeners.get(message.procId)?.line?.(event);
-        }
-        return;
-      case "proc.reset":
-        this.#listeners
-          .get(message.procId)
-          ?.reset?.(message.nextSeq, message.oldest);
-        return;
-      case "proc.exit": {
-        const listener = this.#listeners.get(message.procId);
-        if (listener) {
-          this.#exit(listener, message.exitCode, message.signal);
+      case "proc.backlog": {
+        const subscription = this.#answerFor(message.procId);
+        for (const event of subscription ? message.events : []) {
+          subscription?.listener.line?.(event);
         }
         return;
       }
+      case "proc.reset":
+        this.#answerFor(message.procId)?.listener.reset?.(
+          message.nextSeq,
+          message.oldest
+        );
+        return;
+      case "proc.exit":
+        this.#tellExit(
+          message.procId,
+          message.exitCode,
+          message.signal,
+          message.pid
+        );
+        return;
       case "proc.limit":
         hearLimit(message);
         return;
@@ -667,16 +734,60 @@ export class SessiondClient {
     }
   }
 
+  /**
+   * A live line, to every subscription to its child whose own answer has
+   * come: a line the keeper sent before it read a later subscribe is in that
+   * one's backlog.
+   */
+  #tellLine(event: SessiondLine): void {
+    for (const subscription of this.#subscriptions.get(event.procId) ?? []) {
+      if (subscription.answered) {
+        subscription.listener.line?.(event);
+      }
+    }
+  }
+
+  /** A child's end, to every subscription to it, each listener once. */
+  #tellExit(
+    procId: string,
+    exitCode: number | null,
+    signal: NodeJS.Signals | null,
+    pid: number | undefined
+  ): void {
+    for (const { listener } of this.#subscriptions.get(procId) ?? []) {
+      this.#exit(listener, exitCode, signal, pid);
+    }
+  }
+
+  /**
+   * The subscription a `proc.backlog` or `proc.reset` for `procId` answers
+   * ({@link #awaitingAnswer}), marked answered; undefined when it has
+   * unsubscribed since, or none waits.
+   */
+  #answerFor(procId: string): Subscription | undefined {
+    const waiting = this.#awaitingAnswer.get(procId);
+    const subscription = waiting?.shift();
+    if (waiting?.length === 0) {
+      this.#awaitingAnswer.delete(procId);
+    }
+    if (!(subscription && this.#subscriptions.get(procId)?.has(subscription))) {
+      return;
+    }
+    subscription.answered = true;
+    return subscription;
+  }
+
   #exit(
     listener: ProcListener,
     exitCode: number | null,
-    signal: NodeJS.Signals | null
+    signal: NodeJS.Signals | null,
+    pid: number | undefined
   ): void {
     if (this.#toldExit.has(listener)) {
       return;
     }
     this.#toldExit.add(listener);
-    listener.exit?.(exitCode, signal);
+    listener.exit?.(exitCode, signal, pid);
   }
 
   #send(message: SessiondClientMessage): void {
@@ -740,6 +851,40 @@ export class SessiondClient {
       })
       .catch(() => {
         /* the connection ended: the next one says them again */
+      });
+  }
+
+  /**
+   * Tells this connection's keeper that the dead child `pid` under `procId`
+   * is settled here, so it lets the child go ({@link SessiondRelease}): sent
+   * by whatever follows the child once it has read the end it waited on, and
+   * by nothing earlier. A keeper whose welcome does not say
+   * {@link SESSIOND_RELEASE} is sent nothing: it keeps its dead children, as
+   * it always did. Nobody waits on it; a refusal is said in the log.
+   */
+  release(procId: string, pid: number | undefined): void {
+    if (
+      pid === undefined ||
+      this.retired ||
+      !this.capabilities.includes(SESSIOND_RELEASE)
+    ) {
+      return;
+    }
+    this.#command({
+      type: "release",
+      commandId: crypto.randomUUID(),
+      procId,
+      pid,
+    })
+      .then((settled) => {
+        if (settled.stage === "failed") {
+          console.warn(
+            `[sessiond] ${procId}: the keeper kept its process ${pid}: ${settled.reason ?? "no reason given"}`
+          );
+        }
+      })
+      .catch(() => {
+        /* the connection ended: the keeper keeps it, and its next follower reads its end there */
       });
   }
 
@@ -815,24 +960,52 @@ export class SessiondClient {
    * `list` and `subscribe`, a `Query` attaching to a child that died after
    * its ring was read — waited on a child that could never write or exit
    * again.
+   *
+   * Every subscription to the same child on this connection hears it, each
+   * from its own backlog on ({@link #subscriptions}). Answers its own
+   * unsubscribe: from then on it hears nothing more, and every other
+   * subscription goes on.
    */
-  subscribe(procId: string, listener: ProcListener, afterSeq?: number): void {
-    this.#listeners.set(procId, listener);
+  subscribe(
+    procId: string,
+    listener: ProcListener,
+    afterSeq?: number
+  ): () => void {
+    const subscription: Subscription = { listener, answered: false };
+    const subscriptions = this.#subscriptions.get(procId) ?? new Set();
+    subscriptions.add(subscription);
+    this.#subscriptions.set(procId, subscriptions);
+    const waiting = this.#awaitingAnswer.get(procId) ?? [];
+    waiting.push(subscription);
+    this.#awaitingAnswer.set(procId, waiting);
     this.#send({
       type: "subscribe",
       procId,
       ...(afterSeq === undefined ? {} : { afterSeq }),
     });
     this.#send({ type: "list" });
-    // Its welcome is read by the death check in `#onMessage`, not by a caller.
+    // Its welcome is read by the death check in `#onMessage`, and by this
+    // listener's `gone` when it does not list the child at all.
     this.#welcomeWaiters.push({
-      resolve: () => undefined,
+      resolve: (welcome) => {
+        if (
+          listener.gone &&
+          this.#subscriptions.get(procId)?.has(subscription) &&
+          !this.#toldExit.has(listener) &&
+          !welcome.procs.some((proc) => proc.procId === procId)
+        ) {
+          listener.gone();
+        }
+      },
       reject: () => undefined,
     });
-  }
-
-  unsubscribe(procId: string): void {
-    this.#listeners.delete(procId);
+    return () => {
+      const held = this.#subscriptions.get(procId);
+      held?.delete(subscription);
+      if (held?.size === 0) {
+        this.#subscriptions.delete(procId);
+      }
+    };
   }
 
   /** Ask again what is alive. Answered with a fresh `welcome`. */
@@ -859,7 +1032,9 @@ export class SessiondClient {
 export class SessiondRefusal extends Error {
   readonly reason: string;
   constructor(verb: string, reason: string) {
-    super(`[sessiond] ${verb} failed: ${reason}`);
+    super(
+      `The process that keeps this machine's sessions running refused "${verb}": ${reason}`
+    );
     this.reason = reason;
   }
 }
@@ -916,14 +1091,18 @@ export const endProc = async (
   setTimeout(() => {
     client
       .list()
-      .then(({ procs }) =>
-        procs.some(
-          (proc) =>
-            proc.procId === procId && proc.alive && proc.pid === held.pid
-        )
-          ? quietly(client.signal(procId, "SIGKILL"))
-          : undefined
-      )
+      .then(({ procs }) => {
+        if (
+          procs.some(
+            (proc) =>
+              proc.procId === procId && proc.alive && proc.pid === held.pid
+          )
+        ) {
+          return quietly(client.signal(procId, "SIGKILL"));
+        }
+        // Ended, and nobody drives it: nothing is left to read its end.
+        client.release(procId, held.pid);
+      })
       .catch(() => undefined);
   }, END_GRACE_MS).unref();
 };
@@ -1164,11 +1343,13 @@ export const sessiondBridge = (
       }
       stdout.push(`${event.data}\n`);
     },
-    exit: (code, sig) => {
+    exit: (code, sig, pid) => {
       exitCode = code;
       signalCode = sig;
       stdout.push(null);
       end(code === null && sig === null ? undefined : { code, signal: sig });
+      // This transport is what follows its child: its end is read now.
+      client.release(procId, pid);
       // An `exit` with neither a code nor a signal is not one a process can
       // emit, and the SDK reads it as still running: its `waitForExit` waits
       // for another `exit` and never returns. A child whose end sessiond

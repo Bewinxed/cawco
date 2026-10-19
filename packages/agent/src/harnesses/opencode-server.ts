@@ -66,6 +66,16 @@ export interface ServerIdentity {
 }
 
 /**
+ * Whether a generation never announced where it listens: a launch's candidate
+ * whose announcement did not come in time, kept running and recorded retired
+ * with no URL so it is ended ({@link OpencodeServerOwner}'s launch). Nobody
+ * was ever given its URL, so it serves no session: nothing reads its activity
+ * (no read can reach it) and nothing waits on it.
+ */
+export const neverAnnounced = (identity: ServerIdentity): boolean =>
+  identity.url === "";
+
+/**
  * Whether a generation is an OpenCode 1.x server: one marked so, or one a 1.x
  * record names, which never carried a password (every 2.0 generation has one).
  */
@@ -466,7 +476,10 @@ export class OpencodeServerOwner {
   readonly #keeperOf: (epoch: string) => Promise<SessiondClient | undefined>;
   readonly #attach: Attach;
   readonly #mayManage: () => Promise<boolean>;
-  readonly #idle: (identity: ServerIdentity) => Promise<boolean>;
+  /** Why a generation is not idle now, in words for the log; undefined when it is. */
+  readonly #whyNotIdle: (
+    identity: ServerIdentity
+  ) => Promise<string | undefined>;
   #record: ServerRecord | null = null;
   #transition: Promise<ServerIdentity> | null = null;
   #candidateProcId: string | null = null;
@@ -490,7 +503,7 @@ export class OpencodeServerOwner {
     keeperOf: (epoch: string) => Promise<SessiondClient | undefined>,
     attach: Attach,
     mayManage: () => Promise<boolean>,
-    idle: (identity: ServerIdentity) => Promise<boolean>,
+    whyNotIdle: (identity: ServerIdentity) => Promise<string | undefined>,
     account?: string
   ) {
     if (account !== undefined && !ACCOUNT_ID.test(account)) {
@@ -506,7 +519,7 @@ export class OpencodeServerOwner {
     this.#keeperOf = keeperOf;
     this.#attach = attach;
     this.#mayManage = mayManage;
-    this.#idle = idle;
+    this.#whyNotIdle = whyNotIdle;
   }
 
   get active(): ServerIdentity | null {
@@ -523,10 +536,13 @@ export class OpencodeServerOwner {
     if (!record) {
       return [];
     }
+    // One that never announced is no session's, so no reading looks in it:
+    // recovery asked it on every try, and its activity was never known.
     return [
       ...(record.active ? [record.active] : []),
       ...record.retired.filter(
-        (identity) => identity.procId !== this.#candidateProcId
+        (identity) =>
+          identity.procId !== this.#candidateProcId && !neverAnnounced(identity)
       ),
     ];
   }
@@ -710,7 +726,9 @@ export class OpencodeServerOwner {
       return identity;
     } catch (error) {
       // A timed-out announcement may leave a real candidate. Capture it for
-      // retirement; never reuse that procId or signal the active generation.
+      // retirement, with no URL ({@link neverAnnounced}): it is ended without
+      // a wait on an activity no read can reach. Never reuse that procId or
+      // signal the active generation.
       const orphan = await this.#identify(client, procId, "", password).catch(
         () => null
       );
@@ -1085,16 +1103,28 @@ export class OpencodeServerOwner {
       throw new Error("Refusing to retire the active OpenCode generation.");
     }
     if ((await this.#matches(identity)) || (await this.#runs(identity))) {
-      if (!(await this.#idle(identity))) {
-        throw new Error(
-          "OpenCode retirement deferred: generation activity is busy or unknown."
-        );
+      // One that never announced serves nobody: no read reaches it, and
+      // nothing it runs is anyone's to wait on.
+      let why = isV1(identity) ? "an idle 1.x server" : "idle";
+      if (neverAnnounced(identity)) {
+        why = "it never announced where it listens";
+      } else {
+        const busy = await this.#whyNotIdle(identity);
+        if (busy !== undefined) {
+          throw new Error(`OpenCode retirement deferred: ${busy}.`);
+        }
       }
       if (this.active?.procId === identity.procId) {
         return;
       }
-      await this.#end(identity, isV1(identity) ? "an idle 1.x server" : "idle");
+      await this.#end(identity, why);
     }
+    // Its keeper may list it dead still: its end is read here. A keeper not
+    // reached now keeps it, as one that does not speak `release` does.
+    (await this.#keeperOf(identity.epoch).catch(() => undefined))?.release(
+      identity.procId,
+      identity.pid
+    );
     if (this.#record) {
       this.#record = {
         ...this.#record,

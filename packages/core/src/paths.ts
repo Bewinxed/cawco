@@ -18,6 +18,7 @@ import {
   CLAUDE_JSON_NAME,
   TREE_STORE_DIR,
 } from "./claude-dirs";
+import { hostEnvironment } from "./session-env";
 import { sessiondEndpoint } from "./sessiond";
 
 /**
@@ -186,15 +187,25 @@ export const piSkillsDir = (): string => join(piAgentDir(), "skills");
 export const piMemoryFile = (): string => join(piAgentDir(), "AGENTS.md");
 
 /**
+ * Where the fleet sync installs each fleet MCP server a row runs with npx,
+ * one dir per package and exact version (agent mcp-install.ts): every
+ * session launches the package's bin from here with node, so none runs npx.
+ */
+export const fleetMcpInstallsDir = (): string =>
+  join(cawcoDataDir(), "fleet-mcp");
+
+/**
  * What the fleet sync writes on this machine that a harness loads: each
  * skills dir ({@link claudeSkillsDir}, {@link piSkillsDir}) with the tree
  * store its links land in ({@link treeStoreOf}), the vendored marketplaces
- * with their plugins' stores ({@link VENDOR_MARKETPLACES_DIR}), and pi's
- * memory document (Claude Code's, `CLAUDE.md`, is the user layer's). Every
- * workspace reads each and writes none (core workspace-policy.ts): a harness
- * hands its model a skill's path, and the model reads the skill's other
- * files from there with its own tools, through the boundary. pi's lie in
- * its agent dir, a credential store, so only these open there.
+ * with their plugins' stores ({@link VENDOR_MARKETPLACES_DIR}), pi's
+ * memory document (Claude Code's, `CLAUDE.md`, is the user layer's), and the
+ * fleet's installed MCP servers ({@link fleetMcpInstallsDir}), which a
+ * session in a workspace launches. Every workspace reads each and writes none
+ * (core workspace-policy.ts): a harness hands its model a skill's path, and
+ * the model reads the skill's other files from there with its own tools,
+ * through the boundary. pi's lie in its agent dir, a credential store, so
+ * only these open there.
  */
 export const fleetSyncedPaths = (): string[] => [
   ...[claudeSkillsDir(), piSkillsDir()].flatMap((dir) => [
@@ -203,6 +214,7 @@ export const fleetSyncedPaths = (): string[] => [
   ]),
   userLayerPath(VENDOR_MARKETPLACES_DIR),
   piMemoryFile(),
+  fleetMcpInstallsDir(),
 ];
 
 /** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
@@ -632,6 +644,18 @@ export const workspaceReadOnlyDir = (id: string): string =>
   join(workspaceStateDir(id), "ro");
 
 /**
+ * The temp root of every Claude Code CLI a workspace's sessions run
+ * (`CLAUDE_CODE_TMPDIR`), in {@link workspaceReadOnlyDir}: the CLI writes it
+ * on the host, and a command inside the boundary reads it, so a background
+ * task's output (`<root>/claude-<uid>/<project>/<session>/tasks/*.output`)
+ * is there for the session's shell as for its Read. Never the scratch dir:
+ * the CLI also runs git and loads plugins from that root on the host, which
+ * no workspace may write.
+ */
+export const workspaceClaudeTmpDir = (id: string): string =>
+  join(workspaceReadOnlyDir(id), "claude-tmp");
+
+/**
  * macOS's root for every workspace's sockets ({@link workspaceDoorDir}):
  * `/private/tmp/cawco-<uid>`, this user's own (0700, made and checked by the
  * agent before a socket goes in it, tool-door.ts `socketPlace`). A real path,
@@ -865,6 +889,14 @@ export const hubProjectsDir = (): string =>
   join(dirname(hubDbPath()), "projects");
 
 /**
+ * The fleet's update policy (hub binary-updates.ts): `update-policy.json`
+ * beside the hub's database ({@link hubDbPath}), a file of its own, never
+ * inside a cache anything trims. Only on the hub's machine does it exist.
+ */
+export const hubUpdatePolicyPath = (): string =>
+  join(dirname(hubDbPath()), "update-policy.json");
+
+/**
  * The caches a workspace writes besides its clone and scratch dir: the
  * workspaces' own cache, and on macOS the provisioning profile folders
  * automatic signing fills. Every host cache is read-only to a workspace: a
@@ -899,7 +931,10 @@ export const darwinDeveloperBundle = async (): Promise<string[]> => {
   if (process.platform !== "darwin") {
     return [];
   }
-  const selected = await Bun.$`/usr/bin/xcode-select -p`.quiet().nothrow();
+  const selected = await Bun.$`/usr/bin/xcode-select -p`
+    .env(hostEnvironment())
+    .quiet()
+    .nothrow();
   const developer = selected.stdout.toString().trim();
   const at = developer.lastIndexOf(".app/");
   return selected.exitCode === 0 && at > 0
@@ -916,7 +951,11 @@ export const darwinUserDirs = async (): Promise<string[]> =>
   process.platform === "darwin"
     ? await Promise.all(
         ["DARWIN_USER_TEMP_DIR", "DARWIN_USER_CACHE_DIR"].map(async (name) => {
-          const path = (await Bun.$`getconf ${name}`.quiet()).text().trim();
+          const path = (
+            await Bun.$`getconf ${name}`.env(hostEnvironment()).quiet()
+          )
+            .text()
+            .trim();
           if (!path.startsWith("/")) {
             throw new Error(`getconf ${name} did not return an absolute path`);
           }
@@ -1096,10 +1135,34 @@ export const workspaceCacheEnv = (): Record<string, string> => {
     // `npm_config_devdir` npm 11 warns of ("Unknown env config") and will drop.
     npm_package_config_node_gyp_devdir: join(cache, "node-gyp"),
     XDG_CACHE_HOME: join(cache, "xdg"),
+    XDG_RUNTIME_DIR: workspaceRuntimeDir(),
     UV_CACHE_DIR: join(cache, "uv"),
     PLAYWRIGHT_BROWSERS_PATH: hostPlaywrightBrowsers(),
   };
 };
+
+/**
+ * Every workspace command's `XDG_RUNTIME_DIR`: `run/` in the workspaces'
+ * cache, mode 0700 (boundary.ts `makeDirs`), one for all workspaces. pnpm 12
+ * keeps the locks that coordinate processes sharing a store outside the
+ * store, in `$XDG_RUNTIME_DIR/pnpm-store-operation-locks-<uid>`, else under
+ * `/tmp` ("A sandbox that blocks writes to `/tmp` can set `XDG_RUNTIME_DIR` to
+ * a directory it allows. Processes that use the same store should see the
+ * same `XDG_RUNTIME_DIR`", pnpm/docs/settings/store.md at v12.14.0). It takes
+ * the runtime dir only when the user owns it and other users cannot write to
+ * it (crates/fs/src/secure_temp_lock.rs `xdg_runtime_dir`), so it is never
+ * made group-writable. Without it a boundary had no lock dir it shared: on
+ * Linux `/run` and `/tmp` are each an empty read-only tmpfs of the
+ * boundary's own (boundary-policy.ts `srtSettings`); a runtime dir the boundary
+ * shows read-only (the scratch fleet's, under home) failed every install
+ * ("Failed to open the store operation lock at \"pnpm-store-operation-locks\":
+ * Read-only file system"); and on macOS Seatbelt refuses writes to `/tmp`.
+ * Here every workspace takes its locks beside the others', for the store they
+ * share (boundary.ts `writePnpmConfig`). Like everything else in the cache, a
+ * socket one workspace binds here another can reach.
+ */
+export const workspaceRuntimeDir = (): string =>
+  join(workspaceCacheDir(), "run");
 
 /**
  * The name of a file that holds secrets wherever it lies: `.env`,
@@ -1166,9 +1229,9 @@ export const credentialStores = (): string[] => {
     join(home, ".codex"),
     join(home, ".gemini"),
     join(xdgConfigHome(), "github-copilot"),
-    // Other tools' tokens. `gh` gets its token from the executor as
-    // `GH_TOKEN`, and an empty config dir of its own (`GH_CONFIG_DIR`), so
-    // `gh auth git-credential` hands git that token inside.
+    // Other tools' tokens. `gh` inside runs with a config dir of its own
+    // (`GH_CONFIG_DIR`) that sends it through the workspace's GitHub door,
+    // which signs in on the host: no token of gh's enters a workspace.
     join(xdgConfigHome(), "gh", "hosts.yml"),
     // uv's plaintext credentials store (`uv auth login`): "$XDG_DATA_HOME/uv/
     // credentials or $HOME/.local/share/uv/credentials on Unix"

@@ -16,6 +16,7 @@ import { Database } from "bun:sqlite";
 import {
   existsSync,
   mkdirSync,
+  readFileSync,
   realpathSync,
   renameSync,
   rmdirSync,
@@ -29,8 +30,10 @@ import {
   readFile,
   readlink,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
+import { homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
@@ -154,11 +157,27 @@ export interface Reply {
   deny?: { message: string; status: number };
   everyMs: number;
   /**
+   * The account's usage as the answer's headers say it, as Anthropic's do on
+   * a subscription's request (`anthropic-ratelimit-unified-*`): each window's
+   * share used (0–1) and its reset (epoch ms). Claude Code reads them into a
+   * `rate_limit_event` whenever one moves; `overageIncluded`, the weekly
+   * window of the models whose use spills into usage credits (`7d_oi`),
+   * when the account has one. None: no usage headers.
+   */
+  limits?: {
+    fiveHour: { resetsAt: number; utilization: number };
+    overageIncluded?: { resetsAt: number; utilization: number };
+    sevenDay: { resetsAt: number; utilization: number };
+  };
+  /**
    * The request is refused at its account's usage limit, as Anthropic
    * refuses a subscription past it (429, `rate_limit_error`, the unified
-   * limit headers rejected), until `resetsAt` (epoch ms).
+   * limit headers rejected), until `resetsAt` (epoch ms), on the window
+   * `claim` names (Anthropic's representative claim; the 5-hour when none;
+   * `overage`, the usage-credit budget). `limits`: the account's other
+   * windows the refusal's headers carry as well, short of their limits.
    */
-  refuse?: { resetsAt: number };
+  refuse?: { claim?: LimitClaim; limits?: Reply["limits"]; resetsAt: number };
   /**
    * The model's thinking before its words, a block of its own (Anthropic
    * messages: a `thinking` block, its deltas, then its signature), one
@@ -216,13 +235,28 @@ const refusalOf = (reply: Reply, chat: boolean): Response | undefined => {
       { status: reply.deny.status }
     );
   }
-  return reply.refuse && !chat
-    ? limitRefusal(reply.refuse.resetsAt)
-    : undefined;
+  return reply.refuse && !chat ? limitRefusal(reply.refuse) : undefined;
 };
 
-const limitRefusal = (resetsAt: number): Response => {
+/** A window Anthropic's unified limit headers name, as a refusal's representative claim. */
+export type LimitClaim =
+  "five_hour" | "overage" | "seven_day" | "seven_day_overage_included";
+
+/** Each claim's header infix, as Claude Code reads them (its `Ct` table). */
+const CLAIM_HEADER: Record<LimitClaim, string> = {
+  five_hour: "5h",
+  seven_day: "7d",
+  seven_day_overage_included: "7d_oi",
+  overage: "overage",
+};
+
+const limitRefusal = ({
+  claim = "five_hour",
+  limits,
+  resetsAt,
+}: NonNullable<Reply["refuse"]>): Response => {
   const reset = String(Math.ceil(resetsAt / 1000));
+  const window = CLAIM_HEADER[claim];
   return Response.json(
     {
       type: "error",
@@ -235,12 +269,13 @@ const limitRefusal = (resetsAt: number): Response => {
     {
       status: 429,
       headers: {
+        ...limitHeaders(limits),
         "anthropic-ratelimit-unified-status": "rejected",
         "anthropic-ratelimit-unified-reset": reset,
-        "anthropic-ratelimit-unified-representative-claim": "five_hour",
-        "anthropic-ratelimit-unified-5h-status": "rejected",
-        "anthropic-ratelimit-unified-5h-reset": reset,
-        "anthropic-ratelimit-unified-5h-utilization": "1.0",
+        "anthropic-ratelimit-unified-representative-claim": claim,
+        [`anthropic-ratelimit-unified-${window}-status`]: "rejected",
+        [`anthropic-ratelimit-unified-${window}-reset`]: reset,
+        [`anthropic-ratelimit-unified-${window}-utilization`]: "1.0",
         "x-should-retry": "false",
         "request-id": `req_${crypto.randomUUID()}`,
       },
@@ -250,17 +285,81 @@ const limitRefusal = (resetsAt: number): Response => {
 
 export const delay = (ms: number) => Bun.sleep(ms);
 
+/** Runs of whitespace, as `ss` lays its columns out. */
+const SPACES = /\s+/;
+
 /** How many preview ports a scratch hub gets: one per session that shows a preview or a canvas. */
 export const PREVIEW_PORTS = 12;
 
+/** Where `freePortRange` picks from, `[LOW, HIGH)`, outside the kernel's ephemeral ports. */
+const PORT_RANGE_LOW = 20_000;
+const PORT_RANGE_HIGH = 60_000;
+
+/**
+ * The kernel's ephemeral ports, as it says them: those every `connect()`
+ * and every bind to port 0 in the fleet's network takes its local port from
+ * (Linux `ip_local_port_range`, macOS `net.inet.ip.portrange`).
+ */
+function ephemeralPorts(): { first: number; last: number } {
+  const said =
+    platform() === "darwin"
+      ? new TextDecoder().decode(
+          Bun.spawnSync([
+            "sysctl",
+            "-n",
+            "net.inet.ip.portrange.first",
+            "net.inet.ip.portrange.last",
+          ]).stdout
+        )
+      : readFileSync("/proc/sys/net/ipv4/ip_local_port_range", "utf8");
+  const [first, last] = said.trim().split(SPACES).map(Number);
+  if (!(Number.isInteger(first) && Number.isInteger(last) && first <= last)) {
+    throw new Error(`the kernel's ephemeral port range reads "${said.trim()}"`);
+  }
+  return { first, last };
+}
+
+/**
+ * A random first port for `count` consecutive ports in `[PORT_RANGE_LOW,
+ * PORT_RANGE_HIGH)`, none of them an ephemeral port (`ephemeralPorts`).
+ */
+function firstOutsideEphemeral(count: number): number {
+  const ephemeral = ephemeralPorts();
+  // Each stretch of first ports whose whole run stays clear of the range.
+  const stretches = [
+    [PORT_RANGE_LOW, Math.min(PORT_RANGE_HIGH, ephemeral.first) - count],
+    [Math.max(PORT_RANGE_LOW, ephemeral.last + 1), PORT_RANGE_HIGH - count],
+  ].filter(([from, to]) => to >= from);
+  const total = stretches.reduce((all, [from, to]) => all + to - from + 1, 0);
+  if (total === 0) {
+    throw new Error(
+      `no ${count} consecutive ports in ${PORT_RANGE_LOW}-${PORT_RANGE_HIGH - 1} outside the ephemeral ports ${ephemeral.first}-${ephemeral.last}`
+    );
+  }
+  let at = Math.floor(Math.random() * total);
+  for (const [from, to] of stretches) {
+    if (at <= to - from) {
+      return from + at;
+    }
+    at -= to - from + 1;
+  }
+  return stretches[0][0];
+}
+
 /**
  * `count` consecutive ports nothing listens on, as `first-last` (the hub's
- * `CAWCO_PREVIEW_PORTS`): a random run high in the range, each port opened
- * and closed to see it is free, again from another start if one is not.
+ * `CAWCO_PREVIEW_PORTS`): a random run, each port opened and closed to see
+ * it is free, again from another start if one is not.
+ *
+ * Never among the kernel's ephemeral ports (`ephemeralPorts`). The ports are
+ * closed again before the hub binds them, and in that window any outgoing
+ * connection of the fleet's (the dashboard's, a harness's, the kit's own)
+ * can be given one of them as its local port, which the hub then cannot
+ * bind: a run picked there could leave a scratch hub's previews refused.
  */
 export async function freePortRange(count: number): Promise<string> {
   for (let tries = 0; tries < 50; tries += 1) {
-    const first = 20_000 + Math.floor(Math.random() * 40_000);
+    const first = firstOutsideEphemeral(count);
     const opened: ReturnType<typeof Bun.serve>[] = [];
     try {
       for (let port = first; port < first + count; port += 1) {
@@ -353,8 +452,46 @@ const textOf = (content: unknown): string => {
 const encoder = new TextEncoder();
 /** The agent's log lines about accounts and sign-ins, for a failed wait to show. */
 const ACCOUNT_LINE = /account|sign|auth|login|credential/i;
-/** An SSE stream of `events`, one every `everyMs`, cancelled when the client goes. */
-const sseStream = (events: string[], everyMs: number) => {
+/** Anthropic's usage headers for a subscription's answer ({@link Reply.limits}). */
+const limitHeaders = (limits: Reply["limits"]): Record<string, string> => {
+  if (!limits) {
+    return {};
+  }
+  const seconds = (ms: number) => String(Math.ceil(ms / 1000));
+  return {
+    "anthropic-ratelimit-unified-status": "allowed",
+    "anthropic-ratelimit-unified-representative-claim": "five_hour",
+    "anthropic-ratelimit-unified-reset": seconds(limits.fiveHour.resetsAt),
+    "anthropic-ratelimit-unified-5h-status": "allowed",
+    "anthropic-ratelimit-unified-5h-utilization": String(
+      limits.fiveHour.utilization
+    ),
+    "anthropic-ratelimit-unified-5h-reset": seconds(limits.fiveHour.resetsAt),
+    "anthropic-ratelimit-unified-7d-status": "allowed",
+    "anthropic-ratelimit-unified-7d-utilization": String(
+      limits.sevenDay.utilization
+    ),
+    "anthropic-ratelimit-unified-7d-reset": seconds(limits.sevenDay.resetsAt),
+    ...(limits.overageIncluded
+      ? {
+          "anthropic-ratelimit-unified-7d_oi-status": "allowed",
+          "anthropic-ratelimit-unified-7d_oi-utilization": String(
+            limits.overageIncluded.utilization
+          ),
+          "anthropic-ratelimit-unified-7d_oi-reset": seconds(
+            limits.overageIncluded.resetsAt
+          ),
+        }
+      : {}),
+  };
+};
+
+/** An SSE stream of `events`, one every `everyMs`, cancelled when the client goes, with `headers` beside its type. */
+const sseStream = (
+  events: string[],
+  everyMs: number,
+  headers: Record<string, string> = {}
+) => {
   let timer: ReturnType<typeof setInterval> | undefined;
   return new Response(
     new ReadableStream({
@@ -380,7 +517,7 @@ const sseStream = (events: string[], everyMs: number) => {
         clearInterval(timer);
       },
     }),
-    { headers: { "content-type": "text/event-stream" } }
+    { headers: { "content-type": "text/event-stream", ...headers } }
   );
 };
 
@@ -690,6 +827,74 @@ function shuffledHex(): string[] {
 }
 
 /**
+ * Every browser the agent whose HOME is `dir` made, gone: everything on the
+ * runtime labelled with that agent's owner (agent browser/state.ts
+ * `browserOwner`, kept in `<HOME>/.local/share/cawco/browsers/owner`),
+ * containers and then volumes, by the label alone, whatever its records say
+ * (a move into a container the agent's stop cut short among them); then the
+ * local Chromium each record names, stopped by `LocalHost.stop`, which
+ * signals it only once its recorded identity matches (core signal.ts
+ * `identifiedPid`). The owner is the fleet agent's own, so nothing another
+ * fleet or the live fleet made is touched, though every agent of the machine
+ * shares its machine id. Nothing is matched by a name's pattern. A folder
+ * with no records and no owner is left as is.
+ */
+async function removeFleetBrowsers(dir: string): Promise<void> {
+  const root = join(dir, ".local", "share", "cawco", "browsers");
+  const { keptBrowserOwner } =
+    await import("../packages/agent/src/browser/state");
+  const owner = await keptBrowserOwner(root);
+  if (owner) {
+    const { findRuntime } =
+      await import("../packages/agent/src/browser/runtime");
+    const runtime = await findRuntime();
+    if ("missing" in runtime) {
+      console.log(
+        `… browsers of owner ${owner}: not looked for: ${runtime.missing}`
+      );
+    } else {
+      const { ownedBy, removeOwned } =
+        await import("../packages/agent/src/browser/container-host");
+      await removeOwned(runtime.docker, owner).catch((error: unknown) =>
+        console.log(
+          `… browsers of owner ${owner}: not removed: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+      // Read again: what is still labelled with the owner is said, never hidden.
+      const left = await ownedBy(runtime.docker, owner);
+      console.log(
+        left.containers.length + left.volumes.length === 0
+          ? `… browsers of owner ${owner}: every container and volume labelled dev.cawco.browser.owner=${owner} removed, none left`
+          : `… browsers of owner ${owner}: ${left.containers.length} container(s) and ${left.volumes.length} volume(s) labelled dev.cawco.browser.owner=${owner} still left`
+      );
+    }
+  }
+  const names = await readdir(root).catch(() => [] as string[]);
+  type Record = import("../packages/agent/src/browser/state").BrowserRecord;
+  const records = (
+    await Promise.all(
+      names.map((name) =>
+        readFile(join(root, name, "record.json"), "utf8").then(
+          (text) => JSON.parse(text) as Record,
+          () => undefined
+        )
+      )
+    )
+  ).filter((record): record is Record => !!record?.local);
+  const { LocalHost } =
+    await import("../packages/agent/src/browser/local-host");
+  for (const record of records) {
+    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
+    const gone = await new LocalHost().stop(record).then(
+      () => "its local Chromium stopped",
+      (error: unknown) =>
+        `its local Chromium not stopped: ${error instanceof Error ? error.message : String(error)}`
+    );
+    console.log(`… browser ${record.key}: ${gone}`);
+  }
+}
+
+/**
  * The folders one fleet made, each stamped with its owner as it is made, and
  * what its setup started that has to stop with them. They go with the fleet
  * however it ends: `clean`, a setup that throws (`scratchFleet`), this
@@ -776,7 +981,17 @@ class FleetDirs {
     this.#stops.push(stop);
   }
 
-  /** Stops what the setup started and deletes every folder. */
+  /** Every browser this fleet's agents recorded, removed while their records stand ({@link removeFleetBrowsers}). */
+  async removeBrowsers(): Promise<void> {
+    for (const dir of this.dirs) {
+      // biome-ignore lint/performance/noAwaitInLoops: one folder's browsers at a time
+      await removeFleetBrowsers(dir).catch((error: unknown) =>
+        console.log(`… browsers under ${dir} not removed: ${String(error)}`)
+      );
+    }
+  }
+
+  /** Stops what the setup started, removes its browsers and deletes every folder. */
   async remove(): Promise<void> {
     LIVE.delete(this);
     for (const stop of this.#stops.splice(0)) {
@@ -785,6 +1000,7 @@ class FleetDirs {
         .then(stop)
         .catch(() => undefined);
     }
+    await this.removeBrowsers();
     for (const dir of this.dirs.splice(0)) {
       // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
       await rm(dir, { recursive: true, force: true });
@@ -831,6 +1047,45 @@ class FleetDirs {
   }
 }
 
+/**
+ * In a sandbox kept for reading (`clean(true)`): every folder of its fleet's,
+ * the sandbox, its services' HOME and runtime dir. Kept folders are
+ * unstamped, so no sweep takes them ({@link FleetDirs.keep}); the next fleet
+ * of the same name removes them ({@link removeKept}).
+ */
+const KEPT_FILE = ".kept.json";
+
+/**
+ * Removes the sandboxes earlier fleets named `name` kept for reading under
+ * `scratch`, and every folder each says it kept ({@link KEPT_FILE}): a
+ * failed run's evidence stays until the same spec runs again. Answers the
+ * sandboxes removed.
+ */
+async function removeKept(scratch: string, name: string): Promise<string[]> {
+  const removed: string[] = [];
+  for (const entry of await readdir(scratch).catch(() => [] as string[])) {
+    if (!entry.startsWith(`${name}-`)) {
+      continue;
+    }
+    const sandbox = join(scratch, entry);
+    // biome-ignore lint/performance/noAwaitInLoops: one kept sandbox at a time
+    const said = await readFile(join(sandbox, KEPT_FILE), "utf8").catch(
+      () => null
+    );
+    if (said === null) {
+      continue;
+    }
+    const { dirs } = JSON.parse(said) as { dirs: string[] };
+    for (const dir of [...dirs.filter((one) => one !== sandbox), sandbox]) {
+      // biome-ignore lint/performance/noAwaitInLoops: the sandbox, which says the others, goes last
+      await rm(dir, { recursive: true, force: true });
+      forgetSessiondLink(dir);
+    }
+    removed.push(sandbox);
+  }
+  return removed;
+}
+
 /** The fleets of this process whose folders still stand. */
 const LIVE = new Set<FleetDirs>();
 const END_SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
@@ -847,10 +1102,15 @@ process.on("exit", removeLive);
 for (const [name, number] of Object.entries(END_SIGNALS)) {
   const signal = name as keyof typeof END_SIGNALS;
   const onSignal = () => {
-    removeLive();
-    if (process.listenerCount(signal) === 1) {
-      process.exit(128 + number);
-    }
+    // The browsers first, while the records that name them stand.
+    Promise.allSettled([...LIVE].map((one) => one.removeBrowsers())).finally(
+      () => {
+        removeLive();
+        if (process.listenerCount(signal) === 1) {
+          process.exit(128 + number);
+        }
+      }
+    );
   };
   process.on(signal, onSignal);
 }
@@ -946,6 +1206,10 @@ export async function sweepDeadFleets(): Promise<string[]> {
         ) {
           continue;
         }
+        // A fleet that died (a SIGKILL) left its browsers too.
+        await removeFleetBrowsers(dir).catch((error: unknown) =>
+          console.log(`… browsers under ${dir} not removed: ${String(error)}`)
+        );
         await rm(dir, { recursive: true, force: true });
         forgetSessiondLink(dir);
         removed.push(dir);
@@ -1117,6 +1381,9 @@ async function standUp(
   if (fleet) {
     dirs.clearWhenEmpty(fleet);
   }
+  for (const gone of await removeKept(scratch, options.name)) {
+    console.log(`… removed the kept sandbox of an earlier run: ${gone}`);
+  }
   const sandbox = await dirs.own(
     join(scratch, `${options.name}-${crypto.randomUUID().slice(0, 8)}`)
   );
@@ -1244,16 +1511,19 @@ async function standUp(
         return refused;
       }
       if (body.stream === false && !chat) {
-        return Response.json({
-          id: `msg_${crypto.randomUUID()}`,
-          type: "message",
-          role: "assistant",
-          model: "claude-probe",
-          content: [{ type: "text", text: reply.words.join("") }],
-          stop_reason: "end_turn",
-          stop_sequence: null,
-          usage: { input_tokens: 10, output_tokens: 2 },
-        });
+        return Response.json(
+          {
+            id: `msg_${crypto.randomUUID()}`,
+            type: "message",
+            role: "assistant",
+            model: "claude-probe",
+            content: [{ type: "text", text: reply.words.join("") }],
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            usage: { input_tokens: 10, output_tokens: 2 },
+          },
+          { headers: limitHeaders(reply.limits) }
+        );
       }
       return sseStream(
         chat
@@ -1265,7 +1535,8 @@ async function standUp(
               reply.usage,
               reply.thinking
             ),
-        reply.everyMs
+        reply.everyMs,
+        chat ? {} : limitHeaders(reply.limits)
       );
     },
   });
@@ -1281,6 +1552,18 @@ async function standUp(
     const account = join(dir, ".cawco", "accounts", ACCOUNT, "claude");
     await mkdir(account, { recursive: true });
     await mkdir(join(dir, ".config", "cawco"), { recursive: true });
+    // The host's Playwright browsers, where the agent's own lookup reads them
+    // (capabilities.ts `playwrightBrowser`): a machine's daemon draws a canvas
+    // no panel has open in its Chromium (stage-render.ts), and a HOME of the
+    // fleet's own has none.
+    const browsers = platform() === "darwin" ? "Library/Caches" : ".cache";
+    const hostBrowsers =
+      process.env.PLAYWRIGHT_BROWSERS_PATH ??
+      join(homedir(), browsers, "ms-playwright");
+    if (existsSync(hostBrowsers)) {
+      await mkdir(join(dir, browsers), { recursive: true });
+      await symlink(hostBrowsers, join(dir, browsers, "ms-playwright"));
+    }
     await writeFile(
       join(account, ".credentials.json"),
       JSON.stringify({
@@ -1388,13 +1671,17 @@ async function standUp(
 
   // ── The scratch services ──────────────────────────────────────────────
   /**
-   * A temp dir of its own for one process the fleet starts, `name`, inside
-   * the sandbox (so it goes with the fleet): never the host's /tmp, which a
-   * workspace boundary refuses (the hub stages an approved memory proposal
-   * with `mkdtemp(tmpdir())`: `EPERM … mkdtemp '/tmp/cawco-memory-…'`).
+   * A temp dir of its own for one process the fleet starts, `name`, in the
+   * fleet's short HOME `under` (so it goes with the fleet): never the host's
+   * /tmp, which a workspace boundary refuses (the hub stages an approved
+   * memory proposal with `mkdtemp(tmpdir())`: `EPERM … mkdtemp
+   * '/tmp/cawco-memory-…'`), and never the sandbox's long path, where a
+   * socket made in it does not fit: the agent's Chromium (stage-render.ts)
+   * died "Socket path too long: …/tmp/agent/org.chromium.Chromium.QcIT6E/
+   * SingletonSocket".
    */
-  const tmpFor = (name: string): string => {
-    const dir = join(sandbox, "tmp", name);
+  const tmpFor = (name: string, under: string = home): string => {
+    const dir = join(under, "t", name);
     mkdirSync(dir, { recursive: true });
     return dir;
   };
@@ -1413,6 +1700,8 @@ async function standUp(
     CAWCO_HUB_PORT: String(hubPort),
     CAWCO_PREVIEW_PORTS: previewPorts,
     CAWCO_MCP_PORT: String(mcpPort),
+    // Its own DevTools gate port: the machine's own agent holds the default.
+    CAWCO_BROWSER_GATE_PORT: String(await freePort()),
     CAWCO_DASHBOARD_PORT: String(dashboardPort),
     CAWCO_LOCAL_DASHBOARD_PORT: String(localDashboardPort),
     HOST: hub.bind,
@@ -1445,15 +1734,21 @@ async function standUp(
   let launches = 0;
   /**
    * Starts `role`, under `wrap` when given ({@link serviceSpawn}), with
-   * `overrides` laid over the fleet's environment.
+   * `overrides` laid over the fleet's environment: a name set to `undefined`
+   * is left out of it.
    */
   const launch = (
     role: Role,
     wrap: string[] = [],
-    overrides: Record<string, string> = {}
+    overrides: Record<string, string | undefined> = {}
   ) => {
     launches += 1;
     const err = join(sandbox, `${role}-${launches}.err`);
+    const laid = Object.fromEntries(
+      Object.entries({ ...env, ...overrides }).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined
+      )
+    );
     const child = serviceSpawn(
       root,
       role,
@@ -1463,8 +1758,7 @@ async function standUp(
         // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
         cwd: role === "sessiond" ? sandbox : root,
         env: {
-          ...env,
-          ...overrides,
+          ...laid,
           [STAND_INS_ENV]: JSON.stringify(standIns),
           TMPDIR: tmpFor(role),
         },
@@ -1651,6 +1945,41 @@ async function standUp(
     socket?.close();
     socket = undefined;
   };
+  /**
+   * Who holds the fleet's preview ports (`previewPorts`): every socket on
+   * one of them as a local port, by state and process (`ss`), and the
+   * ports the hub's database keeps for its sessions. Said with a 503 that
+   * found every preview port taken (`api`), whose run then removes its
+   * sandbox.
+   */
+  const previewPortsHeld = async (): Promise<string> => {
+    const [first, last] = previewPorts.split("-").map(Number);
+    const ss = Bun.spawnSync(["ss", "-Htanp", "state", "all"]);
+    const sockets = new TextDecoder()
+      .decode(ss.stdout)
+      .split("\n")
+      .filter((line) => {
+        const local = line.trim().split(SPACES)[3] ?? "";
+        const port = Number(local.slice(local.lastIndexOf(":") + 1));
+        return port >= first && port <= last;
+      });
+    let kept: string;
+    try {
+      const held = new Database(dbPath, { readonly: true })
+        .query("select instance_id, port from preview_ports")
+        .all() as { instance_id: string; port: number }[];
+      kept =
+        held.map((row) => `${row.instance_id} ${row.port}`).join(", ") ||
+        "none";
+    } catch (error) {
+      kept = `unread (${String(error)})`;
+    }
+    const said = (await logs("hub").catch(() => ""))
+      .split("\n")
+      .filter((line) => line.includes("[preview]"))
+      .slice(-20);
+    return `Sockets on ${previewPorts} (ss -tanp, state all): ${sockets.length}\n${sockets.join("\n") || "(none)"}\nThe hub's kept preview ports: ${kept}\nThe hub's last [preview] lines: ${said.length}\n${said.join("\n") || "(none)"}`;
+  };
   const api = async <T>(path: string, body?: unknown): Promise<T> => {
     const read = await readWithin(30_000, async (signal) => {
       const response = await fetch(`${base}${path}`, {
@@ -1664,7 +1993,11 @@ async function standUp(
       });
       const text = await response.text();
       if (!response.ok) {
-        throw new Error(`${path}: ${response.status} ${text}`);
+        const held =
+          response.status === 503 && text.includes("Every preview port")
+            ? `\n${await previewPortsHeld()}`
+            : "";
+        throw new Error(`${path}: ${response.status} ${text}${held}`);
       }
       return JSON.parse(text) as T;
     });
@@ -2048,12 +2381,13 @@ async function standUp(
       CAWCO_MACHINE_ID: machineId,
       CAWCO_SESSIOND_ENDPOINT: socketPath,
       CAWCO_MCP_PORT: String(await freePort()),
+      CAWCO_BROWSER_GATE_PORT: String(await freePort()),
     };
     const start = (role: "agent" | "sessiond") => {
       const err = join(sandbox, `${machineId}-${role}.err`);
       const child = serviceSpawn(root, role, {
         cwd: role === "sessiond" ? sandbox : root,
-        env: { ...machineEnv, TMPDIR: tmpFor(`${machineId}-${role}`) },
+        env: { ...machineEnv, TMPDIR: tmpFor(role, machineHome) },
         stdout: Bun.file(join(sandbox, `${machineId}-${role}.log`)),
         stderr: Bun.file(err),
       });
@@ -2282,6 +2616,8 @@ async function standUp(
       console.log(`… pid ${child.pid} of an added machine stopped`);
     }
     await stop("agent");
+    // Every browser its agents made, now that none can make another.
+    await dirs.removeBrowsers();
     await stop("hub");
     await killSessiond();
     await mock.stop(true);
@@ -2290,6 +2626,12 @@ async function standUp(
   /** Deletes the sandbox, the HOME and the runtime dir beside it (and every added machine's), unless `keep`. */
   const clean = async (keep: boolean) => {
     if (keep) {
+      // Every folder of the fleet's, said in the sandbox, so the next fleet
+      // of this name removes them with it (`removeKept`).
+      await writeFile(
+        join(sandbox, KEPT_FILE),
+        `${JSON.stringify({ dirs: dirs.dirs }, null, 2)}\n`
+      );
       dirs.keep();
       console.log(
         `The sandbox is kept for reading: ${sandbox} (HOME ${home}, runtime dir ${runtime})`
@@ -2306,6 +2648,8 @@ async function standUp(
     hub,
     /** The port the hub says its dashboard is on (`CAWCO_DASHBOARD_PORT`): the kit serves the built dashboard there. */
     dashboardPort,
+    /** The hub's preview ports (`CAWCO_PREVIEW_PORTS`), as `first-last`: picked outside the kernel's ephemeral ports (`freePortRange`). */
+    previewPorts,
     /** The dashboard's loopback port the hub names to every agent (`CAWCO_LOCAL_DASHBOARD_PORT`). */
     localDashboardPort,
     sandbox,

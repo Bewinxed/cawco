@@ -1,9 +1,9 @@
 /** Server-only runtime layout. Never import through the browser-facing core barrel. */
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { atMost } from "./at-most";
-import { binaryAssets } from "./binary-assets";
+import { binaryAssets, publishedHashes } from "./binary-assets";
 import { writeStateFile } from "./state-file";
 
 declare const __CAWCO_VERSION__: string | undefined;
@@ -49,6 +49,7 @@ const RUNTIME_TREES = new Set([
   "dashboard",
   "drizzle",
   "pi",
+  "playwright-core",
   "skills",
   "srt",
   "workflow",
@@ -65,50 +66,104 @@ const RUNTIME_TREES = new Set([
  */
 const PUBLISH_CONCURRENCY = 64;
 
-/** Written once every runtime file is published and flushed; while it is there nothing is checked again. */
+/** Whether the embedded file `name` is published to disk: its first segment is a runtime tree. */
+export const publishedFile = (name: string): boolean =>
+  RUNTIME_TREES.has(name.split("/")[0]);
+
+/**
+ * Written once every runtime file is published and flushed: this build's
+ * manifest, each published file's content hash and name on a line of its
+ * own (`publishedHashes`, hashed by the builder), under a first line that
+ * hashes the rest. While that first line is this build's nothing is checked
+ * again; a build of another set finds each file whose hash differs from the
+ * marker's line for it, or that is missing, and writes it. Nothing a start
+ * does reads a published file's contents.
+ */
 const PUBLISHED_MARKER = ".published";
+
+/** The marker's lines below its first, by name: `<hash>\t<name>`. */
+const manifestBody = (hashes: [string, string][]): string =>
+  hashes.map(([name, hash]) => `${hash}\t${name}`).join("\n");
+
+/** The manifest a marker holds, by name, or nothing when it is missing or not one. */
+const markerManifest = (text: string): Map<string, string> | undefined => {
+  const files = new Map<string, string>();
+  for (const line of text.split("\n").slice(1)) {
+    const tab = line.indexOf("\t");
+    if (tab < 1) {
+      return;
+    }
+    files.set(line.slice(tab + 1), line.slice(0, tab));
+  }
+  return files;
+};
+
+/** A runtime folder that refuses writes: a workspace's, which only the machine's processes publish. */
+const readOnly = (error: unknown): boolean => {
+  const { code } = error as NodeJS.ErrnoException;
+  return code === "EROFS" || code === "EACCES";
+};
 
 /**
  * A child process cannot open $bunfs, so every standalone process publishes
  * this build's runtime trees before anything reads one (scripts/binary
- * entry.ts): each missing file written whole and flushed (state-file.ts), all
- * at once, then the marker. A file already published is left alone without
- * touching its folder: inside a workspace the runtime folder is read-only,
- * and even a recursive mkdir of a folder that exists fails there with EEXIST
- * (`cawco tools` in a workspace). Processes that start together each write
- * what they find missing; a rename lands the same bytes whichever wins.
+ * entry.ts): each file whose hash is not the marker's, or that is missing,
+ * written whole and flushed (state-file.ts), all at once, then the marker. A
+ * file already published is left alone without touching its folder: inside
+ * a workspace the runtime folder is read-only, and even a recursive mkdir of
+ * a folder that exists fails there with EEXIST (`cawco tools` in a
+ * workspace). With nothing to write, a marker of another build is still
+ * replaced where the folder takes it, so a complete tree is checked once.
+ * Processes that start together each write what they find; a rename lands
+ * the same bytes whichever wins.
  */
 export async function publishRuntime(): Promise<void> {
   const base = runtimeDataDir();
-  if (existsSync(join(base, PUBLISHED_MARKER))) {
-    return;
-  }
-  const missing = Object.entries(binaryAssets).filter(
-    ([name]) =>
-      RUNTIME_TREES.has(name.split("/")[0]) && !existsSync(join(base, name))
+  const hashes = Object.entries(publishedHashes).sort(([a], [b]) =>
+    a < b ? -1 : Number(a > b)
   );
-  if (!missing.length) {
+  if (!hashes.length) {
     return;
   }
-  for (const dir of new Set(
-    missing.map(([name]) => dirname(join(base, name)))
-  )) {
+  const body = manifestBody(hashes);
+  const set = Bun.hash(body).toString(36);
+  const marker = join(base, PUBLISHED_MARKER);
+  const kept = existsSync(marker) ? readFileSync(marker, "utf8") : "";
+  if (kept.split("\n", 1)[0] === set) {
+    return;
+  }
+  const onDisk = markerManifest(kept);
+  const stale = hashes.filter(
+    ([name, hash]) =>
+      onDisk?.get(name) !== hash || !existsSync(join(base, name))
+  );
+  const content = `${set}\n${body}`;
+  if (!stale.length) {
+    try {
+      await writeStateFile(marker, content, { mode: 0o600, inPlace: true });
+    } catch (error) {
+      if (!readOnly(error)) {
+        throw error;
+      }
+    }
+    return;
+  }
+  for (const dir of new Set(stale.map(([name]) => dirname(join(base, name))))) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
   const limit = atMost(PUBLISH_CONCURRENCY);
   await Promise.all(
-    missing.map(([name, source]) =>
+    stale.map(([name]) =>
       limit(async () =>
-        writeStateFile(join(base, name), await Bun.file(source).bytes(), {
-          mode: 0o600,
-          inPlace: true,
-        })
+        writeStateFile(
+          join(base, name),
+          await Bun.file(embeddedFile(name)).bytes(),
+          { mode: 0o600, inPlace: true }
+        )
       )
     )
   );
-  await writeStateFile(join(base, PUBLISHED_MARKER), runtimeVersion, {
-    mode: 0o600,
-  });
+  await writeStateFile(marker, content, { mode: 0o600, inPlace: true });
 }
 
 /** Where an embedded tree {@link publishRuntime} published sits on disk. */

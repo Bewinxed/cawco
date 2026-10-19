@@ -57,7 +57,8 @@ final class NewProjectController: KitPopoverController, UITextFieldDelegate {
             self?.namePlaceholder()
         }, for: .editingChanged)
         machineId = hub.fleet.machines.first { $0.status == "online" }?.machineId ?? ""
-        machineSelect.menu = machineMenu()
+        // Set once and made as it opens, from the machines online then.
+        machineSelect.menuOnOpen(options: .singleSelection) { [weak self] in self?.machineMenu().children ?? [] }
         showMachine()
         picker = DirectoryPickerView(hub: hub, machineId: { [weak self] in self?.machineId ?? "" }, value: { [weak self] in self?.dirField.text ?? "" })
         picker.onSelect = { [weak self] path in
@@ -140,7 +141,6 @@ final class NewProjectController: KitPopoverController, UITextFieldDelegate {
     private func showMachine() {
         let machine = hub.fleet.machines.first { $0.machineId == machineId }
         machineSelect.setValue(machine.map { "\($0.name) · \($0.os)" } ?? "No machines online")
-        machineSelect.menu = machineMenu()
     }
 
     private var dir: String {

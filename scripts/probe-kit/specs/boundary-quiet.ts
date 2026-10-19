@@ -39,7 +39,10 @@
  *    command reaches its server; the form its boundary lost is not taken
  *    there (the agent says it keeps it as it is while its work listens), so
  *    the server stays in the network its commands run in. A message after
- *    the quiet time: its command reaches the server again. (W shows no
+ *    the quiet time: its command reaches the server again. After each
+ *    command W rests in a wait for its parent's next word, so its item stays
+ *    live: three quiet turns would fail it, and the hub would retire its
+ *    workspace, server and boundary with it. (W shows no
  *    preview: a preview of a workspace's port names what serves it, and W's
  *    server is the one its own command left listening.)
  * 8. W's item finished: its boundary, its server still listening in it,
@@ -59,7 +62,10 @@ import { join } from "node:path";
 import { QUIET_CLOSE_MS } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf, isJudgeOf } from "../../../packages/agent/src/proc-id";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { OVERLAY_PATH } from "../../../packages/core/src/preview-proxy";
+import {
+  OVERLAY_KEY,
+  OVERLAY_PATH,
+} from "../../../packages/core/src/preview-proxy";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -79,6 +85,12 @@ const WAIT_MINUTES = 15;
 const W_REASON = "the dev server in its workspace";
 /** How the hub wakes a delegate whose wait ended (hub work-items.ts). */
 const WAIT_OVER = `Your wait is over: ${W_REASON}.`;
+/**
+ * W's wait for its parent's next word once woken, and again once checked:
+ * longer than the rest of legs 7 and 8 take, so it ends only by W's own
+ * command or its finish.
+ */
+const PARENT_WAIT = { minutes: 60, reason: "its parent's word on the server" };
 /** How soon W's boundary closes once its item ends: the quiet time, a sweep's minute and slack. */
 const W_CLOSE_MS = 13 * 60_000;
 const KEPT_LINE = `is kept as it is while its work listens on ${PORT.W}`;
@@ -87,8 +99,9 @@ const CLOSE_SLACK_MS = 3 * 60_000;
 const ACCOUNT_ADDED = "acct-probe-older-form";
 const CLOSED_LINE = ": nothing holds it (";
 const START_LINE = "[workspace] boundary hooks written for ";
+/** The start-up pass's count of the workspaces it leaves as they are, armed only when a session there starts (agent boundary.ts `rearmHooks`, since bc1cb9f52). */
 const LEFT_IDLE =
-  /; (\d+) with a boundary running and nothing in it are left as they are/;
+  /; (\d+) with nothing in them are armed when a session there starts/;
 
 /** `word` as one single-quoted shell word. */
 const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -123,6 +136,8 @@ const steps = new Map<
   {
     checked?: boolean;
     finished?: boolean;
+    /** W's rests in a wait for its parent's word so far ({@link waiter}). */
+    rested?: number;
     searched?: boolean;
     shown?: boolean;
     waited?: boolean;
@@ -150,7 +165,12 @@ const offered = (request: Seen, name: string, input: object): Reply => {
 /**
  * W: starts its server and waits; woken by the wait's end, reaches its
  * server; asked to check, reaches it again and shows it; asked to finish,
- * finishes.
+ * finishes. After each command it rests in a wait for its parent's next word
+ * ({@link PARENT_WAIT}), as a live delegate keeping a server up does: a turn
+ * ended with a wait declared counts toward no quiet-turn failure (hub
+ * work-items.ts `waitingTurn`), where three quiet turns in a row fail its
+ * item, and the hub then retires its workspace, its server and boundary with
+ * it (`settle`).
  */
 const waiter = (request: Seen): Reply => {
   const step = steps.get("W") ?? {};
@@ -192,6 +212,15 @@ const waiter = (request: Seen): Reply => {
     step.finished = reply.tool?.name === FINISH;
     return reply;
   }
+  // Woken, then checked: one rest after each, until the parent's next word.
+  const rests = Number(Boolean(step.woke)) + Number(Boolean(step.checked));
+  if (!step.finished && (step.rested ?? 0) < rests) {
+    const reply = offered(request, WAIT, PARENT_WAIT);
+    if (reply.tool?.name === WAIT) {
+      step.rested = rests;
+    }
+    return reply;
+  }
   return text("ok");
 };
 
@@ -205,6 +234,8 @@ const firstWork = (request: Seen, tag: string): Reply => {
     step.shown = true;
     return tool(CREATE, {
       kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
       name: `quiet-${tag.toLowerCase()}`,
       port: PORT[tag],
       serve: { command: servedCommand(tag) },
@@ -343,7 +374,7 @@ const stillOpen = async (
   );
 };
 
-/** Whether preview `instanceId`'s origin answers 200 with `tag`'s page and the overlay, within 30 s. */
+/** Whether preview `instanceId`'s origin answers 200 with `tag`'s page and the overlay at its key (preview-proxy.ts `keyOverlay`, since b61aa3890), within 30 s. */
 const serving = async (
   fleet: Fleet,
   instanceId: string,
@@ -370,7 +401,7 @@ const serving = async (
           if (
             status === 200 &&
             body.includes(`<title>${titleOf(tag)}</title>`) &&
-            body.includes(`src="${OVERLAY_PATH}"`)
+            body.includes(`src="${OVERLAY_PATH}?${OVERLAY_KEY}=`)
           ) {
             return { ok: true, last };
           }
@@ -697,14 +728,17 @@ const waiterHolds = async (
     Boolean(reached),
     `reached: ${Boolean(reached)}`
   );
-  const kept = (await fleet.logs("agent"))
-    .split("\n")
-    .find((line) => line.includes(w.workspaceId) && line.includes(KEPT_LINE));
   const last = await boundariesOf(fleet, w.workspaceId);
+  const said = (await fleet.logs("agent"))
+    .split("\n")
+    .filter((line) => line.includes(w.workspaceId));
+  const keptAt = said.findIndex((line) => line.includes(KEPT_LINE));
+  const unchanged = JSON.stringify(last) === JSON.stringify(had);
   kit.check(
     "7: W's boundary, of an older form since the restart, is kept as it is while its server listens: said in the agent's log, never handed over",
-    Boolean(kept) && JSON.stringify(last) === JSON.stringify(had),
-    `${kept ?? "no kept line"}; boundary ${last.join(",") || "none"}`
+    keptAt >= 0 && unchanged,
+    // What the agent said of W from the kept line on, when its boundary moved.
+    `${said[keptAt] ?? "no kept line"}; boundary ${last.join(",") || "none"}${unchanged ? "" : `; since: ${said.slice(keptAt + 1).join(" | ") || "nothing"}`}`
   );
 };
 
@@ -829,12 +863,21 @@ const run = async (kit: Kit) => {
 
   // 3. The footprint, before and after: P's boundary and W's stay.
   const after = await footprint(fleet);
+  // Whose each boundary still running is: a delegate's tag, or its proc id.
+  const left = (await fleet.heldProcs())
+    .filter((proc) => proc.procId.startsWith("boundary-"))
+    .map((proc) => {
+      const owner = [...idle, p, w].find((one) =>
+        isBoundaryOf(proc.procId, one.workspaceId)
+      );
+      return `${owner?.tag ?? "another workspace"} ${proc.procId}@${proc.pid}`;
+    });
   kit.check(
     "3: closing the idle boundaries takes their processes and inotify instances",
     after.processes < before.processes &&
       after.inotify < before.inotify &&
       after.boundaries === 2,
-    `before: ${before.words}; after: ${after.words}`
+    `before: ${before.words}; after: ${after.words}; running: ${left.join(", ") || "none"}`
   );
   kit.note(
     `3: footprint with ${IDLE} idle workspaces, P and W: before ${before.words}; after the closes ${after.words}`

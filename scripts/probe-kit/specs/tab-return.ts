@@ -28,7 +28,18 @@
  *    a Chromium that does not isolate the preview's site run it: c (as a),
  *    e (hidden `HELD_MS`, held: no animation frame or timer of the page's
  *    runs), d (as b). The kept returns, a, c and e, are read again on
- *    WebKit, without a trace.
+ *    WebKit, without a trace, each a person's press: c and e the pointer's,
+ *    and f (as c) the strip's arrow key, from the keyboard's focus resting
+ *    on the tab before it, whose reach let its neighbours' previews go
+ *    (warm.svelte.ts `besides`). g is f on the one-process Chromium, which
+ *    reports the key's Event Timing; h is f with no rest, the first arrow
+ *    into the strip, its first frame said and not bound. Then the keyboard's
+ *    reach is read whole (`keyReach`), and two arrow keys in one task each
+ *    choose their tab.
+ * 3. A session with nothing said yet (the preview's, the light ones') shown
+ *    in turn, on Chromium and on WebKit: its blank state, never a skeleton
+ *    (a skeleton that never went kept its pane laid out and its sweep
+ *    running); then all put away, every loop in their panes held.
  *
  * Each Chromium return is a pointer's switch, as two-pane-perf's `point`
  * makes it (the pointer comes onto the tab, rests `REACH_MS`, presses),
@@ -37,9 +48,11 @@
  * and `AFTER_READY_MS` past it for a reloaded preview), on a CPU `SLOWER`
  * times slower; the style and layout passes and elements restyled from the
  * input to the frame that shows the pane (`workOf`); the press's
- * interaction by Event Timing. A WebKit return is the tab's click. Each
- * return is a leg gated on the spec's own CPU pressure (`quietLeg`). Every
- * number is written to `numbers.json`.
+ * interaction by Event Timing. A WebKit return is a person's press
+ * (`pressBack`), timed by the event's own stamp, with the dashboard's first
+ * animation frames after it. Each return is a leg gated on the whole
+ * machine's CPU and memory pressure (quiet.ts `quietLeg`), the reading
+ * heavy-run admission reads. Every number is written to `numbers.json`.
  *
  * The busy session streams as the spec lets it: once seeded, its live turns
  * run only while the busy tab is away (one per `TURN_MS` of the absence) and
@@ -47,8 +60,10 @@
  * run, on any tree, is shown the same turns at the same points; each return
  * says how many elements the page put in from the reach on (`inserted`). A
  * return to the preview says when the pane reached into its frame to post
- * (`watchPosts`), when its release reached the page, the page's own long
- * tasks before its first frame, and that frame.
+ * (`watchPosts`, from the reach on), when its release reached the page, the
+ * page's own long tasks before its first frame, and that frame. While a
+ * busy tab is away, its turns running, every loop in a pane off screen is
+ * read (`hiddenLoopsOf`).
  *
  * Asserted per Chromium return: its interaction under `INPUT_MS`, and,
  * for a busy or kept return, its longest task within two frames' budget
@@ -58,23 +73,26 @@
  * the page go and loaded it again. Asserted per kept return, on every
  * engine: the page is the document it was (no reload), held off screen
  * (none of its animation frames or timers ran), and its first animation
- * frame after the press comes within `BACK_MS`.
+ * frame after the press comes within `BACK_MS`. Asserted in leg 3: each
+ * silent session's blank state and no skeleton; and wherever the loops off
+ * screen are read, none running.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one return at a time, as a person makes them
+
+import { readFileSync } from "node:fs";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { CDPSession, Frame, Page } from "playwright-core";
+import type { CDPSession, Frame, Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type MainTask, SCROLLER, traceMain } from "../frames";
+import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
 import { type Kit, open, ROOT, type Spec } from "../kit";
+import { machineQuiet, quietLeg } from "../quiet";
 import {
   type Cost,
   census,
   INPUT_MS,
   inputsOf,
   LONG_TASK_MS,
-  pressureFile,
-  quietLeg,
   REACH_MS,
   SLOWER,
   type SwitchWork,
@@ -120,6 +138,20 @@ const TURN_MS = 3000;
 const RELEASE_MS = 5 * 60_000;
 /** After the last released turn, for its frames to reach the page. */
 const LANDED_MS = 1500;
+/**
+ * The reach's longest task, CPU ms on a quiet host: a quarter of the frame
+ * budget the slower CPU leaves (`2 × LONG_TASK_MS` over `SLOWER`), so a
+ * slower machine still has room. The parent's call (tab-return, 2026-10-19).
+ */
+const REACH_TASK_MS = 12;
+/** A run of whitespace, as the kernel's port range file separates its two ports. */
+const SPACE_RUN = /\s+/;
+/** Transcript's `ROW_ESTIMATE`: virtua's size for a row it has not measured, px. */
+const ROW_ESTIMATE = 21;
+/** How long leg 3 shows each silent session before reading its pane: its read has long landed. */
+const SILENT_MS = 5000;
+/** A press this soon after the reach comes while the warm pane's rows are still staged (Transcript `parkRows`). */
+const PRESS_IN_STAGING_MS = 40;
 /** An interaction's length in `inputsOf`'s line. */
 const LENGTH = / (\d+)ms/;
 const RIVE = join(
@@ -131,8 +163,12 @@ const RIVE = join(
 interface Back {
   /** What other renderers' main threads (an out-of-process preview's) ran in the second after the press, by event. */
   elsewhere: string;
+  /** The dashboard's first animation frames after the press, ms after it (WebKit's, read on its own clock); empty where the trace reads them. */
+  frames: number[];
   /** Every task of `HEAVY_MS` or more from the reach on: when after the press, what it ran, its CPU and what it restyled. */
   heavy: string;
+  /** A busy return: its list's heights at the landing (`heightsOf`). */
+  heights?: string;
   /** What each pane held as the pointer came onto the tab (two-pane-perf's `census`). */
   held: string;
   /** The press's interaction, Event Timing's longest entry. */
@@ -147,21 +183,47 @@ interface Back {
   /** The longest task from the reach to the window's end, CPU ms, and what it was. */
   longest: number;
   longestWhat: string;
-  /**
-   * Every task over two frames' budget on the slower CPU, each said as the
-   * longest is: the morph's own causes are often not the longest task.
-   */
-  over: string;
   /** A return to the preview: what its page's own window said of it. */
   page?: PageBack;
   /** When the switch was pressed, epoch ms. */
   pressAt: number;
+  /**
+   * The press's own task (its pointerup) said whole, as `reachWhat`, with
+   * its script's sampled self time by the bundle file it ran in.
+   */
+  pressWhat: string;
   psi: string;
   /** The longest task between the reach and the press, CPU ms. */
   reach: number;
+  /** When the pointer came onto the tab or the focus did, epoch ms. */
+  reachAt: number;
+  /** That task said whole: what it ran, its restyle, the changes that scheduled it and its sampled stacks. */
+  reachWhat: string;
   scene: string;
+  /** The pane once the window is over: anything left skipped, rows in view with no text box, rows a different height (`shownStateOf`). */
+  shown: string;
+  /** From `shownStateOf`: elements with an inline skip, computing it hidden, rows in view, and those with no text box; empty when unread. */
+  shownCounts: number[];
+  /** WebKit: the first of the dashboard's frames that shows the pane (the frame painting the switch), ms after the press; null where unread. */
+  shownMs: number | null;
+  /** How many item sizes told from the reach to the press differ from the size the item had before it. */
+  sizeChanges: number;
+  /** How many of its rows were still staged (an inline skip) as the press came. */
+  stagedAtPress: number;
+  /** From the reach to the press: the rows staged, the sizes virtua was told and which changed (`watchSizes`). */
+  staging: string;
+  /** WebKit: that frame, the press's Event Timing, and the strip's selection and focus once over (`stripOf`). */
+  switchLine: string;
   /** Read off a DevTools trace (Chromium); a WebKit return is its click alone. */
   traced: boolean;
+  /**
+   * The reach task itself, CPU ms: the longer of the task that warms the
+   * pane (`markWarm`) and the frame after it that first lays the pane out;
+   * NaN when no warm was traced.
+   */
+  warmTask: number;
+  /** That task said whole, as `reachWhat`. */
+  warmWhat: string;
   work: SwitchWork | null;
   /** The longest animation frame in the window, by the scripts that filled it. */
   worstFrame: string;
@@ -197,6 +259,8 @@ interface Clock {
 interface PageBack {
   /** From the press to its first animation frame after it, ms; null when none came. */
   firstTickMs: number | null;
+  /** The dashboard's first animation frames after the press, ms after it; empty where unread. */
+  frames: number[];
   /** Frame and timer requests any of its scripts made while its tab was off screen (held, each waits); NaN when its page was gone. */
   hiddenCalls: number;
   /** Its animation frames and interval ticks while its tab was off screen; NaN when its page was gone. */
@@ -206,8 +270,10 @@ interface PageBack {
   longAfter: [number, number][];
   /** Its own long animation frames in the same span, each said whole (when after the press, its length, its rendering and style shares, its scripts). */
   longFramesAfter: string[];
-  /** From the press to the pane's first reach into the frame to post (`watchPosts`), ms; null where unread (WebKit) or none came. */
+  /** From the press to the pane's first reach into the frame to post after it, ms; null when none came. */
   postMs: number | null;
+  /** The pane's reaches into the frame to post (`watchPosts`) from the reach on, ms after the press (negative: before it); the first is its release. */
+  posts: number[];
   /** From the press to the pane's `cawco:release` reaching the page, ms; null when none came after the press. */
   releaseMs: number | null;
   /** Its document was replaced, or gone: the return loaded it again. */
@@ -276,7 +342,8 @@ function pageBack(
   hidden: Clock | null,
   after: Clock | null,
   pressAt: number,
-  posts: number[]
+  posts: number[],
+  { frames, reachAt }: { frames: number[]; reachAt: number }
 ): PageBack {
   const posted = posts.find((at) => at >= pressAt);
   const kept = !!(before && hidden && hidden.born === before.born);
@@ -297,6 +364,11 @@ function pageBack(
         ? Math.round(after.releasedAt - pressAt)
         : null,
     postMs: posted === undefined ? null : Math.round(posted - pressAt),
+    posts: posts
+      .filter((at) => at >= reachAt && at <= pressAt + WINDOW_MS)
+      .slice(0, 6)
+      .map((at) => Math.round(at - pressAt)),
+    frames,
     // An observer buffered and live can say a task twice: each once, by its start.
     longAfter: [
       ...new Map(
@@ -322,7 +394,7 @@ function pageBack(
 }
 
 const pageLine = (back: PageBack) =>
-  `its page ${back.reloaded ? "loaded again" : "kept"}; off screen ${back.hiddenTicks} animation frames and ${back.hiddenTimers} interval ticks, ${back.hiddenCalls} frame and timer requests; the pane reached into its frame ${back.postMs === null ? "unread" : `${back.postMs}ms after the press`}; its release reached it ${back.releaseMs === null ? "never" : `${back.releaseMs}ms after the press`}; its own long tasks before its first frame ${back.longAfter.map(([at, ms]) => `${ms}ms at ${at}ms`).join(", ") || "none"}, its long frames ${back.longFramesAfter.join("; ") || "none"}; its first animation frame ${back.firstTickMs === null ? "never came" : `${back.firstTickMs}ms after the press`}`;
+  `its page ${back.reloaded ? "loaded again" : "kept"}; off screen ${back.hiddenTicks} animation frames and ${back.hiddenTimers} interval ticks, ${back.hiddenCalls} frame and timer requests; the pane reached into its frame ${back.postMs === null ? "never after the press" : `${back.postMs}ms after the press`} (from the reach on: ${back.posts.map((ms) => `${ms}ms`).join(", ") || "none"}); the dashboard's frames ${back.frames.length > 0 ? `${back.frames.map((ms) => `${ms}ms`).join(", ")} after the press` : "read off the trace"}; its release reached it ${back.releaseMs === null ? "never" : `${back.releaseMs}ms after the press`}; its own long tasks before its first frame ${back.longAfter.map(([at, ms]) => `${ms}ms at ${at}ms`).join(", ") || "none"}, its long frames ${back.longFramesAfter.join("; ") || "none"}; its first animation frame ${back.firstTickMs === null ? "never came" : `${back.firstTickMs}ms after the press`}`;
 
 /**
  * The heavy page: Rive's runtime and its wasm (compiled and instantiated at
@@ -503,14 +575,22 @@ async function pointAt(page: Page, input: CDPSession, id: string) {
   };
 }
 
-/** A switch nobody measures: the tab's own click, the pointer parked off the strip. */
+/**
+ * A switch nobody measures: the tab's own click, the pointer parked off the
+ * strip. A tab already chosen is left as it is: its click opens its details
+ * (PaneTabs `clickTab`), which stood pinned over every leg after.
+ */
 async function away(page: Page, id: string): Promise<void> {
   await page.mouse.move(0, 0);
   await page
     .locator(`[data-session-tab="${id}"]`)
     .filter({ visible: true })
     .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .evaluate((el) => {
+      if (el.getAttribute("aria-selected") !== "true") {
+        (el as HTMLElement).click();
+      }
+    });
 }
 
 /**
@@ -543,6 +623,251 @@ function watchPosts(): void {
     },
   });
 }
+
+/**
+ * In the dashboard's own document: every size a ResizeObserver is told of a
+ * list item (virtua's `[data-item]`), by its row's key and its pane, with
+ * when (epoch ms) and the size it last reported for that item, so a return
+ * says whether a row changed size while its pane was laid out and its rows
+ * staged (`stagingOf`). Read from the entries virtua is handed: nothing
+ * here reads the page's layout.
+ */
+function watchSizes(): void {
+  if (window.top !== window) {
+    return;
+  }
+  const seen: {
+    at: number;
+    key: string;
+    pane: string;
+    was: number | null;
+    px: number;
+  }[] = [];
+  // Each item's last size, and how long its text was then: a row whose
+  // text has changed since was rewritten after virtua last measured it.
+  const last = new WeakMap<Element, { px: number; text: number }>();
+  const w = window as unknown as {
+    __sizes: typeof seen;
+    __lastSize: (el: Element) => { px: number; text: number } | null;
+  };
+  w.__sizes = seen;
+  w.__lastSize = (el) => last.get(el) ?? null;
+  const Own = window.ResizeObserver;
+  window.ResizeObserver = class extends Own {
+    constructor(callback: ResizeObserverCallback) {
+      super((entries, observer) => {
+        for (const entry of entries) {
+          const el = entry.target;
+          if (el instanceof HTMLElement && el.hasAttribute("data-item")) {
+            const px =
+              entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+            seen.push({
+              at: performance.timeOrigin + performance.now(),
+              key:
+                el.querySelector<HTMLElement>(":scope > [data-row]")?.dataset
+                  .row ?? "?",
+              // PaneLeaf's slot: a side split's own panes carry an empty `data-pane`.
+              pane:
+                el.closest<HTMLElement>('[data-slot="pane"][data-pane]')
+                  ?.dataset.pane ?? "?",
+              was: last.get(el)?.px ?? null,
+              px,
+            });
+            last.set(el, { px, text: el.textContent?.length ?? 0 });
+          }
+        }
+        callback(entries, observer);
+      });
+    }
+  };
+}
+
+/** What pane `pane`'s list items last reported (`watchSizes`), by key: the sizes before a reach. Attributes and the watch alone. */
+const itemSizesOf = (page: Page, pane: string) =>
+  page.evaluate((id) => {
+    const w = window as unknown as {
+      __lastSize?: (el: Element) => { px: number; text: number } | null;
+    };
+    const sizes: Record<string, number | null> = {};
+    /** Rows whose text changed after virtua last measured them: rewritten while away. */
+    const rewritten: string[] = [];
+    for (const item of document.querySelectorAll(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"] [data-item]`
+    )) {
+      const key = item.querySelector<HTMLElement>(":scope > [data-row]")
+        ?.dataset.row;
+      if (key) {
+        const had = w.__lastSize?.(item) ?? null;
+        sizes[key] = had?.px ?? null;
+        if (had && had.text !== (item.textContent?.length ?? 0)) {
+          rewritten.push(key);
+        }
+      }
+    }
+    return { sizes, rewritten };
+  }, pane);
+
+/**
+ * The sizes virtua's observer was told of pane `pane`'s items from `from`
+ * to `to` (epoch ms, `watchSizes`): how many, which differ from the size the
+ * item had before the reach (`before`), and those with no size before.
+ */
+async function sizesTold(
+  page: Page,
+  pane: string,
+  {
+    before,
+    from,
+    pressAt,
+    rewritten,
+    to,
+  }: {
+    before: Record<string, number | null>;
+    from: number;
+    pressAt: number;
+    rewritten: string[];
+    to: number;
+  }
+): Promise<{ changes: number; line: string; told: string }> {
+  const sizes = (
+    await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __sizes?: {
+              at: number;
+              key: string;
+              pane: string;
+              was: number | null;
+              px: number;
+            }[];
+          }
+        ).__sizes ?? []
+    )
+  ).filter((one) => one.pane === pane && one.at >= from && one.at < to);
+  // A size virtua had measured before the reach; a row it never measured
+  // has none, and what it is told of that row is its first measurement.
+  const hadOf = (one: { key: string }) => before[one.key] ?? null;
+  const differs = (one: { key: string; px: number }) => {
+    const had = hadOf(one);
+    return had !== null && Math.abs(one.px - had) > 0.5;
+  };
+  const wasRewritten = new Set(rewritten);
+  // A row rewritten while away is a new size, told as virtua measures it.
+  const changed = sizes.filter(
+    (one) => differs(one) && !wasRewritten.has(one.key)
+  );
+  const remeasured = sizes.filter(
+    (one) => differs(one) && wasRewritten.has(one.key)
+  ).length;
+  const unmeasured = sizes.filter((one) => hadOf(one) === null);
+  const which = changed
+    .slice(0, 6)
+    .map(
+      (one) =>
+        `${one.key.slice(0, 16)} ${hadOf(one)}→${one.px}px at ${Math.round(one.at - pressAt)}ms`
+    )
+    .join(", ");
+  const rows = Object.keys(before).length;
+  const never = Object.values(before).filter((one) => one === null).length;
+  const told = `${sizes.length} item sizes, ${changed.length} of them a change from the size before${which ? ` (${which})` : ""}, ${remeasured} of rows rewritten while away, ${unmeasured.length} first measurements of rows never measured`;
+  return {
+    changes: changed.length,
+    told,
+    line: `${rows} rows mounted before the reach (${never} never measured, ${rewritten.length} rewritten while away: ${rewritten.map((key) => key.slice(0, 16)).join(", ") || "none"}); from the reach to the press virtua was told ${told}`,
+  };
+}
+
+/**
+ * Pane `pane` once its return's window is over: any element in it with an
+ * inline `content-visibility` or computing it `hidden`, and each row in its
+ * view whose first text has no box; with each row still mounted whose box
+ * differs from the size it had before the reach (`before`).
+ */
+const shownStateOf = (
+  page: Page,
+  pane: string,
+  before: Record<string, number | null>,
+  rewritten: string[]
+) =>
+  page.evaluate(
+    ([id, scroller, was, redone]) => {
+      const box = document.querySelector<HTMLElement>(
+        `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+      );
+      if (!box) {
+        return null;
+      }
+      const all = [...box.querySelectorAll<HTMLElement>("*")];
+      const inline = all.filter((el) => el.style.contentVisibility).length;
+      const computed = all.filter(
+        (el) => getComputedStyle(el).contentVisibility === "hidden"
+      ).length;
+      const view = box
+        .querySelector<HTMLElement>(scroller)
+        ?.getBoundingClientRect();
+      const inView = (row: HTMLElement) => {
+        const rect = row.getBoundingClientRect();
+        return (
+          !!view &&
+          rect.height > 0 &&
+          rect.bottom > view.top &&
+          rect.top < view.bottom
+        );
+      };
+      // Its first text that is not blank, and whether it has a box.
+      const draws = (row: HTMLElement) => {
+        const walk = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, {
+          acceptNode: (node) =>
+            node.textContent?.trim()
+              ? NodeFilter.FILTER_ACCEPT
+              : NodeFilter.FILTER_SKIP,
+        });
+        const text = walk.nextNode();
+        if (!text) {
+          return false;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const r = range.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      const shownRows = [
+        ...box.querySelectorAll<HTMLElement>("[data-row]"),
+      ].filter(inView);
+      const rows = shownRows.length;
+      const blank = shownRows.filter((row) => !draws(row)).length;
+      // Each item measured before the reach, and whether its box is that size now.
+      const sized = [...box.querySelectorAll<HTMLElement>("[data-item]")]
+        .map((item) => {
+          const key = item.querySelector<HTMLElement>(":scope > [data-row]")
+            ?.dataset.row;
+          // A row rewritten while away is measured anew, not held to its old size.
+          return {
+            item,
+            had: key && !redone.includes(key) ? (was[key] ?? null) : null,
+          };
+        })
+        .filter((one) => one.had !== null);
+      const kept = sized.length;
+      const movedRows = sized
+        .map(({ item, had }) => ({
+          had,
+          key:
+            item.querySelector<HTMLElement>(":scope > [data-row]")?.dataset
+              .row ?? "?",
+          now: item.getBoundingClientRect().height,
+        }))
+        .filter(({ had, now }) => Math.abs(now - (had ?? 0)) > 0.5);
+      const moved = movedRows.length;
+      const which = movedRows
+        .slice(0, 4)
+        .map(({ had, key, now }) => `${key.slice(0, 24)} ${had}→${now}px`)
+        .join(", ");
+      return { inline, computed, rows, blank, kept, moved, which };
+    },
+    [pane, SCROLLER, before, rewritten] as const
+  );
 
 /**
  * In the dashboard's own document on WebKit, which reports no long tasks:
@@ -594,6 +919,110 @@ function landingOf(page: Page, pane: string): Promise<string> {
   );
 }
 
+/**
+ * Every animation in a pane off screen, put away (PaneLeaf
+ * `data-pane-hidden`) or laid out unseen (`data-pane-settling`: drawing its
+ * first picture, or warm), by its play state and whether it runs on an
+ * element or its `::before`/`::after`.
+ */
+const hiddenLoopsOf = (page: Page) =>
+  page.evaluate(() => {
+    const panes = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[data-slot="pane"][data-pane-hidden], [data-slot="pane"][data-pane-settling]'
+      ),
+    ];
+    const unseen = (pane: HTMLElement) =>
+      pane.hasAttribute("data-pane-settling");
+    /** A loop said: its pane, the slot it stands in, its element and its keyframes. */
+    const named = (loop: Animation, effect: KeyframeEffect, el: Element) =>
+      `${(el.closest("[data-pane]") as HTMLElement | null)?.dataset.pane?.slice(0, 8)} ${el.parentElement?.closest("[data-slot]")?.getAttribute("data-slot") ?? ""} ${el.localName}.${[...el.classList].slice(0, 2).join(".")}${effect.pseudoElement ?? ""} ${(loop as CSSAnimation).animationName ?? "script"}`;
+    const runs = document.getAnimations().flatMap((loop) => {
+      const effect = loop.effect as KeyframeEffect | null;
+      const el = effect?.target;
+      return effect && el && panes.some((one) => one.contains(el))
+        ? [{ loop, effect, el }]
+        : [];
+    });
+    const running = runs.filter(({ loop }) => loop.playState === "running");
+    const pseudo = runs.filter(({ effect }) => effect.pseudoElement).length;
+    const laidOut = panes.filter(unseen).length;
+    const where = running
+      .slice(0, 4)
+      .map(({ loop, effect, el }) => named(loop, effect, el));
+    return {
+      running: running.length,
+      paused: runs.length - running.length,
+      panes: panes.length,
+      line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${runs.length - running.length} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}`,
+    };
+  });
+
+/** warm.svelte.ts `COOL_MS`: how long a reach outlasts the pointer or the focus that made it. */
+const REACH_COOL_MS = 1500;
+/** How long a preview's page is given to answer an animation frame of its own (held, it waits). */
+const RUNS_MS = 400;
+
+/**
+ * Each preview frame standing in the dashboard, by its pane, and whether its
+ * page runs: an animation frame it is asked for comes within `RUNS_MS`
+ * (held, the overlay keeps it waiting). A pane whose page is unloaded has
+ * no frame, and is not listed.
+ */
+async function previewsRunning(
+  page: Page
+): Promise<{ pane: string; runs: boolean }[]> {
+  const iframes = page.locator(
+    '[data-slot="pane"][data-pane] iframe[title="Preview"]'
+  );
+  const asked: { pane: string; frame: Frame }[] = [];
+  for (const one of await iframes.all()) {
+    const pane = await one.evaluate(
+      (el) =>
+        el
+          .closest('[data-slot="pane"][data-pane]')
+          ?.getAttribute("data-pane") ?? "?"
+    );
+    const frame = await (await one.elementHandle())?.contentFrame();
+    if (frame) {
+      await frame
+        .evaluate(() => {
+          const w = window as unknown as { __runs: boolean };
+          w.__runs = false;
+          requestAnimationFrame(() => {
+            w.__runs = true;
+          });
+        })
+        .catch(() => undefined);
+      asked.push({ pane, frame });
+    }
+  }
+  await page.waitForTimeout(RUNS_MS);
+  return Promise.all(
+    asked.map(async ({ pane, frame }) => ({
+      pane,
+      runs: await frame
+        .evaluate(() => (window as unknown as { __runs: boolean }).__runs)
+        .catch(() => false),
+    }))
+  );
+}
+
+/**
+ * Pane `pane` as it stands: whether it says nothing has been said there
+ * (SessionPane's blank state) and how many transcript skeletons stand in it.
+ */
+const silentStateOf = (page: Page, pane: string) =>
+  page.evaluate((id) => {
+    const box = document.querySelector<HTMLElement>(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+    );
+    return {
+      blank: !!box?.textContent?.includes("Nothing has been said here yet"),
+      skeletons: box?.querySelectorAll("[data-skeleton]").length ?? -1,
+    };
+  }, pane);
+
 /** The dashboard's reaches into a preview's frame (`watchPosts`), epoch ms. */
 const postsOf = (page: Page) =>
   page.evaluate(
@@ -604,6 +1033,226 @@ const costOf = (page: Page) =>
   page.evaluate(() => (window as unknown as { __cost: Cost }).__cost);
 
 /**
+ * Marks `two-pane:warm:0` in the task that warms pane `pane` (PaneLeaf
+ * `data-pane-settling` set, warm.svelte.ts): an attribute observer's
+ * callback runs in the microtasks of the task whose change it reports.
+ */
+function markWarm(page: Page, pane: string): Promise<void> {
+  return page.evaluate((id) => {
+    const w = window as unknown as { __warmWatch?: MutationObserver };
+    w.__warmWatch?.disconnect();
+    const box = document.querySelector(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+    );
+    if (!box) {
+      return;
+    }
+    const watch = new MutationObserver(() => {
+      if (box.hasAttribute("data-pane-settling")) {
+        performance.mark("two-pane:warm:0");
+        watch.disconnect();
+      }
+    });
+    w.__warmWatch = watch;
+    watch.observe(box, {
+      attributes: true,
+      attributeFilter: ["data-pane-settling"],
+    });
+  }, pane);
+}
+
+/** `shownStateOf`'s reading said, with what virtua was told after the press (`sizesTold`). */
+function shownLine(
+  settled: Awaited<ReturnType<typeof shownStateOf>>,
+  toldAfter: string
+): string {
+  if (!settled) {
+    return "no pane";
+  }
+  const moved = settled.which
+    ? ` (${settled.which}); after the press virtua was told ${toldAfter}`
+    : "";
+  return `${settled.inline} elements with an inline content-visibility, ${settled.computed} computing it hidden; ${settled.rows} rows in view, ${settled.blank} of them with no box on their first text; ${settled.kept} rows measured before the reach still mounted, ${settled.moved} of them a different height now${moved}`;
+}
+
+/** A busy return once its window is over: where it landed (`landingOf`) and its list's heights (`heightsOf`). */
+async function busyAfter(
+  page: Page,
+  pane: string,
+  file: string
+): Promise<{ heights: string; landing: string }> {
+  const landing = await landingOf(page, pane);
+  return { landing, heights: await heightsOf(page, pane, file) };
+}
+
+/** A return's whole line, as its note says it. */
+function noteOf(back: Back, turns: number): string {
+  const page = back.page ? `${pageLine(back.page)} | ` : "";
+  const landed = back.landing
+    ? `landed: ${back.landing} | heights at the landing: ${back.heights} | `
+    : "";
+  const warm = Number.isNaN(back.warmTask)
+    ? "not traced"
+    : `${back.warmTask.toFixed(1)}ms`;
+  return `${back.scene}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${page}${landed}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${warm}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input}; its task: ${back.pressWhat} | the switch: ${back.switchLine} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`;
+}
+
+/**
+ * Pane `pane`'s list at the landing: its height (virtua's total, the
+ * container's), every mounted row's box by key (in view or not, measured or
+ * not: virtua's `visibility: hidden` on an item it has not measured), and
+ * the last size virtua's observer was told of each of the pane's rows
+ * (`watchSizes`). Written whole to `file`; said as a line.
+ */
+async function heightsOf(
+  page: Page,
+  pane: string,
+  file: string
+): Promise<string> {
+  const read = await page.evaluate(
+    ([id, scroller]) => {
+      const box = document.querySelector<HTMLElement>(
+        `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+      );
+      const view = box?.querySelector<HTMLElement>(scroller);
+      const container = box?.querySelector<HTMLElement>('[data-slot="listing"]')
+        ?.firstElementChild as HTMLElement | null | undefined;
+      if (!(view && container)) {
+        return null;
+      }
+      const port = view.getBoundingClientRect();
+      const mounted = [...container.children].map((item) => {
+        const rect = item.getBoundingClientRect();
+        return {
+          key:
+            item.querySelector<HTMLElement>(":scope > [data-row]")?.dataset
+              .row ?? "?",
+          h: rect.height,
+          unmeasured: (item as HTMLElement).style.visibility === "hidden",
+          inView: rect.bottom > port.top && rect.top < port.bottom,
+        };
+      });
+      const told: Record<string, number> = {};
+      for (const one of (
+        window as unknown as {
+          __sizes?: { key: string; pane: string; px: number }[];
+        }
+      ).__sizes ?? []) {
+        if (one.pane === id) {
+          told[one.key] = one.px;
+        }
+      }
+      return {
+        total: Number.parseFloat(container.style.height),
+        mounted,
+        told,
+      };
+    },
+    [pane, SCROLLER] as const
+  );
+  if (!read) {
+    return "no list";
+  }
+  await writeFile(file, `${JSON.stringify(read, null, 2)}\n`);
+  const sizes = Object.values(read.told);
+  const sum = sizes.reduce((all, one) => all + one, 0);
+  const rest = read.total - sum;
+  const inView = read.mounted
+    .filter((one) => one.inView)
+    .map((one) => `${one.key.slice(0, 20)} ${one.h}`)
+    .join(", ");
+  return `list ${read.total}px; virtua was told the sizes of ${sizes.length} rows of this pane (any it has since let go of included), ${sum.toFixed(2)}px in all, ${rest.toFixed(2)}px of the list left over (${(rest / ROW_ESTIMATE).toFixed(2)} rows at the ${ROW_ESTIMATE}px estimate); ${read.mounted.length} mounted, ${read.mounted.filter((one) => one.unmeasured).length} of them never measured; in view by key: ${inView}; whole in ${file}`;
+}
+
+/**
+ * From inside pane `pane`'s transcript (its list), what the bare
+ * `[data-pane]` lookup finds against PaneLeaf's slot: a side split's own
+ * panes (paneforge) carry an empty `data-pane`.
+ */
+async function checkPaneLookup(
+  kit: Kit,
+  page: Page,
+  pane: string
+): Promise<void> {
+  const found = await page.evaluate((id) => {
+    const listing = document.querySelector(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"] [data-slot="listing"]`
+    );
+    const say = (el: Element | null | undefined) =>
+      el
+        ? `${el.tagName.toLowerCase()} data-slot="${el.getAttribute("data-slot") ?? ""}" data-pane="${el.getAttribute("data-pane")}"`
+        : "nothing";
+    return {
+      bare: say(listing?.closest("[data-pane]")),
+      slot: say(listing?.closest('[data-slot="pane"][data-pane]')),
+      slotPane:
+        listing?.closest<HTMLElement>('[data-slot="pane"][data-pane]')?.dataset
+          .pane ?? null,
+    };
+  }, pane);
+  kit.check(
+    `from inside the busy transcript, PaneLeaf's slot is found by [data-slot="pane"][data-pane]`,
+    found.slotPane === pane,
+    `[data-pane] finds ${found.bare}; [data-slot="pane"][data-pane] finds ${found.slot}`
+  );
+}
+
+/** A sampled function's bundle file: `name@file:line:column`, or the engine's own. */
+const FILE_OF = /@([^:@]+):\d+:\d+$/;
+
+/**
+ * The press's own task, the first pointerup at or after the press: said
+ * whole (`line`), and its script's sampled self time summed by the bundle
+ * file each function ran in, the most first.
+ */
+function pressLine(
+  tasks: MainTask[],
+  madeMark: number,
+  main: MainThread,
+  line: (task: MainTask) => string
+): string {
+  const task = tasks.find(
+    (one) => one.at >= madeMark && one.ran === "a pointerup event"
+  );
+  if (!task) {
+    return "no pointerup traced";
+  }
+  const byFile = new Map<string, number>();
+  for (const [fn, ms] of main.selfTime(task.at, task.end)) {
+    const file = FILE_OF.exec(fn.split(" ← ").at(-1) ?? fn)?.[1] ?? fn;
+    byFile.set(file, (byFile.get(file) ?? 0) + ms);
+  }
+  const files = [...byFile]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([file, ms]) => `${file} ${ms.toFixed(1)}ms`)
+    .join(", ");
+  return `${line(task)}; by file: ${files}`;
+}
+
+/**
+ * The reach task among the tasks before the press: the longer of the one
+ * that warms the pane (holding the `two-pane:warm:0` mark `markWarm` makes,
+ * trace clock `warmAt`) and the first after it that restyles, the frame
+ * that lays the pane out.
+ */
+function reachTaskOf(
+  tasks: MainTask[],
+  warmAt: number | undefined
+): MainTask | null {
+  const at =
+    warmAt === undefined
+      ? -1
+      : tasks.findIndex((task) => task.at <= warmAt && warmAt <= task.end);
+  if (at < 0) {
+    return null;
+  }
+  const laysOut = tasks.slice(at + 1).find((task) => task.restyled > 0);
+  const warms = tasks[at];
+  return laysOut && laysOut.cpu > warms.cpu ? laysOut : warms;
+}
+
+/**
  * One return to `id` by the pointer, traced: reach, rest, press, and the
  * window after it (`waitFor`, when given, holds it open until it answers or
  * `READY_MS`, then `AFTER_READY_MS` more).
@@ -612,10 +1261,15 @@ async function measureBack(
   page: Page,
   input: CDPSession,
   id: string,
-  waitFor?: () => Promise<boolean>
+  waitFor?: () => Promise<boolean>,
+  rest = REACH_MS
 ): Promise<Read> {
   const point = await pointAt(page, input, id);
   const held = await census(page);
+  const { sizes: sizesBefore, rewritten } = await itemSizesOf(page, id);
+  await markWarm(page, id);
+  let reachEpoch = 0;
+  let skippedAtPress = 0;
   await page.evaluate(() => {
     const w = window as unknown as {
       __inserted: number;
@@ -651,11 +1305,14 @@ async function measureBack(
       )
         ?.evaluate(() => 0)
         .catch(() => undefined);
-      await page.evaluate(() => performance.mark("two-pane:reach:0"));
+      reachEpoch = await page.evaluate(() => {
+        performance.mark("two-pane:reach:0");
+        return performance.timeOrigin + performance.now();
+      });
       await point.reach();
-      await page.waitForTimeout(REACH_MS);
+      await page.waitForTimeout(rest);
       origin = await page.evaluate(() => performance.timeOrigin);
-      madeAt = await page.evaluate((pane) => {
+      [madeAt, skippedAtPress] = await page.evaluate((pane) => {
         const drawn = () => {
           const box = document.querySelector(
             `[data-slot="pane"][data-pane="${CSS.escape(pane)}"]`
@@ -675,7 +1332,11 @@ async function measureBack(
         };
         performance.mark("two-pane:switch:0");
         requestAnimationFrame(look);
-        return performance.now();
+        // The rows still staged as the press comes: an inline skip, read off the attribute alone.
+        const staged = document.querySelectorAll(
+          `[data-slot="pane"][data-pane="${CSS.escape(pane)}"] [data-item][style*="content-visibility"]`
+        ).length;
+        return [performance.now(), staged] as const;
       }, id);
       await point.press();
       await page.waitForTimeout(WINDOW_MS);
@@ -702,7 +1363,39 @@ async function measureBack(
       null
     );
   const longest = longestOf(own);
-  const reach = longestOf(own.filter((task) => task.at < madeMark));
+  const beforePress = own.filter((task) => task.at < madeMark);
+  const reach = longestOf(beforePress);
+  const warmed = reachTaskOf(beforePress, markAt("two-pane:warm:0"));
+  /** A task said whole: what it ran, when, its CPU and restyle, what scheduled it, its sampled stacks. */
+  const taskLine = (task: MainTask) =>
+    `${task.ran}, ${Math.round((task.at - madeMark) / 1000)}ms after the press: ${task.cpu.toFixed(1)}ms of CPU, ${task.restyled} elements in ${Math.round(task.styleMs)}ms of style; scheduled by ${
+      task.scheduled.map(([what, n]) => `${what} ${n}x`).join("; ") ||
+      "nothing traced"
+    }; its stacks: ${main
+      .stacksIn(task.at, task.end)
+      .filter(([stack]) => stack !== "(idle)")
+      .slice(0, 8)
+      .map(([stack, ms]) => `${stack} ${ms.toFixed(1)}ms`)
+      .join(" || ")}`;
+  const pressEpoch = origin + madeAt;
+  const span = {
+    before: sizesBefore,
+    pressAt: pressEpoch,
+    rewritten,
+  };
+  const told = await sizesTold(page, id, {
+    ...span,
+    from: reachEpoch,
+    to: pressEpoch,
+  });
+  const toldAfter = await sizesTold(page, id, {
+    ...span,
+    from: pressEpoch,
+    to: Number.POSITIVE_INFINITY,
+  });
+  const staging = `${skippedAtPress} rows still staged as the press came; ${told.line}`;
+  const settled = await shownStateOf(page, id, sizesBefore, rewritten);
+  const shown = shownLine(settled, toldAfter.told);
   const inserted = await page.evaluate(() => {
     const w = window as unknown as {
       __inserted: number;
@@ -717,30 +1410,19 @@ async function measureBack(
   const [worst] = cost.frames
     .filter(([at]) => at >= madeAt)
     .sort((a, b) => b[1] - a[1]);
-  /** A task as the report says it: what ran, when, its passes, and what asked for them. */
-  const said = (task: MainTask) =>
-    `${task.ran}, ${Math.round((task.at - madeMark) / 1000)}ms after the press: ${task.restyled} elements in ${Math.round(task.styleMs)}ms of style, ${Math.round(task.layoutMs)}ms of layout [${task.passes
-      .filter((pass) => pass.ms >= 0.5)
-      .map(
-        (pass) =>
-          `${pass.name === "Layout" ? "layout" : "style"} ${pass.elements || ""} ${pass.ms.toFixed(1)}ms by ${pass.at}${pass.root ? ` from a ${pass.root} root` : ""}`
-      )
-      .join("; ")}]; asked for by ${
-      task.invalidated
-        .slice(0, 8)
-        .map(([what, n]) => `${what} ${n}x`)
-        .join("; ") || "nothing traced"
-    }; its other phases: ${
-      task.rendering
-        .map(([what, ms]) => `${what} ${ms.toFixed(1)}ms`)
-        .join("; ") || "none"
-    }`;
+  const after = longest
+    ? Math.round((longest.at - madeMark) / 1000)
+    : Number.NaN;
   return {
     held,
+    frames: [],
     inserted,
     input: press ?? "none reported",
     inputMs,
     pressAt: origin + madeAt,
+    reachAt: reachEpoch,
+    shownMs: null,
+    switchLine: "read off the trace",
     elsewhere:
       main
         .elsewhere(madeMark, madeMark + ELSEWHERE_MS * 1000)
@@ -749,13 +1431,36 @@ async function measureBack(
         .join(", ") || "nothing",
     traced: true,
     longest: Math.round(longest?.cpu ?? 0),
-    longestWhat: longest ? said(longest) : "nothing",
-    over:
-      own
-        .filter((task) => task.cpu * SLOWER > 2 * LONG_TASK_MS)
-        .map((task) => `${task.cpu.toFixed(0)}ms of CPU: ${said(task)}`)
-        .join(" || ") || "none",
+    longestWhat: longest
+      ? `${longest.ran}, ${after}ms after the press: ${longest.restyled} elements in ${Math.round(longest.styleMs)}ms of style, ${Math.round(longest.layoutMs)}ms of layout [${longest.passes
+          .filter((pass) => pass.ms >= 0.5)
+          .map(
+            (pass) =>
+              `${pass.name === "Layout" ? "layout" : "style"} ${pass.elements || ""} ${pass.ms.toFixed(1)}ms by ${pass.at}${pass.root ? ` from a ${pass.root} root` : ""}`
+          )
+          .join("; ")}]; asked for by ${
+          longest.invalidated
+            .slice(0, 8)
+            .map(([what, n]) => `${what} ${n}x`)
+            .join("; ") || "nothing traced"
+        }; its other phases: ${
+          longest.rendering
+            .map(([what, ms]) => `${what} ${ms.toFixed(1)}ms`)
+            .join("; ") || "none"
+        }`
+      : "nothing",
+    shown,
+    shownCounts: settled
+      ? [settled.inline, settled.computed, settled.rows, settled.blank]
+      : [],
+    staging,
+    sizeChanges: told.changes,
+    stagedAtPress: skippedAtPress,
     reach: Math.round(reach?.cpu ?? 0),
+    reachWhat: reach ? taskLine(reach) : "nothing",
+    warmTask: warmed ? warmed.cpu : Number.NaN,
+    warmWhat: warmed ? taskLine(warmed) : "no warm traced",
+    pressWhat: pressLine(own, madeMark, main, taskLine),
     heavy:
       own
         .filter((task) => task.cpu >= HEAVY_MS)
@@ -776,22 +1481,227 @@ async function measureBack(
   };
 }
 
-/** One return to `id` on WebKit, which has no trace: the tab's click, timed by the dashboard's clock, and the window after it. */
-async function clickBack(
+/**
+ * In the dashboard's own document: the next press (a pointer's or a key's),
+ * when it came by the event's own stamp (epoch ms), the dashboard's first
+ * animation frames after it, the first of them in which pane `pane` stands
+ * shown (neither put away nor laid out unseen: the frame that paints the
+ * switch) and when that frame had rendered, and the press's Event Timing
+ * entry where the engine reports one.
+ */
+function armPress(pane: string): void {
+  const w = window as unknown as {
+    __press: number;
+    __pressFrames: number[];
+    __pressShown: number;
+    __pressPainted: number;
+    __pressTiming: string[];
+    __pressOff?: () => void;
+  };
+  w.__pressOff?.();
+  w.__press = 0;
+  w.__pressPainted = 0;
+  w.__pressFrames = [];
+  w.__pressShown = 0;
+  w.__pressTiming = [];
+  const shown = () => {
+    const box = document.querySelector(
+      `[data-slot="pane"][data-pane="${CSS.escape(pane)}"]`
+    );
+    return !!box && !box.matches("[data-pane-hidden], [data-pane-settling]");
+  };
+  const look = () => {
+    const at = performance.timeOrigin + performance.now();
+    w.__pressFrames.push(at);
+    if (!w.__pressShown && shown()) {
+      w.__pressShown = at;
+      // A message posted from the frame's callbacks runs once that frame has rendered.
+      const after = new MessageChannel();
+      after.port1.onmessage = () => {
+        w.__pressPainted = performance.timeOrigin + performance.now();
+      };
+      after.port2.postMessage(0);
+    }
+    if (
+      (w.__pressFrames.length < 4 || !w.__pressShown) &&
+      w.__pressFrames.length < 120
+    ) {
+      requestAnimationFrame(look);
+    }
+  };
+  const pressed = (event: Event) => {
+    if (w.__press) {
+      return;
+    }
+    const now = performance.now();
+    // The event's stamp, unless this engine's is on another clock.
+    const stamp =
+      event.timeStamp > 0 && event.timeStamp <= now ? event.timeStamp : now;
+    w.__press = performance.timeOrigin + stamp;
+    requestAnimationFrame(look);
+  };
+  let timing: PerformanceObserver | null = null;
+  if (PerformanceObserver.supportedEntryTypes?.includes("event")) {
+    timing = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries() as PerformanceEventTiming[]) {
+        if (entry.name === "keydown" || entry.name === "pointerdown") {
+          w.__pressTiming.push(
+            `${entry.name} ${Math.round(entry.duration)}ms (processing ${Math.round(entry.processingStart - entry.startTime)}-${Math.round(entry.processingEnd - entry.startTime)}ms)`
+          );
+        }
+      }
+    });
+    timing.observe({
+      type: "event",
+      durationThreshold: 16,
+    } as PerformanceObserverInit);
+  }
+  addEventListener("pointerdown", pressed, true);
+  addEventListener("keydown", pressed, true);
+  w.__pressOff = () => {
+    timing?.disconnect();
+    removeEventListener("pointerdown", pressed, true);
+    removeEventListener("keydown", pressed, true);
+  };
+}
+
+/** What `armPress` read: the press, epoch ms, the dashboard's frames after it, the first showing the pane, and its Event Timing. */
+const pressOf = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as {
+      __press: number;
+      __pressFrames: number[];
+      __pressShown: number;
+      __pressPainted: number;
+      __pressTiming: string[];
+      __pressOff?: () => void;
+    };
+    w.__pressOff?.();
+    return {
+      at: w.__press,
+      frames: [...w.__pressFrames],
+      paintedAt: w.__pressPainted,
+      shownAt: w.__pressShown,
+      timing: [...w.__pressTiming],
+    };
+  });
+
+/**
+ * The strip as the accessibility tree says it (Playwright's aria snapshot of
+ * the tablist holding `id`'s tab): the tab selected and the tab focused, by
+ * their place in it.
+ */
+async function stripOf(page: Page, id: string): Promise<string> {
+  const list = page
+    .locator('[role="tablist"]')
+    .filter({ has: page.locator(`[data-session-tab="${id}"]`) })
+    .first();
+  const aria = await list.ariaSnapshot().catch(() => "");
+  const tabs = aria.split("\n").filter((line) => line.includes("- tab "));
+  const selected = tabs.findIndex((line) => line.includes("[selected]"));
+  const focused = await list.evaluate((el) =>
+    [...el.querySelectorAll('[role="tab"]')].indexOf(
+      document.activeElement as Element
+    )
+  );
+  return `${tabs.length} tabs; tab ${selected + 1} [selected], tab ${focused + 1} focused (aria: ${tabs.map((line) => (line.includes("[selected]") ? "selected" : "-")).join(" ")})`;
+}
+
+/**
+ * The keyboard's focus on `tab` (its id `id`), as a person reaches the strip:
+ * focused, then Tab out of the strip and Shift+Tab back onto its one tab
+ * stop, so the focus is the keyboard's (`:focus-visible`), as the strip's
+ * own keyboard reach asks (PaneTabs `besideOf`).
+ */
+async function keyFocus(page: Page, tab: Locator, id: string): Promise<void> {
+  await tab.focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  const focused = await page.evaluate(() => {
+    const el = document.activeElement;
+    return {
+      id: el?.getAttribute("data-session-tab") ?? null,
+      keyboard: !!el?.matches(":focus-visible"),
+    };
+  });
+  if (focused.id !== id || !focused.keyboard) {
+    throw new Error(
+      `tab-return: the keyboard's focus is not on tab ${id.slice(0, 8)} (${focused.id?.slice(0, 8) ?? "elsewhere"}, ${focused.keyboard ? "" : "not "}focus-visible)`
+    );
+  }
+}
+
+/**
+ * One return to `id` on WebKit, which has no trace: a person's press, timed
+ * by the dashboard's clock, and the window after it. `pointer`: the pointer
+ * comes onto the tab, rests `rest`, presses; `keyboard`: the keyboard's focus
+ * rests on the chosen tab before it as long (`keyFocus`), and the arrow moves
+ * the focus onto it and chooses it (TabsList `onkeydown`).
+ */
+async function pressBack(
   page: Page,
   id: string,
-  waitFor?: () => Promise<boolean>
+  how: "pointer" | "keyboard",
+  waitFor?: () => Promise<boolean>,
+  rest = REACH_MS
 ): Promise<Read> {
-  const pressAt = await page
+  const tab = page
     .locator(`[data-session-tab="${id}"]`)
     .filter({ visible: true })
-    .first()
-    .evaluate((el) => {
-      const at = performance.timeOrigin + performance.now();
-      (el as HTMLElement).click();
-      return at;
-    });
+    .first();
+  await tab.scrollIntoViewIfNeeded();
+  const box = await tab.boundingBox();
+  if (!box) {
+    throw new Error("tab-return: a tab to switch to has no box");
+  }
+  const now = () =>
+    page.evaluate(() => performance.timeOrigin + performance.now());
+  let reachAt = 0;
+  if (how === "pointer") {
+    await page.evaluate(armPress, id);
+    reachAt = await now();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(rest);
+    await page.mouse.down();
+    await page.mouse.up();
+  } else {
+    // The strip's own keys (TabsList): the focus on the chosen tab before
+    // it, where a Tab into the strip lands, then the arrow that moves the
+    // focus onto it and chooses it.
+    const strip = page
+      .locator('[role="tab"][data-session-tab]')
+      .filter({ visible: true });
+    const ids = await strip.evaluateAll((tabs) =>
+      tabs.map((one) => one.getAttribute("data-session-tab") ?? "")
+    );
+    const at = ids.indexOf(id);
+    if (at < 1) {
+      throw new Error("tab-return: a keyboard return needs a tab before it");
+    }
+    // The reach is the focus's: its keys (Tab and back) come before the press is watched.
+    reachAt = await now();
+    await keyFocus(page, strip.nth(at - 1), ids[at - 1]);
+    await page.waitForTimeout(rest);
+    await page.evaluate(armPress, id);
+    await page.keyboard.press("ArrowRight");
+  }
   await page.waitForTimeout(WINDOW_MS);
+  const press = await pressOf(page);
+  if (!press.at) {
+    throw new Error(`tab-return: the ${how}'s press never reached the page`);
+  }
+  const pressAt = press.at;
+  const shownMs = press.shownAt ? Math.round(press.shownAt - pressAt) : null;
+  const timed = await page.evaluate(
+    () => PerformanceObserver.supportedEntryTypes?.includes("event") ?? false
+  );
+  const timing = timed
+    ? press.timing.join(", ") || "no entry of 16ms or more"
+    : "not reported by this engine";
+  const paintedMs = press.paintedAt
+    ? Math.round(press.paintedAt - pressAt)
+    : null;
+  const switchLine = `shown in the dashboard's frame ${shownMs === null ? "never" : `${shownMs}ms after the press`}, that frame rendered ${paintedMs === null ? "never" : `${paintedMs}ms after the press`}; Event Timing ${timing}; the strip after: ${await stripOf(page, id)}`;
   if (waitFor) {
     const began = Date.now();
     while (!(await waitFor()) && Date.now() - began < READY_MS) {
@@ -811,23 +1721,129 @@ async function clickBack(
   return {
     held: "not read",
     heavy: "not traced",
-    input: "a click, not traced",
+    frames: press.frames.map((at) => Math.round(at - pressAt)),
+    input: `a ${how}'s press, not traced`,
     inputMs: 0,
     inserted: 0,
     longest: 0,
-    longestWhat: `not traced; the dashboard's thread stood still at most ${Math.round(worstMs)}ms, ${Math.round(worstAt - pressAt)}ms after the press (its longest timer gap)`,
-    over: "not traced",
+    longestWhat: `not traced; the dashboard's thread stood still at most ${Math.round(worstMs)}ms, ${Math.round(worstAt - pressAt)}ms after the press (its longest timer gap; every gap over 50ms: ${gaps.map(([at, ms]) => `${Math.round(ms)}ms at ${Math.round(at - pressAt)}ms`).join(", ") || "none"})`,
     pressAt,
+    reachAt,
+    shownMs,
+    switchLine,
     elsewhere: "not traced",
     reach: 0,
+    reachWhat: "not traced",
+    warmTask: Number.NaN,
+    warmWhat: "not traced",
+    pressWhat: "not traced",
+    shown: "not read",
+    shownCounts: [],
+    staging: "not read",
+    sizeChanges: 0,
+    stagedAtPress: 0,
     traced: false,
     work: null,
     worstFrame: "not traced",
   };
 }
 
+/**
+ * A busy return's staging (Transcript `parkRows`): no row changed size from
+ * the reach to the press, nothing left skipped once shown with every row in
+ * view drawing its text, the reach's longest task within `REACH_TASK_MS`
+ * (a press with its rows still staged, 1c, carries the staging in its own
+ * window instead), and 1c's press came while rows were staged.
+ */
+function checkStaging(kit: Kit, back: Back): void {
+  if (!(back.traced && back.kind === "busy")) {
+    return;
+  }
+  kit.check(
+    `${back.scene}: from the reach to the press no row's size changed (virtua's observer told the size each item had before)`,
+    back.sizeChanges === 0,
+    back.staging
+  );
+  const [inline, computed, rows, blank] = back.shownCounts;
+  kit.check(
+    `${back.scene}: once shown nothing in the pane is skipped (no inline content-visibility, none computing it hidden) and every row in view draws its text`,
+    inline === 0 && computed === 0 && rows > 0 && blank === 0,
+    back.shown
+  );
+  if (back.scene.startsWith("1c")) {
+    kit.check(
+      `${back.scene}: the press came while rows were still staged`,
+      back.stagedAtPress > 0,
+      back.staging
+    );
+    return;
+  }
+  kit.check(
+    `${back.scene}: the reach task (its warm and the frame laying the pane out) within ${REACH_TASK_MS}ms of CPU (${REACH_TASK_MS * SLOWER}ms ${SLOWER}x slower)`,
+    back.warmTask <= REACH_TASK_MS,
+    back.warmWhat.slice(0, 600)
+  );
+}
+
+/** Each read of the loops in panes off screen (`hiddenLoopsOf`), by the leg it was read in. */
+type LoopRead = { scene: string } & Awaited<ReturnType<typeof hiddenLoopsOf>>;
+/** Leg 3's readings: each silent session's pane once shown (`silentStateOf`). */
+type SilentRead = { scene: string } & Awaited<ReturnType<typeof silentStateOf>>;
+
+/** Leg 3's silent sessions each show their blank state and no skeleton; every read of the loops off screen finds none running. */
+function checkQuiet(
+  kit: Kit,
+  silentReads: SilentRead[],
+  loopReads: LoopRead[]
+): void {
+  for (const read of silentReads) {
+    kit.check(
+      `${read.scene}: its blank state stands, never a skeleton`,
+      read.blank && read.skeletons === 0,
+      `${read.blank ? "its blank state stands" : "no blank state"}, ${read.skeletons} skeletons in its pane`
+    );
+  }
+  for (const read of loopReads) {
+    kit.check(
+      `${read.scene}: every animation in a pane off screen is held (none running)`,
+      read.running === 0,
+      read.line
+    );
+  }
+}
+
+/** A return to the preview: kept and held (its first frame bound, but for the first arrow into the strip), or past the bound and loaded again. */
+function checkPage(kit: Kit, back: Back): void {
+  const { page } = back;
+  // The first arrow into the strip comes with no reach before it: its first frame is said, not bound.
+  if (back.kind === "kept" && page && back.scene.startsWith("2h")) {
+    kit.check(
+      `${back.scene}: the page is the one it was, held off screen (no animation frame or timer of its ran)`,
+      !page.reloaded && page.hiddenTicks === 0 && page.hiddenTimers === 0,
+      pageLine(page)
+    );
+  } else if (back.kind === "kept" && page) {
+    kit.check(
+      `${back.scene}: the page is the one it was, held off screen (no animation frame or timer of its ran), and its first animation frame comes within ${BACK_MS}ms of the press`,
+      !page.reloaded &&
+        page.hiddenTicks === 0 &&
+        page.hiddenTimers === 0 &&
+        page.firstTickMs !== null &&
+        page.firstTickMs <= BACK_MS,
+      pageLine(page)
+    );
+  }
+  if (back.kind === "past" && page) {
+    kit.check(
+      `${back.scene}: off screen past the bound its page was let go, and it loads again with its tab`,
+      Number.isNaN(page.hiddenTicks) && page.reloaded,
+      pageLine(page)
+    );
+  }
+}
+
 const run = async (kit: Kit) => {
-  const pressure = pressureFile();
+  machineQuiet();
   const folder = join(kit.out, "heavy");
   await mkdir(folder, { recursive: true });
   await heavyFolder(folder);
@@ -848,6 +1864,8 @@ const run = async (kit: Kit) => {
   const previewed = await fleet.spawn("claude", "Heavy preview", fleet.repo);
   await fleet.api(`/api/instances/${previewed}/artifacts`, {
     kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     name: "heavy",
     dir: folder,
   });
@@ -857,10 +1875,22 @@ const run = async (kit: Kit) => {
     const light = await fleet.spawn("claude", `Light ${name}`, fleet.repo);
     await fleet.api(`/api/instances/${light}/artifacts`, {
       kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
       name,
       html: `<!doctype html><html><head><meta charset="utf-8"><title>${name}</title></head><body><p>${name}</p></body></html>`,
     });
     lights.push(light);
+  }
+  // TAB_RETURN_LEGS=setup: the fleet and its five sessions, every preview
+  // and page given its port, and no more.
+  if (process.env.TAB_RETURN_LEGS === "setup") {
+    kit.check(
+      "setup: the five sessions are made, each preview and page given its port",
+      true,
+      `quiet ${front}, busy ${busy}, heavy ${previewed}, lights ${lights.join(", ")}; preview ports ${fleet.previewPorts}, the kernel's ephemeral ports ${readFileSync("/proc/sys/net/ipv4/ip_local_port_range", "utf8").trim().replace(SPACE_RUN, "-")}`
+    );
+    return;
   }
   await until(
     `${SEED} calls in the busy session`,
@@ -883,9 +1913,9 @@ const run = async (kit: Kit) => {
     const page = await kit.page(
       "desk",
       engine === "webkit"
-        ? { engine: "webkit", init: [watchGaps] }
+        ? { engine: "webkit", init: [watchGaps, watchPosts] }
         : {
-            init: [watchCost, watchPosts],
+            init: [watchCost, watchPosts, watchSizes],
             oneProcess: engine === "one-process",
           }
     );
@@ -952,6 +1982,139 @@ const run = async (kit: Kit) => {
   );
 
   const backs: Back[] = [];
+  const loopReads: LoopRead[] = [];
+  const silentReads: SilentRead[] = [];
+  /**
+   * Leg 3: each session with nothing said yet (the preview's, the light
+   * ones') shown in turn for `SILENT_MS`: its blank state stands, and no
+   * skeleton; then all put away, every loop in their panes held.
+   */
+  const silentLeg = async (on: Desk, engine: string) => {
+    for (const [i, id] of [previewed, ...lights].entries()) {
+      await away(on.page, id);
+      await on.page.waitForTimeout(SILENT_MS);
+      const state = await silentStateOf(on.page, id);
+      const said = `3 (${engine}): silent session ${i + 1} shown ${SILENT_MS / 1000}s`;
+      silentReads.push({ scene: said, ...state });
+      kit.note(
+        `${said}: ${state.blank ? "its blank state stands" : "no blank state"}, ${state.skeletons} skeletons in its pane`
+      );
+    }
+    await away(on.page, front);
+    await on.page.waitForTimeout(SETTLE_MS);
+    loopReads.push({
+      scene: `3 (${engine}): the silent sessions put away`,
+      ...(await hiddenLoopsOf(on.page)),
+    });
+  };
+  /**
+   * The keyboard's reach (warm.svelte.ts `besides`): with the keyboard's
+   * focus resting on the quiet tab, the previews of the tabs an arrow lands
+   * on next run, two at most, and nothing else does; with the focus gone
+   * from the strip, once its reach is over, every preview is held again and
+   * no loop off screen runs.
+   */
+  const keyReach = async (on: Desk, engine: string) => {
+    const { page } = on;
+    await away(page, front);
+    await page.waitForTimeout(REACH_COOL_MS + SETTLE_MS);
+    const strip = page
+      .locator('[role="tab"][data-session-tab]')
+      .filter({ visible: true });
+    const ids = await strip.evaluateAll((tabs) =>
+      tabs.map((one) => one.getAttribute("data-session-tab") ?? "")
+    );
+    const at = ids.indexOf(front);
+    const beside = [
+      ids[(at - 1 + ids.length) % ids.length],
+      ids[(at + 1) % ids.length],
+    ];
+    const place = (id: string) => `tab ${ids.indexOf(id) + 1}`;
+    const said = (runs: { pane: string; runs: boolean }[]) =>
+      runs
+        .map((one) => `${place(one.pane)} ${one.runs ? "runs" : "held"}`)
+        .join(", ") || "no preview standing";
+    await keyFocus(page, strip.nth(at), front);
+    await page.waitForTimeout(REACH_MS);
+    const resting = await previewsRunning(page);
+    const restingLoops = await hiddenLoopsOf(page);
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur()
+    );
+    await page.waitForTimeout(REACH_COOL_MS + SETTLE_MS);
+    const left = await previewsRunning(page);
+    const leftLoops = await hiddenLoopsOf(page);
+    const running = resting.filter((one) => one.runs);
+    kit.check(
+      `${engine}: the keyboard's focus resting on a tab lets go the previews of the tabs an arrow lands on next, two at most, and no other`,
+      running.length <= 2 &&
+        running.every((one) => beside.includes(one.pane)) &&
+        running.some((one) => one.pane === previewed),
+      `focus on ${place(front)}, an arrow lands on ${beside.map(place).join(" or ")}: ${said(resting)}; ${restingLoops.line}`
+    );
+    kit.check(
+      `${engine}: the focus gone from the strip, its reach over, every preview is held again and no loop off screen runs`,
+      left.every((one) => !one.runs) && leftLoops.running === 0,
+      `${REACH_COOL_MS + SETTLE_MS}ms after the focus left: ${said(left)}; ${leftLoops.line}`
+    );
+  };
+  /**
+   * Two arrow keys in one task from the quiet tab: each chooses its tab in
+   * its own key (TabsList), and the second is the one selected.
+   */
+  const doubleArrow = async (on: Desk, engine: string) => {
+    const { page } = on;
+    await away(page, front);
+    await page.waitForTimeout(SETTLE_MS);
+    const strip = page
+      .locator('[role="tab"][data-session-tab]')
+      .filter({ visible: true });
+    const ids = await strip.evaluateAll((tabs) =>
+      tabs.map((one) => one.getAttribute("data-session-tab") ?? "")
+    );
+    const at = ids.indexOf(front);
+    await keyFocus(page, strip.nth(at), front);
+    await page.waitForTimeout(REACH_MS);
+    const clicked = await page.evaluate(async () => {
+      const seen: string[] = [];
+      const heard = (event: Event) => {
+        const tab = (event.target as Element | null)?.closest(
+          '[role="tab"][data-session-tab]'
+        );
+        if (tab) {
+          seen.push(tab.getAttribute("data-session-tab") ?? "?");
+        }
+      };
+      addEventListener("click", heard, true);
+      for (const _ of [1, 2]) {
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "ArrowRight",
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      removeEventListener("click", heard, true);
+      return seen;
+    });
+    const selected = await page.evaluate(
+      () =>
+        document
+          .querySelector('[role="tab"][data-session-tab][aria-selected="true"]')
+          ?.getAttribute("data-session-tab") ?? ""
+    );
+    const place = (id: string) => ids.indexOf(id) + 1;
+    kit.check(
+      `${engine}: two arrow keys in one task each choose their tab, the second last`,
+      clicked.length === 2 &&
+        clicked[0] === ids[at + 1] &&
+        clicked[1] === ids[at + 2] &&
+        selected === ids[at + 2],
+      `from tab ${at + 1}: the strip clicked ${clicked.map((id) => `tab ${place(id)}`).join(", ") || "nothing"}; tab ${place(selected)} selected; ${await stripOf(page, front)}`
+    );
+  };
   /**
    * One return to `to`: a busy tab's, a kept preview's (the quiet tab in
    * front for `absence`), or a preview's past the bound (`pastBound`). A
@@ -963,12 +2126,16 @@ const run = async (kit: Kit) => {
     name: string,
     to: string,
     kind: Back["kind"],
-    absence = SHORT_MS
+    absence = SHORT_MS,
+    rest = REACH_MS,
+    how: "pointer" | "keyboard" = "pointer"
   ) => {
     const { page, input, ready } = on;
     const got: { read?: Read; page?: PageBack } = {};
     const turns = kind === "busy" ? Math.round(absence / TURN_MS) : 0;
-    const psi = await quietLeg(name, pressure, async () => {
+    // A keyboard return is untraced on every engine: the strip's own key, timed by the page.
+    const traced = how === "pointer" ? input : null;
+    const psi = await quietLeg(name, async () => {
       let before: Clock | null = null;
       if (kind === "past") {
         before = await clockOf(page, to);
@@ -981,22 +2148,25 @@ const run = async (kit: Kit) => {
         // Away from the busy tab, its session runs the absence's turns, landed before the return.
         if (turns > 0) {
           await scene.release(turns);
+          // Its session still answering, every loop in a pane off screen is held.
+          loopReads.push({ scene: name, ...(await hiddenLoopsOf(page)) });
           await page.waitForTimeout(LANDED_MS);
         }
         await page.waitForTimeout(Math.max(0, absence - (Date.now() - began)));
       }
       const hidden = kind === "busy" ? null : await clockOf(page, to);
       const waitFor = kind === "past" ? ready : undefined;
-      got.read = input
-        ? await measureBack(page, input, to, waitFor)
-        : await clickBack(page, to, waitFor);
+      got.read = traced
+        ? await measureBack(page, traced, to, waitFor, rest)
+        : await pressBack(page, to, how, waitFor, rest);
       if (kind !== "busy") {
         got.page = pageBack(
           before,
           hidden,
           await clockOf(page, to),
           got.read.pressAt,
-          await postsOf(page)
+          await postsOf(page),
+          got.read
         );
       }
     });
@@ -1004,21 +2174,35 @@ const run = async (kit: Kit) => {
       throw new Error(`tab-return: ${name} read nothing`);
     }
     // Its turns held, nothing moves the busy transcript after its window.
-    const landing = kind === "busy" ? await landingOf(page, to) : undefined;
+    const after =
+      kind === "busy"
+        ? await busyAfter(
+            page,
+            to,
+            join(kit.out, `heights-${name.slice(0, 2)}.json`)
+          )
+        : {};
     const back: Back = {
       scene: name,
       kind,
       psi,
       ...got.read,
       ...(got.page ? { page: got.page } : {}),
-      ...(landing ? { landing } : {}),
+      ...after,
     };
     backs.push(back);
-    kit.note(
-      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}${back.landing ? `landed: ${back.landing} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
-    );
+    kit.note(noteOf(back, turns));
   };
   await leg(isolated, `1a: busy, back after ${SHORT_MS / 1000}s`, busy, "busy");
+  await checkPaneLookup(kit, isolated.page, busy);
+  await leg(
+    isolated,
+    `1c: busy, back after ${SHORT_MS / 1000}s, pressed ${PRESS_IN_STAGING_MS}ms after the reach, its rows still staged`,
+    busy,
+    "busy",
+    SHORT_MS,
+    PRESS_IN_STAGING_MS
+  );
   await leg(
     isolated,
     `1b: busy, back after ${BACKLOG_MS / 60_000} min`,
@@ -1026,84 +2210,125 @@ const run = async (kit: Kit) => {
     "busy",
     BACKLOG_MS
   );
-  await leg(
-    isolated,
-    `2a: preview, back after ${SHORT_MS / 1000}s (kept, held)`,
-    previewed,
-    "kept"
-  );
-  await leg(isolated, "2b: preview, back past the bound", previewed, "past");
-  await isolated.page.close();
-  // Scene 2 again with the preview's page on the dashboard's own thread:
-  // every WebKit, and Chromium where it does not isolate the preview's site.
-  const shared = await desk(
-    [front, previewed, ...lights],
-    front,
-    "one-process"
-  );
-  const browser = shared.page.context().browser();
-  const frameSrc = await shared.page
-    .locator(
-      `[data-slot="pane"][data-pane="${previewed}"] iframe[title="Preview"]`
-    )
-    .first()
-    .getAttribute("src");
-  const origin = frameSrc ? new URL(frameSrc).origin : "";
-  const cdp = browser ? await browser.newBrowserCDPSession() : null;
-  const { targetInfos } = cdp
-    ? ((await cdp.send("Target.getTargets")) as {
-        targetInfos: { type: string; url: string }[];
-      })
-    : { targetInfos: [] };
-  await cdp?.detach();
-  const ownProcess = targetInfos.filter(
-    (one) => one.type === "iframe" && one.url.startsWith(origin)
-  ).length;
-  kit.check(
-    "2c, 2d, 2e: the preview's page runs in the dashboard's process (no out-of-process frame on its origin)",
-    !!origin && ownProcess === 0,
-    `origin ${origin || "none"}, ${ownProcess} out-of-process frames on it`
-  );
-  await leg(
-    shared,
-    `2c: preview in the dashboard's process, back after ${SHORT_MS / 1000}s (kept, held)`,
-    previewed,
-    "kept"
-  );
-  await leg(
-    shared,
-    `2e: preview in the dashboard's process, hidden ${HELD_MS / 1000}s, held`,
-    previewed,
-    "kept",
-    HELD_MS
-  );
-  await leg(
-    shared,
-    "2d: preview in the dashboard's process, back past the bound",
-    previewed,
-    "past"
-  );
-  await shared.page.close();
-  // The kept returns on WebKit, which runs every frame on the dashboard's thread.
-  const webkit = await desk([front, previewed, ...lights], front, "webkit");
-  await leg(
-    webkit,
-    `2c (WebKit): preview, back after ${SHORT_MS / 1000}s (kept, held)`,
-    previewed,
-    "kept"
-  );
-  await leg(
-    webkit,
-    `2e (WebKit): preview, hidden ${HELD_MS / 1000}s, held`,
-    previewed,
-    "kept",
-    HELD_MS
-  );
+  /** Scene 2, every engine: the preview's returns. */
+  const previewLegs = async () => {
+    await leg(
+      isolated,
+      `2a: preview, back after ${SHORT_MS / 1000}s (kept, held)`,
+      previewed,
+      "kept"
+    );
+    await leg(isolated, "2b: preview, back past the bound", previewed, "past");
+    await silentLeg(isolated, "Chromium");
+    await isolated.page.close();
+    // Scene 2 again with the preview's page on the dashboard's own thread:
+    // every WebKit, and Chromium where it does not isolate the preview's site.
+    const shared = await desk(
+      [front, previewed, ...lights],
+      front,
+      "one-process"
+    );
+    const browser = shared.page.context().browser();
+    const frameSrc = await shared.page
+      .locator(
+        `[data-slot="pane"][data-pane="${previewed}"] iframe[title="Preview"]`
+      )
+      .first()
+      .getAttribute("src");
+    const origin = frameSrc ? new URL(frameSrc).origin : "";
+    const cdp = browser ? await browser.newBrowserCDPSession() : null;
+    const { targetInfos } = cdp
+      ? ((await cdp.send("Target.getTargets")) as {
+          targetInfos: { type: string; url: string }[];
+        })
+      : { targetInfos: [] };
+    await cdp?.detach();
+    const ownProcess = targetInfos.filter(
+      (one) => one.type === "iframe" && one.url.startsWith(origin)
+    ).length;
+    kit.check(
+      "2c, 2d, 2e: the preview's page runs in the dashboard's process (no out-of-process frame on its origin)",
+      !!origin && ownProcess === 0,
+      `origin ${origin || "none"}, ${ownProcess} out-of-process frames on it`
+    );
+    await leg(
+      shared,
+      `2c: preview in the dashboard's process, back after ${SHORT_MS / 1000}s (kept, held)`,
+      previewed,
+      "kept"
+    );
+    await leg(
+      shared,
+      `2e: preview in the dashboard's process, hidden ${HELD_MS / 1000}s, held`,
+      previewed,
+      "kept",
+      HELD_MS
+    );
+    await leg(
+      shared,
+      `2g: preview in the dashboard's process, back after ${SHORT_MS / 1000}s by the keyboard (kept, held)`,
+      previewed,
+      "kept",
+      SHORT_MS,
+      REACH_MS,
+      "keyboard"
+    );
+    await leg(
+      shared,
+      "2d: preview in the dashboard's process, back past the bound",
+      previewed,
+      "past"
+    );
+    await shared.page.close();
+    // The kept returns on WebKit, which runs every frame on the dashboard's thread.
+    const webkit = await desk([front, previewed, ...lights], front, "webkit");
+    await leg(
+      webkit,
+      `2c (WebKit): preview, back after ${SHORT_MS / 1000}s (kept, held)`,
+      previewed,
+      "kept"
+    );
+    await leg(
+      webkit,
+      `2e (WebKit): preview, hidden ${HELD_MS / 1000}s, held`,
+      previewed,
+      "kept",
+      HELD_MS
+    );
+    await leg(
+      webkit,
+      `2f (WebKit): preview, back after ${SHORT_MS / 1000}s by the keyboard (kept, held)`,
+      previewed,
+      "kept",
+      SHORT_MS,
+      REACH_MS,
+      "keyboard"
+    );
+    await leg(
+      webkit,
+      `2h (WebKit): preview, back after ${SHORT_MS / 1000}s by the keyboard's first arrow into the strip, with no rest (kept, held)`,
+      previewed,
+      "kept",
+      SHORT_MS,
+      0,
+      "keyboard"
+    );
+    await keyReach(webkit, "WebKit");
+    await doubleArrow(webkit, "WebKit");
+    await silentLeg(webkit, "WebKit");
+  };
+  // TAB_RETURN_LEGS=busy: scene 1 alone, its busy returns.
+  if (process.env.TAB_RETURN_LEGS === "busy") {
+    await isolated.page.close();
+  } else {
+    await previewLegs();
+  }
   await writeFile(
     join(kit.out, "numbers.json"),
     `${JSON.stringify(backs, null, 2)}\n`
   );
   for (const back of backs) {
+    checkStaging(kit, back);
     // Past the bound a return loads the page again, and in the dashboard's
     // process its load is the dashboard's task: that page's own weight,
     // noted above, not the return's.
@@ -1111,7 +2336,7 @@ const run = async (kit: Kit) => {
       kit.check(
         `${back.scene}: no task longer than two frames' budget (${2 * LONG_TASK_MS}ms) on a CPU ${SLOWER}x slower`,
         back.longest * SLOWER <= 2 * LONG_TASK_MS,
-        `the longest ${back.longest}ms of CPU, ${back.longest * SLOWER}ms slower; over the budget: ${back.over}`
+        `the longest ${back.longest}ms of CPU, ${back.longest * SLOWER}ms slower; ${back.longestWhat.slice(0, 300)}`
       );
     }
     if (back.traced) {
@@ -1121,26 +2346,9 @@ const run = async (kit: Kit) => {
         back.input
       );
     }
-    const { page } = back;
-    if (back.kind === "kept" && page) {
-      kit.check(
-        `${back.scene}: the page is the one it was, held off screen (no animation frame or timer of its ran), and its first animation frame comes within ${BACK_MS}ms of the press`,
-        !page.reloaded &&
-          page.hiddenTicks === 0 &&
-          page.hiddenTimers === 0 &&
-          page.firstTickMs !== null &&
-          page.firstTickMs <= BACK_MS,
-        pageLine(page)
-      );
-    }
-    if (back.kind === "past" && page) {
-      kit.check(
-        `${back.scene}: off screen past the bound its page was let go, and it loads again with its tab`,
-        Number.isNaN(page.hiddenTicks) && page.reloaded,
-        pageLine(page)
-      );
-    }
+    checkPage(kit, back);
   }
+  checkQuiet(kit, silentReads, loopReads);
 };
 
 const spec: Spec = { name: "tab-return", run };

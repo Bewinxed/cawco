@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { delegateTypesWords as words } from "@cawco/core";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import DelegateTypeEditor from "#lib/cawco/config/editors/DelegateTypeEditor.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -19,9 +20,9 @@
   found={name === "new" || type !== null}
   loaded={types !== null}
   problem={store.types.error}
-  saveLabel={name === "new" ? "Create delegate type" : "Save changes"}
+  saveLabel={name === "new" ? words.create : words.save}
   {section}
-  what="delegate type"
+  what={words.what}
 >
   <DelegateTypeEditor {taken} {type} />
 </EditorRoute>

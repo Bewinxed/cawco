@@ -15,6 +15,7 @@ import {
   claudeHome,
   claudeHomeJson,
 } from "@cawco/core/paths";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   accountEnv,
@@ -152,6 +153,7 @@ const security = async (
 ): Promise<{ code: number; stdout: string }> => {
   const read = await readWithin(SECURITY_MS, async (signal) => {
     const child = Bun.spawn(["security", ...args], {
+      env: hostEnvironment(),
       stdin: input === undefined ? "ignore" : "pipe",
       stdout: "pipe",
       stderr: "ignore",

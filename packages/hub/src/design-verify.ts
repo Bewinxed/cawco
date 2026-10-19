@@ -40,6 +40,13 @@
  *   builder is told; its next `finish_item` starts another. A builder that
  *   ends while checked stops its verifier. A hub that restarts keeps every
  *   round (the rows), and its chips say so again.
+ * - **In a chat** (component canvas E1). A round runs by itself only on a
+ *   task. In a chat, a round is asked of an artifact (`artifact_read({
+ *   verify: true })`, or the panel's Verify): keyed on the artifact, on the
+ *   tree of the workspace its stage runs in, when that repository holds a
+ *   system (`design/DESIGN.md` or `design/SKILL.md`). The same verifier
+ *   judges it; its verdict goes to the session that asked, as one message,
+ *   and nothing is held or finished.
  */
 import type { InstanceRow, ResultArtifact } from "@cawco/core";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -67,6 +74,11 @@ import {
 const CHECKING = "being checked against the design system";
 /** What a verifier's brief opens with: what the probe kit keys its turns by. */
 export const VERIFIER_BRIEF = "You are the design system verifier";
+/** A chat round's key in `design_checks.item_id`: the artifact it judges. */
+const ARTIFACT_KEY = "artifact:";
+/** Whether the clone holds a design system to judge against: one line, `system`, when it does. */
+const HAS_SYSTEM =
+  "if [ -f design/DESIGN.md ] || [ -f design/SKILL.md ]; then echo system; fi";
 /** The patch's name in the verifier's `$TMPDIR/inputs/`. */
 const PATCH = "design-check.patch";
 /** The most of a page's HTML a brief carries. */
@@ -95,6 +107,17 @@ const SNAPSHOT = [
   `out=""; if [ "$tree" != "$(git rev-parse 'HEAD^{tree}')" ]; then out="$(mktemp -d)/${PATCH}"; git diff --cached --binary HEAD > "$out"; fi`,
   'printf \'%s\\n%s\\n%s\\n\' "$head" "$tree" "$out"',
 ].join("\n");
+
+/** An artifact a chat asks a round of: what it is, and the workspace its stage runs in. */
+export interface AskedArtifact {
+  /** Its states files, from the clone's root: what the verifier opens. */
+  files: string[];
+  id: string;
+  kind: string;
+  name: string;
+  projectId: string | null;
+  workspaceId: string;
+}
 
 export interface DesignVerifyDeps {
   /** A hub artifact a result names: its kind and name, and a page's HTML. */
@@ -135,6 +158,23 @@ const short = (id: string): string => id.slice(0, 8);
 /** One finding as the builder and the task read it. */
 const findingLine = (finding: DesignFinding, at: number): string =>
   `${at + 1}. \`${finding.file}:${finding.line}\` \`${finding.selector}\`: ${finding.problem}`;
+
+/** What a chat's ask hears of the last round on the same tree: it passed, or its findings stand; null when a new round starts. */
+const askedBefore = (
+  latest: DesignCheckRow | undefined,
+  tree: string
+): string | null => {
+  if (latest?.tree !== tree) {
+    return null;
+  }
+  if (latest.state === "passed") {
+    return "It passed the design system check on this very tree: nothing changed since.";
+  }
+  if (latest.state === "findings") {
+    return `Its findings on this tree are still open: nothing changed since.\n\n${(latest.findings ?? []).map(findingLine).join("\n")}`;
+  }
+  return null;
+};
 
 const pickLine = (pick: DesignPick | null | undefined): string =>
   pick
@@ -264,6 +304,86 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     ].join("\n\n");
   };
 
+  /** A chat round's brief: the artifact, the system, how to judge, how to answer. */
+  const askedBriefOf = (
+    artifact: AskedArtifact,
+    base: string,
+    at: Snapshot
+  ): string => {
+    const setUp = at.patch
+      ? `run \`git checkout --detach ${at.head} && git apply --binary "$TMPDIR/inputs/${PATCH}"\` first: the commit, then what is not committed yet.`
+      : `run \`git checkout --detach ${at.head}\` first.`;
+    return [
+      `${VERIFIER_BRIEF}. A session asked you, in a chat, to judge its ${artifact.kind} “${artifact.name}” against the project's design system. You never edit or fix the work: you judge, and the session fixes.`,
+      `## The work\n\nIt sits on commit ${at.head}, on top of origin/${base}; its objects are in your clone. ${setUp} Its states files: ${artifact.files.map((file) => `\`${file}\``).join(", ") || "(none named)"}.`,
+      "## The system\n\ndesign/ as the work has it: DESIGN.md (the rules and recipes), tokens.resolver.json and its token files, the generated tokens.css, specimens/, SKILL.md. Load the design-system skill with the Skill tool: its references/css.md holds the CSS practices the work must follow.",
+      "## How\n\nOpen its states files with artifact_create kind component on your own stage, then read what was drawn with artifact_read: each frame, each forced state's computed-style delta with state, the moves' animations; render: true draws it in the machine's browser. Judge it as a designer against DESIGN.md, the tokens and the CSS practices: a value that is no token, a role used for the wrong job, a rule DESIGN.md states broken, a practice css.md asks for not followed. Nothing that would not block the work: no nits, no suggestions.",
+      "## Your answer\n\nCall design_verdict once. Each finding is a must-fix tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. No findings is a pass. design_verdict finishes your item: then end your turn.",
+    ].join("\n\n");
+  };
+
+  /** A chat round's words to the session that asked, once its verdict is in. */
+  const toRequester = (check: DesignCheckRow, words: string): void => {
+    if (check.requesterId) {
+      workItems.tellSession(check.requesterId, words);
+    }
+  };
+
+  /**
+   * Opens round `check` on `at` and starts its verifier with `prompt`; the
+   * patch the verifier was handed is removed either way. Answers why the
+   * verifier did not start, or null when it did.
+   */
+  const openRound = async (
+    check: DesignCheckRow,
+    workspace: { id: string; machineId: string; path: string },
+    at: Snapshot,
+    brief: {
+      origin: WorkItemRequest["origin"];
+      projectId: string;
+      prompt: string;
+    }
+  ): Promise<string | null> => {
+    db.designChecks.open(check);
+    try {
+      const begun = await workItems.startForHub(
+        {
+          title: "Check against the design system",
+          prompt: brief.prompt,
+          lands: "none",
+          cwd: workspace.path,
+          machineId: workspace.machineId,
+          origin: brief.origin,
+          canDelegate: false,
+          ...(at.patch ? { inputs: [at.patch] } : {}),
+        },
+        verifierParent({
+          itemId: check.itemId,
+          projectId: brief.projectId,
+          machineId: workspace.machineId,
+          cwd: workspace.path,
+        })
+      );
+      db.designChecks.set(check.id, { verifierItemId: begun.item.id });
+      return null;
+    } catch (error) {
+      db.designChecks.set(check.id, { state: "failed", endedAt: new Date() });
+      return error instanceof Error ? error.message : String(error);
+    } finally {
+      // Copied into the verifier's inputs as it started, or not needed.
+      if (at.patch) {
+        await command(
+          workspace,
+          `rm -rf ${quote(at.patch.slice(0, at.patch.lastIndexOf("/")))}`
+        ).catch((error: unknown) =>
+          console.warn(
+            `[design-verify] ${short(check.itemId)}: ${at.patch} was not removed: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+      }
+    }
+  };
+
   /** Starts a round on `at` for the builder's item; answers what its finish_item says. */
   const startRound = async (
     item: WorkItemRow & { projectId: string; taskId: string },
@@ -278,6 +398,8 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       projectId: item.projectId,
       taskId: item.taskId,
       itemId: item.id,
+      artifactId: null,
+      requesterId: null,
       tree: at.tree,
       head: at.head,
       verifierItemId: null,
@@ -288,51 +410,21 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       createdAt: new Date(),
       endedAt: null,
     };
-    db.designChecks.open(check);
-    try {
-      const begun = await workItems.startForHub(
-        {
-          title: "Check against the design system",
-          prompt: briefOf(
-            item,
-            task,
-            project?.name ?? item.projectId,
-            workspace.base,
-            at
-          ),
-          lands: "none",
-          cwd: workspace.path,
-          machineId: workspace.machineId,
-          // Kept work (Caw's, let finish as you turned him off) finishes
-          // with its check, as yours does.
-          origin: item.origin === "kept" ? "you" : item.origin,
-          canDelegate: false,
-          ...(at.patch ? { inputs: [at.patch] } : {}),
-        },
-        verifierParent({
-          itemId: item.id,
-          projectId: item.projectId,
-          machineId: workspace.machineId,
-          cwd: workspace.path,
-        })
-      );
-      db.designChecks.set(check.id, { verifierItemId: begun.item.id });
-    } catch (error) {
-      db.designChecks.set(check.id, { state: "failed", endedAt: new Date() });
-      const reason = error instanceof Error ? error.message : String(error);
-      return `Your result needs checking against the project's design system before it reaches review, and the verifier did not start: ${reason}. Call finish_item again to start it again.`;
-    } finally {
-      // Copied into the verifier's inputs as it started, or not needed.
-      if (at.patch) {
-        await command(
-          workspace,
-          `rm -rf ${quote(at.patch.slice(0, at.patch.lastIndexOf("/")))}`
-        ).catch((error: unknown) =>
-          console.warn(
-            `[design-verify] ${item.taskId}: ${at.patch} was not removed: ${error instanceof Error ? error.message : String(error)}`
-          )
-        );
-      }
+    const failed = await openRound(check, workspace, at, {
+      prompt: briefOf(
+        item,
+        task,
+        project?.name ?? item.projectId,
+        workspace.base,
+        at
+      ),
+      // Kept work (Caw's, let finish as you turned him off) finishes with
+      // its check, as yours does.
+      origin: item.origin === "kept" ? "you" : item.origin,
+      projectId: item.projectId,
+    });
+    if (failed) {
+      return `Your result needs checking against the project's design system before it reaches review, and the verifier did not start: ${failed}. Call finish_item again to start it again.`;
     }
     workItems.holdWords(item.id, CHECKING);
     await comment(
@@ -344,6 +436,30 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       `[design-verify] ${item.taskId}: attempt ${short(item.id)}, tree ${at.tree.slice(0, 9)}, goes to a verifier`
     );
     return "Not yet: this project has a design system, so a verifier session (never you) checks your result against it before it reaches review. Its findings come back to you as one message, each a must-fix: fix them and call finish_item again. On a pass the hub finishes your item itself. End your turn now.";
+  };
+
+  /**
+   * A verifier ended with no verdict: its round fails, and whoever waits on
+   * it hears so: a chat's asker, or the builder whose finish it holds.
+   */
+  const endedUnjudged = (check: DesignCheckRow, verifier: WorkItemRow) => {
+    const why = `ended ${verifier.state} with no verdict${verifier.error ? ` (${verifier.error.split("\n")[0]})` : ""}`;
+    if (check.artifactId) {
+      db.designChecks.set(check.id, { state: "failed", endedAt: new Date() });
+      toRequester(
+        check,
+        `The design system check of your artifact ${why}. Ask again with artifact_read({ id, verify: true }).`
+      );
+      return;
+    }
+    failRound(check);
+    const builder = db.workItem(check.itemId);
+    if (builder && isLive(builder.state)) {
+      workItems.tellSession(
+        builder.instanceId,
+        `The design system check of your work ${why}. Call finish_item again to check it again.`
+      );
+    }
   };
 
   /** A round that ends with no verdict: the builder's chip and its hold let go. */
@@ -479,6 +595,63 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       );
     },
 
+    /**
+     * A chat's ask (component canvas E1): a round on `artifact`, in the
+     * workspace its stage runs in, judged as a task's is; its verdict goes to
+     * `requester`. Answers what the ask did, one sentence.
+     */
+    async ask(
+      requester: InstanceRow,
+      artifact: AskedArtifact
+    ): Promise<string> {
+      const key = `${ARTIFACT_KEY}${artifact.id}`;
+      const [workspace] = db.workspacesNamed(artifact.workspaceId);
+      if (!workspace) {
+        return `The workspace ${short(artifact.workspaceId)} its stage ran in is gone, so “${artifact.name}” can't be checked.`;
+      }
+      if (!(await command(workspace, HAS_SYSTEM)).includes("system")) {
+        return "This repository holds no design system (no design/DESIGN.md or design/SKILL.md), so there is nothing to check it against.";
+      }
+      const latest = db.designChecks.latest(key);
+      if (latest?.state === "checking") {
+        return "It is being checked against the design system already: the verifier's word comes to you as a message.";
+      }
+      const at = await snapshot(workspace);
+      const before = askedBefore(latest, at.tree);
+      if (before) {
+        return before;
+      }
+      const check: DesignCheckRow = {
+        id: crypto.randomUUID(),
+        projectId: artifact.projectId ?? "",
+        taskId: "",
+        itemId: key,
+        artifactId: artifact.id,
+        requesterId: requester.id,
+        tree: at.tree,
+        head: at.head,
+        verifierItemId: null,
+        state: "checking",
+        submission: null,
+        findings: null,
+        pick: null,
+        createdAt: new Date(),
+        endedAt: null,
+      };
+      const failed = await openRound(check, workspace, at, {
+        prompt: askedBriefOf(artifact, workspace.base, at),
+        origin: "you",
+        projectId: artifact.projectId ?? "",
+      });
+      if (failed) {
+        return `The verifier did not start: ${failed}. Ask again.`;
+      }
+      console.log(
+        `[design-verify] artifact ${short(artifact.id)}: tree ${at.tree.slice(0, 9)}, goes to a verifier (asked by ${short(requester.id)})`
+      );
+      return "A verifier session (never you) is checking it against the project's design system now; its findings come to you as one message, each a must-fix.";
+    },
+
     /** work-items.ts `designHeld`: a verifier is judging the item's result now. */
     held: (itemId: string): boolean =>
       db.designChecks.latest(itemId)?.state === "checking",
@@ -493,10 +666,20 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
         pick: verdict.pick ?? null,
         endedAt: new Date(),
       });
-      workItems.holdWords(check.itemId, null);
-      const builder = db.workItem(check.itemId);
-      const live = builder && isLive(builder.state) ? builder : undefined;
-      await (passed ? passedVerdict : findingsVerdict)(check, live, verdict);
+      if (check.artifactId) {
+        // A chat's round: its word to the session that asked, nothing held.
+        toRequester(
+          check,
+          passed
+            ? `The design system check of your artifact passed: ${verdict.summary}${pickLine(verdict.pick)}`
+            : `A verifier session checked your artifact against the project's design system. Each of these must be fixed:\n\n${verdict.findings.map(findingLine).join("\n")}\n\n${verdict.summary}${pickLine(verdict.pick)}`
+        );
+      } else {
+        workItems.holdWords(check.itemId, null);
+        const builder = db.workItem(check.itemId);
+        const live = builder && isLive(builder.state) ? builder : undefined;
+        await (passed ? passedVerdict : findingsVerdict)(check, live, verdict);
+      }
       console.log(
         `[design-verify] ${check.taskId}: ${passed ? "passed" : `${verdict.findings.length} findings`}, tree ${check.tree.slice(0, 9)}`
       );
@@ -516,14 +699,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     itemEnded(item: WorkItemRow): void {
       const mine = db.designChecks.ofVerifier(item.id);
       if (mine?.state === "checking") {
-        failRound(mine);
-        const builder = db.workItem(mine.itemId);
-        if (builder && isLive(builder.state)) {
-          workItems.tellSession(
-            builder.instanceId,
-            `The design system check of your work ended ${item.state} with no verdict${item.error ? ` (${item.error.split("\n")[0]})` : ""}. Call finish_item again to check it again.`
-          );
-        }
+        endedUnjudged(mine, item);
         return;
       }
       const theirs = db.designChecks.latest(item.id);
@@ -541,7 +717,9 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     /** The hub started: every round still checking says so on its builder's chip again. */
     start(): void {
       for (const check of db.designChecks.checking()) {
-        workItems.holdWords(check.itemId, CHECKING);
+        if (!check.artifactId) {
+          workItems.holdWords(check.itemId, CHECKING);
+        }
       }
     },
   };

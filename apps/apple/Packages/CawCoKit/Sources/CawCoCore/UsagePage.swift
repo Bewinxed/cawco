@@ -100,13 +100,21 @@ extension UsageRange {
     public func since(fleet: FleetStore) -> [UsageHarness: UsageSince] {
         if self == .window {
             guard fleet.limitsRead else { return [.claude: .pending, .opencode: .pending] }
-            let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: \.stale, windows: \.windows)
             let go = Usage.speaking(fleet.openCodeGoLimits, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
             func fiveHour(_ windows: [Usage.Window]?) -> UsageSince {
                 guard let window = windows?.first(where: { $0.group == "session" }), let start = Usage.windowStart(window) else { return .none }
                 return .at(Usage.bucketStart(start))
             }
-            return [.claude: fiveHour(claude?.windows), .opencode: fiveHour(go?.windows)]
+            // Each Claude account has its own 5-hour window: the range opens
+            // with the earliest of those still running, so it holds them all.
+            let now = Date().timeIntervalSince1970 * 1000
+            let opened = fleet.claudeLimits.values.compactMap { reading -> Double? in
+                guard let window = reading.windows.first(where: { $0.group == "session" }),
+                      let reset = Rings.ms(window.resetsAt), reset > now,
+                      let start = Usage.windowStart(window) else { return nil }
+                return Usage.bucketStart(start)
+            }
+            return [.claude: opened.min().map { .at($0) } ?? .none, .opencode: fiveHour(go?.windows)]
         }
         guard let spend = fleet.spend else { return [.claude: .pending, .opencode: .pending] }
         let back = [UsageRange.today: 0, .week: 6, .month: 29][self] ?? 0

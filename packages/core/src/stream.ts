@@ -72,12 +72,26 @@ import type { CarrySessionRequest } from "./harness";
  *    runtime forwards to a browser's media port (`udp+tcp`, `tcp` or
  *    `none`), in place of `udp`. No page reads it; a page built for 13
  *    reloads first all the same.
+ * 15: the stream relay listens on one port, 443: its frame's `ports` says
+ *    `udp443`, `tcp443` and `tls`, where it said `udp3478`, `tcp3478`,
+ *    `tcp443` and `tls`, and its health chips are `udp 443`, `tcp 443` and
+ *    `tls`. A page built for 14 would draw the 3478 chips, so it reloads
+ *    first.
+ * 16: a browser's row (`BrowserFrame`) says no `ports.gate`: the machine has
+ *    one DevTools gate port for every browser, and a browser reserved for a
+ *    session's browser tool has no `ports` until it first starts. No page
+ *    reads them; a page built for 15 reloads first all the same.
+ * 17: `GET /api/stream-relay` answers the stream relay's journey
+ *    (`RelayAnswer`: `journey` and the page's `domain`), no longer the
+ *    machines that could run it and the relay (`candidates`, `relay`); its
+ *    changes are POST `/api/stream-relay/act`. A page built for 16 would draw
+ *    Settings › Browsers from fields that are gone, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 14;
+export const WIRE_PROTOCOL = 17;
 
 /**
  * What a session's stream carries: the changes each frame made to its
@@ -321,6 +335,13 @@ export interface RegisterAckPayload {
   hubEpoch: string;
   /** Per instance id: an instance with no mark follows from head. */
   ingested: Record<string, IngestMark>;
+  /**
+   * Every instance id this hub has a row for on the machine, whatever its
+   * state. The machine removes what it kept for any other session to be
+   * reattached (its browser door, agent browser/door.ts
+   * `sweepBrowserDoors`): a session forgotten while the machine was away.
+   */
+  instances: string[];
   /**
    * The machine's credential for the hub's git remote (`/git/…`, HTTP Basic
    * `<machineId>:<credential>`), minted for this connection and replaced on

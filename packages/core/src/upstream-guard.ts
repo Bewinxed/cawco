@@ -4,36 +4,31 @@
  * after agents had filed issues and pull requests on other people's
  * repositories under his account). The person picks it once for the fleet
  * (onboarding) and may pick it again per project, one of three answers
- * ({@link UPSTREAM_POSTS}): while it keeps sessions off, a call that writes
- * to another repository does not run, and the refusal tells the session to
- * put its draft in its report; while it asks first, the call's post is held
- * for the person, and CawCo makes it once they approve (upstream-post.ts).
+ * ({@link UPSTREAM_POSTS}): while it keeps sessions off, a write to another
+ * repository does not go out, and the refusal tells the session to put its
+ * draft in its report; while it asks first, the post is held for the
+ * person, and CawCo makes it once they approve (upstream-post.ts).
  *
- * What it judges is one program's argv as it starts, never a shell line:
- * every workspace's commands run with a shim for `gh`, `hub`, `glab` and
- * `curl` first on their PATH (agent `upstream-shim.ts`), so the call is read
- * whatever wrote it (a script, `sh -c`, `xargs`). Caw's gate reads his shell
- * lines with the same words before they reach a card (hub lead-gate.ts).
- *
- * A write is:
- * - `gh issue|pr|release …` and `gh repo fork`, by {@link GH_WRITES};
- * - `gh api`, `hub api` and `glab api` with a write method (`-X/--method`
- *   POST, PATCH, PUT or DELETE, or fields without an explicit GET) against
- *   `repos/<owner>/<repo>` (GitLab: `projects/<path>`);
- * - `hub` and `glab` subcommands that post ({@link HUB_WRITES},
- *   {@link GLAB_WRITES});
- * - `curl` to api.github.com or uploads.github.com with a write method
- *   against `/repos/<owner>/<repo>`.
- *
- * The target is resolved the way gh resolves its base repository
- * (github.com/cli/cli context/context.go, remote.go): `-R/--repo`, else
- * `GH_REPO`, else the cwd's git remotes, a `gh-resolved` one first, then
- * sorted `upstream`, `github`, `origin`, the rest, and, with no prompt, "just
- * resort to the 1st remote". A call whose target names no repository writes
- * nowhere this guard can name, and runs: gh itself refuses it.
- *
- * It imports nothing: each workspace's shim runs its copy as a plain Bun
- * script inside the boundary.
+ * It is held where the credential is, on any host, never by reading what a
+ * program was asked to do. A workspace holds no credential of any forge: its
+ * boundary hides every store under the home dir, reaches no key agent, and
+ * a guarded workspace's commands carry no forge's token (agent boundary.ts
+ * `FORGE_TOKEN_ENV`). What it writes with a credential goes through one of
+ * CawCo's doors, on the host, which judges the write by its own shape:
+ * - git, on any host and over any transport, through the git door (agent
+ *   hub-git.ts): the clone's own origin goes out with the host's own
+ *   credential; under `ask` a push to any other repository is held;
+ * - GitHub's API, through the GitHub door (agent github-door.ts): a write
+ *   against `/repos/<owner>/<repo>`, or a GraphQL mutation, by the
+ *   repository it names or its node ids resolve to
+ *   ({@link upstreamHttpWrite});
+ * - an issue, a pull or merge request or a comment on GitHub, GitLab or
+ *   Gitea, through `forge_post` and that forge's adapter on the machine
+ *   (agent forges/), with the host's sign-in where the forge's CLI keeps it;
+ * - a forge connection's write tool, called by the hub (hub
+ *   connection-writes.ts).
+ * Each of them decides by {@link decideWrite} alone. Anything else has
+ * nothing to sign in with, so it posts nowhere.
  */
 
 /**
@@ -42,7 +37,7 @@
  */
 export const UPSTREAM_WORDS = {
   title: "Other people's repositories",
-  risk: "Agents can open issues and pull requests on other people's repositories under your GitHub account.",
+  risk: "Agents can open issues and pull requests on other people's repositories under your git account.",
   keepOff: "Keep agents off other repositories",
   /** Each post waits in Needs you for the person's Approve (owner: "why is there no option for them to ask me first"). */
   ask: "Ask me first",
@@ -69,15 +64,11 @@ export const upstreamPostsWords = (posts: UpstreamPosts): string => {
 
 /** One project's rule, or the fleet's: whether its sessions may post to other repositories, and the repositories that are its own. */
 export interface UpstreamRule {
-  /** `off` and `ask` guard the workspace: no GitHub token inside, and a write to a repository not in {@link remotes} does not run there. */
+  /** Whether a write to a repository not in {@link remotes} goes (`on`), waits for the person (`ask`) or does not run (`off`), as {@link decideWrite} decides it; whatever it is, no forge's token is inside a workspace. */
   readonly posts: UpstreamPosts;
   /** Its own repositories, each `host/owner/repo` ({@link normaliseRemote}). */
   readonly remotes: readonly string[];
 }
-
-/** Whether a rule guards its workspace: no GitHub token inside, its posts judged (`off` and `ask`). */
-export const isGuarded = (rule: Pick<UpstreamRule, "posts">): boolean =>
-  rule.posts !== "on";
 
 /** A rule as a file holds it, read back; undefined when it is none. */
 export const readUpstreamRule = (value: unknown): UpstreamRule | undefined => {
@@ -96,35 +87,9 @@ export interface UpstreamRules {
   readonly projects: Readonly<Record<string, UpstreamRule>>;
 }
 
-/** A git remote of the cwd's repository, as `git config` names it. */
-export interface GitRemote {
-  /** `remote.<name>.gh-resolved`: `base`, or the `owner/repo` it resolves to. */
-  readonly ghResolved?: string;
-  readonly name: string;
-  readonly pushUrl?: string;
-  readonly url?: string;
-}
-
-/** One program's start, as its shim sees it. */
-export interface UpstreamCall {
-  readonly args: readonly string[];
-  /** The cwd's git remotes; read only when the call needs them. */
-  readonly cwdRemotes: () => readonly GitRemote[];
-  readonly env: Readonly<Record<string, string | undefined>>;
-  readonly program: string;
-  /**
-   * A file the call names for its body (`-F query=@file`, `--input file`,
-   * curl's `-d @file`), read as the program would read it, relative to the
-   * cwd; undefined when it cannot be read, or by a caller that reads no
-   * files (Caw's gate, on the hub). `-` is the call's stdin, which no caller
-   * reads.
-   */
-  readonly readFile?: (path: string) => string | undefined;
-}
-
 /**
- * What a call writes to: the repository, `host/owner/repo`, and the call in
- * a few words. A GraphQL mutation that names no repository has none: it acts
+ * What a request writes to: the repository, `host/owner/repo`, and the
+ * request in a few words. A GraphQL mutation that names no repository has none: it acts
  * on node ids, which name none the guard can check. One whose query the
  * guard could not read is `unread`.
  */
@@ -191,8 +156,7 @@ export const normaliseRemote = (url: string): string | null => {
 };
 
 const GITHUB = "github.com";
-const GITLAB = "gitlab.com";
-/** The API hosts a `curl` to GitHub writes through. */
+/** GitHub's API hosts, the ones the GitHub door signs in to. */
 const GITHUB_API_HOSTS: ReadonlySet<string> = new Set([
   "api.github.com",
   "uploads.github.com",
@@ -204,338 +168,16 @@ const WRITE_METHODS: ReadonlySet<string> = new Set([
   "DELETE",
 ]);
 
-/** gh's subcommands that post to a repository, by command. */
-const GH_WRITES: Readonly<Record<string, ReadonlySet<string>>> = {
-  issue: new Set([
-    "create",
-    "comment",
-    "edit",
-    "close",
-    "reopen",
-    "delete",
-    "lock",
-    "unlock",
-    "pin",
-    "unpin",
-    "transfer",
-  ]),
-  pr: new Set([
-    "create",
-    "comment",
-    "review",
-    "merge",
-    "close",
-    "edit",
-    "reopen",
-    "ready",
-    "lock",
-    "unlock",
-  ]),
-  release: new Set(["create", "edit", "delete", "upload", "delete-asset"]),
-  repo: new Set(["fork"]),
-};
-
-/** hub's subcommands that post: a word, or a command and its subcommand. */
-const HUB_WRITES: ReadonlySet<string> = new Set([
-  "pull-request",
-  "fork",
-  "issue create",
-  "issue update",
-  "issue transfer",
-  "release create",
-  "release edit",
-  "release delete",
-]);
-
-/** glab's subcommands that post, by command. */
-const GLAB_WRITES: Readonly<Record<string, ReadonlySet<string>>> = {
-  issue: new Set(["create", "note", "close", "reopen", "update", "delete"]),
-  mr: new Set([
-    "create",
-    "note",
-    "merge",
-    "close",
-    "reopen",
-    "update",
-    "approve",
-    "delete",
-  ]),
-  release: new Set(["create", "update", "delete", "upload"]),
-  repo: new Set(["fork"]),
-};
-
-/** The value of the last `-x VALUE`, `-xVALUE`, `--long VALUE` or `--long=VALUE` among `args`. */
-const lastValue = (
-  args: readonly string[],
-  short: string | undefined,
-  long: string
-): string | undefined => {
-  let found: string | undefined;
-  for (const [index, arg] of args.entries()) {
-    if (arg === "--") {
-      break;
-    }
-    if (arg === long || (short !== undefined && arg === short)) {
-      found = args[index + 1];
-    } else if (arg.startsWith(`${long}=`)) {
-      found = arg.slice(long.length + 1);
-    } else if (
-      short !== undefined &&
-      arg.startsWith(short) &&
-      !arg.startsWith("--") &&
-      arg.length > short.length
-    ) {
-      found = arg.slice(short.length);
-    }
-  }
-  return found;
-};
-
-/** A `[HOST/]OWNER/REPO` or URL naming a repository, as `host/owner/repo`; `host` when it names none. */
-const repoName = (raw: string, host: string): string | undefined => {
-  if (SCHEME.test(raw) || raw.includes("@")) {
-    return normaliseRemote(raw) ?? undefined;
-  }
-  const parts = raw
-    .replace(DOT_GIT, "")
-    .split("/")
-    .filter((part) => part !== "");
-  if (parts.length === 2) {
-    return `${host}/${parts.join("/")}`;
-  }
-  if (parts.length >= 3 && (parts[0] as string).includes(".")) {
-    return `${(parts[0] as string).toLowerCase()}/${parts.slice(1).join("/")}`;
-  }
-  // GitLab names nested groups: GROUP/SUBGROUP/REPO on its host.
-  return parts.length >= 3 ? `${host}/${parts.join("/")}` : undefined;
-};
-
-const REMOTE_RANK: Readonly<Record<string, number>> = {
-  upstream: 3,
-  github: 2,
-  origin: 1,
-};
-
-/**
- * The cwd's base repository as gh resolves it (context.go `BaseRepo`): a
- * remote marked `gh-resolved` first; else, sorted `upstream`, `github`,
- * `origin`, the rest (remote.go `remoteNameSortScore`, a stable sort), the
- * first that names a repository. None when no remote does.
- */
-const cwdBase = (remotes: readonly GitRemote[]): string | undefined => {
-  const named = remotes
-    .map((remote) => ({
-      remote,
-      repo: normaliseRemote(remote.url ?? remote.pushUrl ?? "") ?? undefined,
-    }))
-    .filter(
-      (each): each is { remote: GitRemote; repo: string } =>
-        each.repo !== undefined
-    );
-  for (const { remote, repo } of named) {
-    const resolved = remote.ghResolved;
-    if (resolved === "base") {
-      return repo;
-    }
-    if (resolved) {
-      return repoName(resolved, repo.slice(0, repo.indexOf("/")));
-    }
-  }
-  return [...named].sort(
-    (a, b) =>
-      (REMOTE_RANK[b.remote.name.toLowerCase()] ?? 0) -
-      (REMOTE_RANK[a.remote.name.toLowerCase()] ?? 0)
-  )[0]?.repo;
-};
-
-/** The base repository a gh call acts on: `-R/--repo`, else `GH_REPO`, else the cwd's. */
-const ghBase = (call: UpstreamCall, host: string): string | undefined => {
-  const named =
-    lastValue(call.args, "-R", "--repo") ?? call.env.GH_REPO ?? undefined;
-  return named ? repoName(named, host) : cwdBase(call.cwdRemotes());
-};
-
-/** An issue's or pull request's URL, which gh acts on whatever the base repository. */
-const ISSUE_URL =
-  /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/(?:issues|pull)\/\d+/i;
-/** gh's flags whose value is words to post, never the issue a call acts on. */
-const TEXT_FLAGS: ReadonlySet<string> = new Set([
-  "-b",
-  "--body",
-  "-t",
-  "--title",
-  "-F",
-  "--body-file",
-]);
-
-/** An issue or pull request URL a gh call names as its subject, as `host/owner/repo`. */
-const subjectUrl = (args: readonly string[]): string | undefined => {
-  for (const [index, arg] of args.entries()) {
-    const match = ISSUE_URL.exec(arg);
-    if (match && !TEXT_FLAGS.has(args[index - 1] ?? "")) {
-      return `${(match[1] as string).toLowerCase()}/${match[2]}/${match[3]}`;
-    }
-  }
-};
-
-/** The first argument that is not an option, after the words `skip` names. */
-const firstOperand = (
-  args: readonly string[],
-  skip: number
-): string | undefined => args.slice(skip).find((arg) => !arg.startsWith("-"));
-
-/** An API call's method: `-X/--method`, else POST when it sends fields or a body, else GET. */
-const apiMethod = (
-  args: readonly string[],
-  fields: readonly string[],
-  methodFlags: { long: string; short: string }
-): string => {
-  const named = lastValue(args, methodFlags.short, methodFlags.long);
-  if (named) {
-    return named.toUpperCase();
-  }
-  return args.some((arg) =>
-    fields.some(
-      (field) =>
-        arg === field ||
-        arg.startsWith(`${field}=`) ||
-        (!(field.startsWith("--") || arg.startsWith("--")) &&
-          arg.startsWith(field) &&
-          arg.length > field.length)
-    )
-  )
-    ? "POST"
-    : "GET";
-};
-
-/** `gh api`'s options that take a value, so the endpoint is the first word that is none of theirs. */
-const GH_API_VALUED: ReadonlySet<string> = new Set([
-  "-X",
-  "--method",
-  "-f",
-  "--raw-field",
-  "-F",
-  "--field",
-  "-H",
-  "--header",
-  "--input",
-  "-q",
-  "--jq",
-  "-t",
-  "--template",
-  "--hostname",
-  "--cache",
-  "-p",
-  "--preview",
-]);
-
-/** An API call's endpoint: its first argument that is no option's value. */
-const endpointOf = (
-  args: readonly string[],
-  valued: ReadonlySet<string>
-): string | undefined => {
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index] as string;
-    if (valued.has(arg)) {
-      index += 1;
-    } else if (!arg.startsWith("-")) {
-      return arg;
-    }
-  }
-};
-
 const REPOS_PATH = /^repos\/([^/?#]+)\/([^/?#]+)/;
 /** GitHub Enterprise's API prefix, `api/v3/`, before an API path. */
 const GHE_API_PREFIX = /^api\/v3\//;
-/** A `host/owner/` prefix: the owner a `hub pull-request -b OWNER:BRANCH` replaces. */
-const HOST_OWNER = /^([^/]+)\/[^/]+\//;
-const HTTP_SCHEME = /^https?:\/\//;
-/** A long option's inline value, after its first `=`. */
-const INLINE_VALUE = /[=](.*)/s;
-const PROJECTS_PATH = /^projects\/([^/?#]+)/;
 
-/**
- * The repository a GitHub API path names, as `host/owner/repo`: its
- * `repos/<owner>/<repo>`, with `{owner}` and `{repo}` the base's. A full URL
- * is read at its path, GitHub Enterprise's `api/v3/` dropped.
- */
-const githubApiRepo = (
-  endpoint: string,
-  host: string,
-  base: () => string | undefined
-): string | undefined => {
-  let path = endpoint;
-  let at = host;
-  if (SCHEME.test(endpoint)) {
-    try {
-      const url = new URL(endpoint);
-      path = url.pathname;
-      at = GITHUB_API_HOSTS.has(url.hostname) ? GITHUB : url.hostname;
-    } catch {
-      return;
-    }
-  }
-  path = path.replace(EDGE_SLASHES, "").replace(GHE_API_PREFIX, "");
-  const match = REPOS_PATH.exec(path);
-  if (!match) {
-    return;
-  }
-  let [, owner = "", repo = ""] = match;
-  if (owner.includes("{") || repo.includes("{")) {
-    const [, baseOwner, baseRepo] = (base() ?? "").split("/");
-    if (!(baseOwner && baseRepo)) {
-      return;
-    }
-    owner = owner.replace("{owner}", baseOwner);
-    repo = repo.replace("{repo}", baseRepo);
-  }
-  return `${at}/${owner}/${repo}`;
-};
-
-/**
- * A call's command and subcommand: its first two words that are neither an
- * option nor `-R/--repo`'s value, which a command's own flags may put
- * between them (`gh issue -R owner/repo create`), and the arguments after
- * the subcommand.
- */
-const commandWords = (
-  args: readonly string[]
-): { command: string; rest: readonly string[]; sub: string } => {
-  const words: number[] = [];
-  for (let index = 0; index < args.length && words.length < 2; index += 1) {
-    const arg = args[index] as string;
-    if (arg === "-R" || arg === "--repo") {
-      index += 1;
-    } else if (!arg.startsWith("-")) {
-      words.push(index);
-    }
-  }
-  const [first, second] = words;
-  return {
-    command: first === undefined ? "" : (args[first] as string),
-    sub: second === undefined ? "" : (args[second] as string),
-    rest:
-      second === undefined
-        ? args.slice((first ?? -1) + 1)
-        : [...args.slice(0, second), ...args.slice(second + 1)].slice(
-            (first ?? -1) + 1
-          ),
-  };
-};
-
-/** A gh call's command and subcommand, and for `gh api` its endpoint, as the guard reads them. */
-export const ghWords = (
-  args: readonly string[]
-): { command: string; endpoint?: string; sub: string } => {
-  const { command, sub } = commandWords(args);
-  if (command !== "api") {
-    return { command, sub };
-  }
-  const endpoint = endpointOf(
-    args.slice(args.indexOf("api") + 1),
-    GH_API_VALUED
+/** The repository a GitHub API path names, as `github.com/owner/repo`: its `repos/<owner>/<repo>`, GitHub Enterprise's `api/v3/` dropped. */
+const githubApiRepo = (path: string): string | undefined => {
+  const match = REPOS_PATH.exec(
+    path.replace(EDGE_SLASHES, "").replace(GHE_API_PREFIX, "")
   );
-  return { command, sub, ...(endpoint ? { endpoint } : {}) };
+  return match ? `${GITHUB}/${match[1]}/${match[2]}` : undefined;
 };
 
 /** A GraphQL document that changes something: an operation of type `mutation` (the GraphQL spec's OperationType). */
@@ -553,38 +195,7 @@ interface GraphqlBody {
   variables: Partial<Record<string, string>>;
 }
 
-/** The text a `@file` (or `@-`) value names, read through the call; undefined when it cannot be read. */
-const fileText = (call: UpstreamCall, at: string): string | undefined =>
-  at === "-" ? undefined : call.readFile?.(at);
-
-/** One `key=value` field of `gh api`/`hub api` into `body`; `-F`'s `@file` value is that file's text. */
-const takeField = (
-  call: UpstreamCall,
-  body: GraphqlBody,
-  field: string,
-  typed: boolean
-): void => {
-  const at = field.indexOf("=");
-  if (at < 0) {
-    return;
-  }
-  const key = field.slice(0, at);
-  let value: string | undefined = field.slice(at + 1);
-  if (typed && value.startsWith("@")) {
-    value = fileText(call, value.slice(1));
-  }
-  if (value === undefined) {
-    body.unread ||= key === "query";
-    return;
-  }
-  if (key === "query") {
-    body.query = value;
-  } else {
-    body.variables[key] = value;
-  }
-};
-
-/** A JSON request body (`--input`, curl's data) into `body`: its `query` and string `variables`. */
+/** A GraphQL request's JSON body into `body`: its `query` and string `variables`. */
 const takeJson = (body: GraphqlBody, text: string | undefined): void => {
   if (text === undefined) {
     body.unread = true;
@@ -608,53 +219,6 @@ const takeJson = (body: GraphqlBody, text: string | undefined): void => {
     // Not JSON: what it says is searched as it is.
     body.query = text;
   }
-};
-
-/** The short and long options of `gh api`/`hub api` that carry a field, raw or typed. */
-const API_FIELDS: readonly { long: string; short: string; typed: boolean }[] = [
-  { short: "-f", long: "--raw-field", typed: false },
-  { short: "-F", long: "--field", typed: true },
-];
-
-/** `gh api graphql`'s or `hub api graphql`'s request, from its fields and its `--input`. */
-const apiGraphqlBody = (
-  call: UpstreamCall,
-  rest: readonly string[]
-): GraphqlBody => {
-  const body: GraphqlBody = { unread: false, variables: {} };
-  for (let index = 0; index < rest.length; index += 1) {
-    index += takeApiArg(call, body, rest[index] as string, rest[index + 1]);
-  }
-  return body;
-};
-
-/** One argument of `gh api graphql` into `body`: how many more words it took. */
-const takeApiArg = (
-  call: UpstreamCall,
-  body: GraphqlBody,
-  arg: string,
-  next: string | undefined
-): number => {
-  if (arg === "--input" || arg.startsWith("--input=")) {
-    const file = arg === "--input" ? next : arg.slice("--input=".length);
-    takeJson(body, file === undefined ? undefined : fileText(call, file));
-    return arg === "--input" ? 1 : 0;
-  }
-  for (const { short, long, typed } of API_FIELDS) {
-    if (arg === short || arg === long) {
-      takeField(call, body, next ?? "", typed);
-      return 1;
-    }
-    if (arg.startsWith(`${long}=`)) {
-      takeField(call, body, arg.slice(long.length + 1), typed);
-      return 0;
-    }
-    if (arg.startsWith(short) && !arg.startsWith("--")) {
-      takeField(call, body, arg.slice(short.length), typed);
-      return 0;
-    }
-  }
-  return 0;
 };
 
 /** A literal (`"x"`) or a variable (`$x`) of a GraphQL argument, as its value. */
@@ -694,408 +258,9 @@ const graphqlWrite = (
     : { what };
 };
 
-/** Whether an API endpoint is GitHub's GraphQL one: `graphql`, or a URL whose path is `/graphql` (`/api/graphql` on Enterprise). */
-const isGraphql = (endpoint: string): boolean => {
-  if (!SCHEME.test(endpoint)) {
-    return endpoint.replace(EDGE_SLASHES, "") === "graphql";
-  }
-  try {
-    return new URL(endpoint).pathname
-      .replace(EDGE_SLASHES, "")
-      .endsWith("graphql");
-  } catch {
-    return false;
-  }
-};
-
-const gh = (call: UpstreamCall): UpstreamWrite | undefined => {
-  const host = (call.env.GH_HOST || GITHUB).toLowerCase();
-  const { command, sub, rest: after } = commandWords(call.args);
-  if (command === "api") {
-    const rest = call.args.slice(call.args.indexOf("api") + 1);
-    const method = apiMethod(
-      rest,
-      ["-f", "--raw-field", "-F", "--field", "--input"],
-      {
-        short: "-X",
-        long: "--method",
-      }
-    );
-    const endpoint = endpointOf(rest, GH_API_VALUED);
-    if (endpoint && isGraphql(endpoint)) {
-      return graphqlWrite(
-        apiGraphqlBody(call, rest),
-        host,
-        "gh api graphql mutation"
-      );
-    }
-    if (!(WRITE_METHODS.has(method) && endpoint)) {
-      return;
-    }
-    const repo = githubApiRepo(endpoint, host, () => ghBase(call, host));
-    return repo ? { repo, what: `gh api ${method} ${endpoint}` } : undefined;
-  }
-  if (!GH_WRITES[command]?.has(sub)) {
-    return;
-  }
-  const what = `gh ${command} ${sub}`;
-  if (command === "repo") {
-    const named = firstOperand(after, 0);
-    const repo = named ? repoName(named, host) : ghBase(call, host);
-    return repo ? { repo, what } : undefined;
-  }
-  const repo = subjectUrl(after) ?? ghBase(call, host);
-  return repo ? { repo, what } : undefined;
-};
-
-const hub = (call: UpstreamCall): UpstreamWrite | undefined => {
-  const { command, sub } = commandWords(call.args);
-  const base = () => cwdBase(call.cwdRemotes());
-  if (command === "api") {
-    const rest = call.args.slice(call.args.indexOf("api") + 1);
-    const method = apiMethod(
-      rest,
-      ["-F", "--field", "-f", "--raw-field", "--input"],
-      {
-        short: "-X",
-        long: "--method",
-      }
-    );
-    const endpoint = endpointOf(rest, GH_API_VALUED);
-    if (endpoint && isGraphql(endpoint)) {
-      return graphqlWrite(
-        apiGraphqlBody(call, rest),
-        GITHUB,
-        "hub api graphql mutation"
-      );
-    }
-    if (!(WRITE_METHODS.has(method) && endpoint)) {
-      return;
-    }
-    const repo = githubApiRepo(endpoint, GITHUB, base);
-    return repo ? { repo, what: `hub api ${method} ${endpoint}` } : undefined;
-  }
-  const words = [command, `${command} ${sub}`].find((each) =>
-    HUB_WRITES.has(each)
-  );
-  if (!words) {
-    return;
-  }
-  const what = `hub ${words}`;
-  const cwd = base();
-  // `hub pull-request -b OWNER:BRANCH` opens it on OWNER's repository of the same name.
-  const owner =
-    command === "pull-request"
-      ? lastValue(call.args, "-b", "--base")?.split(":")[0]
-      : undefined;
-  const repo =
-    owner && cwd && lastValue(call.args, "-b", "--base")?.includes(":")
-      ? cwd.replace(HOST_OWNER, `$1/${owner}/`)
-      : cwd;
-  return repo ? { repo, what } : undefined;
-};
-
-/** `glab api`'s options that take a value. */
-const GLAB_API_VALUED: ReadonlySet<string> = new Set([
-  "-X",
-  "--method",
-  "-f",
-  "--raw-field",
-  "-F",
-  "--field",
-  "-H",
-  "--header",
-  "--input",
-  "--hostname",
-]);
-
-const glab = (call: UpstreamCall): UpstreamWrite | undefined => {
-  const { command, sub, rest: after } = commandWords(call.args);
-  const host = (call.env.GITLAB_HOST || GITLAB)
-    .replace(HTTP_SCHEME, "")
-    .replace(TRAILING_SLASHES, "")
-    .toLowerCase();
-  const named = lastValue(call.args, "-R", "--repo");
-  const base = () =>
-    named ? repoName(named, host) : cwdBase(call.cwdRemotes());
-  if (command === "api") {
-    const rest = call.args.slice(call.args.indexOf("api") + 1);
-    const method = apiMethod(
-      rest,
-      ["-f", "--raw-field", "-F", "--field", "--input"],
-      {
-        short: "-X",
-        long: "--method",
-      }
-    );
-    const endpoint = endpointOf(rest, GLAB_API_VALUED);
-    if (!(WRITE_METHODS.has(method) && endpoint)) {
-      return;
-    }
-    const match = PROJECTS_PATH.exec(endpoint.replace(EDGE_SLASHES, ""));
-    if (!match) {
-      return;
-    }
-    const id = decodeURIComponent(match[1] as string);
-    const repo = id.startsWith(":") ? base() : repoName(id, host);
-    return repo ? { repo, what: `glab api ${method} ${endpoint}` } : undefined;
-  }
-  if (!GLAB_WRITES[command]?.has(sub)) {
-    return;
-  }
-  const what = `glab ${command} ${sub}`;
-  if (command === "repo") {
-    const operand = firstOperand(after, 0);
-    const repo = operand ? repoName(operand, host) : base();
-    return repo ? { repo, what } : undefined;
-  }
-  const repo = base();
-  return repo ? { repo, what } : undefined;
-};
-
-/** curl's short options that take a value: the rest of their word, or the next. */
-const CURL_SHORT_VALUED = new Set("AbcCdDeEFHKmoPQrtTuUwxXyYz".split(""));
-/** curl's long options that take a value. */
-const CURL_LONG_VALUED: ReadonlySet<string> = new Set([
-  "--request",
-  "--data",
-  "--data-raw",
-  "--data-binary",
-  "--data-urlencode",
-  "--data-ascii",
-  "--json",
-  "--form",
-  "--form-string",
-  "--upload-file",
-  "--header",
-  "--user",
-  "--output",
-  "--url",
-  "--user-agent",
-  "--referer",
-  "--cookie",
-  "--cookie-jar",
-  "--config",
-  "--max-time",
-  "--write-out",
-  "--proxy",
-  "--connect-timeout",
-  "--retry",
-  "--retry-delay",
-  "--retry-max-time",
-  "--oauth2-bearer",
-  "--resolve",
-  "--connect-to",
-  "--cacert",
-  "--cert",
-  "--key",
-  "--range",
-]);
-const CURL_DATA_LONG: ReadonlySet<string> = new Set([
-  "--data",
-  "--data-raw",
-  "--data-binary",
-  "--data-urlencode",
-  "--data-ascii",
-  "--json",
-  "--form",
-  "--form-string",
-]);
-
-/** What a curl command line asks, as it is read: its URLs, its named method, and whether it sends data, uploads, asks for a head or a GET. */
-interface CurlLine {
-  data: boolean;
-  /** Each data value as written (`-d`, `--data*`, `--json`): a GraphQL body is read from them. */
-  datas: string[];
-  get: boolean;
-  head: boolean;
-  method: string | undefined;
-  upload: boolean;
-  urls: string[];
-}
-
-/** One option of curl's and its value, into `line`. */
-const curlTake = (
-  line: CurlLine,
-  option: string,
-  value: string | undefined
-): void => {
-  if (option === "X" || option === "--request") {
-    line.method = value?.toUpperCase();
-  } else if (option === "d" || option === "F" || CURL_DATA_LONG.has(option)) {
-    line.data = true;
-    if (value !== undefined && option !== "F" && !option.startsWith("--form")) {
-      line.datas.push(value);
-    }
-  } else if (option === "T" || option === "--upload-file") {
-    line.upload = true;
-  } else if (option === "--url" && value) {
-    line.urls.push(value);
-  } else if (option === "I" || option === "--head") {
-    line.head = true;
-  } else if (option === "G" || option === "--get") {
-    line.get = true;
-  }
-};
-
-/** A long option, into `line`: how many more words it took (its value's). */
-const curlLong = (
-  line: CurlLine,
-  arg: string,
-  next: string | undefined
-): number => {
-  const [name = "", inline] = arg.split(INLINE_VALUE, 2);
-  if (!CURL_LONG_VALUED.has(name)) {
-    curlTake(line, name, undefined);
-    return 0;
-  }
-  curlTake(line, name, inline ?? next);
-  return inline === undefined ? 1 : 0;
-};
-
-/** A cluster of short options (`-sSX POST`, `-XPOST`), into `line`: how many more words it took. */
-const curlShort = (
-  line: CurlLine,
-  arg: string,
-  next: string | undefined
-): number => {
-  for (let at = 1; at < arg.length; at += 1) {
-    const option = arg[at] as string;
-    if (CURL_SHORT_VALUED.has(option)) {
-      const rest = arg.slice(at + 1);
-      curlTake(line, option, rest === "" ? next : rest);
-      return rest === "" ? 1 : 0;
-    }
-    curlTake(line, option, undefined);
-  }
-  return 0;
-};
-
-const curlLine = (args: readonly string[]): CurlLine => {
-  const line: CurlLine = {
-    urls: [],
-    method: undefined,
-    data: false,
-    datas: [],
-    upload: false,
-    head: false,
-    get: false,
-  };
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index] as string;
-    const next = args[index + 1];
-    if (arg.startsWith("--")) {
-      index += curlLong(line, arg, next);
-    } else if (arg.startsWith("-") && arg.length > 1) {
-      index += curlShort(line, arg, next);
-    } else {
-      line.urls.push(arg);
-    }
-  }
-  return line;
-};
-
-/** A curl's method: the one it names, else HEAD, PUT for an upload, POST for data without `-G`, else GET. */
-const curlMethod = ({ method, head, upload, data, get }: CurlLine): string => {
-  if (method) {
-    return method;
-  }
-  if (head) {
-    return "HEAD";
-  }
-  if (upload) {
-    return "PUT";
-  }
-  return data && !get ? "POST" : "GET";
-};
-
-const curl = (call: UpstreamCall): UpstreamWrite | undefined => {
-  const line = curlLine(call.args);
-  const method = curlMethod(line);
-  if (!WRITE_METHODS.has(method)) {
-    return;
-  }
-  for (const raw of line.urls) {
-    const url = SCHEME.test(raw) ? raw : `https://${raw}`;
-    let parsed: URL;
-    try {
-      parsed = new URL(url);
-    } catch {
-      continue;
-    }
-    if (!GITHUB_API_HOSTS.has(parsed.hostname)) {
-      continue;
-    }
-    if (isGraphql(url)) {
-      const body: GraphqlBody = { unread: false, variables: {} };
-      for (const data of line.datas) {
-        takeJson(
-          body,
-          data.startsWith("@") ? fileText(call, data.slice(1)) : data
-        );
-      }
-      return graphqlWrite(
-        body,
-        GITHUB,
-        "curl POST api.github.com/graphql mutation"
-      );
-    }
-    const repo = githubApiRepo(url, GITHUB, () => undefined);
-    if (repo) {
-      return {
-        repo,
-        what: `curl ${method} ${parsed.hostname}${parsed.pathname}`,
-      };
-    }
-  }
-};
-
-const PROGRAMS: Readonly<
-  Record<string, (call: UpstreamCall) => UpstreamWrite | undefined>
-> = { gh, hub, glab, curl };
-
-/** The programs whose calls the guard reads, each a shim on a workspace's PATH. */
-export const GUARDED_PROGRAMS: readonly string[] = Object.keys(PROGRAMS);
-
-/** The base name of a program as a shell names it: `/usr/bin/gh` is `gh`. */
-const programName = (program: string): string =>
-  program.slice(program.lastIndexOf("/") + 1);
-
-/** The repository a call writes to, and the call in a few words; none when it writes to none this guard can name. */
-export const upstreamWrite = (call: UpstreamCall): UpstreamWrite | undefined =>
-  PROGRAMS[programName(call.program)]?.(call);
-
 /** Whether `repo` is one of `remotes`: hosts and owners compare without case, as GitHub's do. */
 export const owns = (remotes: readonly string[], repo: string): boolean =>
   remotes.some((remote) => remote.toLowerCase() === repo.toLowerCase());
-
-/**
- * Why `call` does not run under `rule`, in the words the session reads; none
- * when it runs: the rule lets sessions post upstream, the call writes to no
- * repository, or the one it writes to is the project's own. Under `ask` a
- * post is held for the person instead ({@link ghPost}); this is `off`'s word.
- */
-export const upstreamRefusal = (
-  rule: UpstreamRule,
-  call: UpstreamCall
-): string | undefined => {
-  if (!isGuarded(rule)) {
-    return;
-  }
-  return writeRefusal(rule, upstreamWrite(call));
-};
-
-/**
- * The write a call makes to another repository under `rule`: what `ask`
- * holds for the person. None when it writes to none, or to the project's own.
- */
-export const otherWrite = (
-  rule: UpstreamRule,
-  write: UpstreamWrite | undefined
-): UpstreamWrite | undefined =>
-  write && !(write.repo !== undefined && owns(rule.remotes, write.repo))
-    ? write
-    : undefined;
 
 /**
  * Why a post under `ask` cannot wait for the person as it stands, in the
@@ -1118,282 +283,6 @@ export const heldWords = (
     : `cawco: \`${what}\` to ${repo} was not posted yet: it waits in the owner's Needs you (their choice: Ask me first). If they approve, CawCo posts it exactly as written, once, under their account; if they deny, nothing is posted. You will be told here either way. Don't run it again, and carry on with the rest of your work.`;
 
 /**
- * A gh write held for the person (hub upstream-asks.ts): its argv as the
- * host's gh runs it once approved, every file it read already in it, the
- * repository it acts on pinned (`GH_REPO`, `GH_HOST`), and what it reads on
- * stdin (`--input -`).
- */
-export interface GhPost {
-  readonly args: readonly string[];
-  /** The GitHub host, as gh's `GH_HOST`. */
-  readonly host: string;
-  /** `owner/repo`, as gh's `GH_REPO`: the repository the call resolved to inside the workspace. */
-  readonly repo: string;
-  readonly stdin?: string;
-  readonly via: "gh";
-}
-
-/** gh's flags that read a file the host's gh would read on its own disk, by what each takes instead. */
-const GH_FILE_FLAGS: Readonly<Record<string, string>> = {
-  "-F": "--body",
-  "--body-file": "--body",
-  "--notes-file": "--notes",
-};
-/** gh's flags that open a browser or an editor, or read a file by a name of their own: none can run for a person who is not there. */
-const GH_UNHELD: ReadonlySet<string> = new Set([
-  "-w",
-  "--web",
-  "-e",
-  "--editor",
-  "--recover",
-  "-f",
-  "--fill",
-  "--fill-first",
-  "--fill-verbose",
-]);
-/** The flags whose value is the post's title and body. */
-const TITLE_FLAGS = { short: "-t", long: "--title" };
-const BODY_FLAGS = { short: "-b", long: "--body" };
-
-/** A flag and its value from one word or two: `--long=VALUE`, `--long VALUE`, `-xVALUE`, `-x VALUE`. */
-const flagAt = (
-  args: readonly string[],
-  index: number,
-  flags: readonly string[]
-): { flag: string; value: string | undefined; words: number } | undefined => {
-  const arg = args[index] as string;
-  for (const flag of flags) {
-    if (arg === flag) {
-      return { flag, value: args[index + 1], words: 2 };
-    }
-    if (flag.startsWith("--") && arg.startsWith(`${flag}=`)) {
-      return { flag, value: arg.slice(flag.length + 1), words: 1 };
-    }
-    if (
-      !flag.startsWith("--") &&
-      arg.startsWith(flag) &&
-      !arg.startsWith("--") &&
-      arg.length > flag.length
-    ) {
-      return { flag, value: arg.slice(flag.length), words: 1 };
-    }
-  }
-};
-
-/** A gh command's argv with every file it names read into it; or why it cannot be. */
-const inlineGhCommand = (
-  call: UpstreamCall,
-  words: { command: string; sub: string }
-): { args: string[] } | { problem: string } => {
-  const args: string[] = [];
-  const named = Object.keys(GH_FILE_FLAGS);
-  for (let index = 0; index < call.args.length; index += 1) {
-    const arg = call.args[index] as string;
-    if (arg === "--") {
-      args.push(...call.args.slice(index));
-      break;
-    }
-    if (GH_UNHELD.has(arg.split("=")[0] as string)) {
-      return {
-        problem: `it uses ${arg.split("=")[0]}, which needs a browser, an editor or the checkout`,
-      };
-    }
-    const file = flagAt(call.args, index, named);
-    if (!file) {
-      args.push(arg);
-      continue;
-    }
-    const text =
-      file.value === undefined ? undefined : fileText(call, file.value);
-    if (text === undefined) {
-      return {
-        problem: `${file.flag} ${file.value ?? ""} could not be read (stdin is not read here)`,
-      };
-    }
-    // `gh release create -F` is its notes' file.
-    args.push(
-      words.command === "release" && file.flag === "-F"
-        ? "--notes"
-        : (GH_FILE_FLAGS[file.flag] as string),
-      text
-    );
-    index += file.words - 1;
-  }
-  if (
-    words.command === "release" &&
-    (words.sub === "upload" ||
-      (words.sub === "create" &&
-        commandWords(args).rest.filter((arg) => !arg.startsWith("-")).length >
-          1))
-  ) {
-    return {
-      problem: "a release's assets are files the owner's gh cannot read",
-    };
-  }
-  return { args };
-};
-
-/** `gh api`'s argv with every `@file` field and `--input` read into it; or why it cannot be. */
-const inlineGhApi = (
-  call: UpstreamCall
-): { args: string[]; stdin?: string } | { problem: string } => {
-  const args: string[] = [];
-  let stdin: string | undefined;
-  for (let index = 0; index < call.args.length; index += 1) {
-    const arg = call.args[index] as string;
-    const input = flagAt(call.args, index, ["--input"]);
-    if (input) {
-      const text =
-        input.value === undefined || input.value === "-"
-          ? undefined
-          : fileText(call, input.value);
-      if (text === undefined) {
-        return {
-          problem: `--input ${input.value ?? ""} could not be read (stdin is not read here)`,
-        };
-      }
-      stdin = text;
-      args.push("--input", "-");
-      index += input.words - 1;
-      continue;
-    }
-    const field = flagAt(call.args, index, ["-F", "--field"]);
-    const value = field?.value;
-    const at = value?.indexOf("=") ?? -1;
-    if (field && value?.slice(at + 1).startsWith("@")) {
-      const text = fileText(call, value.slice(at + 2));
-      if (text === undefined) {
-        return {
-          problem: `${field.flag} ${value} could not be read (stdin is not read here)`,
-        };
-      }
-      args.push("-f", `${value.slice(0, at)}=${text}`);
-      index += field.words - 1;
-      continue;
-    }
-    args.push(arg);
-  }
-  return { args, ...(stdin === undefined ? {} : { stdin }) };
-};
-
-/**
- * A gh write as it is held for the person under `ask`: the call's argv with
- * every file it names read in (`--body-file` as `--body`, `-F k=@file` as
- * `-f k=…`, `--input file` as stdin), a `pr create` given the branch it was
- * run on (`--head`), and the repository it resolved to here pinned, so the
- * host's gh, run approved in no checkout, posts exactly this to exactly
- * there. Or why it cannot wait for the person as it stands (a browser, an
- * editor, a file only stdin holds, a create with no title or body).
- */
-export const ghPost = (
-  call: UpstreamCall,
-  write: UpstreamWrite,
-  branch: () => string | undefined
-): { post: GhPost } | { problem: string } => {
-  if (programName(call.program) !== "gh") {
-    return {
-      problem: `${programName(call.program)} cannot hand its post to the owner; gh can, so run it with gh`,
-    };
-  }
-  if (write.unread) {
-    return {
-      problem:
-        "its query comes from stdin or a file the guard cannot open, so what it posts is unknown",
-    };
-  }
-  if (write.repo === undefined) {
-    return {
-      problem:
-        "it names no repository (a mutation acts on node ids), so the owner could not be shown where it posts",
-    };
-  }
-  const words = commandWords(call.args);
-  const inlined =
-    words.command === "api" ? inlineGhApi(call) : inlineGhCommand(call, words);
-  if ("problem" in inlined) {
-    return inlined;
-  }
-  let { args } = inlined;
-  if (words.sub === "create" && ["issue", "pr"].includes(words.command)) {
-    if (
-      lastValue(args, TITLE_FLAGS.short, TITLE_FLAGS.long) === undefined ||
-      lastValue(args, BODY_FLAGS.short, BODY_FLAGS.long) === undefined
-    ) {
-      return {
-        problem:
-          "the owner reads its title and body before anything is posted: give --title and --body (or --body-file)",
-      };
-    }
-    if (
-      words.command === "pr" &&
-      lastValue(args, "-H", "--head") === undefined
-    ) {
-      const head = branch();
-      if (!head) {
-        return { problem: "name the branch it opens from with --head" };
-      }
-      args = [...args, "--head", head];
-    }
-  }
-  const [host = GITHUB, ...path] = write.repo.split("/");
-  const stdin: string | undefined =
-    "stdin" in inlined ? (inlined.stdin as string | undefined) : undefined;
-  return {
-    post: {
-      via: "gh",
-      args,
-      host,
-      repo: path.join("/"),
-      ...(stdin === undefined ? {} : { stdin }),
-    },
-  };
-};
-
-/**
- * Why the host must not run a held gh post as it is: it is no write to a
- * repository, or still names something only the workspace could read or
- * the person cannot see (a file, a browser, an editor). What {@link ghPost}
- * makes always passes; the host checks again what it is handed.
- */
-export const ghPostProblem = (post: GhPost): string | undefined => {
-  const words = commandWords(post.args);
-  if (!(words.command === "api" || GH_WRITES[words.command]?.has(words.sub))) {
-    return `gh ${words.command} ${words.sub} is not a post the guard holds`;
-  }
-  for (const [index, arg] of post.args.entries()) {
-    if (arg === "--") {
-      break;
-    }
-    const flag = arg.split("=")[0] as string;
-    if (words.command === "api") {
-      const input = flagAt(post.args, index, ["--input"]);
-      if (input && input.value !== "-") {
-        return "--input reads a file";
-      }
-      const field = flagAt(post.args, index, ["-F", "--field"]);
-      const value = field?.value ?? "";
-      if (field && value.slice(value.indexOf("=") + 1).startsWith("@")) {
-        return `${field.flag} ${value} reads a file`;
-      }
-    } else if (
-      GH_UNHELD.has(flag) ||
-      flagAt(post.args, index, Object.keys(GH_FILE_FLAGS))
-    ) {
-      return `${flag} reads a file or opens a browser or an editor`;
-    }
-  }
-  const write = upstreamWrite({
-    program: "gh",
-    args: post.args,
-    env: { GH_REPO: post.repo, GH_HOST: post.host },
-    cwdRemotes: () => [],
-  });
-  return write?.repo === undefined
-    ? "it writes to no repository the guard can name"
-    : undefined;
-};
-
-/**
  * Why `write` does not go ahead under a guarded `rule`, in the words the
  * session reads; none when there is no write, or it is to the project's
  * own repository.
@@ -1410,6 +299,52 @@ export const writeRefusal = (
       ? `this project's repository is ${rule.remotes.join(", ")}`
       : "this session has no repository of its own";
   return `cawco: \`${write.what}\` did not run: ${targetWords(write, rule)}, and ${own}. Sessions here are kept off other people's repositories (the owner's choice), so nothing is posted under their account. Put what you would have posted (the title and body, or the comment) in your report as a draft instead; the owner decides whether to post it.`;
+};
+
+/**
+ * What a write to a repository comes to under the project's rule: it goes
+ * (`go`), it waits for the person (`hold`, under "Ask me first"), or it does
+ * not run (`refuse`, in the words the session reads).
+ */
+export type WriteDecision =
+  | { readonly kind: "go" }
+  | { readonly kind: "hold"; readonly repo: string }
+  | { readonly kind: "refuse"; readonly why: string };
+
+/**
+ * The one decision on a write, whatever forge or door it reaches by: no rule,
+ * "Let agents post upstream", or the project's own repository goes; under
+ * "Ask me first" a write to another repository is held, and one whose
+ * repository cannot be named is refused, since the person could not be shown
+ * where it lands; under "Keep agents off" it is refused. The git door, the
+ * GitHub door, forge posts and a connection's write tools all decide here
+ * (docs/forge-adapters.md §3.3).
+ */
+export const decideWrite = (
+  rule: UpstreamRule | undefined,
+  write: UpstreamWrite
+): WriteDecision => {
+  if (!rule || rule.posts === "on") {
+    return { kind: "go" };
+  }
+  const refusal = writeRefusal(rule, write);
+  if (!refusal) {
+    return { kind: "go" };
+  }
+  if (rule.posts === "off") {
+    return { kind: "refuse", why: refusal };
+  }
+  return write.repo !== undefined && !write.unread
+    ? { kind: "hold", repo: write.repo }
+    : {
+        kind: "refuse",
+        why: askRefusal(
+          write.what,
+          write.unread
+            ? "the guard could not read where it writes"
+            : "it names no repository the owner could be shown"
+        ),
+      };
 };
 
 /** Where a refused call writes, in the refusal's words. */
@@ -1500,10 +435,10 @@ const nodeIdsOf = (body: GraphqlBody): string[] => {
 };
 
 /**
- * What one HTTP request writes, by the same rules as a call's argv: a write
- * method against `/repos/<owner>/<repo>` on GitHub's API, or a GraphQL
- * mutation, with the repository it names, or else the node ids it acts on.
- * A write to any other GitHub host the door does not forward at all.
+ * What one HTTP request writes: a write method against
+ * `/repos/<owner>/<repo>` on GitHub's API, or a GraphQL mutation, with the
+ * repository it names, or else the node ids it acts on. A write to any other
+ * GitHub host the door does not forward at all.
  */
 export const upstreamHttpWrite = (call: HttpCall): HttpWrite | undefined => {
   const method = call.method.toUpperCase();
@@ -1524,6 +459,6 @@ export const upstreamHttpWrite = (call: HttpCall): HttpWrite | undefined => {
   if (!WRITE_METHODS.has(method)) {
     return;
   }
-  const repo = githubApiRepo(path, GITHUB, () => undefined);
+  const repo = githubApiRepo(path);
   return repo ? { repo, what: `${method} ${call.host}/${path}` } : undefined;
 };

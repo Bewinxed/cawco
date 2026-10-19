@@ -23,10 +23,7 @@
  * permission ruleset by `PATCH`, which replaces it, settled #9).
  */
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type {
   EffortLevel,
   FleetMcpChange,
@@ -74,7 +71,6 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { userLayerPath } from "@cawco/core/paths";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import type {
   FormInfo,
@@ -365,50 +361,11 @@ const mcpFence = async (
   }
 };
 
-/** The instruction entry keys the owner's and the project's `CLAUDE.md` go under (settled #11: `^[a-z0-9][a-z0-9._-]*$`). */
-export const CLAUDE_MD_GLOBAL = "claude-md-global";
-export const CLAUDE_MD_PROJECT = "claude-md-project";
-/** The key prefix of a project memory document's entry ({@link instructionEntries}). */
-const PROJECT_ENTRY = "cawco-project.";
+/** The key prefix of a role memory document's entry ({@link instructionEntries}). */
+const ROLE_ENTRY = "cawco-role.";
 
 /** The most an instruction entry's value may be, in JSON bytes (2.0.28's `Ohe=262144`, settled #11). */
 const INSTRUCTION_ENTRY_MAX = 262_144;
-
-/** The nearest `CLAUDE.md` from `directory` up, stopping at the home dir; undefined when there is none. */
-const projectClaudeMd = (directory: string): string | undefined => {
-  const home = homedir();
-  for (let dir = directory; ; dir = dirname(dir)) {
-    const file = join(dir, "CLAUDE.md");
-    if (existsSync(file)) {
-      return file;
-    }
-    if (dir === home || dirname(dir) === dir) {
-      return;
-    }
-  }
-};
-
-/**
- * The instructions OpenCode 2.0 does not read itself: it discovers
- * `AGENTS.md` only ("OpenCode V2 recognizes `AGENTS.md` only. It does not use
- * `CLAUDE.md` as a fallback.", opencode.ai/v2/docs/instructions), so the
- * owner's `~/.claude/CLAUDE.md` and the project's `CLAUDE.md` go in as the
- * session's own instruction entries, as they are now.
- */
-export const claudeMdEntries = async (
-  directory: string
-): Promise<Record<string, string>> => {
-  const read = (file: string | undefined) =>
-    file ? readFile(file, "utf8").catch(() => undefined) : undefined;
-  const [global, project] = await Promise.all([
-    read(userLayerPath("CLAUDE.md")),
-    read(projectClaudeMd(directory)),
-  ]);
-  return {
-    ...(global ? { [CLAUDE_MD_GLOBAL]: global } : {}),
-    ...(project ? { [CLAUDE_MD_PROJECT]: project } : {}),
-  };
-};
 
 /** What an instruction key may not hold (settled #11: `^[a-z0-9][a-z0-9._-]*$`). */
 const ENTRY_KEY_UNSAFE = /[^a-z0-9._-]+/g;
@@ -418,22 +375,20 @@ const memoryEntryKey = (kind: "role" | "project", path: string): string =>
   `cawco-${kind}.${path.toLowerCase().replace(ENTRY_KEY_UNSAFE, "-")}`;
 
 /**
- * Every instruction entry a session holds: the `CLAUDE.md` ones
- * ({@link claudeMdEntries}); its project's memory documents, as CawCo placed
- * them in its folder for every session there (agent fleet.ts
+ * Every instruction entry a session holds: its project's memory documents,
+ * as CawCo placed them in its folder for every session there (agent fleet.ts
  * `placedMemoryIn`), which OpenCode does not read itself; and its role's
  * memory documents, which it launched with ({@link SpawnPayload.instructions}).
+ * The fleet's memory is OpenCode's own global `AGENTS.md` (opencode.ts
+ * `OPENCODE_MEMORY`), and a project's `AGENTS.md` OpenCode reads itself, so
+ * neither is an entry; another harness's instruction files are none of its.
  */
 export const instructionEntries = async (
   directory: string,
   instructions: readonly SessionInstruction[]
 ): Promise<Record<string, string>> => {
-  const [claudeMd, placed] = await Promise.all([
-    claudeMdEntries(directory),
-    placedMemoryIn(directory),
-  ]);
+  const placed = await placedMemoryIn(directory);
   return {
-    ...claudeMd,
     ...Object.fromEntries(
       placed.map(({ path, content }) => [
         memoryEntryKey("project", path),
@@ -730,8 +685,8 @@ export class OpencodeSession implements HarnessSession {
   readonly #instructions = new Map<string, string>();
   /** Its scoped memory documents, as it launched with them; none on an attach. */
   readonly #scopedInstructions: readonly SessionInstruction[];
-  /** The project memory entries the session holds: read off it at the first sync ({@link #syncInstructions}), kept in step after. */
-  #projectEntries: Set<string> | undefined;
+  /** The entries the session holds that are not its role's: read off it at the first sync ({@link #syncInstructions}), kept in step after. */
+  #placedEntries: Set<string> | undefined;
   readonly #registerChild: (childId: string, callID: string) => void;
   readonly #turnOutcome: (
     provider: string,
@@ -894,6 +849,11 @@ export class OpencodeSession implements HarnessSession {
     return this.#directory;
   }
 
+  /** The servers that did not connect where the session was moved (a handoff onto a new generation): each said once, as at its start. */
+  mcpUnconnected(unconnected: McpNotConnected[]): Promise<void> {
+    return this.#sayUnconnected(unconnected);
+  }
+
   /** Dispatch custody, not an independent server-idle heuristic. */
   get turnInFlight(): boolean {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: server events and dispatch methods update these fields outside this getter
@@ -1022,15 +982,15 @@ export class OpencodeSession implements HarnessSession {
   }
 
   /**
-   * The owner's and the project's `CLAUDE.md`, the project's memory
-   * documents and its role's, as they are now, put on the session as its
-   * instruction entries ({@link instructionEntries}); a changed file is put
-   * again, and 2.0 announces the change at the next step boundary (settled
-   * #11). A project document CawCo no longer places is taken off, read off
-   * the session itself the first time, as an agent that attached to it
-   * knows nothing it put; its role's stay for its life, as they were given
-   * at its launch. A file larger than an entry may hold is the turn's
-   * refusal, with its size.
+   * The project's memory documents and its role's, as they are now, put on
+   * the session as its instruction entries ({@link instructionEntries}); a
+   * changed file is put again, and 2.0 announces the change at the next step
+   * boundary (settled #11). CawCo is the only writer of a session's entries,
+   * so every entry it holds that is no longer one of these is taken off, read
+   * off the session itself the first time, as an agent that attached to it
+   * knows nothing it put; its role's stay for its life, as they were given at
+   * its launch. A file larger than an entry may hold is the turn's refusal,
+   * with its size.
    */
   async #syncInstructions(): Promise<void> {
     const sessionID = this.#opencodeSessionId();
@@ -1039,7 +999,7 @@ export class OpencodeSession implements HarnessSession {
       this.#scopedInstructions
     );
     const synced = await askOpencode(async (options) => {
-      this.#projectEntries ??= new Set(
+      this.#placedEntries ??= new Set(
         (
           await this.#client.session.instructions.entry.list(
             { sessionID },
@@ -1047,9 +1007,9 @@ export class OpencodeSession implements HarnessSession {
           )
         )
           .map((entry) => entry.key)
-          .filter((key) => key.startsWith(PROJECT_ENTRY))
+          .filter((key) => !key.startsWith(ROLE_ENTRY))
       );
-      const placed = this.#projectEntries;
+      const placed = this.#placedEntries;
       for (const key of [...placed]) {
         if (!(key in entries)) {
           // biome-ignore lint/performance/noAwaitInLoops: a few entries, taken off in turn
@@ -1078,7 +1038,7 @@ export class OpencodeSession implements HarnessSession {
           options
         );
         this.#instructions.set(key, hash);
-        if (key.startsWith(PROJECT_ENTRY)) {
+        if (!key.startsWith(ROLE_ENTRY)) {
           placed.add(key);
         }
       }
@@ -3161,10 +3121,11 @@ export class OpencodeSession implements HarnessSession {
         return;
       }
       case CONTROL_MCP_FLEET_CHANGED:
-        // Already taken by the fleet sync that came before this: a written
-        // config restarts the server, and each session moves to the new one
-        // once idle; every proxied server is added and connected again at
-        // each live session's directory (opencode.ts `#syncFleet`).
+        // Already taken by the fleet sync that came before this: the fleet's
+        // servers ride the launch config, so a change starts a new server and
+        // each session moves to it once idle; a fleet server OpenCode holds
+        // failed at a live session's directory is started again there
+        // (opencode.ts `#startFailed`).
         console.info(
           `[opencode] ${this.instanceId}: fleet MCP ${(args[0] as FleetMcpChange[]).map(({ name, kind }) => `${name} ${kind}`).join(", ")}: taken by the fleet sync`
         );

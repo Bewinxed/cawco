@@ -70,24 +70,25 @@ public enum Wire {
         return text.isEmpty ? nil : text
     }
 
-    /// Why the hub refused, as one sentence a person reads, without its
-    /// closing stop (hub-read.ts `failureReason`): the refusal's own words
-    /// (`words`: a JSON error's `detail`, `error` or `title`, else the text)
-    /// when their first line is a short sentence of prose, else what the
-    /// status says ("The hub answered 502"). Never more than one sentence,
-    /// never a body as it came: a stack, a dump or a page of markup is not a
-    /// reason. Longer than 160 characters, two lines of a toast, it is not one.
-    /// A thrown error's label ("Error:", "TypeError:") is the runtime's name
-    /// for the throw, not a word of the reason: it is taken off, so the
-    /// sentence says what happened (WORDS.md, "Error formula": "A technical
-    /// code alone is banned … the plain-language what-happened").
+    /// Why the hub refused, as a person reads it, without its closing stop
+    /// (hub-read.ts `sentenceOf`): the refusal's own words (`words`: a JSON
+    /// error's `detail`, `error` or `title`, else the text), their first line
+    /// whole, when it is prose; else what the status says ("The hub answered
+    /// 502"). Whole, not cut to its first sentence or to a length: the hub's
+    /// refusals say what happened and then the way on, and a long one
+    /// (placement's, naming every account it weighed) is still the hub
+    /// answering. Never a body as it came: a stack keeps only its first line,
+    /// and a dump or a page of markup starts with one of `<{[`. A thrown
+    /// error's label ("Error:", "TypeError:") is the runtime's name for the
+    /// throw, not a word of the reason: it is taken off, so the sentence says
+    /// what happened (WORDS.md, "Error formula": "A technical code alone is
+    /// banned … the plain-language what-happened").
     static func reason(_ data: Data, status: Int) -> String {
         let line = (words(data) ?? "").split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         var sentence = line.trimmingCharacters(in: .whitespaces)
             .replacing(/^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/, with: "", maxReplacements: 1)
-        if let end = sentence.firstMatch(of: /[.!?](?=\s|$)/) { sentence = String(sentence[..<end.range.upperBound]) }
         if sentence.hasSuffix(".") { sentence.removeLast() }
-        guard !sentence.isEmpty, sentence.count <= 160, let first = sentence.first, !"<{[".contains(first) else {
+        guard !sentence.isEmpty, let first = sentence.first, !"<{[".contains(first) else {
             return "The hub answered \(status)"
         }
         return first.uppercased() + sentence.dropFirst()
@@ -118,6 +119,8 @@ func epochMs(_ date: Date?, _ text: String?, _ number: Double? = nil) -> Double 
 }
 
 extension Components.Schemas.InstanceRow {
+    /// When the hub opened the row, ms epoch (0 when it never said).
+    var createdMs: Double { epochMs(createdAt?.value1, createdAt?.value2, createdAt?.value3) }
     /// When the hub last moved the row, ms epoch (0 when it never said).
     var updatedMs: Double { epochMs(updatedAt?.value1, updatedAt?.value2, updatedAt?.value3) }
     /// When the owner last looked at it or archived it, on any device, ms epoch.
@@ -248,6 +251,12 @@ enum Frame {
     case moves([Components.Schemas.MoveJob])
     /// A project's tasks changed, by anyone: whatever shows them reads them again.
     case tasksChanged(projectId: String)
+    /// A project's decision pages changed: the Decisions tab reads them again.
+    case decisionsChanged(projectId: String)
+    /// A project's arrangement of blocks changed: its pages read it again.
+    case blocksChanged(projectId: String)
+    /// A project's starters for one place, whole, written again.
+    case startersChanged(Components.Schemas.StartersChangedFrame)
     /// The projects changed (one made, renamed or forgotten, a place come or gone): read them again.
     case projectsChanged
     /// One session a forget asked to stop: stopped as its machine confirmed, refused, or owed to its machine's return.
@@ -260,6 +269,8 @@ enum Frame {
     case lawsBroken([Components.Schemas.LawBroken])
     /// The fleet's upstream answer was given or changed, anywhere: Needs you stops asking.
     case fleetUpstream(Components.Schemas.FleetChoicesUpstream)
+    /// A skill, plugin or marketplace the hub fetched has landed (or failed): the fleet's setup is read again.
+    case fleetFetched(Components.Schemas.FleetFetchFrame)
     /// HTTPS on the hub machine's tailnet name changed state: Needs you's step moves on, or ticks.
     case tailnetHttps(Components.Schemas.TailnetHttps)
     /// The hub's mode and what waits on the person to pair or admit, whole, on each change.
@@ -309,6 +320,12 @@ enum Frame {
             self = .moves(frame.moves)
         case .tasks_changed(let frame):
             self = .tasksChanged(projectId: frame.projectId)
+        case .decisions_changed(let frame):
+            self = .decisionsChanged(projectId: frame.projectId)
+        case .blocks_changed(let frame):
+            self = .blocksChanged(projectId: frame.projectId)
+        case .starters_changed(let frame):
+            self = .startersChanged(frame)
         case .projects_changed:
             self = .projectsChanged
         case .project_stop(let frame):
@@ -321,6 +338,8 @@ enum Frame {
             self = .lawsBroken(frame.broken)
         case .fleet_upstream(let frame):
             self = .fleetUpstream(frame.upstream)
+        case .fleet_fetch(let frame):
+            self = .fleetFetched(frame)
         case .tailnet_https(let frame):
             self = .tailnetHttps(frame.tailnet)
         case .hubAuth(let frame):

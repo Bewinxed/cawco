@@ -6,6 +6,8 @@
  * this is each other place a `filter` sits under a transition, an
  * animation or a script's motion:
  *
+ *  - the session page and `/`, loaded cold in light and dark, with every
+ *    blur and fade that comes in with the page;
  *  - the recall wheel's rows, blurred by depth as they roll, and the pick's
  *    cross-blur as it lands in the field (RecallWheel, recall bench);
  *  - the update notice's notes and the moved logins, folding open and shut
@@ -31,10 +33,12 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one case, one step at a time, as a hand makes them
 import type { Page } from "playwright-core";
+import { readWithin } from "../../../../packages/core/src/bounded";
 import { seedDecisions } from "../../../decisions-preview/seed";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { answering, settled } from "../../answering";
 import {
+  COMPOSER,
   COMPOSER_FIELD,
   type Kit,
   type KitFleet,
@@ -42,6 +46,8 @@ import {
   PINNED_WEBKIT,
   type Spec,
   settle,
+  THEMES,
+  type Theme,
 } from "../../kit";
 
 const SLOW = "PROBE-SLOW";
@@ -89,11 +95,12 @@ const respond = (request: Seen): Reply => {
 };
 
 /** A phone's page on the pinned WebKit. */
-async function phone(kit: Kit): Promise<Page> {
+async function phone(kit: Kit, theme: Theme = "light"): Promise<Page> {
   const page = await kit.page("iphone15Pro", {
     engine: "webkit",
     webkit: PINNED_WEBKIT,
     scale: 3,
+    theme,
   });
   page.setDefaultTimeout(30_000);
   return page;
@@ -559,6 +566,57 @@ async function recordFold(kit: Kit, fleet: KitFleet, base: string) {
   await page.close();
 }
 
+/** How long a cold load's page has to answer a script and land a frame. */
+const PAINTS_MS = 5000;
+
+/**
+ * The session page and `/`, each loaded cold in each scheme: its shell
+ * stands, a frame lands within {@link PAINTS_MS}, and the page answers a
+ * script within {@link PAINTS_MS} the whole way, the load's own motion
+ * included. Main's built dashboard hung Safari's web process here in the
+ * iOS 26.3 simulator, before anything painted past the body.
+ */
+async function loads(kit: Kit, fleet: KitFleet, base: string) {
+  const session = await fleet.spawn("claude", "Probe load", fleet.workdir);
+  for (const theme of THEMES) {
+    for (const [where, path, ready] of [
+      ["the session page", `/session/${session}`, COMPOSER],
+      ["/", "/", '[data-slot="shell"] [data-slot="burger"]'],
+    ] as const) {
+      const page = await phone(kit, theme);
+      const loaded = await settled(
+        page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" })
+      );
+      const run = await answering(page, async () => {
+        const shell = await present(page, ready, 90_000);
+        // The load's own motion plays out with the page watched.
+        await page.waitForTimeout(2000);
+        const frame = await readWithin(PAINTS_MS, () =>
+          page.evaluate(
+            () =>
+              new Promise<boolean>((landed) => {
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => landed(true));
+                });
+              })
+          )
+        );
+        return { shell, frame: frame.kind === "answered" };
+      });
+      kit.check(
+        `${where}, ${theme}: it loads, its shell stands, a frame lands and the page keeps answering`,
+        loaded &&
+          run.result.shell &&
+          run.result.frame &&
+          run.longest < PAINTS_MS &&
+          !page.isClosed(),
+        `loaded ${loaded}, shell ${run.result.shell}, frame ${run.result.frame}; longest ${Math.round(run.longest)}ms`
+      );
+      await page.close();
+    }
+  }
+}
+
 const spec: Spec = {
   name: "safari-blurs",
   run: async (kit) => {
@@ -577,6 +635,7 @@ const spec: Spec = {
     await fleet.agentUp();
     await fleet.accountSignedIn();
     const base = await fleet.dashboard();
+    await loads(kit, fleet, base);
     await composerCases(kit, fleet, base);
     await sheetCases(kit, fleet, base);
     await unlockMark(kit, base);

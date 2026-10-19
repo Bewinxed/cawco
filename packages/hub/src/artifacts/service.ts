@@ -14,19 +14,26 @@
  * ({@link ArtifactServiceDeps.deliverMarks}).
  */
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import {
   type AgentRow,
   ARTIFACT_NAME,
   type ArtifactChoices,
+  type ArtifactDoes,
+  type ArtifactHit,
   type ArtifactKind,
   type ArtifactPromotion,
   type ArtifactSummary,
+  type ArtifactThumbnail,
+  ASK_BANNED,
+  ASK_PATHLIKE,
   artifactCommentsNotice,
   artifactErrorsNotice,
   artifactSavesNotice,
   type ChoiceEntry,
   choiceEntryProblem,
+  DESK_CAPTURE_WIDTH,
+  DESK_CAPTURES_PER_PAGE,
   type InstanceRow,
   machineLabel,
   noteText,
@@ -41,6 +48,7 @@ import {
   excalidrawFile,
   NO_SCREEN,
 } from "@cawco/core/canvas";
+import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import {
   COMMENT_LIMITS,
   inkSection,
@@ -55,29 +63,41 @@ import {
   type ThreadEntry,
 } from "@cawco/core/comments";
 import { type GraphPlace, PLACES_KEY } from "@cawco/core/decisions";
+import {
+  excerptOf,
+  field,
+  KIND_WORDS,
+  matchOf,
+  parse,
+} from "@cawco/core/find-match";
 import type { InkGroup } from "@cawco/core/ink";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
-import type {
-  CanvasDial,
-  CanvasEdge,
-  CanvasSpec,
-  DesignMap,
-  DesignQuery,
-  RenderReport,
-  ServeSpec,
-  SheetRead,
-  SheetWeight,
-  SheetWrite,
-  SheetWritten,
-  StageError,
-  StageFrame,
-  StageOpened,
-  StageState,
-  StoryOp,
+import {
+  type CanvasDial,
+  type CanvasEdge,
+  type CanvasMap,
+  type CanvasMapNode,
+  type CanvasSpec,
+  canvasOf,
+  canvasPath,
+  type DesignLink,
+  type DesignMap,
+  type DesignQuery,
+  type RenderReport,
+  type ServeSpec,
+  type SheetRead,
+  type SheetWeight,
+  type SheetWrite,
+  type SheetWritten,
+  type StageError,
+  type StageFrame,
+  type StageOpened,
+  type StageState,
+  type StoryOp,
 } from "@cawco/core/stage";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { applyPatch, type Operation } from "rfc6902";
-import type { Doc } from "yjs";
+import type { Doc, YMapEvent } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import {
   type BuiltProgram,
@@ -87,7 +107,9 @@ import {
   readKept,
   type StatementChange,
 } from "../decision-program";
+import type { AskedArtifact } from "../design-verify";
 import { sessionLabel } from "../labels";
+import type { HubLifetimeShape, HubTimer } from "../lifetime";
 import {
   changeFolderFiles,
   FolderRefusal,
@@ -103,8 +125,7 @@ import {
 import {
   type CanvasInput,
   COMPONENT_EXAMPLE,
-  canvasOf,
-  canvasPath,
+  CREATE_SHAPE,
   canvasProblem,
   errorsSaid,
   movesSaid,
@@ -118,7 +139,7 @@ import {
   weightSaid,
 } from "./component";
 import type { ArtifactDocs } from "./docs";
-import { picturePath } from "./sync";
+import { picturePath, thumbnailPath } from "./sync";
 
 export class ArtifactRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;
@@ -150,11 +171,17 @@ const unmerged = (error: unknown): ArtifactRefusal =>
  * drawn from skeleton `elements` or `mermaid`; each kind's fields only.
  */
 export interface ArtifactInput {
-  /** A component canvas's one line of purpose, drawn under its name. */
-  about?: string | undefined;
+  /**
+   * The panel head's one line under its name: what the person does here,
+   * in their words (core `ASK_LIMIT`). Every create names it but the
+   * person's own composer canvas (`draft`), which asks them nothing.
+   */
+  ask?: string | undefined;
   /** A component canvas's dials: a CSS variable on every frame, or an arg. */
   dials?: CanvasDial[] | undefined;
   dir?: string | undefined;
+  /** What the person does on it (core `ARTIFACT_DOES`); named with `ask`. */
+  does?: ArtifactDoes | undefined;
   /**
    * A canvas the person opened in the composer (a pen's swipe, Draw, ⌘⇧D,
    * the panel's +): always a new one, `meta.draft` until its first send,
@@ -170,7 +197,8 @@ export interface ArtifactInput {
   /** A component canvas's groups: story → the parent story or heading it stands under. */
   group?: Record<string, string> | undefined;
   html?: string | undefined;
-  kind: ArtifactKind;
+  /** A browser artifact is the hub's alone (browsers.ts): no session makes one. */
+  kind: Exclude<ArtifactKind, "browser">;
   machine?: string | undefined;
   /** A canvas's Mermaid diagram. */
   mermaid?: string | undefined;
@@ -186,9 +214,10 @@ export interface ArtifactInput {
    */
   serve?: { command: string; cwd?: string | undefined } | undefined;
   /**
-   * `parent`: a delegate puts it in its parent's panel. The parent owns it
-   * (its panel, its list, the person's picks and pins on it), and is told
-   * once; the delegate stays its maker ({@link ArtifactRow.madeBy}).
+   * `parent`: a delegate hands it to its parent, readied and not opened.
+   * The parent owns it (its panel, its list, the person's picks and pins on
+   * it), is told once per hand-off and opens it itself with artifact_show;
+   * the delegate stays its maker ({@link ArtifactRow.madeBy}).
    */
   to?: "parent" | undefined;
   /**
@@ -197,6 +226,17 @@ export interface ArtifactInput {
    * `machine` names the host the port is on.
    */
   workspace?: string | undefined;
+}
+
+/** What says where an artifact is served from, before it has a row or with one. */
+type Placed = Pick<ArtifactRow, "kind" | "machineId" | "name" | "source">;
+
+/** The hub machine's headless screen on one canvas ({@link ArtifactServiceDeps.screen}). */
+export interface CanvasScreen {
+  /** Keeps it open through another write. */
+  hold: () => void;
+  /** Lets it go. */
+  release: () => void;
 }
 
 /** Whose panel a create puts the artifact in (`owner`), and whose call it was (`maker`): one session, or a delegate and its parent. */
@@ -289,6 +329,50 @@ const previewProblem = (input: ArtifactInput): string | null => {
   return null;
 };
 
+/** Why an ask can't head the panel (checks 1 and 2): words the person never uses, or a file or path; null when it can. */
+export const askProblem = (ask: string): string | null => {
+  if (ASK_BANNED.test(ask)) {
+    return 'The ask reaches the person: say what they do (pick, pin, try, draw) and to what, without "tap" or "poke".';
+  }
+  if (ASK_PATHLIKE.test(ask)) {
+    return "The ask is in the person's words: no file, path or id in it. Name the thing as they call it.";
+  }
+  return null;
+};
+
+/** Why this kind can't deliver what `does` promises (checks 3, 4 and 4b), before anything is built; null when it can. */
+const doesProblem = (
+  input: ArtifactInput,
+  does: ArtifactDoes
+): string | null => {
+  const { kind } = input;
+  if (does === "pick" && kind !== "page") {
+    return `A pick happens on a decision page: kind "page" with a program holding one Decision per question (decision-page skill). This ${kind} is an option's media: embed it with Canvas or Preview inside the Option.`;
+  }
+  const program = input.program !== undefined;
+  if (
+    does === "try" &&
+    (kind === "component" || kind === "canvas" || (kind === "page" && program))
+  ) {
+    return `A try is a flow the person runs: a preview opened at its path, or a page with fields. A ${kind}${program ? " program" : ""} is judged or picked on, not tried.`;
+  }
+  if (does === "draw" && kind !== "canvas") {
+    return 'A drawing is a canvas: kind "canvas", with elements, mermaid or nothing.';
+  }
+  return null;
+};
+
+/** A choice in a page's HTML: a kit choice, or a field the person fills. */
+const HTML_CHOICE = /data-cawco-choice=|<(input|select|textarea)[^>]*\sname=/i;
+
+/** Check 3b: a page for picking that holds no choice, once built. */
+const NO_CHOICE =
+  "A page for picking holds a choice: a Decision in its program, or a data-cawco-choice in its HTML. This one holds none.";
+
+/** Check 5: a page for judging or picking that is a catalogue of desk captures. */
+const capturesRefused = (n: number): string =>
+  `${n} captures wider than ${DESK_CAPTURE_WIDTH}px on one page draw at a fraction of their size in the panel. Show one state at a time: a component canvas of the real component (does "judge"), or a decision page whose options embed them (does "pick").`;
+
 /**
  * Why a preview of a workspace's port with nothing named to serve it is
  * refused: a server the agent starts in its own shell ends with that shell,
@@ -340,6 +424,8 @@ export interface ArtifactRead {
   stage?: StageState;
   /** Every key, or with `since` only those changed after it. */
   state: Record<string, ReadEntry>;
+  /** A component canvas's design system round, as `verify: true` asked it: what the ask did. */
+  verify?: string;
   /** What a sheet loads, from its stage's module graph; null until a view has loaded it. */
   weight?: SheetWeight | null;
   /** A port preview's workspace, whose dev server it is. */
@@ -371,6 +457,10 @@ const CHOICE_ATTRIBUTE = /\bdata-cawco-choice="([^"]+)"/g;
 
 /** One artifact as `artifact_list` answers it. */
 export interface ArtifactStatus {
+  /** Its line in the panel's head. */
+  ask: string;
+  /** What the person does on it. */
+  does: ArtifactDoes;
   id: string;
   kind: ArtifactKind;
   /** The delegate that put it in this session's panel, when another session made it. */
@@ -384,6 +474,8 @@ export interface ArtifactStatus {
   picksAwaiting: number;
   /** Pins the person left open. */
   pins: number;
+  /** The person pressed Send since your last change (a revision, or a new ask). */
+  sent: boolean;
   /** The session that made it, when it is not the caller's own (a lead reading its project's). */
   session?: string;
   /** Whether its session's panel shows it now. */
@@ -391,7 +483,7 @@ export interface ArtifactStatus {
   /** The person's changes (picks, notes, drawn elements) since the session last read it. */
   unread: number;
   updatedAt: string;
-  /** Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks or a canvas's changes unread). */
+  /** Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it by a delegate and not opened yet). */
   waitingOn: ("person" | "session")[];
 }
 
@@ -460,6 +552,13 @@ export const SHOWN_WAIT_MS = 10_000;
 export const NO_VIEW =
   "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
 
+/** Why a `to: "parent"` create opened nothing: the parent opens it. */
+const HELD =
+  "Handed to your parent, not opened: it opens in their panel when they call artifact_show.";
+
+/** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
+const HANDED = "handed";
+
 /** A view's word that it has (or could not load) the artifact at `revision` (`POST …/artifacts/:artifact/shown`). */
 export interface ShownAck {
   /** Which view: a dashboard tab's id, or the app's. */
@@ -507,6 +606,43 @@ export interface Promoted {
   /** `artifacts/<name>/`, from the project folder's root. */
   path: string;
 }
+
+const PAGE_HIDDEN = /<(script|style|template|noscript)\b[\s\S]*?<\/\1\s*>/gi;
+const PAGE_TAG = /<[^>]+>/g;
+const PAGE_ENTITY = /&(amp|lt|gt|quot|#39|apos|nbsp);/g;
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  "#39": "'",
+  apos: "'",
+  nbsp: " ",
+};
+const PAGE_SPACES = /\s+/g;
+
+/** The words a page's reader sees: its HTML less scripts, styles and tags, its common entities read. */
+export const pageText = (html: string): string =>
+  html
+    .replace(PAGE_HIDDEN, " ")
+    .replace(PAGE_TAG, " ")
+    .replace(PAGE_ENTITY, (_, name: string) => ENTITIES[name] ?? " ")
+    .replace(PAGE_SPACES, " ")
+    .trim();
+
+/** A PNG's pixels, from its header's IHDR chunk; null when it is too short to say. */
+export const pngSize = (
+  png: Uint8Array
+): { width: number; height: number } | null => {
+  if (png.length < 24) {
+    return null;
+  }
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+};
+
+/** A thumbnail's most bytes in each scheme: the pane's capture of a page, as `previewPng` takes it. */
+export const THUMBNAIL_BYTES = 3 * 1024 * 1024;
 
 /** A promote from a session outside a project. WORDS.md's error formula. */
 export const NO_PROJECT =
@@ -579,7 +715,8 @@ const newestHash = (state: Record<string, ChoiceEntry>): string | null =>
   Object.values(state).sort((a, b) => b.at.localeCompare(a.at))[0]?.pageHash ??
   null;
 
-const named = (row: ArtifactRow) => `the ${row.kind} "${row.name}"`;
+const named = (row: Pick<ArtifactRow, "kind" | "name">) =>
+  `the ${row.kind} "${row.name}"`;
 
 /** The machine a hostname, its label or its id names. */
 const machineNamed = (
@@ -663,6 +800,8 @@ export interface ComponentReadAsk {
   /** One frame's delta from rest, its transitions and parts. */
   state?: StateAsk;
   story?: string;
+  /** Ask the design system's verifier for a round on it; its findings come as a message. */
+  verify?: boolean;
 }
 
 /** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
@@ -698,7 +837,7 @@ const sheetOf = (
 
 /** A workspace preview's server (core `ServeSpec`): its workspace and port; null for any other artifact. */
 const servedOf = (
-  row: ArtifactRow
+  row: Pick<ArtifactRow, "kind" | "source">
 ): { port: number; workspace: string } | null =>
   row.kind === "preview" &&
   "port" in row.source &&
@@ -739,6 +878,12 @@ const errorSection = (error: StageError): string => {
     ...(error.frame ? ["```", error.frame, "```"] : []),
   ].join("\n");
 };
+
+/**
+ * Who moved a session's panel: the person (a press in the panel, the artifact
+ * menu, a pin's link, a page's Open to draw), or the agent through its tools.
+ */
+export type PanelHand = "person" | "agent";
 
 /** What `artifact_delete` and the panel's Remove answer: what the session's panel shows now, or null for nothing. */
 export interface Removed {
@@ -811,11 +956,15 @@ export interface ArtifactServiceDeps {
   docs: ArtifactDocs;
   /** Whether a session has ended: it takes no input now, so its marks go to its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
-  /** What a folder preview of `dir` loads, weighed on machine `machineId` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
-  folderWeight: (machineId: string, dir: string) => Promise<FolderWeight>;
+  /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
+  folderWeight: (
+    machineId: string,
+    dir: string,
+    path: string | undefined
+  ) => Promise<FolderWeight>;
   /**
-   * Tells `parent` once that its delegate `maker` put `artifact` in its
-   * panel (core `artifactHandedNotice`), on the channel the person's picks
+   * Tells `parent` once that its delegate `maker` handed it `artifact`, not
+   * opened (core `artifactHandedNotice`), on the channel the person's picks
    * take (server.ts `handArtifactUp`).
    */
   handedUp: (
@@ -831,16 +980,25 @@ export interface ArtifactServiceDeps {
    * or is gone is his to act on (Projects spec §5.8, decisions.ts).
    */
   ledProjects: (instance: InstanceRow) => string[];
+  /** The hub's lifetime: the marks' delivery and the shown acks' keep run on it. */
+  lifetime: HubLifetimeShape;
+  /**
+   * The session's panel is listed: the browser it uses gets its artifact
+   * there, made the first time (browsers.ts `listed`).
+   */
+  listing: (instance: InstanceRow) => void;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
    * Publishes `artifact` to its session's panel at a fresh revision (the open
    * frame every view of the session hears); why not, when its server could
    * not be started. Whether a view put it on screen is that view's word
-   * ({@link Artifacts.shown}).
+   * ({@link Artifacts.shown}). One the person opened is kept as what they
+   * have in front ({@link ArtifactServiceDeps.personShown}).
    */
   open: (
-    artifact: ArtifactRow
+    artifact: ArtifactRow,
+    by: PanelHand
   ) => Promise<{ ok: true; revision: string } | { error: string; ok: false }>;
   /** The workspace a session runs in, by id; undefined outside one. */
   ownWorkspace: (instance: InstanceRow) => string | undefined;
@@ -859,10 +1017,26 @@ export interface ArtifactServiceDeps {
     | { refused: string; status: ArtifactRefusal["status"] }
   >;
   /**
+   * The artifact the person last opened in session `instanceId`'s panel
+   * themselves, kept until the panel closes; undefined when they opened none
+   * since. An agent's show never changes it.
+   */
+  personShown: (instanceId: string) => string | undefined;
+  /**
    * Session `instanceId`'s preview origin (preview.ts), its listener started
    * when it has none; throws a refusal when every port is taken.
    */
   previewAddress: (instanceId: string) => PreviewAddress;
+  /**
+   * A preview no panel shows, loaded once through a listener of its own on
+   * machine `machineId` as a pane's load would be, then let go: null when
+   * its page answered, else the hop that didn't and the machine's words for
+   * it. A preview handed to a parent is checked so before it reaches them.
+   */
+  reachable: (
+    machineId: string,
+    source: Exclude<PreviewSource, { page: string }>
+  ) => Promise<{ failure: ShownFailure; why: string | null } | null>;
   /**
    * Every view of session `instanceId`'s panel hears its artifacts again on
    * the frame it follows (the panel's open frame, unchanged otherwise); none
@@ -876,6 +1050,14 @@ export interface ArtifactServiceDeps {
   removed?: (row: ArtifactRow) => void;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
+  /**
+   * Canvas `artifact`'s host page opened in the Chromium of the hub's own
+   * machine (agent canvas-screen.ts), told it is that canvas, its doc at
+   * `sync`, where it joins the doc as a screen: what holds it on through a
+   * write, and what lets it go. Throws an {@link ArtifactRefusal} saying why
+   * when none can open.
+   */
+  screen: (artifact: ArtifactRow, sync: string) => Promise<CanvasScreen>;
   /**
    * What a send applies before the session hears it (setup.ts
    * `applySetupPicks`); a refusal throws and nothing is sent.
@@ -921,15 +1103,7 @@ export interface ArtifactServiceDeps {
     files?: string[]
   ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
   /** The design map of session `instance`'s workspace (agent stage.ts `stageComponents`): its components, paged, or one's card. */
-  stageComponents: (
-    instance: InstanceRow,
-    ask: DesignQuery
-  ) => Promise<DesignMap>;
-  /**
-   * A component canvas drawn by its workspace's daemon in the machine's own
-   * Chromium (agent stage.ts `renderStage`): the stage's report once every
-   * section drew, and a picture when asked.
-   */
+  stageComponents: (at: StageAt, ask: DesignQuery) => Promise<DesignMap>;
   stageRender: (
     at: StageAt,
     ask: { files: string[]; png?: boolean; spec?: CanvasSpec; state?: StateAsk }
@@ -942,6 +1116,17 @@ export interface ArtifactServiceDeps {
   stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
   /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
   unserve: (machineId: string, workspace: string, port: number) => void;
+  /**
+   * A component canvas drawn by its workspace's daemon in the machine's own
+   * Chromium (agent stage.ts `renderStage`): the stage's report once every
+   * section drew, and a picture when asked.
+   */
+  /**
+   * A design system round asked of a component canvas in a chat (hub
+   * design-verify.ts `ask`): its verdict goes to `requester`. Answers what
+   * the ask did, one sentence.
+   */
+  verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
 }
@@ -949,17 +1134,110 @@ export interface ArtifactServiceDeps {
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const { db, docs } = deps;
 
+  /**
+   * Each artifact's kept thumbnail (`<root>/<id>/thumbnail.json` beside its
+   * PNGs), read from its file once and kept here as it changes.
+   */
+  const thumbnails = new Map<string, ArtifactThumbnail | null>();
+  const keptThumbnail = (id: string): ArtifactThumbnail | null => {
+    if (!thumbnails.has(id)) {
+      let kept: ArtifactThumbnail | null = null;
+      try {
+        kept = JSON.parse(
+          readFileSync(thumbnailPath(deps.root, id, "json"), "utf8")
+        ) as ArtifactThumbnail;
+      } catch {
+        kept = null;
+      }
+      thumbnails.set(id, kept);
+    }
+    return thumbnails.get(id) ?? null;
+  };
+  /** Each canvas's picture's size, by the moment it was drawn. */
+  const pictureSizes = new Map<
+    string,
+    { at: string; width: number; height: number }
+  >();
+  /** A canvas's own picture, else the thumbnail a screen took. */
+  const thumbnailOf = (row: ArtifactRow): ArtifactThumbnail | null => {
+    if (row.kind !== "canvas") {
+      return keptThumbnail(row.id);
+    }
+    const at = docs.doc(row.id).getMap("meta").get("pictureAt");
+    if (typeof at !== "string") {
+      return null;
+    }
+    let size = pictureSizes.get(row.id);
+    if (size?.at !== at) {
+      const png = pictureBytes(row.id);
+      const read = png ? pngSize(png) : null;
+      if (!read) {
+        return null;
+      }
+      size = { at, ...read };
+      pictureSizes.set(row.id, size);
+    }
+    return { at, single: true, width: size.width, height: size.height };
+  };
+
+  /**
+   * Whether the person pressed Send since the session last changed it: the
+   * doc's `meta.sentAt` newer than its `meta.revisedAt`, which every revision
+   * and every new ask moves ({@link stampMeta}, {@link askNow}).
+   */
+  const sentOf = (row: ArtifactRow): boolean => {
+    const meta = docs.doc(row.id).getMap("meta");
+    const sentAt = meta.get("sentAt") as string | null | undefined;
+    const revisedAt = meta.get("revisedAt") as string | undefined;
+    return !!sentAt && (!revisedAt || sentAt > revisedAt);
+  };
+
   const summaryOf = (row: ArtifactRow): ArtifactSummary => ({
     id: row.id,
     kind: row.kind,
     name: row.name,
+    does: row.does,
+    ask: row.ask,
+    sent: sentOf(row),
+    waiting: waitingOnPerson(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     shownAt: row.shownAt?.toISOString() ?? null,
     promoted:
       (docs.doc(row.id).getMap("meta").get("promoted") as
         ArtifactPromotion | undefined) ?? null,
+    thumbnail: thumbnailOf(row),
   });
+
+  /**
+   * The words on an artifact's page, for Files' search: a page's text (its
+   * HTML less its scripts, styles and tags), a canvas's outline; a preview
+   * or a component has none of its own. Read once per change of the row.
+   */
+  const wordsKept = new Map<string, { at: number; words: string }>();
+  const wordsOnPage = (row: ArtifactRow): string => {
+    const at = row.updatedAt.getTime();
+    const kept = wordsKept.get(row.id);
+    if (kept?.at === at) {
+      return kept.words;
+    }
+    let words = "";
+    if (row.kind === "page") {
+      try {
+        words = pageText(
+          readFileSync(join(deps.root, row.id, "index.html"), "utf8")
+        );
+      } catch {
+        words = "";
+      }
+    } else if (row.kind === "canvas") {
+      words = canvasOutline(
+        canvasEntries(docs, row.id).map((entry) => entry.el)
+      );
+    }
+    wordsKept.set(row.id, { at, words });
+    return words;
+  };
 
   const sessionOf = (id: string): InstanceRow => {
     const row = deps.instance(id);
@@ -980,7 +1258,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Artifact `id`, when the session owns it or made it: a delegate goes on
-   * updating, reading and showing what it put in its parent's panel.
+   * updating and reading what it handed to its parent.
    */
   const ownedOrMade = (instance: InstanceRow, id: string): ArtifactRow => {
     const row = db.get(id);
@@ -988,6 +1266,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return row;
     }
     return own(instance, id);
+  };
+
+  /** The session's newest artifact the panel can show: a draft canvas still in the composer is not one. */
+  const nextNewest = (instance: InstanceRow): ArtifactRow | undefined =>
+    db
+      .ofInstance(instance.id)
+      .find((other) => docs.doc(other.id).getMap("meta").get("draft") !== true);
+
+  /** What the person last opened in the session's panel themselves, while the session still has it. */
+  const personHad = (instance: InstanceRow): ArtifactRow | undefined => {
+    const id = deps.personShown(instance.id);
+    const row = id === undefined ? undefined : db.get(id);
+    return row?.instanceId === instance.id ? row : undefined;
   };
 
   /**
@@ -1023,19 +1314,53 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Tells the owner, once, that its delegate put the artifact in its panel:
-   * when it first arrives from that maker (new, or one the owner had from
-   * someone else). The maker's own panel, and its re-creates, are not told.
+   * Whether a create hands the artifact to its owner: a delegate's
+   * `to: "parent"`, readied but never shown by the create, so the parent
+   * reviews each revision its delegate makes before the person sees it.
    */
-  const handUp = async (
-    { owner, maker }: Making,
+  const handing = ({ owner, maker }: Making): boolean => owner.id !== maker.id;
+
+  /** Whether an artifact waits on its parent unopened ({@link handOver}). */
+  const isHanded = (row: ArtifactRow): boolean =>
+    docs.doc(row.id).getMap("meta").get(HANDED) === true;
+
+  /**
+   * A create's show, and what readies the artifact after it (`ready`, a
+   * canvas's drawing). The session's own artifact is shown in its panel,
+   * then readied there. One handed to its parent ({@link handing}) is
+   * marked {@link HANDED} and not shown, until the parent's own show opens
+   * it; it is readied unopened, and only then is the parent told, once per
+   * hand-off: when it wasn't waiting on them already, or came from another
+   * delegate than the one it was waiting from. A `ready` that throws tells
+   * the parent nothing and leaves its mark as it was.
+   */
+  const handOver = async (
+    making: Making,
     before: ArtifactRow | undefined,
-    row: ArtifactRow
-  ): Promise<void> => {
-    if (owner.id === maker.id || before?.madeBy === maker.id) {
-      return;
+    row: ArtifactRow,
+    ready?: () => Promise<void>
+  ): ReturnType<typeof show> => {
+    if (!handing(making)) {
+      const shown = await show(row, "agent");
+      await ready?.();
+      return shown;
     }
-    await deps.handedUp(owner, maker, row);
+    const was = isHanded(row);
+    const waiting = was && before?.madeBy === making.maker.id;
+    const meta = docs.doc(row.id).getMap("meta");
+    docs.transact(row.id, "hub", () => meta.set(HANDED, true));
+    try {
+      await ready?.();
+    } catch (error) {
+      if (!was) {
+        docs.transact(row.id, "hub", () => meta.delete(HANDED));
+      }
+      throw error;
+    }
+    if (!waiting) {
+      await deps.handedUp(making.owner, making.maker, row);
+    }
+    return { opened: false, started: true, why: HELD };
   };
 
   /**
@@ -1144,6 +1469,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * project's and stays.
    */
   const discard = (row: ArtifactRow) => {
+    letGoHeadless(row.id);
     docs.drop(row.id);
     db.remove(row.id);
     rmSync(join(deps.root, row.id), { recursive: true, force: true });
@@ -1194,7 +1520,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The server `row` previewed (core `ServeSpec`) is stopped once no other
    * artifact previews that port of its workspace: its life is its artifacts'.
    */
-  const releaseServed = (row: ArtifactRow) => {
+  const releaseServed = (row: Placed & { id?: string }) => {
     const served = servedOf(row);
     if (!(served && row.machineId)) {
       return;
@@ -1270,16 +1596,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
-  /** Writes the doc's meta for the artifact as the hub keeps it. */
+  /**
+   * Writes the doc's meta for the artifact as the hub keeps it: what the
+   * person does there and its ask, which every open view's head reads, and
+   * when the session last changed it (`revisedAt`), which a Send answers.
+   */
   const stampMeta = (row: ArtifactRow, hash: string | null) => {
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
       meta.set("kind", row.kind);
       meta.set("name", row.name);
+      meta.set("does", row.does);
+      meta.set("ask", row.ask);
       meta.set("revision", row.revision);
+      meta.set("revisedAt", new Date().toISOString());
       if (hash !== null) {
         meta.set("pageHash", hash);
       }
+    });
+  };
+
+  /** A new ask in the doc, as a revision is: every open view's head morphs to it, and a Send before it is answered. */
+  const askNow = (id: string, ask: string) => {
+    docs.transact(id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      meta.set("ask", ask);
+      meta.set("revisedAt", new Date().toISOString());
     });
   };
 
@@ -1593,7 +1935,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /** Why a view could not load the artifact, in WORDS.md's error formula: what failed, and why. */
-  const notLoaded = (row: ArtifactRow, failure: ShownFailure): string => {
+  const notLoaded = (row: Placed, failure: ShownFailure): string => {
     const { source } = row;
     const machine = machineOf(row);
     const subject =
@@ -1616,7 +1958,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     return `${subject} answered, but not with a page the panel can show.`;
   };
-  const machineOf = (row: ArtifactRow): string => {
+  const machineOf = (row: Pick<ArtifactRow, "machineId">): string => {
     const machine = deps
       .machines()
       .find((one) => one.machineId === row.machineId);
@@ -1629,14 +1971,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * started, and nothing was published.
    */
   const show = async (
-    row: ArtifactRow
+    row: ArtifactRow,
+    by: PanelHand
   ): Promise<
     | { opened: true; started: true }
     | { opened: false; started: boolean; why: string }
   > => {
-    const published = await deps.open(row);
+    const published = await deps.open(row, by);
     if (!published.ok) {
       return { opened: false, why: published.error, started: false };
+    }
+    const meta = docs.doc(row.id).getMap("meta");
+    if (meta.get(HANDED) === true) {
+      docs.transact(row.id, "hub", () => meta.delete(HANDED));
     }
     const shown = await shownBy(row.id, published.revision);
     let ack: ShownAck;
@@ -1708,10 +2055,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The page posts its pictures of the marks it just made beside the doc
    * (sync.ts `artifactPictures`); they wait here for the delivery.
    */
-  const bursts = new Map<
-    string,
-    { first: number; timer: ReturnType<typeof setTimeout> }
-  >();
+  const bursts = new Map<string, { first: number; timer: HubTimer }>();
   const held = new Map<
     string,
     { pictures: Map<string, string>; url?: string }
@@ -1720,7 +2064,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const marked = (id: string) => {
     const now = Date.now();
     const burst = bursts.get(id);
-    clearTimeout(burst?.timer);
+    deps.lifetime.cancel(burst?.timer);
     const first = burst?.first ?? now;
     const wait = Math.max(
       0,
@@ -1728,7 +2072,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
     bursts.set(id, {
       first,
-      timer: setTimeout(() => {
+      timer: deps.lifetime.after(wait, () => {
         bursts.delete(id);
         // One delivery at a time: what is still owed when it ends goes next.
         if (delivering.has(id)) {
@@ -1743,7 +2087,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             );
           })
           .finally(() => delivering.delete(id));
-      }, wait),
+      }),
     });
   };
   docs.onMarks(marked);
@@ -2015,7 +2359,103 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** What a canvas's create or update draws: skeleton elements or Mermaid, converted on a screen; the ids written. */
+  /**
+   * The hub machine's screen on each canvas handed to its parent and not
+   * opened ({@link isHanded}), by artifact: opened by the first write that
+   * finds no screen joined, kept while any write on it runs (`writing`), and
+   * let go once a picture has followed the last of them (the page posts one
+   * after a quiet 2 s), or `screenHoldMs` after it. `joined` answers once its
+   * page has joined the canvas's doc; `settle` stops a let-go that waits.
+   */
+  const headless = new Map<
+    string,
+    { joined: Promise<CanvasScreen>; settle?: () => void; writing: number }
+  >();
+
+  /**
+   * The canvas's headless screen, opened when it has none and held on when
+   * it has: a write on it counted, any let-go that waited called off.
+   */
+  const headlessScreen = (row: ArtifactRow) => {
+    let screen = headless.get(row.id);
+    if (screen) {
+      screen.joined.then(
+        (one) => one.hold(),
+        () => undefined
+      );
+    } else {
+      const joined = deps.screen(row, routeOf(row.id)).then(async (one) => {
+        if (await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs)) {
+          return one;
+        }
+        one.release();
+        throw new ArtifactRefusal(
+          504,
+          `The canvas ${row.name} wasn't drawn: the hub's machine opened it, but its page didn't join the canvas within ${Math.round(CANVAS_LIMITS.convertMs / 1000)} s.`
+        );
+      });
+      const opened = { joined, writing: 0 };
+      headless.set(row.id, opened);
+      joined.catch(() => {
+        if (headless.get(row.id) === opened) {
+          headless.delete(row.id);
+        }
+      });
+      screen = opened;
+    }
+    screen.settle?.();
+    screen.writing += 1;
+    return screen;
+  };
+
+  /** The canvas's headless screen let go now, if it has one. */
+  const letGoHeadless = (id: string) => {
+    const screen = headless.get(id);
+    if (!screen) {
+      return;
+    }
+    screen.settle?.();
+    headless.delete(id);
+    screen.joined.then(
+      (one) => one.release(),
+      () => undefined
+    );
+  };
+
+  /** A write on the headless screen done: the last one lets it go once a picture follows it, or `screenHoldMs` on. */
+  const wroteHeadless = (id: string) => {
+    const screen = headless.get(id);
+    if (!screen) {
+      return;
+    }
+    screen.writing -= 1;
+    if (screen.writing > 0) {
+      return;
+    }
+    const meta = docs.doc(id).getMap("meta");
+    const pictured = (event: YMapEvent<unknown>) => {
+      if (event.keysChanged.has("pictureAt")) {
+        letGoHeadless(id);
+      }
+    };
+    const timer = setTimeout(
+      () => letGoHeadless(id),
+      CANVAS_LIMITS.screenHoldMs
+    );
+    meta.observe(pictured);
+    screen.settle = () => {
+      clearTimeout(timer);
+      meta.unobserve(pictured);
+      screen.settle = undefined;
+    };
+  };
+
+  /**
+   * What a canvas's create or update draws: skeleton elements or Mermaid,
+   * converted on a screen; the ids written. A canvas handed to its parent
+   * and not opened is drawn on the hub machine's headless screen
+   * ({@link headlessScreen}), so the parent reads it before anyone sees it.
+   */
   const draw = async (
     row: ArtifactRow,
     change: { elements: SkeletonElement[] } | { mermaid: string }
@@ -2027,19 +2467,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `One call writes at most ${CANVAS_LIMITS.elementsPerCall} elements; send the rest in another.`
         );
       }
-      return await convertOnScreen(docs, row.id, "elements", {
-        elements: change.elements,
-      });
-    }
-    if (change.mermaid.length > CANVAS_LIMITS.mermaid) {
+    } else if (change.mermaid.length > CANVAS_LIMITS.mermaid) {
       throw new ArtifactRefusal(
         413,
         `Mermaid is at most ${CANVAS_LIMITS.mermaid} characters; split the diagram.`
       );
     }
-    return await convertOnScreen(docs, row.id, "mermaid", {
-      mermaid: change.mermaid,
-    });
+    const convert = () =>
+      "elements" in change
+        ? convertOnScreen(docs, row.id, "elements", {
+            elements: change.elements,
+          })
+        : convertOnScreen(docs, row.id, "mermaid", {
+            mermaid: change.mermaid,
+          });
+    if (!(
+      isHanded(row) &&
+      (headless.has(row.id) || docs.screens(row.id) === 0)
+    )) {
+      return await convert();
+    }
+    try {
+      await headlessScreen(row).joined;
+      return await convert();
+    } finally {
+      wroteHeadless(row.id);
+    }
   };
 
   /**
@@ -2070,6 +2523,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       projectId: instance.projectId ?? null,
       kind: "canvas",
       name: free,
+      // The person's own canvas: nothing is asked of them on it.
+      does: "draw",
+      ask: "",
       machineId: null,
       source: { page: free },
       revision: 1,
@@ -2096,26 +2552,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /**
-   * Makes a canvas in `owner`'s panel (or opens the one of that name) and
-   * shows it; with elements or Mermaid, waits for a screen to join and
-   * draws them. `maker` is whose call it was.
-   */
-  const createCanvas = async (
-    making: Making,
+  /** The owner's canvas of that name, its maker now `maker` and its ask the input's, or a new one; and what was there. */
+  const canvasPlaced = (
+    { owner, maker }: Making,
     input: ArtifactInput
-  ): Promise<Created> => {
-    const { owner, maker } = making;
-    if (input.elements !== undefined && input.mermaid !== undefined) {
-      throw new ArtifactRefusal(
-        400,
-        "A canvas takes elements or mermaid, not both."
-      );
-    }
+  ): { before: ArtifactRow | undefined; row: ArtifactRow } => {
     const now = new Date();
     const before = db.byName(owner.id, "canvas", input.name);
+    const asked = askedOf(input);
     const row =
-      (before && db.update(before.id, { madeBy: maker.id, updatedAt: now })) ??
+      (before &&
+        db.update(before.id, { madeBy: maker.id, ...asked, updatedAt: now })) ??
       db.create({
         id: crypto.randomUUID(),
         instanceId: owner.id,
@@ -2123,6 +2570,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         projectId: owner.projectId ?? null,
         kind: "canvas",
         name: input.name,
+        ...asked,
         machineId: null,
         // The hub serves it, as it serves a page.
         source: { page: input.name },
@@ -2135,52 +2583,124 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         updatedAt: now,
         shownAt: null,
       });
-    stampMeta(row, null);
-    await handUp(making, before, row);
-    const made = {
-      id: row.id,
-      kind: row.kind,
-      name: row.name,
-      route: routeOf(row.id),
-      ...openedOf(await show(row)),
-    };
-    // Its outline as it stands, read as the owner's read only when the owner made it.
-    const outlineNow = () =>
-      readCanvas(
-        db.get(row.id) as ArtifactRow,
-        undefined,
-        false,
-        owner.id === maker.id
-      ).outline;
-    if (input.elements === undefined && input.mermaid === undefined) {
-      const outline = outlineNow();
-      return {
-        ...made,
-        outline,
-        ...(outline
-          ? {}
-          : {
-              note: "The canvas is empty. Draw on it with artifact_update (elements or mermaid), or wait for the person to draw.",
-            }),
-      };
+    return { before, row };
+  };
+
+  /** What a canvas's create draws: its elements, its Mermaid, or nothing. */
+  const drawingOf = ({
+    elements,
+    mermaid,
+  }: ArtifactInput):
+    { elements: SkeletonElement[] } | { mermaid: string } | null => {
+    if (elements !== undefined) {
+      return { elements };
     }
-    if (!(await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs))) {
+    return mermaid === undefined ? null : { mermaid };
+  };
+
+  /**
+   * A create's drawing on canvas `row`: on its panel's screen once one
+   * joins, or, handed up, on its headless screen ({@link draw}); the ids
+   * written.
+   */
+  const drawnOn = async (
+    row: ArtifactRow,
+    change: { elements: SkeletonElement[] } | { mermaid: string }
+  ): Promise<string[]> => {
+    if (!(
+      isHanded(row) ||
+      (await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs))
+    )) {
       throw new ArtifactRefusal(
         503,
         `The canvas ${row.name} is made (id ${row.id}) and empty. ${NO_SCREEN}`
       );
     }
-    const wrote = await draw(
-      row,
-      input.elements === undefined
-        ? { mermaid: input.mermaid as string }
-        : { elements: input.elements }
+    return await draw(row, change);
+  };
+
+  /**
+   * A handed canvas that couldn't be readied, refused: one the parent
+   * never had is not kept, so nothing of it reaches them.
+   */
+  const unhanded = (
+    before: ArtifactRow | undefined,
+    row: ArtifactRow,
+    error: ArtifactRefusal
+  ): ArtifactRefusal => {
+    if (!before) {
+      discard(row);
+    }
+    return new ArtifactRefusal(
+      error.status,
+      `${error.message} ${before ? "Your parent wasn't told." : "Nothing was handed to your parent."}`,
+      { cause: error }
     );
-    return {
-      ...made,
-      wrote,
-      outline: outlineNow(),
+  };
+
+  /**
+   * Makes a canvas in `owner`'s panel (or opens the one of that name) and
+   * shows it, or hands it to its parent unopened ({@link handOver}); with
+   * elements or Mermaid, draws them ({@link drawnOn}) before the parent
+   * hears of it. `maker` is whose call it was.
+   */
+  const createCanvas = async (
+    making: Making,
+    input: ArtifactInput
+  ): Promise<Created> => {
+    if (input.elements !== undefined && input.mermaid !== undefined) {
+      throw new ArtifactRefusal(
+        400,
+        "A canvas takes elements or mermaid, not both."
+      );
+    }
+    const { before, row } = canvasPlaced(making, input);
+    stampMeta(row, null);
+    const change = drawingOf(input);
+    let wrote: string[] | undefined;
+    let shown: Opened;
+    try {
+      shown = openedOf(
+        await handOver(
+          making,
+          before,
+          row,
+          change
+            ? async () => {
+                wrote = await drawnOn(row, change);
+              }
+            : undefined
+        )
+      );
+    } catch (error) {
+      throw handing(making) && error instanceof ArtifactRefusal
+        ? unhanded(before, row, error)
+        : error;
+    }
+    // Its outline as it stands, read as the owner's read only when the owner made it.
+    const { outline } = readCanvas(
+      db.get(row.id) as ArtifactRow,
+      undefined,
+      false,
+      making.owner.id === making.maker.id
+    );
+    const made = {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      route: routeOf(row.id),
+      ...shown,
+      outline,
     };
+    if (wrote) {
+      return { ...made, wrote };
+    }
+    return outline
+      ? made
+      : {
+          ...made,
+          note: "The canvas is empty. Draw on it with artifact_update (elements or mermaid), or wait for the person to draw.",
+        };
   };
 
   /** A canvas's change: elements added or replaced by id, ids deleted, or Mermaid appended; read after as `ownersRead` says. */
@@ -2521,7 +3041,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         `A component canvas takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`
       );
     }
-    const problem = canvasProblem(input, true);
+    const problem = canvasProblem(input);
     if (problem) {
       throw new ArtifactRefusal(400, problem);
     }
@@ -2546,6 +3066,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           source,
           machineId,
           madeBy: maker.id,
+          ...askedOf(input),
           revision: before.revision + 1,
           updatedAt: now,
         }) as ArtifactRow)
@@ -2556,6 +3077,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           projectId: owner.projectId ?? null,
           kind: "component",
           name: input.name,
+          ...askedOf(input),
           machineId,
           source,
           revision: 1,
@@ -2569,12 +3091,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         });
     stampMeta(row, null);
     writeStage(row, opened.state, opened.sheet);
-    const shown = await show(row);
+    const shown = await handOver(making, before, row);
     if (!(shown.started || before)) {
       discard(row);
       throw new ArtifactRefusal(503, shown.why);
     }
-    await handUp(making, before, row);
     const owned = sheetOf(row);
     const report = await drawnReport(
       { workspace },
@@ -2703,6 +3224,90 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     } as ArtifactRead;
   };
 
+  /** A design system round on component canvas `row`, asked by `requester`: what the ask did. */
+  const askVerify = (
+    requester: InstanceRow,
+    row: ArtifactRow
+  ): Promise<string> => {
+    const sheet = sheetOf(row);
+    if (!sheet) {
+      return Promise.reject(
+        new ArtifactRefusal(
+          409,
+          `${row.name} is a ${row.kind}: verify is a component canvas's.`
+        )
+      );
+    }
+    return deps.verify(requester, {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      projectId: row.projectId,
+      workspaceId: sheet.workspace,
+      files: sheet.files,
+    });
+  };
+
+  /**
+   * Whether a built page or a weighed folder holds what its `does` promises
+   * (checks 3b and 5): a page for picking holds a choice, and a page or
+   * folder for judging or picking is no catalogue of desk captures.
+   */
+  const deliversItsAsk = async (
+    input: Pick<ArtifactInput, "does">,
+    made: {
+      html: string | null;
+      program: BuiltProgram | undefined;
+      weight: FolderWeight | undefined;
+    }
+  ): Promise<void> => {
+    const { html, program, weight } = made;
+    if (input.does === "pick") {
+      const holds = program
+        ? program.read.cards.length > 0
+        : HTML_CHOICE.test(html ?? "");
+      if (!holds) {
+        throw new ArtifactRefusal(400, NO_CHOICE);
+      }
+    }
+    if (!(input.does === "judge" || input.does === "pick")) {
+      return;
+    }
+    let captures = weight?.captures ?? 0;
+    if (html !== null && !program) {
+      captures = await deskCaptures(html, dataUrlBytes);
+    }
+    if (captures > DESK_CAPTURES_PER_PAGE) {
+      throw new ArtifactRefusal(400, capturesRefused(captures));
+    }
+  };
+
+  /**
+   * Checks 1 to 4b, before anything is built or started: a create says what
+   * the person does there, in their words, on a kind that can deliver it.
+   * The person's own composer canvas (`draft`) asks them nothing.
+   */
+  const asksFirst = (input: ArtifactInput): void => {
+    if (input.draft) {
+      return;
+    }
+    const { does, ask } = askedOf(input);
+    const problem = askProblem(ask) ?? doesProblem(input, does);
+    if (problem) {
+      throw new ArtifactRefusal(400, problem);
+    }
+  };
+
+  /** What a create names the person does there and its ask, as its row keeps them; refused with the tool's shape when it names neither. */
+  const askedOf = (
+    input: Pick<ArtifactInput, "does" | "ask">
+  ): { ask: string; does: ArtifactDoes } => {
+    if (input.does === undefined || input.ask === undefined) {
+      throw new ArtifactRefusal(422, CREATE_SHAPE);
+    }
+    return { does: input.does, ask: input.ask };
+  };
+
   /** A canvas (or the composer's draft) and a sheet are each made their own way; a page or preview is null here, made by `create` itself. */
   const madeOwnWay = (
     making: Making,
@@ -2743,14 +3348,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const placed = (
     { owner, maker }: Making,
-    input: Pick<ArtifactInput, "kind" | "name">,
+    input: Pick<ArtifactInput, "kind" | "name" | "does" | "ask">,
     at: { machineId: string | null; source: PreviewSource }
   ): { before: ArtifactRow | undefined; row: ArtifactRow } => {
     const now = new Date();
     const before = db.byName(owner.id, input.kind, input.name);
+    const asked = askedOf(input);
     if (before) {
       const row = db.update(before.id, {
         ...at,
+        ...asked,
         madeBy: maker.id,
         revision: before.revision + 1,
         updatedAt: now,
@@ -2764,6 +3371,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       projectId: owner.projectId ?? null,
       kind: input.kind,
       name: input.name,
+      ...asked,
       ...at,
       revision: 1,
       seq: 0,
@@ -2777,9 +3385,36 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return { before, row };
   };
 
+  /**
+   * A preview handed to a parent, loaded first: no panel loads it to say it
+   * failed, so one that doesn't answer is refused here, its served server let
+   * go, and it never reaches the parent. Nothing for a page.
+   */
+  const answersFirst = async (at: Placed): Promise<void> => {
+    const { kind, machineId, source } = at;
+    if (!(kind === "preview" && machineId) || "page" in source) {
+      return;
+    }
+    const down = await deps.reachable(machineId, source);
+    if (!down) {
+      return;
+    }
+    releaseServed(at);
+    throw new ArtifactRefusal(
+      503,
+      `${notLoaded(at, down.failure)}${down.why ? ` (${down.why})` : ""} It wasn't handed to your parent.`
+    );
+  };
+
   /** The delegate that put it in its owner's panel, as `artifact_list` names it; nothing when the owner made it. */
   const handedBy = (row: ArtifactRow): { madeBy?: string } =>
     row.madeBy && row.madeBy !== row.instanceId ? { madeBy: row.madeBy } : {};
+
+  /** Whether the person has something to do on it now, as `artifact_list` reads it for its owner. */
+  const waitingOnPerson = (row: ArtifactRow): boolean => {
+    const owner = deps.instance(row.instanceId);
+    return !!owner && statusOf(owner, row).waitingOn.includes("person");
+  };
 
   /** One artifact as `artifact_list` answers it, read for `caller`. */
   const statusOf = (caller: InstanceRow, row: ArtifactRow): ArtifactStatus => {
@@ -2808,6 +3443,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const shown = deps.showing(row.instanceId) === row.id;
     const opened = row.openedRevision === row.revision;
     const draft = doc.getMap("meta").get("draft") === true;
+    const handed = doc.getMap("meta").get(HANDED) === true;
     const waitingOn: ArtifactStatus["waitingOn"] = [];
     if (
       !draft &&
@@ -2818,7 +3454,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     if (
       !draft &&
-      (picksAwaiting > 0 || (row.kind === "canvas" && unread.length > 0))
+      (handed ||
+        picksAwaiting > 0 ||
+        (row.kind === "canvas" && unread.length > 0))
     ) {
       waitingOn.push("session");
     }
@@ -2826,10 +3464,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: row.id,
       kind: row.kind,
       name: row.name,
+      does: row.does,
+      ask: row.ask,
       ...(row.instanceId === caller.id ? {} : { session: row.instanceId }),
       ...handedBy(row),
       shown,
       opened,
+      sent: sentOf(row),
       updatedAt: row.updatedAt.toISOString(),
       pins,
       unread: unread.length,
@@ -2840,8 +3481,122 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   return {
-    list: (instanceId: string): ArtifactSummary[] =>
-      db.ofInstance(sessionOf(instanceId).id).map(summaryOf),
+    list: (instanceId: string): ArtifactSummary[] => {
+      const instance = sessionOf(instanceId);
+      deps.listing(instance);
+      return db.ofInstance(instance.id).map(summaryOf);
+    },
+
+    /**
+     * Files' search over the session's artifacts, by the find engine's own
+     * matcher (find-names `matchOf`, what Find and the composer's finder
+     * answer with): every word must match the name, the kind words, or the
+     * words on its page, at the transcript's lower weight. Best match first,
+     * then newest; a page that matched by its words brings the words round
+     * the first hit (`excerptOf`).
+     */
+    search: (instanceId: string, q: string): ArtifactHit[] => {
+      const query = parse(q);
+      const rows = db.ofInstance(sessionOf(instanceId).id);
+      if (query.tokens.length === 0) {
+        return rows.map((row) => ({ id: row.id, excerpt: null }));
+      }
+      return rows
+        .flatMap((row) => {
+          const words = wordsOnPage(row);
+          const match = matchOf(
+            {
+              asked: new Set([...KIND_WORDS.artifact, ...KIND_WORDS[row.kind]]),
+              fields: [
+                ...field("title", row.name),
+                ...field("transcript", words),
+              ],
+            },
+            query
+          );
+          if (match.score <= 0) {
+            return [];
+          }
+          const excerpt =
+            match.fields.includes("transcript") && query.words.length > 0
+              ? excerptOf(words, query.words)
+              : null;
+          return [{ row, score: match.score, excerpt }];
+        })
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            b.row.createdAt.getTime() - a.row.createdAt.getTime()
+        )
+        .map(({ row, excerpt }) => ({ id: row.id, excerpt }));
+    },
+
+    /**
+     * A screen's thumbnail of a page or preview (the dashboard's pane takes
+     * one per revision): kept beside the artifact's files, the latest only,
+     * and named by the list from then on. A canvas keeps its own picture.
+     */
+    keepThumbnail: (
+      instanceId: string,
+      id: string,
+      shot: {
+        light: Uint8Array | null;
+        dark: Uint8Array | null;
+        single: boolean;
+      }
+    ): ArtifactThumbnail => {
+      const row = own(sessionOf(instanceId), id);
+      if (row.kind === "canvas") {
+        throw new ArtifactRefusal(
+          409,
+          `${row.name} is a canvas: it keeps its own picture.`
+        );
+      }
+      const light = shot.light ?? (shot.single ? null : shot.dark);
+      const size = light ? pngSize(light) : null;
+      if (!(light && size)) {
+        throw new ArtifactRefusal(422, "A thumbnail needs a picture.");
+      }
+      writeStateFileSync(thumbnailPath(deps.root, id, "light"), light);
+      if (shot.single || !shot.dark) {
+        rmSync(thumbnailPath(deps.root, id, "dark"), { force: true });
+      } else {
+        writeStateFileSync(thumbnailPath(deps.root, id, "dark"), shot.dark);
+      }
+      const kept: ArtifactThumbnail = {
+        at: new Date().toISOString(),
+        single: shot.single || !shot.dark,
+        ...size,
+      };
+      writeStateFileSync(
+        thumbnailPath(deps.root, id, "json"),
+        JSON.stringify(kept)
+      );
+      thumbnails.set(id, kept);
+      return kept;
+    },
+
+    /** An artifact's latest picture in `scheme` (a single page's one picture in both), or null. */
+    thumbnailFile: (id: string, scheme: "light" | "dark"): Buffer | null => {
+      const row = db.get(id);
+      if (!row) {
+        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+      }
+      if (row.kind === "canvas") {
+        return pictureBytes(id);
+      }
+      const kept = keptThumbnail(id);
+      if (!kept) {
+        return null;
+      }
+      try {
+        return readFileSync(
+          thumbnailPath(deps.root, id, kept.single ? "light" : scheme)
+        );
+      } catch {
+        return null;
+      }
+    },
 
     /**
      * `artifact_list`: the session's artifacts (a project's lead also gets
@@ -2876,9 +3631,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Makes an artifact and shows it in the session's panel, or with
-     * `to: "parent"` in its parent's ({@link ownerFor}), the parent told once
-     * ({@link handUp}). A page or preview the panel's owner already has under
+     * Makes an artifact and shows it in the session's panel; with
+     * `to: "parent"` readies it for its parent ({@link ownerFor}) unopened,
+     * the parent told once and opening it itself ({@link handOver}).
+     * A preview handed so is loaded first ({@link ArtifactServiceDeps.reachable}),
+     * and one that doesn't answer is refused, nothing kept. A page or preview the panel's owner already has under
      * the same kind and name is replaced in place: its doc, and so every
      * pick, stays, and the caller becomes its maker. What it is made from (a
      * page's folder, a preview's workspace, a sheet's stage) is the caller's.
@@ -2898,6 +3655,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (stray) {
         throw new ArtifactRefusal(400, stray);
       }
+      asksFirst(input);
       const making: Making = {
         maker: instance,
         owner: ownerFor(instance, input),
@@ -2917,9 +3675,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const weight =
         "dir" in source && machineId
-          ? await deps.folderWeight(machineId, source.dir)
+          ? await deps.folderWeight(machineId, source.dir, source.path)
           : undefined;
+      await deliversItsAsk(input, { html, program, weight });
       const stage = await serveFirst(source, machineId);
+      if (handing(making)) {
+        await answersFirst({
+          kind: input.kind,
+          name: input.name,
+          machineId,
+          source,
+        });
+      }
       const { before, row } = placed(making, input, { source, machineId });
       if (html !== null) {
         writePage(row.id, html, program);
@@ -2927,14 +3694,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       stampMeta(row, pageHashOf(html, program));
       keepProgramDir(row, program, input.dir);
       keepServed(row, before, stage);
-      const shown = await show(row);
+      const shown = await handOver(making, before, row);
       if (!(shown.started || before) && input.kind === "preview") {
         // A preview nothing could start shows nothing: it is not kept. One
         // whose server did not answer stays in the panel, its failure on it.
         discard(row);
         throw new ArtifactRefusal(503, shown.why);
       }
-      await handUp(making, before, row);
       return {
         id: row.id,
         kind: row.kind,
@@ -3137,8 +3903,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * The state, meta and sentAt; a canvas's outline and what the person
      * changed, with its picture when `png`; with no id, the session's
-     * newest artifact. Its maker reads one it put in its parent's panel
-     * too, which leaves the parent's unread as it was.
+     * newest artifact. Its maker reads one it handed to its parent too,
+     * which leaves the parent's unread as it was.
      */
     read: async (
       instanceId: string,
@@ -3168,12 +3934,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row.kind === "canvas") {
         return readCanvas(row, since, png, ownersRead);
       }
-      return row.kind === "component"
-        ? await readSheet(row, since, ownersRead, {
-            ...ask,
-            png: png || ask.png,
-          })
-        : read(row, since, ownersRead);
+      if (row.kind !== "component") {
+        return read(row, since, ownersRead);
+      }
+      const answer = await readSheet(row, since, ownersRead, {
+        ...ask,
+        png: png || ask.png,
+      });
+      return ask.verify
+        ? { ...answer, verify: await askVerify(instance, row) }
+        : answer;
     },
 
     /** `artifact_update` of a sheet by its owner or its maker: one story's args, or one story op, written by its stage. */
@@ -3194,9 +3964,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * `artifact_update` of a component canvas's about, edges, groups or
-     * dials: its page's address changes, so the panel draws it again at
-     * the next revision. Answers what changed and the canvas's new spec.
+     * `artifact_update` of a component canvas's edges, groups or dials: its
+     * page's address changes, so the panel draws it again at the next
+     * revision. Answers what changed and the canvas's new spec.
      */
     canvasUpdate: async (
       instanceId: string,
@@ -3209,15 +3979,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!(sheet && "port" in row.source)) {
         throw new ArtifactRefusal(
           409,
-          `${row.name} is a ${row.kind}: about, edges, group and dials are a component canvas's.`
+          `${row.name} is a ${row.kind}: edges, group and dials are a component canvas's.`
         );
       }
-      const problem = canvasProblem(input, false);
+      const problem = canvasProblem(input);
       if (problem) {
         throw new ArtifactRefusal(400, problem);
       }
       const spec = specOf(row.name, {
-        about: input.about ?? sheet.spec.about,
         edges: input.edges ?? sheet.spec.edges,
         group: input.group ?? sheet.spec.group,
         dials: input.dials ?? sheet.spec.dials,
@@ -3228,10 +3997,33 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         revision: row.revision + 1,
         updatedAt: new Date(),
       }) as ArtifactRow;
+      stampMeta(next, null);
       if (deps.showing(next.instanceId) === next.id) {
-        await show(next);
+        await show(next, "agent");
       }
       return { id: next.id, revision: next.revision, spec };
+    },
+
+    /**
+     * `artifact_update` with `ask`, for any kind: the head's line changes in
+     * every open view (it reads the doc's `meta.ask`), and the person's
+     * last Send is answered, so the head asks again.
+     */
+    askUpdate: (
+      instanceId: string,
+      id: string,
+      ask: string
+    ): { ask: string; id: string } => {
+      const row = ownedOrMade(sessionOf(instanceId), id);
+      const problem = askProblem(ask);
+      if (problem) {
+        throw new ArtifactRefusal(400, problem);
+      }
+      db.update(row.id, { ask, updatedAt: new Date() });
+      askNow(row.id, ask);
+      // Every view of the panel hears the frame again with the new ask; nothing reloads.
+      deps.relist(row.instanceId);
+      return { id: row.id, ask };
     },
 
     /**
@@ -3245,9 +4037,78 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): Promise<ArtifactRead> =>
       writeSheet(own(sessionOf(instanceId), id), change, "person"),
 
+    /** The panel's Verify on a component canvas: a round asked for its session, whose verdict reaches that session. */
+    verifyFor: (instanceId: string, id: string): Promise<string> => {
+      const session = sessionOf(instanceId);
+      return askVerify(session, own(session, id));
+    },
+
     /** `design_map`: the session's workspace's components, paged, or one component's card (agent stage.ts `stageComponents`). */
     designMap: (instanceId: string, ask: DesignQuery): Promise<DesignMap> =>
-      deps.stageComponents(sessionOf(instanceId), ask),
+      deps.stageComponents({ session: sessionOf(instanceId) }, ask),
+
+    /**
+     * A component canvas's map for its panel: the component its states file
+     * mounts, with what renders it (used in) and what it renders (made of),
+     * each with its states, frames drawn, states files and frames in
+     * miniature, read on the workspace its stage runs in.
+     */
+    mapOf: async (instanceId: string, id: string): Promise<CanvasMap> => {
+      const row = own(sessionOf(instanceId), id);
+      const sheet = sheetOf(row);
+      const component = (
+        docs.doc(row.id).getMap("meta").get("sheet") as SheetRead | undefined
+      )?.meta.component;
+      if (!(sheet && component)) {
+        throw new ArtifactRefusal(
+          409,
+          sheet
+            ? `${row.name}'s states file names no component the stage resolved, so it has no map.`
+            : `${row.name} is a ${row.kind}: a map is a component canvas's.`
+        );
+      }
+      const [card] = (
+        await deps.stageComponents(
+          { workspace: sheet.workspace },
+          {
+            dir: sheet.dir,
+            component: join(sheet.dir, component),
+            thumbs: true,
+          }
+        )
+      ).components;
+      if (!card) {
+        throw new ArtifactRefusal(
+          409,
+          `${component} is no component the stage maps.`
+        );
+      }
+      // States files as a canvas address names them: from the toolchain root.
+      const ownFiles = (files: string[] | undefined) =>
+        (files ?? []).map((file) => relative(sheet.dir, file));
+      const node = (link: DesignLink): CanvasMapNode => ({
+        name: link.name,
+        file: link.file,
+        at: link.at,
+        states: link.states ?? 0,
+        drawn: link.drawn ?? 0,
+        statesFiles: ownFiles(link.statesFiles),
+        thumb: link.thumb ?? null,
+      });
+      return {
+        center: {
+          name: card.name,
+          file: card.file,
+          at: null,
+          states: card.states,
+          drawn: card.drawn,
+          statesFiles: ownFiles(card.statesFiles),
+          thumb: card.thumb ?? null,
+        },
+        usedIn: Array.isArray(card.usedIn) ? card.usedIn.map(node) : [],
+        madeOf: Array.isArray(card.madeOf) ? card.madeOf.map(node) : [],
+      };
+    },
 
     /**
      * The artifact's doc as a person's view reads it (the dashboard pane's
@@ -3396,10 +4257,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * Brings an artifact to the front of its owner's panel and waits for a
      * view to have it on screen ({@link Opened}); a refusal when its server
-     * could not be started. Its owner's or its maker's to call.
+     * could not be started. Its owner's to call, or the person's: what they
+     * open is what the panel goes back to when the agent takes away
+     * something it showed over it. A delegate that handed it up is refused:
+     * its parent's panel changes only when the parent opens it.
      */
-    show: async (instanceId: string, id: string): Promise<Opened> => {
-      const shown = await show(ownedOrMade(sessionOf(instanceId), id));
+    show: async (
+      instanceId: string,
+      id: string,
+      by: PanelHand
+    ): Promise<Opened> => {
+      const instance = sessionOf(instanceId);
+      const row = ownedOrMade(instance, id);
+      if (row.instanceId !== instance.id) {
+        throw new ArtifactRefusal(
+          409,
+          `${named(row)[0]?.toUpperCase()}${named(row).slice(1)} is your parent's: it opens in their panel when they call artifact_show.`
+        );
+      }
+      const shown = await show(row, by);
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }
@@ -3408,11 +4284,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * Removes one of the session's artifacts (`artifact_delete`, the panel's
-     * Remove). When its panel showed it, the panel shows the session's next
-     * newest artifact (a draft canvas still in the composer is not one), or
-     * nothing; every view hears it on the frames it already follows.
+     * Remove); every view hears it on the frames it already follows. When
+     * its panel showed it:
+     * - the person's Remove shows the session's next newest artifact (a draft
+     *   canvas still in the composer is not one), as closing a tab does;
+     * - the agent's delete puts back what the person had in front before it
+     *   ({@link ArtifactServiceDeps.personShown}), or closes the panel: an
+     *   agent taking something away never brings a different artifact
+     *   forward as if it wanted the person there.
+     * Answers what the panel shows after.
      */
-    remove: async (instanceId: string, id: string): Promise<Removed> => {
+    remove: async (
+      instanceId: string,
+      id: string,
+      by: PanelHand
+    ): Promise<Removed> => {
       const instance = sessionOf(instanceId);
       const row = own(instance, id);
       const wasShown = deps.showing(instance.id) === row.id;
@@ -3425,12 +4311,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           showing: now ? { id: now.id, kind: now.kind, name: now.name } : null,
         };
       }
-      const next = db
-        .ofInstance(instance.id)
-        .find(
-          (other) => docs.doc(other.id).getMap("meta").get("draft") !== true
-        );
-      if (next && (await deps.open(next)).ok) {
+      const next = by === "person" ? nextNewest(instance) : personHad(instance);
+      if (next && (await deps.open(next, by)).ok) {
         return { showing: { id: next.id, kind: next.kind, name: next.name } };
       }
       await deps.close(instance.id);
@@ -3455,7 +4337,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       } else if (!heard.has(key)) {
         heard.set(key, ack);
         // Kept as long as a show could still come to wait for it.
-        setTimeout(() => heard.delete(key), SHOWN_WAIT_MS).unref?.();
+        deps.lifetime.after(SHOWN_WAIT_MS, () => heard.delete(key));
       }
       return { heard: true };
     },

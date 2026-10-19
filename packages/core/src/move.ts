@@ -22,7 +22,12 @@ export type MoveStep = "approval" | "snapshot" | "clone" | "lfs" | "start";
 /** Where a job stands: at one of its steps, or settled. */
 export type MoveStage = MoveStep | "started" | "failed" | "cancelled";
 
-/** Files at least this big are large files: offered to LFS, and named while in flight. */
+/**
+ * Files at least this big are large files: offered to LFS (a move's, and a
+ * place's first commit, which leaves them out), and named while in flight.
+ * GitHub's line: "larger than 50 MiB, you will receive a warning … GitHub
+ * blocks files larger than 100 MiB".
+ */
 export const LARGE_FILE_BYTES = 50 * 1024 * 1024;
 
 /**
@@ -298,7 +303,6 @@ export interface MoveHubRemote {
 export interface MovePrepareRequest {
   /** Paths (relative) to track with LFS before the commit. */
   bigFiles: string[];
-  gitInit: boolean;
   jobId: string;
   path: string;
 }

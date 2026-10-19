@@ -546,7 +546,13 @@ const plans = (repo: string): Record<string, Step[]> => ({
     {
       tool: {
         name: ARTIFACT_CREATE,
-        input: { kind: "page", name: "chip-decision", html: ARTIFACT_PAGE },
+        input: {
+          kind: "page",
+          name: "chip-decision",
+          does: "pick",
+          ask: "Pick how a long chip wraps",
+          html: ARTIFACT_PAGE,
+        },
       },
     },
     { words: "The decision is on the project's page." },
@@ -561,7 +567,13 @@ const plans = (repo: string): Record<string, Step[]> => ({
     {
       tool: {
         name: ARTIFACT_CREATE,
-        input: { kind: "page", name: "chip-wrap", html: ARTIFACT_PAGE },
+        input: {
+          kind: "page",
+          name: "chip-wrap",
+          does: "pick",
+          ask: "Pick a wrap for the chip row",
+          html: ARTIFACT_PAGE,
+        },
       },
     },
     { words: "The three wraps are on the page." },
@@ -616,6 +628,8 @@ const plans = (repo: string): Record<string, Step[]> => ({
         input: {
           kind: "component",
           name: "chip-card",
+          does: "judge",
+          ask: "Judge the chip card's two stories",
           file: CARD_SHEET,
           about: "The chip card's two stories, each prop a control.",
         },

@@ -209,13 +209,21 @@ const run = async (kit: Kit) => {
   const CREATE = "mcp__cawco__artifact_create";
   const kept = await call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "kept",
     html: PAGE("Kept"),
   });
   const keptId = kept.match(ID)?.[1];
   const promoted = await call("mcp__cawco__artifact_promote", { id: keptId });
   const commit = promoted.match(COMMIT)?.[1]?.slice(0, 7);
-  await call(CREATE, { kind: "page", name: "notes", html: PAGE("Notes") });
+  await call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "notes",
+    html: PAGE("Notes"),
+  });
   await call(CREATE, { kind: "page", name: "draft", html: PAGE("Draft") });
   if (
     !kit.check(
@@ -370,6 +378,8 @@ const run = async (kit: Kit) => {
     }
     const sheet = await call(CREATE, {
       kind: "component",
+      does: "judge",
+      ask: "Judge these states: pin anything that reads wrong",
       name: "cards",
       file: STORY,
     });

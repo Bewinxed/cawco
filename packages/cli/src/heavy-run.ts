@@ -3,7 +3,9 @@
  * the machine's heavy runs (core heavy-run.ts). It starts only while a slot
  * is free and the machine has room, measured now, and holds the slot until
  * the command has ended; the command and everything it starts take none of
- * their own (`CAWCO_HEAVY_RUN_HELD`). While it waits it says what holds it
+ * their own (`CAWCO_HEAVY_RUN_HELD`). It is admitted for the peak
+ * `CAWCO_HEAVY_PEAK_GIB` declares, a slot's worth when unset (core
+ * heavy-run.ts `heavyPeak`). While it waits it says what holds it
  * on stderr, in the queue marker's words, so a caller that reads that marker
  * shows it and stands its clock.
  *
@@ -16,6 +18,7 @@ import { constants } from "node:os";
 import {
   HEAVY_RUN_HELD_ENV,
   heavyGate,
+  heavyPeak,
   heavyWhere,
   releaseHeavySlot,
   takeHeavySlot,
@@ -33,6 +36,7 @@ export async function heavyRun(command: string): Promise<number> {
         where: heavyWhere(),
         command,
         gate: heavyGate(),
+        peak: heavyPeak(),
       });
   const child = spawn("/bin/sh", ["-c", command], {
     stdio: "inherit",
@@ -52,7 +56,7 @@ export async function heavyRun(command: string): Promise<number> {
     child.on("close", (exit, signal) => resolve(exit ?? signalled(signal)));
   });
   if (taken) {
-    releaseHeavySlot(taken.fd);
+    releaseHeavySlot(taken);
   }
   return code;
 }

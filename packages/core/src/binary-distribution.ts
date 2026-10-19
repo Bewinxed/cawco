@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { Octokit } from "@octokit/rest";
 import type { BinaryUpdatePolicy } from "./binary-updates";
 import { readWithin } from "./bounded";
 import { type ReleaseManifest, verifyManifest } from "./release-manifest";
@@ -31,7 +32,11 @@ const TRAILING_SLASH = /\/$/;
 export const RELEASE_REPOSITORY = "Bewinxed/cawco";
 export const NIGHTLY_TAG_PREFIX = "nightly-";
 
-const GITHUB_API = `https://api.github.com/repos/${RELEASE_REPOSITORY}`;
+/** The release repository as Octokit names it. */
+const RELEASES = (() => {
+  const [owner = "", repo = ""] = RELEASE_REPOSITORY.split("/");
+  return { owner, repo };
+})();
 
 /** The build count a nightly tag (`nightly-<count>-<commit>`) carries, or undefined for any other tag. */
 function nightlyTagCount(tag: string): number | undefined {
@@ -68,24 +73,38 @@ async function fromReleaseHost<T>(
   }
 }
 
-/** A GitHub API answer, or undefined where it answered 404. */
-function githubJson<T>(url: string): Promise<T | undefined> {
+/**
+ * One read of the release repository through Octokit, signed in as no one
+ * (it is public): its data, or undefined where GitHub answered 404. Octokit
+ * throws any other refusal with its status (@octokit/request-error
+ * `RequestError`).
+ */
+function github<T>(
+  what: string,
+  ask: (
+    octokit: Octokit,
+    request: { signal: AbortSignal }
+  ) => Promise<{ data: T }>
+): Promise<T | undefined> {
   return fromReleaseHost(
     RELEASE_HOST_MS,
-    url,
+    what,
     async (signal): Promise<T | undefined> => {
-      const response = await fetch(url, {
-        headers: { accept: "application/vnd.github+json" },
-        signal,
-      });
-      if (response.status === 404) {
-        await response.body?.cancel();
-        return;
+      try {
+        return (await ask(new Octokit({ userAgent: "CawCo" }), { signal }))
+          .data;
+      } catch (error) {
+        const refused = error as { response?: unknown; status?: unknown };
+        if (typeof refused.status === "number" && refused.response) {
+          if (refused.status === 404) {
+            return;
+          }
+          throw new Error(`The release host answered ${refused.status}`, {
+            cause: error,
+          });
+        }
+        throw error;
       }
-      if (!response.ok) {
-        throw new Error(`The release host answered ${response.status}`);
-      }
-      return (await response.json()) as T;
     }
   );
 }
@@ -100,8 +119,12 @@ function githubJson<T>(url: string): Promise<T | undefined> {
  */
 async function newestNightly(): Promise<GithubRelease | undefined> {
   const refs =
-    (await githubJson<{ ref: string }[]>(
-      `${GITHUB_API}/git/matching-refs/tags/${NIGHTLY_TAG_PREFIX}`
+    (await github("the release tags", (octokit, request) =>
+      octokit.rest.git.listMatchingRefs({
+        ...RELEASES,
+        ref: `tags/${NIGHTLY_TAG_PREFIX}`,
+        request,
+      })
     )) ?? [];
   const tags = refs
     .map(({ ref }) => ref.slice("refs/tags/".length))
@@ -112,8 +135,10 @@ async function newestNightly(): Promise<GithubRelease | undefined> {
     .sort((a, b) => b.count - a.count);
   for (const { tag } of tags) {
     // biome-ignore lint/performance/noAwaitInLoops: highest count first; the first published pre-release ends the search
-    const release = await githubJson<GithubRelease>(
-      `${GITHUB_API}/releases/tags/${tag}`
+    const release: GithubRelease | undefined = await github(
+      `the release ${tag}`,
+      (octokit, request) =>
+        octokit.rest.repos.getReleaseByTag({ ...RELEASES, tag, request })
     );
     if (release && !release.draft && release.prerelease) {
       return release;
@@ -162,7 +187,9 @@ export async function discoverRelease(
   } else {
     const release =
       channel === "stable"
-        ? await githubJson<GithubRelease>(`${GITHUB_API}/releases/latest`)
+        ? await github("the latest release", (octokit, request) =>
+            octokit.rest.repos.getLatestRelease({ ...RELEASES, request })
+          )
         : await newestNightly();
     if (!release) {
       throw new NoReleaseError(`No published ${channel} release`);

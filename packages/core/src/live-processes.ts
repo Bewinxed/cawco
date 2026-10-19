@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { commandLine, commandLines } from "./process-identity";
+import { hostEnvironment } from "./session-env";
 
 interface LiveProcess {
   /** Its command line, arguments joined by spaces. */
@@ -91,7 +92,11 @@ function linuxProcesses(): LiveProcess[] {
 
 /** What a command prints on stdout, read without holding the loop. */
 const printed = async (argv: string[]): Promise<string> => {
-  const child = Bun.spawn(argv, { stdout: "pipe", stderr: "ignore" });
+  const child = Bun.spawn(argv, {
+    env: hostEnvironment(),
+    stdout: "pipe",
+    stderr: "ignore",
+  });
   const [text] = await Promise.all([
     new Response(child.stdout).text(),
     child.exited,

@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/lightbox/Lightbox.svelte
+apps/dashboard/src/lib/cawco/motion/Rail.svelte
+apps/dashboard/src/lib/cawco/move/MoveAsk.svelte
+apps/dashboard/src/lib/cawco/move/MoveWait.svelte
+apps/dashboard/src/lib/cawco/plan/PlanPane.svelte
+apps/dashboard/src/lib/cawco/plan/PlanRing.svelte
+apps/dashboard/src/lib/cawco/plan/PlanTree.svelte
+
+# apps/dashboard/src/lib/cawco/lightbox/Lightbox.svelte: relic: literal ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/motion/Rail.svelte: relic: literal ×3; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/move/MoveAsk.svelte: relic: style-var ×1; relic: literal ×1
+# apps/dashboard/src/lib/cawco/move/MoveWait.svelte: relic: literal ×2; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/plan/PlanPane.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/plan/PlanRing.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/plan/PlanTree.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×1; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)

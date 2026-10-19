@@ -31,11 +31,11 @@
   import ChevronLeft from "~icons/solar/alt-arrow-left-linear";
   import ChevronRight from "~icons/solar/alt-arrow-right-linear";
   import NeedsYou from "~icons/solar/hand-shake-bold-duotone";
-  import SearchIcon from "~icons/solar/magnifer-bold-duotone";
   import Server from "~icons/solar/server-bold-duotone";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import Segmented from "../spawn/Segmented.svelte";
+  import FindField from "./FindField.svelte";
   import FindPeek from "./FindPeek.svelte";
   import FindRow from "./FindRow.svelte";
   import type { FindMoment, FindResult, WaitingItem } from "./find-client";
@@ -452,46 +452,27 @@
 </script>
 
 {#snippet field_()}
-  <div
-    data-slot="finder-field"
-    class="flex items-center gap-space-2 flex-none h-(--field-h) ps-space-3 pe-space-1 border-b border-b-border-hairline group-data-phone/finder:h-(--field-h-phone) group-data-phone/finder:border-b-none group-data-phone/finder:border-t group-data-phone/finder:border-t-border-hairline"
-  >
-    <SearchIcon
-      data-finder-lead
-      class="flex-none size-icon-md text-ink-muted"
-      aria-hidden="true"
-    />
-    <input
-      bind:this={field}
-      class="flex-1 min-w-0 h-full border-none border-current p-0 bg-transparent type-body text-ink-strong caret-brand-solid outline-off placeholder:text-ink-subtle placeholder:text-ellipsis group-data-phone/finder:text-(length:--field-fs-phone)"
-      aria-activedescendant={activeKey ? idOf(activeKey) : undefined}
-      aria-autocomplete="list"
-      aria-controls={listId}
-      aria-expanded="true"
-      aria-label="Find a session, or a task, preview, decision"
-      autocapitalize="off"
-      autocomplete="off"
-      enterkeyhint="go"
-      oninput={typedText}
-      {onkeydown}
-      placeholder="Find a session, or a task, preview, decision…"
-      role="combobox"
-      spellcheck="false"
-      type="text"
-      value={finder.text}
-    />
-    {#if finder.text}
-      <button
-        data-slot="clear"
-        class="grid place-items-center flex-none size-(--clear-size) border-none border-current rounded-md bg-transparent text-ink-muted not-active:hover:bg-surface-hover active:bg-surface-fill group-data-phone/finder:size-(--clear-size-phone)"
-        aria-label="Clear the words"
-        onclick={clear}
-        type="button"
-      >
-        <IconClose class="size-icon-md" />
-      </button>
-    {/if}
-  </div>
+  <!-- biome-ignore lint/a11y/useAriaActivedescendantWithTabindex: FindField renders a native input, which is tabbable already -->
+  <FindField
+    aria-activedescendant={activeKey ? idOf(activeKey) : undefined}
+    aria-autocomplete="list"
+    aria-controls={listId}
+    aria-expanded="true"
+    aria-label="Find a session, or a task, preview, decision"
+    autocapitalize="off"
+    autocomplete="off"
+    enterkeyhint="go"
+    onclear={clear}
+    oninput={typedText}
+    {onkeydown}
+    {phone}
+    placeholder="Find a session, or a task, preview, decision…"
+    role="combobox"
+    spellcheck="false"
+    type="text"
+    value={finder.text}
+    bind:input={field}
+  />
 {/snippet}
 
 {#snippet whoChips()}
@@ -984,3 +965,361 @@
   {/if}
   <p class="sr-only" aria-live="polite">{announce}</p>
 </div>
+
+<style>
+  .finder {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    max-block-size: 100%;
+    color: var(--ink-strong);
+  }
+  .body {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-block-size: 0;
+  }
+  .view {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    flex: 1 1 auto;
+  }
+
+  /* The list: rows on the card's surface, scrolling under the house edge fade. */
+  .list {
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-1);
+    scrollbar-width: none;
+  }
+  .list.phone {
+    justify-content: flex-end;
+  }
+  .rule {
+    flex: none;
+    margin: var(--space-1) calc(-1 * var(--space-1));
+    border: 0;
+    border-block-start: 1px solid var(--border-hairline);
+  }
+
+  /* A group's head: uppercase label (DESIGN.md, the slash and @ menu). */
+  .head {
+    flex: none;
+    block-size: 28px;
+    padding-inline: var(--space-3);
+    font: var(--type-caps);
+    line-height: 28px;
+    text-transform: uppercase;
+    letter-spacing: var(--track-caps);
+    color: var(--ink-muted);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* Who said it: filter chips on a 36px row, coverage at its end. */
+  .chips {
+    display: flex;
+    align-items: center;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    min-block-size: 36px;
+    padding-inline: var(--space-2);
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    block-size: 24px;
+    padding-inline: 9px;
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    font: var(--type-label);
+    color: var(--ink-muted);
+    transition-property: background-color, color, border-color;
+
+    &[aria-pressed="true"] {
+      border-color: transparent;
+      background: var(--brand-wash);
+      color: var(--brand-ink);
+    }
+    @media (hover: hover) {
+      &:not([aria-pressed="true"]):hover {
+        background: var(--surface-hover);
+      }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      &:active {
+        scale: var(--press-scale);
+      }
+      transition-property: background-color, color, border-color, scale;
+    }
+  }
+  .chips.phone .chip {
+    block-size: 32px;
+    padding-inline: 12px;
+    font-size: 15px;
+  }
+  .chip.word {
+    border-color: transparent;
+    background: var(--brand-wash);
+    color: var(--brand-ink);
+    padding-inline-end: 2px;
+  }
+  .chip-x {
+    display: grid;
+    place-items: center;
+    inline-size: 20px;
+    block-size: 20px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: none;
+    color: inherit;
+
+    & :global(svg) {
+      inline-size: var(--icon-sm);
+      block-size: var(--icon-sm);
+    }
+  }
+  .searching,
+  .covered {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-inline-start: auto;
+    padding-inline-end: var(--space-1);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .covered {
+    gap: 0.25em;
+    color: var(--ink-subtle);
+  }
+  .searching :global(.spin) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
+
+  .coverage {
+    display: flex;
+    align-items: center;
+    flex: none;
+    block-size: 28px;
+    padding-inline: var(--space-3);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .sep {
+    padding-inline: 0.35em;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  .link {
+    border: 0;
+    padding: 0;
+    background: none;
+    font: inherit;
+    color: var(--link-ink);
+    cursor: pointer;
+
+    &:active {
+      opacity: 0.72;
+    }
+  }
+
+  /* A one-line row: Waiting for you, a folded kind. 40px. */
+  .waiting-row,
+  .fold-row,
+  .act {
+    inline-size: 100%;
+    border: 0;
+    background: none;
+    text-align: start;
+  }
+  .waiting-row,
+  .fold-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
+    block-size: 40px;
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-sm);
+    font: var(--type-label);
+    color: var(--ink-row);
+    cursor: default;
+
+    &:active {
+      background: var(--surface-fill);
+    }
+    & :global(svg) {
+      flex: none;
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+    }
+  }
+  .waiting-row.phone,
+  .fold-row.phone {
+    block-size: 52px;
+    font-size: 16px;
+  }
+  .waiting-row :global(.waiting-glyph) {
+    color: var(--status-attn-glyph);
+  }
+  .fold-row :global(.fold-glyph) {
+    color: var(--status-idle-glyph);
+  }
+  .waiting-label,
+  .fold-label {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: clip;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .list :global(.fold-chev) {
+    color: var(--ink-muted);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .fold-row :global(.fold-chev) {
+      transition: rotate var(--dur-toggle) var(--ease-in-out);
+    }
+  }
+  .fold-row :global(.fold-chev.open) {
+    rotate: 90deg;
+  }
+  .peek-slot,
+  .skeleton-slot {
+    flex: none;
+  }
+
+  .acts {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    margin-inline-start: calc(var(--space-3) + var(--icon-md) + var(--space-2));
+    padding-inline-start: var(--space-3);
+    border-inline-start: 1px solid var(--border-control);
+    margin-block-end: var(--space-2);
+  }
+  .act {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    block-size: 32px;
+    padding-inline: var(--space-2);
+    border-radius: var(--radius-sm);
+    font: var(--type-label);
+    color: var(--ink-row);
+    cursor: default;
+
+    & :global(svg) {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+      color: var(--ink-muted);
+    }
+    &:active {
+      background: var(--surface-fill);
+    }
+  }
+
+  /* A skeleton at the size of the row it stands for: 52px, or 70px with its reason. */
+  .skeleton-slot {
+    padding: 8px var(--space-3);
+  }
+  .finder :global(.skeleton-row) {
+    block-size: 36px;
+  }
+  .finder :global(.skeleton-row.tall) {
+    block-size: 54px;
+  }
+
+  .nothing {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: var(--space-3) var(--space-3) var(--space-4);
+    font: var(--type-body);
+  }
+  .nothing-line {
+    margin: 0;
+    color: var(--ink-strong);
+  }
+
+  /* Waiting for you, in the card's place. */
+  .waiting-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
+    block-size: 44px;
+    padding-inline: var(--space-1) var(--space-2);
+    border-block-end: 1px solid var(--border-hairline);
+  }
+  .waiting-title {
+    flex: 1;
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .back {
+    display: grid;
+    place-items: center;
+    inline-size: 36px;
+    block-size: 36px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--ink-muted);
+
+    & :global(svg) {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+    }
+    &:active {
+      background: var(--surface-fill);
+    }
+  }
+  .waiting-head.phone .back {
+    inline-size: 44px;
+    block-size: 44px;
+  }
+
+  .hints {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex: none;
+    block-size: 32px;
+    padding-inline: var(--space-3);
+    border-block-start: 1px solid var(--border-hairline);
+    font: var(--type-meta);
+    color: var(--ink-subtle);
+
+    & kbd {
+      font: inherit;
+      color: var(--ink-muted);
+    }
+  }
+
+  .sr-only {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+</style>

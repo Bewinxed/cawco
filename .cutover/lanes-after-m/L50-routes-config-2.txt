@@ -1,0 +1,15 @@
+apps/dashboard/src/routes/(app)/config/phone/+page.svelte
+apps/dashboard/src/routes/(app)/config/previews/+page.svelte
+apps/dashboard/src/routes/(app)/config/rules/+page.svelte
+apps/dashboard/src/routes/(app)/config/skills/+page.svelte
+apps/dashboard/src/routes/(app)/config/spend/+page.svelte
+apps/dashboard/src/routes/(app)/config/subagents/+page.svelte
+apps/dashboard/src/routes/(app)/config/updates/+page.svelte
+
+# apps/dashboard/src/routes/(app)/config/phone/+page.svelte: relic: literal ×5; relic: style-var ×6; relic: style-reason ×1
+# apps/dashboard/src/routes/(app)/config/previews/+page.svelte: relic: literal ×2; relic: style-var ×2
+# apps/dashboard/src/routes/(app)/config/rules/+page.svelte: relic: literal ×1; relic: style-var ×2
+# apps/dashboard/src/routes/(app)/config/skills/+page.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×2; relic: style-var ×3; lint: shadcn/no-unknown-classes ×9
+# apps/dashboard/src/routes/(app)/config/spend/+page.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; lint: shadcn/no-unknown-classes ×1
+# apps/dashboard/src/routes/(app)/config/subagents/+page.svelte: relic: literal ×6; relic: style-var ×7
+# apps/dashboard/src/routes/(app)/config/updates/+page.svelte: relic: literal ×4; relic: style-var ×4

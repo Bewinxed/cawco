@@ -28,10 +28,14 @@
    * stands beside the view at a time.
    */
   import {
+    BLOCK_PAGE_TITLES,
     BLOCK_PAGES,
     type BlockPage as BlockPageId,
+    blocksWords,
+    madeWords,
     type ProjectView,
     viewOfBlock,
+    viewsWords,
   } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -50,6 +54,7 @@
     type DecisionsMode,
     ProjectDecisions,
   } from "#lib/cawco/decisions/decisions.svelte.js";
+  import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import {
     failureSentence,
     type HubRead,
@@ -424,8 +429,10 @@
   const sheetQuery = new MediaQuery("(width < 900px)");
   /** Under 640px the page is the one scroller, not the pane (the styles' own line). */
   const pageScrollsQuery = new MediaQuery("(max-width: 639px)", false);
+  // The first paint, on both sides, has the width cookie's guess
+  // (first-render.svelte.ts); the queries answer from a frame after mount.
   const hosted = $derived(
-    !(browser ? narrowQuery.current : Boolean(page.data.narrow))
+    !(firstRender.held ? Boolean(page.data.narrow) : narrowQuery.current)
   );
   $effect(() => {
     if (!(hosted && project)) {
@@ -462,7 +469,7 @@
       : []),
     // What the project's tasks made, while one has made something.
     ...(tasks.some((task) => task.outputs.length > 0)
-      ? [{ value: "made", label: "Made", draft: false }]
+      ? [{ value: "made", label: madeWords.tab, draft: false }]
       : []),
     // A view placed on a page stands there as a block, and is no tab.
     ...views
@@ -630,7 +637,7 @@
    * Under 900px a task is its own page (the session split's line), read off
    * the screen.
    */
-  const phone = $derived(browser ? sheetQuery.current : !hosted);
+  const phone = $derived(firstRender.held ? !hosted : sheetQuery.current);
 
   /**
    * Opens a task: on a desk beside the view, swapping the one open in place;
@@ -1045,12 +1052,6 @@
 
   // --- the pages' blocks ----------------------------------------------------------
 
-  const PAGE_LABELS: Record<BlockPageId, string> = {
-    board: "Board",
-    table: "Table",
-    pipeline: "Pipeline",
-    routines: "Routines",
-  };
   const TASK_GLYPHS = {
     board: IconColumns,
     table: IconFileTable,
@@ -1097,7 +1098,7 @@
   ): Record<string, BlockItem> {
     return {
       [view]: {
-        title: PAGE_LABELS[view],
+        title: BLOCK_PAGE_TITLES[view],
         glyph: TASK_GLYPHS[view],
         meta: taskCount,
         content,
@@ -1129,7 +1130,7 @@
       remember();
     } else {
       // Refused, the view stays where it is: its tab, which says why.
-      toast.error(blocks.refused[on] ?? "The hub did not place the view.");
+      toast.error(blocks.refused[on] ?? blocksWords.notPlaced);
     }
   }
 
@@ -1561,7 +1562,7 @@
           variant="ghost"
         >
           <IconSparkles />
-          <span>Ask Caw for a view</span>
+          <span>{viewsWords.ask}</span>
         </Button>
       {/if}
     </div>
@@ -1674,31 +1675,24 @@
         {#if view.draft}
           <!-- The tab already says `draft`; the bar says what it is and
                offers the two answers, kept together on one row. -->
-          <!-- literal: 14rem -->
-          <div
-            class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 shadow-(--hairline-ring)"
-            style:--hairline-ring="inset 0 0 0 1px var(--border-hairline)"
-            out:crossOut
-          >
-            <span
-              class="type-label min-w-0 flex-(--draft-flex) text-ink-strong"
-              style:--draft-flex="1 1 14rem"
-              >Caw drafted the {viewLabel(view.name)} view</span
+          <div class="draft-bar" out:crossOut>
+            <span class="draft-line"
+              >{viewsWords.drafted(viewLabel(view.name))}</span
             >
             <div class="flex flex-none gap-space-2">
               <Button
-                label="Keep"
+                label={viewsWords.keep}
                 onclick={() => keep(view.name)}
                 pending={keeping === view.name}
-                pendingLabel="Keeping…"
+                pendingLabel={viewsWords.keeping}
                 size="sm"
                 variant="outline"
               />
               <Button
-                label="Discard"
+                label={viewsWords.discard}
                 onclick={() => discard(view.name)}
                 pending={discarding === view.name}
-                pendingLabel="Discarding…"
+                pendingLabel={viewsWords.discarding}
                 size="sm"
                 variant="ghost"
               />
@@ -1734,13 +1728,13 @@
                   <DropdownMenu.Sub>
                     <DropdownMenu.SubTrigger>
                       <IconLayers />
-                      <span>Place on a page</span>
+                      <span>{blocksWords.placeOnPage}</span>
                     </DropdownMenu.SubTrigger>
                     <DropdownMenu.SubContent class="w-auto" min="compact">
                       {#each BLOCK_PAGES as target (target)}
                         <DropdownMenu.Item
                           onSelect={() => placeView(view.name, target)}
-                          >{PAGE_LABELS[target]}</DropdownMenu.Item
+                          >{BLOCK_PAGE_TITLES[target]}</DropdownMenu.Item
                         >
                       {/each}
                     </DropdownMenu.SubContent>
@@ -2239,7 +2233,7 @@
             // biome-ignore lint/complexity/noVoid: the ask's own state is the composer's sending and its refusal
             void askView(text);
           }}
-          placeholder="A view of what is scheduled this week…"
+          placeholder={viewsWords.placeholder}
           sendAgain={viewAgain}
           sendError={viewRefused}
           sending={viewSending}

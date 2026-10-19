@@ -130,19 +130,13 @@
               {/if}
               {#if section.counted}
                 <!-- The figure is its own element, not the dash's text
-                     rewritten: it arrives in place rather than moving in. -->
+                     rewritten: it arrives in place rather than moving in.
+                     A read count stands only above 0 (DESIGN.md, The Earned
+                     Count Rule). -->
                 {#if count === null}
-                  <span
-                    data-slot="count"
-                    class="flex-none min-w-(--count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink"
-                    >—</span
-                  >
-                {:else}
-                  <span
-                    data-slot="count"
-                    class="flex-none min-w-(--count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink"
-                    >{count}</span
-                  >
+                  <span data-slot="count" class="count">—</span>
+                {:else if count > 0}
+                  <span data-slot="count" class="count">{count}</span>
                 {/if}
               {/if}
             </a>

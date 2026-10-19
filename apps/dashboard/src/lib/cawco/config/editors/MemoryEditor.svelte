@@ -6,6 +6,7 @@
     placedOnly,
     scoped,
     scopeKey,
+    memoryWords as words,
   } from "@cawco/core";
   import { untrack } from "svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
@@ -243,19 +244,19 @@
     { value: MAIN, label: fileLabel(MAIN) },
     ...(fleet?.memoryDocs ?? []).map((doc) => ({
       value: doc.path,
-      label: `${docLabel(doc.path, doc.scope)}${drafts.paths.has(fileHref(doc.path)) ? " · unsaved" : ""}`,
+      label: `${docLabel(doc.path, doc.scope)}${drafts.paths.has(fileHref(doc.path)) ? words.unsavedShort : ""}`,
     })),
   ]);
   const label = $derived(main ? fileLabel(path) : docLabel(path, savedScope));
 
   /** The scope's two narrowings, each "None" when it names nothing. */
   const ROLE_OPTIONS = [
-    { value: "", label: "None" },
-    { value: "orchestrator", label: "Orchestrator" },
-    { value: "leaf", label: "Leaf" },
+    { value: "", label: words.none },
+    { value: "orchestrator", label: words.orchestrator },
+    { value: "leaf", label: words.leaf },
   ];
   const projectOptions = $derived([
-    { value: "", label: "None" },
+    { value: "", label: words.none },
     ...cawco.projects
       .map((project) => ({ value: project.id, label: project.name }))
       .sort((a, b) => a.label.localeCompare(b.label)),
@@ -308,7 +309,7 @@
 
   function sourceLabel(source: string): string {
     if (!source.startsWith("machine:")) {
-      return "the fleet";
+      return words.theFleet;
     }
     const machineId = source.slice("machine:".length);
     const machine = machines.find((row) => row.machineId === machineId);
@@ -430,9 +431,9 @@
   }
 
   const SAID: Record<string, string> = {
-    applied: "In sync",
-    failed: "Kept its own copy",
-    removed: "Taken off",
+    applied: words.inSync,
+    failed: words.keptOwn,
+    removed: words.takenOff,
   };
 </script>
 
@@ -440,13 +441,13 @@
 
 <EditorFrame
   canSave={dirty}
-  deleteLabel={saved ? "Delete everywhere" : undefined}
+  deleteLabel={saved ? words.deleteEverywhere : undefined}
   {deleting}
   failed={saveFailed || deleteProblem !== null}
   oncancel={cancel}
   ondelete={saved ? remove : undefined}
   onsubmit={() => save()}
-  saveLabel="Save"
+  saveLabel={words.save}
   saving={busy && !forcing}
   settling={!drawn || (versions === null && historyError === null)}
   title={label}
@@ -464,20 +465,20 @@
   {#snippet header()}
     <div class="flex">
       <PickerChip
-        label="File"
+        label={words.file}
         onpick={(next) => goto(fileHref(next))}
         options={files}
         value={path}
       />
       {#if !main}
         <PickerChip
-          label="Role"
+          label={words.role}
           onpick={pickRole}
           options={ROLE_OPTIONS}
           value={scope.role ?? ""}
         />
         <PickerChip
-          label="Projects"
+          label={words.projects}
           onpick={pickProject}
           options={projectOptions}
           picked={scope.projectIds ?? []}
@@ -491,12 +492,8 @@
       {label}
     </h1>
     {#if !main}
-      <!-- literal: 12px -->
-      <p
-        class="relative flex flex-wrap gap-x-(--facts-gap) gap-y-space-1 type-meta text-ink-muted"
-        style:--facts-gap="12px"
-      >
-        <span>Loaded into: {loadedInto(scope, cawco.projects)}</span>
+      <p class="facts">
+        <span>{words.loadedInto(loadedInto(scope, cawco.projects))}</span>
       </p>
     {/if}
     <!-- literal: 12px -->
@@ -506,25 +503,25 @@
       style:--facts-gap="12px"
     >
       <span>{formatBytes(bytes)}</span>
-      <!-- literal: 3px -->
-      <span
-        class="underline decoration-dotted underline-offset-(--tokens-offset)"
-        style:--tokens-offset="3px"
-        title="Roughly what this file costs every session that loads it, at about four bytes a token"
-        >~{tokens.toLocaleString()}
-        tokens</span
+      <span class="tokens" title={words.tokensTitle}
+        >{words.tokens(tokens.toLocaleString())}</span
       >
       {#if saved}
-        <span>saved {formatDistanceToNow(new Date(saved.updatedAt))}</span>
+        <span
+          >{words.savedAgo(
+            formatDistanceToNow(new Date(saved.updatedAt))
+          )}</span
+        >
         <span class="font-mono" title={saved.hash}
           >{saved.hash.slice(0, 8)}</span
         >
       {:else}
-        <span>Not written yet</span>
+        <span>{words.notWritten}</span>
       {/if}
       {#if dirty}
-        <span class="font-medium text-ink-strong" in:crossIn out:crossOut
-          >Unsaved changes · ⌘S saves</span
+        <span class="unsaved" in:crossIn out:crossOut
+          >{words.unsaved}<span class="shortcut">{words.saveShortcut}</span
+          ></span
         >
       {/if}
     </p>
@@ -532,18 +529,10 @@
     <RowFault again={remove} reason={deleteProblem} />
   {/snippet}
 
-  <EditorSection hue={HUE} icon={IconDocument} label="Contents">
+  <EditorSection hue={HUE} icon={IconDocument} label={words.contents}>
     {#if conflict}
-      <!-- literal: 8px -->
-      <div
-        class="flex flex-col gap-(--stack-gap)"
-        style:--stack-gap="8px"
-        in:unfold
-        out:unfold
-      >
-        <p class="type-meta text-status-attn-ink">
-          Changed elsewhere while you edited. Nothing was overwritten.
-        </p>
+      <div class="conflict" in:unfold out:unfold>
+        <p class="caution">{words.changedElsewhere}</p>
         {#key conflict.hash}
           <DiffView
             filePath={path}
@@ -563,15 +552,15 @@
             size="sm"
             variant="outline"
           >
-            Take latest
+            {words.takeLatest}
           </Button>
           <Button
             disabled={busy && !forcing}
             failed={saveFailed}
-            label="Save mine anyway"
+            label={words.saveMine}
             onclick={() => save(conflict?.hash)}
             pending={busy && forcing}
-            pendingLabel="Saving…"
+            pendingLabel={words.saving}
             size="sm"
             variant="outline"
           />
@@ -599,28 +588,13 @@
     </div>
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconHistory} label="History">
+  <EditorSection hue={HUE} icon={IconHistory} label={words.history}>
     {#if historyError}
       <p class="type-meta text-status-attn-ink" role="alert">{historyError}</p>
     {:else if versions === null}
-      <!-- literal: 72ch -->
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--measure) text-ink-muted"
-        style:--measure="72ch"
-      >
-        Loading…
-      </p>
+      <p data-slot="note" class="note">{words.loading}</p>
     {:else if versions.length === 0}
-      <!-- literal: 72ch -->
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--measure) text-ink-muted"
-        style:--measure="72ch"
-      >
-        Nothing replaced yet. Every version a save, an adopt or an overwrite
-        replaces is kept here.
-      </p>
+      <p data-slot="note" class="note">{words.nothingReplaced}</p>
     {:else}
       <!-- Rows that come and go (Show all, a new version) go through
            reflow, what follows sliding; a row's compare folds open inside
@@ -657,11 +631,8 @@
                   style:--measure="72ch"
                   >{formatDistanceToNow(new Date(row.createdAt))}</span
                 >
-                <!-- literal: 72ch -->
-                <span
-                  data-slot="note"
-                  class="type-meta max-w-(--measure) text-ink-muted"
-                  style:--measure="72ch">from {sourceLabel(row.source)}</span
+                <span data-slot="note" class="note"
+                  >{words.from(sourceLabel(row.source))}</span
                 >
                 <!-- literal: 72ch -->
                 <span
@@ -682,7 +653,7 @@
                   size="sm"
                   variant={shown === row.id ? "secondary" : "outline"}
                 >
-                  {shown === row.id ? "Hide" : "Compare"}
+                  {shown === row.id ? words.hide : words.compare}
                 </Button>
               </div>
               {#if shown === row.id}
@@ -711,8 +682,8 @@
                         in:crossIn
                         out:crossOut
                       >
-                        <Spinner class="size-icon-md shrink-0" /><span
-                          >Reading that version…</span
+                        <Spinner class="size-4 shrink-0" /><span
+                          >{words.readingVersion}</span
                         >
                       </p>
                     {:else if contents[row.id] !== undefined}
@@ -733,10 +704,10 @@
                         <Button
                           class="self-start"
                           failed={restoreFailed?.id === row.id}
-                          label="Restore this version"
+                          label={words.restore}
                           onclick={() => restore(row)}
                           pending={restoring === row.id}
-                          pendingLabel="Restoring…"
+                          pendingLabel={words.restoring}
                           size="sm"
                           variant="outline"
                         />
@@ -766,9 +737,7 @@
               size="sm"
               variant="ghost"
             >
-              {allVersions
-                ? "Show the latest 5"
-                : `Show all ${versions.length}`}
+              {allVersions ? words.showLatest : words.showAll(versions.length)}
             </Button>
           </div>
         {/if}
@@ -779,31 +748,19 @@
   <!-- A machine holds a copy of the main file and of a linked document
        alone: a scoped one is loaded into sessions, never adopted from one. -->
   {#if !scoped(savedScope)}
-    <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
+    <EditorSection hue={HUE} icon={IconLaptop} label={words.perMachine}>
       {#if machines.length === 0}
-        <!-- literal: 72ch -->
-        <p
-          data-slot="note"
-          class="type-meta max-w-(--measure) text-ink-muted"
-          style:--measure="72ch"
-        >
-          <AddMachineLink>No machines yet</AddMachineLink>
-          — this lands on the first one that registers.
+        <p data-slot="note" class="note">
+          <AddMachineLink>{words.noMachines}</AddMachineLink>{words.landsFirst}
         </p>
       {:else}
         {#if applied.length > 0}
-          <!-- literal: 72ch -->
-          <p
-            data-slot="note"
-            class="type-meta max-w-(--measure) text-ink-muted"
-            style:--measure="72ch"
-          >
-            In sync on {applied.length} machine{applied.length === 1
-              ? ""
-              : "s"}.
+          <p data-slot="note" class="note">
+            {words.inSyncOn(applied.length)}
             {#if asleep.length > 0}
-              {asleep.map((row) => machineLabel(row.hostname)).join(", ")}
-              offline — they sync when back.
+              {words.offlineSync(
+                asleep.map((row) => machineLabel(row.hostname)).join(", ")
+              )}
             {/if}
           </p>
         {/if}
@@ -833,9 +790,9 @@
                   hue={machineHue(index, online)}
                   icon={machineIcon(machine.os)}
                   meta="{SAID[item?.state ?? ''] ??
-                    'Not reported'} · {machineOs(machine.os).label}{online
+                    words.notReported} · {machineOs(machine.os).label}{online
                     ? ''
-                    : ' · offline, it syncs when back'}"
+                    : words.offlineWhenBack}"
                   name={machineLabel(machine.hostname)}
                   presence={online ? "online" : "off"}
                 />
@@ -856,16 +813,16 @@
                         size="sm"
                         variant={comparingThis ? "secondary" : "outline"}
                       >
-                        {comparingThis ? "Hide" : "Compare"}
+                        {comparingThis ? words.hide : words.compare}
                       </Button>
                     {/if}
                     <Button
                       disabled={!online || settle === "push"}
                       failed={machine.machineId in settleFailed}
-                      label="Adopt this copy"
+                      label={words.adoptCopy}
                       onclick={() => adopt(machine)}
                       pending={settle === "adopt"}
-                      pendingLabel="Adopting…"
+                      pendingLabel={words.adopting}
                       size="sm"
                       variant="outline"
                     />
@@ -873,10 +830,10 @@
                       <Button
                         disabled={!online || settle === "adopt"}
                         failed={machine.machineId in settleFailed}
-                        label="Send ours"
+                        label={words.sendOurs}
                         onclick={() => overwrite(machine)}
                         pending={settle === "push"}
-                        pendingLabel="Sending…"
+                        pendingLabel={words.sending}
                         size="sm"
                         variant="outline"
                       />
@@ -921,8 +878,8 @@
                         in:crossIn
                         out:crossOut
                       >
-                        <Spinner class="size-icon-md shrink-0" /><span
-                          >Reading this machine's copy…</span
+                        <Spinner class="size-4 shrink-0" /><span
+                          >{words.readingCopy}</span
                         >
                       </p>
                     {:else if unread[machine.machineId]}
@@ -935,15 +892,8 @@
                         {unread[machine.machineId]}
                       </p>
                     {:else if copies[machine.machineId] === null}
-                      <!-- literal: 72ch -->
-                      <p
-                        data-slot="note"
-                        class="type-meta max-w-(--measure) text-ink-muted"
-                        style:--measure="72ch"
-                        in:crossIn
-                        out:crossOut
-                      >
-                        This machine has no copy of this file.
+                      <p data-slot="note" class="note" in:crossIn out:crossOut>
+                        {words.noCopy}
                       </p>
                     {:else if copies[machine.machineId] !== undefined}
                       <div in:crossIn out:crossOut>
@@ -966,3 +916,123 @@
     </EditorSection>
   {/if}
 </EditorFrame>
+
+<style>
+  .switch {
+    display: flex;
+  }
+  .title {
+    font: var(--type-title);
+    font-family: var(--font-mono);
+    letter-spacing: -0.01em;
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .facts {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .tokens {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
+  .unsaved {
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+  }
+  /* ⌘S is said only where a keyboard can press it: not on a touch-only phone. */
+  .shortcut {
+    @media not (any-pointer: fine) {
+      display: none;
+    }
+  }
+  .well {
+    min-height: 320px;
+    padding: 4px 8px;
+    border-radius: var(--radius-md);
+    background: var(--surface-recess);
+  }
+  .conflict {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .note,
+  .label {
+    max-width: 72ch;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .label {
+    color: var(--ink-strong);
+  }
+  .busy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .caution {
+    font: var(--type-meta);
+    color: var(--status-attn-ink);
+  }
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .entry {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-recess);
+  }
+  .line {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .history,
+  .reveal {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .more {
+    align-self: flex-start;
+  }
+  /* One box the reading line and what was read take turns in: the one
+     leaving is pinned in it (crossOut) while the one arriving sets its
+     height. */
+  .swap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .said {
+    max-height: 6rem;
+    overflow: auto;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+</style>

@@ -28,7 +28,7 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
     /// The section beside the rail.
     private var shown: String?
     /// What each row draws now: its count and its badge.
-    private var drawn: [String: (count: Int?, badge: ConfigBadge?)] = [:]
+    private var drawn: [String: (count: Int?, badge: ConfigBadge?, unsaved: Bool)] = [:]
     private var arrangedCompact: Bool?
 
     init(context: ShellContext) {
@@ -42,7 +42,14 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         fatalError("ConfigureController is built in code")
     }
 
-    private var compact: Bool { traitCollection.horizontalSizeClass == .compact }
+    /// The list is the page (`ConfigSections.listed`).
+    private var compact: Bool { ConfigSections.listed(view) }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // A width across the rail's breakpoint (a turn, Split View, Stage Manager) rearranges the page.
+        arrange()
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -104,9 +111,6 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         panel.translatesAutoresizingMaskIntoConstraints = false
         pane.translatesAutoresizingMaskIntoConstraints = false
         pane.clipsToBounds = true
-        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (controller: ConfigureController, _: UITraitCollection) in
-            controller.arrange()
-        }
         arrange()
     }
 
@@ -118,14 +122,18 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
     /// whatever section stood there; once on screen if it isn't yet.
     func reveal(_ slug: String) {
         ConfigSections.last = slug
+        // A section pushed over the list takes the list out of the window: back to
+        // the list first, and the asked-for section opens as the list appears.
+        if compact, let nav = navigationController, nav.topViewController !== self, nav.viewControllers.contains(self) {
+            pending = slug
+            nav.popToViewController(self, animated: false)
+            return
+        }
         guard isViewLoaded, view.window != nil else {
             pending = slug
             return
         }
         pending = nil
-        if compact, let nav = navigationController, nav.topViewController !== self {
-            nav.popToViewController(self, animated: false)
-        }
         open(slug)
         // Asked for from elsewhere, it is the section itself, not an editor left open in it.
         if !compact { stacks[slug]?.popToRootViewController(animated: false) }
@@ -200,9 +208,9 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
     // MARK: Rows
 
     override func refreshContent() {
-        var next: [String: (count: Int?, badge: ConfigBadge?)] = [:]
+        var next: [String: (count: Int?, badge: ConfigBadge?, unsaved: Bool)] = [:]
         for section in ConfigSections.all {
-            next[section.slug] = (section.count(hub), section.badge(hub))
+            next[section.slug] = (section.count(hub), section.badge(hub), ConfigDrafts.shared.unsaved(in: section.slug, hub: hub))
         }
         drawn = next
     }
@@ -227,7 +235,7 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         let state = drawn[slug]
         cell.contentConfiguration = SectionRowConfiguration(glyph: section.glyph, hue: section.hue, label: section.label,
                                                             counted: section.counted, count: state?.count, badge: state?.badge,
-                                                            opens: section.opens)
+                                                            unsaved: state?.unsaved == true, opens: section.opens, list: compact)
         // A section the app has no screen for is not a way in: no chevron (HIG Lists and tables:
         // the disclosure indicator says the row opens more), its place kept so every count stands in one column.
         cell.accessories = compact
@@ -259,7 +267,8 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         }
         cell.accessibilityIdentifier = "config.row.\(slug)"
         cell.accessibilityLabel = section.label
-        cell.accessibilityValue = [state?.count.map { "\($0)" }, state?.badge?.said].compactMap(\.self).joined(separator: ", ")
+        cell.accessibilityValue = [state?.count.map { "\($0)" }, state?.unsaved == true ? Words.Configure.unsaved : nil, state?.badge?.said]
+            .compactMap(\.self).joined(separator: ", ")
         cell.accessibilityTraits = section.opens ? .button : [.button, .notEnabled]
     }
 
@@ -401,7 +410,11 @@ private struct SectionRowConfiguration: UIContentConfiguration {
     let counted: Bool
     let count: Int?
     let badge: ConfigBadge?
+    /// An editor in this section holds edits not saved yet (`.unsaved`).
+    let unsaved: Bool
     let opens: Bool
+    /// The list is the page (`[data-variant="list"]`), not the rail.
+    let list: Bool
     var chosen = false
 
     func makeContentView() -> any UIView & UIContentView { SectionRowView(self) }
@@ -412,6 +425,7 @@ private final class SectionRowView: UIView, UIContentView {
     private let tile = TileView(radius: Radius.radiusXs)
     private let mark = GlyphView(.settings, size: 14)
     private let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkRow)
+    private let unsaved = UIView()
     private let badge = KitLabel(TypeScale.typeMeta, ink: Palette.statusAttnInk)
     private let badgeBox = UIView()
     private let count = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
@@ -442,7 +456,10 @@ private final class SectionRowView: UIView, UIContentView {
         count.tabular = true
         count.textAlignment = .right
         let zero = ("000" as NSString).size(withAttributes: [.font: TypeScale.typeMeta.font]).width
-        let row = UIStackView(arrangedSubviews: [tile, name, badgeBox, count])
+        // The unsaved dot: 6pt, round, in the strong ink.
+        unsaved.backgroundColor = Palette.inkStrong
+        unsaved.layer.cornerRadius = 3
+        let row = UIStackView(arrangedSubviews: [tile, name, unsaved, badgeBox, count])
         row.spacing = Space.space3
         row.alignment = .center
         row.translatesAutoresizingMaskIntoConstraints = false
@@ -454,6 +471,8 @@ private final class SectionRowView: UIView, UIContentView {
         NSLayoutConstraint.activate([
             tile.widthAnchor.constraint(equalToConstant: 22),
             tile.heightAnchor.constraint(equalToConstant: 22),
+            unsaved.widthAnchor.constraint(equalToConstant: 6),
+            unsaved.heightAnchor.constraint(equalToConstant: 6),
             mark.centerXAnchor.constraint(equalTo: tile.centerXAnchor),
             mark.centerYAnchor.constraint(equalTo: tile.centerYAnchor),
             badgeBox.heightAnchor.constraint(equalToConstant: 18),
@@ -467,7 +486,6 @@ private final class SectionRowView: UIView, UIContentView {
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
             height,
         ])
-        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (view: SectionRowView, _: UITraitCollection) in view.draw() }
         draw()
     }
 
@@ -478,14 +496,15 @@ private final class SectionRowView: UIView, UIContentView {
 
     private func draw() {
         // The list's touch height on a phone (`[data-variant="list"] .row`: 48px), the rail's own beside a section.
-        height.constant = traitCollection.horizontalSizeClass == .compact ? 48 : Size.cRailRowH
-        directionalLayoutMargins = traitCollection.horizontalSizeClass == .compact
+        height.constant = current.list ? 48 : Size.cRailRowH
+        directionalLayoutMargins = current.list
             ? .init(top: 0, leading: Space.space4, bottom: 0, trailing: 0)
             : .init(top: 0, leading: Space.space2, bottom: 0, trailing: Space.space3)
         mark.glyph = current.glyph
         mark.tintColor = current.hue
         name.text = current.label
         name.ink = current.chosen ? Palette.selectedInk : Palette.inkRow
+        unsaved.isHidden = !current.unsaved
         badge.text = current.badge.map { "\($0.count)" }
         badgeBox.isHidden = current.badge == nil
         count.isHidden = !current.counted

@@ -1,12 +1,13 @@
 <script lang="ts">
   /**
    * Location as a composer chip: where the session works — an existing folder
-   * or a GitHub repo to clone — named on the chip, chosen in its popover.
+   * or a repository to clone by its git URL — named on the chip, chosen in
+   * its popover.
    * The popover is the same Location form the dialog used to show as its own
    * section, so browsing, override and clone behave exactly as they did.
    */
-  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import Down from "~icons/solar/alt-arrow-down-linear";
+  import FolderGit from "~icons/solar/folder-git-bold-duotone";
   import FolderOpen from "~icons/solar/folder-open-bold-duotone";
   import LocationSection from "./LocationSection.svelte";
   import NsPopover from "./NsPopover.svelte";
@@ -56,7 +57,7 @@
   };
   const label = $derived.by(() => {
     if (mode === "repo") {
-      return repo.trim() || "Clone from GitHub";
+      return repo.trim() || "Clone a repository";
     }
     return dir.trim() ? short(dir.trim()) : "Choose folder";
   });
@@ -76,7 +77,7 @@
 >
   {#snippet trigger()}
     {#if mode === "repo"}
-      <ProviderLogo provider="github" size={null} />
+      <FolderGit style="color:var(--hue-amber-500)" />
     {:else}
       <FolderOpen class="text-hue-amber-500" />
     {/if}

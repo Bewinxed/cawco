@@ -1,4 +1,4 @@
-import type { AccountOverage } from "../accounts";
+import { type AccountOverage, modelScope } from "../accounts";
 import type { LimitWindow } from "./types";
 
 /**
@@ -23,17 +23,43 @@ const iso = (seconds: number | undefined): string | null =>
  */
 const percent = (utilization: number): number => utilization * 100;
 
-/** The two windows every event carries, and the {@link LimitWindow} each is. */
+/**
+ * The model scope of `seven_day_overage_included`, the weekly window of the
+ * models whose use spills into usage credits: Claude Code 2.1.302 names it
+ * by that model in its own limit words (`Cae.seven_day_overage_included`
+ * "Fable limit", which its refusal reads as "You've hit your Fable limit"),
+ * and its `/usage` lists the window under that model's `display_name`.
+ */
+const OVERAGE_INCLUDED_SCOPE = "Fable";
+
+/**
+ * The windows an event's `unifiedWindows` carries, and the
+ * {@link LimitWindow} each is (Claude Code's `Ct`: `five_hour` "5h",
+ * `seven_day` "7d", `seven_day_overage_included` "7d_oi").
+ */
 const UNIFIED = [
-  { key: "five_hour", kind: "session", group: "session" },
-  { key: "seven_day", kind: "weekly_all", group: "weekly" },
+  { key: "five_hour", kind: "session", group: "session", scope: null },
+  { key: "seven_day", kind: "weekly_all", group: "weekly", scope: null },
+  {
+    key: "seven_day_overage_included",
+    kind: "weekly_scoped",
+    group: "weekly",
+    scope: OVERAGE_INCLUDED_SCOPE,
+  },
 ] as const;
 
 /** The binding windows that are one model's weekly window, and that model's scope. */
 const SCOPED: Record<string, string> = {
   seven_day_opus: "Opus",
   seven_day_sonnet: "Sonnet",
+  seven_day_overage_included: OVERAGE_INCLUDED_SCOPE,
 };
+
+/**
+ * The binding claim that is the usage-credit budget, not a window
+ * (`Cae.overage` "usage credit limit"): what it says is the overage state.
+ */
+const OVERAGE = "overage";
 
 /**
  * The `rate_limit_info` payload, structurally. Not imported from the agent
@@ -51,6 +77,7 @@ export interface ObservedRateLimitInfo {
   unifiedWindows?: {
     five_hour?: { utilization: number; resetsAt: number };
     seven_day?: { utilization: number; resetsAt: number };
+    seven_day_overage_included?: { utilization: number; resetsAt: number };
   };
   utilization?: number;
 }
@@ -74,15 +101,139 @@ export interface ObservedReading {
 }
 
 /**
- * The windows, overage and exhaustion one `rate_limit_event` reports. The
- * unified windows give the 5-hour and weekly reading; the binding window
- * (`rateLimitType`) adds a model's own weekly window when it is one; a
- * `rejected` status says the binding window is spent until its reset.
+ * The session an event came from: the model its refused request ran on, and
+ * the account's windows as the hub held them before the event.
  */
-export function observedReading(info: ObservedRateLimitInfo): ObservedReading {
+export interface ObservedSession {
+  held: readonly LimitWindow[];
+  model: string | null;
+  /** When the event arrived, epoch ms: a held window that reset before it says nothing. */
+  now: number;
+}
+
+/** A window at its limit: the model scope it holds (null: every model) and its reset, epoch seconds. */
+interface Spent {
+  resetsAt: number;
+  scope: string | null;
+}
+
+/**
+ * The refusal `spent` says: every model while a window over them all is at
+ * its limit, until the last of those resets; else the one model's window.
+ */
+const refusalOf = (
+  spent: readonly Spent[]
+): NonNullable<ObservedReading["exhausted"]> | null => {
+  const every = spent.filter((one) => one.scope === null);
+  const held = every.length > 0 ? every : spent;
+  const [first] = held;
+  return first
+    ? {
+        scope: first.scope,
+        resetsAt: iso(Math.max(...held.map((one) => one.resetsAt))),
+      }
+    : null;
+};
+
+/**
+ * The windows the account held at their limit before the event, still
+ * before their reset, that bear on `scope`'s requests: the 5-hour, the week,
+ * and `scope`'s own week.
+ */
+const heldSpent = (session: ObservedSession, scope: string | null): Spent[] =>
+  session.held.flatMap((one) => {
+    const resets = one.resetsAt ? Date.parse(one.resetsAt) : Number.NaN;
+    const bears =
+      one.kind === "session" ||
+      one.kind === "weekly_all" ||
+      (one.kind === "weekly_scoped" && one.scopeLabel === scope);
+    return bears && one.percent >= 100 && resets > session.now
+      ? [
+          {
+            scope: one.kind === "weekly_scoped" ? scope : null,
+            resetsAt: resets / 1000,
+          },
+        ]
+      : [];
+  });
+
+/**
+ * What a refusal of the usage-credit budget spends: the request went to
+ * credits because a window was at its limit, so the models that window
+ * covers are refused until it resets. Which window, from the first that
+ * says:
+ * - one the event carries at its limit (the 5-hour or the week: every
+ *   model; the overage-included week: its model);
+ * - one the account held at its limit before the event, for the refused
+ *   request's model (Claude Code's 429 may carry no windows);
+ * - else the refused request's model, whose own week the event does not
+ *   carry (Opus's, Sonnet's): its model alone, until the credits refill, or
+ *   until that week resets when the account held it and held its 5-hour
+ *   and week short of their limits (so the week is the one spent).
+ * A model with no family to scope by is refused on every model's terms.
+ */
+const creditsRefused = (
+  info: ObservedRateLimitInfo,
+  session: ObservedSession | undefined
+): NonNullable<ObservedReading["exhausted"]> => {
+  const carried = UNIFIED.flatMap((each) => {
+    const window = info.unifiedWindows?.[each.key];
+    return window && window.utilization >= 1
+      ? [{ scope: each.scope, resetsAt: window.resetsAt }]
+      : [];
+  });
+  const scope = modelScope(session?.model);
+  return (
+    refusalOf(carried) ??
+    (session ? refusalOf(heldSpent(session, scope)) : null) ?? {
+      scope,
+      resetsAt: iso(ownWeekResets(session, scope, info.resetsAt)),
+    }
+  );
+};
+
+/**
+ * When `scope`'s refused requests run again: its own week's reset, when the
+ * account held that week and held its 5-hour and week short of their
+ * limits, and it comes before the credits refill (`credits`, epoch seconds).
+ */
+const ownWeekResets = (
+  session: ObservedSession | undefined,
+  scope: string | null,
+  credits: number | undefined
+): number | undefined => {
+  const held = session?.held ?? [];
+  const short = (kind: string) =>
+    held.some((one) => one.kind === kind && one.percent < 100);
+  const week = held.find(
+    (one) => one.kind === "weekly_scoped" && one.scopeLabel === scope
+  );
+  const resets = week?.resetsAt ? Date.parse(week.resetsAt) / 1000 : null;
+  return scope &&
+    short("session") &&
+    short("weekly_all") &&
+    resets !== null &&
+    resets * 1000 > (session?.now ?? 0) &&
+    (credits === undefined || resets < credits)
+    ? resets
+    : credits;
+};
+
+/**
+ * The windows, overage and exhaustion one `rate_limit_event` reports. The
+ * unified windows give the 5-hour, weekly and overage-included weekly
+ * reading; the binding window (`rateLimitType`) adds a model's own weekly
+ * window when it is one; a `rejected` status says the binding window is
+ * spent until its reset, for its model when it is one model's. The
+ * usage-credit claim (`overage`) is the overage state, not a window.
+ */
+export function observedReading(
+  info: ObservedRateLimitInfo,
+  session?: ObservedSession
+): ObservedReading {
   const binding = info.rateLimitType;
   const windows: LimitWindow[] = [];
-  for (const { key, kind, group } of UNIFIED) {
+  for (const { key, kind, group, scope } of UNIFIED) {
     const window = info.unifiedWindows?.[key];
     if (!window) {
       continue;
@@ -95,12 +246,15 @@ export function observedReading(info: ObservedRateLimitInfo): ObservedReading {
       // `rateLimitType` names; every other window is unremarkable.
       severity: binding === key ? severity(info.status) : "normal",
       resetsAt: iso(window.resetsAt),
-      scopeLabel: null,
+      scopeLabel: scope,
       isActive: binding === key,
     });
   }
   const scope = binding ? SCOPED[binding] : undefined;
-  if (scope && info.utilization !== undefined) {
+  const carried = windows.some(
+    (one) => one.kind === "weekly_scoped" && one.scopeLabel === scope
+  );
+  if (scope && !carried && info.utilization !== undefined) {
     windows.push({
       kind: "weekly_scoped",
       group: "weekly",
@@ -111,21 +265,34 @@ export function observedReading(info: ObservedRateLimitInfo): ObservedReading {
       isActive: true,
     });
   }
-  const overage: AccountOverage | null =
-    info.overageStatus === undefined && info.isUsingOverage === undefined
-      ? null
-      : {
-          status: info.overageStatus ?? null,
-          resetsAt: iso(info.overageResetsAt),
-          inUse: info.isUsingOverage ?? false,
-          disabledReason: info.overageDisabledReason ?? null,
-        };
-  return {
-    windows,
-    overage,
-    exhausted:
-      info.status === "rejected"
-        ? { scope: scope ?? null, resetsAt: iso(info.resetsAt) }
-        : null,
-  };
+  let exhausted: ObservedReading["exhausted"] = null;
+  if (info.status === "rejected") {
+    exhausted =
+      binding === OVERAGE
+        ? creditsRefused(info, session)
+        : { scope: scope ?? null, resetsAt: iso(info.resetsAt) };
+  }
+  return { windows, overage: overageOf(info), exhausted };
 }
+
+/**
+ * The usage-credit state an event carries: its overage fields, and, when
+ * the credit budget is the claim that binds (`overage`), that claim's
+ * status and reset where the overage fields leave them out.
+ */
+const overageOf = (info: ObservedRateLimitInfo): AccountOverage | null => {
+  const claim = info.rateLimitType === OVERAGE ? info : undefined;
+  if (
+    info.overageStatus === undefined &&
+    info.isUsingOverage === undefined &&
+    !claim
+  ) {
+    return null;
+  }
+  return {
+    status: info.overageStatus ?? claim?.status ?? null,
+    resetsAt: iso(info.overageResetsAt ?? claim?.resetsAt),
+    inUse: info.isUsingOverage ?? false,
+    disabledReason: info.overageDisabledReason ?? null,
+  };
+};

@@ -3,7 +3,7 @@ import {
   type AccountBench,
   type AccountReading,
   type AccountSignin,
-  accountName,
+  accountNameAmong,
   clockWords,
   type LimitWindow,
   modelScope,
@@ -256,6 +256,10 @@ class Usage {
     this.#scope = modelScope(input.model);
   }
 
+  /** What the account is called beside the others (core `accountNameAmong`). */
+  name = (account: Account): string =>
+    accountNameAmong(account, this.#input.accounts);
+
   #window(id: string, kind: string): LimitWindow | undefined {
     const windows =
       this.#input.readings.find((one) => one.accountId === id)?.windows ?? [];
@@ -427,7 +431,7 @@ const pinned = (
 ): Choice => {
   const account = candidates.find((one) => one.id === pinnedId);
   if (account) {
-    return { account, why: `${accountName(account)} is pinned.` };
+    return { account, why: `${usage.name(account)} is pinned.` };
   }
   const backup = byOrder(candidates.filter((one) => !one.neverBackup)).find(
     usage.headroom
@@ -435,7 +439,7 @@ const pinned = (
   return backup
     ? {
         account: backup,
-        why: `The pinned account ${pinnedId ? name(pinnedId) : ""} cannot take it here, so fill-first chose ${accountName(backup)}, the first backup with headroom (${usage.said(backup.id)}).`,
+        why: `The pinned account ${pinnedId ? name(pinnedId) : ""} cannot take it here, so fill-first chose ${usage.name(backup)}, the first backup with headroom (${usage.said(backup.id)}).`,
       }
     : undefined;
 };
@@ -446,7 +450,7 @@ const fillFirst = (candidates: Account[], usage: Usage): Choice => {
   return account
     ? {
         account,
-        why: `${accountName(account)} is the first account in order with headroom (${usage.said(account.id)}).`,
+        why: `${usage.name(account)} is the first account in order with headroom (${usage.said(account.id)}).`,
       }
     : undefined;
 };
@@ -459,7 +463,7 @@ const spread = (candidates: Account[], usage: Usage): Choice => {
   return account
     ? {
         account,
-        why: `${accountName(account)} has the lowest use (${usage.said(account.id)}).`,
+        why: `${usage.name(account)} has the lowest use (${usage.said(account.id)}).`,
       }
     : undefined;
 };
@@ -492,7 +496,7 @@ const soonestReset = (
   if (!account) {
     return undefined;
   }
-  const named = accountName(account);
+  const named = usage.name(account);
   if (stays) {
     return {
       account,
@@ -513,7 +517,7 @@ const soonestReset = (
     .slice(0, ranked.indexOf(account))
     .map(
       (one) =>
-        `${accountName(one)} resets sooner but would run out at ${clockWords(usage.runsOut(one.id) ?? 0)} first`
+        `${usage.name(one)} resets sooner but would run out at ${clockWords(usage.runsOut(one.id) ?? 0)} first`
     );
   return {
     account,
@@ -532,7 +536,7 @@ const explicitPick = (
   if (!pick) {
     return { ok: false, refusal: `There is no account ${asked}.` };
   }
-  const pickName = accountName(pick);
+  const pickName = name(pick.id);
   const machine = input.machineName ?? input.machineId;
   if (!signedIn.some((account) => account.id === pick.id)) {
     return {
@@ -628,14 +632,14 @@ const choose = (
     .filter((account) => !candidates.includes(account))
     .map((account) => {
       if (usage.benched(account.id)) {
-        return `${accountName(account)} is benched until its window resets`;
+        return `${usage.name(account)} is benched until its window resets`;
       }
       if (usage.pastReserve(account)) {
-        return `${accountName(account)} is past its ${account.reservePct}% reserve`;
+        return `${usage.name(account)} is past its ${account.reservePct}% reserve`;
       }
       return usage.read(account)
-        ? `${accountName(account)} is at its limit`
-        : `${accountName(account)}'s limits are unread`;
+        ? `${usage.name(account)} is at its limit`
+        : `${usage.name(account)}'s limits are unread`;
     });
   const out = outNote.length > 0 ? ` (${outNote.join("; ")})` : "";
 
@@ -645,7 +649,7 @@ const choose = (
       ok: true,
       accountId: preferred.id,
       strategy: "type",
-      why: `The delegate type prefers ${accountName(preferred)}.${out}`,
+      why: `The delegate type prefers ${usage.name(preferred)}.${out}`,
     };
   }
 
@@ -675,31 +679,69 @@ const choose = (
       why: `No other account this session may run on has room for it now${out}.`,
     };
   }
-  return { ok: false, refusal: noRoomRefusal(allowed, usage, out, input.now) };
+  return {
+    ok: false,
+    refusal: noRoomRefusal(
+      allowed.filter((account) => !candidates.includes(account)),
+      usage,
+      input.now
+    ),
+  };
 };
 
+/** Why an account has no room now, as {@link noRoomRefusal} groups them. */
+const NO_ROOM_GROUPS = [
+  "Benched",
+  "Past the reserve",
+  "At the limit",
+  "Limits unread",
+] as const;
+
 /**
- * Why nothing started: no account it may run on has room now. Names the one
- * back first and when, in the words the account surfaces say a reset in
- * ("A resets in 3h 10m"), or that no reading says when.
+ * Why nothing can start: no account it may run on has room now. In the
+ * error formula (WORDS.md): what happened, then the way on (the account
+ * back first and when, in the words the account surfaces say a reset in, or
+ * that no reading says when), then each account by why it has no room and
+ * when it is back, the detail for whoever wants it.
  */
-const noRoomRefusal = (
-  allowed: Account[],
-  usage: Usage,
-  out: string,
-  now: number
-): string => {
+const noRoomRefusal = (full: Account[], usage: Usage, now: number): string => {
+  const backs = full.map((account) => ({
+    account,
+    at: usage.backAt(account),
+  }));
   let first: { account: Account; at: number } | undefined;
-  for (const account of allowed) {
-    const at = usage.backAt(account);
+  for (const { account, at } of backs) {
     if (at !== undefined && (!first || at < first.at)) {
       first = { account, at };
     }
   }
-  const back = first
-    ? ` ${accountName(first.account)} resets in ${spanWords(first.at - now)} (${clockWords(first.at)}); start it again then.`
-    : " No reading says when one resets.";
-  return `No account this session may run on has room for it now${out}.${back}`;
+  const wayOn = first
+    ? `${usage.name(first.account)} is back ${full.length > 1 ? "first, " : ""}in ${spanWords(first.at - now)} (${clockWords(first.at)}): start it again then, or sign in another account.`
+    : "No reading says when one is back: sign in another account, or start it again once one resets.";
+  const groupOf = (account: Account): (typeof NO_ROOM_GROUPS)[number] => {
+    if (usage.benched(account.id)) {
+      return "Benched";
+    }
+    if (usage.pastReserve(account)) {
+      return "Past the reserve";
+    }
+    return usage.read(account) ? "At the limit" : "Limits unread";
+  };
+  const groups = NO_ROOM_GROUPS.flatMap((group) => {
+    const named = backs
+      .filter(({ account }) => groupOf(account) === group)
+      .map(({ account, at }) =>
+        at === undefined
+          ? usage.name(account)
+          : `${usage.name(account)} until ${clockWords(at)}`
+      );
+    return named.length > 0 ? [`${group}: ${named.join(", ")}.`] : [];
+  });
+  return [
+    "No account this session may run on has room for it now.",
+    wayOn,
+    ...groups,
+  ].join(" ");
 };
 
 /**
@@ -758,7 +800,7 @@ export const place = (input: PlacementInput): Placement => {
   const byId = new Map(input.accounts.map((account) => [account.id, account]));
   const name = (id: string): string => {
     const account = byId.get(id);
-    return account ? accountName(account) : id;
+    return account ? accountNameAmong(account, input.accounts) : id;
   };
   const machine = input.machineName ?? input.machineId;
 
@@ -799,7 +841,7 @@ export const place = (input: PlacementInput): Placement => {
     ];
     return {
       ok: false,
-      refusal: `None of the accounts signed in on ${machine} (${signedIn.map(accountName).join(", ")}) is allowed here: the project or task limits this session to ${limits.map(name).join(", ")}.`,
+      refusal: `None of the accounts signed in on ${machine} (${signedIn.map((account) => name(account.id)).join(", ")}) is allowed here: the project or task limits this session to ${limits.map(name).join(", ")}.`,
     };
   }
   // One account with room: no choice to make. Without room, the refusal.
@@ -809,7 +851,7 @@ export const place = (input: PlacementInput): Placement => {
       ok: true,
       accountId: only.id,
       strategy: "only",
-      why: `${accountName(only)} is the only account this session may run on here.`,
+      why: `${name(only.id)} is the only account this session may run on here.`,
     };
   }
   return choose(input, allowed, name);

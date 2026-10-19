@@ -101,9 +101,6 @@
                 }
               ]
             }
-          },
-          "intro": {
-            "type": "string"
           }
         },
         "required": [
@@ -190,7 +187,7 @@
           "options"
         ],
         "additionalProperties": false,
-        "description": "One question the person picks on: a card with its options, a note, and a state line."
+        "description": "One question the person picks on: a card with its options and a note. Once picked it folds to one line."
       },
       "Option": {
         "type": "object",
@@ -212,6 +209,9 @@
             "items": {
               "$ref": "#/$defs/__schema0"
             }
+          },
+          "cost": {
+            "type": "string"
           }
         },
         "required": [
@@ -219,7 +219,7 @@
           "label"
         ],
         "additionalProperties": false,
-        "description": "One answer to a decision: what the person gets, in a few words."
+        "description": "One answer to a decision, in a few words."
       },
       "__schema0": {
         "anyOf": [

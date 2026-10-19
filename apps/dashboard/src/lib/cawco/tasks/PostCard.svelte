@@ -16,6 +16,7 @@
     type PostFile,
     postLength,
     withFirstParagraph,
+    madeWords as words,
   } from "@cawco/core";
   import {
     TabItem,
@@ -62,18 +63,18 @@
       size="compact"
       value={choice}
     >
-      <TabsList aria-label="First paragraph">
-        <TabItem label="As written" value="0" />
+      <TabsList aria-label={words.firstParagraph}>
+        <TabItem label={words.asWritten} value="0" />
         {#each post.alternates ?? [] as _, index (index)}
-          <TabItem label="Alternate {index + 1}" value={String(index + 1)} />
+          <TabItem
+            label={words.alternate(index + 1)}
+            value={String(index + 1)}
+          />
         {/each}
       </TabsList>
     </Tabs>
   {/if}
-  <ol
-    aria-label={parts.length > 1 ? "Thread" : "Post"}
-    class="m-0 flex list-none flex-col gap-space-2 p-0"
-  >
+  <ol aria-label={parts.length > 1 ? words.thread : words.post} class="parts">
     {#each parts as text, index (index)}
       {@const length = postLength(text)}
       <li
@@ -114,10 +115,9 @@
           <span
             data-num
             data-slot="count"
-            class="num self-end type-meta text-ink-muted data-over:text-status-fail-ink"
-            title="As X counts it: a link is 23, a line break is one"
-            data-over={length > POST_LIMIT || undefined}
-            >{length}/{POST_LIMIT}</span
+            class="count num"
+            title={words.countTitle}
+            class:over={length > POST_LIMIT}>{length}/{POST_LIMIT}</span
           >
         {/if}
       </li>
@@ -126,16 +126,14 @@
   {#if !compact && (post.community || post.media)}
     <dl class="m-0 flex flex-col gap-space-1">
       {#if post.community}
-        <div class="flex flex-col gap-space-row">
-          <dt class="type-meta text-ink-muted">Community</dt>
-          <dd data-slot="name" class="m-0 type-label text-ink-strong">
-            {post.community}
-          </dd>
+        <div class="fact">
+          <dt>{words.community}</dt>
+          <dd data-slot="name" class="name">{post.community}</dd>
         </div>
       {/if}
       {#if media.length > 0}
-        <div class="flex flex-col gap-space-row">
-          <dt class="type-meta text-ink-muted">Media</dt>
+        <div class="fact">
+          <dt>{words.media}</dt>
           <!-- mark-line: each media file stands on its own, a picture or a player, beside no words -->
           <dd class="m-0 flex flex-wrap gap-space-2 type-meta text-ink-strong">
             {#each media as file (file)}
@@ -168,14 +166,9 @@
           </dd>
         </div>
       {:else if post.media}
-        <div class="flex flex-col gap-space-row">
-          <dt class="type-meta text-ink-muted">Media plan</dt>
-          <dd
-            data-slot="sentence"
-            class="m-0 type-body text-pretty text-ink-strong"
-          >
-            {post.media.plan}
-          </dd>
+        <div class="fact">
+          <dt>{words.mediaPlan}</dt>
+          <dd data-slot="sentence" class="sentence">{post.media.plan}</dd>
         </div>
       {/if}
     </dl>

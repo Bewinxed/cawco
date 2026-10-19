@@ -57,12 +57,16 @@ enum AccountsProbe {
         func walk(_ node: UIView) {
             guard !node.isHidden, node.alpha > 0.01, !(node is StrategyFigureView) else { return }
             if let label = node as? UILabel, let text = label.text, !text.isEmpty, label.bounds.width > 0 {
+                // The box it has and what its words need, and what holds it: which label, and why.
+                let holder = sequence(first: label as UIView, next: \.superview).dropFirst().first { !($0 is UIStackView) }
+                let box = "\(Int(label.bounds.width))x\(Int(label.bounds.height)) in \(holder.map { "\(type(of: $0))" } ?? "nothing")"
                 if label.numberOfLines == 1 {
                     if label.intrinsicContentSize.width > label.bounds.width + 1, !truncating.contains(label.lineBreakMode) {
-                        out.append("cut: \(text)")
+                        out.append("cut: \(text) (\(box), needs \(Int(label.intrinsicContentSize.width)) wide)")
                     }
-                } else if label.sizeThatFits(CGSize(width: label.bounds.width, height: .greatestFiniteMagnitude)).height > label.bounds.height + 1 {
-                    out.append("cut: \(text)")
+                } else {
+                    let needs = label.sizeThatFits(CGSize(width: label.bounds.width, height: .greatestFiniteMagnitude)).height
+                    if needs > label.bounds.height + 1 { out.append("cut: \(text) (\(box), needs \(Int(needs)) tall)") }
                 }
                 if pastEdge(label) { out.append("past the edge: \(text)") }
                 return
@@ -312,7 +316,7 @@ enum AccountsProbe {
                 routing.probeRunSave()
                 await until { routing.probeFooter.contains("Saved") || routing.probeRefusal != nil }
                 let held = FleetAccounts.view(hub).flatMap { FleetAccounts.routing($0, provider: FleetAccounts.claude) }
-                say("routing saved", "\(routing.probeFooter) | hub: yours \(held?.yours.strategy ?? "-") delegates \(held?.delegates.strategy ?? "-") wait \(held?.atLimit.waitMinutes ?? -1) order \(FleetAccounts.view(hub).map { FleetAccounts.accounts($0, provider: FleetAccounts.claude).map(FleetAccounts.name) } ?? [])")
+                say("routing saved", "\(routing.probeFooter) | hub: yours \(held?.yours.strategy ?? "-") delegates \(held?.delegates.strategy ?? "-") wait \(held?.atLimit.waitMinutes ?? -1) order \(FleetAccounts.view(hub).map { view in FleetAccounts.accounts(view, provider: FleetAccounts.claude).map { FleetAccounts.name($0, among: view.accounts) } } ?? [])")
                 await until { routing.view.window == nil }
                 await wait(0.6)
             }

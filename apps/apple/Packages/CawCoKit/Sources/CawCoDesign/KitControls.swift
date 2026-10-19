@@ -9,16 +9,26 @@ import UIKit
 /// `draft`). The chosen item's raised sheet (`--surface-raised`,
 /// `--shadow-tile`) glides to it over `durToggle` on the out curve, and its
 /// ink turns strong over `durGhost`; a press tints the item.
+///
+/// `wraps` (Choice.svelte's `.choice-group { flex-wrap: wrap }`): each item
+/// stands at its own width, and items that run past the control's width go
+/// on to the next line inside the same well, 2pt under, the sheet gliding
+/// between lines as it does along one. The control is as wide as its items
+/// on one line, or as its width allows.
 public final class SegmentedTabs: UIControl {
     public struct Item: Sendable, Equatable {
         public let label: String
         public let glyph: Glyph?
         /// A secondary badge after the name, `space-1` from it.
         public let badge: String?
-        public init(_ label: String, glyph: Glyph? = nil, badge: String? = nil) {
+        /// A count after the name (the project strip's `.tab-num`: the
+        /// decision pages waiting on picks), `space-1` from it.
+        public let count: Int?
+        public init(_ label: String, glyph: Glyph? = nil, badge: String? = nil, count: Int? = nil) {
             self.label = label
             self.glyph = glyph
             self.badge = badge
+            self.count = count
         }
     }
 
@@ -28,9 +38,16 @@ public final class SegmentedTabs: UIControl {
     private let sheet = UIView()
     private var cells: [Cell] = []
     private static let pad = 4.0
+    private static let gap = 2.0
+    private let wraps: Bool
+    /// An item's height: 32pt under a finger, 28 at a pointer.
+    private var line: Double { traitCollection.userInterfaceIdiom != .mac ? 32 : 28 }
+    /// The width the lines were last laid out for: a new one asks for a new height.
+    private var laidWidth: Double = 0
 
-    public init(_ items: [Item], selected: Int = 0) {
+    public init(_ items: [Item], selected: Int = 0, wraps: Bool = false) {
         selectedIndex = selected
+        self.wraps = wraps
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = Palette.muted
@@ -42,18 +59,19 @@ public final class SegmentedTabs: UIControl {
         sheet.isUserInteractionEnabled = false
         sheet.boxShadow = Shadow.shadowTile
         addSubview(sheet)
-        stack.axis = .horizontal
-        stack.spacing = 2
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        let coarse = traitCollection.userInterfaceIdiom != .mac
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: Self.pad),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.pad),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.pad),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.pad),
-            stack.heightAnchor.constraint(equalToConstant: coarse ? 32 : 28),
-        ])
+        if !wraps {
+            stack.axis = .horizontal
+            stack.spacing = Self.gap
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(stack)
+            NSLayoutConstraint.activate([
+                stack.topAnchor.constraint(equalTo: topAnchor, constant: Self.pad),
+                stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.pad),
+                stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.pad),
+                stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.pad),
+                stack.heightAnchor.constraint(equalToConstant: line),
+            ])
+        }
         build(items)
         isAccessibilityElement = false
         accessibilityTraits = .tabBar
@@ -65,10 +83,48 @@ public final class SegmentedTabs: UIControl {
         cells = next.enumerated().map { index, item in
             let cell = Cell(item)
             cell.addAction(UIAction { [weak self] _ in self?.choose(index) }, for: .primaryActionTriggered)
-            stack.addArrangedSubview(cell)
+            if wraps {
+                cell.translatesAutoresizingMaskIntoConstraints = true
+                addSubview(cell)
+            } else {
+                stack.addArrangedSubview(cell)
+            }
             return cell
         }
+        if wraps { invalidateIntrinsicContentSize() }
         mark()
+    }
+
+    // MARK: Wrapping
+
+    /// Each item's own width.
+    private var widths: [Double] {
+        cells.map { $0.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width.rounded(.up) }
+    }
+
+    /// Each item's box when the items wrap inside `width`.
+    private func flow(_ width: Double) -> [CGRect] {
+        let room = max(width - Self.pad * 2, 0)
+        var x = 0.0
+        var y = 0.0
+        return widths.map { wide in
+            if x > 0, x + wide > room {
+                x = 0
+                y += line + Self.gap
+            }
+            let box = CGRect(x: Self.pad + x, y: Self.pad + y, width: wide, height: line)
+            x += wide + Self.gap
+            return box
+        }
+    }
+
+    override public var intrinsicContentSize: CGSize {
+        guard wraps else { return super.intrinsicContentSize }
+        let one = widths.reduce(0, +) + Self.gap * Double(max(cells.count - 1, 0)) + Self.pad * 2
+        // Until the control has a width, the items on one line.
+        let boxes = flow(laidWidth > 0 ? laidWidth : one)
+        let bottom = boxes.map(\.maxY).max() ?? Self.pad + line
+        return CGSize(width: one, height: bottom + Self.pad)
     }
 
     /// The items as they stand now (a project's views come and go), with
@@ -98,6 +154,14 @@ public final class SegmentedTabs: UIControl {
 
     override public func layoutSubviews() {
         super.layoutSubviews()
+        if wraps {
+            for (cell, box) in zip(cells, flow(bounds.width)) { cell.frame = box }
+            if bounds.width != laidWidth {
+                laidWidth = bounds.width
+                // Its lines for this width make its height.
+                invalidateIntrinsicContentSize()
+            }
+        }
         guard !placing else { return }
         place()
     }
@@ -106,7 +170,7 @@ public final class SegmentedTabs: UIControl {
 
     private func place() {
         guard cells.indices.contains(selectedIndex) else { return }
-        stack.layoutIfNeeded()
+        if !wraps { stack.layoutIfNeeded() }
         sheet.frame = cells[selectedIndex].convert(cells[selectedIndex].bounds, to: self)
     }
 
@@ -147,7 +211,13 @@ public final class SegmentedTabs: UIControl {
             label.text = item.label
             let badge = item.badge.map { KitBadge($0, variant: .secondary) }
             badge?.isAccessibilityElement = false
-            let row = UIStackView(arrangedSubviews: [glyph, label, badge].compactMap(\.self))
+            let count = item.count.map { value in
+                let number = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+                number.text = "\(value)"
+                number.tabular = true
+                return number
+            }
+            let row = UIStackView(arrangedSubviews: [glyph, label, badge ?? count].compactMap(\.self))
             row.spacing = 6
             row.setCustomSpacing(Space.space1, after: label)
             row.alignment = .center
@@ -161,7 +231,7 @@ public final class SegmentedTabs: UIControl {
             ])
             addTarget(self, action: #selector(tapped), for: .touchUpInside)
             isAccessibilityElement = true
-            accessibilityLabel = [item.label, item.badge].compactMap(\.self).joined(separator: ", ")
+            accessibilityLabel = [item.label, item.badge, item.count.map(String.init)].compactMap(\.self).joined(separator: ", ")
             addInteraction(UIPointerInteraction(delegate: nil))
         }
 

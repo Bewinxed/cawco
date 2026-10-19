@@ -1,0 +1,13 @@
+apps/dashboard/src/lib/cawco/turn/Well.svelte
+apps/dashboard/src/lib/cawco/turn/Who.svelte
+apps/dashboard/src/lib/cawco/updates/ChannelCards.svelte
+apps/dashboard/src/lib/cawco/updates/ReleaseNotes.svelte
+apps/dashboard/src/lib/cawco/updates/UpdateCell.svelte
+apps/dashboard/src/lib/cawco/updates/UpdateTable.svelte
+
+# apps/dashboard/src/lib/cawco/turn/Well.svelte: relic: style-reason ×1; relic: important ×1
+# apps/dashboard/src/lib/cawco/turn/Who.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/updates/ChannelCards.svelte: relic: literal ×2; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/updates/ReleaseNotes.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/updates/UpdateCell.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/updates/UpdateTable.svelte: relic: literal ×2

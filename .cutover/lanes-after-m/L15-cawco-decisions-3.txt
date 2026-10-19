@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/decisions/host/Diagram.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Image.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Option.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Preview.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Section.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Stack.svelte
+apps/dashboard/src/lib/cawco/decisions/host/Text.svelte
+
+# apps/dashboard/src/lib/cawco/decisions/host/Diagram.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/decisions/host/Image.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/decisions/host/Option.svelte: after-M: markup naming a scoped class
+# apps/dashboard/src/lib/cawco/decisions/host/Preview.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/decisions/host/Section.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/decisions/host/Stack.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/decisions/host/Text.svelte: relic: style-reason ×1

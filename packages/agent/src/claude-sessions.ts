@@ -260,13 +260,53 @@ const carryOne = async (
 };
 
 /**
+ * The carry each session's data is in now, by session id: the next carry of
+ * that session waits for it ({@link carrySessions}).
+ */
+const carrying = new Map<string, Promise<void>>();
+
+/**
  * Carries each session into the dir its row names: every per-session entry
  * any other config dir on this machine holds for it is moved there. A
  * session already whole in its dir is left as it is. One that fails says
  * why and the rest go on. The caller makes sure no process of a session runs
  * while its data moves.
+ *
+ * Carries of one session go one after another, each reading the dirs once
+ * the one before it has ended: a launch's carry can start while the hub's
+ * carry of the same session still runs (its answer late, its copy going on),
+ * and two at once each list the same entries, the second then finding them
+ * moved ("ENOENT … lstat '<old dir>/projects/<slug>/<id>.jsonl'") and failing
+ * a launch whose conversation was already whole where it runs.
  */
 export const carrySessions = async (
+  requests: readonly CarryRequest[]
+): Promise<Map<string, Carried>> => {
+  const before = requests.flatMap(
+    (request) => carrying.get(request.sessionId) ?? []
+  );
+  let done = (): void => undefined;
+  const mine = new Promise<void>((ended) => {
+    done = ended;
+  });
+  for (const request of requests) {
+    carrying.set(request.sessionId, mine);
+  }
+  try {
+    await Promise.all(before);
+    return await carryNow(requests);
+  } finally {
+    done();
+    for (const request of requests) {
+      if (carrying.get(request.sessionId) === mine) {
+        carrying.delete(request.sessionId);
+      }
+    }
+  }
+};
+
+/** {@link carrySessions}' work, once no other carry of these sessions runs. */
+const carryNow = async (
   requests: readonly CarryRequest[]
 ): Promise<Map<string, Carried>> => {
   const results = new Map<string, Carried>();

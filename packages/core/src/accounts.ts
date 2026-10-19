@@ -185,20 +185,30 @@ export const ACCOUNT_HUES: readonly AccountHue[] = [
 ];
 
 /**
- * Who an account is. Claude: as Claude Code's initialize response reports it
- * (`account.email`, `account.organization` — the organization's name).
- * ChatGPT: the access token's claims, read on the machine — the email
- * (`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT
- * account id (`https://api.openai.com/auth`.chatgpt_account_id), the
- * workspace the subscription bills. Another OAuth provider: the email its
+ * Who an account is: an email in an organization, the organization known by
+ * its id (`orgId`), never its name, which is a display name: an org renamed
+ * is the same org, and two orgs can share a name. Claude: as `claude auth
+ * status --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the
+ * access token's claims, read on the machine — the email
+ * (`https://api.openai.com/profile`.email) and, as `organization` and its
+ * id, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),
+ * the workspace the subscription bills. Another OAuth provider: the email its
  * credential names, if any, and its provider id. A key: its last four
- * characters (`…a1b2`) and, as `organization`, a fingerprint of it
- * (`key:` and the first 16 hex of its SHA-256), so the same key on two
+ * characters (`…a1b2`) and, as `organization` and its id, a fingerprint of
+ * it (`key:` and the first 16 hex of its SHA-256), so the same key on two
  * machines is one account and the key itself never leaves them.
  */
 export interface AccountIdentity {
   email: string;
+  /** The organization's name, for a screen. */
   organization: string;
+  /**
+   * The organization's id: what tells two identities apart. Null where
+   * nothing read one (Claude Code's initialize response names none, an agent
+   * older than this field sends none): such an identity is the same as no
+   * other ({@link sameIdentity}).
+   */
+  orgId: string | null;
 }
 
 export interface Account {
@@ -279,13 +289,21 @@ export interface StrategyChoice {
  * and goes on; one of this many or more, moved to another organization
  * (whose cache it can't read), also files its open items and is compacted by
  * Claude Code's own `/compact` as its first steps there, before anything it
- * is owed. `delegateWork`: what a turn the limit refused is answered with
- * when it was the hub's own word to a live work item's session
- * ({@link DelegateWork}); every other word of the hub's a limit refused is
- * left until a person or the session's parent writes.
+ * is owed. A live work item's session is answered so whoever started its
+ * refused turn, the hub's own word to it included; every other word of the
+ * hub's a limit refused is left until a person or the session's parent
+ * writes.
  */
 export interface AtLimit {
-  delegateWork: DelegateWork;
+  /**
+   * Read by nothing: a delegate's work at its limit is answered as any
+   * session's is, moved to an account with room or held until the earliest
+   * reset. Sent as `move`, which is what the hub does, only because the
+   * TestFlight builds 20261017 and 20261018 require it, which the hub's wire
+   * check holds to (packages/hub/scripts/openapi.ts). It goes in the change
+   * that expires them.
+   */
+  delegateWork: "move";
   move: boolean;
   moveWholeUnderK: number;
   /**
@@ -299,30 +317,12 @@ export interface AtLimit {
   waitMinutes: number;
 }
 
-/**
- * When a delegate's work reaches its account's limit: the hub's word to a
- * live work item's session ("Your work item is still open", the sleep
- * sweep's wake, a wait's end; core `WORK_ITEM_ORIGIN`) was refused there.
- * `resume`: that word is sent again once, when the account's limit resets;
- * nothing moves it meanwhile. `move`: it is answered as a person's turn is,
- * moved whole to an account with room by the routing. `leave`: it waits
- * until a person or its parent writes to it.
- */
-export type DelegateWork = "resume" | "move" | "leave";
-
-/** The {@link DelegateWork} choices, in the order a control offers them. */
-export const DELEGATE_WORK: readonly DelegateWork[] = [
-  "resume",
-  "move",
-  "leave",
-];
-
 export const DEFAULT_AT_LIMIT: AtLimit = {
   move: true,
   waitMinutes: 15,
   moveWholeUnderK: 200,
   prepareAtPct: 90,
-  delegateWork: "resume",
+  delegateWork: "move",
 };
 
 /**
@@ -973,6 +973,46 @@ export const accountName = (
   account: Pick<Account, "email" | "id" | "label">
 ): string => account.label ?? account.email ?? accountsWords.unnamed;
 
+/**
+ * What each of `accounts` is called where it stands beside the others: its
+ * {@link accountName}, and for an account with no nickname whose email
+ * another account of its provider also signs in as (a personal plan and a
+ * Team seat on one email), its organization after it, so each reading says
+ * whose it is: "bewinxed@petralab.ai (Petralab)".
+ */
+export const accountNames = (
+  accounts: readonly NameableAccount[]
+): Map<string, string> =>
+  new Map(accounts.map((one) => [one.id, accountNameAmong(one, accounts)]));
+
+type NameableAccount = Pick<
+  Account,
+  "email" | "id" | "identity" | "label" | "provider"
+>;
+
+/**
+ * What `one` is called beside `accounts` ({@link accountNames}): the name
+ * every line the hub writes or logs gives it. `accounts` may hold other
+ * providers'.
+ */
+export const accountNameAmong = (
+  one: NameableAccount,
+  accounts: readonly NameableAccount[]
+): string => {
+  const org = one.identity?.organization;
+  const sharing =
+    one.email !== null &&
+    accounts.some(
+      (other) =>
+        other.id !== one.id &&
+        other.provider === one.provider &&
+        other.email?.toLowerCase() === one.email?.toLowerCase()
+    );
+  return !one.label && org && sharing
+    ? `${one.email} (${org})`
+    : accountName(one);
+};
+
 /** An account as a transcript line names it, as it was when the line was written. */
 export interface NamedAccount {
   hue: AccountHue;
@@ -980,9 +1020,13 @@ export interface NamedAccount {
   name: string;
 }
 
-export const namedAccount = (account: Account): NamedAccount => ({
+/** `account` as a line names it among `accounts`, the hub's every account ({@link accountNames}). */
+export const namedAccount = (
+  account: Account,
+  accounts: readonly Account[]
+): NamedAccount => ({
   id: account.id,
-  name: accountName(account),
+  name: accountNameAmong(account, accounts),
   hue: account.hue,
 });
 
@@ -990,9 +1034,9 @@ export const namedAccount = (account: Account): NamedAccount => ({
  * Why a session at its account's limit waits for the reset rather than
  * moving: it is a fork (it reads its origin's cache, on its origin's
  * account), moving is switched off, no other account has room, the reset
- * comes sooner than re-reading its context elsewhere is worth, or the limit
- * refused the hub's word to a live work item and the routing has that carry
- * on after the reset ({@link DelegateWork} `resume`).
+ * comes sooner than re-reading its context elsewhere is worth. `work` is
+ * history only: lines a hub stored while a delegate's work could be set to
+ * carry on after its own account's reset, never moved, still read.
  */
 export type WaitReason = "fork" | "off" | "full" | "soon" | "work";
 
@@ -1573,19 +1617,32 @@ const cameWords = (came: RebalanceNotice["came"]): string => {
   ].join(", ");
 };
 
-/** Whether two identities are the same account: same email in the same organization. */
+/**
+ * Whether two identities are the same account: the same email in the same
+ * organization, the organization by its id alone. Either side with no id is
+ * the same as nothing: who it is can't be compared, and a name is never
+ * taken for an id. (An identity off the wire from an agent older than
+ * `orgId` has none at all, so the test is for an id, not for null.)
+ */
 export const sameIdentity = (a: AccountIdentity, b: AccountIdentity): boolean =>
-  a.email.toLowerCase() === b.email.toLowerCase() &&
-  a.organization === b.organization;
+  Boolean(a.orgId) &&
+  a.orgId === b.orgId &&
+  a.email.toLowerCase() === b.email.toLowerCase();
 
 /**
- * An initialize response's account as an identity, or nothing when it names
- * nobody (a dir that is not signed in reports no email).
+ * Who a Claude Code login says it is (its `auth status`, or its initialize
+ * response, which names no organization id) as an identity, or nothing when
+ * it names nobody (a dir that is not signed in reports no email).
  */
 export const identityOf = (account: {
   email?: string;
   organization?: string;
+  orgId?: string;
 }): AccountIdentity | undefined =>
   account.email
-    ? { email: account.email, organization: account.organization ?? "" }
+    ? {
+        email: account.email,
+        organization: account.organization ?? "",
+        orgId: account.orgId || null,
+      }
     : undefined;

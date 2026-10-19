@@ -60,6 +60,7 @@ import {
 import { dirname, join } from "node:path";
 import type { AuthContext } from "ssh2";
 import type { SshJoinJob } from "../../../packages/core/src/join";
+import { listedPid, signal } from "../../../packages/core/src/signal";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import {
@@ -88,6 +89,11 @@ const CARRYING = "cawco-install: carrying this hub to the machine on its port ";
 const NO_TAR = "cawco: tar is needed";
 
 const PROCESS_ID = /^\d+$/;
+/** The locale the hub runs under: ssh's words, in any language, decide nothing. */
+const HUB_LOCALE = "de_DE.UTF-8";
+/** The step join.ts `refusalStep` names for a machine whose sshd refuses forwarding. */
+const FORWARDING_REFUSED =
+  "forwarding a port on the machine to this hub, which its SSH server refuses";
 
 /** A process's group, from /proc/<pid>/stat (the third field after the name). */
 const groupOf = (pid: number): number | null => {
@@ -99,12 +105,33 @@ const groupOf = (pid: number): number | null => {
   }
 };
 
-/** Every live process whose argv holds all of `parts`, or whose group is `group`. */
-const processes = (match: { parts: string[] } | { group: number }): number[] =>
+/** Whether `pid`'s environment holds `entry` (`NAME=value`), read from /proc. */
+const environHolds = (pid: number, entry: string): boolean => {
+  try {
+    return readFileSync(`/proc/${pid}/environ`, "utf8")
+      .split("\0")
+      .includes(entry);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Every live process whose argv holds all of `parts`, or whose group is
+ * `group`; with `run`, only those whose environment holds it (leg (l)'s
+ * {@link RUN_ENV} marker, so a process an earlier run left behind is never
+ * read as this run's).
+ */
+const processes = (
+  match: ({ parts: string[] } | { group: number }) & { run?: string }
+): number[] =>
   readdirSync("/proc")
     .filter((entry) => PROCESS_ID.test(entry))
     .map(Number)
     .filter((pid) => {
+      if (match.run !== undefined && !environHolds(pid, match.run)) {
+        return false;
+      }
       if ("group" in match) {
         return groupOf(pid) === match.group;
       }
@@ -115,6 +142,13 @@ const processes = (match: { parts: string[] } | { group: number }): number[] =>
         return false;
       }
     });
+
+/**
+ * The variable leg (l)'s sshd sets on every session (`SetEnv`), with a value
+ * of its own run: every process of the session inherits it, an orphan the
+ * watchdog failed to end included, and nothing an earlier run left holds it.
+ */
+const RUN_ENV = "CAWCO_PROBE_RUN";
 
 /** Every process's argv and environment that holds `secret`, read from /proc. */
 const holders = (secret: string): string[] => {
@@ -190,7 +224,13 @@ const installed = (job: SshJoinJob): boolean => {
  * only, the scratch target's `authorized_keys`, which holds the hub's key
  * by now; its sessions given the scratch HOME and {@link machineBin}'s PATH by
  * `SetEnv`): Stop ends what the add runs on the machine, not only the
- * hub's `ssh`, and an add that runs to its end leaves nothing behind.
+ * hub's `ssh`, and an add that runs to its end leaves nothing behind. Every
+ * process it reads is this run's own ({@link RUN_ENV}), and whatever of this
+ * run still lives at the end is killed, so a failure here never fails the
+ * next run. A second real sshd, `AllowTcpForwarding no`, refuses the
+ * forward: the add ends naming that setting, read from the forward's own
+ * exit and the master still answering, not from `ssh`'s words (the hub runs
+ * under {@link HUB_LOCALE} throughout).
  */
 async function realSshd(
   kit: Kit,
@@ -198,40 +238,53 @@ async function realSshd(
   dir: string,
   machine: { authorized: string; bin: string; home: string }
 ): Promise<void> {
-  const lease = Bun.listen({
-    hostname: "127.0.0.1",
-    port: 0,
-    socket: { data: () => undefined },
-  });
-  const { port } = lease;
-  lease.stop(true);
-  const config = join(dir, "sshd_config");
+  const marker = `${RUN_ENV}=${crypto.randomUUID()}`;
   await Bun.$`ssh-keygen -q -t ed25519 -N "" -f ${join(dir, "sshd_host_key")}`.quiet();
-  writeFileSync(
-    config,
-    `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(dir, "sshd_host_key")}\nPidFile ${join(dir, "sshd.pid")}\nAuthorizedKeysFile ${machine.authorized}\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\nStrictModes no\nSetEnv HOME=${machine.home} PATH=${machine.bin}\n`
-  );
-  const sshd = Bun.spawn(
-    ["/usr/sbin/sshd", "-D", "-f", config, "-E", join(dir, "sshd.log")],
-    { stdout: "ignore", stderr: "ignore" }
-  );
-  const user = (await Bun.$`id -un`.text()).trim();
-  const begin = () =>
-    fleet.api<SshJoinJob>("/api/machines/ssh", {
-      target: `${user}@127.0.0.1`,
-      port,
+  /** A real sshd named `name` on a free port of its own, with `extra` in its config. */
+  const startSshd = (name: string, extra: string) => {
+    const lease = Bun.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: { data: () => undefined },
     });
-  const read = (id: string) => fleet.api<SshJoinJob>(`/api/machines/ssh/${id}`);
-  const holding = () => processes({ parts: HELD });
-  const watchdogs = () => processes({ parts: ["while ps -p"] });
-  const hold = join(machine.home, ".hold");
-  try {
-    await until(
-      "the real sshd listening",
-      () => existsSync(join(dir, "sshd.pid")) || undefined,
+    const { port } = lease;
+    lease.stop(true);
+    const config = join(dir, `${name}_config`);
+    const pidFile = join(dir, `${name}.pid`);
+    writeFileSync(
+      config,
+      `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(dir, "sshd_host_key")}\nPidFile ${pidFile}\nAuthorizedKeysFile ${machine.authorized}\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\nStrictModes no\nSetEnv HOME=${machine.home} PATH=${machine.bin} ${marker}\n${extra}`
+    );
+    const proc = Bun.spawn(
+      ["/usr/sbin/sshd", "-D", "-f", config, "-E", join(dir, `${name}.log`)],
+      { stdout: "ignore", stderr: "ignore" }
+    );
+    const listening = until(
+      `the real sshd ${name} listening`,
+      () => existsSync(pidFile) || undefined,
       Boolean,
       10_000
     );
+    return { port, proc, listening };
+  };
+  const sshd = startSshd("sshd", "");
+  const closed = startSshd("sshd-closed", "AllowTcpForwarding no\n");
+  const { port } = sshd;
+  const user = (await Bun.$`id -un`.text()).trim();
+  const beginOn = (on: number) =>
+    fleet.api<SshJoinJob>("/api/machines/ssh", {
+      target: `${user}@127.0.0.1`,
+      port: on,
+    });
+  const begin = () => beginOn(port);
+  const read = (id: string) => fleet.api<SshJoinJob>(`/api/machines/ssh/${id}`);
+  const holding = () => processes({ parts: HELD, run: marker });
+  const watchdogs = () => processes({ parts: ["while ps -p"], run: marker });
+  const inGroup = (group: number | null) =>
+    group === null ? [] : processes({ group, run: marker });
+  const hold = join(machine.home, ".hold");
+  try {
+    await Promise.all([sshd.listening, closed.listening]);
     writeFileSync(hold, "");
     const held = await begin();
     const step = await until(
@@ -245,8 +298,7 @@ async function realSshd(
     const gone = await until(
       "the machine's step and its group gone",
       () =>
-        holding().length === 0 &&
-        processes({ group: stepGroup ?? -1 }).length === 0
+        holding().length === 0 && inGroup(stepGroup).length === 0
           ? true
           : undefined,
       Boolean,
@@ -255,7 +307,7 @@ async function realSshd(
     kit.check(
       "l: on a real sshd, Stop ends what the add runs on the machine: its held step and every process of that group are gone within 10 s",
       stopped.job?.state === "stopped" && step !== undefined && gone === true,
-      `stop answered ${stopped.said}; machine's step ${step} (group ${stepGroup}); left ${JSON.stringify(holding())} and in the group ${JSON.stringify(processes({ group: stepGroup ?? -1 }))}`
+      `stop answered ${stopped.said}; machine's step ${step} (group ${stepGroup}); left ${JSON.stringify(holding())} and in the group ${JSON.stringify(inGroup(stepGroup))}`
     );
     rmSync(hold, { force: true });
     const ran = await begin();
@@ -276,8 +328,28 @@ async function realSshd(
       ended.state === "failed" && installed(ended) && strays === true,
       `${seen(ended)}; watchdogs left ${JSON.stringify(watchdogs())}`
     );
+    const refused = await beginOn(closed.port);
+    const said = await until(
+      "the add on the forwarding-refusing sshd ended",
+      () => read(refused.id),
+      (job) => job.state !== "running",
+      30_000
+    ).catch(() => read(refused.id));
+    kit.check(
+      `l: on a real sshd with AllowTcpForwarding no, under LC_ALL=${HUB_LOCALE}, the add fails naming that setting, as a refusal and not a failed step`,
+      said.state === "failed" &&
+        said.problem?.kind === "step" &&
+        said.problem.step.startsWith(FORWARDING_REFUSED),
+      seen(said)
+    );
   } finally {
-    sshd.kill();
+    sshd.proc.kill();
+    closed.proc.kill();
+    // Whatever of this run still lives (a watchdog that failed, its step):
+    // it goes, by the pid /proc lists now.
+    for (const pid of processes({ parts: [], run: marker })) {
+      signal(listedPid(pid), "SIGKILL");
+    }
   }
 }
 
@@ -411,7 +483,32 @@ async function run(kit: Kit): Promise<void> {
 
   const jobs: SshJoinJob[] = [];
   try {
-    fleet.launch("hub", [], { PATH: `${bin}:${fleet.env.PATH}` });
+    // ssh's own words never decide an outcome: the hub runs every add under
+    // German, compiled here into the scratch dir (glibc reads it through
+    // LOCPATH, so a host that never installed it runs it all the same), and
+    // proven in effect before any add.
+    const locales = join(dir, "locale");
+    mkdirSync(locales, { recursive: true });
+    await Bun.$`localedef -i de_DE -f UTF-8 ${join(locales, "de_DE.utf8")}`.quiet();
+    const localeEnv = {
+      LOCPATH: locales,
+      LC_ALL: HUB_LOCALE,
+      LANG: HUB_LOCALE,
+    };
+    const sunday = (
+      await Bun.$`date -d 2026-10-18 +%A`
+        .env({ ...process.env, ...localeEnv })
+        .text()
+    ).trim();
+    kit.check(
+      `the hub runs under ${HUB_LOCALE}, in effect: 2026-10-18 reads as Sonntag`,
+      sunday === "Sonntag",
+      `date said ${sunday}`
+    );
+    fleet.launch("hub", [], {
+      PATH: `${bin}:${fleet.env.PATH}`,
+      ...localeEnv,
+    });
     await fleet.hubUp();
     const begin = (password?: string) =>
       fleet.api<SshJoinJob>("/api/machines/ssh", {

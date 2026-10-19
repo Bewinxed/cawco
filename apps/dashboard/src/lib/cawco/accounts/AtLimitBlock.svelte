@@ -5,16 +5,9 @@
    * conversation then compacted there by Claude Code's own /compact after it
    * files its open items. The figure under the numbers plays that policy,
    * rebuilt as they change. Off, the numbers fold away with the figure and
-   * the terms. Under it, on or off, what a delegate's work does at its limit.
+   * the terms.
    */
-  import {
-    type Account,
-    type AtLimit,
-    accountsWords,
-    DELEGATE_WORK,
-    type DelegateWork,
-  } from "@cawco/core";
-  import Choice from "#lib/cawco/config/Choice.svelte";
+  import { type Account, type AtLimit, accountsWords } from "@cawco/core";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
@@ -127,20 +120,78 @@
       {/if}
     </div>
   {/if}
-  <div
-    class="flex flex-col gap-space-2 pt-space-3 pb-space-2 text-pretty text-ink-row"
-  >
-    <p>{words.delegateWork}</p>
-    <Choice
-      label={words.delegateWork}
-      onchange={(next) => {
-        atLimit.delegateWork = next as DelegateWork;
-      }}
-      options={DELEGATE_WORK.map((value) => ({
-        value,
-        label: words.delegateWorkChoices[value],
-      }))}
-      value={atLimit.delegateWork}
-    />
-  </div>
 </div>
+
+<style>
+  .lim {
+    display: flex;
+    flex-direction: column;
+    container-type: inline-size;
+  }
+  .head {
+    margin-block-end: var(--space-3);
+    font: var(--type-label);
+    color: var(--ink-strong);
+    text-wrap: balance;
+  }
+  .switch-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding-block: var(--space-2) var(--space-3);
+    color: var(--ink-row);
+  }
+  .switch-line label {
+    cursor: pointer;
+  }
+  .rows {
+    display: flex;
+    flex-direction: column;
+  }
+  .pr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    color: var(--ink-row);
+    text-wrap: pretty;
+  }
+  .pr :global(.field) {
+    flex: none;
+    width: 64px;
+    height: var(--c-btn-h-sm);
+    padding-inline: var(--space-2);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .aside {
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .figure {
+    margin-block: var(--space-3);
+  }
+  .terms {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    align-self: flex-start;
+    border-radius: var(--radius-xs);
+    font: var(--type-label);
+    color: var(--link-ink);
+    text-decoration: none;
+    text-wrap: pretty;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .terms:hover {
+      color: var(--link-hover);
+    }
+  }
+  .terms :global(svg) {
+    flex: none;
+    width: 12px;
+    height: 12px;
+  }
+</style>

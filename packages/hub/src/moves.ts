@@ -93,8 +93,6 @@ export interface MoveState {
   cloneUrl?: string;
   error?: MoveError;
   from: MoveJob["from"];
-  /** The folder is no repository: the approval's yes runs `git init`. */
-  gitInit: boolean;
   ignoredSecrets: string[];
   ignores: boolean;
   kept?: string;
@@ -142,6 +140,15 @@ export interface MovesDeps {
   readonly lifetime: HubLifetimeShape;
   readonly machineName: (machineId: string) => string;
   /**
+   * Why a `harness` session on `machineId` can't start in `mode`, as every
+   * start is refused (server.ts `modeOf`: no mode nobody chose), or nothing.
+   */
+  readonly modeRefusal: (
+    machineId: string,
+    harness: string,
+    mode: string | undefined
+  ) => string | undefined;
+  /**
    * The started session's transcript opens on the move's ready line: kept
    * on its row and said now. Once per session, whatever the retries.
    */
@@ -171,6 +178,11 @@ export interface MovesDeps {
     requestId: string,
     outcome: "answered" | "cancelled"
   ) => void;
+  /**
+   * Resolves once a place's repo step in flight, if any, has finished
+   * (place-repo.ts `settled`): the plan reads the source as it settled.
+   */
+  readonly settled: (machineId: string, path: string) => Promise<void>;
   /** Starts the session as every hub-started session starts (server.ts `spawnSession`). */
   readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
 }
@@ -699,6 +711,9 @@ export const createMoves = (deps: MovesDeps) => {
     if (targetPath instanceof MachinePathRefused) {
       throw new MoveRefused(400, targetPath.message, { cause: targetPath });
     }
+    // A plain folder being made a repository is read once it is one (or
+    // stayed a folder): what the move asks never depends on which finished first.
+    await deps.settled(sourcePlace.machineId, sourcePlace.path);
     const [sourceInspection, targetInspection] = await Promise.all([
       inspect(sourcePlace.machineId, sourcePlace.path),
       inspect(targetMachineId, targetPath),
@@ -956,7 +971,6 @@ export const createMoves = (deps: MovesDeps) => {
       ),
       targetHome: t.home,
       bigFiles: s.bigFiles,
-      gitInit: !s.isGit,
       snapshotBranch: moveBranch(deps.machineName(sourceMachineId)),
       steps,
       bytes: s.bytes,
@@ -1002,6 +1016,16 @@ export const createMoves = (deps: MovesDeps) => {
         400,
         "A move names the harness its session starts on. Pick one, then move it again."
       );
+    }
+    // Its session's mode is settled as every start's is, before anything
+    // moves: a move whose start could only be refused copies nothing.
+    const unfit = deps.modeRefusal(
+      asked.machineId,
+      harness,
+      asked.spawn.permissionMode
+    );
+    if (unfit) {
+      throw new MoveRefused(400, unfit);
     }
     const request: NamedMoveRequest = {
       ...asked,
@@ -1075,7 +1099,6 @@ export const createMoves = (deps: MovesDeps) => {
             {
               jobId: row.id,
               path: state.sourcePath,
-              gitInit: state.gitInit,
               bigFiles: state.bigFiles.map((file) => file.path),
             },
           ],

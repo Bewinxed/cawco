@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/spawn/PermissionSection.svelte
+apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte
+apps/dashboard/src/lib/cawco/spawn/PromptEditor.svelte
+apps/dashboard/src/lib/cawco/spawn/Segmented.svelte
+apps/dashboard/src/lib/cawco/spawn/SessionFooter.svelte
+apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte
+apps/dashboard/src/lib/cawco/spawn/TriggerMenu.svelte
+
+# apps/dashboard/src/lib/cawco/spawn/PermissionSection.svelte: relic: style-var ×5; relic: literal ×1
+# apps/dashboard/src/lib/cawco/spawn/ProjectChip.svelte: relic: literal ×10; relic: style-var ×24; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/spawn/PromptEditor.svelte: relic: literal ×2; relic: style-var ×9; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/spawn/Segmented.svelte: relic: literal ×2; relic: style-var ×4; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/spawn/SessionFooter.svelte: relic: literal ×1; relic: style-var ×3
+# apps/dashboard/src/lib/cawco/spawn/ToolChips.svelte: relic: literal ×1; relic: style-var ×3
+# apps/dashboard/src/lib/cawco/spawn/TriggerMenu.svelte: relic: literal ×3; relic: style-var ×7; relic: style-reason ×1

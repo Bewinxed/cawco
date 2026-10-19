@@ -19,7 +19,8 @@
  * 2 and 3 are kept
  * per tree (`git rev-parse HEAD^{tree}`) of a clean checkout, so a proof run
  * again at the same commit compiles nothing; a checkout with changes always
- * compiles them.
+ * compiles them. A published release leaves its own tree's builds alone in the
+ * cache (release.ts runs proof-cache-prune.sh).
  *
  * A heavy run: it holds one of the machine's slots (lib/heavy-run.ts) for
  * its whole life, waiting for one when all are held.

@@ -18,12 +18,14 @@ import type {
   AgentRow,
   ApprovedActionView,
   AvailableCommand,
+  BrowserAskFrame,
   BuildInfo,
   CawHarness,
   CawInitiated,
   CawView,
   ClaudeLimits,
   CommandKind,
+  ConnectionView,
   ContinuationJob,
   ControlPayload,
   DelegateEvent,
@@ -41,6 +43,7 @@ import type {
   InstanceRow,
   LandsMode,
   LawBroken,
+  LfsOfferState,
   McpServerStatus,
   MoveJob,
   NamedSpawn,
@@ -63,6 +66,11 @@ import type {
   ProviderSigninChallenge,
   ProviderSigninResult,
   RebalanceNotice,
+  RelayAct,
+  RelayAnswer,
+  RelayJourneyView,
+  RelayProofReport,
+  RelayTry,
   SendAttachment,
   SendPayload,
   SendRecord,
@@ -90,7 +98,6 @@ import type {
   TranscriptPage,
   TranscriptPageBranch,
   TranscriptTail,
-  UsageLimitsReading,
   UsageLimitsResponse,
   UsageSpend,
   WorkflowRun,
@@ -282,6 +289,10 @@ export interface ProjectRow {
   id: string;
   /** Where its attempts land when their task says nothing. */
   lands: LandsMode;
+  /** The connection that signs in to {@link lfsUrl}; null with it. */
+  lfsConnection: string | null;
+  /** Where its large files live, an LFS endpoint; null: each repository's origin's own LFS. */
+  lfsUrl: string | null;
   name: string;
   places: ProjectPlace[];
   /** Its primary checkout's id; null while it has none (a New project before its place is picked). */
@@ -409,6 +420,8 @@ const listedInHistory = (info: NeutralSessionInfo): boolean =>
   info.tag !== CAWCO_SCRATCH_TAG;
 
 export interface PendingPermission {
+  /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Deny and Take over. */
+  browserAsk?: BrowserAskFrame;
   /**
    * When this device last heard the hub park it, in the order it hears
    * things ({@link askHeard}): a read of `/api/pending` asked for before
@@ -541,6 +554,13 @@ export interface SessionState {
   contextError: string | null;
   /** A `getContextUsage` call is out; the meter keeps its last number meanwhile. */
   contextPending: boolean;
+  /**
+   * The session a continuation took this one's work item on in, by its id
+   * and title, as its newest page said (core `TranscriptPage.continuedTo`):
+   * what its pane reads on its first paint and when the board no longer
+   * lists its row. Null on every other.
+   */
+  continuedTo: { instanceId: string; title: string } | null;
   /** The main loop's tool in flight, cleared by its result or the turn's end. */
   currentTool: ToolGlance | null;
   /**
@@ -750,6 +770,127 @@ const instances = $derived(
     )
   )
 );
+
+/**
+ * One child a session's tray lists (DelegateTray): a delegate, by its work
+ * item, or a session it started with `start_session`, which runs none. The
+ * chip and its panel read only this; the acts on a failure (retry, replaced
+ * by, dismiss) are a work item's, and only a chip with `work` offers them.
+ */
+export interface TrayChild {
+  /** The work item's landing wait (WorkItemSummary `checkQueue`); null on a started session. */
+  checkQueue: WorkItemSummary["checkQueue"];
+  createdAt: number;
+  dismissedAt: number | null;
+  endedAt: number | null;
+  /** Why it failed, first lines; "" when it has not, or said nothing. */
+  error: string;
+  /** Its chip's key: the work item's id, or the started session's own. */
+  id: string;
+  instanceId: string;
+  /** Its machine's pause, while it holds the work item's session; null on a started session. */
+  machinePaused: string | null;
+  /** What the work item waits for to start; null on a started session. */
+  queued: WorkItemSummary["queued"];
+  /** Its account's limit stopping the work item's session, in words; null on a started session. */
+  stalled: string | null;
+  state: WorkItemSummary["state"];
+  title: string;
+  /** The delegate's work item; null on a started session. */
+  work: WorkItemSummary | null;
+}
+
+/**
+ * A session another one started with `start_session` (or a continuation
+ * of one): it names its starter and runs no work item, the one thing that
+ * tells it from a delegate (core `InstanceRow.workItemId`). A workflow's
+ * step names its supervisor too, and lists under its run.
+ */
+const isStarted = (row: InstanceRow): boolean =>
+  !!row.parentInstanceId && !row.workItemId && !row.workflowRunId;
+
+/** The sessions each session started that run no work item, by their starter. */
+const startedBy = $derived.by(() => {
+  const by = new Map<string, InstanceRow[]>();
+  for (const row of instances) {
+    if (isStarted(row)) {
+      const parent = row.parentInstanceId as string;
+      by.set(parent, [...(by.get(parent) ?? []), row]);
+    }
+  }
+  return by;
+});
+
+const epochMs = (at: string | number | Date | null | undefined): number =>
+  at === null || at === undefined ? 0 : new Date(at).getTime() || 0;
+
+const itemChild = (item: WorkItemSummary): TrayChild => ({
+  id: item.id,
+  instanceId: item.instanceId,
+  title: item.title,
+  state: item.state,
+  createdAt: item.createdAt,
+  endedAt: item.endedAt,
+  dismissedAt: item.dismissedAt,
+  error: item.firstLines.error,
+  queued: item.queued,
+  checkQueue: item.checkQueue,
+  machinePaused: item.machinePaused,
+  stalled: item.stalled,
+  work: item,
+});
+
+/**
+ * A started session as its tray says it: what its turn is doing. It is
+ * persistent, so its "done" is a turn that ended (and a later turn takes
+ * the chip back, DelegateTray `admitWaiting`); stopped is "cancelled", and
+ * a session that errored "failed", with no work item to retry or dismiss.
+ */
+const sessionChild = (row: InstanceRow): TrayChild => {
+  const state = ((): TrayChild["state"] => {
+    switch (row.status) {
+      case "starting":
+        return "starting";
+      case "error":
+        return "failed";
+      case "stopping":
+      case "stopped":
+      case "discarded":
+        return "cancelled";
+      case "moving":
+      case "running":
+      case "sleeping":
+      case "unknown":
+        break;
+    }
+    return cawco.activityOf(row.id) === "idle" ? "done" : "running";
+  })();
+  return {
+    id: row.id,
+    instanceId: row.id,
+    title: resolveSessionTitle({
+      title: row.title ?? row.derivedTitle,
+      cwd: row.cwd,
+      id: row.id,
+    }),
+    state,
+    createdAt: epochMs(row.createdAt),
+    // A turn ends at its own time; a stop or a failure when the row last moved.
+    endedAt:
+      state === "starting" || state === "running"
+        ? null
+        : (state === "done" && epochMs(row.turnEndedAt)) ||
+          epochMs(row.updatedAt),
+    dismissedAt: null,
+    error: state === "failed" ? (row.lastError ?? "") : "",
+    queued: null,
+    checkQueue: null,
+    machinePaused: null,
+    stalled: null,
+    work: null,
+  };
+};
+
 /**
  * Every workflow run as a session row (workflow-runs.ts): what the lists
  * nest, fold and archive it by, and what its tab is named and marked from.
@@ -1043,9 +1184,19 @@ const state = $state({
   /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
   tailnetTicked: false,
   /**
-   * Each machine's latest Claude limit reading, by machineId — folded in from
-   * the `kind: 'usage'` frame so the pill updates live rather than polling
-   * (USAGE-SPEC.md §7.1). Empty until a machine has reported.
+   * The stream relay's journey (`GET /api/stream-relay`, then each
+   * `stream_relay.journey` frame): Needs you shows its row while it asks,
+   * Settings › Browsers its card or its summary; undefined until read.
+   */
+  relayJourney: undefined as RelayJourneyView | undefined,
+  /** The domain this page reached CawCo through, as the hub saw it (null by IP, the tailnet, a name of the hub's). */
+  relayDomain: null as string | null,
+  /** It went live and was proven from outside while this page stood: the row ticks until the next open. */
+  relayTicked: false,
+  /**
+   * Each Claude account's own limits, by account id — folded in from the
+   * `kind: 'usage'` frame so the pill updates live rather than polling
+   * (USAGE-SPEC.md §7.1). Empty while there is no Claude account.
    */
   usageLimits: {} as Record<string, ClaudeLimits>,
   /** Each machine's OpenCode Go windows, from the same frame; absent on a machine with no Go key. */
@@ -1203,6 +1354,7 @@ export function blankSession(instanceId: string): SessionState {
     queued: [],
     rev: 0,
     cursor: null,
+    continuedTo: null,
     records: {},
     local: [],
     notes: [],
@@ -1779,6 +1931,7 @@ function adoptTranscriptPage(
     target.sessionId = where.sessionKey;
   }
   seesCompaction(page);
+  target.continuedTo = page.continuedTo ?? null;
   target.blocks = page.blocks.map((block) => take(target, block, "blocks"));
   target.queued = (page.queued ?? []).map((block) =>
     take(target, block, "queued")
@@ -2217,19 +2370,15 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
 
 /** Replaces both limits maps with the hub's word — a full snapshot, not a patch. */
 function adoptUsageLimits(
-  readings: {
-    machineId: string;
-    limits: ClaudeLimits;
-    openCodeGo: OpenCodeGoLimits | null;
-  }[]
+  readings: Pick<UsageLimitsResponse, "claude" | "openCodeGo">
 ): void {
   const claude: Record<string, ClaudeLimits> = {};
   const openCodeGo: Record<string, OpenCodeGoLimits> = {};
-  for (const reading of readings) {
-    claude[reading.machineId] = reading.limits;
-    if (reading.openCodeGo) {
-      openCodeGo[reading.machineId] = reading.openCodeGo;
-    }
+  for (const one of readings.claude) {
+    claude[one.accountId] = one.limits;
+  }
+  for (const machine of readings.openCodeGo) {
+    openCodeGo[machine.machineId] = machine.plan;
   }
   if (!equal(state.usageLimits, claude)) {
     state.usageLimits = claude;
@@ -2464,14 +2613,6 @@ export async function placementFor(query: {
     : undefined;
 }
 
-/** The `kind: 'usage'` frame's readings, in the shape `/api/usage/limits` serves. */
-const usageLimitReadings = (readings: UsageLimitsReading[]) =>
-  readings.map((reading) => ({
-    machineId: reading.machineId,
-    limits: reading.payload,
-    openCodeGo: reading.openCodeGo,
-  }));
-
 /** Who hears the continuation table each time it moves (see {@link followContinuations}). */
 let continuationFollower: ((table: ContinuationJob[]) => void) | null = null;
 
@@ -2601,6 +2742,8 @@ async function refresh(): Promise<boolean> {
   readFleetUpstream();
   // HTTPS on the tailnet name: Needs you shows its step while one stands.
   readTailnetHttps();
+  // The stream relay's journey: Needs you's row and Settings › Browsers.
+  readRelayJourney().catch(() => undefined);
   // Every project's threads, for the rail; frames keep them from here.
   readThreads();
   // What the socket says about asks from here on is newer than the read.
@@ -2636,7 +2779,7 @@ async function refresh(): Promise<boolean> {
     adoptInstances(rows);
   }
   if (usage) {
-    adoptUsageLimits(usage.machines);
+    adoptUsageLimits(usage);
   }
   if (pending) {
     adoptPending(pending, readFrom);
@@ -3043,7 +3186,7 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "usage") {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
-    adoptUsageLimits(usageLimitReadings(frame.limits));
+    adoptUsageLimits(frame);
     adoptSpend(frame.spend);
     // The hub says this when an account's reading, sign-in or catalog moved.
     readAccounts();
@@ -3120,6 +3263,12 @@ function handleFrame(frame: FramePayload): void {
   // The fleet's upstream answer, given anywhere: Needs you stops asking.
   if (frame.kind === "fleet.upstream") {
     state.fleetUpstream = frame.upstream;
+    return;
+  }
+
+  // The stream relay's journey moved: every place that draws it follows.
+  if (frame.kind === "stream_relay.journey") {
+    keepRelayJourney(frame.journey);
     return;
   }
 
@@ -3283,12 +3432,20 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "browsers") {
     return;
   }
+  // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
+  if (frame.kind === "browser_handback") {
+    return;
+  }
   // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
   if (frame.kind === "stream_relay") {
     return;
   }
   // A place's stage clone travels machine → hub only; the hub files it as a workspace.
   if (frame.kind === "stage-clone") {
+    return;
+  }
+  // A machine's fleet report travels machine → hub only; screens read the hub's row.
+  if (frame.kind === "fleet_report") {
     return;
   }
 
@@ -3323,6 +3480,7 @@ function handleFrame(frame: FramePayload): void {
         raisedAt: frame.raisedAt,
         threadId: frame.threadId,
         originInstanceId: frame.originInstanceId,
+        browserAsk: frame.browserAsk,
       });
       break;
     }
@@ -5690,6 +5848,8 @@ export async function editProject(
   projectId: string,
   change: {
     lands?: LandsMode;
+    /** Where its large files live, and the connection that signs in there; null: each origin's own LFS. */
+    lfs?: { connection: string; url: string } | null;
     name?: string;
     review?: boolean;
     upstreamPosts?: UpstreamPosts | null;
@@ -5971,6 +6131,48 @@ async function readTailnetHttps(): Promise<void> {
   }
 }
 
+/** The journey as the hub has it now, and whether it ticked while this page stood (asking, then done). */
+function keepRelayJourney(journey: RelayJourneyView): void {
+  const before = state.relayJourney;
+  state.relayJourney = journey;
+  if (before?.asks && !journey.asks && journey.done) {
+    state.relayTicked = true;
+  }
+}
+
+/** The stream relay's journey as the hub has it now, with this page's domain; a failed read throws its words. */
+export async function readRelayJourney(): Promise<void> {
+  const read = await askHub<RelayAnswer>("/api/stream-relay");
+  state.relayDomain = read.domain;
+  keepRelayJourney(read.journey);
+}
+
+/** One act on the stream relay's journey: the hub's answer kept, its refusal thrown in its words. */
+export async function actOnRelay(act: RelayAct): Promise<void> {
+  const answered = await askHub<RelayAnswer>(
+    "/api/stream-relay/act",
+    json("POST", act)
+  );
+  state.relayDomain = answered.domain;
+  keepRelayJourney(answered.journey);
+}
+
+/** What this screen's proof found, told to the hub, and its answer kept. */
+export async function reportRelayProof(
+  report: RelayProofReport
+): Promise<void> {
+  const answered = await askHub<RelayAnswer>(
+    "/api/stream-relay/proof",
+    json("POST", report)
+  );
+  keepRelayJourney(answered.journey);
+}
+
+/** A 60 s credential for this screen's proof of the relay. */
+export function relayTry(): Promise<RelayTry> {
+  return askHub<RelayTry>("/api/stream-relay/try");
+}
+
 /** The fleet's upstream answer, as the hub holds it now. */
 async function readFleetUpstream(): Promise<void> {
   const read = await load<{ upstream: UpstreamPosts | null }>(
@@ -6193,6 +6395,25 @@ export const answerDesignOffer = (
   answer: "build" | "dismiss"
 ): Promise<DesignOfferState> =>
   askHub(`${designOfferPath(projectId)}/${answer}`, json("POST", {}));
+
+const lfsOfferPath = (id: string): string =>
+  `/api/lfs-offers/${encodeURIComponent(id)}`;
+
+/** Where an offer of Git LFS for a place's left-out large files stands (hub lfs-offers.ts). */
+export const readLfsOffer = (id: string): Promise<LfsOfferState> =>
+  askHub(lfsOfferPath(id));
+
+/** Answers it: Track commits the files through LFS, Not now records it; the offer as it stands after. */
+export const answerLfsOffer = (
+  id: string,
+  answer: "track" | "dismiss"
+): Promise<LfsOfferState> =>
+  askHub(`${lfsOfferPath(id)}/${answer}`, json("POST", {}));
+
+/** The fleet's connections, never their keys (`GET /api/connections`). */
+export const readConnections = async (): Promise<ConnectionView[]> =>
+  (await askHub<{ connections: ConnectionView[] }>("/api/connections"))
+    .connections;
 
 /** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
 export const changeRoutine = (
@@ -8172,14 +8393,44 @@ export function permissionAnswer(
   request: PendingPermission,
   answer: PermissionAnswer
 ): PermissionResult {
+  // A browser ask's Deny carries the person's words alone, none here.
   if (answer === "deny") {
-    return { behavior: "deny", message: "User denied permission" };
+    return {
+      behavior: "deny",
+      message: request.browserAsk ? "" : "User denied permission",
+    };
   }
   return {
     behavior: "allow",
     updatedInput: request.input,
     ...(answer === "always" && { updatedPermissions: request.suggestions }),
   };
+}
+
+/**
+ * Take over on a browser ask (core `BrowserAskFrame`), from its transcript
+ * card or its Needs you row alike: the hub's `/takeover` (browsers.ts)
+ * starts the private period for that ask, takes it off every screen and
+ * opens the session's panel on its browser. Answers null once the hub has
+ * it, else the line the refusal reads, the hub's own sentence inside it
+ * (WORDS, the error formula).
+ */
+export async function takeOverBrowser(
+  requestId: string,
+  browserAsk: BrowserAskFrame
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `/api/browsers/${encodeURIComponent(browserAsk.key)}/takeover`,
+      json("POST", { requestId, machineId: browserAsk.machineId })
+    );
+    if (!response.ok) {
+      throw await hubRefusal(response);
+    }
+    return null;
+  } catch (error) {
+    return `Couldn't take over. ${error instanceof Error ? error.message : String(error)} The agent is still waiting; try Take over again.`;
+  }
 }
 
 /**
@@ -8411,7 +8662,7 @@ export const cawco = {
   get onlineMachines() {
     return state.machines.filter((machine) => machine.status === "online");
   },
-  /** Every machine's Claude reading, by machineId (every usage surface). */
+  /** Every Claude account's own limits, by account id. */
   get claudeLimits(): Readonly<Record<string, ClaudeLimits>> {
     return state.usageLimits;
   },
@@ -8576,17 +8827,32 @@ export const cawco = {
   delegateEventsOf: (instanceId: string): DelegateEvent[] =>
     state.delegateEvents[instanceId] ?? [],
   /**
-   * The work items a session's tray knows of, oldest first: the ones it
-   * delegated, and as its project's lead the ones it co-parents.
+   * What a session's tray lists, oldest first: the work items it delegated
+   * (and as its project's lead the ones it co-parents), and the sessions it
+   * started that run none ({@link startedBy}).
    */
-  workItemsOf: (instanceId: string): WorkItemSummary[] =>
-    Object.values(state.workItems)
-      .filter(
-        (item) =>
-          item.parentInstanceId === instanceId ||
-          item.leadInstanceId === instanceId
-      )
-      .sort((a, b) => a.createdAt - b.createdAt),
+  trayOf: (instanceId: string): TrayChild[] =>
+    [
+      ...Object.values(state.workItems)
+        .filter(
+          (item) =>
+            item.parentInstanceId === instanceId ||
+            item.leadInstanceId === instanceId
+        )
+        .map(itemChild),
+      ...(startedBy.get(instanceId) ?? []).map(sessionChild),
+    ].sort((a, b) => a.createdAt - b.createdAt),
+  /** A delegate's or a started session's tray entry, by its instance id. */
+  trayChildFor: (instanceId: string): TrayChild | undefined => {
+    const item = Object.values(state.workItems).find(
+      (each) => each.instanceId === instanceId
+    );
+    if (item) {
+      return itemChild(item);
+    }
+    const row = instances.find((each) => each.id === instanceId);
+    return row && isStarted(row) ? sessionChild(row) : undefined;
+  },
   /** A followed session's plan, live: its steps, its spec, an attempt's to-dos. */
   planOf: (instanceId: string): SessionPlan | undefined =>
     state.plans[instanceId]?.plan,
@@ -8620,6 +8886,18 @@ export const cawco = {
   /** Its step was taken while this page stood, a moment ago: the row ticks. */
   get tailnetTicked(): boolean {
     return state.tailnetTicked;
+  },
+  /** The stream relay's journey, as the hub has it; undefined until read. */
+  get relayJourney(): RelayJourneyView | undefined {
+    return state.relayJourney;
+  },
+  /** The domain this page reached CawCo through, as the hub saw it; null by IP, the tailnet or a name of the hub's. */
+  get relayDomain(): string | null {
+    return state.relayDomain;
+  },
+  /** The relay went live and was proven from outside while this page stood: its row ticks. */
+  get relayTicked(): boolean {
+    return state.relayTicked;
   },
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {

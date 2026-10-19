@@ -40,7 +40,7 @@ final class AccountsSectionController: ConfigSectionController {
         let groupsNow = FleetAccounts.groups(view, hub: hub)
         let lines = groupsNow.flatMap { group in
             ["group \(group.provider) \(group.name)"] + group.accounts.map { account in
-                "\(account.id) \(account.hue) \(rowName(account)) \(FleetAccounts.problem(account, view: view, hub: hub) ?? "")"
+                "\(account.id) \(account.hue) \(rowName(account, view)) \(FleetAccounts.problem(account, view: view, hub: hub) ?? "")"
             }
         }
         guard lines != drawn else { return }
@@ -48,8 +48,8 @@ final class AccountsSectionController: ConfigSectionController {
         draw(groupsNow, view: view)
     }
 
-    private func rowName(_ account: FleetAccounts.Account) -> String {
-        account.label != nil || account.email != nil ? FleetAccounts.name(account) : Words.Accounts.notSignedInYet
+    private func rowName(_ account: FleetAccounts.Account, _ view: FleetAccounts.View) -> String {
+        account.label != nil || account.email != nil ? FleetAccounts.name(account, among: view.accounts) : Words.Accounts.notSignedInYet
     }
 
     private func draw(_ list: [FleetAccounts.Group], view: FleetAccounts.View) {
@@ -90,7 +90,7 @@ final class AccountsSectionController: ConfigSectionController {
             rows.accessibilityLabel = group.name
             rows.accessibilityContainerType = .list
             for account in group.accounts {
-                let row = AccountRow(name: rowName(account), hue: account.hue, problem: FleetAccounts.problem(account, view: view, hub: hub))
+                let row = AccountRow(name: rowName(account, view), hue: account.hue, problem: FleetAccounts.problem(account, view: view, hub: hub))
                 row.accessibilityIdentifier = "accounts.row.\(account.id)"
                 let id = account.id
                 row.addAction(UIAction { [weak self] _ in self?.openAccount(id) }, for: .primaryActionTriggered)
@@ -273,10 +273,12 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
 
     init(section: ConfigSection, context: ShellContext, accountId: String) {
         self.accountId = accountId
-        let now = FleetAccounts.view(context.hub)?.accounts.first { $0.id == accountId }
+        let accounts = FleetAccounts.view(context.hub)?.accounts ?? []
+        let now = accounts.first { $0.id == accountId }
         // Until the account is read, the page is its section's, as the web's skeleton is.
-        super.init(section: section, context: context, title: now.map(FleetAccounts.name) ?? section.label,
+        super.init(section: section, context: context, title: now.map { FleetAccounts.name($0, among: accounts) } ?? section.label,
                    saveLabel: Words.Accounts.Editor.save, deleteLabel: Words.Accounts.Editor.remove)
+        draftPath = ConfigDrafts.path("accounts", accountId)
         if let now { tile = providerMark(now.provider) }
     }
 
@@ -357,11 +359,17 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         }
         account = now
         let saved = Fields(now)
-        // A field nobody touched follows the hub; one being edited keeps its draft.
-        if fields == nil || fields == base { fields = saved }
+        // A field nobody touched follows the hub; one being edited keeps its draft,
+        // and edits left here unsaved come back as the editor opens (drafts.svelte.ts).
+        if fields == nil {
+            fields = draftPath.flatMap { ConfigDrafts.shared.kept($0, as: Fields.self) } ?? saved
+        } else if fields == base {
+            fields = saved
+        }
         base = saved
-        navigationItem.title = FleetAccounts.name(now)
-        nickname.attributedPlaceholder = NSAttributedString(string: now.label != nil ? Words.Accounts.Editor.nickname : FleetAccounts.name(now),
+        let named = FleetAccounts.name(now, among: view.accounts)
+        navigationItem.title = named
+        nickname.attributedPlaceholder = NSAttributedString(string: now.label != nil ? Words.Accounts.Editor.nickname : named,
                                                             attributes: [.foregroundColor: Palette.inkSubtle, .font: nickname.font as Any])
         limitsPart.isHidden = !FleetAccounts.limits(now.provider)
         machines.draw(now, view: view)
@@ -378,6 +386,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
 
     private func drawFields() {
         guard let fields else { return }
+        if let draftPath, base != nil { ConfigDrafts.shared.keep(draftPath, fields == base ? nil : fields) }
         if !nickname.isFirstResponder, nickname.text != fields.nickname { nickname.text = fields.nickname }
         swatches.set(fields.hue)
         (looksHead as? UIStackView)?.arrangedSubviews.first?.tintColor = AccountInk.color(fields.hue)
@@ -410,6 +419,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         do {
             try await hub.patchAccount(account.id, label: .some(label.isEmpty ? nil : label), hue: fields.hue,
                                        neverBackup: limits ? fields.neverBackup : nil, reservePct: limits ? .some(reserve) : .none)
+            if let draftPath { ConfigDrafts.shared.drop(draftPath) }
             self.fields = nil
             requestRefresh()
             return true
@@ -426,13 +436,14 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         let on = FleetAccounts.machines(for: account.provider, hub: hub)
             .filter { FleetAccounts.state(view.signins, account: account.id, machine: $0.machineId) == "signed-in" }
             .map(\.name)
-        return Question(title: Words.Accounts.Editor.removeTitle(name: FleetAccounts.name(account)),
+        return Question(title: Words.Accounts.Editor.removeTitle(name: FleetAccounts.name(account, among: view.accounts)),
                         body: Words.Accounts.Editor.removeBody(machines: on, harnesses: FleetAccounts.harnessWords(account.provider, hub: hub)),
                         confirm: Words.Accounts.Editor.remove, pending: Words.Accounts.Editor.removing)
     }
 
     override func delete() async throws {
         try await hub.deleteAccount(accountId)
+        if let draftPath { ConfigDrafts.shared.drop(draftPath) }
         navigationController?.popViewController(animated: true)
     }
 

@@ -16,7 +16,7 @@ At 640px and below the modal is the kit Drawer: a bottom sheet with rounded top 
 - The chips, 30px and wrapping:
   - **Machines**: multi-select, plus Connect a machine.
   - **Project**: pick, clear or create.
-  - **Location**: Existing files or Clone from GitHub, with a directory browser over the machine's filesystem.
+  - **Location**: Existing files, or Clone a repository by its git URL on any host, with a directory browser over the machine's filesystem.
   - **Lifetime**: keep the session, or let it end with its task.
 - On a coarse pointer the chip rows open to 14px apart so each touch area reaches 44px.
 - Several machines make Start read "Start N sessions" and start one session on each.

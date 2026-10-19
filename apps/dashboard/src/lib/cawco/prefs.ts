@@ -29,6 +29,14 @@ export const PREF_MAX_AGE = 31_536_000;
 export const PREF_VALUE_LIMIT = 3800;
 
 /**
+ * A value as the server's copy is kept: itself where it fits a cookie, else
+ * `null`, which takes the copy away. A copy that cannot follow the page is
+ * absent, never an older one standing in for it.
+ */
+export const asPref = (value: string): string | null =>
+  encodeURIComponent(value).length > PREF_VALUE_LIMIT ? null : value;
+
+/**
  * The cookie a pref is kept under: `__Host-`-prefixed where the scheme lets
  * it be Secure (https, and http on `localhost`), so nothing on another path
  * or a parent domain can set one in its place.
@@ -41,8 +49,8 @@ export const prefCookie = (
 export const secureScheme = (url: { hostname: string; protocol: string }) =>
   url.protocol === "https:" || url.hostname === "localhost";
 
-/** Values to keep for the next server render, at once, past the page's own end (`keepalive`). */
-export function keepPrefs(values: Partial<Record<Pref, string>>): void {
+/** Values to keep for the next server render (`null` keeps none), at once, past the page's own end (`keepalive`). */
+export function keepPrefs(values: Partial<Record<Pref, string | null>>): void {
   fetch("/prefs", {
     method: "POST",
     headers: { "content-type": "application/json" },

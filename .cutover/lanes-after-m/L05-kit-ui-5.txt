@@ -1,0 +1,13 @@
+apps/dashboard/src/lib/components/ui/tabs/tabs.svelte
+apps/dashboard/src/lib/components/ui/textarea/textarea.svelte
+apps/dashboard/src/lib/components/ui/thinking-indicator/thinking-indicator.svelte
+apps/dashboard/src/lib/components/ui/thinking-steps/thinking-step.svelte
+apps/dashboard/src/lib/components/ui/thinking-steps/thinking-steps-header.svelte
+apps/dashboard/src/lib/components/ui/toggle/toggle.svelte
+
+# apps/dashboard/src/lib/components/ui/tabs/tabs.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/textarea/textarea.svelte: kit: a no-restyle site or a K1–K3 carve-out wants a variant here
+# apps/dashboard/src/lib/components/ui/thinking-indicator/thinking-indicator.svelte: relic: literal ×2; relic: style-var ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/components/ui/thinking-steps/thinking-step.svelte: relic: literal ×3; relic: style-var ×3; relic: style-reason ×1
+# apps/dashboard/src/lib/components/ui/thinking-steps/thinking-steps-header.svelte: relic: literal ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/components/ui/toggle/toggle.svelte: after-M: a Tailwind class with a raw value; after-M: the merge took main's unconverted lines in a conflicting hunk; lint: house/variant-order ×2

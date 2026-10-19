@@ -97,6 +97,28 @@ export interface SessiondStdinEnd {
 }
 
 /**
+ * A keeper that speaks `release` ({@link SessiondRelease}) says so in its
+ * welcome's capabilities beside {@link SESSIOND_V1}. One that does not keeps
+ * every dead child for as long as it lives, as every keeper before it did.
+ */
+export const SESSIOND_RELEASE = "sessiond.release";
+
+/**
+ * agent → sessiond: the dead child `pid` under `procId` is settled where the
+ * agent follows it (its end read by the one thing that needed it), and the
+ * keeper lets it go: out of every welcome and listing, its ring with it.
+ * Refused while that process is alive; done for one the keeper no longer
+ * holds, or holds under another pid (a start since under the same id, whose
+ * own end is its own follower's to settle).
+ */
+export interface SessiondRelease {
+  commandId: string;
+  pid: number;
+  procId: string;
+  type: "release";
+}
+
+/**
  * agent → sessiond: follow a child's stdout ring. `afterSeq` present is a
  * resume; absent follows from now — the same subscribe choreography as the
  * Ledger Protocol's {@link import('./stream').StreamSubscribe}.
@@ -198,6 +220,8 @@ export interface SessiondReset {
 /** sessiond → agent: a child exited. Delivered once per procId per epoch. */
 export interface SessiondExit {
   exitCode: number | null;
+  /** The process that exited: what a {@link SessiondRelease} of it names. Absent from a keeper that predates it. */
+  pid?: number;
   procId: string;
   signal: NodeJS.Signals | null;
   type: "proc.exit";
@@ -251,7 +275,7 @@ export interface SessiondDraining {
 
 /** The reason a `spawn` sent to a draining keeper is refused with. */
 export const SESSIOND_DRAINING =
-  "draining: this keeper is shutting down and starts nothing more";
+  "draining: it is shutting down and starts nothing more";
 
 /**
  * How a `spawn` refused at the machine's process limit starts its `reason`:
@@ -282,6 +306,7 @@ export type SessiondClientMessage =
   | SessiondWrite
   | SessiondSignal
   | SessiondStdinEnd
+  | SessiondRelease
   | SessiondSubscribe
   | SessiondList;
 

@@ -1058,6 +1058,11 @@
       "$value": "{color.surface-fill-strong}",
       "$description": "A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill."
     },
+    "surface-pressed": {
+      "$type": "color",
+      "$value": "{color.neutral-6}",
+      "$description": "The kit Toggle's on step, where a pressed or chosen control stands (a chosen canvas tool, a pressed head button, a held tab): by day the surface-fill-strong step, a step past the hover; at night the surface-fill step, so it never reads as hovered."
+    },
     "surface-hover": {
       "$type": "color",
       "$value": "{color.neutral-4}",
@@ -1573,7 +1578,7 @@
         "colorSpace": "oklch",
         "components": [0.48, 0.125, 78]
       },
-      "$description": "A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim in it (tab-rim-mix) cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own."
+      "$description": "A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim mixed from it cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own."
     },
     "status-done-glyph": {
       "$type": "color",
@@ -3594,6 +3599,14 @@
         }
       }
     },
+    "underline-offset": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3,
+        "unit": "px"
+      },
+      "$description": "How far under its words a text link's underline stands, when it is drawn (its hover)."
+    },
     "type-meta": {
       "$type": "typography",
       "$value": {
@@ -3998,6 +4011,38 @@
         "unit": "px"
       },
       "$description": "The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink)."
+    },
+    "c-canvas-skeleton-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "A component canvas's frame on its way, where its story names no form width: the skeleton's width, a button-to-card component's own (DESIGN.md Artifact panel, canvas and ink; Skeleton)."
+    },
+    "c-canvas-skeleton-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (DESIGN.md Artifact panel, canvas and ink; Skeleton)."
+    },
+    "c-graph-edge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1.5,
+        "unit": "px"
+      },
+      "$description": "An edge's stroke on a graph canvas: the decision graph's and a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink)."
+    },
+    "c-map-node-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 264,
+        "unit": "px"
+      },
+      "$description": "A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink)."
     },
     "c-pin-list-share": {
       "$type": "number",
@@ -4454,6 +4499,22 @@
         "unit": "px"
       },
       "$description": "A routines-page row's lead column (a routine's state glyph, a service's mark): its 16px glyph centred in it, the text --space-3 after."
+    },
+    "c-section-head-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
+      "$description": "A section's head inside a floating panel (Files' Artifacts and Attachments, as Caw's panel heads his): its glyph, its name in the label role and its count, one line."
+    },
+    "c-row-inset": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$description": "A list row's inline inset inside a floating panel (Files' rows and heads, as the menu item's 10px padding): its lead column's glyph stands this far in from the row's edge."
     },
     "c-row-h": {
       "$type": "dimension",
@@ -5048,16 +5109,6 @@
         }
       }
     },
-    "tab-rim-mix": {
-      "$type": "number",
-      "$value": 0.83,
-      "$description": "The strength of Caw's panel's vermillion hairline between its sections (CawPanel, web and iOS), and of an unchosen session tab's rim in the iOS app (PaneTabsView); the dashboard's unchosen tabs wear tab-rim-mix-subtle. At this strength a status rim holds 3:1 against the tab's fill and the shelf in both themes: by day 83% clears the working and failed tones, by night 64% the failed tone, the hardest.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "83%"
-        }
-      }
-    },
     "tab-rim-mix-chosen": {
       "$type": "number",
       "$value": 0.97,
@@ -5371,6 +5422,11 @@
       "$type": "number",
       "$value": 0.45,
       "$description": "A working session's echo as it leaves the tile."
+    },
+    "breath-floor": {
+      "$type": "number",
+      "$value": 0.8,
+      "$description": "The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1)."
     },
     "glyph-duo-status-opacity": {
       "$type": "number",

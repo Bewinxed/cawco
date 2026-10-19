@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { memoryWords as words } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { deleteMemory } from "#lib/cawco/config/deletes.js";
   import { drafts } from "#lib/cawco/config/drafts.svelte.js";
@@ -53,10 +54,13 @@
   );
 
   const facts = (row: { content: string; updatedAt: string }) =>
-    `${formatBytes(byteLength(row.content))} · saved ${formatDistanceToNow(new Date(row.updatedAt))}`;
+    words.facts(
+      formatBytes(byteLength(row.content)),
+      formatDistanceToNow(new Date(row.updatedAt))
+    );
 
   const drafted = (path: string) =>
-    drafts.paths.has(fileHref(path)) ? " · unsaved draft" : "";
+    drafts.paths.has(fileHref(path)) ? words.unsavedDraft : "";
 
   /** Delete: at once, with Undo in the toast (deletes.ts). */
   async function remove(path: string) {
@@ -94,20 +98,20 @@
   {/snippet}
   {#snippet toolbar()}
     <Input
-      aria-label="Filter memory files"
-      measure="cap-sm"
-      placeholder="Filter files…"
+      aria-label={words.filterLabel}
+      class="max-w-64"
+      placeholder={words.filter}
       bind:value={filter}
     />
   {/snippet}
 
-  <RowList label="Memory files">
+  <RowList label={words.list}>
     {#if mainShown}
       <SectionRow
         actions={memory
           ? [
               {
-                label: "Delete everywhere",
+                label: words.deleteEverywhere,
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[MAIN] === true,
@@ -120,8 +124,8 @@
         hue={HUE}
         icon={IconBook}
         meta={memory
-          ? `Loaded into every session · ${facts(memory)}${drafted(MAIN)}`
-          : "The fleet keeps no memory yet — write one, or adopt a machine's copy"}
+          ? `${words.everySession} · ${facts(memory)}${drafted(MAIN)}`
+          : words.noMemory}
         mono
         name={fileLabel(MAIN)}
       >
@@ -139,7 +143,7 @@
       <SectionRow
         actions={[
           {
-            label: "Delete everywhere",
+            label: words.deleteEverywhere,
             icon: IconTrash,
             destructive: true,
             disabled: busy[doc.path] === true,
@@ -175,13 +179,6 @@
     {/each}
   </RowList>
   {#if !mainShown && shown.length === 0}
-    <!-- literal: 72ch -->
-    <p
-      data-slot="note"
-      class="type-meta max-w-(--note-measure) text-ink-muted"
-      style:--note-measure="72ch"
-    >
-      No file matches “{filter.trim()}”.
-    </p>
+    <p data-slot="note" class="note">{words.noMatch(filter.trim())}</p>
   {/if}
 </SectionFrame>

@@ -1,0 +1,79 @@
+/**
+ * What a project's Decisions tab says of its pages, for the dashboard and
+ * the native app alike (WORDS.md; the decided record's copy): its figures,
+ * its pills, a page's acts and a decided card's parts. Nothing here names a
+ * card, an option or a page by its id.
+ *
+ * `bun run words` writes these into the app as `Words.Decisions`
+ * (CawCoCore/Words.generated.swift), and `words:check` fails the typecheck
+ * chain when that file is stale. So a word is changed here or nowhere.
+ */
+export const decisionsWords = {
+  /** The tab's name in the project's strip, and ‹ back to its list. */
+  tab: "Decisions",
+  /** The figure beside the ring while a page is picked on: `12 of 20 picked`. */
+  picked: (picked: number, cards: number) => `${picked} of ${cards} picked`,
+  /** A decided page's figure: `12 decided`, or `8 of 12 decided` when some were left open. */
+  decided: (decided: number, cards: number) =>
+    decided === cards ? `${decided} decided` : `${decided} of ${cards} decided`,
+  /** What a decided page made, after its figure: `12 decided · 14 tasks`. */
+  decidedTasks: (figure: string, tasks: number) =>
+    `${figure} · ${tasks} ${tasks === 1 ? "task" : "tasks"}`,
+  /** `· 3 notes` after a page's figure while it is picked on. */
+  notes: (notes: number) => `· ${notes} ${notes === 1 ? "note" : "notes"}`,
+  /** A decided page's head meta: its figure and when it was decided, `12 decided · 3d ago`. */
+  decidedAt: (figure: string, age: string) =>
+    `${figure} · ${age === "now" ? "now" : `${age} ago`}`,
+  /** A page's state pill: sent to its session or Caw, then decided. */
+  sent: "Sent",
+  decidedPill: "Decided",
+  /** Who has a sent page once its session ended. */
+  caw: "Caw",
+  /** A tile, short of room, says who works on it in one word. */
+  working: "working",
+  /** The head says the session's name with it. */
+  workingWhole: (title: string) => `${title} working`,
+  /** The pill's whole state, for a pointer that rests on it. */
+  pillTitle: (word: string, who: string) => `${word} · ${who}`,
+  /** The page's one coral act while it is picked on, and while it runs. */
+  done: "I'm done picking",
+  sending: "Sending…",
+  /** Its act once sent: the record written and its session asked to file the tasks. */
+  makeTasks: "Make tasks",
+  making: "Making tasks…",
+  /** The docked note for the session that wrote the page. */
+  note: "Add a note…",
+  noteLabel: "Add a note for the session",
+  send: "Send",
+  /** The page's read was refused. */
+  unread: (problem: string) => `This page didn't read: ${problem}`,
+  /** The live page's own failures (PageFrame): the hub named nowhere, the origin unreached, the pass refused twice. */
+  noAddress: "The hub named no address for this page.",
+  unreached: (host: string) =>
+    `Pages are served at ${host}, which this browser can't reach.`,
+  turnedAway:
+    "This page turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then open it again.",
+  /** A page whose writer the hub no longer holds. */
+  gone: "This page's session is gone from the hub, so the page can't be shown here.",
+  /** A decided card with nothing picked. */
+  leftOpen: "Left open",
+  /** The writer's mark on the option it recommended. */
+  recommended: "Recommended",
+  /** A decided card's fold: the options turned down. */
+  others: (count: number) =>
+    `${count} other ${count === 1 ? "option" : "options"}`,
+  hideOthers: "Hide other options",
+  /** The list could not be read. */
+  unavailable: "Decisions are not available",
+  unavailableLine: (project: string, problem: string) =>
+    `The decision pages for ${project} could not be read: ${problem}`,
+  retry: "Retry",
+  /** The empty tab, with Caw able to start: his starters under him. */
+  empty: "No decisions yet",
+  emptyCaw:
+    "Caw writes a decision page: the choices this project needs you to make, each with its options.",
+  /** The empty tab while Caw can't start: a session writes one. */
+  emptySession:
+    "A session writes decision pages; start one and ask for a page.",
+  newSession: "New session",
+};

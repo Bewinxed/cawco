@@ -4,7 +4,12 @@
    * ~/.claude/memories/, then the editor. A write to a path the hub has never
    * seen is how a document comes into being.
    */
-  import { memoryDocProblem, userLayerLabel } from "@cawco/core";
+  import {
+    memoryDocProblem,
+    userLayerLabel,
+    memoryWords as words,
+  } from "@cawco/core";
+  import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -38,12 +43,10 @@
   const trimmed = $derived(path.trim());
   const problem = $derived.by(() => {
     if (trimmed === "") {
-      return asked
-        ? "A document needs a path — models/deepseek-v4.md, say."
-        : undefined;
+      return asked ? words.needsPath : undefined;
     }
     if (taken.includes(trimmed)) {
-      return `“${trimmed}” is already a linked document.`;
+      return words.alreadyLinked(trimmed);
     }
     const said = memoryDocProblem(trimmed);
     return said === undefined
@@ -63,7 +66,7 @@
       const result = await saveMemoryDoc(trimmed, "");
       if (!result.ok) {
         onsaved(result.latest);
-        failed = `${trimmed} was written elsewhere a moment ago. Nothing was overwritten.`;
+        failed = words.writtenElsewhere(trimmed);
         return;
       }
       onsaved(result.doc);
@@ -91,7 +94,7 @@
     {#snippet child({ props })}
       <Button {...props} disabled={down !== null} title={down ?? undefined}>
         <IconPlus />
-        <span>New document</span>
+        <span>{words.newDocument}</span>
       </Button>
     {/snippet}
   </Popover.Trigger>
@@ -110,19 +113,18 @@
     >
       <Field
         id="memory-path"
-        label="Path under {userLayerLabel('memories')}/"
+        label={words.pathUnder(userLayerLabel("memories"))}
         {problem}
       >
         {#snippet hint()}
-          A <span class="font-mono">models/&lt;model&gt;.md</span> is put in front
-          of the session running that model.
+          <Coded text={words.pathHint} />
         {/snippet}
         <Input
           aria-invalid={problem ? "true" : undefined}
           autocomplete="off"
           face="mono"
           id="memory-path"
-          placeholder="models/deepseek-v4.md"
+          placeholder={words.pathPlaceholder}
           spellcheck="false"
           bind:value={path}
         />
@@ -140,9 +142,9 @@
         class="self-end"
         disabled={down !== null}
         failed={failed !== undefined}
-        label="Create and open"
+        label={words.create}
         pending={busy}
-        pendingLabel="Creating…"
+        pendingLabel={words.creating}
         title={down ?? undefined}
         type="submit"
       />

@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/config/SwitchField.svelte
+apps/dashboard/src/lib/cawco/config/editors/DelegateTypeEditor.svelte
+apps/dashboard/src/lib/cawco/config/editors/HookEditor.svelte
+apps/dashboard/src/lib/cawco/config/editors/McpEditor.svelte
+apps/dashboard/src/lib/cawco/config/editors/MemoryEditor.svelte
+apps/dashboard/src/lib/cawco/config/editors/RuleEditor.svelte
+apps/dashboard/src/lib/cawco/config/editors/SubagentEditor.svelte
+
+# apps/dashboard/src/lib/cawco/config/SwitchField.svelte: relic: literal ×3; relic: style-var ×3
+# apps/dashboard/src/lib/cawco/config/editors/DelegateTypeEditor.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; lint: shadcn/no-unknown-classes ×3
+# apps/dashboard/src/lib/cawco/config/editors/HookEditor.svelte: relic: literal ×21; relic: style-var ×28
+# apps/dashboard/src/lib/cawco/config/editors/McpEditor.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; lint: shadcn/no-unknown-classes ×10
+# apps/dashboard/src/lib/cawco/config/editors/MemoryEditor.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×18; relic: style-var ×27; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s); lint: shadcn/no-restyle ×2
+# apps/dashboard/src/lib/cawco/config/editors/RuleEditor.svelte: relic: literal ×4; relic: style-var ×4
+# apps/dashboard/src/lib/cawco/config/editors/SubagentEditor.svelte: relic: literal ×3; relic: style-var ×3

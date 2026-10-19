@@ -84,3 +84,56 @@
     <MorphText text={status.label} />
   {/if}
 </span>
+
+<style>
+  .session-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--ink-muted);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    white-space: nowrap;
+  }
+  .session-status :global(svg) {
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+  /* The two glyphs of a change share one cell while they cross-fade. */
+  .glyph {
+    display: inline-grid;
+    flex: none;
+  }
+  .mark {
+    grid-area: 1 / 1;
+    display: inline-flex;
+  }
+  .compact :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+  /* The glyph wears its status hue; the word beside it stays text ink.
+     A change cross-fades once (glyphIn); then the Working glyph breathes
+     (DESIGN.md Live work breathes) and every other holds, but for the
+     stopping spinner (StopTray's, until the machine confirms). */
+  .working .glyph {
+    color: var(--status-live-glyph);
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: breath var(--breath) var(--ease-in-out) infinite;
+    }
+  }
+  .attention .glyph {
+    color: var(--status-attn-glyph);
+  }
+  .failed .glyph {
+    color: var(--status-fail-glyph);
+  }
+  .quiet .glyph {
+    color: var(--status-idle-glyph);
+  }
+  .done .glyph {
+    color: var(--status-done-glyph);
+  }
+</style>

@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/components/features/workflows/CodeView.svelte
+apps/dashboard/src/lib/components/features/workflows/TemplateInput.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowCanvas.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowCanvasTools.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.svelte
+apps/dashboard/src/lib/components/features/workflows/WorkflowInspector.svelte
+
+# apps/dashboard/src/lib/components/features/workflows/CodeView.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/components/features/workflows/TemplateInput.svelte: relic: literal ×1; relic: style-var ×3
+# apps/dashboard/src/lib/components/features/workflows/WorkflowCanvas.svelte: relic: literal ×1; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/components/features/workflows/WorkflowCanvasTools.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte: relic: literal ×1; relic: style-var ×1; relic: style-reason ×1; relic: important ×1
+# apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.svelte: relic: literal ×8; relic: style-var ×11; relic: style-reason ×1
+# apps/dashboard/src/lib/components/features/workflows/WorkflowInspector.svelte: relic: literal ×2; relic: style-var ×2

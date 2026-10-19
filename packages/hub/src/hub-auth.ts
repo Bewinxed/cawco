@@ -114,8 +114,18 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/api\/agents\/[^/]+\/busy$/, "machine"],
   // A workspace's post held for the person (upstream-asks.ts), raised by its machine.
   ["POST", /^\/api\/upstream\/asks$/, "machine"],
+  // Where a project's large files live, and a .lfsconfig its git-lfs refused (agent host-lfs.ts).
+  ["GET", /^\/api\/lfs\/projects\/[^/]+$/, "machine"],
+  ["POST", /^\/api\/lfs\/projects\/[^/]+\/refused$/, "machine"],
   ["POST", /^\/api\/session-identities\/install$/, "machine-proof"],
 ];
+
+/** A browser's take-over and hand-back (browsers.ts): the person's act alone, refused to a session in its own words. */
+const TAKEOVER_ROUTE = /^\/api\/browsers\/[^/]+\/(?:takeover|handback)$/;
+const TAKEOVER_REFUSED = "Only the person takes over";
+
+/** A browser view's routes (browser-routes.ts), where the view's own client sends a Bearer that is no credential of the hub's. */
+const BROWSER_VIEW = /^\/ws\/browser\/[^/]+\/[^/]+\/(?:api(?:\/.*)?|cdp)$/;
 
 /** Machine routes that name a machine: a machine reaches them for itself alone. */
 const OWN_MACHINE: readonly RegExp[] = [
@@ -444,10 +454,15 @@ export const createHubAuth = ({
     }
     const authorization = header("authorization");
     if (authorization?.startsWith("Bearer ")) {
-      return {
-        kind: "session",
-        instanceId: session(authorization)?.instanceId ?? null,
-      };
+      const named = session(authorization)?.instanceId;
+      // A browser view's neko client sends a Bearer of its own making, which
+      // the view's routes swap for the viewer's neko session
+      // (browser-routes.ts): there, one that names no session is no
+      // credential, and the request is the one it would be without it. A
+      // session's own credential is that session there as everywhere.
+      if (named || !BROWSER_VIEW.test(path)) {
+        return { kind: "session", instanceId: named ?? null };
+      }
     }
     const token = ownerTokenOf(authorization, header("cookie"));
     const device = token ? deviceOf(token, address) : undefined;
@@ -494,6 +509,9 @@ export const createHubAuth = ({
 
   /** The answer to a request its caller may not make, by what the caller is. */
   const refusal = (caller: Caller, method: string, path: string): Response => {
+    if (caller.kind === "session" && TAKEOVER_ROUTE.test(path)) {
+      return new Response(TAKEOVER_REFUSED, { status: 403 });
+    }
     if (caller.kind === "session") {
       return new Response(
         `A session's credential reaches its own tools and work items, never the person's routes: ${method} ${path} is the person's.`,
@@ -520,6 +538,9 @@ export const createHubAuth = ({
     });
   };
 
+  /** Each request's caller as the gate classified it, for its handler ({@link callerOf}). */
+  const gated = new WeakMap<Request, Caller>();
+
   /**
    * The gate every request passes once it is no cross-site one: undefined to
    * go on, or the refusal. The address is the one the request came from, or
@@ -534,6 +555,7 @@ export const createHubAuth = ({
       path,
       clientAddress(header, address)
     );
+    gated.set(request, caller);
     if (allows(caller, request.method, path, modeFor(header))) {
       return;
     }
@@ -781,8 +803,20 @@ export const createHubAuth = ({
     return true;
   };
 
-  /** The caller of a route handler, read again from its request. */
+  /**
+   * The caller of a route handler: as the gate classified its request (the
+   * root app's `.request` hook, server.ts, which Elysia hands the same
+   * Request a handler gets), else read from it, for one the gate never saw.
+   * Read a second time, a machine's proof is one the gate already spent
+   * (`machineOf`, against replay), so a handler saw an owner on a trusted
+   * hub and no one on a pairing one: `session-identities/install`'s "its own
+   * sessions only" never held, and no LFS read knew its machine.
+   */
   const callerOf = (request: Request, address: string | null): Caller => {
+    const known = gated.get(request);
+    if (known) {
+      return known;
+    }
     const header: Headers = (name) => request.headers.get(name);
     return classify(
       header,

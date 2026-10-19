@@ -223,6 +223,7 @@ export class PiRemoteSession implements HarnessSession {
           this.#unread.clear();
           this.#setBusy(false);
           ctx.closed?.();
+          client.release(procIdFor("pi", ctx.instanceId), pid);
         },
       },
       afterSeq
@@ -473,20 +474,26 @@ export async function piSnapshot(instanceId: string): Promise<PiHostState> {
   const { client } = held;
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
-    client.subscribe(procIdFor("pi", instanceId), {
+    // Its own subscription beside the session's: ending it leaves the
+    // session's listener as it was.
+    let stop = (): void => undefined;
+    stop = client.subscribe(procIdFor("pi", instanceId), {
       line: (line) => {
         const event = JSON.parse(line.data) as PiHostEvent;
         if (event.type !== "reply" || event.id !== id) {
           return;
         }
-        client.unsubscribe(procIdFor("pi", instanceId));
+        stop();
         if (event.error) {
           reject(new Error(event.error));
         } else {
           resolve(event.value as PiHostState);
         }
       },
-      exit: () => reject(new Error("pi host exited while reading state")),
+      exit: () => {
+        stop();
+        reject(new Error("pi host exited while reading state"));
+      },
     });
     client
       .write(

@@ -1,0 +1,13 @@
+apps/dashboard/src/lib/cawco/accounts/AccountEditor.svelte
+apps/dashboard/src/lib/cawco/accounts/AccountListRow.svelte
+apps/dashboard/src/lib/cawco/accounts/AccountMachines.svelte
+apps/dashboard/src/lib/cawco/accounts/AccountName.svelte
+apps/dashboard/src/lib/cawco/accounts/AccountSetup.svelte
+apps/dashboard/src/lib/cawco/accounts/AccountSubmenu.svelte
+
+# apps/dashboard/src/lib/cawco/accounts/AccountEditor.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/accounts/AccountListRow.svelte: relic: literal ×3; relic: style-var ×3
+# apps/dashboard/src/lib/cawco/accounts/AccountMachines.svelte: relic: literal ×1
+# apps/dashboard/src/lib/cawco/accounts/AccountName.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk
+# apps/dashboard/src/lib/cawco/accounts/AccountSetup.svelte: after-M: markup naming a scoped class; after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×10; relic: style-var ×10; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/accounts/AccountSubmenu.svelte: relic: literal ×1; relic: style-var ×2

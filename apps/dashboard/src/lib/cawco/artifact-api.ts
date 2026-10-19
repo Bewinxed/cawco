@@ -4,9 +4,15 @@
  * alike. Its own module, apart from the fleet store, so an artifact's tab
  * reaches them without loading the fleet.
  */
-import type { ArtifactSummary, ShownFailure } from "@cawco/core";
+import type {
+  ArtifactHit,
+  ArtifactSummary,
+  ArtifactThumbnail,
+  SessionAttachments,
+  ShownFailure,
+} from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { SheetRead, StoryOp } from "@cawco/core/stage";
+import type { CanvasMap, SheetRead, StoryOp } from "@cawco/core/stage";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { currentClientId } from "./client-id";
 
@@ -26,6 +32,67 @@ export async function listArtifacts(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
   return (await ok(await fetch(artifactsPath(instanceId)))).json();
+}
+
+/**
+ * A session's attachments, read off its whole transcript on the hub, newest
+ * first (core `SessionAttachments`): Files' Attachments.
+ */
+export async function listAttachments(
+  instanceId: string
+): Promise<SessionAttachments> {
+  return (
+    await ok(
+      await fetch(
+        `/api/instances/${encodeURIComponent(instanceId)}/attachments`
+      )
+    )
+  ).json();
+}
+
+/**
+ * Files' search over a session's artifacts: those a query matches by name
+ * or by the words on their page, best first (core `ArtifactHit`).
+ */
+export async function searchArtifacts(
+  instanceId: string,
+  q: string,
+  signal?: AbortSignal
+): Promise<ArtifactHit[]> {
+  return (
+    await ok(
+      await fetch(
+        `${artifactsPath(instanceId)}/search?q=${encodeURIComponent(q)}`,
+        { signal }
+      )
+    )
+  ).json();
+}
+
+/** Where an artifact's latest picture is served in `scheme`, named by when it was drawn. */
+export const thumbnailUrl = (
+  id: string,
+  thumbnail: ArtifactThumbnail,
+  scheme: "light" | "dark"
+): string =>
+  `/api/artifacts/${encodeURIComponent(id)}/thumbnail/${thumbnail.single ? "light" : scheme}?at=${encodeURIComponent(thumbnail.at)}`;
+
+/**
+ * The pane's thumbnail of the artifact it shows, kept by the hub as the
+ * artifact's latest picture (Files' cards draw it).
+ */
+export async function keepThumbnail(
+  instanceId: string,
+  id: string,
+  shot: { light: string | null; dark: string | null; single: boolean }
+): Promise<void> {
+  await ok(
+    await fetch(`${artifactsPath(instanceId, id)}/thumbnail`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(shot),
+    })
+  );
 }
 
 /** Brings one of a session's artifacts to the front of its panel; the panel follows its frame. */
@@ -150,6 +217,27 @@ export async function writeSheet(
       })
     )
   ).json();
+}
+
+/** A component canvas's map: its component, what renders it and what it renders, each with its states and frames in miniature. */
+export async function fetchCanvasMap(
+  instanceId: string,
+  id: string
+): Promise<CanvasMap> {
+  return (await ok(await fetch(`${artifactsPath(instanceId, id)}/map`))).json();
+}
+
+/** The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session. Answers what the hub did, one sentence. */
+export async function verifyArtifact(
+  instanceId: string,
+  id: string
+): Promise<string> {
+  const answer = (await (
+    await ok(
+      await fetch(`${artifactsPath(instanceId, id)}/verify`, { method: "POST" })
+    )
+  ).json()) as { verify: string };
+  return answer.verify;
 }
 
 /** The draft canvas went out with a send: the session holds it now. */

@@ -1,10 +1,12 @@
 /** Server-only install identity and durable update state of a binary install. */
+import type { Dirent } from "node:fs";
 import { mkdir, readdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import type { BinaryUpdateState } from "./binary-updates";
 import { versionsInUse } from "./live-processes";
+import { hubDbPath } from "./paths";
 import { markerIsLive } from "./process-identity";
 import type { ReleaseManifest } from "./release-manifest";
 import { runtimeVersion } from "./runtime";
@@ -198,41 +200,123 @@ const STAGED_PHASES: ReadonlySet<BinaryUpdateState["phase"]> = new Set([
 ]);
 
 /**
- * Deletes the directories under `versions/` nothing needs. Kept: what `current`
- * and `keeper` name, what a pending update trial would restore or has swapped
- * in (`trial.json`), the build a live helper is applying (named in
- * `apply.lock`), the build staged for an install no helper has taken up yet
- * ({@link STAGED_PHASES}: a prune while it waits, a retiring keeper's removal
- * among them, left its helper no build to apply), and every build a live
- * process runs or names ({@link versionsInUse}): a unit still on a build the
- * links have left, a retiring keeper and its children, and the hooks baked
- * into their CLI settings. The caller never supplies a keep-list.
+ * How many installed builds a machine keeps: the one installed and the two
+ * installed before it, in `versions/` and, on the hub's machine, in the hub's
+ * archive cache ({@link hubReleasesDir}).
  */
-export async function prune(): Promise<void> {
-  const keep = new Set<string>();
-  const add = (version: string | undefined) => {
-    if (version) {
-      keep.add(version);
-    }
-  };
-  add(await linkedVersion(currentDirectory()));
-  add(await linkedVersion(keeperPath()));
-  const trial = await readTrial();
-  add(trial?.previous);
-  add(trial?.version);
-  add((await liveHelper())?.version);
-  const state = await readUpdateState();
-  if (state && STAGED_PHASES.has(state.phase)) {
-    add(state.availableVersion);
-  }
-  for (const version of await versionsInUse(binaryRoot())) {
-    add(version);
-  }
-  const versions = join(binaryRoot(), "versions");
-  const present = await readdir(versions).catch(() => [] as string[]);
+export const KEPT_INSTALLS = 3;
+
+/**
+ * The builds this machine installed, in the order it installed them, newest
+ * last, at most {@link KEPT_INSTALLS}: what {@link prune} keeps by install
+ * order. Written only by {@link recordInstall}: by the installer's
+ * `binary-install` for the build it installs, and by an update helper when it
+ * confirms a build. Never read from version names: a nightly's and a
+ * stable's do not sort by when they went on.
+ */
+export const installOrderPath = (): string =>
+  join(binaryRoot(), "install-order.json");
+const readInstallOrder = async (): Promise<string[]> =>
+  (await readRecord<string[]>(installOrderPath())) ?? [];
+
+/**
+ * `version` goes to the end of the install order, and the order keeps its
+ * newest {@link KEPT_INSTALLS}. An update names the build it replaced
+ * (`previous`), which goes just before it: the build that ran is the one
+ * installed before, whether or not this machine's order holds it yet.
+ */
+export async function recordInstall(
+  version: string,
+  previous?: string
+): Promise<void> {
+  const before = (await readInstallOrder()).filter(
+    (name) => name !== version && name !== previous
+  );
+  await writeJsonAtomic(
+    installOrderPath(),
+    [...before, ...(previous ? [previous] : []), version].slice(-KEPT_INSTALLS)
+  );
+}
+
+/**
+ * The hub's cache of the release archives it serves its machines
+ * (`binary-releases/<version>/<archive>`, hub binary-updates.ts), beside the
+ * hub's database. It holds archives only: everything in it is a build's, and
+ * {@link prune} trims it. The update policy is not here
+ * (paths.ts `hubUpdatePolicyPath`). Only on the hub's machine does it exist.
+ */
+export const hubReleasesDir = (): string =>
+  join(dirname(hubDbPath()), "binary-releases");
+
+/** Removes every folder in `dir` not named in `keep`; unfinished folders (`.partial`) stay. */
+async function removeFoldersBut(
+  dir: string,
+  keep: ReadonlySet<string>
+): Promise<void> {
+  const present = await readdir(dir, { withFileTypes: true }).catch(
+    () => [] as Dirent[]
+  );
   await Promise.all(
     present
-      .filter((name) => !(keep.has(name) || name.includes(".partial")))
-      .map((name) => rm(join(versions, name), { recursive: true, force: true }))
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          !(keep.has(entry.name) || entry.name.includes(".partial"))
+      )
+      .map((entry) =>
+        rm(join(dir, entry.name), { recursive: true, force: true })
+      )
   );
+}
+
+/**
+ * Deletes the builds nothing keeps. In `versions/`, kept: the builds of the
+ * install order ({@link readInstallOrder}: the installed one and the two
+ * installed before it), what `current` and `keeper` name, what a pending
+ * update trial would restore or has swapped in (`trial.json`), the build a
+ * live helper is applying (named in `apply.lock`), the build staged for an
+ * install no helper has taken up yet ({@link STAGED_PHASES}: a prune while it
+ * waits, a retiring keeper's removal among them, left its helper no build to
+ * apply), and every build a live process runs or names ({@link versionsInUse}):
+ * a unit still on a build the links have left, a retiring keeper and its
+ * children, and the hooks baked into their CLI settings. Such a build stays
+ * while its process lives: the agent prunes again when it removes a retiring
+ * keeper that holds nothing (binary-update.ts `#tendKeepers`), and that prune
+ * deletes it.
+ *
+ * In the hub's archive cache ({@link hubReleasesDir}), which no process runs
+ * from (the hub reads an archive only to serve it, and fetches one it lacks
+ * again), kept: the install order, what `current` names, and the update
+ * state's `availableVersion` (the build this machine is fetching or holds
+ * staged through the hub). The caller never supplies a keep-list.
+ */
+export async function prune(): Promise<void> {
+  const state = await readUpdateState();
+  const trial = await readTrial();
+  const installed = [
+    ...(await readInstallOrder()),
+    await linkedVersion(currentDirectory()),
+  ];
+  const builds = new Set(
+    [
+      ...installed,
+      await linkedVersion(keeperPath()),
+      trial?.previous,
+      trial?.version,
+      (await liveHelper())?.version,
+      state && STAGED_PHASES.has(state.phase)
+        ? state.availableVersion
+        : undefined,
+      ...(await versionsInUse(binaryRoot())),
+    ].filter((version): version is string => Boolean(version))
+  );
+  const archives = new Set(
+    [...installed, state?.availableVersion].filter(
+      (version): version is string => Boolean(version)
+    )
+  );
+  await Promise.all([
+    removeFoldersBut(join(binaryRoot(), "versions"), builds),
+    removeFoldersBut(hubReleasesDir(), archives),
+  ]);
 }

@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/cawco/tasks/TaskLabels.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskNeeds.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskOutput.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskPane.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskRelations.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskReview.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte
+apps/dashboard/src/lib/cawco/tasks/stage/ArtifactStage.svelte
+
+# apps/dashboard/src/lib/cawco/tasks/TaskLabels.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/tasks/TaskNeeds.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/tasks/TaskOutput.svelte: after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×3; relic: style-var ×4; lint: shadcn/no-unknown-classes ×2
+# apps/dashboard/src/lib/cawco/tasks/TaskPane.svelte: relic: literal ×4
+# apps/dashboard/src/lib/cawco/tasks/TaskRelations.svelte: relic: literal ×3; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/tasks/TaskReview.svelte: relic: literal ×4; relic: style-var ×2
+# apps/dashboard/src/lib/cawco/tasks/TaskTable.svelte: relic: literal ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/tasks/stage/ArtifactStage.svelte: relic: literal ×1; relic: style-var ×1

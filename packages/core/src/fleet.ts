@@ -15,6 +15,7 @@ import type {
   McpStdioServerConfig,
 } from "./harness";
 import type { FleetHook } from "./hooks";
+import { memoryWords } from "./words/memory";
 
 /**
  * Where a fleet row applies, in Claude Code's own vocabulary:
@@ -88,6 +89,15 @@ export interface FleetMcpServer extends FleetPlacement {
   platforms?: McpPlatform[];
   /** The config points at the hub's authenticated forwarder. */
   proxied?: boolean;
+  /**
+   * One instance on each machine serves every session there, started at its
+   * first call (the agent's MCP gateway, packages/agent mcp-host.ts), rather
+   * than one per session started with it. A stdio fleet server only, and
+   * only one whose tools keep nothing per session and resolve no path
+   * against its working directory. Absent: one per session, as the harness
+   * starts it.
+   */
+  shared?: boolean;
 }
 
 /** The platforms an MCP server can be scoped to ({@link FleetMcpServer.platforms}). */
@@ -481,23 +491,23 @@ const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:/;
 
 export const memoryDocProblem = (path: string): string | undefined => {
   if (!path.endsWith(".md")) {
-    return "a linked document is markdown — its path has to end in .md";
+    return memoryWords.problemNotMarkdown;
   }
   if (path.startsWith("/") || WINDOWS_DRIVE_PREFIX.test(path)) {
-    return `“${path}” is absolute — a document's path is relative to ${userLayerLabel("memories")}/`;
+    return memoryWords.problemAbsolute(path, userLayerLabel("memories"));
   }
   if (path.includes("\\")) {
-    return `“${path}” uses backslashes — the path is the same string on every machine, so it is forward-slashed`;
+    return memoryWords.problemBackslash(path);
   }
   if (path.includes("@")) {
-    return `“${path}” has an @ — a machine reports a project's copy of a document as <path>@<place>`;
+    return memoryWords.problemAt(path);
   }
   const parts = path.split("/");
   if (parts.some((part) => part === "" || part === "." || part === "..")) {
-    return `“${path}” is not a usable path — no empty, “.” or “..” segments`;
+    return memoryWords.problemSegments(path);
   }
   if (parts.some((part) => part.startsWith("."))) {
-    return `“${path}” hides a segment behind a dot — the set is documents, not dotfiles`;
+    return memoryWords.problemDotted(path);
   }
   return undefined;
 };
@@ -677,7 +687,7 @@ export const briefTakes = (
 const listed = (names: readonly string[]): string =>
   names.length < 2
     ? (names[0] ?? "")
-    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+    : `${names.slice(0, -1).join(", ")}${memoryWords.scopeAnd}${names.at(-1)}`;
 
 /**
  * The sessions a scope loads a document into, in a few words, each project
@@ -688,36 +698,43 @@ export const scopeWords = (
   scope: MemoryScope | undefined,
   projectName: (id: string) => string
 ): string => {
+  const words = memoryWords;
   const types = scope?.delegateTypes?.length
-    ? `${listed(scope.delegateTypes)} delegates`
+    ? words.scopeDelegates(listed(scope.delegateTypes))
     : undefined;
-  const model = scope?.model ? `on models matching ${scope.model}` : undefined;
+  const model = scope?.model ? words.scopeOnModels(scope.model) : undefined;
   if (scope?.briefer) {
-    const about = [types ?? "any delegate", model].filter(Boolean).join(" ");
-    return `Sessions briefing ${about}`;
+    const about = [types ?? words.scopeAnyDelegate, model]
+      .filter(Boolean)
+      .join(" ");
+    return words.scopeBriefing(about);
   }
   const role = scope?.role;
   const projects = scope?.projectIds?.length
     ? listed(scope.projectIds.map(projectName))
     : undefined;
   const who = [
-    role ? `${role === "orchestrator" ? "Orchestrator" : "Leaf"}` : undefined,
+    role
+      ? `${role === "orchestrator" ? words.orchestrator : words.leaf}`
+      : undefined,
     types,
   ].filter(Boolean);
-  const subject = who.length > 0 ? `${who.join(" ")} sessions` : undefined;
-  const narrowing = [model, projects ? `in ${projects}` : undefined].filter(
-    Boolean
-  );
+  const subject =
+    who.length > 0 ? words.scopeSessionsOf(who.join(" ")) : undefined;
+  const narrowing = [
+    model,
+    projects ? words.scopeIn(projects) : undefined,
+  ].filter(Boolean);
   if (!(subject || narrowing.length > 0)) {
-    return "No session on its own: linked, read on purpose";
+    return words.scopeNone;
   }
   if (subject && narrowing.length === 0 && !types && role) {
-    return `Every ${role} session`;
+    return words.scopeEvery(role);
   }
   if (!subject && projects && !model) {
-    return `Every session in ${projects}`;
+    return words.scopeEveryIn(projects);
   }
-  return [subject ?? "Sessions", ...narrowing].join(" ");
+  return [subject ?? words.scopeSessions, ...narrowing].join(" ");
 };
 
 /**

@@ -117,6 +117,15 @@ public enum ModelCatalog {
         return window >= needed ? nil : "needs \(Int((needed / 1000).rounded(.up)))k context, has \(Int((window / 1000).rounded(.down)))k"
     }
 
+    /// Whether `repo` is a git URL, in git's own syntaxes (core `isGitUrl`,
+    /// git-scm.com/docs/git-clone "GIT URLS"): a `<scheme>://` URL or the
+    /// scp-like `[<user>@]<host>:<path>`, on any host.
+    public static func isGitUrl(_ repo: String) -> Bool {
+        let url = repo.trimmingCharacters(in: .whitespacesAndNewlines)
+        return url.wholeMatch(of: /[A-Za-z][A-Za-z0-9+.\-]*:\/\/\S+/) != nil
+            || url.wholeMatch(of: /[^\/\s:]+:\S+/) != nil
+    }
+
     /// `owner/name`, however the repository was written (core `repoPath`).
     public static func repoPath(_ repo: String) -> String {
         repo.trimmingCharacters(in: .whitespaces)

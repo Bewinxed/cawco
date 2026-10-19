@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/cawco/HarnessLogo.svelte
+apps/dashboard/src/lib/cawco/HoverPanel.svelte
+apps/dashboard/src/lib/cawco/HubBand.svelte
+apps/dashboard/src/lib/cawco/MachineAuthStatus.svelte
+apps/dashboard/src/lib/cawco/MachineInventory.svelte
+apps/dashboard/src/lib/cawco/MachinesButton.svelte
+apps/dashboard/src/lib/cawco/MachinesEmpty.svelte
+apps/dashboard/src/lib/cawco/MachinesList.svelte
+
+# apps/dashboard/src/lib/cawco/HarnessLogo.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/HoverPanel.svelte: relic: literal ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/HubBand.svelte: relic: literal ×2
+# apps/dashboard/src/lib/cawco/MachineAuthStatus.svelte: relic: literal ×2; relic: style-var ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/MachineInventory.svelte: after-M: markup naming a scoped class; after-M: a new Tailwind class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×6; lint: shadcn/no-unknown-classes ×6; lint: shadcn/no-restyle ×1
+# apps/dashboard/src/lib/cawco/MachinesButton.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×1
+# apps/dashboard/src/lib/cawco/MachinesEmpty.svelte: relic: literal ×1; relic: style-var ×4
+# apps/dashboard/src/lib/cawco/MachinesList.svelte: relic: literal ×4; relic: style-var ×4

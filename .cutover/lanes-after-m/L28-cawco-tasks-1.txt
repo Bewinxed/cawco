@@ -1,0 +1,17 @@
+apps/dashboard/src/lib/cawco/tasks/BulkBar.svelte
+apps/dashboard/src/lib/cawco/tasks/PostCard.svelte
+apps/dashboard/src/lib/cawco/tasks/StagesControl.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskBoard.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskCard.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskColumn.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskFields.svelte
+apps/dashboard/src/lib/cawco/tasks/TaskFilterPopover.svelte
+
+# apps/dashboard/src/lib/cawco/tasks/BulkBar.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/tasks/PostCard.svelte: after-M: markup naming a scoped class; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×3; relic: style-var ×4; relic: style-reason ×1; lint: shadcn/no-unknown-classes ×6
+# apps/dashboard/src/lib/cawco/tasks/StagesControl.svelte: relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/tasks/TaskBoard.svelte: relic: literal ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/tasks/TaskCard.svelte: after-M: a scoped <style> rule; after-M: the merge took main's unconverted lines in a conflicting hunk; relic: literal ×1; relic: style-var ×1; relic: style-reason ×1; dead: svelte-unused-css pruned rule(s)
+# apps/dashboard/src/lib/cawco/tasks/TaskColumn.svelte: relic: literal ×1; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/tasks/TaskFields.svelte: relic: literal ×2; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/tasks/TaskFilterPopover.svelte: relic: literal ×2; relic: style-var ×2

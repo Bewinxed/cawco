@@ -1,0 +1,15 @@
+apps/dashboard/src/lib/cawco/usage/AccountDot.svelte
+apps/dashboard/src/lib/cawco/usage/History.svelte
+apps/dashboard/src/lib/cawco/usage/LimitBar.svelte
+apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte
+apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte
+apps/dashboard/src/lib/cawco/usage/ProviderLimit.svelte
+apps/dashboard/src/lib/cawco/usage/Relay.svelte
+
+# apps/dashboard/src/lib/cawco/usage/AccountDot.svelte: relic: literal ×1; relic: style-var ×2
+# apps/dashboard/src/lib/cawco/usage/History.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/usage/LimitBar.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte: relic: literal ×12; relic: style-var ×17; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte: relic: literal ×2; relic: style-reason ×1
+# apps/dashboard/src/lib/cawco/usage/ProviderLimit.svelte: relic: literal ×1; relic: style-var ×1
+# apps/dashboard/src/lib/cawco/usage/Relay.svelte: relic: literal ×3; relic: style-var ×2

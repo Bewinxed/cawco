@@ -123,6 +123,12 @@ export interface BlockMetadata {
   /** A stored transcript can name an image it no longer carries, hence the optional src. */
   images?: Array<{ mediaType: string; src?: string }>;
   isRedactedThinking?: boolean;
+  /**
+   * A thread's note that a folder was made a repository with files left out
+   * for their size: the offer of Git LFS for them (ThreadEvent `repo`'s
+   * `lfsOffer`), whose Track with LFS and Not now the note draws under it.
+   */
+  lfsOffer?: { id: string };
   model?: string;
   /** Harness-injected user-role content (task notifications, reminders, compaction). */
   noteKind?: string;
@@ -369,6 +375,13 @@ export interface TranscriptPage {
   blocks: TranscriptBlock[];
   /** The branches whose Task call is on this page, each with its blocks. */
   branches: TranscriptPageBranch[];
+  /**
+   * Newest page only: the session a continuation took this one's work item
+   * on in (`InstanceRow.continuedInto`, followed to the last), by its id and
+   * title: its page says where the work went in its composer's place, from
+   * its first paint and for a reader whose board no longer lists either row.
+   */
+  continuedTo?: { instanceId: string; title: string };
   /** Pass as `before` for the page older than this; null at the conversation's start. */
   cursor: string | null;
   /** Newest page only: what the session has said about itself. */

@@ -189,6 +189,7 @@
       parentInstanceId: ID,
       leadInstanceId: null,
       machinePaused: null,
+      stalled: null,
       title: work.title,
       state: failed ? "failed" : work.state,
       createdAt,
