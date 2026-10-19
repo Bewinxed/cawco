@@ -1,3 +1,5 @@
+Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, emil-design-eng, transitions-dev, interface-craft, ui-observer.
+
 # L08-cawco-accounts-3
 
 | file | rules moved | literals → ladder | residual |
