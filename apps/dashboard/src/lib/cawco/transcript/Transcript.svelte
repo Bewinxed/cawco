@@ -1679,9 +1679,7 @@
     const mountedKeys = onList();
     const kept = [...skipping.keys()].filter((key) => mountedKeys.has(key));
     if (kept.length < skipping.size) {
-      skipping = new Map(
-        [...skipping].filter(([key]) => mountedKeys.has(key))
-      );
+      skipping = new Map([...skipping].filter(([key]) => mountedKeys.has(key)));
     }
     return kept;
   }

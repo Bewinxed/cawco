@@ -579,11 +579,19 @@ function watchSizes(): void {
   if (window.top !== window) {
     return;
   }
-  const seen: { at: number; key: string; pane: string; was: number | null; px: number }[] = [];
-  const last = new WeakMap<Element, number>();
+  const seen: {
+    at: number;
+    key: string;
+    pane: string;
+    was: number | null;
+    px: number;
+  }[] = [];
+  // Each item's last size, and how long its text was then: a row whose
+  // text has changed since was rewritten after virtua last measured it.
+  const last = new WeakMap<Element, { px: number; text: number }>();
   const w = window as unknown as {
     __sizes: typeof seen;
-    __lastSize: (el: Element) => number | null;
+    __lastSize: (el: Element) => { px: number; text: number } | null;
   };
   w.__sizes = seen;
   w.__lastSize = (el) => last.get(el) ?? null;
@@ -594,15 +602,21 @@ function watchSizes(): void {
         for (const entry of entries) {
           const el = entry.target;
           if (el instanceof HTMLElement && el.hasAttribute("data-item")) {
-            const px = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+            const px =
+              entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
             seen.push({
               at: performance.timeOrigin + performance.now(),
-              key: el.querySelector<HTMLElement>(":scope > [data-row]")?.dataset.row ?? "?",
-              pane: el.closest<HTMLElement>("[data-pane]")?.dataset.pane ?? "?",
-              was: last.get(el) ?? null,
+              key:
+                el.querySelector<HTMLElement>(":scope > [data-row]")?.dataset
+                  .row ?? "?",
+              // PaneLeaf's slot: a side split's own panes carry an empty `data-pane`.
+              pane:
+                el.closest<HTMLElement>('[data-slot="pane"][data-pane]')
+                  ?.dataset.pane ?? "?",
+              was: last.get(el)?.px ?? null,
               px,
             });
-            last.set(el, px);
+            last.set(el, { px, text: el.textContent?.length ?? 0 });
           }
         }
         callback(entries, observer);
@@ -614,17 +628,26 @@ function watchSizes(): void {
 /** What pane `pane`'s list items last reported (`watchSizes`), by key: the sizes before a reach. Attributes and the watch alone. */
 const itemSizesOf = (page: Page, pane: string) =>
   page.evaluate((id) => {
-    const w = window as unknown as { __lastSize?: (el: Element) => number | null };
+    const w = window as unknown as {
+      __lastSize?: (el: Element) => { px: number; text: number } | null;
+    };
     const sizes: Record<string, number | null> = {};
+    /** Rows whose text changed after virtua last measured them: rewritten while away. */
+    const rewritten: string[] = [];
     for (const item of document.querySelectorAll(
       `[data-slot="pane"][data-pane="${CSS.escape(id)}"] [data-item]`
     )) {
-      const key = item.querySelector<HTMLElement>(":scope > [data-row]")?.dataset.row;
+      const key = item.querySelector<HTMLElement>(":scope > [data-row]")
+        ?.dataset.row;
       if (key) {
-        sizes[key] = w.__lastSize?.(item) ?? null;
+        const had = w.__lastSize?.(item) ?? null;
+        sizes[key] = had?.px ?? null;
+        if (had && had.text !== (item.textContent?.length ?? 0)) {
+          rewritten.push(key);
+        }
       }
     }
-    return sizes;
+    return { sizes, rewritten };
   }, pane);
 
 /**
@@ -635,10 +658,20 @@ const itemSizesOf = (page: Page, pane: string) =>
 async function sizesTold(
   page: Page,
   pane: string,
-  before: Record<string, number | null>,
-  from: number,
-  to: number
-): Promise<{ changes: number; line: string }> {
+  {
+    before,
+    from,
+    pressAt,
+    rewritten,
+    to,
+  }: {
+    before: Record<string, number | null>;
+    from: number;
+    pressAt: number;
+    rewritten: string[];
+    to: number;
+  }
+): Promise<{ changes: number; line: string; told: string }> {
   const sizes = (
     await page.evaluate(
       () =>
@@ -658,23 +691,33 @@ async function sizesTold(
   // A size virtua had measured before the reach; a row it never measured
   // has none, and what it is told of that row is its first measurement.
   const hadOf = (one: { key: string }) => before[one.key] ?? null;
-  const changed = sizes.filter((one) => {
+  const differs = (one: { key: string; px: number }) => {
     const had = hadOf(one);
     return had !== null && Math.abs(one.px - had) > 0.5;
-  });
+  };
+  const wasRewritten = new Set(rewritten);
+  // A row rewritten while away is a new size, told as virtua measures it.
+  const changed = sizes.filter(
+    (one) => differs(one) && !wasRewritten.has(one.key)
+  );
+  const remeasured = sizes.filter(
+    (one) => differs(one) && wasRewritten.has(one.key)
+  ).length;
   const unmeasured = sizes.filter((one) => hadOf(one) === null);
   const which = changed
     .slice(0, 6)
     .map(
       (one) =>
-        `${one.key.slice(0, 16)} ${hadOf(one)}→${one.px}px at ${Math.round(one.at - to)}ms`
+        `${one.key.slice(0, 16)} ${hadOf(one)}→${one.px}px at ${Math.round(one.at - pressAt)}ms`
     )
     .join(", ");
   const rows = Object.keys(before).length;
   const never = Object.values(before).filter((one) => one === null).length;
+  const told = `${sizes.length} item sizes, ${changed.length} of them a change from the size before${which ? ` (${which})` : ""}, ${remeasured} of rows rewritten while away, ${unmeasured.length} first measurements of rows never measured`;
   return {
     changes: changed.length,
-    line: `${rows} rows mounted before the reach (${never} never measured); ${sizes.length} item sizes told from the reach to the press, ${changed.length} of them a change from the size before${which ? ` (${which})` : ""}, ${unmeasured.length} first measurements of rows never measured`,
+    told,
+    line: `${rows} rows mounted before the reach (${never} never measured, ${rewritten.length} rewritten while away: ${rewritten.map((key) => key.slice(0, 16)).join(", ") || "none"}); from the reach to the press virtua was told ${told}`,
   };
 }
 
@@ -687,10 +730,11 @@ async function sizesTold(
 const shownStateOf = (
   page: Page,
   pane: string,
-  before: Record<string, number | null>
+  before: Record<string, number | null>,
+  rewritten: string[]
 ) =>
   page.evaluate(
-    ([id, scroller, was]) => {
+    ([id, scroller, was, redone]) => {
       const box = document.querySelector<HTMLElement>(
         `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
       );
@@ -741,17 +785,31 @@ const shownStateOf = (
         .map((item) => {
           const key = item.querySelector<HTMLElement>(":scope > [data-row]")
             ?.dataset.row;
-          return { item, had: key ? (was[key] ?? null) : null };
+          // A row rewritten while away is measured anew, not held to its old size.
+          return {
+            item,
+            had: key && !redone.includes(key) ? (was[key] ?? null) : null,
+          };
         })
         .filter((one) => one.had !== null);
       const kept = sized.length;
-      const moved = sized.filter(
-        ({ item, had }) =>
-          Math.abs(item.getBoundingClientRect().height - (had ?? 0)) > 0.5
-      ).length;
-      return { inline, computed, rows, blank, kept, moved };
+      const movedRows = sized
+        .map(({ item, had }) => ({
+          had,
+          key:
+            item.querySelector<HTMLElement>(":scope > [data-row]")?.dataset
+              .row ?? "?",
+          now: item.getBoundingClientRect().height,
+        }))
+        .filter(({ had, now }) => Math.abs(now - (had ?? 0)) > 0.5);
+      const moved = movedRows.length;
+      const which = movedRows
+        .slice(0, 4)
+        .map(({ had, key, now }) => `${key.slice(0, 24)} ${had}→${now}px`)
+        .join(", ");
+      return { inline, computed, rows, blank, kept, moved, which };
     },
-    [pane, SCROLLER, before] as const
+    [pane, SCROLLER, before, rewritten] as const
   );
 
 /**
@@ -842,6 +900,20 @@ function markWarm(page: Page, pane: string): Promise<void> {
   }, pane);
 }
 
+/** `shownStateOf`'s reading said, with what virtua was told after the press (`sizesTold`). */
+function shownLine(
+  settled: Awaited<ReturnType<typeof shownStateOf>>,
+  toldAfter: string
+): string {
+  if (!settled) {
+    return "no pane";
+  }
+  const moved = settled.which
+    ? ` (${settled.which}); after the press virtua was told ${toldAfter}`
+    : "";
+  return `${settled.inline} elements with an inline content-visibility, ${settled.computed} computing it hidden; ${settled.rows} rows in view, ${settled.blank} of them with no box on their first text; ${settled.kept} rows measured before the reach still mounted, ${settled.moved} of them a different height now${moved}`;
+}
+
 /**
  * The reach task among the tasks before the press: the longer of the one
  * that warms the pane (holding the `two-pane:warm:0` mark `markWarm` makes,
@@ -878,7 +950,7 @@ async function measureBack(
 ): Promise<Read> {
   const point = await pointAt(page, input, id);
   const held = await census(page);
-  const sizesBefore = await itemSizesOf(page, id);
+  const { sizes: sizesBefore, rewritten } = await itemSizesOf(page, id);
   await markWarm(page, id);
   let reachEpoch = 0;
   let skippedAtPress = 0;
@@ -990,12 +1062,24 @@ async function measureBack(
       .map(([stack, ms]) => `${stack} ${ms.toFixed(1)}ms`)
       .join(" || ")}`;
   const pressEpoch = origin + madeAt;
-  const told = await sizesTold(page, id, sizesBefore, reachEpoch, pressEpoch);
+  const span = {
+    before: sizesBefore,
+    pressAt: pressEpoch,
+    rewritten,
+  };
+  const told = await sizesTold(page, id, {
+    ...span,
+    from: reachEpoch,
+    to: pressEpoch,
+  });
+  const toldAfter = await sizesTold(page, id, {
+    ...span,
+    from: pressEpoch,
+    to: Number.POSITIVE_INFINITY,
+  });
   const staging = `${skippedAtPress} rows still staged as the press came; ${told.line}`;
-  const settled = await shownStateOf(page, id, sizesBefore);
-  const shown = settled
-    ? `${settled.inline} elements with an inline content-visibility, ${settled.computed} computing it hidden; ${settled.rows} rows in view, ${settled.blank} of them with no box on their first text; ${settled.kept} rows measured before the reach still mounted, ${settled.moved} of them a different height now`
-    : "no pane";
+  const settled = await shownStateOf(page, id, sizesBefore, rewritten);
+  const shown = shownLine(settled, toldAfter.told);
   const inserted = await page.evaluate(() => {
     const w = window as unknown as {
       __inserted: number;
