@@ -24,8 +24,16 @@
  * - `Network.getAllCookies` answers the sign-ins sentence;
  * - the shield's `closeAll` drops A and B with 4423, a new connection gets
  *   423 with its sentence until `open()`, then connects;
+ * - with B connected and holding a page, A's `performance_start_trace` is
+ *   refused with the gate's sentence (a trace records every page); B's
+ *   boundary ended (`forget`), A's trace starts and stops;
  * - from each delegate's workspace shell, `curl --max-time 3` to the
  *   browser's DevTools port and to the runtime's socket are both refused.
+ *
+ * Between the legs the browser stops and the runtime is hidden, as a
+ * runtime going away leaves it: the browser moves to the local host, its
+ * container marked to be removed, and once the runtime answers again its
+ * removal takes the container and the volume too.
  *
  * Run on the host, outside every workspace boundary (it starts two, and a
  * boundary hides the runtime's socket):
@@ -350,6 +358,42 @@ const gateChecks = async (
         again,
       JSON.stringify({ aClosed, bClosed, refused, again })
     );
+
+    // Tracing records every page of the browser: B connected with its page,
+    // A's trace is refused; B's boundary ended, A's trace starts. A page whose
+    // trace start failed keeps puppeteer's tracer set, so A traces a new one.
+    await called(B, "list_pages");
+    const tracedPage = selected(
+      (await called(A, "new_page", { url: "about:blank" })).text
+    );
+    const refusedTrace = await called(A, "performance_start_trace", {
+      pageId: tracedPage,
+      reload: false,
+      autoStop: false,
+    });
+    await gate?.forget(who.B.id);
+    const freshPage = selected(
+      (await called(A, "new_page", { url: "about:blank" })).text
+    );
+    const trace = await called(A, "performance_start_trace", {
+      pageId: freshPage,
+      reload: false,
+      autoStop: false,
+    });
+    const stopped = await called(A, "performance_stop_trace", {
+      pageId: freshPage,
+    });
+    check(
+      `${host}: with B connected and holding a page, A's performance_start_trace answers "${words.traceShared}"; B gone, A's trace starts and stops`,
+      refusedTrace.text.includes(words.traceShared) &&
+        trace.text.includes("is being recorded") &&
+        stopped.text.includes("has been stopped"),
+      JSON.stringify({
+        refused: refusedTrace.text.slice(0, 300),
+        trace: trace.text.slice(0, 200),
+        stopped: stopped.text.slice(0, 200),
+      })
+    );
   } finally {
     await Promise.allSettled([A.close(), B.close()]);
   }
@@ -376,6 +420,15 @@ const shellChecks = async (kit: Kit, leg: Leg): Promise<void> => {
       devtools === 7 && socket > 0,
       out.slice(-400)
     );
+  }
+};
+
+/** `DOCKER_HOST` as the run found it. */
+const restore = (hidden: string | undefined): void => {
+  if (hidden === undefined) {
+    delete process.env.DOCKER_HOST;
+  } else {
+    process.env.DOCKER_HOST = hidden;
   }
 };
 
@@ -434,6 +487,8 @@ const run = async (kit: Kit): Promise<void> => {
   const gates: Gate = await import("../../../packages/agent/src/browser/gate");
   const { findRuntime } =
     await import("../../../packages/agent/src/browser/runtime");
+  const { readBrowser } =
+    await import("../../../packages/agent/src/browser/state");
   try {
     await until(
       "both delegates started",
@@ -471,27 +526,54 @@ const run = async (kit: Kit): Promise<void> => {
     shell.container = { devtools: ports.devtools, socket };
     await shellChecks(kit, "container");
 
-    // The local host: the runtime hidden, the container and its volume gone
-    // first (a browser that moves host leaves them).
-    await browsers.removeBrowser(key);
+    // The local host: the runtime gone (its containers stop with it), then
+    // hidden. The browser moves; its container and volume are marked to go
+    // once the runtime answers again.
+    await browsers.stopBrowser(key);
     process.env.DOCKER_HOST = "unix:///nonexistent";
     await browsers.browserRuntime(true);
     const local = await browsers.startBrowser({ key });
     const localPorts = local.ports ?? { devtools: 0, gate: 0 };
+    const moved = await readBrowser(key);
     kit.check(
-      `local (DOCKER_HOST=unix:///nonexistent): ${key} live on the ${local.host} host, gate on 127.0.0.1:${localPorts.gate}`,
-      local.host === "local",
-      JSON.stringify(local)
+      `local (DOCKER_HOST=unix:///nonexistent): ${key} live on the ${local.host} host, gate on 127.0.0.1:${localPorts.gate}, its container marked to be removed`,
+      local.host === "local" && moved?.containerLeft === true,
+      JSON.stringify({ local, containerLeft: moved?.containerLeft })
     );
     await gateChecks(kit, gates, key, localPorts.gate, "local", who, realHome);
     shell.local = { devtools: localPorts.devtools, socket };
     await shellChecks(kit, "local");
-  } finally {
-    if (hidden === undefined) {
-      delete process.env.DOCKER_HOST;
-    } else {
-      process.env.DOCKER_HOST = hidden;
+
+    // The runtime back: the container and volume the move left go with the
+    // browser's removal (a tick or the next start back in a container
+    // removes them the same way).
+    restore(hidden);
+    await browsers.browserRuntime(true);
+    await browsers.removeBrowser(key);
+    if (!("missing" in runtime)) {
+      const name = `cawco-browser-${key.replace(":", "-")}`;
+      const containers = await runtime.docker.listContainers({
+        all: true,
+        filters: { name: [name] },
+      });
+      const volume = await runtime.docker
+        .getVolume(name)
+        .inspect()
+        .then(
+          () => "kept",
+          () => "gone"
+        );
+      kit.check(
+        `the runtime back: ${name}'s container and volume are removed with the browser`,
+        containers.length === 0 && volume === "gone",
+        JSON.stringify({
+          containers: containers.map((one) => one.Names),
+          volume,
+        })
+      );
     }
+  } finally {
+    restore(hidden);
     await browsers.browserRuntime(true);
     await browsers.removeBrowser(key).catch(() => undefined);
     process.env.HOME = realHome;

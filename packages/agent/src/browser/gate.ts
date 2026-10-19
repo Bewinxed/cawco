@@ -24,7 +24,10 @@
  * clearing its cookies, opening its own pages (`chrome://`,
  * `chrome-untrusted://`, `devtools://`, `file://`), another session's pages,
  * and the methods that speak for every page at once (a browser-level
- * session, tracing or interception at the browser's level). The shield cuts
+ * session, tracing or interception at the browser's level). Chromium's
+ * tracing records the whole browser whichever page asks, so a page's trace
+ * starts only while no other workspace has a connection or a page here, and
+ * one running is cut, its data dropped, as another arrives. The shield cuts
  * every connection with {@link SHIELD_CLOSE} and refuses new ones with its
  * sentence until it opens again; a workspace whose boundary ends for good
  * has its connections cut and its pages closed. A connection holds its
@@ -54,6 +57,10 @@ export const GATE_WORDS = {
   project: "This browser is another project's.",
   ended: "This workspace's boundary ended, and its pages with it.",
   stopped: "The browser stopped.",
+  traceShared:
+    "Tracing did not start: a trace records every page of the browser, and another session of the project has pages or a connection in it. Trace on a new page once the project's other sessions have closed theirs.",
+  traceCut:
+    "The trace was stopped and its data dropped: another session of the project came to the browser while it ran, and a trace records every page. Trace on a new page once the project's other sessions have closed theirs.",
 } as const;
 
 /** The close code of a connection the shield cuts. */
@@ -533,6 +540,7 @@ export class Gate {
     if (this.#links.size === 1) {
       this.#deps.used(true);
     }
+    this.#arrived(link.workspace);
     const url = await this.#browserUrl(true);
     await this.#watching(url);
     return dial(url);
@@ -628,7 +636,33 @@ export class Gate {
   own(targetId: string, id: string): void {
     this.#owners.targets[targetId] = id;
     this.#save();
+    this.#arrived(id);
     this.#changed(targetId);
+  }
+
+  /**
+   * Whether a workspace other than `id` holds a connection or a live page
+   * here. Chromium's tracing is the whole browser's, whichever page asks:
+   * a trace then would record that workspace's pages.
+   */
+  shared(id: string): boolean {
+    for (const link of this.#links) {
+      if (link.workspace !== id) {
+        return true;
+      }
+    }
+    return Object.entries(this.#owners.targets).some(
+      ([target, owner]) => owner !== id && this.#infos.has(target)
+    );
+  }
+
+  /** Workspace `id` came to the browser (a connection, a page): every other workspace's trace running is cut. */
+  #arrived(id: string): void {
+    for (const link of this.#links) {
+      if (link.workspace !== id) {
+        link.cutTraces();
+      }
+    }
   }
 
   ownContext(contextId: string, id: string): void {
@@ -705,6 +739,9 @@ export class Gate {
     const tabsAttached: Promise<unknown>[] = [];
     watch.ready = (async () => {
       await this.#load();
+      // What an earlier watch knew may have ended unseen: discovery says it
+      // all again.
+      this.#infos.clear();
       const socket = await dial(url);
       watch.socket = socket;
       if (watch.done) {
@@ -867,6 +904,10 @@ class Link {
   readonly #sessions = new Set<string>();
   /** The agent's calls whose answers the gate reads or narrows. */
   readonly #asked = new Map<number, Cdp>();
+  /** Sessions the agent traces on now. */
+  readonly #tracing = new Set<string>();
+  /** Sessions whose trace the gate cut: their trace's events are dropped, their `Tracing.end` refused. */
+  readonly #traceCut = new Set<string>();
 
   constructor(gate: Gate, workspace: string) {
     this.#gate = gate;
@@ -956,7 +997,7 @@ class Link {
     if (!(message && typeof message.id === "number" && message.method)) {
       return;
     }
-    const why = await this.#refusal(message);
+    const why = (await this.#refusal(message)) ?? this.#traced(message);
     if (why) {
       this.#refuse(message, why);
       return;
@@ -965,6 +1006,41 @@ class Link {
       return;
     }
     this.#up?.send(JSON.stringify(message));
+  }
+
+  /**
+   * Keeps which of the agent's sessions trace: a trace starts only while no
+   * other workspace is in the browser ({@link Gate.shared}), and the end of
+   * one the gate cut is refused, its data already dropped.
+   */
+  #traced(message: Cdp): string | undefined {
+    const session = message.sessionId ?? "";
+    if (message.method === "Tracing.start") {
+      if (this.#gate.shared(this.workspace)) {
+        return GATE_WORDS.traceShared;
+      }
+      this.#traceCut.delete(session);
+      this.#tracing.add(session);
+    } else if (message.method === "Tracing.end") {
+      if (this.#traceCut.has(session)) {
+        return GATE_WORDS.traceCut;
+      }
+      this.#tracing.delete(session);
+    }
+  }
+
+  /** Another workspace came to the browser: every trace of this agent's is ended, and what it recorded never reaches it. */
+  cutTraces(): void {
+    for (const session of this.#tracing) {
+      this.#traceCut.add(session);
+      this.#wire?.call("Tracing.end", {}, session).catch(() => undefined);
+    }
+    if (this.#tracing.size > 0) {
+      console.info(
+        `[browser] ${this.#gate.key}: workspace ${this.workspace}'s trace was cut: another session of the project came to the browser`
+      );
+    }
+    this.#tracing.clear();
   }
 
   /** Why the gate refuses `message`, or nothing when it goes on. */
@@ -1137,7 +1213,11 @@ class Link {
 
   /** An event of one of the agent's sessions: its children are the agent's too. */
   #sessionEvent(message: Cdp, params: Json, data: string): void {
-    if (!this.#sessions.has(message.sessionId ?? "")) {
+    const session = message.sessionId ?? "";
+    if (
+      !this.#sessions.has(session) ||
+      (this.#traceCut.has(session) && message.method?.startsWith("Tracing."))
+    ) {
       return;
     }
     const child = text(params.sessionId);
@@ -1318,6 +1398,9 @@ export const serveGate = (deps: GateDeps): Gate => {
 
 /** The gate of `key`, when this process serves it. */
 export const gateOf = (key: BrowserKey): Gate | undefined => gates.get(key);
+
+/** Every browser this process serves a gate for. */
+export const servedGates = (): BrowserKey[] => [...gates.keys()];
 
 /** Stops the gate of `key` (its browser removed). */
 export const stopGate = (key: BrowserKey): void => {

@@ -4,17 +4,23 @@
  * runtime is looked for as the agent starts and every 10 minutes while any
  * browser is local, so an install is found without a restart; a local
  * browser moves into a container at its next start (its sign-ins start over
- * there). A browser stops after 30 minutes with no agent connection and no
- * viewer, its profile kept, and wakes on the next need. The daemon tells the
- * hub the whole list on each change ({@link BrowserFrame}); `cawco browser`
- * acts on the same records from a terminal.
+ * there). A move leaves nothing of the host it left: the local profile is
+ * deleted, and the container with its volume is removed, at once, or, when
+ * the move was the runtime going away, as soon as it answers again. A
+ * browser stops after 30 minutes with no agent connection and no viewer, its
+ * profile kept, and wakes on the next need. The daemon tells the hub the
+ * whole list on each change ({@link BrowserFrame}); `cawco browser` acts on
+ * the same records from a terminal.
  *
  * The daemon serves each browser's DevTools gate (gate.ts) on the browser's
  * gate port, for every browser it keeps a record of, asleep ones too: a
- * session's browser tool connecting wakes its browser, and holds it awake
- * while connected. A browser `cawco browser` started gets its gate at the
- * daemon's next tick.
+ * session's browser tool connecting wakes its browser (with the stream relay
+ * the hub last gave it), and holds it awake while connected. It watches the
+ * records' dir, so a browser `cawco browser` starts has its gate as its
+ * record is written, and one it removes has none.
  */
+import { watch } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import type {
   BrowserFrame,
   BrowserKey,
@@ -25,13 +31,14 @@ import type {
 } from "@cawco/core/browser";
 import { isBrowserKey } from "@cawco/core/browser";
 import { ContainerHost, RELAY_RENEW_MS } from "./container-host";
-import { gateOf, serveGate, stopGate } from "./gate";
+import { gateOf, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
 import { findRuntime, type Runtime } from "./runtime";
 import {
   allBrowsers,
   type BrowserHost,
   type BrowserRecord,
+  browsersDir,
   forgetBrowser,
   type Progress,
   portsOf,
@@ -167,17 +174,30 @@ const used = (key: BrowserKey): void => {
     );
 };
 
+/** Whether `relay`'s credential holds past the renewal window (its username is `<expiry, s>:<who>`). */
+const relayHolds = (relay: BrowserRelay): boolean => {
+  const seconds = Number(relay.username.split(":")[0]);
+  return (
+    Number.isFinite(seconds) && seconds * 1000 > Date.now() + RELAY_RENEW_MS
+  );
+};
+
 /**
  * `key`'s DevTools address as its host gives it: with `wake`, the browser
- * started or woken first (as the hub's start would, keeping the container's
- * relay); without, only while it runs.
+ * started or woken first, with the stream relay the hub last gave it while
+ * that credential holds (a container made again keeps its relay); without,
+ * only while it runs.
  */
 const devtoolsOf = async (
   key: BrowserKey,
   wake: boolean
 ): Promise<string | undefined> => {
   if (wake) {
-    await startBrowser({ key });
+    const kept = (await readBrowser(key))?.relay;
+    await startBrowser({
+      key,
+      ...(kept && relayHolds(kept) ? { relay: kept } : {}),
+    });
   }
   const record = await readBrowser(key);
   if (record?.state !== "live") {
@@ -216,9 +236,99 @@ const gateFor = (record: BrowserRecord): void => {
   }
 };
 
+/** Every record's gate served, and the gate of a browser no record keeps any more stopped. */
+const gatesNow = async (): Promise<void> => {
+  const records = await allBrowsers();
+  for (const record of records) {
+    gateFor(record);
+  }
+  const kept = new Set(records.map((record) => record.key));
+  for (const key of servedGates()) {
+    if (!kept.has(key)) {
+      stopGate(key);
+    }
+  }
+};
+
+let gating: Promise<void> | undefined;
+let gateAgain = false;
+
+/** {@link gatesNow} as a record is written: one at a time, once more if one was written meanwhile. */
+const gatesAsWritten = (): void => {
+  if (gating) {
+    gateAgain = true;
+    return;
+  }
+  gating = gatesNow()
+    .catch((error: unknown) =>
+      console.warn(`[browser] the gates were not served: ${why(error)}`)
+    )
+    .finally(() => {
+      gating = undefined;
+      if (gateAgain) {
+        gateAgain = false;
+        gatesAsWritten();
+      }
+    });
+};
+
 /** Stops `record` on the host it ran on, when that host is still here. */
 const stopOn = async (record: BrowserRecord): Promise<void> => {
   await (await hostOf(record))?.stop(record);
+};
+
+/** The container host now, when the runtime answers. */
+const containerHost = async (): Promise<BrowserHost | undefined> => {
+  const found = await browserRuntime();
+  return "missing" in found ? undefined : new ContainerHost(found);
+};
+
+/**
+ * Removes the container (and its volume) a move to the local host left of
+ * `record`, when the runtime answers now; the record without its mark once
+ * it is gone.
+ */
+const removeLeft = async (record: BrowserRecord): Promise<BrowserRecord> => {
+  if (!record.containerLeft) {
+    return record;
+  }
+  const containers = await containerHost();
+  if (!containers) {
+    return record;
+  }
+  await containers.remove({ ...record, host: "container" });
+  console.info(
+    `[browser] ${record.key}: the container its move to the local host left is removed, with its volume`
+  );
+  const { containerLeft: _left, ...rest } = record;
+  return rest;
+};
+
+/**
+ * `record` moved to the `to` host: what it left on the other goes (its
+ * sign-ins cannot follow it, Projects spec §5.11). The local profile is
+ * deleted; the container and its volume are removed, or, when the runtime
+ * is the thing that went (the only way a container moves to the local
+ * host), marked to be removed once it answers again.
+ */
+const leave = async (
+  record: BrowserRecord,
+  to: BrowserHost
+): Promise<BrowserRecord> => {
+  const { container: _container, local: _local, ...rest } = record;
+  if (record.host === "local") {
+    await local.remove(record);
+    return removeLeft({ ...rest, host: to.kind });
+  }
+  const containers = await containerHost();
+  if (containers) {
+    await containers.remove(record);
+    return { ...rest, host: to.kind };
+  }
+  console.info(
+    `[browser] ${record.key}: its container and volume are removed once the container runtime answers again`
+  );
+  return { ...rest, host: to.kind, containerLeft: true };
 };
 
 /**
@@ -237,9 +347,11 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
       console.info(
         `[browser] ${key} moves from the ${record.host} host to the ${host.kind} host; its sign-ins start over there`
       );
-      await stopOn(record);
-      const { container: _container, local: _local, ...rest } = record;
-      record = { ...rest, host: host.kind };
+      record = await leave(record, host);
+      await writeBrowser(record);
+    }
+    if (relay) {
+      record = { ...record, relay };
     }
     if (
       record.state === "live" &&
@@ -332,12 +444,16 @@ export const removeBrowser = async (key: BrowserKey): Promise<void> => {
     const record = await readBrowser(key);
     if (record) {
       const host = await hostOf(record);
-      if (!host && record.host === "container") {
+      if (
+        (!host && record.host === "container") ||
+        (record.containerLeft && !(await containerHost()))
+      ) {
         throw new Error(
           `${key}'s profile is a volume of the container runtime, which does not answer now: start it, then remove the browser again.`
         );
       }
       await host?.remove(record);
+      await removeLeft(record);
     }
   });
   stopGate(key);
@@ -403,7 +519,30 @@ const idleDown = async (): Promise<void> => {
   }
 };
 
-/** One tick: the runtime again when due, every browser's gate, the records against their hosts, the idle ones down, and the frame. */
+/** The containers moves to the local host left, removed once the runtime answers. */
+const sweepLeft = async (records: BrowserRecord[]): Promise<void> => {
+  for (const record of records) {
+    if (!record.containerLeft) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
+    await withBrowser(record.key, async () => {
+      const now = await readBrowser(record.key);
+      if (now?.containerLeft) {
+        const swept = await removeLeft(now);
+        if (swept !== now) {
+          await writeBrowser(swept);
+        }
+      }
+    }).catch((error: unknown) =>
+      console.warn(
+        `[browser] ${record.key}: the container its move left was not removed: ${why(error)}`
+      )
+    );
+  }
+};
+
+/** One tick: the runtime again when due, every browser's gate, what moves left, the records against their hosts, the idle ones down, and the frame. */
 const tick = async (): Promise<void> => {
   const records = await allBrowsers();
   if (
@@ -412,17 +551,26 @@ const tick = async (): Promise<void> => {
   ) {
     await browserRuntime(true);
   }
-  for (const record of records) {
-    gateFor(record);
-  }
+  await gatesNow();
+  await sweepLeft(records);
   await readBack();
   await idleDown();
   await tell();
 };
 
-/** The daemon's part: the runtime and the records read as it starts, every gate served, then a tick every minute. */
+/**
+ * The daemon's part: the runtime and the records read as it starts, every
+ * gate served and served again as any record is written (a terminal's
+ * `cawco browser start` among them), then a tick every minute.
+ */
 export const watchBrowsers = async (): Promise<void> => {
   servingGates = true;
+  await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
+  watch(browsersDir(), { recursive: true }, (_event, name) => {
+    if (name?.endsWith("record.json")) {
+      gatesAsWritten();
+    }
+  }).unref();
   const found = await browserRuntime(true);
   console.info(
     "missing" in found

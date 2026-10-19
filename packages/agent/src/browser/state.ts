@@ -46,12 +46,24 @@ export interface BrowserRecord {
     userPassword: string;
     volume: string;
   };
+  /**
+   * A container of this key that a move to the local host left behind (its
+   * runtime did not answer then), removed with its volume as soon as one
+   * does.
+   */
+  containerLeft?: true;
   host: BrowserHostKind;
   key: BrowserKey;
   lastUsedAt: number;
   /** The local host's Chromium, by its identity, so a later process signals only it. */
   local?: { bootId?: string; pid: number; procStart: string };
   name: string;
+  /**
+   * The stream relay's credential the hub's last `browser.start` brought: a
+   * wake by the gate starts with it, so a container made again keeps its
+   * relay.
+   */
+  relay?: BrowserRelay;
   /** When the stream relay's credential the container was started with lapses (ms epoch). */
   relayExpiresAt?: number;
   /** The stream relay's URLs that credential is for. */
