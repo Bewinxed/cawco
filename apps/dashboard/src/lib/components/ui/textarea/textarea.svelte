@@ -4,7 +4,9 @@
 
   /** Its callers' looks, each as they drew it: the mono face, a text size, a
       tall editor's least height, the page's fill, and a note written
-      straight into a composer (no field of its own). */
+      straight into a composer (no field of its own: the composer's shell is
+      the field, DESIGN.md Inputs and fields, Field shell). A phone's 16px
+      floor is the base layer's, for every field. */
   export const textareaVariants = tv({
     variants: {
       face: { mono: "font-mono" },
@@ -15,7 +17,7 @@
       height: { tall: "min-h-80" },
       fill: { page: "bg-surface-page" },
       look: {
-        note: "coarse:text-(length:--note-fs) max-phone:text-(length:--note-fs) min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-(--note-leading) shadow-none placeholder-shown:truncate",
+        note: "min-h-c-composer-field max-h-(--c-note-max-h) min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-ui shadow-none placeholder-shown:truncate",
       },
     },
   });
@@ -45,10 +47,10 @@
 
 <textarea
   class={cn(
-    "rounded-md shadow-xs [transition:var(--transition-control)] motion-safe:[transition:var(--transition-control),height_var(--dur-control)_var(--ease-out)]",
+    "rounded-md shadow-xs transition-control motion-safe:transition-control-grow",
     "flex min-h-16 w-full resize-none py-2",
-    "border border-[var(--border-control)]",
-    "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
+    "border border-border-control",
+    "bg-surface-raised px-3 text-ink-strong",
     "text-body placeholder:text-ink-muted",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "aria-invalid:border-error-9",

@@ -12,7 +12,7 @@
 
 <TabsPrimitive.Root
   class={cn(
-    "group/tabs flex gap-2 data-[orientation=horizontal]:flex-col",
+    "group/tabs flex gap-2 data-horizontal:flex-col",
     className
   )}
   data-slot="tabs"
