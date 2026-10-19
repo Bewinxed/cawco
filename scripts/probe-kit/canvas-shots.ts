@@ -559,9 +559,9 @@ export async function shootEmbedded(
         (key) =>
           (
             globalThis as unknown as {
-              __cawcoCanvas?: { settled: (one: string) => boolean };
+              __cawcoCanvas?: { settled?: (one: string) => boolean };
             }
-          ).__cawcoCanvas?.settled(key) === true,
+          ).__cawcoCanvas?.settled?.(key) === true,
         one.key,
         { timeout: POSE_MS, polling: 100 }
       )

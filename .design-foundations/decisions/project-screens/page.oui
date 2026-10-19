@@ -18,6 +18,6 @@ pinsnot = Option("not-yet", "Not yet", "Say what's still wrong in the note, by s
 
 pipeline = Decision("pipeline", "What is the Pipeline tab for?", [runorder, removed], "Your words: “this isn't a pipeline, and it's useless the way it is now”. The PRD keeps a pipeline among a project's views (§5.2: “board, table, calendar, pipeline, canvas”) without saying what it shows. Its rows use the card's state line from the card above. Recommended: the run order, because the board shows a task's wait as one name on its card, and nothing shows the order work will run in.", [], ["pins"])
 runorder = Option("run-order", "The run order", "What runs now, what waits on you, what's stuck and what comes next; a task that waits stands under the one it waits on, and done tasks fold away.", true, [runorderview], "One more view to keep true as tasks gain and lose their waits.")
-runorderview = Preview("@run-order")
+runorderview = Preview("@run-order", null, ["Phone"])
 removed = Option("remove", "Remove the tab", "Board, Table, Routines and Decisions; the board's column heads already count each stage.", false, [removedview], "Nowhere shows the order tasks will run in or what holds each one, and the PRD's list of views loses one.")
-removedview = Preview("@removed")
+removedview = Preview("@removed", null, ["Phone"])

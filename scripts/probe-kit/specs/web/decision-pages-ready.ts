@@ -599,11 +599,23 @@ async function sweepFile(
     `http://127.0.0.1:${stage}/@cawco/canvas?file=${encodeURIComponent(file)}&by=stage&scheme=${theme}`,
     { waitUntil: "domcontentloaded" }
   );
-  await page.waitForFunction(drawn, null, { timeout: STAGE_START_MS });
+  // A sweep that never ends is this file's fault, read with the rest, never the run's end.
+  const swept = await page
+    .waitForFunction(drawn, null, { timeout: STAGE_START_MS })
+    .then(
+      () => true,
+      () => false
+    );
   await page.evaluate(() => document.fonts.ready);
   await settle(page, 400);
   const whole = await page.evaluate(measure, { section, phone: false });
-  whole.blank = [...whole.blank, ...(await page.evaluate(undrawn))];
+  whole.blank = [
+    ...whole.blank,
+    ...(swept
+      ? []
+      : [`the stage's sweep didn't end in ${STAGE_START_MS / 1000} s`]),
+    ...(await page.evaluate(undrawn)),
+  ];
   if (!phone) {
     return whole;
   }
@@ -613,7 +625,12 @@ async function sweepFile(
       .map((one) => ({ key: one.key, story: one.story }))
   );
   // A phone shows one frame at a time, so the others have no box: each is read once stepped to.
-  whole.blank = await page.evaluate(undrawn);
+  whole.blank = [
+    ...(swept
+      ? []
+      : [`the stage's sweep didn't end in ${STAGE_START_MS / 1000} s`]),
+    ...(await page.evaluate(undrawn)),
+  ];
   const reads: Read[] = [];
   for (const frame of stories) {
     await page.evaluate((key) => window.__cawcoCanvas?.go(key), frame.key);
