@@ -123,6 +123,22 @@ export const PickMachinePhone = {
   parameters: phone,
 };
 
+const onlyMac = {
+  machine: null,
+  candidates: 0,
+  steps: [
+    { step: "machine", state: "none", notLinux: ["studio"] },
+    { step: "name", state: "waiting", name },
+    { step: "certificate", state: "waiting" },
+    { step: "start", state: "waiting" },
+    { step: "prove", state: "waiting" },
+  ] satisfies RelayStep[],
+};
+/** 1 · The internet reaches only a Mac: no machine can run it, and why (it runs only on Linux). */
+export const OnlyAMac = { args: onlyMac, parameters: desk };
+/** 1 · The same, on a phone. */
+export const OnlyAMacPhone = { args: onlyMac, parameters: phone };
+
 const checking = { steps: path({}) };
 /** A · Checking: just started through the domain; obelisk ticked, the name and the low ports being checked. */
 export const Checking = { args: checking, parameters: desk };

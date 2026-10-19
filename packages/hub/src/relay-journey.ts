@@ -74,6 +74,7 @@ import type {
 import type { HubLifetimeShape } from "./lifetime";
 import {
   candidateOf,
+  hostsRelay,
   type RelayCall,
   type RelayFleetMachine,
   RelayRefusal,
@@ -186,13 +187,18 @@ interface StepFacts {
 
 const machineStepOf = (
   machine: RelayMachine | null,
-  found: RelayCandidate[]
+  found: RelayCandidate[],
+  notLinux: string[]
 ): StepOf<"machine"> => {
   if (machine) {
     return { step: "machine", state: "done" };
   }
   if (found.length === 0) {
-    return { step: "machine", state: "none" };
+    return {
+      step: "machine",
+      state: "none",
+      ...(notLinux.length > 0 ? { notLinux } : {}),
+    };
   }
   return {
     step: "machine",
@@ -440,10 +446,12 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     deps.machines().find((one) => one.machineId === machineId)?.name ??
     machineId;
 
+  /** Every machine that can run the relay (`hostsRelay`) where the internet reaches it, the hub's first. */
   const candidates = (): RelayCandidate[] => {
     const hub = deps.hubMachineId();
     return deps
       .machines()
+      .filter(hostsRelay)
       .flatMap((one) => candidateOf(one) ?? [])
       .sort(
         (a, b) => Number(b.machineId === hub) - Number(a.machineId === hub)
@@ -459,6 +467,13 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     candidate: RelayCandidate | undefined;
   } | null => {
     if (!journey.machineId) {
+      return null;
+    }
+    // A pick that can't run the relay (one made before it reported its OS) is no pick.
+    const reported = deps
+      .machines()
+      .find((one) => one.machineId === journey.machineId);
+    if (reported?.capabilities && !hostsRelay(reported)) {
       return null;
     }
     const candidate = found.find((one) => one.machineId === journey.machineId);
@@ -541,7 +556,14 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     const startDone = startStep.state === "done";
     const proveStep = proveStepOf(startDone, proofs, facts.outside);
     const steps: RelayStep[] = [
-      machineStepOf(machine, found),
+      machineStepOf(
+        machine,
+        found,
+        deps
+          .machines()
+          .filter((one) => !hostsRelay(one) && candidateOf(one))
+          .map((one) => one.name)
+      ),
       nameStep,
       ...(routerStep ? [routerStep] : []),
       ...(runtimeStep ? [runtimeStep] : []),

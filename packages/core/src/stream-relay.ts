@@ -276,6 +276,8 @@ export type RelayStep =
       /** `needs`: two or more machines could run it, `choices` the ask; `none`: no machine can. */
       state: "done" | "needs" | "none";
       choices?: RelayChoice[];
+      /** `none` only: the machines the internet reaches that aren't Linux, so can't run it (hub stream-relay.ts `hostsRelay`). */
+      notLinux?: string[];
     }
   | {
       step: "name";
@@ -623,6 +625,9 @@ export const STREAM_RELAY_WORDS = {
   machineDone: (machine: RelayMachine) =>
     `Runs on ${machine.name} · ${machine.address}${machine.lan ? ", behind a router" : ""}`,
   none: "No machine of yours is reached from the internet yet. Add one (a small server at a host works), or open UDP and TCP 443 and UDP 49152–49400 on your router to a machine here, then come back.",
+  /** No Linux machine is reached, only `machines` that aren't Linux. */
+  noneNotLinux: (machines: string[]) =>
+    `No machine of yours can run the relay: it runs only on Linux, and on ${machines.length === 1 ? machines[0] : `${machines.slice(0, -1).join(", ")} and ${machines.at(-1)}`} it would run inside the container runtime's VM, which nothing outside reaches. Add a Linux machine the internet reaches (a small server at a host works); this step picks it once it reports.`,
   runHere: "Run the relay here",
   behindRouter: "behind a router",
   offline: "offline",

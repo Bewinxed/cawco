@@ -131,6 +131,21 @@ export class RelayRefusal extends Error {
 }
 
 /**
+ * Whether the machine can run the relay. coturn runs on the host network
+ * (agent browser/relay.ts), and only Linux puts that on the machine's own
+ * interfaces. On a Mac it is the container runtime's VM's, which nothing
+ * outside reaches: Docker Desktop's host networking "works on layer 4" and
+ * "Processes inside the container cannot bind to the IP addresses of the
+ * host" (docs.docker.com/engine/network/drivers/host), and Colima's and
+ * Lima's port forwarders carry TCP alone, or UDP only on the GRPC forwarder
+ * Colima marks experimental (its colima.yaml: "grpc supports both TCP and
+ * UDP, but is experimental"). A machine not yet reported is judged once
+ * its report comes.
+ */
+export const hostsRelay = (machine: RelayFleetMachine): boolean =>
+  machine.capabilities?.platform === "linux";
+
+/**
  * Where a machine's relay would be reached: its candidate row, or undefined
  * when the internet reaches it nowhere the hub knows. An interface's public
  * address first; else the public address the hub sees its agent connect from;

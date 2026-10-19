@@ -33773,6 +33773,13 @@
                 "items": {
                   "$ref": "#/components/schemas/RelayChoice"
                 }
+              },
+              "notLinux": {
+                "description": "`none` only: the machines the internet reaches that aren't Linux, so can't run it (hub stream-relay.ts `hostsRelay`).",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [

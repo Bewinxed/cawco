@@ -482,7 +482,9 @@
 
 {#snippet machineBody(step: Extract<RelayStep, { step: "machine" }>)}
   {#if step.state === "none"}
-    <p class={NOTE}>{words.none}</p>
+    <p class={NOTE}>
+      {step.notLinux?.length ? words.noneNotLinux(step.notLinux) : words.none}
+    </p>
   {:else}
     <ul
       aria-label={words.machine}

@@ -45,7 +45,8 @@
  *    address; the summary;
  * and the Needs you row appearing, leaving on Later, coming back on Set up,
  * ticking once proven, and Remove taking the router's mappings and the
- * journey.
+ * journey; then the same machine reporting darwin, offered nowhere, the
+ * machine step saying the relay runs only on Linux.
  *
  * Where this machine has a private interface (the host), the agent's own
  * STUN read makes the machine behind a router; inside a workspace boundary,
@@ -255,7 +256,6 @@ const NEEDS_HEAD = /^Needs you, \d+|^All caught up/;
 /** The certificate's and the start's failure on a machine with no container runtime. */
 const NO_RUNTIME =
   /could not start on .+: it runs in a container, and this machine has no container runtime/;
-
 
 /**
  * The browser's `RTCPeerConnection`, scripted by localStorage's `relay-fake`
@@ -808,7 +808,11 @@ const run = async (kit: Kit): Promise<void> => {
         partialWords.includes(
           words.rangeForward(routerLan).split(" ")[0] ?? ""
         ),
-      JSON.stringify({ partialWords, table: listener, actions: gateway.actions.slice(0, 3) })
+      JSON.stringify({
+        partialWords,
+        table: listener,
+        actions: gateway.actions.slice(0, 3),
+      })
     );
     gateway.mode.refuse = true;
     natPmp.mode.refuse = true;
@@ -848,7 +852,10 @@ const run = async (kit: Kit): Promise<void> => {
         [...natPmp.table.values()].every((one) => one.lease === LEASE_S) &&
         gateway.table.size === 0 &&
         natPmpWords?.includes(words.routerDone("NAT-PMP")) === true,
-      JSON.stringify({ size: natPmp.table.size, why: stepOf(byNatPmp, "router") })
+      JSON.stringify({
+        size: natPmp.table.size,
+        why: stepOf(byNatPmp, "router"),
+      })
     );
     gateway.mode.off = false;
     gateway.mode.permanentOnly = true;
@@ -1090,6 +1097,45 @@ const run = async (kit: Kit): Promise<void> => {
         removed.journey.summary === null &&
         gateway.table.size === 0,
       JSON.stringify({ table: gateway.table.size, journey: removed.journey })
+    );
+
+    // A machine that isn't Linux (its report says darwin) can't run it: offered nowhere, and the machine step says why.
+    const [reportRow] = fleet.query<{ caps: string | null }>(
+      "SELECT machine_capabilities AS caps FROM agents WHERE machine_id = ?",
+      MACHINE
+    );
+    fleet.write(
+      "UPDATE agents SET machine_capabilities = ? WHERE machine_id = ?",
+      JSON.stringify({
+        ...(JSON.parse(reportRow?.caps ?? "{}") as MachineCapabilities),
+        platform: "darwin",
+      }),
+      MACHINE
+    );
+    const noHost = await journeyUntil(
+      fleet,
+      "no machine that can run it",
+      (answer) => answer.journey.candidates === 0
+    );
+    await act(fleet, { act: "set-up" });
+    const onMac = await journeyUntil(
+      fleet,
+      "the machine step with only a Mac",
+      (answer) => stepOf(answer, "machine")?.state === "none"
+    );
+    const macNames = stepOf(onMac, "machine")?.notLinux ?? [];
+    const macWords = await stepSays(
+      page,
+      "machine",
+      words.noneNotLinux([machine?.name ?? ""])
+    );
+    kit.check(
+      `the same machine reporting darwin: ${noHost.journey.candidates} machines can run it, Set up picks none, and the machine step names it: "${words.noneNotLinux(macNames)}"`,
+      noHost.journey.candidates === 0 &&
+        onMac.journey.machine === null &&
+        macNames.join() === machine?.name &&
+        macWords?.includes(words.noneNotLinux([machine?.name ?? ""])) === true,
+      JSON.stringify({ step: stepOf(onMac, "machine"), macWords })
     );
   } finally {
     stun.socket.close();
