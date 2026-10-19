@@ -2,7 +2,9 @@
  * What the canvas says about itself (component canvas §2, "What the canvas
  * says about itself"), in a shadow root so the project's CSS never reaches
  * it and it never reaches the project's: the name and the agent's `about`
- * line, the crumb of the frame in view, an outline of sections and frames
+ * line when the page stands alone (framed in a panel or the artifact's own
+ * tab, the host's head says both, so the band says neither), the crumb of
+ * the frame in view, an outline of sections and frames
  * that moves the canvas (J and K step), the count line, and on a phone one
  * frame at a time with a state strip and a swipe that plays the move. The
  * move's timeline and the agent's dials are DialKit's own (vendored at
@@ -150,6 +152,8 @@ svg { inline-size: 16px; block-size: 16px; flex: none; }
   font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .strip { display: none; gap: var(--space-2); align-items: center; flex-wrap: wrap; padding: 0 var(--space-3) var(--space-2); }
 :host([data-phone]) .strip { display: flex; }
+/* A map's live card: the frames alone. */
+:host([data-card]) :is(.head, .outline, .foot, .steps) { display: none; }
 :host([data-phone]) .outline { inset-inline: 0; inline-size: auto; }
 /* The story picker: the input recipe as a select trigger (DESIGN.md, Inputs and fields), its sort-vertical glyph at the end. */
 .pick { position: relative; display: inline-flex; align-items: center; min-inline-size: 0; max-inline-size: 60vw; }
@@ -198,11 +202,41 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
   gap: var(--space-8); padding-block-end: 160px; will-change: transform; --cawco-gutter: 0px; padding-inline-start: var(--cawco-gutter); }
 .cawco-section { display: flex; flex-direction: column; gap: var(--space-3); min-block-size: 120px; }
 .cawco-section[data-cawco-asleep] .cawco-grid { display: none; }
-/* A section's head: the sheet's title in the title role when it has one, its file in code. */
-.cawco-section-head { display: grid; gap: var(--space-1); padding-block-end: var(--space-1); border-block-end: 1px solid var(--border-well); }
-.cawco-section-title { font: var(--type-title); color: var(--ink-strong); text-wrap: balance; }
-.cawco-section-file { font: var(--type-code); font-variant-ligatures: none; color: var(--ink-muted); overflow-wrap: anywhere; }
-.cawco-section-head[data-cawco-failed] .cawco-section-file { color: var(--status-fail-ink); }
+/* A section's head: its name in plain words in the title role, its file in small print under it, and while it is on its way
+   the status line beside the name, on the title's row, so its going moves nothing. */
+.cawco-section-head { display: grid; grid-template-columns: auto auto; justify-content: start; gap: var(--space-1) var(--space-3);
+  padding-block-end: var(--space-1); border-block-end: 1px solid var(--border-well); }
+.cawco-section-title { grid-column: 1; font: var(--type-title); color: var(--ink-strong); text-wrap: balance; }
+.cawco-section-file { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); overflow-wrap: anywhere; }
+/* A section on its way (DESIGN.md's Real Wait Rule): nothing until the wait has lasted the grace, then the line saying what it
+   waits for and each story's frame as a skeleton where its frame lands; they hold their room from the first, so nothing moves. */
+.cawco-waiting { animation: cawco-wait 1ms var(--dur-wait-grace) both; }
+.cawco-section-status { grid-column: 2; grid-row: 1; align-self: baseline; margin: 0; font: var(--type-meta); color: var(--ink-muted); }
+.cawco-stand-in { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.cawco-stand-in > .cawco-frame-words { padding: 2px var(--space-1); }
+/* The skeleton recipe: a surface-fill block at the frame's size, one raised band crossing it each loop, still without motion. */
+.cawco-stand-in-body { position: relative; overflow: hidden; inline-size: var(--c-canvas-skeleton-w); max-inline-size: 100vw; block-size: var(--c-canvas-skeleton-h);
+  border-radius: var(--radius-sm); background: var(--surface-fill); }
+@media (prefers-reduced-motion: no-preference) {
+  .cawco-waiting { animation-duration: var(--dur-fade); animation-timing-function: var(--ease-out); }
+  .cawco-stand-in-body::after { content: ""; position: absolute; inset: 0; translate: -100% 0;
+    background: linear-gradient(90deg, transparent 0 30%, var(--skeleton-sheen) 50%, transparent 70% 100%);
+    animation: cawco-sweep var(--dur-loop) linear infinite; }
+}
+@keyframes cawco-wait { from { opacity: 0; } }
+@keyframes cawco-sweep { to { translate: 100% 0; } }
+/* A section whose module didn't load says so where its frames would stand: the error formula's line, then Show details. */
+.cawco-section-failed { display: grid; gap: var(--space-2); inline-size: 0; min-inline-size: max(100%, var(--c-canvas-skeleton-w)); }
+.cawco-section-failed-line { margin: 0; font: var(--type-body); color: var(--status-fail-ink); text-wrap: pretty; }
+/* Show details: the sm ghost, its words standing on the line's start (its own inset pulled back), no disclosure triangle. */
+.cawco-section-failed summary { list-style: none; display: inline-flex; align-items: center; inline-size: fit-content; block-size: var(--c-btn-h-sm);
+  padding-inline: var(--space-2); margin-inline-start: calc(var(--space-2) * -1); border-radius: var(--radius-sm);
+  font: var(--type-label); color: var(--ink-strong); cursor: pointer; }
+.cawco-section-failed summary::-webkit-details-marker { display: none; }
+@media (hover: hover) { .cawco-section-failed summary:hover { background: var(--surface-hover); } }
+.cawco-section-failed summary:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.cawco-section-failed pre { margin: var(--space-1) 0 0; padding: var(--space-2); font: var(--type-code); font-variant-ligatures: none; color: var(--ink-strong);
+  white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-recess); border-radius: var(--radius-sm); }
 .cawco-grid { display: grid; grid-auto-columns: max-content; gap: var(--space-6) var(--space-6); align-items: start; justify-content: start; }
 .cawco-colhead { font: var(--type-meta); color: var(--ink-muted); text-transform: none; }
 /* The gap clears the selected ring (2px at a 2px offset) of the label above and the status below. */
@@ -343,7 +377,11 @@ export class Chrome {
   #timelineRoot: { update: (next: Record<string, unknown>) => void } | null =
     null;
   /** Whether a look for the frame in view waits on the next frame; whether the page is a phone's; whether the dials stand. */
-  readonly #flags: { dialed: boolean; pending: boolean; phone: boolean } = {
+  readonly #flags: {
+    dialed: boolean;
+    pending: boolean;
+    phone: boolean;
+  } = {
     dialed: false,
     pending: false,
     phone: false,
@@ -366,11 +404,13 @@ export class Chrome {
     const name = document.createElement("div");
     name.className = "name";
     name.textContent = options.spec.name ?? "Component canvas";
-    // In a panel (or the artifact's own tab) the host's head names the canvas: the band would say it twice.
-    name.hidden = window.top !== window;
+    // In a panel (or the artifact's own tab) the host's head names the canvas and says its about under the name: the band would say both twice.
+    const framed = window.top !== window;
+    name.hidden = framed;
     const about = document.createElement("div");
     about.className = "about";
     about.textContent = options.spec.about ?? "";
+    about.hidden = framed;
     this.#crumb = document.createElement("div");
     this.#crumb.className = "crumb";
     this.#crumb.setAttribute("aria-live", "polite");
@@ -443,6 +483,17 @@ export class Chrome {
     if (this.#dialRoot) {
       this.#dialRoot.element.dataset.theme = scheme;
     }
+  }
+
+  /**
+   * The page as a map's live card (runtime `by=map`): the frames alone,
+   * fitted to the card's view. The band, the foot, the outline and the
+   * steps go (so the room they take measures none); the panel's map says
+   * what the card is.
+   */
+  asCard(): void {
+    this.#host.toggleAttribute("data-card", true);
+    this.#measure();
   }
 
   readonly #sizes = new ResizeObserver(() => this.#measure());

@@ -243,6 +243,10 @@ import type { Tasks } from "./tasks";
  * words. About 28 tokens for the worker, the delegate and the lead (worker
  * 27,170, delegate 9,549, lead 17,794 measured beside
  * `forge_post`). Raised deliberately, by that, for each.
+ * 2026-10-19, after it: artifact_read's `verify` (component canvas E1, a
+ * design system round asked in a chat), the read's words cut to make room
+ * for it: about 5 tokens for each (worker 26,585, delegate 8,964, lead
+ * 17,541 measured). Raised deliberately, by that.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_180,

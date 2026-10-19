@@ -11120,6 +11120,8 @@ export const createServer = (
       );
       return { machineId, workspace, opened: result as StageOpened };
     },
+    // A design system round asked of a component canvas in a chat; its verdict reaches the asker.
+    verify: (requester, artifact) => designVerify.ask(requester, artifact),
     // A component canvas drawn by its workspace's daemon in the machine's own Chromium.
     stageRender: async (at, ask) =>
       (await onStage(at, STAGE_RENDER, ask)).result as {
@@ -11128,9 +11130,8 @@ export const createServer = (
       },
     stageWrite: async (at, write) =>
       (await onStage(at, STAGE_WRITE, write)).result as SheetWritten,
-    stageComponents: async (instance, ask) =>
-      (await onStage({ session: instance }, STAGE_COMPONENTS, ask))
-        .result as DesignMap,
+    stageComponents: async (at, ask) =>
+      (await onStage(at, STAGE_COMPONENTS, ask)).result as DesignMap,
     // A workspace preview's server, run and kept up on the workspace's machine.
     serve: async (machineId, workspace, serve) => {
       const asked = await callAgent(

@@ -278,9 +278,9 @@ export const artifactRead = {
     "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. " +
     "When the person sends picks, you are told the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
-    "the person changed since `since` or your last read; `png: true` adds its picture. A component answers each " +
-    "frame as drawn, its moves' animations, its stories, the person's `dials` and `tuned` motion; `state` adds a " +
-    "frame's style delta, `detail: \"story\"` a story's args, `render` draws it now.",
+    "the person changed since `since` or your last read; `png: true` adds its picture. A component answers its " +
+    "frames as drawn, moves, stories, the person's `dials` and `tuned`; `state` adds a frame's style delta, " +
+    '`detail: "story"` a story\'s args, `render` draws it, `verify` asks the design verifier.',
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),
@@ -296,6 +296,7 @@ export const artifactRead = {
       })
       .optional(),
     render: z.boolean().optional(),
+    verify: z.boolean().optional(),
   },
 };
 
@@ -335,7 +336,7 @@ export const artifactDelete = {
 export const designMap = {
   name: "design_map",
   description:
-    "The project's component library: each component's states, frames drawn, and what it is made of and used in. " +
+    "The project's component library: each component's states, frames drawn, what it is made of and used in. " +
     "`component` (a file) answers its card: props, stories, moves, call sites. Mount what it lists.",
   input: {
     dir: z

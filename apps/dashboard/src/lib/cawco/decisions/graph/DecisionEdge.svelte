@@ -34,5 +34,5 @@
   {id}
   markerEnd="url(#{marker})"
   path={route[0]}
-  style="stroke: var(--ink-muted); stroke-width: 1.5px"
+  style="stroke: var(--ink-muted); stroke-width: var(--c-graph-edge)"
 />

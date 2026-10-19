@@ -14,6 +14,7 @@
   } from "@cawco/core";
   import { readWithin } from "@cawco/core/bounded";
   import { type PreviewMode, previewMode } from "@cawco/core/comments";
+  import { canvasOf } from "@cawco/core/stage";
   import { type Snippet, untrack } from "svelte";
   import {
     failureClause,
@@ -54,6 +55,7 @@
     artifactShown,
     createDraftCanvas,
     showArtifact,
+    verifyArtifact,
     writeSheet,
   } from "../artifact-api";
   import {
@@ -71,6 +73,7 @@
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import SideSurface from "../side/SideSurface.svelte";
   import { readJson, store, stored, writeJson } from "../storage";
+  import { toast } from "../toasts";
   import { afterPaint, warm } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
@@ -85,6 +88,7 @@
   import CanvasView from "./CanvasView.svelte";
   import { CanvasViewState } from "./canvas-view.svelte";
   import { loadedPanes } from "./loaded.svelte";
+  import CanvasMap from "./map/CanvasMap.svelte";
   import PinCard from "./PinCard.svelte";
   import PinList from "./PinList.svelte";
   import PlacePick from "./PlacePick.svelte";
@@ -93,7 +97,6 @@
   import SheetInspector from "./SheetInspector.svelte";
   import { isSetupPage } from "./setup-page";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
-  import { previewPlace } from "./source";
   import {
     type PaneKey,
     previewError,
@@ -431,13 +434,6 @@
       ? ports
       : `${ports}, or switch previews to a hostname pattern`;
   }
-  let displayPath = $state("");
-  /**
-   * A page is served at the root of its own address, and a component
-   * canvas at the stage's canvas address: the head names the artifact, with
-   * no path under it (DESIGN.md's head is the name and its controls).
-   */
-  const page = $derived(!!source && "page" in source);
   const artifact = $derived(preview?.artifact);
   const frameKey = $derived(`${preview?.revision}:${reload}`);
   // The old paint bridges navigation only until the replacement finishes loading.
@@ -858,6 +854,9 @@
   const staged = $derived(
     artifact?.kind === "component" || served ? (view?.stage ?? null) : null
   );
+  /** A down stage's own words stand unfolded (Show details). */
+  let stageDetails = $state(false);
+  const stageDetailsId = `${paneId}-stage-details`;
   /** What the cover says while the page is on its way; null when nothing is. */
   const stageWaiting = $derived.by(() => {
     switch (staged?.status) {
@@ -897,6 +896,16 @@
     store("local", inspectKey, open ? "open" : "shut");
   }
   const isSheet = $derived(artifact?.kind === "component");
+  /**
+   * What the head says under the artifact's name: its description, the one
+   * kind that has one being a component canvas (its `about`); never a path
+   * or a route. A page, a preview and a canvas have none, so nothing.
+   */
+  const description = $derived(
+    isSheet && source && "path" in source && source.path
+      ? (canvasOf(source.path).spec.about ?? "")
+      : ""
+  );
   /**
    * A page or a sheet draws in the dashboard's theme (the overlay's
    * `themed`): its frame's `color-scheme` is that theme too, so a page that
@@ -1543,7 +1552,6 @@
         down = null;
         downWhy = null;
         const parsed = new URL(at);
-        displayPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
         keepAt(parsed);
         if (preview) {
           preview.title = previewTitle(message.title) ?? "";
@@ -1843,6 +1851,21 @@
       untrack(() => held.send(held.chosen));
     }
   });
+  /** The canvas view's Verify: a design system round on the canvas, its verdict to the session; the hub's sentence says what it did. */
+  let verifying = $state(false);
+  async function verify() {
+    if (!artifact) {
+      return;
+    }
+    verifying = true;
+    try {
+      toast.info(await verifyArtifact(instanceId, artifact.id));
+    } catch (error) {
+      toast.error(failureWords(error));
+    } finally {
+      verifying = false;
+    }
+  }
 
   /** The mode's glyph and word, for its one-button form. */
   const MODE_GLYPHS = {
@@ -2052,12 +2075,12 @@
 {#snippet viewBar()}
   {#if canvasView}
     <!-- A component canvas's view: its frames' scheme, widths, motion and zoom. -->
-    <CanvasView view={canvasView} />
+    <CanvasView onverify={verify} view={canvasView} {verifying} />
   {/if}
 {/snippet}
 {#snippet viewMenu()}
   {#if canvasView}
-    <CanvasView as="sub" view={canvasView} />
+    <CanvasView as="sub" onverify={verify} view={canvasView} {verifying} />
   {/if}
 {/snippet}
 
@@ -2286,9 +2309,7 @@
     items={headItems}
     label="Preview"
     onclose={ownTab ? backToSession : close}
-    subtitle={page || isSheet
-      ? ""
-      : displayPath || (source ? previewPlace(source) : "")}
+    subtitle={description}
     {switcher}
     titleControl={artifact ? artifactTitle : undefined}
     bind:section
@@ -2403,6 +2424,17 @@
         <p class="cover-state">{stageWaiting}</p>
       {/if}
     </div>
+    {#if canvasView?.map && artifact && isSheet}
+      <!-- Map mode: the canvas's component among what renders it and what it renders, over the page, which stays loaded under it. -->
+      <CanvasMap
+        address={paneOrigin ? `${paneOrigin}${startAt}` : null}
+        artifactId={artifact.id}
+        {instanceId}
+        ready={loaded}
+        revision={preview?.revision ?? ""}
+        view={canvasView.chosen}
+      />
+    {/if}
     {#if compileErrors.length > 0}
       {@const first = compileErrors[0]}
       <!-- The last good render stays under it, dimmed; the session is told of it on its own. -->
@@ -2437,22 +2469,40 @@
       >
         {#snippet line()}
           {staged.runs === "sheet"
-            ? sheetWords.downLine(
-                staged.message ?? null,
-                sheetWords.toolchains[staged.toolchain]
-              )
-            : sheetWords.serverDownLine(staged.message ?? null)}
+            ? sheetWords.downLine(sheetWords.toolchains[staged.toolchain])
+            : sheetWords.serverDownLine}
         {/snippet}
         {#snippet action()}
-          <Button
-            icon={IconRefresh}
-            label={sheetWords.tryAgain}
-            onclick={retry}
-            pending={retrying}
-            pendingLabel={sheetWords.tryingAgain}
-            size="sm"
-            variant="outline"
-          />
+          <div class="down-actions">
+            <Button
+              icon={IconRefresh}
+              label={sheetWords.tryAgain}
+              onclick={retry}
+              pending={retrying}
+              pendingLabel={sheetWords.tryingAgain}
+              size="sm"
+              variant="outline"
+            />
+            {#if staged.message}
+              <!-- The stage's own words, as RowFault folds a machine's: under Show details. -->
+              <Button
+                data-details
+                aria-controls={stageDetailsId}
+                aria-expanded={stageDetails}
+                label={stageDetails ? "Hide details" : "Show details"}
+                onclick={() => {
+                  stageDetails = !stageDetails;
+                }}
+                size="sm"
+                variant="ghost"
+              />
+            {/if}
+          </div>
+          {#if staged.message && stageDetails}
+            <p id={stageDetailsId} data-slot="details" class="down-details">
+              {staged.message}
+            </p>
+          {/if}
         {/snippet}
       </EmptyState>
     </div>
@@ -2592,7 +2642,10 @@
 <style>
   /* Inset: the host's surface around it; the well is the panel's own
      (SideSurface `.side-well`): the recess inside its hairline. */
+  /* A size container, as the side card is: what stands in its well keys on
+     the pane's width (the head's narrow line, a canvas's map). */
   .preview-inset {
+    container-type: inline-size;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -2727,6 +2780,16 @@
   .cover.ready {
     opacity: 0;
   }
+  /* Nothing until the wait has lasted the grace (DESIGN.md's Real Wait
+     Rule): then the skeleton line and what the stage is doing fade up. */
+  .cover > * {
+    animation: kit-fade-in 1ms var(--dur-wait-grace) both;
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation-duration: var(--dur-fade);
+      animation-timing-function: var(--ease-out);
+    }
+  }
   /* What a sheet's stage is doing while its page is on its way, under the cover's line. */
   .cover-state {
     margin: var(--space-3) 0 0;
@@ -2803,6 +2866,16 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
+  }
+  /* What the stage said, word for word, under its Show details: the figure
+     face in muted ink, a long machine path wrapping anywhere. */
+  .down-details {
+    margin: var(--space-2) 0 0;
+    color: var(--ink-muted);
+    font: var(--type-code);
+    font-variant-ligatures: none;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   /* What went wrong, over the foot of the frame, and the one thing to do
      about it. */

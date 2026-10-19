@@ -293,7 +293,10 @@
         <span data-slot="title" class="title">{title}</span>
       {/if}
       {#if subtitle}
-        <span class="subtitle">{subtitle}</span>
+        <!-- One line under the name, cut with an ellipsis; whole in its tooltip. -->
+        <span data-slot="subtitle" class="subtitle" title={subtitle}
+          >{subtitle}</span
+        >
       {/if}
     </div>
     {@render actions?.()}
@@ -436,9 +439,12 @@
     color: var(--ink-strong);
     font: var(--type-label);
   }
+  /* What is on show, described: the meta role, never past the head's room
+     (a title control's column sets its children at their own width). */
   .subtitle {
+    max-inline-size: 100%;
     color: var(--ink-muted);
-    font: var(--text-meta) var(--font-mono);
+    font: var(--type-meta);
   }
   /* Every control in the header, the pane's and Close: one recipe, one
      press. */

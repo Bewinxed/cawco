@@ -3,7 +3,10 @@
    * A component canvas's view in the panel's head (canvas-view.svelte.ts):
    * the kit's dropdown menu under the head's own button (the `sm` ghost, as
    * Inspect), so the head keeps its room; or, once the head has no room for
-   * it, the same entries as a submenu of the head's More.
+   * it, the same entries as a submenu of the head's More. Map stands first
+   * (the map over the page, its own zoom at its foot, so the page's zoom
+   * waits while it is on); Verify last, a design system round whose verdict
+   * goes to the session.
    */
   // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -19,13 +22,22 @@
   interface Props {
     /** `sub`: More's submenu; the head's own button otherwise. */
     as?: "button" | "sub";
+    /** Verify: asks the hub for a design system round on the canvas. */
+    onverify: () => void;
+    /** A Verify on its way to the hub. */
+    verifying?: boolean;
     view: CanvasViewState;
   }
 
-  let { as = "button", view }: Props = $props();
+  let { as = "button", onverify, verifying = false, view }: Props = $props();
 </script>
 
 {#snippet entries()}
+  <DropdownMenu.CheckboxItem
+    checked={view.map}
+    onCheckedChange={(on) => view.showMap(on)}>Map</DropdownMenu.CheckboxItem
+  >
+  <DropdownMenu.Separator />
   <DropdownMenu.Group>
     <DropdownMenu.GroupHeading>Scheme</DropdownMenu.GroupHeading>
     <DropdownMenu.RadioGroup
@@ -59,11 +71,18 @@
     >Reduced motion</DropdownMenu.CheckboxItem
   >
   <DropdownMenu.Separator />
-  <DropdownMenu.Item onSelect={() => view.send(view.chosen, "fit")}
+  <DropdownMenu.Item
+    disabled={view.map}
+    onSelect={() => view.send(view.chosen, "fit")}
     >Zoom to fit</DropdownMenu.Item
   >
-  <DropdownMenu.Item onSelect={() => view.send(view.chosen, 1)}
-    >Zoom to 100%</DropdownMenu.Item
+  <DropdownMenu.Item
+    disabled={view.map}
+    onSelect={() => view.send(view.chosen, 1)}>Zoom to 100%</DropdownMenu.Item
+  >
+  <DropdownMenu.Separator />
+  <DropdownMenu.Item disabled={verifying} onSelect={onverify}
+    >Verify against the design system</DropdownMenu.Item
   >
 {/snippet}
 
@@ -81,7 +100,7 @@
     <!-- The head's own button, as Inspect beside it: SideSurface's head recipe draws it; the trigger brings touch-hit. -->
     <DropdownMenu.Trigger
       aria-label="Canvas view"
-      title="Canvas view: scheme, widths, motion, zoom"
+      title="Canvas view: map, scheme, widths, motion, zoom, verify"
     >
       <IconLayers />
     </DropdownMenu.Trigger>

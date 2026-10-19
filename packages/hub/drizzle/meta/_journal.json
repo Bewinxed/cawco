@@ -1765,6 +1765,13 @@
       "when": 1792400000000,
       "tag": "0259_purged_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "6",
+      "when": 1792400001000,
+      "tag": "0260_design_check_artifact",
+      "breakpoints": true
     }
   ]
 }

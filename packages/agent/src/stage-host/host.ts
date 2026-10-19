@@ -49,6 +49,7 @@ import { pathToFileURL } from "node:url";
 import {
   AS_PAGE,
   CANVAS_PATH,
+  CANVAS_PLAN_ID,
   COMPONENT_BUDGET,
   COMPONENTS_PATH,
   type ComponentDoc,
@@ -57,12 +58,14 @@ import {
   type DesignLink,
   type DesignMap,
   type DesignQuery,
+  type DesignThumb,
   type Found,
   HEALTH_PATH,
   type PageError,
   RENDERED_PATH,
   REPORT_PATH,
   type RenderReport,
+  type SectionPlan,
   type SectionRender,
   type SheetImport,
   type SheetOnPage,
@@ -74,6 +77,8 @@ import {
   STORY_FILE,
   type StageError,
   type StageToolchain,
+  sectionName,
+  THUMB_FRAMES,
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
@@ -879,9 +884,18 @@ async function serveCanvas(
   next: (error?: unknown) => void
 ): Promise<void> {
   try {
+    const files = new URL(
+      req.url ?? CANVAS_PATH,
+      "http://stage"
+    ).searchParams.getAll("file");
+    // JSON in a script element: no `<` closes it early.
+    const plan = JSON.stringify(planOf(files)).replaceAll("<", "\\u003c");
     const html = await dev.transformIndexHtml(
       req.url ?? CANVAS_PATH,
-      canvasPage(),
+      canvasPage().replace(
+        "</head>",
+        `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script></head>`
+      ),
       (req as IncomingMessage & { originalUrl?: string }).originalUrl
     );
     res.setHeader("content-type", "text/html");
@@ -890,6 +904,41 @@ async function serveCanvas(
   } catch (error) {
     next(error);
   }
+}
+
+/**
+ * Each states file's {@link SectionPlan} (from the toolchain root), read
+ * from the file as it stands, no transform: what the canvas page names its
+ * section and stands in place while the module loads. A file outside the
+ * root, or one that doesn't read, is named by its file with no stories; its
+ * module's load says what is wrong with it.
+ */
+function planOf(files: string[]): Record<string, SectionPlan> {
+  return Object.fromEntries(
+    files.map((file): [string, SectionPlan] => {
+      const named = sectionName(null, null, file);
+      const abs = resolve(root, file);
+      if (relative(root, abs).startsWith("..")) {
+        return [file, { name: named, stories: [] }];
+      }
+      try {
+        const read = readStoryFile(abs, readFileSync(abs, "utf8"));
+        return [
+          file,
+          {
+            name: sectionName(read.meta.title, read.meta.component, file),
+            stories: read.stories.map((story) => ({
+              name: story.name,
+              label: story.label,
+              width: story.form?.width ?? null,
+            })),
+          },
+        ];
+      } catch {
+        return [file, { name: named, stories: [] }];
+      }
+    })
+  );
 }
 
 /** A request's body, read whole as JSON. */
@@ -1317,7 +1366,8 @@ async function designMap(ask: DesignQuery): Promise<DesignMap> {
       `${ask.dir} is no folder inside ${root}: dir is a folder from the toolchain root, like src/lib.`
     );
   }
-  let found = await discovered(top);
+  const library = await discovered(top);
+  let found = library;
   if (ask.query) {
     const needle = ask.query.toLowerCase();
     found = found.filter((one) => one.name.toLowerCase().includes(needle));
@@ -1429,6 +1479,17 @@ async function designMap(ask: DesignQuery): Promise<DesignMap> {
       if (ask.component) {
         card.props = (await propsOf(resolve(root, one.file), one.name)).props;
       }
+      if (ask.thumbs) {
+        card.thumb = thumbOf(one.sheets);
+        const known = new Map(library.map((each) => [each.file, each]));
+        const counted = (links: DesignLink[]): DesignLink[] =>
+          links.map((linked) => ({
+            ...linked,
+            ...countsOf(known.get(linked.file)?.sheets ?? []),
+          }));
+        card.usedIn = counted(used);
+        card.madeOf = counted(made);
+      }
       return card;
     })
   );
@@ -1446,6 +1507,68 @@ async function designMap(ask: DesignQuery): Promise<DesignMap> {
         }
       : {}),
   };
+}
+
+/** A component's states, frames drawn, states files and thumbnail, from its states files (from the toolchain root): the map's counts of a linked component. */
+function countsOf(
+  sheets: string[]
+): Required<Pick<DesignLink, "drawn" | "states" | "statesFiles" | "thumb">> {
+  let states = 0;
+  for (const sheet of sheets) {
+    try {
+      const abs = resolve(root, sheet);
+      states += readStoryFile(abs, readFileSync(abs, "utf8")).stories.length;
+    } catch {
+      // A states file that doesn't read counts none: its canvas says why.
+    }
+  }
+  return {
+    states,
+    drawn: sheets
+      .flatMap((sheet) => reports.get(sheet)?.section.frames ?? [])
+      .filter((frame) => frame.state === "drawn").length,
+    statesFiles: sheets,
+    thumb: thumbOf(sheets),
+  };
+}
+
+/** How far one states file's frames stand below the one before, in a thumbnail. Ours: a frame's own gap on the canvas. */
+const THUMB_GAP = 24;
+
+/**
+ * A component's frames as a browser last drew them, in miniature (the
+ * panel's map): each states file's first frames from its own top left, the
+ * next file's under it, at most {@link THUMB_FRAMES}; null before any drew.
+ */
+function thumbOf(sheets: string[]): DesignThumb | null {
+  const frames: DesignThumb["frames"] = [];
+  let top = 0;
+  let wide = 0;
+  for (const sheet of sheets) {
+    const own = (reports.get(sheet)?.section.frames ?? []).slice(
+      0,
+      THUMB_FRAMES - frames.length
+    );
+    if (own.length === 0) {
+      continue;
+    }
+    const left = Math.min(...own.map((frame) => frame.box.x));
+    const up = Math.min(...own.map((frame) => frame.box.y));
+    let low = 0;
+    for (const { box, state } of own) {
+      frames.push({
+        x: box.x - left,
+        y: box.y - up + top,
+        w: box.w,
+        h: box.h,
+        state,
+      });
+      wide = Math.max(wide, box.x - left + box.w);
+      low = Math.max(low, box.y - up + box.h);
+    }
+    top += low + THUMB_GAP;
+  }
+  return frames.length > 0 ? { frames, w: wide, h: top - THUMB_GAP } : null;
 }
 
 /** Every story file under `dir`, routes and builds left out. */
@@ -1681,6 +1804,7 @@ async function serveStage(
       cursor: ask.get("cursor") ?? undefined,
       limit: ask.has("limit") ? Number(ask.get("limit")) : undefined,
       detailed: ask.get("detailed") === "1",
+      thumbs: ask.get("thumbs") === "1",
     }).then(
       (map) => json(res, 200, map),
       (error) => refusedWith(res, error)

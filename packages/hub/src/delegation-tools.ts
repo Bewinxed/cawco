@@ -1231,7 +1231,7 @@ export function handoffTools(deps: HandoffDeps) {
       artifactRead.description,
       artifactRead.input,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each optional read field into the query, and a picture into an image block
-      async ({ id, since, png, detail, story, state, render }) => {
+      async ({ id, since, png, detail, story, state, render, verify }) => {
         const query = new URLSearchParams({
           ...(since === undefined ? {} : { since: String(since) }),
           ...(png ? { png: "true" } : {}),
@@ -1239,6 +1239,7 @@ export function handoffTools(deps: HandoffDeps) {
           ...(story ? { story } : {}),
           ...(state ? { state: JSON.stringify(state) } : {}),
           ...(render ? { render: "true" } : {}),
+          ...(verify ? { verify: "true" } : {}),
         }).toString();
         let target = id;
         if (target === undefined) {

@@ -23,10 +23,12 @@
  *    story picker is the input recipe, edged in `border-button-outline`
  *    (3:1), with the sort-vertical glyph.
  * 6. An unnamed story's label says "Unnamed" in meta, upright; a label never
- *    repeats its name under it; a section's file is set in code under its
- *    title; the steps lead and end with Solar's chevrons, no ◀ ▶.
+ *    repeats its name under it; a section is named in words (no path, no
+ *    `.stories`) over its file in meta ink (owner: "the hyperlink thing"),
+ *    never underlined; the steps lead and end with Solar's chevrons, no ◀ ▶.
  * 7. The house faces load: `document.fonts.check('500 13px "Figtree
- *    Variable"')` and JetBrains Mono's.
+ *    Variable"')`, and JetBrains Mono's once asked for (the page sets no
+ *    code at rest; a failed section's details do).
  *
  * The panel (the bench) at 390, 523 and 720, light and dark:
  * 8. (330 too, where the mode stands as one button; and 8h, at 330 with
@@ -34,17 +36,52 @@
  *    The name is whole or ellipsed, never under another control; every
  *    head control is 44px tall or reaches 44px through its ::after under a
  *    finger; the controls past the head's room stand in More, in head
- *    order; no path line stands under the name.
+ *    order; under the name stands the canvas's `about`, one line inside
+ *    the head and whole in its tooltip, and no text in the pane holds a
+ *    route (owner: "the url should have the description there instead").
+ *
+ * Map mode on the bench (CanvasMap), at a 720 pane and at 390, light and
+ * dark, the hub's map answered by the probe, the live card on the stage:
+ * 10. Opened from the head's canvas view (Map), the map stands over the
+ *    page: on the desk a graph with the used-in cards above the canvas's
+ *    card and the made-of cards below, an edge each, every card inside the
+ *    pane; each card counts its states; the canvas's card is chosen and
+ *    live (its canvas page, `by=map`, drawn), the others the report's
+ *    thumbnail (a rect per frame) or "Not drawn yet". Choosing another
+ *    card makes it the live one. The live page posts no report. On a phone
+ *    the map is a list: Used in, This canvas, Made of, each card inside it.
+ *
+ * 8i. In a tab of its own (`/artifact/<id>`, the bench's `own=1`), the
+ *    canvas is named once, by its head, its about on the line under the
+ *    name; its page, framed there, names neither.
+ * 10d. At the desk, the canvas view's Verify asks the hub once
+ *    (`POST …/verify`) and toasts the hub's answer.
+ * 12. The owner's crash on nightly 4202 ("i selected plan view and got
+ *    this in the side panel": the panel's error boundary): the panel,
+ *    showing a page or a canvas, with Inspect shut or open, switches to a
+ *    canvas whose states file does not exist and whose stage failed
+ *    (plan-view's own state); it draws that canvas's failed state in the
+ *    pane, its name in the head and its about under it, and nothing throws.
+ * 11. A stage that failed (its doc's `meta.stage` in error, with the words
+ *    nightly 4202's hub answered: "Cannot find package 'playwright-core'
+ *    imported from /$bunfs/root/cawco") says so where the page would be:
+ *    its title, the plain line and Try again, the stage's own words under
+ *    Show details only, folded until pressed and then whole; never blank.
  *
  * Captures for a second review (never read here) go to `$TMPDIR/caps/`:
- * `canvas-{390,523,desk}-{light,dark}.png`, the panel's pane at 2×.
+ * `canvas-{390,523,desk}-{light,dark}.png`, the panel's pane at 2×, and
+ * `map-{desk,phone}-{light,dark}.png` (also to the clone's `caps/`).
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
-import type { CanvasSpec } from "../../../packages/core/src/stage";
+import type {
+  CanvasMap,
+  CanvasSpec,
+  StageState,
+} from "../../../packages/core/src/stage";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -259,13 +296,25 @@ interface PageRead {
   repeats: string[];
   ring: { clear: boolean; style: string; color: [string, string] } | null;
   row: { bg: [string, string]; ink: [string, string] } | null;
-  sectionFile: { font: string; text: string; title: string } | null;
+  sectionFile: {
+    color: string;
+    decoration: string;
+    font: string;
+    muted: string;
+    size: string;
+    text: string;
+    title: string;
+  } | null;
   steps: { glyphs: number; arrows: boolean } | null;
   unnamed: { text: string; style: string; font: string; small: string } | null;
 }
 
 /** One page's reading of every finding on the canvas. */
 async function readCanvas(page: Page): Promise<PageRead> {
+  // The mono face loads when code is drawn (a failed section's details), not at rest: asked for here, it must come from the stage.
+  await page.evaluate(() =>
+    document.fonts.load('400 12px "JetBrains Mono Variable"')
+  );
   // Outline open: the frame in view takes its mark, the outline its current row.
   await page.evaluate(() => {
     const root = document.getElementById("cawco-chrome")
@@ -455,6 +504,10 @@ async function readCanvas(page: Page): Promise<PageRead> {
       sectionFile: file
         ? {
             font: getComputedStyle(file).fontFamily,
+            size: getComputedStyle(file).fontSize,
+            decoration: getComputedStyle(file).textDecorationLine,
+            color: w.__rgb(getComputedStyle(file).color),
+            muted: w.__token("--ink-muted", file, "color"),
             text: file.textContent ?? "",
             title:
               file.parentElement?.querySelector(".cawco-section-title")
@@ -578,10 +631,16 @@ async function canvasLeg(
     );
   }
   kit.check(
-    `6b: ${leg}: a section's file is set in code under its title`,
+    `6b: ${leg}: a section is named in words over its file in meta ink, never underlined`,
     !!read.sectionFile &&
-      read.sectionFile.font.includes("JetBrains Mono") &&
-      read.sectionFile.text.endsWith(".stories.ts"),
+      read.sectionFile.font.includes("Figtree") &&
+      read.sectionFile.size === "12px" &&
+      read.sectionFile.color === read.sectionFile.muted &&
+      read.sectionFile.decoration === "none" &&
+      read.sectionFile.text.endsWith(".stories.ts") &&
+      read.sectionFile.title.length > 0 &&
+      !read.sectionFile.title.includes("/") &&
+      !read.sectionFile.title.includes(".stories"),
     JSON.stringify(read.sectionFile)
   );
   kit.check(
@@ -1068,10 +1127,18 @@ interface HeadRead {
   bar: { key: string; h: number; after: number }[];
   /** The head's gap and each child's box (x, width) and form, as drawn. */
   boxes: string;
+  /** The line under the name: its words, its tooltip, whether it stands on one line inside the head. */
+  line: {
+    inside: boolean;
+    oneLine: boolean;
+    text: string;
+    tooltip: string;
+  } | null;
   more: string[];
   moreLabel: string;
   name: { whole: boolean; ellipsed: boolean; under: string; width: number };
-  path: string;
+  /** Whether any text in the pane holds a stage route. */
+  route: boolean;
 }
 
 /** The bench's head: what stands, what went to More, the name, the touch areas. */
@@ -1123,7 +1190,25 @@ async function readHead(page: Page): Promise<HeadRead> {
       moreLabel:
         head.querySelector("[data-slot=more]")?.getAttribute("aria-label") ??
         "",
-      path: head.querySelector(".subtitle")?.textContent ?? "",
+      line: (() => {
+        const line = head.querySelector<HTMLElement>("[data-slot=subtitle]");
+        const box = line?.getBoundingClientRect();
+        const edge = head.getBoundingClientRect();
+        return line && box
+          ? {
+              text: line.textContent ?? "",
+              tooltip: line.title,
+              inside:
+                box.left >= edge.left - 0.5 && box.right <= edge.right + 0.5,
+              oneLine:
+                box.height <=
+                Number.parseFloat(getComputedStyle(line).lineHeight) + 1,
+            }
+          : null;
+      })(),
+      route: (
+        document.querySelector("[data-bench-pane]")?.textContent ?? ""
+      ).includes("/@cawco/"),
     };
   });
   let more: string[] = [];
@@ -1385,9 +1470,14 @@ async function headLeg(
     `bar ${read.bar.map((one) => one.key).join(",")}; More ${read.more.join(" | ") || "none"} (${read.moreLabel || "no More"})`
   );
   kit.check(
-    `8d: ${leg}: no path line stands under the name`,
-    read.path === "",
-    read.path || "none"
+    `8d: ${leg}: under the name stands the canvas's about, one line inside the head, whole in its tooltip; no text in the pane holds a route`,
+    !!read.line &&
+      read.line.text === CANVAS.about &&
+      read.line.tooltip === CANVAS.about &&
+      read.line.inside &&
+      read.line.oneLine &&
+      !read.route,
+    `${JSON.stringify(read.line)}; route in the pane: ${read.route}`
   );
   kit.note(`head ${leg}: ${read.boxes}`);
   await seamLeg(kit, page, leg);
@@ -1429,6 +1519,560 @@ async function headLeg(
   return standing;
 }
 
+/** The hub's map of the bench's canvas, as the probe answers it: StatTile, two that render it, two it renders. */
+const MAP: CanvasMap = {
+  center: {
+    name: "StatTile",
+    file: "apps/dashboard/src/lib/cawco/StatTile.svelte",
+    at: null,
+    states: 3,
+    drawn: 2,
+    statesFiles: ["src/lib/cawco/StatTile.stories.ts"],
+    thumb: {
+      w: 384,
+      h: 216,
+      frames: [
+        { x: 0, y: 0, w: 180, h: 84, state: "drawn" },
+        { x: 204, y: 0, w: 180, h: 84, state: "drawn" },
+        { x: 0, y: 132, w: 180, h: 84, state: "failed" },
+      ],
+    },
+  },
+  usedIn: [
+    {
+      name: "Who",
+      file: "apps/dashboard/src/lib/cawco/turn/Who.svelte",
+      at: "apps/dashboard/src/lib/cawco/turn/Who.svelte:12:3",
+      states: 2,
+      drawn: 2,
+      statesFiles: ["src/lib/cawco/turn/Who.stories.ts"],
+      thumb: {
+        w: 300,
+        h: 40,
+        frames: [
+          { x: 0, y: 0, w: 140, h: 40, state: "drawn" },
+          { x: 160, y: 0, w: 140, h: 40, state: "drawn" },
+        ],
+      },
+    },
+    {
+      name: "ViewHome",
+      file: "apps/dashboard/src/lib/cawco/views/ViewHome.svelte",
+      at: null,
+      states: 0,
+      drawn: 0,
+      statesFiles: [],
+      thumb: null,
+    },
+  ],
+  madeOf: [
+    {
+      name: "NumberFlow",
+      file: "apps/dashboard/src/lib/cawco/NumberFlow.svelte",
+      at: "apps/dashboard/src/lib/cawco/StatTile.svelte:30:5",
+      states: 0,
+      drawn: 0,
+      statesFiles: [],
+      thumb: null,
+    },
+    {
+      name: "Tooltip",
+      file: "apps/dashboard/src/lib/components/ui/tooltip/tooltip.svelte",
+      at: null,
+      states: 0,
+      drawn: 0,
+      statesFiles: [],
+      thumb: null,
+    },
+  ],
+};
+/** The Who card's name, whole: Playwright's `hasText` alone also finds "vie(wHo)me". */
+const WHO = /^Who$/;
+/** The bench's artifact (motion/artifact-head), and the one it switches to with `then`. */
+const BENCH_ARTIFACT = "00000000-0000-4000-8000-0000000000a1";
+const BENCH_THEN = "00000000-0000-4000-8000-0000000000a2";
+/** The bench's session (motion/artifact-head). */
+const BENCH_INSTANCE = "bench-artifact-head";
+
+/** The canvas view's menu opened from the head: its own button where it stands, else More's Canvas view. */
+async function openView(page: Page): Promise<void> {
+  const own = page.locator(
+    '[data-bench-pane] [data-head-item="view"]:not([hidden]) [aria-label="Canvas view"]'
+  );
+  if (await own.count()) {
+    await own.click();
+  } else {
+    await page.locator("[data-bench-pane] [data-slot=more]").click();
+    await page
+      .locator("[data-slot=dropdown-menu-sub-trigger]", {
+        hasText: "Canvas view",
+      })
+      .click();
+  }
+}
+
+/** Map mode turned on from the head's canvas view. */
+async function openMap(page: Page): Promise<void> {
+  await openView(page);
+  await page.getByRole("menuitemcheckbox", { name: "Map" }).click();
+  await page.keyboard.press("Escape");
+}
+
+/** The hub's answer to a Verify, as the probe gives it. */
+const VERIFY_SAID =
+  "A verifier session (never you) is checking it against the project's design system now; its findings come to you as one message, each a must-fix.";
+
+/** The map's cards as drawn: each one's role, box, words, whether it is chosen and live, and its thumbnail. */
+const readMap = (page: Page) =>
+  page.evaluate(() => {
+    const pane = document.querySelector("[data-bench-pane]") as HTMLElement;
+    const room = (
+      pane.querySelector("[data-slot=canvas-map]") as HTMLElement
+    ).getBoundingClientRect();
+    const cards = [
+      ...pane.querySelectorAll<HTMLElement>("[data-slot=map-card]"),
+    ].map((card) => {
+      const box = card.getBoundingClientRect();
+      return {
+        role: card.dataset.role,
+        name: card.querySelector("[data-slot=map-name]")?.textContent ?? "",
+        counts: card.querySelector("[data-slot=map-counts]")?.textContent ?? "",
+        chosen: card.hasAttribute("data-chosen"),
+        live: card.querySelector("iframe")?.getAttribute("src") ?? null,
+        rects: card.querySelectorAll("svg[data-slot=map-thumb] rect").length,
+        none: card.querySelector("p[data-slot=map-thumb]")?.textContent ?? null,
+        top: box.top,
+        bottom: box.bottom,
+        inside:
+          box.left >= room.left - 0.5 &&
+          box.right <= room.right + 0.5 &&
+          box.top >= room.top - 0.5 &&
+          box.bottom <= room.bottom + 0.5,
+      };
+    });
+    return {
+      cards,
+      edges: pane.querySelectorAll(".svelte-flow__edge").length,
+      graph: !!pane.querySelector(".svelte-flow"),
+      list: !!pane.querySelector("[data-slot=map-list]"),
+      groups: [...pane.querySelectorAll("[data-slot=map-list] h3")].map(
+        (one) => one.textContent ?? ""
+      ),
+      legend: (pane.querySelector(".legend")?.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    };
+  });
+
+/** Leg 10: Map mode at one pane width and scheme, on the bench. */
+async function mapLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  width: number,
+  theme: "light" | "dark"
+): Promise<void> {
+  const phone = width < 640;
+  const page = await kit.page(phone ? "phone" : "desk", { theme, scale: 2 });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  let mapPosts = 0;
+  let panelPosts = 0;
+  page.on("request", (request) => {
+    if (!request.url().includes("/@cawco/rendered")) {
+      return;
+    }
+    if (request.frame().url().includes("by=map")) {
+      mapPosts += 1;
+    } else {
+      panelPosts += 1;
+    }
+  });
+  await page.setViewportSize({ width: width + 40, height: 900 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  await page.route(
+    `**/api/instances/${BENCH_INSTANCE}/artifacts/*/map`,
+    (route) => route.fulfill({ json: MAP })
+  );
+  await page.goto(
+    `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+  );
+  await page.waitForSelector("[data-bench-pane] iframe.ready", {
+    timeout: 60_000,
+  });
+  await openMap(page);
+  await page.waitForSelector("[data-bench-pane] [data-slot=map-card] iframe", {
+    timeout: 30_000,
+  });
+  // The live card's page drawn: its canvas's report, read in its own frame.
+  const liveSections = async (): Promise<number> => {
+    const frame = page.frames().find((one) => one.url().includes("by=map"));
+    if (!frame) {
+      return 0;
+    }
+    try {
+      return await frame.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __cawcoCanvas?: { report: { sections: unknown[] } | null };
+            }
+          ).__cawcoCanvas?.report?.sections.length ?? 0
+      );
+    } catch {
+      // The frame went or navigated as it was read: read it again.
+      return 0;
+    }
+  };
+  const drewLive = await until(
+    "the live card's canvas drawn",
+    liveSections,
+    (sections) => sections > 0,
+    60_000
+  ).catch(() => 0);
+  await page.waitForTimeout(1500);
+  const leg = `${phone ? "390" : "desk"} ${theme}`;
+  const read = await readMap(page);
+  const center = read.cards.find((one) => one.role === "center");
+  const used = read.cards.filter((one) => one.role === "usedIn");
+  const made = read.cards.filter((one) => one.role === "madeOf");
+  const who = used.find((one) => one.name === "Who");
+  const home = used.find((one) => one.name === "ViewHome");
+  const cardsSaid =
+    read.cards.length === 5 &&
+    center?.chosen === true &&
+    !!center.live?.includes("by=map") &&
+    center.counts === "3 states · 2 drawn" &&
+    who?.rects === 2 &&
+    who.counts === "2 states · 2 drawn" &&
+    home?.none === "Not drawn yet" &&
+    home.counts === "No states file" &&
+    drewLive > 0;
+  if (phone) {
+    kit.check(
+      `10: ${leg}: Map is a list (Used in, This canvas, Made of), every card inside it; the canvas's card is chosen and live (its page drawn, by=map), the others the report's thumbnail or "Not drawn yet"`,
+      read.list &&
+        !read.graph &&
+        read.groups.join(",") === "Used in,This canvas,Made of" &&
+        read.cards.every((one) => one.inside || one.role !== "center") &&
+        cardsSaid,
+      `${JSON.stringify(read)}; live canvas drew ${drewLive} sections`
+    );
+  } else {
+    kit.check(
+      `10: ${leg}: Map is a graph over the page, used in above the canvas's card and made of below, an edge each, every card inside the pane; the canvas's card chosen and live (its page drawn, by=map), the others the report's thumbnail or "Not drawn yet"`,
+      read.graph &&
+        !read.list &&
+        !!center &&
+        used.length === 2 &&
+        made.length === 2 &&
+        used.every((one) => one.bottom < center.top) &&
+        made.every((one) => one.top > center.bottom) &&
+        read.edges === 4 &&
+        read.cards.every((one) => one.inside) &&
+        read.legend.includes("(2)") &&
+        cardsSaid,
+      `${JSON.stringify(read)}; live canvas drew ${drewLive} sections`
+    );
+  }
+  for (const dir of [CAPS, join(ROOT, "caps")]) {
+    mkdirSync(dir, { recursive: true });
+    // biome-ignore lint/performance/noAwaitInLoops: one file per folder
+    await page.locator("[data-bench-pane]").screenshot({
+      path: join(dir, `map-${phone ? "phone" : "desk"}-${theme}.png`),
+    });
+  }
+  kit.note(
+    `capture: ${join(CAPS, `map-${phone ? "phone" : "desk"}-${theme}.png`)}`
+  );
+
+  // Another card chosen: it draws live, the canvas's card its thumbnail.
+  await page
+    .locator("[data-bench-pane] [data-slot=map-card][data-role=usedIn]")
+    .filter({
+      has: page.locator("[data-slot=map-name]", { hasText: WHO }),
+    })
+    .locator("button")
+    .click();
+  await page.waitForTimeout(1500);
+  const after = await readMap(page);
+  const whoNow = after.cards.find((one) => one.name === "Who");
+  const centerNow = after.cards.find((one) => one.role === "center");
+  kit.check(
+    `10b: ${leg}: choosing Who makes it the live card (its states file, by=map) and the canvas's card its thumbnail; the live page posted no report while the panel's page did`,
+    whoNow?.chosen === true &&
+      !!whoNow.live?.includes("Who.stories.ts") &&
+      !!whoNow.live.includes("by=map") &&
+      centerNow?.chosen === false &&
+      centerNow.rects === 3 &&
+      mapPosts === 0 &&
+      panelPosts > 0,
+    `Who ${JSON.stringify(whoNow)}; canvas ${JSON.stringify(centerNow)}; report posts from the live page ${mapPosts}, from the panel's ${panelPosts}`
+  );
+  if (!phone) {
+    let asked = 0;
+    await page.route(
+      `**/api/instances/${BENCH_INSTANCE}/artifacts/*/verify`,
+      (route) => {
+        asked += 1;
+        return route.fulfill({ json: { verify: VERIFY_SAID } });
+      }
+    );
+    await openView(page);
+    await page
+      .getByRole("menuitem", { name: "Verify against the design system" })
+      .click();
+    const toasted = await page
+      .locator("[data-sonner-toast]", { hasText: VERIFY_SAID })
+      .waitFor({ timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    kit.check(
+      `10d: ${leg}: the canvas view's Verify asks the hub once and says the hub's answer`,
+      asked === 1 && toasted,
+      `${asked} POST …/verify; the answer ${toasted ? "toasted" : "not shown"}`
+    );
+  }
+  kit.check(
+    `10c: ${leg}: no page errors with the map open`,
+    errors.length === 0,
+    errors.join(" | ") || "none"
+  );
+  await page.close();
+}
+
+/** Leg 12's second canvas: plan-view's, its states file missing, its stage failed as the hub kept it. */
+const MISSING_FILE = "src/lib/cawco/plan/proposal/PlanFrame.stories.ts";
+const THEN_ABOUT = "The plan view's frame";
+const thenPath = () =>
+  `/@cawco/canvas?file=${encodeURIComponent(MISSING_FILE)}&spec=${encodeURIComponent(JSON.stringify({ name: "plan-view", about: THEN_ABOUT }))}`;
+const missingStage = (): StageState => ({
+  runs: "sheet",
+  toolchain: "vite",
+  status: "error",
+  dir: "apps/dashboard",
+  at: new Date().toISOString(),
+  errors: [],
+  message: `apps/dashboard/${MISSING_FILE} does not exist in /home/bewinxed/.worktrees/cockpit-b146f292. Write it, then call again.`,
+});
+
+/** Leg 12: the panel switches into a canvas whose stage failed, from a page or a canvas, Inspect shut or open. */
+async function switchLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  for (const from of ["page", "component"] as const) {
+    for (const inspect of [false, true]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+      const page = await kit.page("desk", { theme, scale: 2 });
+      const errors: string[] = [];
+      page.on("pageerror", (error) =>
+        errors.push(`${error.message} ${error.stack?.split("\n")[1] ?? ""}`)
+      );
+      page.on("console", (message) => {
+        if (message.type() === "error") {
+          errors.push(message.text().split("\n")[0] ?? "");
+        }
+      });
+      await page.setViewportSize({ width: 760, height: 900 });
+      await page.route(`${stage.base}/__cawco/ping`, (route) =>
+        route.fulfill({
+          status: 204,
+          headers: { "access-control-allow-origin": "*" },
+        })
+      );
+      await serveDoc(page, { [BENCH_THEN]: missingStage() });
+      if (inspect) {
+        await page.addInitScript((key) => {
+          localStorage.setItem(key, "open");
+        }, `cawco-preview-inspect:${BENCH_INSTANCE}`);
+      }
+      await page.goto(
+        `${bench}/motion/artifact-head?w=720&kind=${from}&then=${encodeURIComponent(thenPath())}&thenName=plan-view&after=4000&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+      );
+      const down = await page
+        .locator("[data-bench-pane] [data-slot=down][role=alert]")
+        .waitFor({ timeout: 30_000 })
+        .then(() => true)
+        .catch(() => false);
+      await page.waitForTimeout(1500);
+      const read = await page.evaluate(() => {
+        const pane = document.querySelector("[data-bench-pane]");
+        return {
+          name:
+            pane?.querySelector(".artifact-name")?.textContent?.trim() ?? null,
+          line: pane?.querySelector("[data-slot=subtitle]")?.textContent ?? null,
+          title:
+            pane?.querySelector("[data-slot=down] .kit-empty-title")
+              ?.textContent ?? null,
+        };
+      });
+      kit.check(
+        `12: ${theme}, from a ${from}${inspect ? " with Inspect open" : ""}: switching to a canvas whose stage failed draws its failed state in the pane, named in the head with its about, and nothing throws`,
+        down &&
+          read.name === "plan-view" &&
+          read.line === THEN_ABOUT &&
+          read.title === "The stage for apps/dashboard didn't start" &&
+          errors.length === 0,
+        `${JSON.stringify(read)}; failed state ${down ? "drawn" : "never drawn"}; errors ${errors.join(" | ") || "none"}`
+      );
+      await page.close();
+    }
+  }
+}
+
+/** The name the own-tab leg gives its canvas: words nothing else in the pane holds. */
+const OWN_NAME = "Own tab canvas";
+
+/** Leg 8i: the canvas in a tab of its own (`/artifact/<id>`): named once, by its head, with its about under the name. */
+async function ownTabLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  const page = await kit.page("desk", { theme, scale: 2 });
+  await page.setViewportSize({ width: 1064, height: 900 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  await page.goto(
+    `${bench}/motion/artifact-head?w=1024&own=1&name=${encodeURIComponent(OWN_NAME)}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+  );
+  await page.waitForSelector("[data-bench-pane] iframe.ready", {
+    timeout: 60_000,
+  });
+  await page.waitForTimeout(3000);
+  const pane = await page.evaluate((name) => {
+    const text = document.querySelector("[data-bench-pane]")?.textContent ?? "";
+    return {
+      line:
+        document.querySelector("[data-bench-pane] [data-slot=subtitle]")
+          ?.textContent ?? null,
+      names: text.split(name).length - 1,
+      route: text.includes("/@cawco/"),
+    };
+  }, OWN_NAME);
+  const canvas = page
+    .frames()
+    .find(
+      (frame) =>
+        frame.url().includes("/@cawco/canvas") &&
+        !frame.url().includes("by=map")
+    );
+  const band = canvas
+    ? await canvas.evaluate(
+        () =>
+          document.getElementById("cawco-chrome")?.shadowRoot?.textContent ?? ""
+      )
+    : null;
+  kit.check(
+    `8i: ${theme}: in its own tab the canvas is named once, by its head, its about on the line under the name; its page, framed there, says neither`,
+    pane.line === CANVAS.about &&
+      pane.names === 1 &&
+      !pane.route &&
+      band !== null &&
+      !band.includes(CANVAS.name ?? "") &&
+      !band.includes(CANVAS.about ?? ""),
+    `pane ${JSON.stringify(pane)}; the page's chrome says ${JSON.stringify(band?.slice(0, 200))}`
+  );
+  await page.close();
+}
+
+/** What nightly 4202's hub answered when it couldn't draw a canvas: the words a failed stage folds under Show details. */
+const NIGHTLY_ERROR =
+  "Cannot find package 'playwright-core' imported from /$bunfs/root/cawco";
+
+/** Leg 11: a failed stage on the bench, said with its own words under Show details. */
+async function stageDownLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  const page = await kit.page("desk", { theme, scale: 2 });
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  await serveDoc(page, {
+    [BENCH_ARTIFACT]: {
+    runs: "sheet",
+    toolchain: "vite",
+    status: "error",
+    dir: "apps/dashboard",
+    at: new Date().toISOString(),
+    errors: [],
+    message: NIGHTLY_ERROR,
+    },
+  });
+  await page.goto(
+    `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+  );
+  const down = page.locator("[data-bench-pane] [data-slot=down][role=alert]");
+  const shown = await down
+    .waitFor({ timeout: 60_000 })
+    .then(() => true)
+    .catch(() => false);
+  const readDown = () =>
+    down.evaluate((box) => {
+      const details = box.querySelector<HTMLElement>("[data-slot=details]");
+      const button = box.querySelector<HTMLElement>("[data-details]");
+      const edge = box.getBoundingClientRect();
+      const at = details?.getBoundingClientRect();
+      return {
+        title: box.querySelector(".kit-empty-title")?.textContent ?? "",
+        line: box.querySelector(".kit-empty-line")?.textContent?.trim() ?? "",
+        button: button?.textContent?.trim() ?? null,
+        expanded: button?.getAttribute("aria-expanded") ?? null,
+        details: details?.textContent?.trim() ?? null,
+        inside:
+          !!at &&
+          at.height > 0 &&
+          at.left >= edge.left - 0.5 &&
+          at.right <= edge.right + 0.5,
+        said: (box.textContent ?? "").includes("playwright-core"),
+      };
+    });
+  const folded = shown ? await readDown() : null;
+  if (shown) {
+    await down.locator("[data-details]").click();
+    await page.waitForTimeout(300);
+  }
+  const open = shown ? await readDown() : null;
+  kit.check(
+    `11: ${theme}: a failed stage says so where the page would be, its own words under Show details only: folded until pressed, then whole`,
+    !!folded &&
+      !!open &&
+      folded.title === "The stage for apps/dashboard didn't start" &&
+      folded.line ===
+        "Vite stopped before it served the canvas. Try again starts it again." &&
+      folded.button === "Show details" &&
+      folded.expanded === "false" &&
+      folded.details === null &&
+      !folded.said &&
+      open.button === "Hide details" &&
+      open.expanded === "true" &&
+      open.details === NIGHTLY_ERROR &&
+      open.inside,
+    `folded ${JSON.stringify(folded)}; open ${JSON.stringify(open)}`
+  );
+  await page.close();
+}
+
 /** A pin as the overlay writes one: open, on the page's body. */
 const pinOf = (number: number, at: string) => ({
   id: `00000000-0000-4000-8000-00000000000${number}`,
@@ -1449,12 +2093,13 @@ const pinOf = (number: number, at: string) => ({
 });
 
 /**
- * The artifact's live doc as the hub's `/ws/artifact/<session>/<artifact>`
+ * Each artifact's live doc as the hub's `/ws/artifact/<session>/<artifact>`
  * serves it (y-websocket's sync protocol), answered in the page's own
- * network: a pick the session has not heard, and the pins `pins()` holds
- * as it changes.
+ * network, one doc per artifact: a pick the session has not heard, the
+ * stage `stages` names for it (its `meta.stage`), and the pins `pins()`
+ * holds as it changes.
  */
-async function serveDoc(page: Page) {
+async function serveDoc(page: Page, stages: Record<string, StageState> = {}) {
   const yws = Bun.resolveSync("y-websocket", DASHBOARD);
   // The dashboard's own yjs (the probe kit depends on none): the part of it this serves with.
   const Y = (await import(Bun.resolveSync("yjs", DASHBOARD))) as {
@@ -1464,31 +2109,51 @@ async function serveDoc(page: Page) {
       transact: (run: () => void) => void;
     };
   };
+  type YDoc = InstanceType<typeof Y.Doc>;
   const sync = await import(Bun.resolveSync("y-protocols/sync", yws));
   const encoding = await import(Bun.resolveSync("lib0/encoding", yws));
   const decoding = await import(Bun.resolveSync("lib0/decoding", yws));
-  const doc = new Y.Doc();
   const at = new Date().toISOString();
-  doc.getMap("state").set("pick", {
-    at,
-    note: null,
-    options: ["one"],
-    pageHash: "bench",
-    value: null,
-  });
-  const sockets: { send: (data: Buffer) => void }[] = [];
   const say = (write: (encoder: unknown) => void) => {
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, 0);
     write(encoder);
     return Buffer.from(encoding.toUint8Array(encoder));
   };
-  doc.on("update", (update: Uint8Array) => {
-    for (const ws of sockets) {
-      ws.send(say((encoder) => sync.writeUpdate(encoder, update)));
+  const docs = new Map<
+    string,
+    { doc: YDoc; sockets: { send: (data: Buffer) => void }[] }
+  >();
+  const docOf = (artifact: string) => {
+    const had = docs.get(artifact);
+    if (had) {
+      return had;
     }
-  });
+    const doc = new Y.Doc();
+    const stageState = stages[artifact];
+    if (stageState) {
+      doc.getMap("meta").set("stage", stageState);
+    }
+    doc.getMap("state").set("pick", {
+      at,
+      note: null,
+      options: ["one"],
+      pageHash: "bench",
+      value: null,
+    });
+    const made = { doc, sockets: [] as { send: (data: Buffer) => void }[] };
+    doc.on("update", (update: Uint8Array) => {
+      for (const ws of made.sockets) {
+        ws.send(say((encoder) => sync.writeUpdate(encoder, update)));
+      }
+    });
+    docs.set(artifact, made);
+    return made;
+  };
   await page.routeWebSocket(ARTIFACT_SOCKET, (ws) => {
+    const artifact =
+      new URL(ws.url()).pathname.split("/").filter(Boolean).at(-1) ?? "";
+    const { doc, sockets } = docOf(artifact);
     sockets.push(ws);
     ws.send(say((encoder) => sync.writeSyncStep1(encoder, doc)));
     ws.onMessage((message) => {
@@ -1508,12 +2173,15 @@ async function serveDoc(page: Page) {
     });
   });
   return {
-    pins: (count: number) =>
-      doc.transact(() => {
-        for (let number = 1; number <= count; number += 1) {
-          doc.getMap("pins").set(pinOf(number, at).id, pinOf(number, at));
-        }
-      }),
+    pins: (count: number) => {
+      for (const { doc } of docs.values()) {
+        doc.transact(() => {
+          for (let number = 1; number <= count; number += 1) {
+            doc.getMap("pins").set(pinOf(number, at).id, pinOf(number, at));
+          }
+        });
+      }
+    },
   };
 }
 
@@ -1870,6 +2538,10 @@ const spec: Spec = {
         );
         await moreHoldsComments(kit, bench, stage, theme);
         await commentsCount(kit, bench, stage, theme);
+        await mapLeg(kit, bench, stage, 720, theme);
+        await mapLeg(kit, bench, stage, 390, theme);
+        await stageDownLeg(kit, bench, stage, theme);
+        await ownTabLeg(kit, bench, stage, theme);
         await switchLeg(kit, bench, stage, theme);
       }
       sameLoadPlace(kit);

@@ -365,6 +365,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           // A frame: JSON { story, interaction?, scheme?, width? }.
           state: t.Optional(t.String({ maxLength: 400 })),
           render: t.Optional(t.BooleanString()),
+          verify: t.Optional(t.BooleanString()),
         }),
       },
       ({ params, query }) => {
@@ -379,6 +380,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
               ...(query.story ? { story: query.story } : {}),
               ...(query.state ? { state: stateOf(query.state) } : {}),
               ...(query.render ? { render: true } : {}),
+              ...(query.verify ? { verify: true } : {}),
             }
           );
         } catch (error) {
@@ -480,6 +482,27 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             params.artifact,
             sheetChangeOf(body)
           );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // A component canvas's map for its panel: its component, what renders it and what it renders.
+    .get("/api/instances/:id/artifacts/:artifact/map", async ({ params }) => {
+      try {
+        return await artifacts.mapOf(params.id, params.artifact);
+      } catch (error) {
+        return refused(error);
+      }
+    })
+    // The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/verify",
+      async ({ params }) => {
+        try {
+          return {
+            verify: await artifacts.verifyFor(params.id, params.artifact),
+          };
         } catch (error) {
           return refused(error);
         }

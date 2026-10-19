@@ -101,6 +101,16 @@
  * 22. Once the panel has opened (its page resized a frame at a time), the
  *     first frame stands in the middle of the canvas, at the desk and at 390:
  *     each centring measured where the world stands, never mid-move.
+ * 23. Name once, description once, no route (owner: "ur also repeating the
+ *     title of the card twice, the url should have the description there
+ *     instead"): at the desk and at 390 the line under the head's name is
+ *     the canvas's `about`, one line inside the panel and whole in its
+ *     tooltip; the name stands once across the panel and its canvas page,
+ *     and no text in either holds `/@cawco/`.
+ * 24. The hub's map of that canvas (`GET …/artifacts/:id/map`, what the
+ *     panel's Map reads) answers Card in the middle with its states, its
+ *     states file from the toolchain root, and its frames' thumbnail from
+ *     the panel's draw; nothing renders it and it renders nothing.
  *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
@@ -119,7 +129,7 @@ import {
 import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright-core";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
-import { STAGE_ENSURE } from "../../../packages/core/src/stage";
+import { type CanvasMap, STAGE_ENSURE } from "../../../packages/core/src/stage";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec } from "../kit";
 
@@ -630,7 +640,61 @@ const scaled = (transform: string, to: number) => {
   return Math.abs(Number(x) - to) < 0.001 && Math.abs(Number(y) - to) < 0.001;
 };
 
-/** Legs 18 to 21: the first session's card in its panel on the dashboard. */
+/** The canvas's name and `about` in leg 23: words no other text in the panel holds. */
+const PANEL_NAME = "probe-panel-card";
+const PANEL_ABOUT = "The card in its panel, at every width";
+
+/** Leg 23's read: the head's line under the name and where it stands, and the name and any route across the panel and its canvas page. */
+async function describedOf(page: Page) {
+  const outer = await page
+    .locator(PANE)
+    .first()
+    .evaluate((pane, name) => {
+      const card = pane.closest('[data-slot="side-card"]') ?? pane;
+      const line = card.querySelector<HTMLElement>('[data-slot="subtitle"]');
+      const box = line?.getBoundingClientRect();
+      const edge = card.getBoundingClientRect();
+      const text = card.textContent ?? "";
+      return {
+        line: line?.textContent ?? null,
+        tooltip: line?.title ?? null,
+        inside:
+          !!box && box.left >= edge.left - 0.5 && box.right <= edge.right + 0.5,
+        oneLine:
+          !!line &&
+          !!box &&
+          box.height <=
+            Number.parseFloat(getComputedStyle(line).lineHeight) + 1,
+        names: text.split(name).length - 1,
+        route: text.includes("/@cawco/"),
+      };
+    }, PANEL_NAME);
+  const frame = await (
+    await page.locator(FRAME).first().elementHandle()
+  )?.contentFrame();
+  const inner = frame
+    ? await frame.evaluate((name) => {
+        const text = `${document.body.innerText}\n${document.getElementById("cawco-chrome")?.shadowRoot?.textContent ?? ""}`;
+        return {
+          names: text.split(name).length - 1,
+          route: text.includes("/@cawco/"),
+        };
+      }, PANEL_NAME)
+    : null;
+  return { ...outer, frame: inner };
+}
+
+/** Leg 23 holds for one read: the about under the name, one line inside the panel, the name once, no route. */
+const describedWell = (read: Awaited<ReturnType<typeof describedOf>>) =>
+  read.line === PANEL_ABOUT &&
+  read.tooltip === PANEL_ABOUT &&
+  read.inside &&
+  read.oneLine &&
+  read.names + (read.frame?.names ?? 1) === 1 &&
+  !read.route &&
+  read.frame?.route === false;
+
+/** Legs 18 to 24: the first session's card in its panel on the dashboard. */
 async function panelLegs(
   kit: Kit,
   call: (n: string, name: string, input: object) => Promise<string>,
@@ -639,11 +703,11 @@ async function panelLegs(
 ): Promise<void> {
   // The page open first, so the canvas the session makes stands in its panel.
   const desk = await panelPage(kit, base, session, "desk", "light");
-  await call("18", "mcp__cawco__artifact_create", {
+  const made = await call("18", "mcp__cawco__artifact_create", {
     kind: "component",
-    name: "panel",
+    name: PANEL_NAME,
     file: STORY,
-    about: "The card in its panel",
+    about: PANEL_ABOUT,
   });
   await desk
     .locator(`${FRAME}[data-ready]`)
@@ -731,6 +795,10 @@ async function panelLegs(
     `before ${JSON.stringify(before)}; 60ms ${JSON.stringify(held)}; 460ms ${JSON.stringify(settled)}; released ${JSON.stringify(released)}`
   );
   await desk.keyboard.press("Escape");
+  const described = { desk: await describedOf(desk) } as Record<
+    string,
+    Awaited<ReturnType<typeof describedOf>>
+  >;
 
   // 18 and 21 at 390, light and dark: the mode as one button, More before Close holding the rest.
   for (const theme of ["light", "dark"] as const) {
@@ -761,8 +829,43 @@ async function panelLegs(
       `head ${JSON.stringify(narrow)}; More's entries ${JSON.stringify(entries)}`
     );
     await phone.keyboard.press("Escape");
+    described[`phone-${theme}`] = await describedOf(phone);
     await capture(phone, `panel-phone-${theme}`);
   }
+  kit.check(
+    "23: at the desk and at 390 the line under the name is the canvas's about, one line inside the panel and whole in its tooltip; the name stands once across the panel and its page, and no text holds /@cawco/",
+    Object.keys(described).length === 3 &&
+      Object.values(described).every(describedWell),
+    JSON.stringify(described)
+  );
+
+  // 24. The hub's map of the canvas, read as the panel's Map reads it.
+  const madeId = made.match(ID)?.[1];
+  const mapRead = madeId
+    ? await desk.evaluate(
+        async (path) => {
+          const answer = await fetch(path);
+          return {
+            status: answer.status,
+            body: (await answer.json().catch(() => null)) as CanvasMap | null,
+          };
+        },
+        `/api/instances/${encodeURIComponent(session)}/artifacts/${madeId}/map`
+      )
+    : null;
+  const center = mapRead?.body?.center;
+  kit.check(
+    "24: the hub's map of the canvas answers Card in the middle with its states, its states file from the toolchain root and its frames' thumbnail, nothing above or below it",
+    mapRead?.status === 200 &&
+      center?.name === "Card" &&
+      center.file === "src/Card.svelte" &&
+      center.statesFiles.includes(STORY) &&
+      center.states >= 1 &&
+      (center.thumb?.frames.length ?? 0) > 0 &&
+      mapRead.body?.usedIn.length === 0 &&
+      mapRead.body?.madeOf.length === 0,
+    JSON.stringify(mapRead).slice(0, 800)
+  );
   const pictures = [
     "panel-desk-light",
     "panel-desk-dark",

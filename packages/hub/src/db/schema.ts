@@ -3321,6 +3321,14 @@ export const designChecks = sqliteTable(
     head: text("head_sha").notNull(),
     /** The verifier's own work item, once it started. */
     verifierItemId: text("verifier_item_id"),
+    /**
+     * A round asked of an artifact in a chat (component canvas E1): the
+     * artifact it judges; `itemId` is then its key (`artifact:<id>`), and
+     * `projectId` and `taskId` are the empty string. Null for a task's round.
+     */
+    artifactId: text("artifact_id"),
+    /** The session that asked a chat round: it hears the verdict. Null for a task's round. */
+    requesterId: text("requester_id"),
     state: text("state")
       .$type<"checking" | "passed" | "findings" | "failed">()
       .notNull(),

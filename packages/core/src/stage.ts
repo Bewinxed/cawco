@@ -20,6 +20,38 @@
  */
 export const CANVAS_PATH = "/@cawco/canvas";
 
+/**
+ * A section as the canvas page has it before its module loads (the stage
+ * reads it from the states file itself, no transform): its name in plain
+ * words and its stories, so the page names the section and stands each
+ * story's frame in its place while it draws.
+ */
+export interface SectionPlan {
+  /** The states file's `title`, else its component's name, else its file's. */
+  name: string;
+  stories: { label: string | null; name: string; width: number | null }[];
+}
+
+/** A states file's `.stories.<ext>`. */
+const STORIES_EXT = /\.stories\.[cm]?[jt]sx?$/;
+
+/**
+ * A section's name in plain words: its states file's `title` (its last
+ * part: Storybook's `Kit/Badge` is a Badge in the Kit group), else the
+ * component's name, else the file's without `.stories.<ext>`.
+ */
+export const sectionName = (
+  title: string | null,
+  component: string | null,
+  file: string
+): string =>
+  title?.split("/").at(-1)?.trim() ||
+  component ||
+  (file.split("/").at(-1) ?? file).replace(STORIES_EXT, "");
+
+/** The id of the canvas page's `<script type="application/json">` holding each states file's {@link SectionPlan}, by file. */
+export const CANVAS_PLAN_ID = "cawco-plan";
+
 /** Where a canvas page posts its {@link RenderReport} (`POST`), beside the page so a panel's preview reaches it. */
 export const RENDERED_PATH = "/@cawco/rendered";
 
@@ -168,6 +200,26 @@ export interface CanvasDial {
   step?: number;
   target: { cssVar: string } | { arg: string };
   unit?: string;
+}
+
+/** The canvas page's address on its stage: each states file (from the toolchain root), slashes kept, and its spec. */
+export const canvasPath = (files: string[], spec: CanvasSpec): string => {
+  const query = files
+    .map((file) => `file=${encodeURIComponent(file).replaceAll("%2F", "/")}`)
+    .join("&");
+  return `${CANVAS_PATH}?${query}&spec=${encodeURIComponent(JSON.stringify(spec))}`;
+};
+
+/** A canvas address's states files and spec, as {@link canvasPath} wrote them. */
+export function canvasOf(path: string): { files: string[]; spec: CanvasSpec } {
+  const query = new URL(path, "http://stage").searchParams;
+  let spec: CanvasSpec = {};
+  try {
+    spec = JSON.parse(query.get("spec") ?? "{}") as CanvasSpec;
+  } catch {
+    spec = {};
+  }
+  return { files: query.getAll("file"), spec };
 }
 
 /** What a canvas page is told besides its files: what it is for, the agent's edges and groups, its dials. */
@@ -519,16 +571,34 @@ export interface DesignQuery {
   dir?: string;
   limit?: number;
   query?: string;
+  /** The panel's map, never the agent's: each card's frames in miniature, and each link's own counts, states files and frames. */
+  thumbs?: boolean;
 }
 
 /** A design map's page bounds. The design's numbers. */
 export const DESIGN_MAP_LIMITS = { limit: 50, max: 200 } as const;
 
+/** A component's frames as a browser last drew them, in miniature: each one's box on its canvas and its state, from its canvas's top left. */
+export interface DesignThumb {
+  frames: { h: number; state: FrameState; w: number; x: number; y: number }[];
+  /** The canvas the frames stand on: their union's extent. */
+  h: number;
+  w: number;
+}
+
+/** How many frames a thumbnail draws. Ours: a canvas's first rows read at a node's size; more is noise. */
+export const THUMB_FRAMES = 48;
+
 /** Where a component is used, or what it renders: the other component, and the call site when a draw saw it. */
 export interface DesignLink {
   at: string | null;
+  /** With `thumbs`: its own frames drawn, states, states files and thumbnail. */
+  drawn?: number;
   file: string;
   name: string;
+  states?: number;
+  statesFiles?: string[];
+  thumb?: DesignThumb | null;
 }
 
 /** A component in the library, as the map answers it: counts, or its card. */
@@ -552,7 +622,32 @@ export interface DesignCard {
     label: string | null;
     name: string;
   }[];
+  /** With `thumbs`: its frames in miniature; null before a browser drew them. */
+  thumb?: DesignThumb | null;
   usedIn: number | DesignLink[];
+}
+
+/** One component on a canvas's map: what it is, where it is called, and its states as drawn. */
+export interface CanvasMapNode {
+  /** Where it is called from the canvas's component (made of) or where it calls it (used in); null when no draw saw it. */
+  at: string | null;
+  /** Frames a browser drew of its states. */
+  drawn: number;
+  file: string;
+  name: string;
+  /** Stories across its states files. */
+  states: number;
+  /** Its states files, from the toolchain root, as a canvas address names them; none, it has no canvas to draw live. */
+  statesFiles: string[];
+  /** Its frames as last drawn, in miniature; null before a browser drew them. */
+  thumb: DesignThumb | null;
+}
+
+/** A component canvas's map (component canvas §3c): its component, what renders it above, what it renders below. */
+export interface CanvasMap {
+  center: CanvasMapNode;
+  madeOf: CanvasMapNode[];
+  usedIn: CanvasMapNode[];
 }
 
 /** A page of the design map. */

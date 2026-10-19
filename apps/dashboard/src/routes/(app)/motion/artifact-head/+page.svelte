@@ -7,8 +7,10 @@
    * which the probe starts), and a split's Expand, so every control of the
    * head stands or goes to More by the head's priority rule. `?switch=1`
    * gives the head the Plan | Preview switch SideSplit gives it while a plan
-   * stands beside the preview, drawn as SideSplit draws it. The probe
-   * answers the pane's reach check (`/__cawco/ping`) itself.
+   * stands beside the preview, drawn as SideSplit draws it. `?own=1` draws
+   * it as the artifact's own tab does (`/artifact/<id>`, PreviewPane
+   * `ownTab`). The probe answers the pane's reach check (`/__cawco/ping`)
+   * itself.
    */
   import { type FsEntry, sideWords } from "@cawco/core";
   import type { Bounded } from "@cawco/core/bounded";
@@ -34,17 +36,39 @@
   const name =
     page.url.searchParams.get("name") ?? "Preview canvas view states";
   const switched = page.url.searchParams.get("switch") === "1";
+  const own = page.url.searchParams.get("own") === "1";
+  /** `?kind=page`: the first artifact a page (the switch below starts from one). */
+  const kind = page.url.searchParams.get("kind") === "page" ? "page" : "component";
+  /** `?then=` a second canvas address: the panel switches to it, a component canvas named `?thenName=`, `?after=` ms in. */
+  const then = page.url.searchParams.get("then");
+  const after = Number(page.url.searchParams.get("after") ?? 3000);
+  const THEN = "00000000-0000-4000-8000-0000000000a2";
 
-  const preview: PanePreview = {
+  let preview = $state<PanePreview>({
     kind: "preview",
     instanceId: INSTANCE,
-    artifact: { id: ARTIFACT, kind: "component", name },
+    artifact: { id: ARTIFACT, kind, name },
     artifacts: [ARTIFACT],
     port,
     revision: "bench-1",
     source: { port, path },
     state: "open",
-  };
+  });
+  if (then) {
+    setTimeout(() => {
+      preview = {
+        ...preview,
+        artifact: {
+          id: THEN,
+          kind: "component",
+          name: page.url.searchParams.get("thenName") ?? "Switched canvas",
+        },
+        artifacts: [ARTIFACT, THEN],
+        revision: "bench-2",
+        source: { port, path: then },
+      };
+    }, after);
+  }
   const fleet: PaneFleet = {
     closePreview: () => Promise.resolve(),
     folders: {
@@ -82,6 +106,7 @@
 <div data-bench-pane class="pane" style:inline-size={`${width}px`}>
   <PreviewPane
     instanceId={INSTANCE}
+    ownTab={own}
     switcher={switched ? switcher : undefined}
   />
 </div>

@@ -41,6 +41,21 @@
  *     as preview-bridge.ts makes it (socat, unix to the stage's port): the
  *     stage's report says `by: "stage"`, every frame drawn, the move read,
  *     and a frame's picture.
+ * 14. A section on its way (a states file whose helper takes 4 s): the band
+ *     says neither the canvas's name nor its about (the panel's head does);
+ *     the section is named in words (its title's last part) in the title
+ *     role over its file in meta ink, never link-styled; one status line
+ *     ("Drawing 2 stories"), the column's head and a skeleton frame per
+ *     story stand from the first, unseen until `--dur-wait-grace` (their
+ *     `cawco-wait` delay,
+ *     scrubbed through the DevTools Animation domain: transparent just
+ *     before the grace, opaque past its fade); the frames land in the
+ *     skeletons' cells, the first row on its skeleton's corner, and the
+ *     skeletons go.
+ * 15. A section that didn't load (its helper throws): it says so where its
+ *     frames would stand, named by its component, with the error and its
+ *     place under Show details, and the report holds the page error; no
+ *     skeleton or status line is left.
  *
  * Captures of the canvas (desk and phone, light and dark, its move's
  * timeline and its dials open) go to `$TMPDIR/caps/` and the clone's
@@ -785,7 +800,7 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
       about: "A broken component",
     })
   );
-  const onPage = framesOf(await reportOn(broken))[0];
+  const [onPage] = framesOf(await reportOn(broken));
   // What the tools answer: the stage's kept report, its place mapped through Vite's sourcemap to the line the component writes.
   const [frame] = framesOf(await read("src/Throws.stories.js"));
   kit.check(
@@ -796,6 +811,287 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
       frame.error.line === 4 &&
       frame.error.column === 11,
     `kept ${JSON.stringify(frame?.error)}; as the page said it ${JSON.stringify(onPage?.error)}`
+  );
+  await broken.close();
+}
+
+/** A token's computed values, read off an element that takes it: font for a type role, colour for an ink. */
+const tokenStyle = (page: Page, font: string, color: string) =>
+  page.evaluate(
+    ([type, ink]) => {
+      const probe = document.createElement("span");
+      probe.style.font = `var(${type})`;
+      probe.style.color = `var(${ink})`;
+      document.body.append(probe);
+      const read = getComputedStyle(probe);
+      const resolved = {
+        size: read.fontSize,
+        weight: read.fontWeight,
+        family: read.fontFamily,
+        color: read.color,
+      };
+      probe.remove();
+      return resolved;
+    },
+    [font, color]
+  );
+
+/** An element's own type and ink, as leg 14 compares them to the tokens'. */
+const ownStyle = (page: Page, selector: string) =>
+  page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const read = getComputedStyle(el);
+      return {
+        size: read.fontSize,
+        weight: read.fontWeight,
+        family: read.fontFamily,
+        color: read.color,
+        decoration: read.textDecorationLine,
+        tag: el.tagName,
+      };
+    });
+
+/** Where each stand-in or each rest frame stands, in story order: its grid cell and its box's corner. */
+const placesOf = (page: Page, selector: string) =>
+  page.evaluate(
+    (wanted) =>
+      [...document.querySelectorAll<HTMLElement>(wanted)]
+        .map((el) => {
+          const box = el.getBoundingClientRect();
+          return {
+            cell: `${el.style.gridRow}/${el.style.gridColumn}`,
+            x: Math.round(box.x),
+            y: Math.round(box.y),
+          };
+        })
+        .sort((a, b) => a.cell.localeCompare(b.cell)),
+    selector
+  );
+
+/** Legs 14 and 15: a section on its way, and one that didn't load. */
+async function waiting(kit: Kit, stage: Stage): Promise<void> {
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Animation.enable");
+  const started: { id: string; name: string }[] = [];
+  cdp.on("Animation.animationStarted", ({ animation }) => {
+    started.push({ id: animation.id, name: animation.name });
+  });
+  const spec = { name: "Waiting canvas", about: "Two marks that come late" };
+  await page.goto(canvasUrl(stage, ["src/Slow.stories.js"], spec), {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForSelector(".cawco-section-status", { state: "attached" });
+  const seen = await page.evaluate(() => ({
+    band:
+      document
+        .getElementById("cawco-chrome")
+        ?.shadowRoot?.querySelector(".band")?.textContent ?? "",
+    page: `${document.body.innerText}\n${document.getElementById("cawco-chrome")?.shadowRoot?.textContent ?? ""}`,
+    title: document.querySelector(".cawco-section-title")?.textContent,
+    file: document.querySelector(".cawco-section-file")?.textContent,
+    status: document.querySelector(".cawco-section-status")?.textContent,
+    standIns: document.querySelectorAll(".cawco-stand-in").length,
+    frames: document.querySelectorAll(".cawco-world .cawco-frame").length,
+  }));
+  const [title, titleWant, file, fileWant] = await Promise.all([
+    ownStyle(page, ".cawco-section-title"),
+    tokenStyle(page, "--type-title", "--ink-strong"),
+    ownStyle(page, ".cawco-section-file"),
+    tokenStyle(page, "--type-meta", "--ink-muted"),
+  ]);
+  const same = (
+    own: Awaited<ReturnType<typeof ownStyle>>,
+    want: Awaited<ReturnType<typeof tokenStyle>>
+  ) =>
+    own.size === want.size &&
+    own.weight === want.weight &&
+    own.family === want.family &&
+    own.color === want.color &&
+    own.decoration === "none" &&
+    own.tag !== "A";
+  kit.check(
+    "14a: the band names neither the canvas nor its about; the section is named in words in the title role over its file in meta ink, never link-styled, and no text holds a route",
+    !(seen.band.includes(spec.name) || seen.band.includes(spec.about)) &&
+      seen.title === "Late badge" &&
+      seen.file === "src/Slow.stories.js" &&
+      same(title, titleWant) &&
+      same(file, fileWant) &&
+      !seen.page.includes("/@cawco/"),
+    `band ${JSON.stringify(seen.band)}; head ${JSON.stringify(seen.title)} ${JSON.stringify(title)} (title role ${JSON.stringify(titleWant)}) over ${JSON.stringify(seen.file)} ${JSON.stringify(file)} (meta ${JSON.stringify(fileWant)})`
+  );
+
+  // The wait's grace and fade, as the page's tokens resolve them.
+  const ms = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.transitionDuration = "var(--dur-wait-grace), var(--dur-fade)";
+    document.body.append(probe);
+    const [grace, fade] = getComputedStyle(probe)
+      .transitionDuration.split(",")
+      .map((one) => Number.parseFloat(one) * 1000);
+    probe.remove();
+    return { grace: grace ?? 0, fade: fade ?? 0 };
+  });
+  const timings = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((one) => (one as CSSAnimation).animationName === "cawco-wait")
+      .map((one) => {
+        const timing = one.effect?.getTiming();
+        return {
+          on: ((one.effect as KeyframeEffect | null)?.target as Element | null)
+            ?.className,
+          delay: Number(timing?.delay),
+          duration: Number(timing?.duration),
+          start: one.startTime,
+        };
+      })
+  );
+  const ids = started
+    .filter((one) => one.name === "cawco-wait")
+    .map((one) => one.id);
+  await cdp.send("Animation.setPaused", { animations: ids, paused: true });
+  const opacityAt = async (at: number) => {
+    await cdp.send("Animation.seekAnimations", {
+      animations: ids,
+      currentTime: at,
+    });
+    return page.evaluate(() =>
+      [...document.querySelectorAll(".cawco-waiting")].map((el) =>
+        Number(getComputedStyle(el).opacity)
+      )
+    );
+  };
+  const fade = Math.max(...timings.map((one) => one.duration));
+  const early = await opacityAt(ms.grace - 50);
+  const past = await opacityAt(ms.grace + fade + 20);
+  await cdp.send("Animation.setPaused", { animations: ids, paused: false });
+  kit.check(
+    "14b: one status line, the column's head and a skeleton per story stand from the first, on one clock delayed by --dur-wait-grace: transparent just before it, opaque past its fade",
+    seen.status === "Drawing 2 stories" &&
+      seen.standIns === 2 &&
+      seen.frames === 0 &&
+      timings.length === 4 &&
+      timings.every(
+        (one) =>
+          one.delay === ms.grace &&
+          one.duration === timings[0]?.duration &&
+          one.start === timings[0]?.start
+      ) &&
+      ids.length === 4 &&
+      early.length === 4 &&
+      early.every((one) => one === 0) &&
+      past.every((one) => one === 1),
+    `grace ${ms.grace} ms, fade ${ms.fade} ms; animations ${JSON.stringify(timings)}; opacity at ${ms.grace - 50} ms ${JSON.stringify(early)}, at ${ms.grace + fade + 20} ms ${JSON.stringify(past)}; status ${JSON.stringify(seen.status)}`
+  );
+
+  const stood = await placesOf(page, ".cawco-stand-in");
+  await page.waitForFunction(
+    () => document.querySelectorAll(".cawco-world .cawco-frame").length >= 2,
+    null,
+    { timeout: 20_000 }
+  );
+  const landed = await placesOf(
+    page,
+    '.cawco-world .cawco-frame[data-cawco-interaction="rest"]'
+  );
+  const left = await page.evaluate(
+    () =>
+      document.querySelectorAll(".cawco-stand-in, .cawco-section-status").length
+  );
+  kit.check(
+    "14c: the frames land in their skeletons' cells, the first row on its skeleton's corner (the rows under it move by the frames' own heights), and the skeletons go",
+    landed.length === 2 &&
+      landed.every(
+        (one, at) =>
+          one.cell === stood[at]?.cell &&
+          Math.abs(one.x - (stood[at]?.x ?? -99)) <= 1
+      ) &&
+      Math.abs((landed[0]?.y ?? 0) - (stood[0]?.y ?? -99)) <= 1 &&
+      left === 0,
+    `skeletons at ${JSON.stringify(stood)}; frames at ${JSON.stringify(landed)}; ${left} stand-ins left`
+  );
+  await page.close();
+
+  const broken = await kit.page("desk", { init: [BRIDGE] });
+  await broken.goto(
+    canvasUrl(stage, ["src/Broken.stories.js"], {
+      name: "Broken canvas",
+      about: "A states file that never loads",
+    })
+  );
+  await broken.waitForSelector(".cawco-section-failed", { timeout: 20_000 });
+  const before = await broken.evaluate(() => ({
+    title: document.querySelector(".cawco-section-title")?.textContent,
+    line: document.querySelector(".cawco-section-failed-line")?.textContent,
+    summary: document.querySelector(".cawco-section-failed summary")
+      ?.textContent,
+    open: !!document.querySelector<HTMLDetailsElement>(
+      ".cawco-section-failed details"
+    )?.open,
+    left: document.querySelectorAll(".cawco-stand-in, .cawco-section-status")
+      .length,
+    role: document.querySelector(".cawco-section-failed")?.getAttribute("role"),
+  }));
+  await broken.locator(".cawco-section-failed summary").click();
+  // The details' toggle event is a task after the press: its words follow it.
+  await broken
+    .waitForFunction(
+      () =>
+        document.querySelector(".cawco-section-failed summary")?.textContent ===
+        "Hide details",
+      null,
+      { timeout: 2000 }
+    )
+    .catch(() => undefined);
+  const details = await broken.evaluate(() => {
+    const pre = document.querySelector(".cawco-section-failed pre");
+    const summary = document.querySelector(".cawco-section-failed summary");
+    return {
+      text: pre?.textContent ?? "",
+      height: pre?.getBoundingClientRect().height ?? 0,
+      summary: summary?.textContent ?? "",
+      marker: summary ? getComputedStyle(summary).listStyleType : "",
+    };
+  });
+  const report = await broken
+    .waitForFunction(
+      () =>
+        (
+          window as unknown as {
+            __cawcoCanvas?: { report: RenderReport | null };
+          }
+        ).__cawcoCanvas?.report?.page.errors.length,
+      null,
+      { timeout: 10_000 }
+    )
+    .then(() =>
+      broken.evaluate(
+        () =>
+          (window as unknown as { __cawcoCanvas: { report: RenderReport } })
+            .__cawcoCanvas.report.page.errors
+      )
+    )
+    .catch(() => []);
+  kit.check(
+    "15: a section that didn't load says so in its place, named by its component, its error and place under Show details, the report holding the page error, no skeleton left",
+    before.title === "Badge" &&
+      before.line === "Badge didn't load, so none of its stories are drawn." &&
+      before.summary === "Show details" &&
+      !before.open &&
+      before.role === "alert" &&
+      before.left === 0 &&
+      details.height > 0 &&
+      details.summary === "Hide details" &&
+      details.marker === "none" &&
+      details.text.includes("The states file's helper broke as it loaded") &&
+      details.text.includes("src/broken.js:2:") &&
+      report.some((one) =>
+        one.message.includes("The states file's helper broke as it loaded")
+      ),
+    `before ${JSON.stringify(before)}; details ${JSON.stringify(details)}; report's page errors ${JSON.stringify(report)}`
   );
   await broken.close();
 }
@@ -973,6 +1269,7 @@ const spec: Spec = {
       await views(kit, svelte);
       await lazy(kit, svelte);
       await kept(kit, svelte);
+      await waiting(kit, svelte);
       await daemonRender(kit, svelte);
     } finally {
       svelte.stop();

@@ -8,7 +8,6 @@
  * alone. Refusals name the valid shape and one example.
  */
 import {
-  CANVAS_PATH,
   CANVAS_SPEC_LIMITS,
   type CanvasDial,
   type CanvasEdge,
@@ -75,26 +74,6 @@ export const specOf = (name: string, input: CanvasInput): CanvasSpec => ({
     : {}),
   ...(input.dials?.length ? { dials: input.dials } : {}),
 });
-
-/** The canvas page's address on its stage: each states file (from the toolchain root), slashes kept, and its spec. */
-export const canvasPath = (files: string[], spec: CanvasSpec): string => {
-  const query = files
-    .map((file) => `file=${encodeURIComponent(file).replaceAll("%2F", "/")}`)
-    .join("&");
-  return `${CANVAS_PATH}?${query}&spec=${encodeURIComponent(JSON.stringify(spec))}`;
-};
-
-/** A canvas address's states files and spec, as {@link canvasPath} wrote them. */
-export function canvasOf(path: string): { files: string[]; spec: CanvasSpec } {
-  const query = new URL(path, "http://stage").searchParams;
-  let spec: CanvasSpec = {};
-  try {
-    spec = JSON.parse(query.get("spec") ?? "{}") as CanvasSpec;
-  } catch {
-    spec = {};
-  }
-  return { files: query.getAll("file"), spec };
-}
 
 /** At most this many frames an answer lists; past it, the count and how to read one. Ours: a canvas's first screenful. */
 const FRAMES_LISTED = 60;

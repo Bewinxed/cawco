@@ -14,7 +14,7 @@
  * ({@link ArtifactServiceDeps.deliverMarks}).
  */
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import {
   type AgentRow,
   ARTIFACT_NAME,
@@ -57,23 +57,28 @@ import {
 import { type GraphPlace, PLACES_KEY } from "@cawco/core/decisions";
 import type { InkGroup } from "@cawco/core/ink";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
-import type {
-  CanvasDial,
-  CanvasEdge,
-  CanvasSpec,
-  DesignMap,
-  DesignQuery,
-  RenderReport,
-  ServeSpec,
-  SheetRead,
-  SheetWeight,
-  SheetWrite,
-  SheetWritten,
-  StageError,
-  StageFrame,
-  StageOpened,
-  StageState,
-  StoryOp,
+import {
+  type CanvasDial,
+  type CanvasEdge,
+  type CanvasMap,
+  type CanvasMapNode,
+  type CanvasSpec,
+  canvasOf,
+  canvasPath,
+  type DesignLink,
+  type DesignMap,
+  type DesignQuery,
+  type RenderReport,
+  type ServeSpec,
+  type SheetRead,
+  type SheetWeight,
+  type SheetWrite,
+  type SheetWritten,
+  type StageError,
+  type StageFrame,
+  type StageOpened,
+  type StageState,
+  type StoryOp,
 } from "@cawco/core/stage";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { applyPatch, type Operation } from "rfc6902";
@@ -87,6 +92,7 @@ import {
   readKept,
   type StatementChange,
 } from "../decision-program";
+import type { AskedArtifact } from "../design-verify";
 import { sessionLabel } from "../labels";
 import {
   changeFolderFiles,
@@ -103,8 +109,6 @@ import {
 import {
   type CanvasInput,
   COMPONENT_EXAMPLE,
-  canvasOf,
-  canvasPath,
   canvasProblem,
   errorsSaid,
   movesSaid,
@@ -340,6 +344,8 @@ export interface ArtifactRead {
   stage?: StageState;
   /** Every key, or with `since` only those changed after it. */
   state: Record<string, ReadEntry>;
+  /** A component canvas's design system round, as `verify: true` asked it: what the ask did. */
+  verify?: string;
   /** What a sheet loads, from its stage's module graph; null until a view has loaded it. */
   weight?: SheetWeight | null;
   /** A port preview's workspace, whose dev server it is. */
@@ -663,6 +669,8 @@ export interface ComponentReadAsk {
   /** One frame's delta from rest, its transitions and parts. */
   state?: StateAsk;
   story?: string;
+  /** Ask the design system's verifier for a round on it; its findings come as a message. */
+  verify?: boolean;
 }
 
 /** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
@@ -935,15 +943,7 @@ export interface ArtifactServiceDeps {
     files?: string[]
   ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
   /** The design map of session `instance`'s workspace (agent stage.ts `stageComponents`): its components, paged, or one's card. */
-  stageComponents: (
-    instance: InstanceRow,
-    ask: DesignQuery
-  ) => Promise<DesignMap>;
-  /**
-   * A component canvas drawn by its workspace's daemon in the machine's own
-   * Chromium (agent stage.ts `renderStage`): the stage's report once every
-   * section drew, and a picture when asked.
-   */
+  stageComponents: (at: StageAt, ask: DesignQuery) => Promise<DesignMap>;
   stageRender: (
     at: StageAt,
     ask: { files: string[]; png?: boolean; spec?: CanvasSpec; state?: StateAsk }
@@ -956,6 +956,17 @@ export interface ArtifactServiceDeps {
   stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
   /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
   unserve: (machineId: string, workspace: string, port: number) => void;
+  /**
+   * A component canvas drawn by its workspace's daemon in the machine's own
+   * Chromium (agent stage.ts `renderStage`): the stage's report once every
+   * section drew, and a picture when asked.
+   */
+  /**
+   * A design system round asked of a component canvas in a chat (hub
+   * design-verify.ts `ask`): its verdict goes to `requester`. Answers what
+   * the ask did, one sentence.
+   */
+  verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
   workspaces: (needle: string) => { id: string; machineId: string }[];
 }
@@ -2731,6 +2742,30 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     } as ArtifactRead;
   };
 
+  /** A design system round on component canvas `row`, asked by `requester`: what the ask did. */
+  const askVerify = (
+    requester: InstanceRow,
+    row: ArtifactRow
+  ): Promise<string> => {
+    const sheet = sheetOf(row);
+    if (!sheet) {
+      return Promise.reject(
+        new ArtifactRefusal(
+          409,
+          `${row.name} is a ${row.kind}: verify is a component canvas's.`
+        )
+      );
+    }
+    return deps.verify(requester, {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      projectId: row.projectId,
+      workspaceId: sheet.workspace,
+      files: sheet.files,
+    });
+  };
+
   /** A canvas (or the composer's draft) and a sheet are each made their own way; a page or preview is null here, made by `create` itself. */
   const madeOwnWay = (
     making: Making,
@@ -3196,12 +3231,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row.kind === "canvas") {
         return readCanvas(row, since, png, ownersRead);
       }
-      return row.kind === "component"
-        ? await readSheet(row, since, ownersRead, {
-            ...ask,
-            png: png || ask.png,
-          })
-        : read(row, since, ownersRead);
+      if (row.kind !== "component") {
+        return read(row, since, ownersRead);
+      }
+      const answer = await readSheet(row, since, ownersRead, {
+        ...ask,
+        png: png || ask.png,
+      });
+      return ask.verify
+        ? { ...answer, verify: await askVerify(instance, row) }
+        : answer;
     },
 
     /** `artifact_update` of a sheet by its owner or its maker: one story's args, or one story op, written by its stage. */
@@ -3273,9 +3312,78 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): Promise<ArtifactRead> =>
       writeSheet(own(sessionOf(instanceId), id), change, "person"),
 
+    /** The panel's Verify on a component canvas: a round asked for its session, whose verdict reaches that session. */
+    verifyFor: (instanceId: string, id: string): Promise<string> => {
+      const session = sessionOf(instanceId);
+      return askVerify(session, own(session, id));
+    },
+
     /** `design_map`: the session's workspace's components, paged, or one component's card (agent stage.ts `stageComponents`). */
     designMap: (instanceId: string, ask: DesignQuery): Promise<DesignMap> =>
-      deps.stageComponents(sessionOf(instanceId), ask),
+      deps.stageComponents({ session: sessionOf(instanceId) }, ask),
+
+    /**
+     * A component canvas's map for its panel: the component its states file
+     * mounts, with what renders it (used in) and what it renders (made of),
+     * each with its states, frames drawn, states files and frames in
+     * miniature, read on the workspace its stage runs in.
+     */
+    mapOf: async (instanceId: string, id: string): Promise<CanvasMap> => {
+      const row = own(sessionOf(instanceId), id);
+      const sheet = sheetOf(row);
+      const component = (
+        docs.doc(row.id).getMap("meta").get("sheet") as SheetRead | undefined
+      )?.meta.component;
+      if (!(sheet && component)) {
+        throw new ArtifactRefusal(
+          409,
+          sheet
+            ? `${row.name}'s states file names no component the stage resolved, so it has no map.`
+            : `${row.name} is a ${row.kind}: a map is a component canvas's.`
+        );
+      }
+      const [card] = (
+        await deps.stageComponents(
+          { workspace: sheet.workspace },
+          {
+            dir: sheet.dir,
+            component: join(sheet.dir, component),
+            thumbs: true,
+          }
+        )
+      ).components;
+      if (!card) {
+        throw new ArtifactRefusal(
+          409,
+          `${component} is no component the stage maps.`
+        );
+      }
+      // States files as a canvas address names them: from the toolchain root.
+      const ownFiles = (files: string[] | undefined) =>
+        (files ?? []).map((file) => relative(sheet.dir, file));
+      const node = (link: DesignLink): CanvasMapNode => ({
+        name: link.name,
+        file: link.file,
+        at: link.at,
+        states: link.states ?? 0,
+        drawn: link.drawn ?? 0,
+        statesFiles: ownFiles(link.statesFiles),
+        thumb: link.thumb ?? null,
+      });
+      return {
+        center: {
+          name: card.name,
+          file: card.file,
+          at: null,
+          states: card.states,
+          drawn: card.drawn,
+          statesFiles: ownFiles(card.statesFiles),
+          thumb: card.thumb ?? null,
+        },
+        usedIn: Array.isArray(card.usedIn) ? card.usedIn.map(node) : [],
+        madeOf: Array.isArray(card.madeOf) ? card.madeOf.map(node) : [],
+      };
+    },
 
     /**
      * The artifact's doc as a person's view reads it (the dashboard pane's

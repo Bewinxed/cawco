@@ -54,6 +54,11 @@
  *    from the pane's hello, dark after the dashboard's switch flips to dark,
  *    light after it flips back; a preview of a live port keeps its root
  *    untouched through the same flips.
+ * 19. The head says no path under the artifact's name (owner: "a stray /
+ *    below the preview title"): for the page, the live preview and a canvas
+ *    the session makes, at 1440 and at 390, the head stands with no line
+ *    under the name (only a component canvas has a description, its
+ *    `about`: session-sheet leg 22), and no text in the panel holds a route.
  *
  * `artifact_promote` (slice 6), read from the project's folder on the hub
  * with git:
@@ -815,6 +820,31 @@ const rootTheme = (frame: Frame) =>
   }));
 
 /** The dashboard's theme switch (the sidebar's), pressed from `from` to the other scheme. */
+/** What the panel's head says under the name, read from the DOM: whether the head stands, its line (null when none), and whether any text in the panel holds a stage route. */
+const headLine = (page: Page) =>
+  page.evaluate(() => {
+    const head = document.querySelector(
+      '[data-side-surface-class~="preview-pane"] [data-slot="side-head"]'
+    );
+    const panel = head?.closest('[data-slot="side-card"]');
+    return {
+      head: !!head,
+      line: head?.querySelector('[data-slot="subtitle"]')?.textContent ?? null,
+      route: !!panel?.textContent?.includes("/@cawco/"),
+    };
+  });
+
+/** {@link headLine} at the desk (1440) and at 390, the desk's size given back after. */
+async function headLines(page: Page) {
+  // Text is read, not motion: a beat for the layout after each size.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(600);
+  const phone = await headLine(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(600);
+  return { desk: await headLine(page), phone };
+}
+
 const flipTheme = (page: Page, from: "light" | "dark") =>
   page
     .getByRole("button", {
@@ -855,6 +885,9 @@ const themeChecks = async (
       light.scheme === "light",
     `hello ${JSON.stringify(hello)}; dark ${JSON.stringify(dark)}; light ${JSON.stringify(light)}`
   );
+  const lines: Record<string, Awaited<ReturnType<typeof headLines>>> = {
+    page: await headLines(page),
+  };
 
   const app = Bun.serve({
     port: 0,
@@ -902,9 +935,29 @@ const themeChecks = async (
       ),
       `before ${JSON.stringify(before)}; dark ${JSON.stringify(flipped)}; light ${JSON.stringify(back)}`
     );
+    lines.preview = await headLines(page);
+    await call(CREATE, {
+      kind: "canvas",
+      name: "head-sketch",
+      mermaid: "flowchart LR; A --> B",
+    });
+    await until(
+      "the panel showing the canvas",
+      () => page.locator('[data-slot="canvas-slot"]').count(),
+      (count) => count === 1,
+      30_000
+    );
+    lines.canvas = await headLines(page);
   } finally {
     await app.stop(true);
   }
+  const reads = Object.values(lines).flatMap((one) => [one.desk, one.phone]);
+  kit.check(
+    "19: for the page, the live preview and a canvas, at 1440 and 390, the head stands with no line under the name and no route in the panel",
+    Object.keys(lines).length === 3 &&
+      reads.every((read) => read.head && read.line === null && !read.route),
+    JSON.stringify(lines)
+  );
 };
 
 /** One entry of a read, or none. */

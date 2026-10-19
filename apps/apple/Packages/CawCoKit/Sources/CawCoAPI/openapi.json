@@ -5292,6 +5292,21 @@
                 }
               ]
             }
+          },
+          {
+            "name": "verify",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
           }
         ],
         "operationId": "getApiInstancesByIdArtifactsByArtifact",
@@ -6013,6 +6028,76 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/map": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdArtifactsByArtifactMap",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdArtifactsByArtifactMap 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasMap"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/verify": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstancesByIdArtifactsByArtifactVerify",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactVerify 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactVerify200"
                 }
               }
             }
@@ -25578,6 +25663,17 @@
           }
         ]
       },
+      "postApiInstancesByIdArtifactsByArtifactVerify200": {
+        "type": "object",
+        "properties": {
+          "verify": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "verify"
+        ]
+      },
       "postApiInstancesByIdArtifactsCommentsByPinReply200": {
         "type": "object",
         "properties": {
@@ -35455,6 +35551,10 @@
             "type": "object",
             "description": "Every key, or with `since` only those changed after it."
           },
+          "verify": {
+            "description": "A component canvas's design system round, as `verify: true` asked it: what the ask did.",
+            "type": "string"
+          },
           "weight": {
             "description": "What a sheet loads, from its stage's module graph; null until a view has loaded it.",
             "$ref": "#/components/schemas/SheetWeight"
@@ -35958,6 +36058,126 @@
           "replaced"
         ]
       },
+      "CanvasMap": {
+        "description": "A component canvas's map (component canvas §3c): its component, what renders it above, what it renders below.",
+        "type": "object",
+        "properties": {
+          "center": {
+            "$ref": "#/components/schemas/CanvasMapNode"
+          },
+          "madeOf": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CanvasMapNode"
+            }
+          },
+          "usedIn": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CanvasMapNode"
+            }
+          }
+        },
+        "required": [
+          "center",
+          "madeOf",
+          "usedIn"
+        ]
+      },
+      "CanvasMapNode": {
+        "description": "One component on a canvas's map: what it is, where it is called, and its states as drawn.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "Where it is called from the canvas's component (made of) or where it calls it (used in); null when no draw saw it.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "drawn": {
+            "description": "Frames a browser drew of its states.",
+            "type": "number"
+          },
+          "file": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "states": {
+            "description": "Stories across its states files.",
+            "type": "number"
+          },
+          "statesFiles": {
+            "description": "Its states files, from the toolchain root, as a canvas address names them; none, it has no canvas to draw live.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "thumb": {
+            "description": "Its frames as last drawn, in miniature; null before a browser drew them.",
+            "$ref": "#/components/schemas/DesignThumb"
+          }
+        },
+        "required": [
+          "at",
+          "drawn",
+          "file",
+          "name",
+          "states",
+          "statesFiles"
+        ]
+      },
+      "DesignThumb": {
+        "description": "A component's frames as a browser last drew them, in miniature: each one's box on its canvas and its state, from its canvas's top left.",
+        "type": "object",
+        "properties": {
+          "frames": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "h": {
+                  "type": "number"
+                },
+                "state": {
+                  "$ref": "#/components/schemas/FrameState"
+                },
+                "w": {
+                  "type": "number"
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "h",
+                "state",
+                "w",
+                "x",
+                "y"
+              ]
+            }
+          },
+          "h": {
+            "description": "The canvas the frames stand on: their union's extent.",
+            "type": "number"
+          },
+          "w": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "frames",
+          "h",
+          "w"
+        ]
+      },
       "DesignMap": {
         "description": "A page of the design map.",
         "type": "object",
@@ -36098,6 +36318,10 @@
               ]
             }
           },
+          "thumb": {
+            "description": "With `thumbs`: its frames in miniature; null before a browser drew them.",
+            "$ref": "#/components/schemas/DesignThumb"
+          },
           "usedIn": {
             "anyOf": [
               {
@@ -36131,11 +36355,27 @@
               "string"
             ]
           },
+          "drawn": {
+            "description": "With `thumbs`: its own frames drawn, states, states files and thumbnail.",
+            "type": "number"
+          },
           "file": {
             "type": "string"
           },
           "name": {
             "type": "string"
+          },
+          "states": {
+            "type": "number"
+          },
+          "statesFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "thumb": {
+            "$ref": "#/components/schemas/DesignThumb"
           }
         },
         "required": [

@@ -513,6 +513,14 @@ public enum Size {
     public static let cSheetInspectorW: Double = 296
     /// The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink).
     public static let cSheetInspectorHeadH: Double = 44
+    /// A component canvas's frame on its way, where its story names no form width: the skeleton's width, a button-to-card component's own (DESIGN.md Artifact panel, canvas and ink; Skeleton).
+    public static let cCanvasSkeletonW: Double = 240
+    /// A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (DESIGN.md Artifact panel, canvas and ink; Skeleton).
+    public static let cCanvasSkeletonH: Double = 96
+    /// An edge's stroke on a graph canvas: the decision graph's and a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink).
+    public static let cGraphEdge: Double = 1.5
+    /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink).
+    public static let cMapNodeW: Double = 264
     /// The preview's Comments panel, floating over the page's top-right: its share of the pane's width (Magnific's floating panel, about 22%), held between c-pin-list-min and c-pin-list-max.
     public static let cPinListShare: Double = 0.22
     /// The Comments panel at its narrowest: a row's disc, anchor line and last reply's first line.

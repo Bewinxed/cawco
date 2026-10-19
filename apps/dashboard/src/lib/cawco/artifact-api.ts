@@ -6,7 +6,7 @@
  */
 import type { ArtifactSummary, ShownFailure } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { SheetRead, StoryOp } from "@cawco/core/stage";
+import type { CanvasMap, SheetRead, StoryOp } from "@cawco/core/stage";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { currentClientId } from "./client-id";
 
@@ -150,6 +150,27 @@ export async function writeSheet(
       })
     )
   ).json();
+}
+
+/** A component canvas's map: its component, what renders it and what it renders, each with its states and frames in miniature. */
+export async function fetchCanvasMap(
+  instanceId: string,
+  id: string
+): Promise<CanvasMap> {
+  return (await ok(await fetch(`${artifactsPath(instanceId, id)}/map`))).json();
+}
+
+/** The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session. Answers what the hub did, one sentence. */
+export async function verifyArtifact(
+  instanceId: string,
+  id: string
+): Promise<string> {
+  const answer = (await (
+    await ok(
+      await fetch(`${artifactsPath(instanceId, id)}/verify`, { method: "POST" })
+    )
+  ).json()) as { verify: string };
+  return answer.verify;
 }
 
 /** The draft canvas went out with a send: the session holds it now. */

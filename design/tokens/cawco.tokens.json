@@ -3864,6 +3864,38 @@
       },
       "$description": "The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink)."
     },
+    "c-canvas-skeleton-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "A component canvas's frame on its way, where its story names no form width: the skeleton's width, a button-to-card component's own (DESIGN.md Artifact panel, canvas and ink; Skeleton)."
+    },
+    "c-canvas-skeleton-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (DESIGN.md Artifact panel, canvas and ink; Skeleton)."
+    },
+    "c-graph-edge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1.5,
+        "unit": "px"
+      },
+      "$description": "An edge's stroke on a graph canvas: the decision graph's and a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink)."
+    },
+    "c-map-node-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 264,
+        "unit": "px"
+      },
+      "$description": "A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink)."
+    },
     "c-pin-list-share": {
       "$type": "number",
       "$value": 0.22,

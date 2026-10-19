@@ -12,12 +12,15 @@
  * (`mountStory`, answering `unmount` and `update`) and how to load each
  * section; everything else is read from the page's URL: `file` per
  * section, `spec` (core `CanvasSpec`), and `scheme`, `width`, `motion`,
- * `all` and `by`.
+ * `all` and `by`; and from the plan the stage writes into the page (core
+ * `SectionPlan`): each section's name and its stories, so a section names
+ * itself and stands its frames in their places before its module loads.
  */
 
 import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
+  CANVAS_PLAN_ID,
   type CanvasSpec,
   FORMS,
   type FormName,
@@ -27,9 +30,11 @@ import {
   type PageError,
   type RenderReport,
   type Scheme,
+  type SectionPlan,
   type SectionRender,
   type SheetOnPage,
   type Story,
+  sectionName,
 } from "@cawco/core/stage";
 import { Chrome } from "./chrome";
 import {
@@ -171,7 +176,11 @@ export interface Section {
   loading?: Promise<void>;
   mod?: SectionModule;
   moves: MoveRender[];
+  /** Its name in plain words: its states file's title, else its component's, else its file's. */
+  name: string;
   probes: Map<string, Probe>;
+  /** What stands for its frames until they draw: the line saying what it waits for and each story's frame on its way, or why it didn't load. */
+  standIns: HTMLElement[];
 }
 
 const frameTick = () =>
@@ -200,24 +209,26 @@ function viewOf(params: URLSearchParams): View {
   };
 }
 
-/** A section's head: the sheet's title in the title role when it has one, over its file in code. */
-const headOf = (
-  head: HTMLElement,
-  file: string,
-  title?: string | null
-): void => {
-  const lines: HTMLElement[] = [];
-  if (title) {
-    const named = document.createElement("span");
-    named.className = "cawco-section-title";
-    named.textContent = title;
-    lines.push(named);
-  }
-  const path = document.createElement("code");
+/** A section's head: its name in plain words in the title role, over its file in small print. */
+const headOf = (head: HTMLElement, file: string, name: string): void => {
+  const named = document.createElement("span");
+  named.className = "cawco-section-title";
+  named.textContent = name;
+  const path = document.createElement("span");
   path.className = "cawco-section-file";
   path.textContent = file;
-  lines.push(path);
-  head.replaceChildren(...lines);
+  head.replaceChildren(named, path);
+};
+
+/** Each states file's plan as the stage wrote it into the page; none when the page has no plan. */
+const planOfPage = (): Record<string, SectionPlan> => {
+  try {
+    return JSON.parse(
+      document.getElementById(CANVAS_PLAN_ID)?.textContent ?? "{}"
+    ) as Record<string, SectionPlan>;
+  } catch {
+    return {};
+  }
 };
 
 const specOf = (params: URLSearchParams): CanvasSpec => {
@@ -274,6 +285,12 @@ export function boot(options: BootOptions): void {
   const files = params.getAll("file");
   const spec = specOf(params);
   const by = params.get("by") === "stage" ? "stage" : "panel";
+  /**
+   * The panel map's live card (`by=map`): a second page of a canvas that
+   * draws its frames fitted to the card and never posts, so the report
+   * stays the panel's own page's (chrome `asCard`).
+   */
+  const card = params.get("by") === "map";
   const view = viewOf(params);
   const base = location.pathname.slice(
     0,
@@ -420,7 +437,10 @@ export function boot(options: BootOptions): void {
 
   /* --- Sections ----------------------------------------------------------- */
 
+  const plans = planOfPage();
   for (const file of files) {
+    const plan = plans[file];
+    const name = plan?.name ?? sectionName(null, null, file);
     const el = document.createElement("section");
     el.className = "cawco-section";
     el.dataset.cawcoFile = file;
@@ -428,22 +448,112 @@ export function boot(options: BootOptions): void {
     el.dataset.cawcoChoice = file;
     const head = document.createElement("header");
     head.className = "cawco-section-head cawco-ui";
-    headOf(head, file);
+    headOf(head, file, name);
     const grid = document.createElement("div");
     grid.className = "cawco-grid";
     el.append(head, grid);
     world.append(el);
-    sections.push({
+    const section: Section = {
       file,
       el,
       head,
       grid,
+      name,
+      standIns: [],
       frames: new Map(),
       interactions: new Map(),
       loaded: false,
       moves: [],
       probes: new Map(),
+    };
+    sections.push(section);
+  }
+
+  /**
+   * A section on its way: one line saying what it waits for, its columns'
+   * heads, and each planned story's frame as a skeleton in the cell its
+   * frame takes (its label, then a block at its width), so the frames land
+   * where they stood. All of it is seen only once the wait has lasted the
+   * grace (`cawco-waiting`, PAGE_CSS; DESIGN.md's Real Wait Rule); before
+   * it, nothing. Run once the columns' rules below are defined.
+   */
+  function standIn(section: Section, stories: SectionPlan["stories"]): void {
+    const status = document.createElement("p");
+    status.className = "cawco-section-status cawco-waiting cawco-ui";
+    status.setAttribute("role", "status");
+    status.textContent =
+      stories.length > 0
+        ? `Drawing ${stories.length} ${stories.length === 1 ? "story" : "stories"}`
+        : "Drawing its stories";
+    heads(section);
+    const columns = columnsOfSection(section);
+    const frames = stories.flatMap((story, row) =>
+      columns.map((column, at) => {
+        const one = document.createElement("div");
+        one.className = "cawco-stand-in cawco-waiting cawco-ui";
+        one.setAttribute("aria-hidden", "true");
+        one.style.gridRow = String(row + 2);
+        one.style.gridColumn = String(at + 1);
+        const words = document.createElement("span");
+        words.className = "cawco-frame-words";
+        words.textContent = story.label ?? story.name;
+        const body = document.createElement("div");
+        body.className = "cawco-stand-in-body";
+        const width = column.width === "own" ? story.width : column.width;
+        if (width !== null) {
+          body.style.inlineSize = `${width}px`;
+        }
+        one.append(words, body);
+        return one;
+      })
+    );
+    const columnHeads = [
+      ...section.grid.querySelectorAll<HTMLElement>(":scope > .cawco-colhead"),
+    ];
+    for (const head of columnHeads) {
+      head.classList.add("cawco-waiting");
+    }
+    // In the head's title row, beside the name: when it goes, nothing under it moves.
+    section.head.append(status);
+    section.grid.append(...frames);
+    section.standIns = [status, ...columnHeads, ...frames];
+  }
+
+  /** What stood for a section's frames, taken away: they drew, or it says why not. */
+  const clearStandIns = (section: Section) => {
+    for (const one of section.standIns) {
+      one.remove();
+    }
+    section.standIns = [];
+  };
+
+  /**
+   * A section whose module didn't load: it says so in its own place, its
+   * error and where it threw under Show details, never a blank canvas.
+   */
+  function failedSection(section: Section, error: PageError): void {
+    clearStandIns(section);
+    const failed = document.createElement("div");
+    failed.className = "cawco-section-failed cawco-ui";
+    failed.setAttribute("role", "alert");
+    const line = document.createElement("p");
+    line.className = "cawco-section-failed-line";
+    line.textContent = `${section.name} didn't load, so none of its stories are drawn.`;
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "Show details";
+    // The house's disclosure (dashboard RowFault): its words say what a press does.
+    details.addEventListener("toggle", () => {
+      summary.textContent = details.open ? "Hide details" : "Show details";
     });
+    const words = document.createElement("pre");
+    words.textContent = error.file
+      ? `${error.message}\n${error.file}:${error.line ?? 1}:${error.column ?? 1}`
+      : error.message;
+    details.append(summary, words);
+    failed.append(line, details);
+    section.head.after(failed);
+    section.standIns = [failed];
   }
 
   const sectionOf = (file: string) => sections.find((one) => one.file === file);
@@ -829,7 +939,7 @@ export function boot(options: BootOptions): void {
         section.mod = await options.load(section.file);
       } catch (error) {
         heard(error);
-        section.head.dataset.cawcoFailed = "";
+        failedSection(section, pageError(error, root, base));
         section.loading = undefined;
         return;
       }
@@ -842,7 +952,13 @@ export function boot(options: BootOptions): void {
   function showSection(section: Section): void {
     const mod = section.mod as SectionModule;
     section.loaded = true;
-    headOf(section.head, section.file, mod.SHEET.meta.title);
+    clearStandIns(section);
+    section.name = sectionName(
+      mod.SHEET.meta.title,
+      section.name,
+      section.file
+    );
+    headOf(section.head, section.file, section.name);
     delete section.el.dataset.cawcoAsleep;
     for (const story of mod.SHEET.stories) {
       if (!section.interactions.has(story.name)) {
@@ -1315,12 +1431,17 @@ export function boot(options: BootOptions): void {
     const report = reportNow();
     chrome.counts(report);
     drawEdges();
+    if (card) {
+      fit();
+    }
     try {
-      await fetch(new URL("rendered", location.href), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(report),
-      });
+      if (!card) {
+        await fetch(new URL("rendered", location.href), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(report),
+        });
+      }
     } catch {
       // The stage is away: the next draw posts again.
     }
@@ -1993,7 +2114,14 @@ export function boot(options: BootOptions): void {
     playMove: async (file, to) => (await playVisible(file, to))?.move ?? null,
     world: () => ({ ...zoom }),
   };
+  // Each section stands in its place until it draws, now every column's rule is defined; its load waits on the observer's first callback.
+  for (const section of sections) {
+    standIn(section, plans[section.file]?.stories ?? []);
+  }
   window.__cawcoCanvas = canvasState;
+  if (card) {
+    chrome.asCard();
+  }
   zoom.x = WORLD_INSET.x;
   zoom.y = WORLD_INSET.y;
   place();

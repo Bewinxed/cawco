@@ -37,8 +37,9 @@ struct SheetStageShown: Equatable {
                 more = max(0, sheet.errors.count - 1)
             case .error:
                 let toolchain = Words.Sheet.Toolchains.byKey[sheet.toolchain.rawValue] ?? sheet.toolchain.rawValue
+                // The stage's own words on their own line under the plain one (the web folds them under Show details).
                 down = Down(title: Words.Sheet.downTitle(dir: sheet.dir),
-                            line: Words.Sheet.downLine(message: sheet.message, toolchain: toolchain))
+                            line: [Words.Sheet.downLine(toolchain: toolchain), sheet.message].compactMap(\.self).joined(separator: "\n"))
             case .unrecognized: break
             }
         } else if let server = stage?.value2, let served {
@@ -49,7 +50,8 @@ struct SheetStageShown: Equatable {
                 error = server.errors.first
                 more = max(0, server.errors.count - 1)
             case .error:
-                down = Down(title: Words.Sheet.serverDownTitle(port: served), line: Words.Sheet.serverDownLine(message: server.message))
+                down = Down(title: Words.Sheet.serverDownTitle(port: served),
+                            line: [Words.Sheet.serverDownLine, server.message].compactMap(\.self).joined(separator: "\n"))
             case .unrecognized: break
             }
         }

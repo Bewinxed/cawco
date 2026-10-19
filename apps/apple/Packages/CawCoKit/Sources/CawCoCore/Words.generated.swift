@@ -1134,9 +1134,9 @@ public enum Words {
             public static let byKey: [String: String] = ["vite": vite, "astro": astro, "nuxt": nuxt]
         }
 
-        /// The line under it: the stage's own reason, or, when it gave none, that its toolchain (its name in `toolchains`) ended.
-        public static func downLine(message: String?, toolchain: String) -> String {
-            "\(message ?? "\(toolchain) ended before it served the sheet.") Try again starts it again."
+        /// The line under it, in plain words, its toolchain by its name in `toolchains`; the stage's own words stand under Show details.
+        public static func downLine(toolchain: String) -> String {
+            "\(toolchain) stopped before it served the canvas. Try again starts it again."
         }
 
         /// A workspace preview's server (`serve`), run the same way: the cover's line while it starts.
@@ -1147,9 +1147,8 @@ public enum Words {
             "The server on port \(port) isn't running"
         }
 
-        public static func serverDownLine(message: String?) -> String {
-            "\(message ?? "It ended before it answered.") Try again starts it again."
-        }
+        /// The line under it, in plain words; the server's own words stand under Show details.
+        public static let serverDownLine = "It stopped before it answered. Try again starts it again."
 
         public static let tryAgain = "Try again"
 
