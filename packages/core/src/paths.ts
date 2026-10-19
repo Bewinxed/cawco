@@ -1096,10 +1096,34 @@ export const workspaceCacheEnv = (): Record<string, string> => {
     // `npm_config_devdir` npm 11 warns of ("Unknown env config") and will drop.
     npm_package_config_node_gyp_devdir: join(cache, "node-gyp"),
     XDG_CACHE_HOME: join(cache, "xdg"),
+    XDG_RUNTIME_DIR: workspaceRuntimeDir(),
     UV_CACHE_DIR: join(cache, "uv"),
     PLAYWRIGHT_BROWSERS_PATH: hostPlaywrightBrowsers(),
   };
 };
+
+/**
+ * Every workspace command's `XDG_RUNTIME_DIR`: `run/` in the workspaces'
+ * cache, mode 0700 (boundary.ts `makeDirs`), one for all workspaces. pnpm 12
+ * keeps the locks that coordinate processes sharing a store outside the
+ * store, in `$XDG_RUNTIME_DIR/pnpm-store-operation-locks-<uid>`, else under
+ * `/tmp` ("A sandbox that blocks writes to `/tmp` can set `XDG_RUNTIME_DIR` to
+ * a directory it allows. Processes that use the same store should see the
+ * same `XDG_RUNTIME_DIR`", pnpm/docs/settings/store.md at v12.14.0). It takes
+ * the runtime dir only when the user owns it and other users cannot write to
+ * it (crates/fs/src/secure_temp_lock.rs `xdg_runtime_dir`), so it is never
+ * made group-writable. Without it a boundary had no lock dir it shared: on
+ * Linux `/run` and `/tmp` are each an empty tmpfs of the boundary's own, so
+ * each workspace locked the shared store alone; a runtime dir the boundary
+ * shows read-only (the scratch fleet's, under home) failed every install
+ * ("Failed to open the store operation lock at \"pnpm-store-operation-locks\":
+ * Read-only file system"); and on macOS Seatbelt refuses writes to `/tmp`.
+ * Here every workspace takes its locks beside the others', for the store they
+ * share (boundary.ts `writePnpmConfig`). Like everything else in the cache, a
+ * socket one workspace binds here another can reach.
+ */
+export const workspaceRuntimeDir = (): string =>
+  join(workspaceCacheDir(), "run");
 
 /**
  * The name of a file that holds secrets wherever it lies: `.env`,
