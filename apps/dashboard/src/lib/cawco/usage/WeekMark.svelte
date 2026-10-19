@@ -29,29 +29,15 @@
   style:--c={ring.color}
 >
   <circle class="fill-border-control" cx="5" cy="5" r="5" />
-  <!-- literal: 5px 5px; rotate(-90deg) -->
+  <!-- A sector: a stroke as wide as its circle's diameter fills the disc from the centre out. -->
   <circle
-    class="share fill-none stroke-5 origin-(--share-origin) transform-(--share-turn) transition-[stroke-dashoffset] dur-panel ease-in-out motion-reduce:transition-off"
+    class="fill-none arc-week origin-center -rotate-90 transition-[stroke-dashoffset] dur-panel ease-in-out motion-reduce:transition-off"
     cx="5"
     cy="5"
     pathLength="100"
     r="2.5"
-    style:--share-origin="5px 5px"
-    style:--share-turn="rotate(-90deg)"
+    stroke-dasharray="100 100"
+    stroke-width="5"
     style:stroke-dashoffset={(100 - shown).toFixed(2)}
   />
 </svg>
-
-<style>
-  /* residual: svg-paint — a sector: a stroke as wide as its circle's
-     diameter, so it fills the disc from the centre out (as Rings draws its
-     disc), in the rim's own shade (its offset inline). */
-  .share {
-    stroke: color-mix(
-      in oklch,
-      var(--c),
-      var(--account-week-toward) calc(var(--account-week-mix) * 100%)
-    );
-    stroke-dasharray: 100 100;
-  }
-</style>

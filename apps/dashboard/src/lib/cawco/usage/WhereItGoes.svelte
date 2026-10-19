@@ -646,17 +646,15 @@
 </section>
 
 {#snippet line(item: Item, live: boolean)}
-  <!-- literal: minmax(0, 2fr) minmax(0, 3fr), 28px -->
   <div
     data-slot="row"
-    class="grid min-h-(--row-min) grid-cols-(--row-cols) items-center gap-space-3 max-phone:grid-cols-1 max-phone:gap-space-1 max-phone:py-space-1"
+    class="grid min-h-(--row-compact-h) grid-cols-(--row-cols) items-center gap-space-3 max-phone:grid-cols-1 max-phone:gap-space-1 max-phone:py-space-1"
     style:--row-cols="minmax(0, 2fr) minmax(0, 3fr)"
-    style:--row-min="28px"
   >
     {#if item.href && live}
       <a
         data-slot="name"
-        class="type-body truncate text-ink-strong no-underline [&:hover]:underline"
+        class="type-body truncate text-ink-strong no-underline hover:underline"
         href={item.href}
         title={item.label}>{item.label}</a
       >
@@ -682,10 +680,9 @@
             <span {...props} class="flex min-w-0 items-center gap-space-2">
               <span
                 data-slot="fill"
-                class="h-(--fill-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
+                class="h-(--c-meter-bar-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
                 style:--share={item.share}
                 style:--fill-w="calc(var(--share) * (100% - 5.5rem))"
-                style:--fill-h="8px"
               ></span>
               <span
                 data-where-it-goes-value
@@ -702,10 +699,9 @@
       <span class="flex min-w-0 items-center gap-space-2">
         <span
           data-slot="fill"
-          class="h-(--fill-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
+          class="h-(--c-meter-bar-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
           style:--share={item.share}
           style:--fill-w="calc(var(--share) * (100% - 5.5rem))"
-          style:--fill-h="8px"
         ></span>
         <span
           data-where-it-goes-value
