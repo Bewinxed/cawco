@@ -200,10 +200,12 @@
   <section data-probe="pins">
     <PinList
       focused="pin-1"
+      hold="ready"
       live={new Set()}
       onclose={noop}
       onopen={noop}
       onplace={noop}
+      onretry={noop}
       {pins}
       placing={null}
     />

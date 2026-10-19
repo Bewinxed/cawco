@@ -967,6 +967,17 @@ public enum Words {
             "\(name) wasn't removed: \(why)"
         }
 
+        /// Its skeleton rows, for a screen reader, while the pins are read past the wait's grace.
+        public static let readingComments = "Reading the comments"
+
+        /// The pins couldn't be read; `why` is its own sentence (the hub's reason).
+        public static func commentsNotRead(why: String) -> String {
+            "The comments couldn't be read. \(why)"
+        }
+
+        /// A moved pin's last line: what it stood on is gone.
+        public static let pinElementGone = "Its element is gone from the page"
+
         public static let inspect = "Inspect"
 
         public static let inspectTitle = "Inspect: change the story's props, then Save them into its file"
