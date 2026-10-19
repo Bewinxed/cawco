@@ -16,6 +16,12 @@ export interface TranscriptQuery {
   author?: TranscriptAuthor;
   /** How many conversations to answer with. */
   limit?: number;
+  /**
+   * Only these conversations, by their harness session ids: a find narrowed
+   * to a project asks for its sessions alone, so their matches are not cut
+   * by other projects' ranking above them.
+   */
+  sessions?: string[];
 }
 
 /** One place in a machine's transcript that matched. */

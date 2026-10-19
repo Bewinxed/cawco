@@ -41,7 +41,7 @@ import {
   type StageKind,
   type ThreadSummary,
   type TranscriptAnswer,
-  type TranscriptAuthor,
+  type TranscriptQuery,
   type WaitingAnswer,
   type WaitingItem,
 } from "@cawco/core";
@@ -120,6 +120,19 @@ const THREAD_MOMENTS = 3;
  */
 export const WAITING_DAYS = 14;
 
+/**
+ * What a find narrows to, beside its words and kinds: what an agent's `find`
+ * (find-tool.ts) asks for. A project or a machine keeps the results that are
+ * in it (a machine: the sessions on it, and the machine); `since` keeps what
+ * moved since then, a conversation's or thread's moments the ones said since.
+ */
+export interface FindWhere {
+  machineId?: string;
+  projectId?: string;
+  /** ms epoch. */
+  since?: number;
+}
+
 /** What a page of a find is asked for. */
 export interface FindRequest {
   /** Only words said by this author (`by=me`: the person's own). */
@@ -130,14 +143,62 @@ export interface FindRequest {
   q: string;
   /** Whether to ask the machines' transcripts; false answers from names alone. */
   transcripts: boolean;
+  where?: FindWhere;
 }
+
+/** `result` as `where` keeps it, or null when `where` leaves it out. */
+const within = (result: FindResult, where: FindWhere): FindResult | null => {
+  if (where.projectId && result.project?.id !== where.projectId) {
+    return null;
+  }
+  if (where.machineId) {
+    let machineId: string | null = null;
+    if (result.kind === "conversation") {
+      machineId = result.machine.id;
+    } else if (result.kind === "machine") {
+      machineId = result.id;
+    }
+    if (machineId !== where.machineId) {
+      return null;
+    }
+  }
+  const { since } = where;
+  if (since === undefined) {
+    return result;
+  }
+  if (result.kind === "conversation" || result.kind === "thread") {
+    const moments = result.moments.filter(
+      (moment) => moment.at === null || moment.at >= since
+    );
+    const byWords = result.matched.some((field) => field !== "transcript");
+    if (
+      moments.length > 0 ||
+      (byWords && (result.lastActivity ?? 0) >= since)
+    ) {
+      return { ...result, moments };
+    }
+    return null;
+  }
+  return (result.lastActivity ?? 0) >= since ? result : null;
+};
+
+/**
+ * One page of a find as the engine answers it in the hub: the route's
+ * answer, and how many results it ranked in all, every page together, which
+ * an agent's `find` says (find-tool.ts) and the route leaves out.
+ */
+export type FindPage = FindAnswer & { total: number };
+
+/** The cursor that starts a page at `offset`. */
+export const cursorAt = (offset: number): string =>
+  Buffer.from(String(offset), "utf8").toString("base64url");
 
 export interface FindDeps {
   /** One machine's transcript answer, or why it gave none. */
   askMachine: (
     machineId: string,
     query: string,
-    options: { author?: TranscriptAuthor; limit: number },
+    options: TranscriptQuery & { limit: number },
     timeoutMs: number
   ) => Promise<TranscriptAnswer | { error: string }>;
   db: DbShape;
@@ -392,7 +453,8 @@ const withMoments = <Result extends FindResult & { moments: FindMoment[] }>(
 const momentMatch = (score: number, top: number, author: MomentAuthor) =>
   0.15 + 0.35 * (top > 0 ? score / top : 0) * MOMENT_WEIGHT[author];
 
-const decodeCursor = (cursor: string | undefined): number => {
+/** The offset a cursor this hub gave starts at; 0 for none. */
+export const decodeCursor = (cursor: string | undefined): number => {
   if (!cursor) {
     return 0;
   }
@@ -768,7 +830,7 @@ export const createFind = (deps: FindDeps) => {
   const askOne = async (
     machine: AgentRow,
     query: string,
-    options: { author?: TranscriptAuthor; limit: number }
+    options: TranscriptQuery & { limit: number }
   ): Promise<Asked> => {
     const base = {
       machineId: machine.machineId,
@@ -976,12 +1038,29 @@ export const createFind = (deps: FindDeps) => {
     if (request.author === "caw") {
       return { asked: false, machines: [] };
     }
-    const { author } = request;
+    const { author, where } = request;
+    // Narrowed to a machine, only it is asked; to a project, each machine
+    // for that project's sessions on it, so its matches are never cut by
+    // other projects' ranking above them.
+    const machines = [...matched.held.machines.values()].filter(
+      (machine) => !where?.machineId || machine.machineId === where.machineId
+    );
+    const sessionsOn = (machineId: string): string[] =>
+      [...matched.held.conversations.values()].flatMap(({ row }) =>
+        row.projectId === where?.projectId && row.machineId === machineId
+          ? [row.sessionId, ...row.priorSessionIds].filter(
+              (id): id is string => !!id
+            )
+          : []
+      );
     const asked = await Promise.all(
-      [...matched.held.machines.values()].map((machine) =>
+      machines.map((machine) =>
         askOne(machine, query.words.join(" "), {
           limit,
           ...(author ? { author } : {}),
+          ...(where?.projectId
+            ? { sessions: sessionsOn(machine.machineId) }
+            : {}),
         })
       )
     );
@@ -1004,9 +1083,14 @@ export const createFind = (deps: FindDeps) => {
     const namesMs = Math.round((performance.now() - started) * 10) / 10;
     const askTranscripts =
       request.transcripts && query.words.join("").length >= 2;
+    const { where } = request;
+    const kept = (results: Iterable<FindResult>): FindResult[] =>
+      where
+        ? [...results].flatMap((result) => within(result, where) ?? [])
+        : [...results];
     if (!askTranscripts) {
       return {
-        ranked: [...matched.found.values()].toSorted(
+        ranked: kept(matched.found.values()).toSorted(
           (a, b) => b.score - a.score
         ),
         coverage: { asked: false, machines: unasked(matched.held.machines) },
@@ -1025,7 +1109,7 @@ export const createFind = (deps: FindDeps) => {
       now
     );
     // Who said it narrows to what holds their words: a moment of theirs.
-    const said = [...matched.found.values()].filter(
+    const said = kept(matched.found.values()).filter(
       (result) =>
         !request.author ||
         ((result.kind === "conversation" || result.kind === "thread") &&
@@ -1057,6 +1141,7 @@ export const createFind = (deps: FindDeps) => {
       request.kinds ?? [],
       request.author ?? "",
       request.transcripts,
+      request.where ?? {},
     ]);
     const kept = paging ? pages.get(key) : undefined;
     if (kept && Date.now() - kept.at < PAGE_KEPT_MS) {
@@ -1104,7 +1189,7 @@ export const createFind = (deps: FindDeps) => {
     },
 
     /** One page of a find. */
-    async find(request: FindRequest): Promise<FindAnswer> {
+    async find(request: FindRequest): Promise<FindPage> {
       const started = performance.now();
       const query = parse(request.q);
       const limit = Math.min(
@@ -1118,11 +1203,13 @@ export const createFind = (deps: FindDeps) => {
         query.tokens.length === 0 && !named
           ? new Set<FindKind>(["conversation", "thread"])
           : named;
+      // A narrowed find drops what the machines answer outside it: they are
+      // asked for as many as a page holds, so a page is not left short.
       const fresh = await rankedFor(
         request,
         query,
         kinds,
-        Math.min(offset + limit, MAX_LIMIT),
+        request.where ? MAX_LIMIT : Math.min(offset + limit, MAX_LIMIT),
         offset > 0,
         started
       );
@@ -1131,10 +1218,8 @@ export const createFind = (deps: FindDeps) => {
       return {
         query: query.words.join(" "),
         results: page,
-        next:
-          end < fresh.ranked.length
-            ? Buffer.from(String(end), "utf8").toString("base64url")
-            : null,
+        next: end < fresh.ranked.length ? cursorAt(end) : null,
+        total: fresh.ranked.length,
         coverage: fresh.coverage,
         timing: { namesMs: fresh.namesMs, transcriptsMs: fresh.transcriptsMs },
       };
@@ -1359,7 +1444,7 @@ export const answerFind = async (
   }
 ): Promise<FindAnswer> => {
   try {
-    return await find.find({
+    const { total: _total, ...answer } = await find.find({
       q: query.q ?? "",
       ...(query.limit ? { limit: Number(query.limit) || DEFAULT_LIMIT } : {}),
       ...(query.cursor ? { cursor: query.cursor } : {}),
@@ -1367,6 +1452,7 @@ export const answerFind = async (
       kinds: kindsOf(query.kinds),
       transcripts: query.transcripts !== "0",
     });
+    return answer;
   } catch (error) {
     return refused(error);
   }

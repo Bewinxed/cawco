@@ -21,8 +21,8 @@
  *   connected, Jev sorts the rest (lasting fact, scaffolding, secret,
  *   untrusted, duplicate) as the curator's run starts; Jev off, the curator
  *   sorts them on its run. Jev on but failing fails the run with its words.
- *   Every Jev row here (§5.9 Memory inbox, Fact sorting, Brief context,
- *   Session search) goes through jev-placement.ts, as every row does:
+ *   Every Jev row here (§5.9 Memory inbox, Fact sorting, Brief context)
+ *   goes through jev-placement.ts, as every row does:
  *   `[jev]` and `[jev off]` lines.
  * - **Fact lines** (memory-facts.ts): `knowledge/<topic>.md` holds one
  *   dated, sourced line per fact; a changed fact keeps its old line under
@@ -79,8 +79,8 @@
  *   words; off, the grep's score orders them. Current lines before Formerly
  *   ones; a Conflict line brings its other side. Each line a brief carries
  *   is a use (db `fact_uses`). Files and grep; no index.
- * - **Recall** (`memory_recall`): past sessions' prose (session-prose.ts),
- *   for "have we tried this before".
+ * - **What past sessions said** is `find` (find-tool.ts), the dashboard's
+ *   Find, over every machine's transcripts: no store of its own here.
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { devNull, tmpdir } from "node:os";
@@ -159,7 +159,6 @@ import {
   YOU,
 } from "./project-folder";
 import { roleOf } from "./roles";
-import { RECALL_SHOWN } from "./session-prose";
 import { listOf, scalarOf } from "./task-file";
 import { readsWeb, type WebContext } from "./web-reads";
 import { isRoutineParent } from "./work-items";
@@ -179,9 +178,6 @@ const WAITING =
   "The person sees it as a needs-you item with its diff; nothing changes until they approve it.";
 /** Where a project's delegate types are, one file each (project-delegate-types.ts). */
 const DELEGATES_DIR = "delegates/";
-/** `memory_recall`: the longest question, the most excerpts asked for, and the excerpts shown unless asked (session-prose.ts). */
-const RECALL_QUESTION = 500;
-const RECALL_LIMIT = 20;
 /** Candidates past this many run the curator now, not at its next slot (routines.ts rests it an hour between). */
 export const INBOX_MARK = 20;
 /** Notes one curator run reads, oldest first; the rest wait for the next. */
@@ -1500,11 +1496,6 @@ export interface MemoryDeps {
   ) => void;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   readonly park: (envelope: Envelope) => void;
-  /** `memory_recall`'s answer for a session in a project (session-prose.ts `recall`). */
-  readonly recall: (
-    actor: InstanceRow,
-    asked: { limit?: number; question: string; since?: string }
-  ) => Promise<unknown>;
   /** Takes a settled ask off the pending ledger. */
   readonly settle: (requestId: string) => void;
   /** The thread a project's Caw's turn answers (caw.ts `askThread`); undefined for any other session. */
@@ -1518,7 +1509,6 @@ export const createMemory = ({
   folderChanged,
   notice,
   park,
-  recall,
   settle,
   threadOf,
   watch,
@@ -3307,37 +3297,6 @@ export const createMemory = ({
           { path: z.string().optional() },
           async ({ path }) => ok(await read(me(), path))
         ),
-        {
-          ...tool(
-            "memory_recall",
-            "Past sessions of this project: what was said about `question` (tried, decided, ruled out), as dated excerpts with session ids, best first; or that none answers it.",
-            {
-              question: z
-                .string()
-                .max(RECALL_QUESTION)
-                .describe("Plain words; they are what is searched."),
-              since: z
-                .string()
-                .optional()
-                .describe("YYYY-MM-DD: sittings from this day on."),
-              limit: z
-                .number()
-                .int()
-                .min(1)
-                .max(RECALL_LIMIT)
-                .optional()
-                .describe(`Default ${RECALL_SHOWN}.`),
-            },
-            async ({ question, since, limit }) =>
-              ok(await recall(me(), { question, since, limit }))
-          ),
-          annotations: {
-            readOnlyHint: true,
-            destructiveHint: false,
-            idempotentHint: true,
-            openWorldHint: false,
-          },
-        },
       ];
     },
   };
@@ -3351,7 +3310,6 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
   "memory_propose",
   "memory_classify",
   "memory_read",
-  "memory_recall",
 ]);
 
 /** A refusal as the route's answer. */

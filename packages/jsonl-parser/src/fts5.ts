@@ -166,6 +166,8 @@ export interface SearchOptions {
   limit?: number;
   /** Only documents by this author: `owner` is "said by me". */
   author?: DocAuthor;
+  /** Only documents of these conversations, by session id. */
+  sessions?: readonly string[];
 }
 
 /** One place in a conversation that matched: where to open it, and why it matched. */
@@ -669,10 +671,10 @@ export class TranscriptIndex {
 
   /**
    * The best `scan` documents `match` finds among the rowids `within` says
-   * (by author when `byAuthor` says), as ids and scores only: BM25 weighed
+   * (by author and conversation when `filters` say), as ids and scores only: BM25 weighed
    * by whose words they are, read off ids, never the strings table.
    */
-  #ranked(pass: Pass, byAuthor: string, params: (string | number)[], scan: number): Ranked[] {
+  #ranked(pass: Pass, filters: string, params: (string | number)[], scan: number): Ranked[] {
     const weight = Object.entries(AUTHOR_WEIGHT)
       .flatMap(([author, w]) => {
         const id = this.#strings.get(author);
@@ -685,7 +687,7 @@ export class TranscriptIndex {
                 -bm25(docs_fts, ${COLUMN_WEIGHTS}) * (CASE d.author ${weight} ELSE 1 END) AS score
          FROM docs_fts
          JOIN docs d ON d.id = docs_fts.rowid
-         WHERE docs_fts MATCH ? ${byAuthor} AND ${pass.within}
+         WHERE docs_fts MATCH ? ${filters} AND ${pass.within}
          ORDER BY score DESC
          LIMIT ?`,
       )
@@ -752,17 +754,30 @@ export class TranscriptIndex {
     }
     const limit = options.limit ?? 20;
     const params: (string | number)[] = [];
-    let byAuthor = "";
+    let filters = "";
     if (options.author !== undefined) {
       // An author no row names has no id, and no hits.
       const id = this.#strings.get(options.author);
       if (id === undefined) {
         return [];
       }
-      byAuthor = "AND d.author = ?";
+      filters = "AND d.author = ?";
       params.push(id);
     }
-    const ranked = this.#rankedPasses(whole, typing, byAuthor, params, limit);
+    if (options.sessions !== undefined) {
+      // Filtered after the FTS match, as the author is: a session no row
+      // names has no id, and none of them leaves no hits.
+      const ids = options.sessions.flatMap((session) => {
+        const id = this.#strings.get(session);
+        return id === undefined ? [] : [id];
+      });
+      if (ids.length === 0) {
+        return [];
+      }
+      filters += " AND d.session IN (SELECT value FROM json_each(?))";
+      params.push(JSON.stringify(ids));
+    }
+    const ranked = this.#rankedPasses(whole, typing, filters, params, limit);
     const described = this.#described(ranked.map((row) => row.id));
     const kept = this.#moments(ranked, described);
     const excerpts = new Map<number, string>();
@@ -805,7 +820,7 @@ export class TranscriptIndex {
   #rankedPasses(
     whole: string,
     typing: string | null,
-    byAuthor: string,
+    filters: string,
     params: (string | number)[],
     limit: number,
   ): Ranked[] {
@@ -831,7 +846,7 @@ export class TranscriptIndex {
       if (conversations.size >= limit) {
         break;
       }
-      for (const row of this.#ranked(pass, byAuthor, params, limit * SCAN_PER_CONVERSATION)) {
+      for (const row of this.#ranked(pass, filters, params, limit * SCAN_PER_CONVERSATION)) {
         if (!rows.has(row.id)) {
           rows.set(row.id, row);
           conversations.add(`${row.harness}:${row.session}`);

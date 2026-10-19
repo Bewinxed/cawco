@@ -223,6 +223,7 @@ export class TranscriptSearchService {
     const conversations = this.#index.search(query, {
       limit,
       ...(options?.author ? { author: options.author } : {}),
+      ...(options?.sessions ? { sessions: options.sessions } : {}),
     });
     return {
       conversations,

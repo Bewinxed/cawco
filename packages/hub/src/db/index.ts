@@ -1204,7 +1204,7 @@ export interface DbShape {
     instances: (typeof instances.$inferSelect)[];
     runs: WorkflowRunRow[];
   };
-  /** A project's fact uses and its sessions' prose cut (memory.ts, session-prose.ts). */
+  /** A project's fact uses and declined rewrites (memory.ts). */
   readonly memoryFacts: MemoryFactsDb;
   /**
    * What each harness on the machine can do, as its daemon's report beat

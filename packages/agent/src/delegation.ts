@@ -34,7 +34,7 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
   ...(credential ? { headers: { Authorization: `Bearer ${credential}` } } : {}),
   // No server-level `alwaysLoad`: the hub marks the few tools a session uses
   // every turn with `_meta` `"anthropic/alwaysLoad": true` (hub
-  // delegation-tools.ts `ALWAYS_LOAD`), and Claude Code defers the rest,
+  // delegation-tools.ts `loadsUpfront`), and Claude Code defers the rest,
   // some 80 of them, behind ToolSearch. The server-level flag would load all
   // of them upfront in every session (code.claude.com/docs/en/mcp: "Use this
   // for a small number of tools that Claude needs on every turn"). Measured

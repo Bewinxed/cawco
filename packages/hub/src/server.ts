@@ -243,6 +243,7 @@ import {
   MOVED_HERE,
   machineCalled,
   machineFaultWords,
+  machineLabel,
   mcpRunsOn,
   memoryDocProblem,
   memoryScopeProblem,
@@ -525,6 +526,7 @@ import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
 import { answerFind, createFind, FIND_QUERY } from "./find";
+import { createFindTool } from "./find-tool";
 import {
   type FleetChoicesStore,
   fleetChoicesRoutes,
@@ -696,7 +698,6 @@ import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
-import { createSessionProse } from "./session-prose";
 import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
@@ -3016,15 +3017,6 @@ export const createServer = (
       return config && "url" in config ? config.url : undefined;
     },
     put: (row) => db.putSessionTaint(row),
-  });
-  /**
-   * The prose cut of every project session (session-prose.ts): the person's
-   * words its harness read and its own text, for memory_recall.
-   */
-  const sessionProse = createSessionProse({
-    db,
-    // Made further down; a backfill reads only once a machine registers.
-    readHistory: (instanceId) => readHistory(instanceId),
   });
   /**
    * The gate on a project's Caw's shell and edit calls (lead-gate.ts): each
@@ -5594,13 +5586,6 @@ export const createServer = (
       }
       // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
       memoryWatch.read(instanceId, row.body?.origin);
-      // The person's words, into the project session's prose (session-prose.ts).
-      sessionProse.heard(
-        instanceId,
-        row.body?.origin,
-        row.body?.message?.content,
-        row.acceptedAt
-      );
       // Whose a lead's wake is: your words alone, or outside text (lead-gate.ts).
       if (reader && !isKeepAlive(row.body)) {
         leadGate.read(reader, row.uuid, row.body?.origin);
@@ -18993,7 +18978,6 @@ export const createServer = (
     },
     threadOf: (actor) => lead?.askThread(actor),
     park: (envelope) => parkForPerson(envelope),
-    recall: (actor, asked) => sessionProse.recall(actor, asked),
     settle: (requestId) => {
       pending.resolve(requestId);
     },
@@ -20173,8 +20157,34 @@ export const createServer = (
     workItems,
   });
   offBoot.push(() => designVerify.start());
+  // `find`: the dashboard's Finder as every session's tool (find-tool.ts).
+  const findTool = createFindTool({
+    find,
+    instance: (id) => db.getInstancesByIds([id])[0] as InstanceRow | undefined,
+    machines: () =>
+      db.listAgents().map((agent) => ({
+        id: agent.machineId,
+        name: machineLabel(agent.hostname),
+      })),
+    projects: () =>
+      db.listProjects().map((project) => ({
+        id: project.id,
+        name: project.name,
+      })),
+    readHistory: (id) => readHistory(id),
+    thread: (id) => db.thread(id),
+    threadMessages: (threadId) =>
+      db.threadMessages(threadId).map((message) => ({
+        id: message.id,
+        at: message.createdAt,
+        author: message.author,
+        body: message.body,
+        noteTitle: message.noteTitle,
+      })),
+  });
   const hubTools = createHubTools({
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
+    find: (actor, input) => findTool.call(actor, input),
     designVerdict: (actor, verdict) => designVerify.verdict(actor, verdict),
     designWrite: (actor, files, why, toolUseId) =>
       designSystem.write(actor, files, why, toolUseId),
@@ -26920,12 +26930,6 @@ export const createServer = (
                 repairThread();
               });
               workItems.discardUnfiled(message.machineId);
-              // Its project sessions' stored transcripts the prose cut has
-              // not read yet (session-prose.ts), now that it can be asked.
-              detach(
-                sessionProse.backfill(message.machineId),
-                "session prose backfill"
-              );
               // Landings a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the
               // register asks of the agent.
@@ -28057,8 +28061,6 @@ export const createServer = (
                   admitted.message,
                   admitted.harness
                 );
-                // Its own words, into the project session's prose (session-prose.ts).
-                sessionProse.said(message.instanceId, admitted.message);
                 // A lead's web reads, his calls' results and his turn's end
                 // (lead-gate.ts): none of a stream's deltas carry them. A
                 // routine run's session's words, for a failure that gives no

@@ -3806,42 +3806,6 @@ export const factUses = sqliteTable(
 );
 
 /**
- * The prose cut of a project's sessions (session-prose.ts): the person's
- * words a session read and the agent's own text, one row per message, no
- * tool calls, no tool output, no thinking. Kept on the hub, never in the
- * project's folder, for `memory_recall`.
- */
-export const sessionProse = sqliteTable(
-  "session_prose",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
-    instanceId: text("instance_id").notNull(),
-    at: timestamp("at").notNull(),
-    /** `person`: words the person sent it; `agent`: its own text. */
-    who: text("who", { enum: ["person", "agent"] }).notNull(),
-    text: text("text").notNull(),
-  },
-  (table) => [index("session_prose_project_at").on(table.projectId, table.at)]
-);
-
-/**
- * The project sessions whose stored transcripts were cut into
- * `session_prose` after the fact (session-prose.ts `backfill`): one row per
- * session done, with how many messages it gave, so a backfill stopped part
- * way resumes where it was.
- */
-export const proseBackfills = sqliteTable("prose_backfills", {
-  instanceId: text("instance_id")
-    .primaryKey()
-    .references(() => instances.id, { onDelete: "cascade" }),
-  at: timestamp("at").notNull(),
-  messages: integer("messages").notNull(),
-});
-
-/**
  * A knowledge file's prose the person declined to have rewritten as fact
  * lines (memory.ts `proposeConversions`), by the hash of the words declined:
  * its rewrite is proposed again only once the file says something else.
