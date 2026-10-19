@@ -667,8 +667,8 @@
 {#snippet askCaw()}
   <div
     data-slot="ask-caw"
-    class="relative w-full flex-none"
-    style:block-size="calc({askFoot}px + var(--space-4))"
+    class="relative h-(--ask-h) w-full flex-none"
+    style:--ask-h="calc({askFoot}px + var(--space-4))"
   >
     <Composer
       agentName="Caw"
@@ -728,13 +728,13 @@
               aria-label={lead.said}
               class="grid w-c-row-lead place-items-center text-ink-muted lead-expiring:text-status-attn-glyph lead-paused:text-ink-subtle"
               data-lead={leadOf(routine)}
-              role="img"><lead.glyph /></span
+              role="img"><lead.glyph class="size-icon-md" /></span
             >
           </Table.Cell>
           <Table.Cell class="h-c-btn-h-lg" {rule} variant="list-opens">
             <Collapsible.Trigger
               data-opener
-              class="focus-inset block max-w-full cursor-pointer border-none border-current bg-transparent p-0 text-start text-inherit"
+              class="focus-inset block max-w-full cursor-pointer border-none border-current bg-transparent p-0 text-start text-inherit after:absolute after:inset-0"
             >
               <span
                 data-slot="name"
@@ -752,7 +752,10 @@
                 <span class="text-status-attn-ink">· {line.off}</span>
               {/if}
               <!-- On a narrow ledger, Last and Next in the same order. -->
-              <span data-slot="folded" class="folded">
+              <span
+                data-slot="folded"
+                class="hidden @max-routines-ledger-34rem/routines-ledger:inline"
+              >
                 · {words.lastShort}
                 <RunStatus
                   said={last.said}
@@ -809,7 +812,7 @@
               <fieldset
                 data-slot="row-ask"
                 aria-label={words.removeLabel(routine.name)}
-                class="row-ask"
+                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none border-current px-space-3 pt-0 pb-space-2 type-meta text-ink-strong"
               >
                 <span>{words.removeAsk(routine.name)}</span>
                 <Button
@@ -855,32 +858,35 @@
           {#snippet action()}
             <!-- The starters as the kit's option chips,
                  a press putting its words in the composer under them, unsent. -->
-            {#if starters.length > 0}
-              <ul
-                data-slot="routine-starters"
-                aria-label={words.startersLabel}
-                class="routine-starters kit-chips"
-              >
-                {#each starters as starter (starter.text)}
-                  {@const Glyph = GLYPHS[starter.glyph]}
-                  <li class="flex max-w-full">
-                    <button
-                      class="kit-chip touch-hit"
-                      onclick={() => pick(starter.text)}
-                      type="button"
-                    >
-                      <Glyph
-                        data-starter-glyph
-                        aria-hidden="true"
-                        class="size-icon-md flex-none text-ink-muted"
-                      />
-                      <span>{starter.text}</span>
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-            {@render askCaw()}
+            <div class="flex flex-col gap-space-3">
+              {#if starters.length > 0}
+                <ul
+                  data-slot="routine-starters"
+                  aria-label={words.startersLabel}
+                  class="kit-chips m-0 list-none px-(--starters-inset) py-0 max-desk:px-space-3"
+                  style:--starters-inset="calc((100% - var(--c-composer-w)) / 2)"
+                >
+                  {#each starters as starter (starter.text)}
+                    {@const Glyph = GLYPHS[starter.glyph]}
+                    <li class="flex max-w-full">
+                      <button
+                        class="kit-chip touch-hit"
+                        onclick={() => pick(starter.text)}
+                        type="button"
+                      >
+                        <Glyph
+                          data-starter-glyph
+                          aria-hidden="true"
+                          class="size-icon-md flex-none text-ink-muted"
+                        />
+                        <span>{starter.text}</span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+              {@render askCaw()}
+            </div>
           {/snippet}
         </EmptyState>
       {:else}
@@ -896,48 +902,47 @@
       <!-- New routine: the composer stands over the ledger it will land in. -->
       <div class="p-space-3">{@render askCaw()}</div>
     {/if}
-    <!-- literal: 6rem; calc(var(--c-row-lead) + var(--space-3)); calc(var(--c-btn-h-sm) + var(--space-3) * 2); 0 -->
     <div
       data-slot="ledger"
       class="@container/routines-ledger"
       style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
       style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
-      style:--col-when="6rem"
-      style:--none="0"
     >
       <Table.Root
         data-routines
         aria-label={words.tab}
-        class="routines table-fixed"
-        ghostRows="tr.row"
+        ghostRows="[data-view-routines-row]"
+        layout="ledger"
       >
         <Table.Header>
           <Table.Row variant="band">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="h-c-toolbar-ctl w-(--col-state)"
+              class="sticky top-0 z-2 w-(--col-state) bg-surface-band"
               scope="col"
-              variant="caps"
+              variant="band"
               ><span class="sr-only">{words.columnState}</span></Table.Head
             >
-            <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
-              >{words.columnRoutine}</Table.Head
+            <Table.Head
+              class="sticky top-0 z-2 bg-surface-band"
+              scope="col"
+              variant="band">{words.columnRoutine}</Table.Head
             >
             <Table.Head
               data-col-last
-              class="h-c-toolbar-ctl w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
+              class="sticky top-0 z-2 w-c-routine-time-w bg-surface-band @max-routines-ledger-34rem/routines-ledger:hidden"
               scope="col"
-              variant="caps">{words.columnLastRun}</Table.Head
+              variant="band">{words.columnLastRun}</Table.Head
             >
             <Table.Head
-              class="h-c-toolbar-ctl w-c-routine-time-w @max-routines-ledger-34rem/routines-ledger:hidden"
+              class="sticky top-0 z-2 w-c-routine-time-w bg-surface-band @max-routines-ledger-34rem/routines-ledger:hidden"
               scope="col"
-              variant="caps">{words.columnNextRun}</Table.Head
+              variant="band">{words.columnNextRun}</Table.Head
             >
             <Table.Head
-              class="h-c-toolbar-ctl w-(--col-menu)"
+              class="sticky top-0 z-2 w-(--col-menu) bg-surface-band"
               scope="col"
-              variant="caps"
+              variant="band"
               ><span class="sr-only">{words.columnActions}</span></Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
@@ -953,27 +958,36 @@
 
 {#snippet sourcesBody()}
   {#if sourceCount === 0}
-    <p class="purpose">{words.noSources}</p>
+    <p
+      class="m-0 max-w-(--c-prose-measure) p-space-3 type-meta text-pretty text-ink-muted"
+    >
+      {words.noSources}
+    </p>
   {:else}
-    <div data-slot="ledger" class="ledger">
-      <Table.Root aria-label={words.sources} class="quiet table-fixed">
+    <div
+      data-slot="ledger"
+      style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
+    >
+      <Table.Root aria-label={words.sources} layout="ledger">
         <Table.Header>
           <Table.Row variant="band">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="h-c-toolbar-ctl w-(--col-state)"
+              class="sticky top-0 z-2 w-(--col-state) bg-surface-band"
               scope="col"
-              variant="caps"
+              variant="band"
               ><span class="sr-only">{words.columnService}</span></Table.Head
             >
-            <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
-              >{words.columnSource}</Table.Head
+            <Table.Head
+              class="sticky top-0 z-2 bg-surface-band"
+              scope="col"
+              variant="band">{words.columnSource}</Table.Head
             >
             <Table.Head
               data-col-last
-              class="h-c-toolbar-ctl w-c-routine-time-w"
+              class="sticky top-0 z-2 w-c-routine-time-w bg-surface-band"
               scope="col"
-              variant="caps">{words.columnLastRead}</Table.Head
+              variant="band">{words.columnLastRead}</Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
           </Table.Row>
@@ -1097,9 +1111,13 @@
 
 {#snippet actionsBody()}
   {#if actions.length === 0}
-    <p class="purpose">{words.noActions}</p>
+    <p
+      class="m-0 max-w-(--c-prose-measure) p-space-3 type-meta text-pretty text-ink-muted"
+    >
+      {words.noActions}
+    </p>
   {:else}
-    <div data-slot="ledger" class="ledger">
+    <div data-slot="ledger">
       <ActionsTable {actions} label={words.actions} {routineNames} />
     </div>
   {/if}
@@ -1108,8 +1126,7 @@
 <!-- Held as a skeleton until the hub's first read. -->
 <div bind:this={place} class="flex min-h-0 flex-auto flex-col">
   {#if page === null && problem !== null}
-    <!-- literal: 72ch -->
-    <div class="max-w-(--measure)" style:--measure="72ch">
+    <div class="max-w-(--c-prose-measure)">
       <EmptyState
         icon={IconClock}
         line={words.unavailableLine(project.name, problem)}
@@ -1128,48 +1145,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: foreign-dom — the ledger's rules on tables this file does not
-     render (a routine's runs in RoutineDetail, ActionsTable) */
-  [data-slot="ledger"] :global(table > thead th) {
-    position: sticky;
-    inset-block-start: 0;
-    z-index: 2;
-    background: var(--surface-band);
-  }
-  [data-slot="ledger"] :global(th[data-slot="actions-table-col-status"]) {
-    inline-size: var(--c-routine-time-w);
-  }
-  [data-slot="ledger"]
-    :global(
-      th:is(
-        [data-slot="actions-table-col-when"],
-        [data-slot="routine-detail-col-when"]
-      )
-    ) {
-    inline-size: var(--col-when);
-  }
-  /* A mark in the lead column: a glyph, or a provider's logo (ProviderLogo
-     takes no class). */
-  [data-slot="lead"] :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  /* The empty page's starters, and the composer under them (EmptyState's
-     action slot). */
-  [data-slot="starters"] :global(.kit-empty-action) {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    align-self: stretch;
-  }
-  /* residual: pseudo */
-  /* The name opens the routine; its box reaches every cell, so the whole
-     row is the opener, its ⋯ above it. */
-  [data-slot="ledger"] :global([data-opener]::after) {
-    position: absolute;
-    inset: 0;
-    content: "";
-  }
-</style>
