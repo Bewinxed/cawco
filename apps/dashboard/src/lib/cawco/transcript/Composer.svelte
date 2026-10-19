@@ -2882,17 +2882,13 @@
    * A draft of more than one line folds to its first line while the field
    * is not being written in, and opens to its full height, growing upward
    * over the transcript, when the field takes focus. Folding and opening
-   * run over --dur-morph (`folding`); a typed line grows over the field's
-   * own --dur-control.
+   * run over --dur-morph (autosize's `data-folding`, on the field while
+   * that height change runs); a typed line grows over the field's own
+   * --dur-control.
    */
   let focused = $state(false);
-  let folding = $state(false);
   const folds = (whole: number) => !focused && whole > floor + 0.5;
   const folded = $derived(folds(natural));
-  function refocus(now: boolean): void {
-    focused = now;
-    folding = lines > 1;
-  }
 
   /**
    * The panel's own height, the delegate tray's standing on it, and the
@@ -3525,33 +3521,24 @@
             data-cue-bottom={(cueBottom && !folded) || undefined}
             data-cue-top={(cueTop && !folded) || undefined}
             data-flying={flight !== null || !wordsLanded || undefined}
-            data-folding={folding || undefined}
             here={mentionsFrom}
             label={FIELD_LABEL}
             menuHost={pill}
             names={mentionsFrom !== null}
             onblur={() => {
               dismissed = true;
-              refocus(false);
+              focused = false;
             }}
             onclick={noteCaret}
             {ondragover}
             {ondrop}
-            onfocus={() => refocus(true)}
+            onfocus={() => {
+              focused = true;
+            }}
             oninput={noteCaret}
             {onkeydown}
             onkeyup={noteCaret}
             {onpaste}
-            ontransitioncancel={(event) => {
-              if (event.propertyName === "height") {
-                folding = false;
-              }
-            }}
-            ontransitionend={(event) => {
-              if (event.propertyName === "height") {
-                folding = false;
-              }
-            }}
             phone={phone.current}
             placeholder={hint}
             tabindex={0}
