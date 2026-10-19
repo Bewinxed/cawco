@@ -17,6 +17,7 @@
   import {
     type Account,
     type AccountHue,
+    accountName,
     accountsWords,
     CLAUDE_PROVIDER,
     configureWords,
@@ -224,6 +225,20 @@
         (flow) => flow.phase === "signed-in"
       )?.email ??
       null
+  );
+  /** A sign-in that came out as an account that already exists. */
+  const joined = $derived(
+    [...pastes.values()].find((flow) => flow.joined)?.joined ?? null
+  );
+  /** The account the join points at, to name it and open it. */
+  const joinedAccount = $derived(
+    joined
+      ? cawco.accounts?.accounts.find((one) => one.id === joined.accountId)
+      : null
+  );
+  /** Its name, for the sentence that says the account already exists. */
+  const joinedAccountName = $derived(
+    joinedAccount ? accountName(joinedAccount) : accountsWords.unnamed
   );
 
   // ── Name it ────────────────────────────────────────────────────────────
@@ -503,7 +518,7 @@
             variant="outline"
           />
           <Button
-            disabled={!canGo}
+            disabled={!canGo || joined !== null}
             label={nextLabel}
             onclick={next}
             pending={busy}
@@ -615,135 +630,151 @@
         >
       </div>
     {/if}
-    {#if choice?.signin === "api-key"}
-      <KeyPanel account={ensureAccount} {machines} primary={keyFirst} />
+    {#if joined}
+      <div class="signed-as mark-line" in:unfold out:unfold>
+        <IconWarningTriangle aria-hidden="true" />
+        <span>{words.joined(joinedAccountName)}</span>
+      </div>
+      <Button
+        href={`/config/accounts/${joined.accountId}`}
+        label={words.openAccount}
+        size="sm"
+        variant="outline"
+      />
     {:else}
-      <ul data-slot="machines" class="machines">
-        {#each machines as machine (machine.machineId)}
-          {@const name = machineName(machine)}
-          {@const online = machineOnline(machine)}
-          {@const state = stateOn(machine.machineId)}
-          {@const done = doneOn(machine.machineId)}
-          {@const paste = pastes.get(machine.machineId)}
-          {@const device = devices.get(machine.machineId)}
-          {#if device}
-            <li class="mrow device">
-              <b class="mname">{name}</b>
-              <div data-slot="controls" class="controls">
-                <DevicePanel flow={device} machine={name} {online} />
-              </div>
-              <span class={["st", "mark-line", state === "mismatch" && "warn"]}>
-                {#if !done && state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" /><span
-                    >{words.someoneElse}</span
-                  >
-                {:else if !online}
-                  <span>{words.offline}</span>
-                {/if}
-              </span>
-            </li>
-          {:else if paste}
-            <!-- One control per machine: Sign in opens Claude Code's link in
+      {#if choice?.signin === "api-key"}
+        <KeyPanel account={ensureAccount} {machines} primary={keyFirst} />
+      {:else}
+        <ul data-slot="machines" class="machines">
+          {#each machines as machine (machine.machineId)}
+            {@const name = machineName(machine)}
+            {@const online = machineOnline(machine)}
+            {@const state = stateOn(machine.machineId)}
+            {@const done = doneOn(machine.machineId)}
+            {@const paste = pastes.get(machine.machineId)}
+            {@const device = devices.get(machine.machineId)}
+            {#if device}
+              <li class="mrow device">
+                <b class="mname">{name}</b>
+                <div data-slot="controls" class="controls">
+                  <DevicePanel flow={device} machine={name} {online} />
+                </div>
+                <span
+                  class={["st", "mark-line", state === "mismatch" && "warn"]}
+                >
+                  {#if !done && state === "mismatch"}
+                    <IconWarningTriangle aria-hidden="true" /><span
+                      >{words.someoneElse}</span
+                    >
+                  {:else if !online}
+                    <span>{words.offline}</span>
+                  {/if}
+                </span>
+              </li>
+            {:else if paste}
+              <!-- One control per machine: Sign in opens Claude Code's link in
                  a new tab and opens the row onto the link, the paste field
                  and Done. Continue is how a machine is skipped. -->
-            {@const asked = paste.phase !== "idle" || paste.url !== null}
-            <li class="mrow paste">
-              <b class="mname">{name}</b>
-              <span
-                class={[
-                  "st",
-                  "mark-line",
-                  done && "ok",
-                  state === "mismatch" && "warn",
-                ]}
-              >
-                {#if done}
-                  <IconSuccess aria-hidden="true" /><span>{words.signedIn}</span
-                  >
-                {:else if paste.phase === "mismatch" || state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" /><span
-                    >{words.someoneElse}</span
-                  >
-                {:else if !online}
-                  <span>{words.offline}</span>
-                {:else if !asked}
-                  <Button
-                    data-box
-                    label={words.signIn}
-                    onclick={() => paste.open()}
-                    size="sm"
-                    variant="outline"
-                  />
-                {/if}
-              </span>
-              {#if asked && !done}
-                <div data-slot="controls" class="controls" in:unfold>
-                  {#if paste.url}
+              {@const asked = paste.phase !== "idle" || paste.url !== null}
+              <li class="mrow paste">
+                <b class="mname">{name}</b>
+                <span
+                  class={[
+                    "st",
+                    "mark-line",
+                    done && "ok",
+                    state === "mismatch" && "warn",
+                  ]}
+                >
+                  {#if done}
+                    <IconSuccess aria-hidden="true" /><span
+                      >{words.signedIn}</span
+                    >
+                  {:else if paste.phase === "mismatch" || state === "mismatch"}
+                    <IconWarningTriangle aria-hidden="true" /><span
+                      >{words.someoneElse}</span
+                    >
+                  {:else if !online}
+                    <span>{words.offline}</span>
+                  {:else if !asked}
                     <Button
-                      href={paste.url}
-                      icon={IconArrowUpRight}
-                      label={accountsWords.signin.openLink}
-                      rel="noopener noreferrer"
-                      size="sm"
-                      target="_blank"
-                      variant="outline"
-                    />
-                  {:else}
-                    <Button
-                      disabled
-                      icon={IconArrowUpRight}
-                      label={accountsWords.signin.openLink}
-                      pending={paste.phase === "opening"}
-                      pendingLabel={accountsWords.signin.opening}
+                      data-box
+                      label={words.signIn}
+                      onclick={() => paste.open()}
                       size="sm"
                       variant="outline"
                     />
                   {/if}
-                  <Input
-                    data-account-setup-code
-                    aria-invalid={paste.problem ? "true" : undefined}
-                    aria-label={words.codeFor(name)}
-                    autocomplete="off"
-                    class="code h-[30px]"
-                    disabled={paste.url === null}
-                    onkeydown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        paste.done();
-                      }
-                    }}
-                    placeholder={words.pasteCode}
-                    spellcheck="false"
-                    bind:value={paste.code}
-                  />
-                  <Button
-                    disabled={paste.url === null || paste.code.trim() === ""}
-                    failed={paste.problem !== null}
-                    label={accountsWords.signin.done}
-                    onclick={() => paste.done()}
-                    pending={paste.phase === "checking"}
-                    pendingLabel={accountsWords.signin.checking}
-                    size="sm"
-                  />
-                </div>
-              {/if}
-              {#if paste.problem}
-                <p class="row-problem" role="alert" in:appear>
-                  {paste.problem}
-                </p>
-              {:else if paste.phase === "mismatch"}
-                <p class="row-warn" role="alert" in:appear>
-                  {words.mismatch(name, paste.email)}
-                </p>
-              {/if}
+                </span>
+                {#if asked && !done}
+                  <div data-slot="controls" class="controls" in:unfold>
+                    {#if paste.url}
+                      <Button
+                        href={paste.url}
+                        icon={IconArrowUpRight}
+                        label={accountsWords.signin.openLink}
+                        rel="noopener noreferrer"
+                        size="sm"
+                        target="_blank"
+                        variant="outline"
+                      />
+                    {:else}
+                      <Button
+                        disabled
+                        icon={IconArrowUpRight}
+                        label={accountsWords.signin.openLink}
+                        pending={paste.phase === "opening"}
+                        pendingLabel={accountsWords.signin.opening}
+                        size="sm"
+                        variant="outline"
+                      />
+                    {/if}
+                    <Input
+                      data-account-setup-code
+                      aria-invalid={paste.problem ? "true" : undefined}
+                      aria-label={words.codeFor(name)}
+                      autocomplete="off"
+                      class="code h-[30px]"
+                      disabled={paste.url === null}
+                      onkeydown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          paste.done();
+                        }
+                      }}
+                      placeholder={words.pasteCode}
+                      spellcheck="false"
+                      bind:value={paste.code}
+                    />
+                    <Button
+                      disabled={paste.url === null || paste.code.trim() === ""}
+                      failed={paste.problem !== null}
+                      label={accountsWords.signin.done}
+                      onclick={() => paste.done()}
+                      pending={paste.phase === "checking"}
+                      pendingLabel={accountsWords.signin.checking}
+                      size="sm"
+                    />
+                  </div>
+                {/if}
+                {#if paste.problem}
+                  <p class="row-problem" role="alert" in:appear>
+                    {paste.problem}
+                  </p>
+                {:else if paste.phase === "mismatch"}
+                  <p class="row-warn" role="alert" in:appear>
+                    {words.mismatch(name, paste.email)}
+                  </p>
+                {/if}
+              </li>
+            {/if}
+          {:else}
+            <li class="none">
+              {words.none(harnessWords(choice?.provider ?? CLAUDE_PROVIDER))}
             </li>
-          {/if}
-        {:else}
-          <li class="none">
-            {words.none(harnessWords(choice?.provider ?? CLAUDE_PROVIDER))}
-          </li>
-        {/each}
-      </ul>
+          {/each}
+        </ul>
+      {/if}
     {/if}
   </section>
 {/snippet}

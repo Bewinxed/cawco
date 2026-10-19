@@ -8,7 +8,7 @@
  * the machine answers: a tab opened after an `await` is a popup the
  * browser blocks.
  */
-import { accountsWords } from "@cawco/core";
+import { type AccountJoined, accountsWords } from "@cawco/core";
 import { beginSignin, completeSignin } from "../client.svelte";
 import { failureWords } from "../hub-read";
 
@@ -24,6 +24,8 @@ export class SigninFlow {
   problem = $state<string | null>(null);
   /** Who the machine signed in as, once it has. */
   email = $state<string | null>(null);
+  /** The sign-in came out as an account that already exists. */
+  joined = $state<AccountJoined | null>(null);
 
   readonly #account: () => Promise<string>;
   readonly #machineId: string;
@@ -49,6 +51,7 @@ export class SigninFlow {
     const tab = window.open("about:blank", "_blank");
     this.phase = "opening";
     this.problem = null;
+    this.joined = null;
     try {
       const id = await this.#account();
       const { url } = await beginSignin(id, this.#machineId);
@@ -77,6 +80,7 @@ export class SigninFlow {
       const id = await this.#account();
       const result = await completeSignin(id, this.#machineId, code);
       this.email = result.probe?.identity?.email ?? null;
+      this.joined = result.joined ?? null;
       this.code = "";
       // Signed in, or signed in as someone else, is the machine's answer;
       // any other (signed out, or a code still waited on) the code didn't

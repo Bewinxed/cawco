@@ -9301,6 +9301,14 @@ export const createServer = (
   const joinedInto = new Map<string, string>();
 
   /**
+   * An account by its id, or the account a joined-away id now is
+   * ({@link joinedInto}): one lookup used by both sign-in routes, so a
+   * sign-in begun under a removed id still resolves to the account it joined.
+   */
+  const accountOf = (id: string): Account | undefined =>
+    db.accounts.get(id) ?? db.accounts.get(joinedInto.get(id) ?? "");
+
+  /**
    * Of the account stores a connecting machine named (`accountStores` on its
    * register), the ones this hub deliberately removed (or joined away): the
    * machine forgets each ({@link RegisterAckPayload.unknownAccounts}). A
@@ -26712,7 +26720,7 @@ export const createServer = (
       .post(
         "/api/accounts/:id/machines/:machineId/signin",
         async ({ params, status }) => {
-          const account = db.accounts.get(params.id);
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
@@ -26742,7 +26750,7 @@ export const createServer = (
           const sent = !(
             answer.kind === "unanswered" && answer.reason === "dead"
           );
-          if (sent && !db.accounts.get(account.id)) {
+          if (sent && !accountOf(account.id)) {
             return status(
               404,
               await undoRemovedSignin(account, params.machineId)
@@ -26795,10 +26803,7 @@ export const createServer = (
         async ({ params, body, status }) => {
           // The account the sign-in finishes into: its own, or the one a
           // sign-in on another machine has since joined it into.
-          const into = () =>
-            db.accounts.get(params.id) ??
-            db.accounts.get(joinedInto.get(params.id) ?? "");
-          const account = into();
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
@@ -26821,7 +26826,7 @@ export const createServer = (
               throw unreachable(asked);
           }
           const answer = asked.value;
-          const now = into();
+          const now = accountOf(params.id);
           if (!now) {
             return status(
               404,
