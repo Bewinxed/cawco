@@ -201,8 +201,21 @@ function dropWebFamilies(el: Node, web: Set<string>) {
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-/** A box's own size: modern-screenshot always copies it (its defaults never hold it), and a twin's would match only by chance. */
-const SIZES = new Set(["width", "height"]);
+/**
+ * What a copy's own box resolves: its size (modern-screenshot always copies
+ * it, its defaults never hold it) and the origins whose default, 50% 50%, is
+ * read back in px of the box ("The transform-origin property is a resolved
+ * value special case property like height", drafts.csswg.org/css-transforms-1;
+ * `perspective-origin` the same, css-transforms-2). A twin's box is not the
+ * copy's, so its value would match only by chance: a frame's copy scaled from
+ * `0px 0px` lost its origin to a twin's and drew off its place.
+ */
+const SIZES = new Set([
+  "width",
+  "height",
+  "transform-origin",
+  "perspective-origin",
+]);
 
 /** A name's group as modern-screenshot's diff counts it: the name up to its last hyphen, "" for none. */
 const groupOf = (name: string) => {
@@ -251,14 +264,34 @@ function placeTwin(blank: Document, el: Element): Element {
 /**
  * The browser's own style for an element with no style of its own: a twin of
  * its tag (an input's type and an SVG shape's `stroke` and `fill` with it),
- * standing in a blank frame of ours, read a property at a time as asked. The
- * frame stands inside the overlay's host when it has one, so none of the
- * page's observers see it, and goes with {@link UaDefaults.close}.
+ * standing in a {@link blankFrame} of ours, read a property at a time as
+ * asked; the frame goes with {@link UaDefaults.close}.
  */
 interface UaDefaults {
   close: () => void;
-  /** `name` on `el`'s twin, or on its `pseudo` (`::before`) when given. */
-  value: (el: Element, name: string, pseudo?: string) => string;
+  /** A property's value on `el`'s twin, or on its `pseudo` (`::before`) when given: the twin found once, each name read once. */
+  of: (el: Element, pseudo?: string) => (name: string) => string;
+}
+
+/**
+ * A hidden frame in `doc` holding a blank standards-mode document (as the
+ * picture's SVG draws in), written at once: its body stands from the first
+ * read, with no navigation to land later. It stands inside the overlay's host
+ * when it has one, so none of the page's observers see it.
+ */
+function blankFrame(doc: Document): HTMLIFrameElement {
+  const frame = doc.createElement("iframe");
+  frame.width = "0";
+  frame.height = "0";
+  frame.style.cssText = "position:fixed;visibility:hidden;border:0";
+  (
+    doc.querySelector("cawco-overlay")?.shadowRoot ?? doc.documentElement
+  ).append(frame);
+  const blank = frame.contentDocument;
+  blank?.open();
+  blank?.write("<!DOCTYPE html><title></title><body>");
+  blank?.close();
+  return frame;
 }
 
 function uaDefaults(doc: Document): UaDefaults {
@@ -268,20 +301,7 @@ function uaDefaults(doc: Document): UaDefaults {
     { read: Map<string, string>; style: CSSStyleDeclaration }
   >();
   const sandbox = () => {
-    if (!frame) {
-      frame = doc.createElement("iframe");
-      frame.width = "0";
-      frame.height = "0";
-      frame.style.cssText = "position:fixed;visibility:hidden;border:0";
-      (
-        doc.querySelector("cawco-overlay")?.shadowRoot ?? doc.documentElement
-      ).append(frame);
-      const blank = frame.contentDocument;
-      // A standards-mode document, as the picture's SVG draws in.
-      blank?.open();
-      blank?.write("<!DOCTYPE html><title></title><body>");
-      blank?.close();
-    }
+    frame ??= blankFrame(doc);
     return frame;
   };
   const twinOf = (el: Element, pseudo: string | null) => {
@@ -302,17 +322,19 @@ function uaDefaults(doc: Document): UaDefaults {
     return twin;
   };
   return {
-    value: (el, name, pseudo) => {
+    of: (el, pseudo) => {
       const twin = twinOf(el, pseudo ?? null);
       if (!twin) {
-        return "";
+        return () => "";
       }
-      let value = twin.read.get(name);
-      if (value === undefined) {
-        value = twin.style.getPropertyValue(name);
-        twin.read.set(name, value);
-      }
-      return value;
+      return (name) => {
+        let value = twin.read.get(name);
+        if (value === undefined) {
+          value = twin.style.getPropertyValue(name);
+          twin.read.set(name, value);
+        }
+        return value;
+      };
     },
     close: () => {
       frame?.remove();
@@ -343,25 +365,49 @@ function slim(
   if (!style?.length) {
     return;
   }
+  // Each a call into a copy's style, so the cheap tests go first and the
+  // priority, which only a dropped name needs, last.
+  const fallback = defaults.of(el);
   const says = (name: string) =>
     SIZES.has(name) ||
-    style.getPropertyPriority(name) !== "" ||
     (!NON_INHERITED.has(name) && parent?.getPropertyValue(name)) ||
-    style.getPropertyValue(name) !== defaults.value(el, name);
+    style.getPropertyValue(name) !== fallback(name) ||
+    style.getPropertyPriority(name) !== "";
   for (const name of silent(Array.from(style), says)) {
     style.removeProperty(name);
   }
 }
 
-/** Of `names`, the non-inherited ones that say nothing and share no group with one that does: what {@link slim} drops. */
+/**
+ * Of `names`, the non-inherited ones that say nothing and share no group with
+ * one that does: what {@link slim} drops. A name is asked only when its answer
+ * can change that: a non-inherited one whose group no name has spoken for yet,
+ * then an inherited one whose group holds a quiet name.
+ */
 function silent(names: string[], says: (name: string) => unknown) {
   const speaking = new Set<string>();
   const quiet: string[] = [];
+  const inherited: string[] = [];
   for (const name of names) {
-    if (says(name)) {
-      speaking.add(groupOf(name));
-    } else if (NON_INHERITED.has(name)) {
-      quiet.push(name);
+    const group = groupOf(name);
+    if (!NON_INHERITED.has(name)) {
+      inherited.push(name);
+    } else if (!(group && speaking.has(group))) {
+      if (says(name)) {
+        speaking.add(group);
+      } else {
+        quiet.push(name);
+      }
+    }
+  }
+  const open = new Set(
+    quiet.map(groupOf).filter((group) => group && !speaking.has(group))
+  );
+  for (const name of inherited) {
+    const group = groupOf(name);
+    if (open.has(group) && says(name)) {
+      speaking.add(group);
+      open.delete(group);
     }
   }
   return new Set(
@@ -411,6 +457,7 @@ function slimRule(
     }
     declared.set(parts[1], { value: parts[2], important: Boolean(parts[3]) });
   }
+  const fallbacks = hosts.map(({ host, pseudo }) => defaults.of(host, pseudo));
   const says = (name: string) => {
     const { value, important } = declared.get(name) ?? {};
     return (
@@ -418,9 +465,7 @@ function slimRule(
       important ||
       SIZES.has(name) ||
       !NON_INHERITED.has(name) ||
-      hosts.some(
-        ({ host, pseudo }) => defaults.value(host, name, pseudo) !== value
-      )
+      fallbacks.some((fallback) => fallback(name) !== value)
     );
   };
   const dropped = silent([...declared.keys()], says);
@@ -746,6 +791,15 @@ export async function cropPicture(
           : {}),
       })
     : null;
+  // modern-screenshot's own sandbox (its `Context.sandbox`) is a frame it
+  // gives a `srcdoc` and reads at once; a slice's task lets that navigation
+  // land mid-clone, and the next default it reads finds a document with no
+  // body yet ("Cannot read properties of null (reading 'appendChild')", the
+  // heavy page's mark on Chromium). One written whole has its body from the
+  // start; `destroyContext` removes it.
+  if (context) {
+    context.sandbox = blankFrame(view.document);
+  }
   try {
     for (const step of steps) {
       if (!step.whole) {
