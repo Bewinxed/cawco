@@ -310,12 +310,7 @@
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconEye} label="What to watch for">
-    <!-- literal: 72ch -->
-    <p
-      data-slot="note"
-      class="type-meta max-w-(--measure) text-ink-muted"
-      style:--measure="72ch"
-    >
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
       CawCo reads what a session writes, not what you write to it.
     </p>
     <div data-slot="fold" class="flex flex-col gap-inherit">
@@ -427,12 +422,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlain} label="What CawCo sends back">
-    <!-- literal: 72ch -->
-    <p
-      data-slot="note"
-      class="type-meta max-w-(--measure) text-ink-muted"
-      style:--measure="72ch"
-    >
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
       The session is told this is CawCo and not you, so it does not answer you
       for something you never said.
     </p>
@@ -474,18 +464,12 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <!-- literal: 72ch -->
-    <p
-      data-slot="note"
-      class="type-meta max-w-(--measure) text-ink-muted"
-      style:--measure="72ch"
-    >
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
       Everywhere unless you narrow it. Each filter you set has to match for the
       rule to fire. A model matches as a substring, so a family name covers
       every dated build of it.
     </p>
-    <!-- literal: 8px -->
-    <div class="flex flex-wrap gap-(--picker-gap)" style:--picker-gap="8px">
+    <div class="flex flex-wrap gap-space-2">
       <PickerChip
         label="Machine"
         onpick={(next) => narrow("machineId", next)}

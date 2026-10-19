@@ -195,7 +195,7 @@
       placeholder={words.namePlaceholder}
       bind:value={draft.name}
     />
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
       {name ? words.nameKept : words.nameRule}
     </p>
     {#if problemFor("name")}
@@ -235,7 +235,9 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconCpu} label={words.runsOn}>
-    <p data-slot="note" class="note">{words.runsOnNote}</p>
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+      {words.runsOnNote}
+    </p>
     <Choice
       label={words.harness}
       onchange={(next) => {
@@ -279,7 +281,9 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconKey} label={words.reach}>
-    <p data-slot="note" class="note">{words.reachNote}</p>
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+      {words.reachNote}
+    </p>
     <Field id="type-skills" label={words.skills}>
       <Input
         autocomplete="off"

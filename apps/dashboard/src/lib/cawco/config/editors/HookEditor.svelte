@@ -480,11 +480,9 @@
         what={draft.name || "This hook"}
       />
     {/if}
-    <!-- literal: 32ch -->
     <span
       data-slot="reach"
-      class="max-w-(--reach-max) truncate"
-      style:--reach-max="32ch"
+      class="max-w-(--c-reach-max) truncate"
       title={reach.map((m) => machineLabel(m.hostname)).join(", ")}
       >{reach.length > 0
         ? reach.map((m) => machineLabel(m.hostname)).join(", ")
@@ -523,12 +521,7 @@
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconClock} label="When it runs">
-    <!-- literal: 72ch -->
-    <p
-      data-slot="note"
-      class="type-meta max-w-(--measure) text-ink-muted"
-      style:--measure="72ch"
-    >
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
       One lifecycle event. The events with a matcher are the ones Claude Code
       lets you narrow further.
     </p>
@@ -550,22 +543,15 @@
     {#if shown("event")}
       <p class="type-meta text-status-fail-ink" in:appear>{wrong.event}</p>
     {:else if eventInfo}
-      <!-- literal: 72ch -->
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--measure) text-ink-muted"
-        style:--measure="72ch"
-      >
+      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
         Runs {eventInfo.blurb}.
       </p>
     {/if}
     {#if hookTakesMatcher(draft.event)}
       <!-- The matcher comes and goes with the event: it folds (240 / 160). -->
-      <!-- literal: 8px -->
       <div
         data-slot="fold"
-        class="flex flex-col gap-(--fold-gap)"
-        style:--fold-gap="8px"
+        class="flex flex-col gap-space-2"
         in:unfold
         out:unfold
       >
@@ -601,12 +587,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlay} label="What it runs">
-    <!-- literal: 72ch -->
-    <p
-      data-slot="note"
-      class="type-meta max-w-(--measure) text-ink-muted"
-      style:--measure="72ch"
-    >
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
       CawCo writes this to every machine it applies to and registers it — no
       prompt, no approval, every time the event fires.
     </p>
@@ -623,11 +604,9 @@
       {@attach morph({ ms: dur("--dur-pop") })}
     >
       {#if draft.handler.type === "command"}
-        <!-- literal: 8px -->
         <div
           data-slot="fold"
-          class="flex flex-col gap-(--fold-gap)"
-          style:--fold-gap="8px"
+          class="flex flex-col gap-space-2"
           in:crossIn
           out:crossOut
         >
@@ -688,11 +667,9 @@
           />
         </div>
       {:else if draft.handler.type === "http"}
-        <!-- literal: 8px -->
         <div
           data-slot="fold"
-          class="flex flex-col gap-(--fold-gap)"
-          style:--fold-gap="8px"
+          class="flex flex-col gap-space-2"
           in:crossIn
           out:crossOut
         >
@@ -717,13 +694,9 @@
           </Field>
         </div>
       {:else if draft.handler.type === "mcp_tool"}
-        <!-- literal: 8px, 12px, 1fr 1fr -->
         <div
           data-slot="pair"
-          class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y) phone:grid-cols-(--pair-cols)"
-          style:--pair-cols="1fr 1fr"
-          style:--pair-gap-x="12px"
-          style:--pair-gap-y="8px"
+          class="grid gap-x-space-3 gap-y-space-2 phone:grid-cols-2"
           in:crossIn
           out:crossOut
         >
@@ -761,11 +734,9 @@
           </Field>
         </div>
       {:else}
-        <!-- literal: 8px -->
         <div
           data-slot="fold"
-          class="flex flex-col gap-(--fold-gap)"
-          style:--fold-gap="8px"
+          class="flex flex-col gap-space-2"
           in:crossIn
           out:crossOut
         >
@@ -783,11 +754,9 @@
             />
           </Field>
           {#if draft.handler.type === "agent"}
-            <!-- literal: 8px -->
             <div
               data-slot="fold"
-              class="flex flex-col gap-(--fold-gap)"
-              style:--fold-gap="8px"
+              class="flex flex-col gap-space-2"
               in:unfold
               out:unfold
             >
@@ -831,13 +800,9 @@
         value={draft.handler.if ?? ""}
       />
     </Field>
-    <!-- literal: 8px, 12px, 1fr 1fr -->
     <div
       data-slot="pair"
-      class="grid gap-x-(--pair-gap-x) gap-y-(--pair-gap-y) phone:grid-cols-(--pair-cols)"
-      style:--pair-cols="1fr 1fr"
-      style:--pair-gap-x="12px"
-      style:--pair-gap-y="8px"
+      class="grid gap-x-space-3 gap-y-space-2 phone:grid-cols-2"
     >
       <Field
         id="hook-timeout"
@@ -876,12 +841,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <!-- literal: 72ch -->
-    <p
-      data-slot="note"
-      class="type-meta max-w-(--measure) text-ink-muted"
-      style:--measure="72ch"
-    >
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
       Every machine in the fleet unless you narrow it to one project.
     </p>
     <div>
@@ -906,22 +866,18 @@
   {#if id}
     <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
       {#if machines.length === 0}
-        <!-- literal: 72ch -->
         <p
           data-slot="note"
-          class="type-meta max-w-(--measure) text-ink-muted"
-          style:--measure="72ch"
+          class="type-meta max-w-(--c-measure) text-ink-muted"
         >
           <AddMachineLink>No machines yet</AddMachineLink>
           — this lands on the first one that registers.
         </p>
       {:else}
         {#if applied.length > 0}
-          <!-- literal: 72ch -->
           <p
             data-slot="note"
-            class="type-meta max-w-(--measure) text-ink-muted"
-            style:--measure="72ch"
+            class="type-meta max-w-(--c-measure) text-ink-muted"
           >
             In sync on
             {applied.length}
@@ -943,18 +899,12 @@
             {@const drifted = refused && causeOf(item?.detail) === "drifted"}
             {@const comparingThis = comparing === machine.machineId}
             {@const settle = settling[machine.machineId]}
-            <!-- literal: 8px, 10px -->
             <li
               data-slot="machine"
-              class="flex flex-col gap-(--machine-gap) rounded-sm bg-surface-recess px-(--machine-px) py-(--machine-gap)"
-              style:--machine-gap="8px"
-              style:--machine-px="10px"
+              class="flex flex-col gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
             >
-              <!-- literal: 8px, 12px -->
               <div
-                class="relative flex flex-wrap items-center gap-x-(--line-gap-x) gap-y-(--line-gap-y)"
-                style:--line-gap-x="12px"
-                style:--line-gap-y="8px"
+                class="relative flex flex-wrap items-center gap-x-space-3 gap-y-space-2"
               >
                 <MachineRow
                   hue={machineHue(index, online)}
@@ -968,11 +918,9 @@
                   presence={online ? "online" : "off"}
                 />
                 {#if drifted}
-                  <!-- literal: 8px -->
                   <span
                     data-slot="acts"
-                    class="flex flex-wrap gap-(--acts-gap)"
-                    style:--acts-gap="8px"
+                    class="flex flex-wrap gap-space-2"
                     in:crossIn
                     out:crossOut
                   >
@@ -1009,34 +957,25 @@
               </div>
               <RowFault reason={settleFailed[machine.machineId]} />
               {#if refused && item?.detail}
-                <!-- literal: 6rem, 6px, 8px -->
                 <pre
-                  class="max-h-(--said-max) overflow-auto rounded-sm bg-surface-raised px-(--said-px) py-(--said-py) font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
-                  style:--said-max="6rem"
-                  style:--said-px="8px"
-                  style:--said-py="6px"
+                  class="max-h-(--c-detail-max) overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
                   in:unfold
                   out:unfold>{item.detail}</pre>
               {/if}
               {#if comparingThis}
                 <!-- The machine's script folds open under its row; reading
                      cross-fades to what was read as the box follows. -->
-                <!-- literal: 8px -->
                 <div
                   data-slot="fold"
-                  class="flex flex-col gap-(--fold-gap)"
-                  style:--fold-gap="8px"
+                  class="flex flex-col gap-space-2"
                   in:unfold
                   out:unfold
                 >
                   <div class="relative flex flex-col" {@attach morph()}>
                     {#if peeking[machine.machineId]}
-                      <!-- literal: 72ch, 8px -->
                       <p
                         data-slot="note"
-                        class="mark-line flex items-center gap-(--note-gap) type-meta max-w-(--measure) text-ink-muted"
-                        style:--measure="72ch"
-                        style:--note-gap="8px"
+                        class="mark-line flex items-center gap-space-2 type-meta max-w-(--c-measure) text-ink-muted"
                         role="status"
                         in:crossIn
                         out:crossOut
@@ -1055,11 +994,9 @@
                         {unread[machine.machineId]}
                       </p>
                     {:else if copies[machine.machineId] === null}
-                      <!-- literal: 72ch -->
                       <p
                         data-slot="note"
-                        class="type-meta max-w-(--measure) text-ink-muted"
-                        style:--measure="72ch"
+                        class="type-meta max-w-(--c-measure) text-ink-muted"
                         in:crossIn
                         out:crossOut
                       >
