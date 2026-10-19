@@ -27,8 +27,8 @@
  * 3. An ask's place keycap ("2 of 3") keeps its width (Prompt). On the
  *    /motion/prompt-head bench, the real approval card at 390, second of
  *    three, from a session with a long title: the keycap's text lays out as
- *    one line box, and the asker is cut with an ellipsis inside its own box
- *    (it runs past it, and its box ends before the keycap starts).
+ *    one line box, and the asker's chip is cut with an ellipsis inside its
+ *    own box (it runs past it, and its box ends before the keycap starts).
  *
  *   bun scripts/probe-kit/run.ts web breath-and-head
  */
@@ -396,7 +396,7 @@ async function promptHead(kit: Kit, bench: string): Promise<void> {
   const head = await page.evaluate((): PromptHead | null => {
     const h2 = document.querySelector('[data-slot="hitl"] h2');
     const place = h2?.querySelector<HTMLElement>(".place");
-    const asker = h2?.querySelector<HTMLElement>('[data-slot="title"]');
+    const asker = h2?.querySelector<HTMLElement>('[data-chip="asker"]');
     if (!(place && asker)) {
       return null;
     }

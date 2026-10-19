@@ -5,24 +5,25 @@
    * asks waiting, from a session with a long title, so its head carries the
    * place keycap ("2 of 3") beside an asker that must give way.
    */
-  import type { PendingPermission } from "#lib/cawco/client.svelte.js";
+  import { presentPermission } from "@cawco/core/permission-presentation";
   import Prompt from "#lib/cawco/transcript/Prompt.svelte";
+  import { requestOf } from "#lib/cawco/transcript/prompt-fixtures.js";
 
-  const request: PendingPermission = {
-    heard: 0,
-    input: { command: "bun run lint:changed" },
-    instanceId: "bench-prompt-head",
-    presentation: {
+  /** The ask as a session makes it, read by core's own presenter as the hub reads it. */
+  const request = requestOf(
+    {
       asker: "Build Mobbin search MCP from web API",
-      changes: [],
-      command: "bun run lint:changed",
-      fields: [],
+      input: {
+        command: "bun run lint:changed",
+        description: "Lint the files this change touched",
+      },
+      instanceId: "bench-prompt-head",
       project: "cockpit",
-      summary: "Lint the files this change touched",
+      requestId: "bench-prompt-head-1",
+      toolName: "Bash",
     },
-    requestId: "bench-prompt-head-1",
-    toolName: "Bash",
-  };
+    presentPermission
+  );
 </script>
 
 <main class="bench">

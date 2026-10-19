@@ -69,7 +69,6 @@
     "./safe-git": "./src/safe-git.ts",
     "./permission-presentation": "./src/permission-presentation.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
-    "./permission-presentation": "./src/permission-presentation.ts",
     "./line-diff": "./src/line-diff.ts",
     "./session-env": "./src/session-env.ts",
     "./keep-detached": "./src/keep-detached.ts",

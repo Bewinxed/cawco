@@ -1996,6 +1996,23 @@ const shellCall = (input: Record<string, unknown>): Presented => {
 export const commandOf = (input: Record<string, unknown>): string | null =>
   typeof input.command === "string" ? unboundedCommand(input.command) : null;
 
+/** A browser ask reads as its reason, the page's origin under it. */
+const browserAskPresented = (
+  input: Record<string, unknown>,
+  context: PresentationContext
+): PermissionPresentation =>
+  assembled(
+    context,
+    plainSubject(typeof input.reason === "string" ? input.reason : "", "web"),
+    "",
+    {
+      fields:
+        typeof input.origin === "string"
+          ? [{ key: "origin", value: input.origin }]
+          : [],
+    }
+  );
+
 /**
  * What a parked tool call will do, for every surface that shows the ask. A
  * question names itself (its questions, joined); an admin write says the
@@ -2018,17 +2035,8 @@ export function presentPermission(
       ""
     );
   }
-  // A browser ask reads as its reason, the page's origin under it.
   if (toolName === BROWSER_ASK_TOOL) {
-    return {
-      ...who,
-      summary: typeof input.reason === "string" ? input.reason : "",
-      changes: [],
-      fields:
-        typeof input.origin === "string"
-          ? [{ key: "origin", value: input.origin }]
-          : [],
-    };
+    return browserAskPresented(input, context);
   }
   const admin = CAWCO_ADMIN_WRITE.exec(toolName);
   const administered = admin ? adminWrite(admin[1], input, context) : undefined;
