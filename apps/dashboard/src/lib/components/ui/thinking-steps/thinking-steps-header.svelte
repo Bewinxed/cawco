@@ -14,12 +14,15 @@
   } = $props();
 </script>
 
-<!-- literal: 26px, -9px (the header's least height; how far the touch target reaches past it) -->
+<!-- A transcript rail line's height. A finger's 44px target is the house
+     touch area reaching past it (The 44 Touch Rule), never a taller header:
+     the live header turns enabled as its first words land, and a header that
+     grew then would drop its re-centred label under the reader. A disabled
+     header has no target. -->
 <Collapsible.Trigger
   {...rest}
-  class="group/header mark-line press-tint m-0 flex min-h-(--header-min) max-w-full cursor-pointer items-center gap-space-2 rounded-xs border-none border-current bg-transparent p-0 font-inherit text-start text-inherit [&:hover]:enabled:text-ink-strong disabled:cursor-default coarse:enabled:relative {className}"
+  class="group/header mark-line press-tint touch-hit m-0 flex min-h-(--tx-line) max-w-full cursor-pointer items-center gap-space-2 rounded-xs border-none border-current bg-transparent p-0 font-inherit text-start text-inherit enabled:hover:text-ink-strong disabled:cursor-default disabled:after:content-none {className}"
   data-slot="thinking-steps-header"
-  style="--header-min: 26px; --hit-reach: -9px"
 >
   {#if children}
     {@render children()}
@@ -28,27 +31,9 @@
   {/if}
   <span
     aria-hidden="true"
-    class="grid flex-none motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out group-state-open/header:transform-(--chev-turn) group-disabled/header:invisible"
+    class="grid flex-none motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/header:rotate-90 group-disabled/header:invisible"
     data-box
-    style:--chev-turn="rotate(90deg)"
     ><IconChevronRight class="size-icon-sm" /></span
   >
   {@render after?.()}
 </Collapsible.Trigger>
-
-<style>
-  /* A 44px target for a finger, without the header growing to it: the
-     live header turns enabled as its first words land, and a header that
-     grew then dropped its re-centred label 9px under the reader. The
-     target reaches past the header instead of the header being taller. */
-  /* residual: pseudo */
-  @media (pointer: coarse) {
-    /* css-scope: the same trigger's touch target */
-    :global([data-slot="thinking-steps-header"]:not(:disabled))::before {
-      content: "";
-      position: absolute;
-      inset-block: var(--hit-reach);
-      inset-inline: 0;
-    }
-  }
-</style>

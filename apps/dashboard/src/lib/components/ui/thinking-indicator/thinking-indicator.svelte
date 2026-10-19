@@ -78,12 +78,16 @@
          each other on a 6s breath. Each is its own <svg> so its transform
          and opacity run on the compositor; morphing the path itself
          repainted the page every frame. -->
-    <!-- literal: 16px, 20px (the mark's box, unless the caller sets --thinking-icon-size) -->
+    <!-- The circle and the infinity trade places twice a three-breath loop,
+         each easing in and out: the circle widens and flattens as it fades,
+         the infinity settles out of a narrower, taller shape as it comes
+         up. The mark's box is the large icon (the medium one compact),
+         unless the caller sets --thinking-icon-size. -->
     <span data-slot="mark" aria-hidden="true" class="grid flex-none">
       {#each motion.current ? MORPHING : STILL as mark (mark.name)}
         <svg
           aria-hidden="true"
-          class="col-start-1 row-start-1 size-(--box) motion-safe:origin-center"
+          class="col-start-1 row-start-1 size-(--box) motion-safe:origin-center motion-safe:mark-circle:animate-thinking-circle motion-safe:mark-lemniscate:animate-thinking-lemniscate"
           data-mark={mark.name}
           fill="none"
           height={compact ? 18 : 20}
@@ -91,7 +95,7 @@
           stroke-linecap="round"
           stroke-linejoin="round"
           stroke-width="1.5"
-          style:--box={`var(--thinking-icon-size, ${compact ? "16px" : "20px"})`}
+          style:--box={`var(--thinking-icon-size, var(${compact ? "--icon-md" : "--icon-lg"}))`}
           viewBox="0 0 24 24"
           width={compact ? 18 : 20}
         >
@@ -106,31 +110,31 @@
     class="inline-grid overflow-hidden text-size-label leading-body font-medium data-compact:text-size-meta data-compact:font-normal"
     data-compact={compact || undefined}
   >
+    <!-- Every beat here is the breath (--breath): each word stands for two
+         of them in an eight-breath cycle, rising in and out, and the light
+         crosses a word once a breath. -->
     {#each words as word, index}
       <span
-        class="col-start-1 row-start-1 whitespace-nowrap opacity-0 data-first:opacity-100"
+        class="col-start-1 row-start-1 whitespace-nowrap opacity-0 data-first:opacity-100 motion-safe:animate-thinking-word"
         data-first={index === 0 || undefined}
         data-slot="word"
-        style:--delay={`calc(var(--breath) * ${index * 2} - 0.24s)`}
+        style:--word-delay={`calc(var(--breath) * ${index * 2} - 0.24s)`}
       >
         <!-- The light passing over the word: the word again in the strong
-             ink, masked to a band. The band slides and the word inside it
-             slides back the same distance on the same curve, so the letters
-             stand still and only the light moves, all of it on the
-             compositor. -->
-        <span class="shimmer motion-safe:relative motion-safe:inline-block"
+             ink, masked to a band three words wide (the band enters from the
+             right and leaves on the left once a breath). The band slides and
+             the word inside it slides back the same distance on the same
+             curve, so the letters stand still and only the light moves, all
+             of it on the compositor. -->
+        <span class="motion-safe:relative motion-safe:inline-block"
           >{word}
           {#if motion.current}
-            <!-- literal: 300% (three words wide). The band is the old
-                 gradient's geometry: ink-strong at its middle, fading to
-                 nothing 15% of its width either side. -->
             <span
-              class="motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:w-(--sheen-width) motion-safe:text-ink-strong motion-safe:mask-(--sheen-band)"
+              class="motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:text-ink-strong motion-safe:sheen-band motion-safe:animate-thinking-sheen"
               data-slot="sheen"
-              style:--sheen-band={"linear-gradient(90deg, transparent 35%, var(--mask-opaque) 50%, transparent 65%)"}
-              style:--sheen-width="300%"
-              ><span class="motion-safe:inline-block" data-slot="sheen-word"
-                >{word}</span
+              ><span
+                class="motion-safe:inline-block motion-safe:animate-thinking-sheen-hold"
+                data-slot="sheen-word">{word}</span
               ></span
             >
           {/if}</span
@@ -139,90 +143,3 @@
     {/each}
   </span>
 </span>
-
-<style>
-  /* The band enters from the right and leaves on the left once a breath.
-     Every beat here is the breath (--breath): each word stands for two of
-     them in an eight-breath cycle, the marks trade places on a three-breath
-     loop, and the light crosses a word once a breath. */
-  /* residual: keyframes */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="word"] {
-      animation: cycle calc(var(--breath) * 8) var(--ease-out) infinite both;
-      animation-delay: var(--delay);
-    }
-
-    /* The circle and the infinity trade places twice a loop, each easing in
-       and out: the circle widens and flattens as it fades, the infinity
-       settles out of a narrower, taller shape as it comes up. */
-    [data-mark="circle"] {
-      animation: circle calc(var(--breath) * 3) var(--ease-in-out) infinite both;
-    }
-    [data-mark="lemniscate"] {
-      animation: lemniscate calc(var(--breath) * 3) var(--ease-in-out) infinite
-        both;
-    }
-    [data-slot="sheen"] {
-      animation: sheen var(--breath) var(--ease-in-out) infinite;
-    }
-    [data-slot="sheen-word"] {
-      animation: sheen-hold var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-
-  @keyframes circle {
-    0%,
-    50%,
-    100% {
-      opacity: 1;
-      transform: none;
-    }
-    25%,
-    75% {
-      opacity: 0;
-      transform: scale(1.15, 0.8);
-    }
-  }
-  @keyframes lemniscate {
-    0%,
-    50%,
-    100% {
-      opacity: 0;
-      transform: scale(0.7, 1.1);
-    }
-    25%,
-    75% {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  @keyframes cycle {
-    0% {
-      opacity: 0;
-      transform: translateY(80%);
-    }
-    1.5%,
-    25% {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    26%,
-    100% {
-      opacity: 0;
-      transform: translateY(-80%);
-    }
-  }
-
-  /* The band two words to the left; the word inside it two words back. */
-  @keyframes sheen {
-    to {
-      transform: translateX(-66.6667%);
-    }
-  }
-  @keyframes sheen-hold {
-    to {
-      transform: translateX(200%);
-    }
-  }
-</style>
