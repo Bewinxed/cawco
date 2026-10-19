@@ -72,10 +72,12 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   BROWSER_HANDBACK,
+  BROWSER_LISTEN,
   BROWSER_REMOVE,
   BROWSER_SHIELD,
   BROWSER_START,
   BROWSER_STOP,
+  BROWSER_VIEWER_TOKEN,
   BROWSER_VIEWERS,
   type BrowserKey,
   type BrowserShieldArgs,
@@ -159,6 +161,7 @@ import {
   setBrowserSink,
   startBrowser,
   stopBrowser,
+  viewerSession,
   watchBrowsers,
 } from "./browser/browsers";
 import { sweepBrowserDoors } from "./browser/door";
@@ -212,7 +215,7 @@ import {
 } from "./move";
 import { placePush } from "./place-push";
 import { placeLfs, placeRepo, repoRoot } from "./place-repo";
-import { servingPreviews } from "./preview";
+import { listenBrowsers, servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
 import { parseProcId, procIdFor, SESSION_PROC_KINDS } from "./proc-id";
 import {
@@ -3094,9 +3097,23 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(BROWSER_HANDBACK, async (args) =>
       handBackBrowser(browserKeyOf(args))
     );
+    // The person's view of a browser, through the hub (hub
+    // browser-routes.ts): the machine's one browser listener, and a neko
+    // session of its own for each viewer.
+    supervisor.registerDaemonFunction(BROWSER_LISTEN, async (args) =>
+      listenBrowsers(args)
+    );
+    supervisor.registerDaemonFunction(BROWSER_VIEWER_TOKEN, async (args) =>
+      viewerSession(browserKeyOf(args))
+    );
     supervisor.registerDaemonFunction(BROWSER_VIEWERS, (args) => {
       const { count } = args as BrowserViewersArgs;
-      browserViewers(browserKeyOf(args), typeof count === "number" ? count : 0);
+      const key = browserKeyOf(args);
+      const views = typeof count === "number" ? count : 0;
+      browserViewers(key, views);
+      console.info(
+        `[browser] ${key}: the hub counts ${views} view${views === 1 ? "" : "s"}`
+      );
       return Promise.resolve(true);
     });
     yield* Effect.forkScoped(

@@ -165,6 +165,36 @@ export interface BrowserViewersArgs {
 }
 
 /**
+ * Hub → daemon: a neko session of its own for one viewer of the browser of
+ * `key` (container host), woken first when it sleeps. The hub swaps it in
+ * for whatever credential the viewer's client sent, on every request and
+ * socket of that viewer (hub browser-routes.ts). Answers
+ * {@link BrowserViewerSession}; refused on the local host, which has no neko.
+ */
+export const BROWSER_VIEWER_TOKEN = "browser.viewerToken";
+export interface BrowserViewerSession {
+  /** neko's id for the session: the one `browser.shield`'s `viewer` gives control to. */
+  session: string;
+  token: string;
+}
+
+/**
+ * Hub → daemon: the machine's one browser listener, opened when it has none,
+ * answering only `token` from then on (core `RELAY_HEADER`, as a preview
+ * listener does). It serves {@link browserMount}`/api/*` (neko's REST and
+ * `/api/ws`, container host) and `/cdp` (the take-over view, local host).
+ * Answers `{ port }`.
+ */
+export const BROWSER_LISTEN = "browser.listen";
+export interface BrowserListenArgs {
+  token: string;
+}
+
+/** Where the machine's browser listener serves the browser of `key`. */
+export const browserMount = (key: BrowserKey): string =>
+  `/__cawco/browser/${encodeURIComponent(key)}`;
+
+/**
  * What every agent's browser tool is told while the person holds the
  * browser privately (agent shield.ts): the gate's refusal and close reason,
  * and the line the project's other sessions are told (hub browsers.ts).

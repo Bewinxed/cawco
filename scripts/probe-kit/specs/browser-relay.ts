@@ -114,7 +114,7 @@ interface TlsTo {
 }
 
 /** One TURN exchange: allocate with `user`, then (when asked) a permission to `peer`; what each answered. */
-const turn = (
+export const turn = (
   url: string,
   user: { username: string; credential: string },
   peer?: string,
@@ -226,7 +226,7 @@ const bindPort = (
  * hub's preview ports and the relay's own; `tries` more ports are asked for
  * when one is not.
  */
-const freeStandIn = async (tries = 20): Promise<number | undefined> => {
+export const freeStandIn = async (tries = 20): Promise<number | undefined> => {
   if (tries === 0) {
     return;
   }
@@ -257,7 +257,7 @@ const freeStandIn = async (tries = 20): Promise<number | undefined> => {
 };
 
 /** One STUN binding over `url`: answered, or why not. Over TLS through `connect`, which takes a server name and a CA. */
-const binding = (url: string, tls?: TlsTo): Promise<string> =>
+export const binding = (url: string, tls?: TlsTo): Promise<string> =>
   new Promise((resolve) => {
     if (!tls) {
       getPublicIP(url, { timeout: 3000 }, (error, address) =>
@@ -716,7 +716,7 @@ const startProbe = async (
 };
 
 /** `arg` with the relay's 443 moved to `port`. */
-const onPort =
+export const onPort =
   (port: number) =>
   (arg: string): string =>
     arg === `--listening-port=${STREAM_RELAY_PORT}`

@@ -424,15 +424,22 @@ export class ContainerHost implements BrowserHost {
   }
 }
 
-/**
- * A neko session token for the browser: the daemon's own as admin, or a
- * viewer's (the hub's, for a person watching). neko answers it in the
- * login's body while its cookie is off.
- */
+/** A neko session token for the browser, as {@link nekoSession} makes it. */
 export const nekoLogin = async (
   record: BrowserRecord,
   as: "admin" | "viewer"
-): Promise<string> => {
+): Promise<string> => (await nekoSession(record, as)).token;
+
+/**
+ * A new neko session for the browser, its id and its token: the daemon's own
+ * as admin, or a viewer's (a person watching through the hub). Each login is
+ * a session of its own (neko's multiuser provider names it `<username>-<uid>`).
+ * neko answers the token in the login's body while its cookie is off.
+ */
+export const nekoSession = async (
+  record: BrowserRecord,
+  as: "admin" | "viewer"
+): Promise<{ id: string; token: string }> => {
   if (!record.container) {
     throw new Error(`${record.key} runs on no container.`);
   }
@@ -460,9 +467,14 @@ export const nekoLogin = async (
       `neko refused the ${as} login (HTTP ${response.status}): ${(await response.text()).trim()}`
     );
   }
-  const { token } = (await response.json()) as { token?: string };
-  if (!token) {
-    throw new Error(`neko answered the ${as} login with no token.`);
+  const { id, token } = (await response.json()) as {
+    id?: string;
+    token?: string;
+  };
+  if (!(id && token)) {
+    throw new Error(
+      `neko answered the ${as} login with no session id or token.`
+    );
   }
-  return token;
+  return { id, token };
 };

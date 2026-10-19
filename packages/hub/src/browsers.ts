@@ -86,7 +86,8 @@ export const browserKeyOf = (instance: InstanceRow): BrowserKey =>
     ? `project:${instance.projectId}`
     : `machine:${instance.machineId}`;
 
-const answered = <T>(
+/** A machine's answer to a browser call, or its refusal in the person's words. */
+export const answered = <T>(
   read: Awaited<ReturnType<RelayCall>>,
   machine: string,
   what: string

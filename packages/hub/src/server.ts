@@ -444,8 +444,9 @@ import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { bodyLimitRefusal } from "./body-limits";
 import { briefingsObserve } from "./briefings";
+import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
-import { browserRoutes, createBrowsers } from "./browsers";
+import { BrowserRefusal, browserRoutes, createBrowsers } from "./browsers";
 import {
   attemptTry,
   type Caw,
@@ -2977,6 +2978,40 @@ export const createServer = (
     // The gate id its browser door is (agent door.ts): its workspace's,
     // else the session's own.
     workspaceOf: (row) => sessionWorkspace(row)?.id ?? row.id,
+  });
+  // The person's view of a browser, on the hub's own origin
+  // (browser-routes.ts): relayed to its machine's browser listener.
+  const browserStream = createBrowserStream({
+    artifact: (id) => db.artifacts.get(id),
+    call: (machineId, method, args, timeoutMs) =>
+      callAgent(machineId, method, args, timeoutMs),
+    callerOf: (request) => hubAuth.callerOf(request, null),
+    classify: (header, method, path, address) =>
+      hubAuth.classify(header, method, path, address),
+    keysOf: (machineId) =>
+      db.browsers
+        .list()
+        .filter((row) => row.machineId === machineId)
+        .map((row) => row.key),
+    machineName: (machineId) => machineName(machineId),
+    mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
+    // As a preview's listener is reached (`startListener`): at the address
+    // its agent connected from, or carried over its SSH connection.
+    reach: async (machineId, port) => {
+      const address = registry.address(machineId);
+      if (!address) {
+        throw new BrowserRefusal(
+          503,
+          `${machineName(machineId)} is not connected, so its browser could not be reached. Try again once it is back.`
+        );
+      }
+      return sshTunnels.holds(machineId)
+        ? {
+            address: "127.0.0.1",
+            port: await sshTunnels.carry(machineId, port),
+          }
+        : { address, port };
+    },
   });
   const browserAsks = createBrowserAsks({
     browserFor: (actor) => browsers.browserFor(actor),
@@ -22890,6 +22925,7 @@ export const createServer = (
         fleetChoicesRoutes(fleetChoices),
         streamRelayRoutes(streamRelay),
         browserRoutes(browsers),
+        browserStreamRoutes(browserStream),
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
           (id) => {
@@ -27803,6 +27839,7 @@ export const createServer = (
               streamRelay.connected(message.machineId);
               // A take-over it held is sent again: its gate stays closed.
               browsers.connected(message.machineId);
+              browserStream.connected(message.machineId);
               // A question parked by a process that is gone cannot be answered:
               // the reply would arrive at a daemon with no such session. Drop them
               // with the sessions they belonged to, or they replay to every
@@ -28512,6 +28549,10 @@ export const createServer = (
               // (browsers.ts, Projects spec §5.11); no screen is sent them.
               if (kind === "browsers") {
                 browsers.heard(
+                  message.machineId,
+                  message.payload as BrowserFrame
+                );
+                browserStream.heard(
                   message.machineId,
                   message.payload as BrowserFrame
                 );

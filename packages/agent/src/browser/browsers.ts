@@ -31,10 +31,11 @@ import type {
   BrowserRow,
   BrowserRuntime,
   BrowserStartArgs,
+  BrowserViewerSession,
 } from "@cawco/core/browser";
 import { isBrowserKey, SHIELD_WORDS } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
-import { ContainerHost, RELAY_RENEW_MS } from "./container-host";
+import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
 import { findRuntime, type Runtime } from "./runtime";
@@ -202,14 +203,7 @@ const devtoolsOf = async (
   key: BrowserKey,
   wake: boolean
 ): Promise<string | undefined> => {
-  if (wake) {
-    const kept = (await readBrowser(key))?.relay;
-    await startBrowser({
-      key,
-      ...(kept && relayHolds(kept) ? { relay: kept } : {}),
-    });
-  }
-  const record = await readBrowser(key);
+  const record = wake ? await wakeBrowser(key) : await readBrowser(key);
   if (record?.state !== "live") {
     return;
   }
@@ -217,6 +211,46 @@ const devtoolsOf = async (
   return host && (await host.running(record))
     ? host.devtoolsUrl(record)
     : undefined;
+};
+
+/**
+ * `key` started or woken, with the stream relay the hub last gave it while
+ * that credential holds (a container made again keeps its relay): its record
+ * as it stands then.
+ */
+export const wakeBrowser = async (
+  key: BrowserKey
+): Promise<BrowserRecord | undefined> => {
+  const kept = (await readBrowser(key))?.relay;
+  await startBrowser({
+    key,
+    ...(kept && relayHolds(kept) ? { relay: kept } : {}),
+  });
+  return readBrowser(key);
+};
+
+/**
+ * A neko session of its own for one viewer of `key` (core
+ * `BROWSER_VIEWER_TOKEN`), the browser woken first when it sleeps.
+ */
+export const viewerSession = async (
+  key: BrowserKey
+): Promise<BrowserViewerSession> => {
+  if (!isBrowserKey(key)) {
+    throw new Error(`${String(key)} is no browser key.`);
+  }
+  const before = await readBrowser(key);
+  const record = before?.state === "live" ? before : await wakeBrowser(key);
+  if (!record) {
+    throw new Error(`${key} has no record on this machine.`);
+  }
+  if (record.host !== "container") {
+    throw new Error(
+      `${key} runs as a local Chromium on this machine: it has no neko session to give a viewer.`
+    );
+  }
+  const { id, token } = await nekoSession(record, "viewer");
+  return { session: id, token };
 };
 
 /** Serves `record`'s gate behind the machine's one gate port, when this process serves gates. */
