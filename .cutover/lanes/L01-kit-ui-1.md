@@ -14,7 +14,7 @@ Base: f5c5024ab (cawco/cutover-merge). Tailwind 4.3.3.
 | ui/button/pending-content.svelte | 2 literal markers and their `style:--x` literals → tokens | none | 0 |
 | ui/collapsible/collapsible-trigger.svelte | `skin: surface` (K1) added | none | 0 |
 | ui/copy-button/copy-button.svelte | none: it forwards Button's `skin` (its props are Button's) | none | 0 |
-| ui/drawer/drawer-content.svelte | `height: cap` added; 2 trailing `!` kept, see Gaps | none | 0 by the relic check; 2 `!` in a tv string, see Gaps |
+| ui/drawer/drawer-content.svelte | `height: cap` added; under reduced motion every sheet fades over --dur-control (`motion-reduce:sheet-fade!`), the new-session look keeps only `motion-reduce:transition-none!` | none | 0; 2 sanctioned `!`, see Sanctioned overrides |
 | ui/dropdown-menu/dropdown-menu-content.svelte | none: its sites map to the width variants it has | none | 0 |
 | ui/dropdown-menu/dropdown-menu-label.svelte | to `tv`; `kind: line` added | none | 0 |
 
@@ -71,7 +71,38 @@ token: --c-sheet-max-h 85vh — the drawer recipe's cap (DESIGN.md Drawer: "It i
 
 ## Theme additions
 
-None: `font-inherit` is app.css's (`@utility font-inherit`, in tailwind-merge's `font-shorthand` group), `text-inherit`, `blur-(--…)`, `max-w-(--…)` and the bracketed `h-[var(…)]` are Tailwind's own.
+theme: utility sheet-fade
+```css
+/* A kit sheet under reduced motion: it fades in and out over the control's
+   beat instead of sliding (DESIGN.md, Sheet: "with reduced motion it fades
+   over 120ms"). Used as `motion-reduce:sheet-fade!` on DrawerContent; its
+   `!` reaches both rules (compiled with @tailwindcss/node 4.3.3). */
+@utility sheet-fade {
+  animation: sheet-fade-in var(--dur-control) var(--ease-out) both;
+  &[data-state="closed"] {
+    animation-name: sheet-fade-out;
+  }
+}
+@keyframes sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sheet-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+```
+
+The rest is not a theme addition: `font-inherit` is app.css's (`@utility font-inherit`, in tailwind-merge's `font-shorthand` group), and `text-inherit`, `blur-(--…)`, `max-w-(--…)` and the bracketed `h-[var(…)]` are Tailwind's own.
+
+## Sanctioned overrides
+
+Both are on vaul-svelte's sheet (1.0.0-next.7), allowed by the orchestrator (eee38793) under Tailwind's rule: "When you really need to force a specific utility class to take effect and have no other means of managing the specificity, you can add `!` to the end of the class name" (https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier). Each has a comment beside it in the file with the reason and that URL.
+
+sanctioned: apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte:164 `motion-reduce:sheet-fade!` — vaul's slide is an unlayered global sheet (drawer.svelte:92: `animation-duration: 0.5s`, and `animation-name: slideFromBottom` at four attributes' weight); a layered utility loses to it whatever its specificity
+sanctioned: apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte:36 `motion-reduce:transition-none!` (look new-session) — vaul writes `transition: transform 0.5s cubic-bezier(…)` inline from script (use-drawer-root.svelte.js:335); only `!important` outranks an inline style
 
 ## Kit swaps
 
@@ -79,7 +110,7 @@ None: this lane is the kit side. Every consumer site is under Variants.
 
 ## Contracts
 
-None.
+contract: apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte:164 shadcn/no-unknown-classes | apps/dashboard/src/app.css (the `theme: utility sheet-fade` addition above) | integration adds `@utility sheet-fade` and its two keyframes to app.css; then `motion-reduce:sheet-fade!` is known. The lane eslint check's theme-name match does not strip Tailwind's trailing `!`, so it can't clear this site by its `theme:` line
 
 ## Fixed
 
@@ -89,7 +120,6 @@ fixed: apps/dashboard/src/lib/components/ui/button/button.svelte:117 row-reach r
 
 ## Gaps
 
-gap: apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte:33 `motion-reduce:animate-none! motion-reduce:transition-none!` kept — vaul-svelte 1.0.0-next.7 (the `next` tag; `latest` is 0.3.2) draws the sheet's motion from an unlayered global `<style>` (drawer.svelte:92, `:global([data-vaul-drawer]) { transition: transform 0.5s …; animation-duration: 0.5s }`) and writes `transition` inline from script (use-drawer-root.svelte.js:335); no layered utility outranks either, and its own off switch (`data-vaul-animate`) is internal state, not a prop. Tailwind: "When you really need to force a specific utility class to take effect and have no other means of managing the specificity, you can add `!` to the end of the class name" (https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier). The relic check reads only `class=` lines, so it does not see this tv string; it is a relic by delta T until vaul-svelte takes a reduced-motion prop. Proposal for the owner: keep it, or file it upstream
 gap: apps/dashboard/src/lib/cawco/transcript/Prompt.svelte:668 the permission card's peers draw 32px tall (44px drawn under a coarse pointer) with 12px icons, where The Peer Rule names `sm` (30px, 44px of touch area) and DESIGN.md's icon sizes give 16px in controls; the `size="sm"` swap above settles both, and changes what the card draws
 gap: apps/dashboard/src/lib/cawco/side/SideSurface.svelte:414 the More menu's 224px sits off the kit's menu widths (176 / 208 / 256); the swap to `regular` narrows it 16px
 gap: apps/dashboard/src/lib/components/ui/dropdown-menu/dropdown-menu-content.svelte:66 `min-w-48` (192px) is wider than `width: compact` (`w-44`, 176px), so compact computes 192px unless `min` is set too
@@ -102,3 +132,4 @@ fixed: apps/dashboard/src/lib/components/ui/button/button.svelte:116 Files' Show
 fixed: apps/dashboard/src/lib/components/ui/button/pending-content.svelte:256 the pending words' blur is a named 2px token under `motion-safe:` (DESIGN.md Buttons, Pending), never a value in the markup
 gap: apps/dashboard/src/lib/components/ui/button/button.svelte:117 a disabled row-reach button stays hidden under a hover-capable pointer when its row is reached (no caller is disabled today); a disabled one would need its own reveal at 50%
 gap: ui-observer not run: no `/motion` bench or stories file in this workspace renders these kit parts, so their rendered layout is Not verified
+fixed: apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte:164 under reduced motion a kit sheet slid in over vaul's 500ms (vaul reads no motion preference), and the new-session sheet swapped instantly (`animate-none!`); every sheet now fades in and out over --dur-control, 120ms, on --ease-out (DESIGN.md, Sheet: "with reduced motion it fades over 120ms"), and the new-session one keeps none of vaul's settling transform
