@@ -8,6 +8,7 @@ The render report is the one source. The canvas page writes it after every draw,
 | `empty` | It mounted to nothing: a 0×0 box, or no words, media, control or painted box |
 | `failed` | It threw: `error` names the message and its `file:line:column` |
 | `unseen` | No browser drew it since its file or a component it mounts changed |
+| `unshown` | The page did not show it at its width (a phone's canvas, one frame at a time): neither drawn nor empty; read it from a desk's draw or `render: true` |
 
 `by` says which browser drew it: `panel` (the person's) or `stage` (the daemon's, in the machine's own Chromium, when no panel has the canvas open). `artifact_read({ render: true })` draws it now; `artifact_create` draws it on the daemon by itself when no panel did within a few seconds.
 

@@ -34,7 +34,9 @@
  *     the source, mapped through Vite's sourcemap (the throw's own line, not
  *     the compiled one).
  * 11. At 1440 and 390, light and dark: both schemes drawn side by side; a
- *     phone shows one frame with its state strip, and a step plays the move.
+ *     phone shows one frame with its state strip, and a step plays the move;
+ *     the phone's report says the frame it shows `drawn` and every other
+ *     `unshown`, never `empty`.
  * 12. No console errors (the throwing story's page aside).
  * 13. With no panel open, the daemon's render (stage-render.ts) draws the
  *     canvas in the machine's own Chromium through a bridge socket shaped
@@ -626,7 +628,19 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
         about: "The pairing card's two states and the move between them",
       })
     );
-    await reportOn(phone, 2000);
+    const phoneReport = await reportOn(phone, 2000);
+    const states = framesOf(phoneReport).map(
+      (one) => `${one.story}/${one.interaction}:${one.state}`
+    );
+    kit.check(
+      `11d: at 390 (${theme}) the frame on screen reports drawn and every frame the phone does not show reports unshown, none empty (the plan-view builder: "reads like a failure")`,
+      states.filter((one) => one.endsWith(":drawn")).length === 1 &&
+        states.some((one) => one.endsWith(":unshown")) &&
+        states.every(
+          (one) => one.endsWith(":drawn") || one.endsWith(":unshown")
+        ),
+      states.join(", ")
+    );
     const shown = await phone.evaluate(() => ({
       phone: document.documentElement.hasAttribute("data-cawco-phone"),
       visible: [

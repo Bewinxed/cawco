@@ -4,13 +4,14 @@
    * `DesignThumb`, from the stage's kept reports): each frame's box where it
    * stood on its canvas, drawn by its state. Drawn on the raised surface,
    * empty with a dashed edge, failed in the fail status, not seen since its
-   * file changed on the skeleton's fill. Nothing drawn yet says so.
+   * file changed or not shown at its page's width on the skeleton's fill.
+   * Nothing drawn yet says so.
    */
   import type { DesignThumb } from "@cawco/core/stage";
 
   let { name, thumb }: { name: string; thumb: DesignThumb | null } = $props();
   const counts = $derived.by(() => {
-    const by = { drawn: 0, empty: 0, failed: 0, unseen: 0 };
+    const by = { drawn: 0, empty: 0, failed: 0, unseen: 0, unshown: 0 };
     for (const frame of thumb?.frames ?? []) {
       by[frame.state] += 1;
     }
@@ -23,6 +24,7 @@
       counts.failed ? `${counts.failed} failed` : "",
       counts.empty ? `${counts.empty} empty` : "",
       counts.unseen ? `${counts.unseen} not seen since a change` : "",
+      counts.unshown ? `${counts.unshown} not shown at its width` : "",
     ]
       .filter(Boolean)
       .join(", ")
@@ -73,7 +75,8 @@
     fill: var(--status-fail-bg);
     stroke: var(--status-fail-glyph);
   }
-  rect[data-state="unseen"] {
+  rect[data-state="unseen"],
+  rect[data-state="unshown"] {
     fill: var(--surface-fill);
     stroke: none;
   }

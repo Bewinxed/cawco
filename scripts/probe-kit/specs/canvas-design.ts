@@ -1309,8 +1309,10 @@ async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
         const root = document.getElementById("cawco-chrome")
           ?.shadowRoot as ShadowRoot;
         const name = root.querySelector(".name") as HTMLElement;
+        const about = root.querySelector(".about") as HTMLElement;
         return {
           nameShown: getComputedStyle(name).display !== "none",
+          aboutShown: getComputedStyle(about).display !== "none",
           crumb:
             (root.querySelector(".crumb .num") as HTMLElement | null)
               ?.textContent ?? "",
@@ -1318,8 +1320,11 @@ async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
       })
     : null;
   kit.check(
-    `7d: ${leg}: in the panel the band doesn't name the canvas the head names, and its crumb counts frames only`,
-    !!band && !band.nameShown && FRAME_COUNT.test(band.crumb),
+    `7d: ${leg}: in the panel the band says neither the name nor the about the head says, and its crumb counts frames only`,
+    !!band &&
+      !band.nameShown &&
+      !band.aboutShown &&
+      FRAME_COUNT.test(band.crumb),
     JSON.stringify(band)
   );
   const well = await page.evaluate(() => {
@@ -1866,7 +1871,7 @@ const missingStage = (): StageState => ({
 });
 
 /** Leg 12: the panel switches into a canvas whose stage failed, from a page or a canvas, Inspect shut or open. */
-async function switchLeg(
+async function artifactSwitchLeg(
   kit: Kit,
   bench: string,
   stage: Stage,
@@ -2535,7 +2540,7 @@ const spec: Spec = {
         const bench = await kit.bench();
         for (const theme of ["light", "dark"] as const) {
           // biome-ignore lint/performance/noAwaitInLoops: one theme at a time
-          await switchLeg(kit, bench, stage, theme);
+          await artifactSwitchLeg(kit, bench, stage, theme);
         }
         return;
       }
@@ -2578,6 +2583,7 @@ const spec: Spec = {
         await stageDownLeg(kit, bench, stage, theme);
         await ownTabLeg(kit, bench, stage, theme);
         await switchLeg(kit, bench, stage, theme);
+        await artifactSwitchLeg(kit, bench, stage, theme);
       }
       sameLoadPlace(kit);
     } finally {

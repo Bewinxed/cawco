@@ -747,6 +747,9 @@ export class Chrome {
     if (by("failed")) {
       bits.push(`${by("failed")} failed`);
     }
+    if (by("unshown")) {
+      bits.push(`${by("unshown")} not shown at this width`);
+    }
     if (report.unnamed.length) {
       bits.push(`${report.unnamed.length} unnamed`);
     }

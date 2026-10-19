@@ -1373,6 +1373,9 @@ export function boot(options: BootOptions): void {
     let state: FrameRender["state"] = "empty";
     if (frame.error) {
       state = "failed";
+    } else if (frame.el.getClientRects().length === 0) {
+      // Not on screen at this width (a phone shows one frame at a time): it has not drawn nothing, it is not shown.
+      state = "unshown";
     } else if (drew(frame.body)) {
       state = "drawn";
     }

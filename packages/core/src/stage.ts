@@ -85,8 +85,13 @@ export interface Form {
   width: number;
 }
 
-/** What a browser drew of one frame: `unseen` until one drew it since its file last changed. */
-export type FrameState = "drawn" | "empty" | "failed" | "unseen";
+/**
+ * What a browser drew of one frame: `unseen` until one drew it since its
+ * file last changed; `unshown` when the page did not show it at its width (a
+ * phone's canvas shows one frame at a time), so it is neither drawn nor
+ * empty: `empty` is a frame shown that drew nothing.
+ */
+export type FrameState = "drawn" | "empty" | "failed" | "unseen" | "unshown";
 
 /** Where a page's code threw, 1-based, the file from the toolchain root when it is the project's. */
 export interface PageError {
