@@ -98,6 +98,17 @@ fixed: both sheets: every `@media (prefers-reduced-motion: no-preference)` → `
 fixed: apps/dashboard/src/lib/components/features/workflows/workflows.css wf fields, select and wf-btn 36px → `--c-input-h` / `--c-btn-h`, 44px → `--c-btn-h-lg`, wf-check 36px → `--c-input-h`, `--btn-icon` 16px → `--icon-md`.
 fixed: apps/dashboard/src/lib/components/features/workflows/workflows.css wf-btn's transition names `background-color` with `transform` (the hover surface now changes on `--dur-control`, DESIGN.md, Buttons: "hover and colour changes take 120ms").
 fixed: apps/dashboard/src/lib/components/features/workflows/workflows.css the element rules (headings, labels, fields, the disabled button, pre) sit in `@layer components`, so a kit control inside `.wf` draws its own recipe instead of the sheet's.
+fixed: apps/dashboard/src/lib/cawco/spawn/ns-theme.css:74 a raw input's placeholder in the dialog `--ink-subtle` → `--ink-muted` (DESIGN.md, Inputs and fields: "muted placeholder"), the same ink as the kit Input's.
+
+## Measured (computed styles in a headless Chromium on `vite dev`, the nine `token:` values above injected at runtime as integration will define them)
+
+Bench `/motion/signin-problem` (an `.ns-pop` holding SigninPanel's kit Buttons and Input), desk 1280 fine / phone 375 coarse:
+- popover: width 340px (`--c-signin-pop-w`) / 351px (375 − 2 × `--c-screen-margin`); padding 7px both; max-height none on the desk (no bits-ui available-height outside a real popover, as before) / 420px.
+- kit Buttons (K1 gone): font-size 13px (`--text-label`), weight 500, height 30px at both, so a coarse pointer keeps the drawn size; the outline one's colour `oklch(0.295 0.01 70)` = `--ink-strong`, the primary's `oklch(1 0 0)` = `--on-action` on its gradient.
+- kit Input: placeholder `oklch(0.495 0.014 74)` = `--ink-muted` (K2 gone); font-size 14px / 16px (the `overrides` floor over the kit's text utility).
+- `overrides`: an `animate-spin` under `data-at-rest` → `animation-play-state: paused`; a kit Button under `.theme-flip` → `transition-property: none`.
+
+Injected into the bench (no bench renders these): a raw row button in the `.ns-pop` → min-height auto, 20px tall / min-height 44px, 44px tall (K3 in `ns-pop`); a `.wf` block → label `flex-direction: column`, `wf-check` row (X1 safe to drop), a `wf-mono` textarea in JetBrains Mono (X2 safe to drop), input and select 36px / 44px, textarea min-height 90px, checkbox 24px, `wf-btn` 36px / 44px tall and min-width 0 / 44px, radius 8px, `transition-property: background-color, transform`, quiet background transparent, disabled opacity 0.5.
 
 ## Gaps
 
@@ -106,7 +117,6 @@ gap: apps/dashboard/src/lib/components/features/workflows/workflows.css `wf-btn`
 gap: apps/dashboard/src/lib/components/features/workflows/workflows.css wf-btn and wf fields grow their drawn size to 44px under a finger — DESIGN.md, The 44 Touch Rule keeps the drawn size and reaches 44 through `.touch-hit`; resolving it is the Button swap above.
 gap: apps/dashboard/src/lib/cawco/side/SideSurface.svelte:472 `.side-head`'s unlayered `font: inherit` resets `num` on PreviewPane's Comments button until that lane converts it to `font-inherit` (app.css:2727 `num` no longer `!important`).
 gap: apps/dashboard/src/app.css `overrides` outranks every layer, not unlayered rules: a loop still in a Svelte `<style>` block (thinking-indicator, thinking-step, CompactionDivider, LiveDot and the `breath` users) is held by `data-at-rest` / `data-offscreen` / hidden swap slots only once its lane moves it to a utility (delta T2).
-gap: apps/dashboard/src/lib/cawco/spawn/ns-theme.css:69 raw inputs in the dialog keep `--ink-subtle` placeholders while DESIGN.md, Inputs and fields says "muted placeholder" — a call for the owner (the dialog may mean its quieter field), not changed here.
 
 ## Design Critique (interface-craft), from the sheets' rules against DESIGN.md
 
@@ -114,5 +124,4 @@ fixed: a primary kit Button in an account popover drew `ink-strong` on coral (K1
 fixed: kit `sm` Buttons in popovers drew in the body role over their label size (K1) — now the `sm` recipe, so a popover's actions match the same Button everywhere.
 fixed: a static setting chip carried a hover rule that cancelled itself — now it has none, as the recipe says.
 fixed: popover rows were 44px only by window width, so an iPad (coarse, wide) got 32px rows under a finger — now 44px on every touch screen, and a narrow desktop window keeps its pointer density.
-gap: ns-btn's xs at 30px now equals sm's height; the two differ in padding, radius and gap only — worth a look when ns-btn swaps to the kit Button.
-gap: the comb's 6px tick pitch and the popover caps are named tokens awaiting integration; until then those values are undefined in this tree, as delta O expects.
+fixed: ns-btn's xs is the chip-shaped button its comment names ("a button at chip scale, for actions that sit among chips"): a chip's 30px height, 8px radius and `--space-2` padding (DESIGN.md, New-session dialog: "Setting chips are 30px with an 8px radius"), so it stands level with the chips beside it; sm is the kit's 30px Button shape (10px radius, `--space-3` padding). Same height by design, different shape.

@@ -71,9 +71,10 @@
   .ns-theme [contenteditable] {
     font-family: var(--font-body);
   }
-  /* foreign-dom */
+  /* foreign-dom — DESIGN.md, Inputs and fields: "muted placeholder", the
+     kit Input's own. */
   .ns-theme input::placeholder {
-    color: var(--ink-subtle);
+    color: var(--ink-muted);
   }
   /* foreign-dom */
   .ns-theme .ns-tile svg {
