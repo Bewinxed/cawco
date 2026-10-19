@@ -329,9 +329,49 @@ async function capture(page: Page, name: string, story: string): Promise<void> {
   }, selector);
   await page.waitForTimeout(900);
   const frame = page.locator(selector).first();
+  const seen = await frame
+    .waitFor({ state: "visible", timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!seen) {
+    const why = await page.evaluate((one) => {
+      const el = document.querySelector<HTMLElement>(one);
+      const chain: string[] = [];
+      for (let at: HTMLElement | null = el; at; at = at.parentElement) {
+        const style = getComputedStyle(at);
+        if (
+          style.display === "none" ||
+          style.visibility !== "visible" ||
+          at.getBoundingClientRect().width === 0
+        ) {
+          chain.push(
+            `${at.className.toString().split(" ")[0]} display ${style.display} visibility ${style.visibility} ${Math.round(at.getBoundingClientRect().width)}×${Math.round(at.getBoundingClientRect().height)}`
+          );
+        }
+      }
+      return chain.join(" < ");
+    }, selector);
+    throw new Error(`${story}'s frame is not shown: ${why}`);
+  }
+  // The page cut to the frame's box: `go` stood it in the middle of the
+  // view, and an element's own picture waits for a stillness a frame in a
+  // transformed world never reports.
+  const box = await frame.boundingBox();
+  const view = page.viewportSize();
+  if (!(box && view)) {
+    throw new Error(`${story}'s frame has no box to picture`);
+  }
+  const x = Math.max(0, box.x);
+  const y = Math.max(0, box.y);
+  const clip = {
+    x,
+    y,
+    width: Math.min(box.x + box.width, view.width) - x,
+    height: Math.min(box.y + box.height, view.height) - y,
+  };
   for (const dir of CAPS) {
     mkdirSync(dir, { recursive: true });
-    await frame.screenshot({ path: join(dir, `${name}.png`) });
+    await page.screenshot({ path: join(dir, `${name}.png`), clip });
   }
 }
 
@@ -575,6 +615,42 @@ async function leg(
     JSON.stringify(report.page.errors).slice(0, 600)
   );
   checkGeometry(kit, name, way, await readGeometry(page), view === "desk");
+  // Each frame drawn in the page's scheme: its color-scheme, and the card's
+  // ground dark at night (a channel under 128) and light by day.
+  const scheme = await page.evaluate(() => {
+    const body = document.querySelector<HTMLElement>(
+      '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-body'
+    );
+    const card = body?.querySelector<HTMLElement>(
+      '[data-slot="side-card"] [data-slot="side-surface"], [data-slot="side-card"] > *, [data-slot="phone-screen"]'
+    );
+    const pen = document.createElement("canvas").getContext("2d");
+    let ground = 0;
+    for (
+      let at: HTMLElement | null | undefined = card;
+      at && pen;
+      at = at.parentElement
+    ) {
+      const paint = getComputedStyle(at).backgroundColor;
+      if (paint !== "rgba(0, 0, 0, 0)" && paint !== "transparent") {
+        pen.fillStyle = paint;
+        pen.fillRect(0, 0, 1, 1);
+        const [r = 0, g = 0, b = 0] = pen.getImageData(0, 0, 1, 1).data;
+        ground = Math.round((r + g + b) / 3);
+        break;
+      }
+    }
+    return {
+      scheme: body ? getComputedStyle(body).colorScheme : "",
+      ground,
+    };
+  });
+  kit.check(
+    `${name}: its frames are drawn ${theme} (color-scheme ${scheme.scheme}, the card's ground ${scheme.ground})`,
+    scheme.scheme.includes(theme) &&
+      (theme === "dark" ? scheme.ground < 128 : scheme.ground >= 128),
+    JSON.stringify(scheme)
+  );
   if (view === "phone") {
     checkPhone(kit, name, way, report, stories);
   } else {
