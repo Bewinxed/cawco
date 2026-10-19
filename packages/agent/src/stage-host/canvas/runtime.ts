@@ -1349,6 +1349,7 @@ export function boot(options: BootOptions): void {
     "wheel",
     (event) => {
       event.preventDefault();
+      letGo();
       if (event.ctrlKey || event.metaKey) {
         // The world's translate is the canvas's own: the pointer measured from the canvas's corner, which stands under the head.
         const box = canvas.getBoundingClientRect();
@@ -1372,6 +1373,7 @@ export function boot(options: BootOptions): void {
     if (canvas.scrollTop === 0 && canvas.scrollLeft === 0) {
       return;
     }
+    letGo();
     zoom.x -= canvas.scrollLeft;
     zoom.y -= canvas.scrollTop;
     canvas.scrollTop = 0;
@@ -1436,6 +1438,7 @@ export function boot(options: BootOptions): void {
       }
       drawEdges();
     } else {
+      letGo();
       zoom.x = drag.ox + dx;
       zoom.y = drag.oy + dy;
       place();
@@ -1478,42 +1481,76 @@ export function boot(options: BootOptions): void {
     drawEdges();
   };
 
-  /** Brings a frame to the middle of the view at the zoom it has. */
-  const go = (key: string) => {
-    const el = world.querySelector<HTMLElement>(
-      `[data-cawco-key="${CSS.escape(key)}"]`
-    );
-    if (!el) {
-      return;
+  /**
+   * An element's box in the world's own coordinates, before the world's
+   * transform: its layout offsets up to the world, and a frame's drag
+   * (`translate`). Unlike a screen rect it is the same whatever the world's
+   * transform is now, or is animating through.
+   */
+  const worldBox = (el: HTMLElement) => {
+    let x = 0;
+    let y = 0;
+    for (
+      let at: HTMLElement | null = el;
+      at && at !== world;
+      at = at.offsetParent as HTMLElement | null
+    ) {
+      x += at.offsetLeft;
+      y += at.offsetTop;
     }
+    const dragged = moved[el.dataset.cawcoKey ?? ""] ?? [0, 0];
+    return {
+      x: x + dragged[0],
+      y: y + dragged[1],
+      w: el.offsetWidth,
+      h: el.offsetHeight,
+    };
+  };
+
+  /**
+   * The frame `go` last showed while the view is still where it put it; the
+   * person's own pan or zoom lets it go. While it is held, it is shown again
+   * as its box changes (its component mounting, the faces arriving, the
+   * scheme re-dressing it), so where it stands never depends on when.
+   */
+  let held: { key: string; el: HTMLElement } | null = null;
+  const holding = new ResizeObserver(() => {
+    if (held?.el.isConnected) {
+      show(held.key, held.el, false);
+    }
+  });
+  const letGo = () => {
+    held = null;
+    holding.disconnect();
+  };
+
+  /** Places the world so frame `el` stands in the middle of the view, from its world box alone: the same at any moment for the same frame and view. */
+  const show = (key: string, el: HTMLElement, animate: boolean) => {
     const from = world.style.transform;
-    const bounds = canvas.getBoundingClientRect();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const own = worldBox(el);
     if (chrome.phone()) {
       // One frame at a time, as wide as the screen lets it be, never past its own size.
-      const own = el.getBoundingClientRect().width / zoom.z;
       zoom.z = Math.max(
         ZOOM_MIN,
-        Math.min(1, (bounds.width - 24) / Math.max(1, own))
+        Math.min(1, (width - 24) / Math.max(1, own.w))
       );
-      place();
     }
     // On a phone the frame stands alone in its section: it is shown with its section's head, which names its sheet.
-    const head = chrome.phone()
+    const headEl = chrome.phone()
       ? el
           .closest(".cawco-section")
-          ?.querySelector(".cawco-section-head")
-          ?.getBoundingClientRect()
-      : undefined;
-    const own = el.getBoundingClientRect();
-    const top = head ? Math.min(head.top, own.top) : own.top;
-    const box = new DOMRect(own.x, top, own.width, own.bottom - top);
-    zoom.x += bounds.x + bounds.width / 2 - (box.x + box.width / 2);
-    zoom.y +=
-      bounds.y +
-      Math.min(bounds.height / 2, WORLD_INSET.y + box.height / 2) -
-      (box.y + box.height / 2);
+          ?.querySelector<HTMLElement>(".cawco-section-head")
+      : null;
+    const top = headEl ? Math.min(worldBox(headEl).y, own.y) : own.y;
+    const box = { x: own.x, y: top, w: own.w, h: own.y + own.h - top };
+    zoom.x = width / 2 - (box.x + box.w / 2) * zoom.z;
+    zoom.y =
+      Math.min(height / 2, WORLD_INSET.y + (box.h * zoom.z) / 2) -
+      (box.y + box.h / 2) * zoom.z;
     place();
-    if (!media("(prefers-reduced-motion: reduce)").matches) {
+    if (animate && !media("(prefers-reduced-motion: reduce)").matches) {
       world.animate(
         [{ transform: from }, { transform: world.style.transform }],
         {
@@ -1525,6 +1562,28 @@ export function boot(options: BootOptions): void {
     chrome.current(key);
     // On a phone the frame shown changed: its edges are drawn again, to frames now drawn only.
     drawEdges();
+  };
+
+  /** Brings a frame to the middle of the view, and holds it there until the person moves the view. */
+  const go = (key: string) => {
+    const el = world.querySelector<HTMLElement>(
+      `[data-cawco-key="${CSS.escape(key)}"]`
+    );
+    if (!el) {
+      return;
+    }
+    letGo();
+    show(key, el, true);
+    held = { key, el };
+    holding.observe(el);
+    // The canvas resizing (a dock taking its room, the pane resized) shows it again too.
+    holding.observe(canvas);
+    const headEl = el
+      .closest(".cawco-section")
+      ?.querySelector<HTMLElement>(".cawco-section-head");
+    if (headEl) {
+      holding.observe(headEl);
+    }
   };
 
   /* --- Edges: moves always, the agent's own when it sent them ---------- */
@@ -1801,10 +1860,11 @@ export function boot(options: BootOptions): void {
       }
     }
     if (next.zoom === "fit") {
+      letGo();
       fit();
     } else if (typeof next.zoom === "number") {
-      const box = canvas.getBoundingClientRect();
-      zoomAt(next.zoom, box.width / 2, box.height / 2);
+      letGo();
+      zoomAt(next.zoom, canvas.clientWidth / 2, canvas.clientHeight / 2);
     }
     chrome.view(view);
     later();

@@ -1203,6 +1203,7 @@ async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
   // N7's cause, framed: the world clear of the page's head in the panel, after load and after Zoom to fit.
   if (canvasFrame) {
     const loaded = await canvasFrame.evaluate(WORLD_TOP);
+    keepLoadX(`${leg} in the panel`, loaded.x);
     await canvasFrame.evaluate(() =>
       dispatchEvent(
         new CustomEvent("cawco:canvas-view", { detail: { zoom: "fit" } })
@@ -1651,6 +1652,86 @@ async function commentsCount(
   await page.close();
 }
 
+/**
+ * Where each fresh load put the first section's title, by leg without its
+ * scheme, then scheme: the same canvas at the same width loads to the same
+ * place in both (the world placed from its layout, never from a moment).
+ */
+const LOAD_X = new Map<string, Partial<Record<"light" | "dark", number>>>();
+const SCHEME_IN_LEG = / (light|dark)\b/;
+const keepLoadX = (leg: string, x: number) => {
+  const scheme = SCHEME_IN_LEG.exec(leg)?.[1] as "light" | "dark" | undefined;
+  if (!scheme) {
+    return;
+  }
+  const key = leg.replace(SCHEME_IN_LEG, "");
+  LOAD_X.set(key, { ...LOAD_X.get(key), [scheme]: x });
+};
+
+/** The shown frame's centre against the canvas's, in px (a phone shows its one frame centred). */
+const OFF_CENTRE = () => {
+  const frame = document
+    .querySelector(".cawco-frame[data-cawco-shown]")
+    ?.getBoundingClientRect();
+  const canvas = document
+    .querySelector(".cawco-canvas")
+    ?.getBoundingClientRect();
+  return frame && canvas
+    ? frame.x + frame.width / 2 - (canvas.x + canvas.width / 2)
+    : Number.NaN;
+};
+
+/**
+ * N7c's cause: a phone's frame placed from a moment, not its layout. After
+ * load, and after a step whose placement a resize interrupts mid-way (as a
+ * panel sliding open does while the canvas loads), the shown frame stands
+ * centred: the placement never takes its offset from a position in flight.
+ */
+async function centredLeg(
+  kit: Kit,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  const page = await kit.page("desk", { theme });
+  await page.setViewportSize({ width: 560, height: 844 });
+  await page.goto(`${stage.base}${canvasPath()}`);
+  await drawn(page);
+  const loaded = await page.evaluate(OFF_CENTRE);
+  await page.keyboard.press("j");
+  await page.waitForTimeout(40);
+  await page.setViewportSize({ width: 600, height: 844 });
+  await page.waitForTimeout(40);
+  await page.setViewportSize({ width: 560, height: 844 });
+  await page.waitForTimeout(900);
+  const raced = await page.evaluate(OFF_CENTRE);
+  kit.check(
+    `N7d: 560 desk pointer ${theme}: the shown frame stands centred after load and after a step a resize interrupts`,
+    Math.abs(loaded) <= 0.5 && Math.abs(raced) <= 0.5,
+    `off centre after load ${loaded.toFixed(1)}px, after the interrupted step ${raced.toFixed(1)}px`
+  );
+  await page.close();
+}
+
+/** N7c: every leg's load placement the same in light and dark. */
+function sameLoadPlace(kit: Kit): void {
+  const pairs = [...LOAD_X].filter(
+    ([, at]) => at.light !== undefined && at.dark !== undefined
+  );
+  kit.check(
+    "N7c: a fresh load places the world the same in light and dark, for the same canvas and width, alone and in the panel",
+    pairs.length > 0 &&
+      pairs.every(
+        ([, at]) => Math.abs((at.light ?? 0) - (at.dark ?? Number.NaN)) <= 0.5
+      ),
+    pairs
+      .map(
+        ([leg, at]) =>
+          `${leg}: light ${at.light?.toFixed(1)}, dark ${at.dark?.toFixed(1)}`
+      )
+      .join("; ")
+  );
+}
+
 /** Where the world's first drawn section head stands against the page's head, and what a press at its title's centre meets. */
 const WORLD_TOP = () => {
   const chrome = document.getElementById("cawco-chrome")?.shadowRoot;
@@ -1669,6 +1750,7 @@ const WORLD_TOP = () => {
     : null;
   const top = head?.getBoundingClientRect().top ?? 0;
   return {
+    x: t?.x ?? Number.NaN,
     clear: !!head && !!title && top >= foot + gap - 0.5 && hit === title,
     said: `head's foot ${foot.toFixed(1)}, section head top ${top.toFixed(1)} (needs ≥ ${(foot + gap).toFixed(1)}), a press at "${title?.textContent}" meets ${hit === title ? "it" : hit?.id || hit?.className || "nothing"}`,
   };
@@ -1681,6 +1763,7 @@ const WORLD_TOP = () => {
  */
 async function worldLeg(kit: Kit, page: Page, leg: string): Promise<void> {
   const loaded = await page.evaluate(WORLD_TOP);
+  keepLoadX(leg, loaded.x);
   await page.evaluate(() =>
     dispatchEvent(
       new CustomEvent("cawco:canvas-view", { detail: { zoom: "fit" } })
@@ -1759,6 +1842,7 @@ const spec: Spec = {
           await canvasLeg(kit, stage, width, theme);
         }
         await footLeg(kit, stage, theme);
+        await centredLeg(kit, stage, theme);
       }
       const bench = await kit.bench();
       for (const theme of only === "page" ? [] : (["light", "dark"] as const)) {
@@ -1788,6 +1872,7 @@ const spec: Spec = {
         await commentsCount(kit, bench, stage, theme);
         await switchLeg(kit, bench, stage, theme);
       }
+      sameLoadPlace(kit);
     } finally {
       stage.stop();
     }
