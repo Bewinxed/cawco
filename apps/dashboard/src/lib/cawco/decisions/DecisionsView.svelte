@@ -19,6 +19,7 @@
   import {
     crossIn,
     crossOut,
+    graceLeft,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
@@ -112,6 +113,18 @@
    * will (The Claim Of Nothing Rule).
    */
   const row = $derived(cawco.projects.find((one) => one.id === projectId));
+  /**
+   * When the list's wait began (it went unread): a tile counted in after
+   * (the project's row read later) carries that wait on rather than waiting
+   * the grace again (`graceLeft`).
+   */
+  let opened = performance.now();
+  const unread = $derived(list === null);
+  $effect.pre(() => {
+    if (unread) {
+      opened = performance.now();
+    }
+  });
   const underSeg = $derived(
     !page && (list ? list.graph : (row?.decisionsGraphed ?? false))
   );
@@ -350,7 +363,10 @@
               out:crossOut
             >
               {#each readingTiles as slot (slot)}
-                <Skeleton class="tile-reading" />
+                <Skeleton
+                  class="tile-reading"
+                  style="--wait-grace-left: {graceLeft(opened)}"
+                />
               {/each}
             </div>
           {/if}

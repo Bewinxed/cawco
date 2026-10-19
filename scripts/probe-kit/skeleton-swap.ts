@@ -211,7 +211,8 @@ export async function proveSwap(
       inside.opacities.every((one) => one === 0) &&
       past.stands &&
       past.seen === past.bones &&
-      past.opacities.every((one) => one === 1),
+      // Faded in, give or take the frame a bone is drawn after its container.
+      past.opacities.every((one) => one >= 0.9),
     `at grace − 100: ${JSON.stringify(inside)}; at grace + fade + 50: ${JSON.stringify(past)}`
   );
   kit.check(

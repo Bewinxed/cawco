@@ -162,6 +162,8 @@ async function columns(kit: Kit, page: Page, phone: Page, url: string) {
   ];
   for (const [width, count, spans] of want) {
     await page.setViewportSize({ width, height: 1000 });
+    // Across 900px the pane is drawn anew, its Routines read again: a frame on.
+    await frames(page);
     await settled(page);
     const read = await blocksOf(page);
     kit.check(
@@ -189,6 +191,7 @@ async function columns(kit: Kit, page: Page, phone: Page, url: string) {
     JSON.stringify(read)
   );
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await frames(page);
   await settled(page);
 }
 

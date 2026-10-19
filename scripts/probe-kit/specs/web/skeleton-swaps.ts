@@ -199,10 +199,11 @@ const run = async (kit: Kit) => {
     content: '[data-page-frame-opening], [data-slot="decisions"] iframe',
   });
 
-  // 5. Its frame, the page's address held.
+  // 5. Its frame, the page's address held: the frame's line carries on the
+  // page's own wait, so the wait is dated from the page's opening line.
   await leg(kit, at("view=decisions&page=landing"), ADDRESS_READ, {
     name: "5 decision page frame",
-    skeleton: "[data-page-frame-opening]",
+    skeleton: "[data-decision-opening], [data-page-frame-opening]",
     content: '[data-slot="decisions"] iframe',
   });
 
