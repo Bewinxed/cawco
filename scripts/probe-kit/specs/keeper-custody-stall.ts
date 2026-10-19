@@ -36,6 +36,9 @@
  *   one do: one reads its end and releases it, and the other's ring read
  *   (sessiond-custody.ts `readRing`), from 0 and from a seq, settles as gone
  *   within 5 s. Main fails: both reads wait for good;
+ * - (k) two ring reads of one child at once on one connection each read its
+ *   lines and settle. Main fails: the second subscribe took the first one's
+ *   place, and the first waited for good;
  * - (g) an OpenCode server whose launch never heard where it listens is
  *   ended and its record let go, without a wait on an activity no read can
  *   reach. Main fails: it is deferred, and still runs;
@@ -265,6 +268,53 @@ const twoFollowers = async (
   return other;
 };
 
+/**
+ * (k) Two ring reads of one child at once on one connection: each reads its
+ * own backlog through the child's head and settles.
+ */
+const concurrentReads = async (
+  kit: Kit,
+  now: SessiondClient,
+  current: string,
+  dir: string
+): Promise<SessiondClient> => {
+  const procId = `claude-probe-${crypto.randomUUID()}`;
+  await now.spawnProc(procId, {
+    command: "/bin/sh",
+    args: ["-c", "echo one; echo two; read line; exit 6"],
+    cwd: dir,
+    env: {},
+  });
+  const reader = await welcomed(current);
+  const head = await until(
+    "the child's two lines",
+    async () =>
+      (await reader.list()).procs.find((one) => one.procId === procId)?.head,
+    (seq) => seq >= 2,
+    10_000
+  );
+  const reads = await Promise.all(
+    ["first", "second"].map(async (which) => {
+      const lines: string[] = [];
+      const read = await readWithin(5000, () =>
+        readRing(reader, procId, 0, head, (event) => lines.push(event.data))
+      );
+      return read.kind === "answered"
+        ? `${which}: ${JSON.stringify(read.value)} after ${lines.join(",")}`
+        : `${which}: still waiting after ${read.after} ms, after ${lines.join(",") || "no line"}`;
+    })
+  );
+  await now.stdinEnd(procId);
+  kit.check(
+    "(k) two ring reads of one child at once on one connection each read its lines and settle",
+    reads.every((one) =>
+      one.endsWith('{"kind":"read","oldest":1} after one,two')
+    ),
+    reads.join("; ")
+  );
+  return reader;
+};
+
 const spec: Spec = {
   name: "keeper-custody-stall",
   ownHome: "the OpenCode server owner keeps its records under ~/.cawco",
@@ -416,6 +466,7 @@ const spec: Spec = {
       );
 
       clients.push(await twoFollowers(kit, now, current, dir));
+      clients.push(await concurrentReads(kit, now, current, dir));
 
       // (g) and (h): OpenCode servers on the current keeper, each launched
       // as a harness launches one, its announcement read by `attach`.

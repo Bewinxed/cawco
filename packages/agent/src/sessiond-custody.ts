@@ -103,7 +103,14 @@ export const readRing = (
 ): Promise<RingRead> => {
   let oldest = afterSeq + 1;
   return new Promise<RingRead>((settle) => {
-    const done = (): void => settle({ kind: "read", oldest });
+    // This read's own subscription, ended with the read: every other one to
+    // the child on this connection goes on.
+    let stop = (): void => undefined;
+    const finish = (read: RingRead): void => {
+      stop();
+      settle(read);
+    };
+    const done = (): void => finish({ kind: "read", oldest });
     if (head <= afterSeq) {
       done();
       return;
@@ -120,10 +127,7 @@ export const readRing = (
         }
       },
       exit: () => done(),
-      gone: () => {
-        client.unsubscribe(procId);
-        settle({ kind: "gone" });
-      },
+      gone: () => finish({ kind: "gone" }),
       reset: (nextSeq, from) => {
         oldest = from ?? nextSeq;
         if (reopened || oldest > head) {
@@ -131,9 +135,10 @@ export const readRing = (
           return;
         }
         reopened = true;
-        client.subscribe(procId, listener, oldest - 1);
+        stop();
+        stop = client.subscribe(procId, listener, oldest - 1);
       },
     };
-    client.subscribe(procId, listener, afterSeq);
+    stop = client.subscribe(procId, listener, afterSeq);
   });
 };

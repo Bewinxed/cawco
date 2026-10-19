@@ -429,6 +429,12 @@ export interface SessiondWelcomeInfo {
   procs: SessiondProcInfo[];
 }
 
+/** One subscription to a child on a connection: its listener, and whether the keeper's answer to it (its backlog or reset) has come. */
+interface Subscription {
+  answered: boolean;
+  listener: ProcListener;
+}
+
 interface ProcListener {
   /**
    * The child is gone. Both arguments `null` means sessiond reported it dead
@@ -491,7 +497,24 @@ export class SessiondClient {
    * with the connection.
    */
   readonly #holds = new Map<string, () => void>();
-  readonly #listeners = new Map<string, ProcListener>();
+  /**
+   * EVERY SUBSCRIPTION TO A CHILD ON THIS CONNECTION HEARS IT, each until its
+   * own unsubscribe ({@link subscribe}). It was one listener per id, and a
+   * second subscribe took the first one's place: the first heard nothing
+   * more, its `gone` and its `exit` included, and waited for good (two ring
+   * reads of one child at once; a pi host's state read, which then
+   * unsubscribed the session's own listener with its own).
+   */
+  readonly #subscriptions = new Map<string, Set<Subscription>>();
+  /**
+   * The subscriptions of each id still waiting on the keeper's answer to
+   * their subscribe, oldest first. sessiond answers every subscribe with
+   * exactly one `proc.backlog` or `proc.reset`, in the order it read them
+   * (server.ts `#subscribe`), so the head is the one an answer belongs to:
+   * one that unsubscribed meanwhile still holds its place, and its answer is
+   * dropped.
+   */
+  readonly #awaitingAnswer = new Map<string, Subscription[]>();
   /** Listeners already told their child is gone: a death reaches each once. */
   readonly #toldExit = new WeakSet<ProcListener>();
   #closed = false;
@@ -657,10 +680,9 @@ export class SessiondClient {
         // child with its backlog alone. The welcome {@link subscribe} asks for
         // is where that death is learned.
         for (const proc of message.procs) {
-          const listener = this.#listeners.get(proc.procId);
-          if (!proc.alive && listener) {
-            this.#exit(
-              listener,
+          if (!proc.alive) {
+            this.#tellExit(
+              proc.procId,
               proc.exitCode ?? null,
               proc.signal ?? null,
               proc.pid
@@ -681,31 +703,78 @@ export class SessiondClient {
         this.#draining = true;
         return;
       case "proc.line":
-        this.#listeners.get(message.event.procId)?.line?.(message.event);
+        this.#tellLine(message.event);
         return;
-      case "proc.backlog":
-        for (const event of message.events) {
-          this.#listeners.get(message.procId)?.line?.(event);
-        }
-        return;
-      case "proc.reset":
-        this.#listeners
-          .get(message.procId)
-          ?.reset?.(message.nextSeq, message.oldest);
-        return;
-      case "proc.exit": {
-        const listener = this.#listeners.get(message.procId);
-        if (listener) {
-          this.#exit(listener, message.exitCode, message.signal, message.pid);
+      case "proc.backlog": {
+        const subscription = this.#answerFor(message.procId);
+        for (const event of subscription ? message.events : []) {
+          subscription?.listener.line?.(event);
         }
         return;
       }
+      case "proc.reset":
+        this.#answerFor(message.procId)?.listener.reset?.(
+          message.nextSeq,
+          message.oldest
+        );
+        return;
+      case "proc.exit":
+        this.#tellExit(
+          message.procId,
+          message.exitCode,
+          message.signal,
+          message.pid
+        );
+        return;
       case "proc.limit":
         hearLimit(message);
         return;
       default:
         return;
     }
+  }
+
+  /**
+   * A live line, to every subscription to its child whose own answer has
+   * come: a line the keeper sent before it read a later subscribe is in that
+   * one's backlog.
+   */
+  #tellLine(event: SessiondLine): void {
+    for (const subscription of this.#subscriptions.get(event.procId) ?? []) {
+      if (subscription.answered) {
+        subscription.listener.line?.(event);
+      }
+    }
+  }
+
+  /** A child's end, to every subscription to it, each listener once. */
+  #tellExit(
+    procId: string,
+    exitCode: number | null,
+    signal: NodeJS.Signals | null,
+    pid: number | undefined
+  ): void {
+    for (const { listener } of this.#subscriptions.get(procId) ?? []) {
+      this.#exit(listener, exitCode, signal, pid);
+    }
+  }
+
+  /**
+   * The subscription a `proc.backlog` or `proc.reset` for `procId` answers
+   * ({@link #awaitingAnswer}), marked answered; undefined when it has
+   * unsubscribed since, or none waits.
+   */
+  #answerFor(procId: string): Subscription | undefined {
+    const waiting = this.#awaitingAnswer.get(procId);
+    const subscription = waiting?.shift();
+    if (waiting?.length === 0) {
+      this.#awaitingAnswer.delete(procId);
+    }
+    if (!(subscription && this.#subscriptions.get(procId)?.has(subscription))) {
+      return;
+    }
+    subscription.answered = true;
+    return subscription;
   }
 
   #exit(
@@ -891,9 +960,24 @@ export class SessiondClient {
    * `list` and `subscribe`, a `Query` attaching to a child that died after
    * its ring was read — waited on a child that could never write or exit
    * again.
+   *
+   * Every subscription to the same child on this connection hears it, each
+   * from its own backlog on ({@link #subscriptions}). Answers its own
+   * unsubscribe: from then on it hears nothing more, and every other
+   * subscription goes on.
    */
-  subscribe(procId: string, listener: ProcListener, afterSeq?: number): void {
-    this.#listeners.set(procId, listener);
+  subscribe(
+    procId: string,
+    listener: ProcListener,
+    afterSeq?: number
+  ): () => void {
+    const subscription: Subscription = { listener, answered: false };
+    const subscriptions = this.#subscriptions.get(procId) ?? new Set();
+    subscriptions.add(subscription);
+    this.#subscriptions.set(procId, subscriptions);
+    const waiting = this.#awaitingAnswer.get(procId) ?? [];
+    waiting.push(subscription);
+    this.#awaitingAnswer.set(procId, waiting);
     this.#send({
       type: "subscribe",
       procId,
@@ -906,7 +990,7 @@ export class SessiondClient {
       resolve: (welcome) => {
         if (
           listener.gone &&
-          this.#listeners.get(procId) === listener &&
+          this.#subscriptions.get(procId)?.has(subscription) &&
           !this.#toldExit.has(listener) &&
           !welcome.procs.some((proc) => proc.procId === procId)
         ) {
@@ -915,10 +999,13 @@ export class SessiondClient {
       },
       reject: () => undefined,
     });
-  }
-
-  unsubscribe(procId: string): void {
-    this.#listeners.delete(procId);
+    return () => {
+      const held = this.#subscriptions.get(procId);
+      held?.delete(subscription);
+      if (held?.size === 0) {
+        this.#subscriptions.delete(procId);
+      }
+    };
   }
 
   /** Ask again what is alive. Answered with a fresh `welcome`. */

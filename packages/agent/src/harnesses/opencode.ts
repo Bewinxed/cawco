@@ -536,13 +536,14 @@ const announceOpencodeServer = async (
     (signal) =>
       new Promise<string>((resolve, reject) => {
         let settled = false;
+        let stop = (): void => undefined;
         const settle = (finish: () => void): void => {
           if (settled) {
             return;
           }
           settled = true;
           signal.removeEventListener("abort", aborted);
-          client.unsubscribe(procId);
+          stop();
           finish();
         };
         const aborted = () => settle(() => reject(signal.reason));
@@ -553,7 +554,7 @@ const announceOpencodeServer = async (
         }
         // From seq 0: the announce line is printed once, at boot, and a returning
         // agent reads it out of the replay ring long after it was written.
-        client.subscribe(
+        stop = client.subscribe(
           procId,
           {
             line: (event) => {

@@ -722,11 +722,12 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
     return;
   }
   watchedJudges.set(procId, client);
-  client.subscribe(procId, {
+  let stop = (): void => undefined;
+  stop = client.subscribe(procId, {
     line: () => undefined,
     exit: (code, signal, pid) => {
       watchedJudges.delete(procId);
-      client.unsubscribe(procId);
+      stop();
       client.release(procId, pid);
       // Counted as arming from its exit until it is started again, as the
       // handover decides ({@link armStep}).
@@ -776,7 +777,8 @@ const watchHost = async (
   }
   const { client } = proc;
   watchedHosts.set(procId, client);
-  client.subscribe(
+  let stop = (): void => undefined;
+  stop = client.subscribe(
     procId,
     {
       line: (event) => {
@@ -796,7 +798,7 @@ const watchHost = async (
         if (watchedHosts.get(procId) === client) {
           watchedHosts.delete(procId);
         }
-        client.unsubscribe(procId);
+        stop();
         client.release(procId, pid);
       },
     },
@@ -4864,9 +4866,10 @@ const ready = (
   new Promise((resolve, reject) => {
     const said: string[] = [];
     const words = (): string => (said.length ? `: ${said.join(" / ")}` : "");
+    let stop = (): void => undefined;
     const finish = (outcome: Error | number): void => {
       clearTimeout(timer);
-      client.unsubscribe(procId);
+      stop();
       if (typeof outcome === "number") {
         resolve(outcome);
       } else {
@@ -4882,7 +4885,7 @@ const ready = (
         ),
       WORKSPACE_BOUNDARY_START_TIMEOUT_MS
     );
-    client.subscribe(
+    stop = client.subscribe(
       procId,
       {
         line: (event) => {
