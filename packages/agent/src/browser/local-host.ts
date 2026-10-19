@@ -82,7 +82,7 @@ const chromiumExecutable = async (): Promise<Chromium> => {
             "Install a Chromium browser with the command in this machine's capability report.",
         };
   }
-  // Standalone never evaluates this import: playwright-core is external to the binary.
+  // Standalone runs the person's own Chromium; only a source install installs Playwright's.
   const { chromium } = await import("playwright-core");
   const executable = chromium.executablePath();
   try {

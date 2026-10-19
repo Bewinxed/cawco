@@ -1,5 +1,5 @@
 /** Server-only runtime layout. Never import through the browser-facing core barrel. */
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { atMost } from "./at-most";
@@ -66,8 +66,18 @@ const RUNTIME_TREES = new Set([
  */
 const PUBLISH_CONCURRENCY = 64;
 
-/** Written once every runtime file is published and flushed; while it is there nothing is checked again. */
+/**
+ * Written once every runtime file is published and flushed, holding
+ * {@link publishedSet}; while it holds this build's, nothing is checked
+ * again. A build of the same version that publishes another set of files (a
+ * tree added to {@link RUNTIME_TREES}, a file added to one) finds another
+ * and writes what is missing.
+ */
 const PUBLISHED_MARKER = ".published";
+
+/** The runtime files this build publishes, by name, as one hash. */
+const publishedSet = (names: string[]): string =>
+  `${runtimeVersion} ${Bun.hash(names.sort().join("\n")).toString(36)}`;
 
 /**
  * A child process cannot open $bunfs, so every standalone process publishes
@@ -81,13 +91,15 @@ const PUBLISHED_MARKER = ".published";
  */
 export async function publishRuntime(): Promise<void> {
   const base = runtimeDataDir();
-  if (existsSync(join(base, PUBLISHED_MARKER))) {
+  const published = Object.entries(binaryAssets).filter(([name]) =>
+    RUNTIME_TREES.has(name.split("/")[0])
+  );
+  const set = publishedSet(published.map(([name]) => name));
+  const marker = join(base, PUBLISHED_MARKER);
+  if (existsSync(marker) && readFileSync(marker, "utf8") === set) {
     return;
   }
-  const missing = Object.entries(binaryAssets).filter(
-    ([name]) =>
-      RUNTIME_TREES.has(name.split("/")[0]) && !existsSync(join(base, name))
-  );
+  const missing = published.filter(([name]) => !existsSync(join(base, name)));
   if (!missing.length) {
     return;
   }
@@ -107,9 +119,7 @@ export async function publishRuntime(): Promise<void> {
       )
     )
   );
-  await writeStateFile(join(base, PUBLISHED_MARKER), runtimeVersion, {
-    mode: 0o600,
-  });
+  await writeStateFile(marker, set, { mode: 0o600 });
 }
 
 /** Where an embedded tree {@link publishRuntime} published sits on disk. */
