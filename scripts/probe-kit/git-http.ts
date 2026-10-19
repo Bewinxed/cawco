@@ -84,14 +84,16 @@ const basicUser = (
 
 /**
  * Serves the bare repositories under `root` over http on 127.0.0.1; their
- * LFS takes `login` alone.
+ * LFS takes `login` alone, and `api`, when given, answers first.
  */
 export const serveGitHttp = (
   root: string,
   login: { password: string; user: string } = {
     user: "probe",
     password: "probe",
-  }
+  },
+  /** A forge's API on the same host (forge-stubs.ts): its answer, or none for git's own paths. */
+  api?: (request: Request, url: URL) => Promise<Response | undefined>
 ): GitHttp => {
   const pushed = new Map<string, number>();
   const stored = new Map<string, LfsObject[]>();
@@ -165,6 +167,10 @@ export const serveGitHttp = (
     port: 0,
     async fetch(request) {
       const url = new URL(request.url);
+      const apiAnswer = await api?.(request, url);
+      if (apiAnswer) {
+        return apiAnswer;
+      }
       const lfsAnswer = await lfs(
         request,
         url,
