@@ -47,6 +47,13 @@ const STILL = 3;
 const OWN_SCROLL = 200;
 /** How long (ms) a scroll stands still before the ghost is aimed in full again. */
 const SCROLL_END = 100;
+/** An ancestor's move ending, on a transition or an animation (a sheet's `sheet-in`). */
+const SETTLES = [
+  "transitionend",
+  "transitioncancel",
+  "animationend",
+  "animationcancel",
+];
 
 /** A row's box in the container's own coordinates. */
 export interface LaidOut {
@@ -176,6 +183,13 @@ const slideOf = (
   return { x, y };
 };
 
+/** Whether a box is anywhere else at all, a residue under `same`'s half pixel included. */
+const moved = (a: Box, b: Box) =>
+  Math.abs(a.x - b.x) > 0.001 ||
+  Math.abs(a.y - b.y) > 0.001 ||
+  Math.abs(a.w - b.w) > 0.001 ||
+  Math.abs(a.h - b.h) > 0.001;
+
 const same = (a: Box | null, b: Box | null) =>
   a !== null &&
   b !== null &&
@@ -301,6 +315,8 @@ export function highlight(options: HighlightOptions) {
     let pendingHide = 0;
     let pillBox: Box | null = null;
     let pillRow: HTMLElement | null = null;
+    /** The rows the layers stand on, watched for their own size (set below, with its observer). */
+    let watchRows: () => void = () => undefined;
 
     const showOrCover = () => {
       show(ghost, !(covered && ghostRow?.matches(covered)));
@@ -320,6 +336,7 @@ export function highlight(options: HighlightOptions) {
         row?.removeAttribute("data-ghosted");
         show(ghost, false);
         ghostRow = null;
+        watchRows();
         return;
       }
       // Out of view, the ghost lands where it is going without a glide;
@@ -328,6 +345,7 @@ export function highlight(options: HighlightOptions) {
       place(ghost, box);
       ghostBox = box;
       ghostRow = row;
+      watchRows();
       showOrCover();
     };
 
@@ -342,6 +360,7 @@ export function highlight(options: HighlightOptions) {
         show(pill, false);
         pillBox = null;
         pillRow = null;
+        watchRows();
         return;
       }
       if (row === pillRow && same(box, pillBox)) {
@@ -357,6 +376,7 @@ export function highlight(options: HighlightOptions) {
       movePill(box, glide && !fromGhost && pillBox !== null && row !== pillRow);
       pillBox = box;
       pillRow = row;
+      watchRows();
     };
     /** Hover becomes selection: the old selection fades where it was. */
     const fadeTrail = (from: Box) => {
@@ -808,21 +828,82 @@ export function highlight(options: HighlightOptions) {
       }
     };
     sizes.observe(container);
-    // A popover scales in: `frameOf` corrects for the scale it is measured
-    // at and leaves a residue, and a transform change is no resize. Once its
-    // open transition has settled, the layers are placed once more at the
-    // real size.
-    const pop = container.closest<HTMLElement>(".kit-pop");
-    const onSettled = (event: TransitionEvent) => {
-      if (
-        event.target === pop &&
-        (event.propertyName === "scale" || event.propertyName === "transform")
-      ) {
-        onResize();
+    /**
+     * Each layer onto its row's box as it stands now, where that is anywhere
+     * else at all (`moved`: a residue under `same`'s half pixel is still a
+     * place the layer is not), without a glide. A layer already on its row's
+     * box is left as it is, so a glide on its way there runs on.
+     */
+    const realign = () => {
+      if (skipped) {
+        return;
+      }
+      const pillAt = pillRow?.isConnected ? shownBoxOf(pillRow) : undefined;
+      if (pillAt && pillBox && moved(pillAt, pillBox)) {
+        setGlide(pill, false);
+        place(pill, pillAt);
+        pillBox = pillAt;
+      }
+      const ghostAt = ghostRow?.isConnected ? boxOf(ghostRow) : undefined;
+      if (ghostAt && ghostBox && moved(ghostAt, ghostBox)) {
+        setGlide(ghost, false);
+        place(ghost, ghostAt);
+        ghostBox = ghostAt;
       }
     };
-    pop?.addEventListener("transitionend", onSettled);
-    pop?.addEventListener("transitioncancel", onSettled);
+    /**
+     * The rows the layers stand on, watched beside the list. A row's own box
+     * can change while the list keeps its size: a tree's inset, measured
+     * after the pill was placed (motion/branch `measureNests`), sets its rows
+     * a step in and a step narrower, and a row whose edge is drawn
+     * (`data-flip="box"`) travels to that width frame by frame (motion/rows
+     * `spanOf`). Nothing else here heard it: placed while the width was on
+     * its way, the rail's pill stood at the row's old width for good (198px
+     * on a 185px row). A row's first report aims the layers once more too:
+     * the box they were measured at may have moved on before it.
+     */
+    const watchedRows = new Set<Element>();
+    let pendingRealign = 0;
+    const toRealign = () => {
+      cancelAnimationFrame(pendingRealign);
+      pendingRealign = requestAnimationFrame(realign);
+    };
+    const rowWatch = new ResizeObserver(toRealign);
+    watchRows = () => {
+      for (const row of watchedRows) {
+        if (row !== pillRow && row !== ghostRow) {
+          rowWatch.unobserve(row);
+          watchedRows.delete(row);
+        }
+      }
+      for (const row of [pillRow, ghostRow]) {
+        if (row && !watchedRows.has(row)) {
+          watchedRows.add(row);
+          rowWatch.observe(row, { box: "border-box" });
+        }
+      }
+    };
+    watchRows();
+    // An ancestor that moves the list (a popover scaling in, a sheet sliding
+    // up on `sheet-in`) leaves a residue in what was measured mid-move: a
+    // row's edges are put on the device-pixel grid where it is drawn, and a
+    // move is no resize, so nothing measured them again. The rail's pill in
+    // a tablet's sheet stood 0.37px off its row. Once an ancestor's
+    // transition or animation ends, whatever it moved, the layers are aimed
+    // again at where their rows stand.
+    const settled = (event: Event) => {
+      const { target } = event;
+      if (
+        target instanceof Element &&
+        target !== container &&
+        target.contains(container)
+      ) {
+        toRealign();
+      }
+    };
+    for (const type of SETTLES) {
+      document.addEventListener(type, settled, true);
+    }
     // A list an ancestor skips (the home board put away under a
     // conversation) has no layout to measure, and measuring it would lay it
     // out: the layers wait, and are placed afresh, without a glide, the
@@ -865,8 +946,11 @@ export function highlight(options: HighlightOptions) {
       container.removeEventListener("touchmove", onInput, { capture: true });
       container.removeEventListener("keydown", onInput, { capture: true });
       container.removeEventListener("scroll", onScroll, { capture: true });
-      pop?.removeEventListener("transitionend", onSettled);
-      pop?.removeEventListener("transitioncancel", onSettled);
+      cancelAnimationFrame(pendingRealign);
+      for (const type of SETTLES) {
+        document.removeEventListener(type, settled, true);
+      }
+      rowWatch.disconnect();
       watch.disconnect();
       sizes.disconnect();
       watching.stop();
