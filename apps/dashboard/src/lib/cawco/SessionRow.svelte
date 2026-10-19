@@ -1,4 +1,8 @@
 <script lang="ts" module>
+  /** Peek and Archive: the row's end actions, one recipe. */
+  const ROW_ACTION =
+    "touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) me-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:end-(--action-end) can-hover:my-auto can-hover:me-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide";
+
   /**
    * The selection pill for a list of these rows (highlight): it sits under
    * the open session's row. Hover is the rail's one ghost, not the list's.
@@ -528,7 +532,10 @@
             data-archive
             {...tip}
             aria-label="Archive {title}"
-            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) can-hover:group-data-peek/session-row:right-(--archive-end) no-hover:hidden light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide"
+            class={cn(
+              ROW_ACTION,
+              "no-hover:hidden can-hover:group-data-peek/session-row:end-(--archive-end)"
+            )}
             onclick={onarchive}
             style:--archive-end={"calc(var(--action-end) + var(--action-size) + var(--space-1))"}
             type="button"
@@ -556,7 +563,7 @@
             data-session-row-peek
             {...tip}
             aria-label="Peek {title}"
-            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) max-desk:hidden light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide"
+            class={cn(ROW_ACTION, "max-desk:hidden")}
             onclick={() => openPeek({ viewId: live.id, href, title })}
             type="button"
           >

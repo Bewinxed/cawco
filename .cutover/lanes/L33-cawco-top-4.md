@@ -210,31 +210,28 @@ token: --c-rail-sheet-w 284px — the width of the phone's navigation sheet (She
 
 ## Removed
 
-removed: SessionRow.svelte:324,352,363 `items-center` on a `display:block` title/line — a flex alignment on a block box that draws nothing (the old `.title, .line` rule was block + align-content).
+removed: SessionRow.svelte:328,356,367 `items-center` (removed) on a `display:block` title/line — a flex alignment on a block box that draws nothing (the old `.title, .line` rule was block + align-content).
 removed: SessionRow.svelte (style) `.item`, `.row`, `.row-action`, `.swipe-reveal`, `.words`, `.end`, `.cell`, `.title`, `.line`, `.trail`, `.field`, `.doing`, `@media` rules — dead selectors: no element of the file carries those classes; their declarations are on the elements as utilities.
 removed: SessionPane.svelte (style) `.body`, `.pane`, `.transcript-slide`, `.state`, `.move-layer`, `.veil`, the duplicated `.body` — dead or duplicate selectors.
 removed: Shell.svelte (style) `.top`, `.burger`, `.content`, `.swap`, `.page`, `.tools` (non-hook), `.right` phone rule — dead selectors; the live ones moved.
 removed: Shell.svelte `--rail-sheet-close-room: 46px` — a custom property no file reads.
 removed: Shell.svelte `class="slot-strip"` / `lifted` / `away` classes — merge residue; the file's script already sets `data-shell-lifted` / `data-shell-away`, which the markup's data variants read.
 removed: ScreenEdges.svelte (style) `.edge-top`, `.edge-bottom` — dead; the strips carry their utilities.
+removed: Sidebar.svelte (the four row="nav" MenuButtons) `class="h-c-nav-h"` on four `row="nav"` MenuButtons — the kit's default size already is `h-[var(--c-nav-h)]` (sidebar-menu-button.svelte:14), so the class restated it.
 removed: Sidebar.svelte `data-rail-configure` styling rule — replaced by the kit Button's `current="selected"` (the hook attribute stays).
 
 ## Kit swaps
 
-kit-swap: apps/dashboard/src/lib/cawco/SessionRow.svelte:400 Spinner (default) — an inline wait; `size-space-4` dropped, the default is `size-icon-md` — done
-kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:1229 Button current="selected" — the selected tint and its colour transition while `aria-current="page"` — done
-kit-swap: apps/dashboard/src/lib/cawco/SessionRow.svelte:371 Spinner size="sm" — a 12px inline wait (`size-icon-sm`)
+kit-swap: apps/dashboard/src/lib/cawco/SessionRow.svelte:404 Spinner (default) — an inline wait; `size-space-4` dropped, the default is `size-icon-md` — done
+kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:1227 Button current="selected" — the selected tint and its colour transition while `aria-current="page"` — done
+kit-swap: apps/dashboard/src/lib/cawco/SessionRow.svelte:375 Spinner size="sm" — a 12px inline wait (`size-icon-sm`)
 kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:650 Skeleton height="icon-sm" — a group label's word bar at 12px
 kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:654 Skeleton height="rail-row" — a placeholder rail row at the list row's 30px (`c-btn-h-sm`)
-kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:776 SidebarMenuButton row="nav" height="nav" — the nav row's height (`h-c-nav-h`)
-kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:862 SidebarMenuButton row="nav" height="nav" — the same
-kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:901 SidebarMenuButton row="nav" height="nav" — the same
-kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:934 SidebarMenuButton row="nav" height="nav" — the same
 kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:881 SidebarMenuBadge align="row-centre" — centred on its nav row (`peer-data-[size=default]/menu-button:top-1/2 -translate-y-1/2`)
-kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:922 SidebarMenuBadge align="row-centre" — the same
-kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:1050 SidebarMenuButton row="list" height="list" — a project row at 30px (`h-c-btn-h-sm`)
-kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:1140 SidebarMenuSubButton row="compact" — the compact row's height (`h-(--row-compact-h)`)
-kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:1201 SidebarMenuButton row="avatar" — the footer avatar button: 30px square, centred, overflow visible (`size-c-btn-h-sm justify-center overflow-visible`)
+kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:921 SidebarMenuBadge align="row-centre" — the same
+kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:1048 SidebarMenuButton row="list" height="list" — a project row at 30px (`h-c-btn-h-sm`)
+kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:1138 SidebarMenuSubButton row="compact" — the compact row's height (`h-(--row-compact-h)`)
+kit-swap: apps/dashboard/src/lib/cawco/Sidebar.svelte:1199 SidebarMenuButton row="avatar" — the footer avatar button: 30px square, centred, overflow visible (`size-c-btn-h-sm justify-center overflow-visible`)
 kit-swap: apps/dashboard/src/lib/cawco/Shell.svelte:1022 SheetContent hide="desk" — the phone navigation sheet gone from 900px up (`desk:hidden`)
 kit-swap: apps/dashboard/src/lib/cawco/Shell.svelte:1031 SheetHeader hidden="visually" — a heading read by assistive tech only (`sr-only`)
 
@@ -245,16 +242,15 @@ fixed: Shell.svelte:1213 the trailing cluster `.right` had no rule after the mer
 fixed: Shell.svelte:1163 the page's strip (`slot-strip`) had no layout (`relative flex grow basis-0 items-center self-stretch`), no leave state and no narrow hide; it has them on the same data variants the tabs strip uses.
 fixed: Shell.svelte:955 the skip link is visually hidden by `sr-only` and shown on focus with `focus:not-sr-only` — it no longer parks at `left: -9999px`.
 fixed: ScreenEdges.svelte:103 the top strip's mask (paint only above the safe area) was lost in the conversion; it is `edge-mask-top` again — the strip rule in the file's own header comment.
-fixed: SessionRow.svelte:592 the fault / ask indent was set by two `:global` class rules on child roots; it is set once on a `display: contents` wrapper the children inherit from — one source for the row's note, fault and question.
+fixed: SessionRow.svelte:599 the fault / ask indent was set by two `:global` class rules on child roots; it is set once on a `display: contents` wrapper the children inherit from — one source for the row's note, fault and question.
+fixed: SessionRow.svelte:3 Peek and Archive carried the same 700-character class list twice, with `ml-0` / `mr-0` / `mr-space-2` margins cancelling each other and physical `right-`; they share one `ROW_ACTION` recipe with `me-space-2 can-hover:me-0` and `end-` — DESIGN.md Layout (logical properties).
 fixed: Shell.svelte:1075 the shelf's hairline is one background layer (`shelf-hairline`) instead of a custom property holding a gradient string.
 
 ## Gaps
 
-gap: Sidebar.svelte:776 four nav rows set `h-c-nav-h` on the kit's MenuButton though `row="nav"` already names the nav row — the variant should own its height (`--c-nav-h` is 44px under a coarse pointer already).
-gap: Shell.svelte:1245 the Jump button is an `[data-bar-item]` that restates the item recipe in a theme rule; the items (Jump, Files, Machines, Caw) should be one kit `BarItem` part — DESIGN.md Components, the bar's glass group.
-gap: SessionRow.svelte:527 Peek (:555) and Archive are hand-rolled buttons with a 28→30px action size and the same class list twice; a kit `Button reveal="row-reach"` (L01 lists it) is the swap, but it needs a `group/session-row` hook variant first.
-gap: Shell.svelte:1022 Sheet.Content width and `desk:hidden` are the sheet's, not a consumer's; the kit should own a `side="left"` rail variant.
-gap: Not verified in a browser: no `/motion` bench or stories file renders Shell, Sidebar, SessionRow or SessionPane in this workspace; ui-observer could not read their rendered layout.
+gap: apps/dashboard/src/lib/components/ui/ has no bar-item part; Shell.svelte:1245 (Jump) and the `bar-group` theme rule restate the item recipe that FilesItem.svelte:35, MachinesButton.svelte:89 and NeedsCaw.svelte:667 also use — DESIGN.md Components, the bar's glass group (one kit part).
+gap: apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte has no left-rail variant; Shell.svelte:1022 (`w-c-rail-sheet-w desk:hidden`) and :1031 (`sr-only` header) are the sheet's own look — DESIGN.md Components, Sheet.
+gap: apps/dashboard/src/lib/components/ui/sidebar/sidebar-menu-button.svelte:14 has one row height (`--c-nav-h`); Sidebar.svelte:1048 (30px project rows) and :1199 (30px avatar) need `row="list"` / `row="avatar"` heights there — DESIGN.md Components, the rail.
 
 ## Contracts
 

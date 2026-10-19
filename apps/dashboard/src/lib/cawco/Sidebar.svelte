@@ -773,7 +773,7 @@
     <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
       <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton class="h-c-nav-h" isActive={false} row="nav">
+          <Sidebar.MenuButton isActive={false} row="nav">
             {#snippet child({ props })}
               <a
                 href="/session"
@@ -859,7 +859,7 @@
       <Sidebar.Group pad="rail">
         <Sidebar.Menu aria-label="This conversation" gap="tight">
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton class="h-c-nav-h" isActive={false} row="nav">
+            <Sidebar.MenuButton isActive={false} row="nav">
               {#snippet child({ props })}
                 <button
                   {...props}
@@ -898,7 +898,6 @@
           <!-- The board is the place while it is on screen; with a
                conversation open, its row is the one selection. -->
           <Sidebar.MenuButton
-            class="h-c-nav-h"
             isActive={path.startsWith("/session") && activeSession === null}
             row="nav"
           >
@@ -931,7 +930,6 @@
 
         <Sidebar.MenuItem>
           <Sidebar.MenuButton
-            class="h-c-nav-h"
             isActive={path.startsWith("/workflows")}
             row="nav"
           >
