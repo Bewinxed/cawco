@@ -320,7 +320,7 @@ public enum FleetAccounts {
     static func choiceLine(_ accounts: [Account], _ choice: StrategyChoice) -> String {
         let label = strategyLabel(choice.strategy)
         guard choice.strategy == "pinned", let pin = pinned(accounts, choice.pinnedAccountId) else { return label }
-        return Words.Accounts.RoutingEditor.pinnedTo(strategy: label, account: name(pin))
+        return Words.Accounts.RoutingEditor.pinnedTo(strategy: label, account: name(pin, among: accounts))
     }
 
     /// "You: Pinned to you@gmail.com · Delegates: Soonest reset".
