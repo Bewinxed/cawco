@@ -273,9 +273,10 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
 
     init(section: ConfigSection, context: ShellContext, accountId: String) {
         self.accountId = accountId
-        let now = FleetAccounts.view(context.hub)?.accounts.first { $0.id == accountId }
+        let accounts = FleetAccounts.view(context.hub)?.accounts ?? []
+        let now = accounts.first { $0.id == accountId }
         // Until the account is read, the page is its section's, as the web's skeleton is.
-        super.init(section: section, context: context, title: now.map(FleetAccounts.name) ?? section.label,
+        super.init(section: section, context: context, title: now.map { FleetAccounts.name($0, among: accounts) } ?? section.label,
                    saveLabel: Words.Accounts.Editor.save, deleteLabel: Words.Accounts.Editor.remove)
         draftPath = ConfigDrafts.path("accounts", accountId)
         if let now { tile = providerMark(now.provider) }

@@ -426,7 +426,7 @@ final class StrategyCard: UIControl {
         top?.accessibilityTraits = now ? [.button, .selected] : .button
         // Only the chosen Pinned card names its account: an unchosen one keeps no room for it.
         if strategy.id == "pinned" {
-            pin.setValue(pinned.map(FleetAccounts.name) ?? "")
+            pin.setValue(pinned.map { FleetAccounts.name($0, among: accounts) } ?? "")
             pinnedId = pinned?.id
             fold(pin, open: now)
         }
@@ -460,7 +460,7 @@ final class StrategyCard: UIControl {
         let shown = shown
         let lanes = strategy.id == "fill-first" ? order.compactMap { id in shown.first { $0.id == id } } : shown
         let pin = strategy.id == "pinned" ? max(0, shown.firstIndex { $0.id == pinned?.id } ?? 0) : 0
-        figure.update(lanes: Self.lanes(lanes), pin: pin)
+        figure.update(lanes: Self.lanes(lanes, among: accounts), pin: pin)
         figure.playing = chosen || hovered
     }
 
