@@ -612,7 +612,7 @@
           <a class="link touch-hit" href={last.href}>{words.openRun}</a>
         {/if}
       </p>
-    {:else if failed && last}
+    {:else if failed && last?.outcome === "failed"}
       <Alert data-slot="run-failed" class="run-failed" variant="destructive">
         <AlertDescription
           >{words.runFailed(

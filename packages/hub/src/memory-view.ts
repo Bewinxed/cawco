@@ -21,6 +21,7 @@ import {
   MEMORY_USE_DAYS,
   type MemoryBriefRow,
   type MemoryCurator,
+  type MemoryCuratorRun,
   type MemoryFileRow,
   type MemoryFileView,
   type MemoryMark,
@@ -68,7 +69,7 @@ import {
   folderPath,
   refused,
 } from "./project-folder";
-import type { Routines } from "./routines";
+import type { RoutineRunView, Routines } from "./routines";
 
 /** What the page and a file are drawn from: the folder, its git and the hub's rows, as read once. */
 export interface MemorySources {
@@ -497,16 +498,38 @@ const curatorOf = (
     timeZone: routine.timeZone,
     nextSlot: routine.nextSlot,
     last: run
-      ? {
-          state: run.state,
-          outcome: run.outcome,
-          reason: run.reason,
-          startedAt: run.startedAt,
-          endedAt: run.endedAt,
-          href: item?.instanceId ? `/session/${item.instanceId}` : null,
-        }
+      ? curatorRun(run, item?.instanceId ? `/session/${item.instanceId}` : null)
       : null,
   };
+};
+
+/**
+ * A run as Inbox reads it. A failed run's reason is the hub's own: every
+ * failure it books says why (routines.ts `RunEnd`), so one without is a
+ * broken row, said as such rather than drawn without its why.
+ */
+export const curatorRun = (
+  run: Pick<
+    RoutineRunView,
+    "endedAt" | "id" | "outcome" | "reason" | "startedAt" | "state"
+  >,
+  href: string | null
+): MemoryCuratorRun => {
+  const base = {
+    state: run.state,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt,
+    href,
+  };
+  if (run.outcome !== "failed") {
+    return { ...base, outcome: run.outcome, reason: run.reason };
+  }
+  if (run.reason === null) {
+    throw new Error(
+      `The curator's run ${run.id} is booked failed with no reason; every failure the hub books says why.`
+    );
+  }
+  return { ...base, outcome: "failed", reason: run.reason };
 };
 
 /** Everything the page and a file are drawn from, read now. */

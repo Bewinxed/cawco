@@ -633,7 +633,7 @@ try {
 
   // ── (d) Make a note: a Caw thread message, the one path ───────────────
   await section("d: Make a note writes AGENTS.md directly", async () => {
-    const routed = await http("POST", `/api/projects/${projectId}/threads`, {
+    const first = await http("POST", `/api/projects/${projectId}/threads`, {
       body: "Make a note: Release notes are written in the present tense.",
     });
     const threaded = await http("POST", `/api/projects/${projectId}/threads`, {
@@ -650,7 +650,7 @@ try {
     )[0]?.n;
     check(
       "d: Make a note writes AGENTS.md directly, as the person, waking no model",
-      routed.status === 200 &&
+      first.status === 200 &&
         threaded.status === 200 &&
         agents.includes(
           "## Notes\n\n- Release notes are written in the present tense.\n- Screenshots go in assets/screens."
@@ -662,7 +662,7 @@ try {
           (message) => message.noteTitle === "AGENTS.md · noted"
         ) &&
         leads === 0,
-      `route ${routed.status}, thread ${threaded.status}; AGENTS.md:\n${agents}\ncommits ${commits.map((c) => `${c.author}: ${c.message}`).join(" | ")}; thread ${said.messages.map((m) => m.noteTitle ?? m.author).join(", ")}; Caw sessions started: ${leads}`
+      `first thread ${first.status}, second ${threaded.status}; AGENTS.md:\n${agents}\ncommits ${commits.map((c) => `${c.author}: ${c.message}`).join(" | ")}; thread ${said.messages.map((m) => m.noteTitle ?? m.author).join(", ")}; Caw sessions started: ${leads}`
     );
   });
 

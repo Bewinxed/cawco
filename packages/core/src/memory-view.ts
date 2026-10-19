@@ -118,22 +118,33 @@ export interface MemoryProposalRow {
   why: string;
 }
 
+/** One curator run, as Inbox's first line says it: a failed one always carries the hub's reason. */
+export type MemoryCuratorRun = {
+  endedAt: number | null;
+  /** Where the run's session reads: its session page, once it has one. */
+  href: string | null;
+  startedAt: number;
+  state: "starting" | "running" | "queued" | "skipped" | "ended";
+} & (
+  | {
+      outcome: "failed";
+      /** The hub's sentence: why it failed (routines.ts `RunEnd`). */
+      reason: string;
+    }
+  | {
+      outcome: "delivered" | "silent" | "cancelled" | null;
+      /** The hub's sentence: why it was skipped, or did nothing. */
+      reason: string | null;
+    }
+);
+
 /** The project's curator routine, as Inbox's head says it. */
 export interface MemoryCurator {
   /** Its schedule, as the routine keeps it: the empty Facts block says when it runs. */
   cron: string;
   enabled: boolean;
   /** The newest run, or null before its first. */
-  last: {
-    endedAt: number | null;
-    /** Where the run's session reads: its session page, once it has one. */
-    href: string | null;
-    outcome: "delivered" | "silent" | "failed" | "cancelled" | null;
-    /** The hub's sentence: why it failed, was skipped, or did nothing. */
-    reason: string | null;
-    startedAt: number;
-    state: "starting" | "running" | "queued" | "skipped" | "ended";
-  } | null;
+  last: MemoryCuratorRun | null;
   /** Its next scheduled run, ms epoch. */
   nextSlot: number;
   routineId: string;
@@ -417,9 +428,8 @@ export const memoryViewWords = {
   withdrawYoursAskLine: "It leaves AGENTS.md; the project's history keeps it.",
   reshapeOffered: (n: number) => `offered past ${n} files`,
   /** Failures. */
-  /** A failed run: the hub's reason when it kept one, nothing in its place when not. */
-  runFailed: (time: string, reason: string | null) =>
-    `The curator's run failed at ${time}.${reason ? ` ${reason}` : ""} The inbox is as it was.`,
+  runFailed: (time: string, reason: string) =>
+    `The curator's run failed at ${time}. ${reason} The inbox is as it was.`,
   /** The curator's last run, as Inbox's body line says it. */
   curatedAgo: (ago: string) => `Curated ${ago}`,
   /** A file card's Back on a phone. */

@@ -16,11 +16,11 @@
       "nextSlot": 1792476000000,
       "last": {
         "state": "running",
-        "outcome": null,
-        "reason": null,
         "startedAt": 1792406520000,
         "endedAt": null,
-        "href": "/session/i-curator-run"
+        "href": "/session/i-curator-run",
+        "outcome": null,
+        "reason": null
       }
     },
     "inbox": [

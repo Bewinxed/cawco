@@ -16,11 +16,11 @@
       "nextSlot": 1792476000000,
       "last": {
         "state": "ended",
-        "outcome": "failed",
-        "reason": "Jev answered 503: its route is down, so the inbox was not sorted.",
         "startedAt": 1792389600000,
         "endedAt": 1792389660000,
-        "href": "/session/i-curator-run"
+        "href": "/session/i-curator-run",
+        "outcome": "failed",
+        "reason": "Jev answered 503: its route is down, so the inbox was not sorted."
       }
     },
     "inbox": [

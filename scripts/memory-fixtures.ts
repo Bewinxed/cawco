@@ -24,6 +24,8 @@ import {
   presentPermission,
 } from "../packages/core/src/index";
 import type { BriefUse } from "../packages/hub/src/db/memory-facts";
+import type { RoutineRunRow } from "../packages/hub/src/db/routines";
+import type { RoutineOutcome } from "../packages/hub/src/db/schema";
 import {
   briefWhole,
   type Note,
@@ -33,6 +35,7 @@ import {
 } from "../packages/hub/src/memory";
 import { factKey, parseFactFile } from "../packages/hub/src/memory-facts";
 import {
+  curatorRun,
   type MemorySources,
   memoryFile,
   memoryPage,
@@ -57,15 +60,15 @@ interface HubRows {
   commits?: Record<string, { at: string; author: string; message: string }[]>;
   curator?:
     | (Omit<MemoryCurator, "last" | "nextSlot"> & {
-        last:
-          | (Omit<
-              NonNullable<MemoryCurator["last"]>,
-              "endedAt" | "startedAt"
-            > & {
-              endedAt: string | null;
-              startedAt: string;
-            })
-          | null;
+        /** The newest run as the hub's row keeps it: its times ISO. */
+        last: {
+          endedAt: string | null;
+          href: string | null;
+          outcome: RoutineOutcome | null;
+          reason: string | null;
+          startedAt: string;
+          state: RoutineRunRow["state"];
+        } | null;
         nextSlot: string;
       })
     | null;
@@ -167,14 +170,21 @@ const stateOf = (name: string) => {
     ? {
         ...rows.curator,
         nextSlot: Date.parse(rows.curator.nextSlot),
+        // The hub's own reading of its run (memory-view.ts `curatorRun`).
         last: rows.curator.last
-          ? {
-              ...rows.curator.last,
-              startedAt: Date.parse(rows.curator.last.startedAt),
-              endedAt: rows.curator.last.endedAt
-                ? Date.parse(rows.curator.last.endedAt)
-                : null,
-            }
+          ? curatorRun(
+              {
+                id: "fixture",
+                state: rows.curator.last.state,
+                outcome: rows.curator.last.outcome,
+                reason: rows.curator.last.reason,
+                startedAt: Date.parse(rows.curator.last.startedAt),
+                endedAt: rows.curator.last.endedAt
+                  ? Date.parse(rows.curator.last.endedAt)
+                  : null,
+              },
+              rows.curator.last.href
+            )
           : null,
       }
     : null;

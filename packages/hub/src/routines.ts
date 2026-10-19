@@ -495,12 +495,17 @@ const leadContract = (runId: string): string =>
 /** A lead run's end when Caw's turn that took its wake ends with no `routine_result`. */
 const NO_RESULT = "Caw ended its turn without saying how the run went";
 
-/** How a run ended, as its answer or its work item says. */
-interface RunEnd {
-  outcome: RoutineOutcome;
-  output: string | null;
-  reason: string | null;
-}
+/**
+ * How a run ended, as its answer or its work item says. A failure always
+ * says why: the Memory view's and Routines' failed-run lines read it.
+ */
+type RunEnd =
+  | { outcome: "failed"; output: null; reason: string }
+  | {
+      outcome: Exclude<RoutineOutcome, "failed">;
+      output: string | null;
+      reason: string | null;
+    };
 
 export const createRoutines = ({
   anyOnline,
@@ -1053,12 +1058,7 @@ export const createRoutines = ({
    */
   const settle = (
     runId: string,
-    end: {
-      outcome: RoutineOutcome;
-      output: string | null;
-      reason: string | null;
-      usd: number | null;
-    },
+    end: RunEnd & { usd: number | null },
     /** The session its work item ran, when it had one: a push's Reply writes to it. */
     instanceId: string | null = null
   ): void => {
@@ -1098,11 +1098,7 @@ export const createRoutines = ({
   const surface = (
     routine: RoutineRow,
     run: RoutineRunRow,
-    end: {
-      outcome: RoutineOutcome;
-      output: string | null;
-      reason: string | null;
-    },
+    end: RunEnd,
     instanceId: string | null
   ): boolean => {
     if (end.outcome === "delivered") {
