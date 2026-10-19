@@ -1,0 +1,27 @@
+{
+  "page": {
+    "now": 1792411200000,
+    "jev": true,
+    "thresholds": {
+      "archiveDays": 90,
+      "budgetChars": 24000,
+      "fileChars": 8000,
+      "reshapeAbove": 25
+    },
+    "curator": null,
+    "inbox": [],
+    "files": [],
+    "yours": {
+      "count": 0,
+      "changedAt": null
+    },
+    "archive": [],
+    "briefs": [],
+    "proposals": []
+  },
+  "problem": null,
+  "files": {},
+  "notes": {},
+  "histories": {},
+  "asks": {}
+}

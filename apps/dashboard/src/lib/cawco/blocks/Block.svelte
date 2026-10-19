@@ -206,6 +206,8 @@
 <style>
   .block {
     --block-head-h: var(--c-btn-h-sm);
+    /* Its width is its own: what stands in its head and body answers it, not the window's. */
+    container: block / inline-size;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -251,9 +253,12 @@
     align-items: center;
     gap: var(--space-1);
   }
+  /* What acts on the block gives way to its title's room last: words in it
+     (a run's age) clip before its controls leave the head. */
   .tools {
     display: flex;
-    flex: none;
+    flex: 0 1 auto;
+    min-inline-size: 0;
     align-items: center;
     gap: var(--space-2);
     margin-inline-start: auto;

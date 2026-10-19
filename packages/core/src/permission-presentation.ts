@@ -51,6 +51,12 @@ export interface PermissionPresentation {
   detail?: string;
   /** The rest of the input worth reading, secrets hidden. What the summary and the diffs already say is left out. */
   fields: PermissionField[];
+  /**
+   * Where the ask's subject is read whole, as a link under its title: a
+   * memory proposal's file on its project's Memory view ("Open in memory").
+   * Absent for every other ask.
+   */
+  open?: string;
   /** The project the asker works in, by name; absent for a session in none. The card's head reads "Caw · cockpit". */
   project?: string;
   /**
@@ -1092,8 +1098,9 @@ function memoryProposal(input: Record<string, unknown>): Presented {
     summary,
     detail: statWords(stat),
     changes: made.map((each) => each.change),
+    ...(typeof input.open === "string" ? { open: input.open } : {}),
     fields: [
-      ...fieldsOf(input, ["files", "notes", "project"]),
+      ...fieldsOf(input, ["files", "notes", "project", "open"]),
       ...(notes.length > 0
         ? [{ key: "from notes", value: notes.join(", ") }]
         : []),

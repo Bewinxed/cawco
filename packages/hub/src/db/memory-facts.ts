@@ -1,9 +1,27 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { declinedRewrites, factUses } from "./schema";
+import { briefFactUses, declinedRewrites, factUses } from "./schema";
+
+/** One fact line one brief carried (schema `brief_fact_uses`). */
+export interface BriefUse {
+  at: Date;
+  chars: number;
+  key: string;
+  path: string;
+  taskId: string;
+  title: string;
+}
 
 /** The rows memory.ts keeps (schema `fact_uses`, `declined_rewrites`). */
 export interface MemoryFactsDb {
+  /** Every line a project's briefs carried since `from`, newest first. */
+  readonly briefUses: (projectId: string, from: Date) => BriefUse[];
+  /** A task's brief carried these lines at `at`: one row each. */
+  readonly carried: (
+    projectId: string,
+    brief: { at: Date; taskId: string; title: string },
+    lines: { chars: number; key: string; path: string }[]
+  ) => void;
   /** The hash of a knowledge file's prose the person declined to have rewritten, if they did. */
   readonly declinedRewrite: (
     projectId: string,
@@ -30,6 +48,31 @@ export interface MemoryFactsDb {
 export const useKey = (path: string, key: string): string => `${path}\0${key}`;
 
 export const memoryFactsDb = (db: BunSQLiteDatabase): MemoryFactsDb => ({
+  briefUses: (projectId, from) =>
+    db
+      .select({
+        at: briefFactUses.at,
+        chars: briefFactUses.chars,
+        key: briefFactUses.key,
+        path: briefFactUses.path,
+        taskId: briefFactUses.taskId,
+        title: briefFactUses.title,
+      })
+      .from(briefFactUses)
+      .where(
+        and(eq(briefFactUses.projectId, projectId), gte(briefFactUses.at, from))
+      )
+      .orderBy(desc(briefFactUses.at))
+      .all(),
+  carried: (projectId, brief, lines) => {
+    if (lines.length === 0) {
+      return;
+    }
+    db.insert(briefFactUses)
+      .values(lines.map((line) => ({ projectId, ...brief, ...line })))
+      .onConflictDoNothing()
+      .run();
+  },
   declinedRewrite: (projectId, path) =>
     db
       .select({ words: declinedRewrites.words })

@@ -81,7 +81,7 @@ import { eventData } from "./ingress";
 import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { ROUTINE_ORIGIN } from "./memory";
+import { type CuratorAsk, ROUTINE_ORIGIN } from "./memory";
 import type { Push } from "./push";
 import { BUDGET, LANDS } from "./tasks";
 import {
@@ -122,6 +122,19 @@ const CAW_OFF = "Caw is off, so only your words wake him";
 
 /** A run the inbox's mark started (memory.ts): slot `inbox:<time>`. */
 const INBOX_SLOT = "inbox:";
+/** A curator run the person asked a fold of one file of (the Memory view): slot `fold:<time>|<path>`. */
+const FOLD_SLOT = "fold:";
+/** A curator run the person asked a reshape of (the Memory view): slot `reshape:<time>`. */
+const RESHAPE_SLOT = "reshape:";
+
+/** What a curator run's slot asks of it beyond its inbox: a fold of one file, a reshape, or nothing. */
+const curatorAskOf = (slot: string): CuratorAsk | undefined => {
+  if (slot.startsWith(FOLD_SLOT)) {
+    const path = slot.slice(slot.indexOf("|") + 1);
+    return path ? { fold: path } : undefined;
+  }
+  return slot.startsWith(RESHAPE_SLOT) ? { reshape: true } : undefined;
+};
 /** The soonest a full inbox runs the curator again after its last run began. */
 const INBOX_REST_MS = 60 * 60_000;
 const CURATOR_NAME = "Memory curator";
@@ -301,7 +314,8 @@ export interface RoutineDeps {
    * left to curate, else the brief it reads; Jev failing throws.
    */
   readonly curatorBrief: (
-    projectId: string
+    projectId: string,
+    ask?: CuratorAsk
   ) => Promise<
     { kind: "none"; reason: string } | { kind: "run"; text: string }
   >;
@@ -373,6 +387,12 @@ export const slotLabel = (slot: string, timeZone: string): string => {
   }
   if (slot.startsWith(INBOX_SLOT)) {
     return "inbox";
+  }
+  if (slot.startsWith(FOLD_SLOT)) {
+    return "fold";
+  }
+  if (slot.startsWith(RESHAPE_SLOT)) {
+    return "reshape";
   }
   return new Intl.DateTimeFormat("en-GB", {
     timeZone,
@@ -975,7 +995,7 @@ export const createRoutines = ({
     run: RoutineRunRow
   ): Promise<void> => {
     const projectId = routine.projectId ?? refuse(409, "no project");
-    const brief = await curatorBrief(projectId);
+    const brief = await curatorBrief(projectId, curatorAskOf(run.slot));
     if (brief.kind === "none") {
       settle(run.id, {
         outcome: "silent",
@@ -2178,6 +2198,45 @@ export const createRoutines = ({
   };
 
   /**
+   * The person's Curate now, Fold or Reshape (the Memory view): the
+   * project's curator runs now, made first when the project has none yet,
+   * its slot carrying what was asked. A run of it still going skips this
+   * one, said in the run's reason; a paused curator is refused.
+   */
+  const curateNow = (
+    projectId: string,
+    ask?: CuratorAsk
+  ): { routine: RoutineRow; run: RoutineRunRow } => {
+    ensureCurator(projectId);
+    const routine =
+      curatorOf(projectId) ??
+      refuse(404, "This project has no Memory curator.");
+    if (!routine.enabled) {
+      refuse(
+        409,
+        `The Memory curator is paused${routine.disabledReason ? `: ${routine.disabledReason}` : ""}. Resume it in Routines.`
+      );
+    }
+    const at = new Date().toISOString();
+    let slot = `now:${at}`;
+    if (ask && "fold" in ask) {
+      slot = `${FOLD_SLOT}${at}|${ask.fold}`;
+    } else if (ask) {
+      slot = `${RESHAPE_SLOT}${at}`;
+    }
+    const run =
+      fireExtra(routine, slot, 1) ??
+      refuse(409, "That run was asked for already.");
+    return { routine, run };
+  };
+
+  /** The project's curator as its Memory view reads it: the routine and its newest run. */
+  const curatorView = (projectId: string): RoutineView | undefined => {
+    const routine = curatorOf(projectId);
+    return routine ? viewOf(routine) : undefined;
+  };
+
+  /**
    * The inbox passed its mark (memory.ts): the curator runs now, unless it
    * is off, a run of it goes, or its last run began within the hour.
    */
@@ -2352,6 +2411,8 @@ export const createRoutines = ({
 
   return {
     create,
+    curateNow,
+    curatorView,
     ensureCurator,
     get,
     inboxPassed,

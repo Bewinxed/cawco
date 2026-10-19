@@ -743,6 +743,17 @@ export interface BlocksChangedFrame {
   projectId: string;
 }
 
+export interface MemoryChangedFrame {
+  instanceId?: undefined;
+  /**
+   * Hub-originated: a project's memory changed (a note, a sort, a proposal
+   * made or answered, a brief that carried fact lines): its Memory view
+   * reads it again.
+   */
+  kind: "memory.changed";
+  projectId: string;
+}
+
 export interface ThreadMessageFrame {
   instanceId?: undefined;
   /** Hub-originated: a message was added to a thread. */

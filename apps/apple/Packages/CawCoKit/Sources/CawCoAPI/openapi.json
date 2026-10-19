@@ -10247,7 +10247,8 @@
                       "board",
                       "table",
                       "pipeline",
-                      "routines"
+                      "routines",
+                      "memory"
                     ]
                   },
                   "position": {
@@ -15561,7 +15562,8 @@
                 "board",
                 "table",
                 "pipeline",
-                "routines"
+                "routines",
+                "memory"
               ]
             }
           }
@@ -31067,6 +31069,9 @@
             "$ref": "#/components/schemas/BlocksChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/MemoryChangedFrame"
+          },
+          {
             "$ref": "#/components/schemas/StartersChangedFrame"
           },
           {
@@ -31157,6 +31162,7 @@
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "decisions.changed": "#/components/schemas/DecisionsChangedFrame",
             "blocks.changed": "#/components/schemas/BlocksChangedFrame",
+            "memory.changed": "#/components/schemas/MemoryChangedFrame",
             "starters.changed": "#/components/schemas/StartersChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
             "hub.restart": "#/components/schemas/HubRestartFrame",
@@ -41297,6 +41303,12 @@
           "pages": {
             "type": "object",
             "properties": {
+              "memory": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BlockPlace"
+                }
+              },
               "board": {
                 "type": "array",
                 "items": {
@@ -41399,6 +41411,7 @@
         "type": "string",
         "enum": [
           "board",
+          "memory",
           "pipeline",
           "routines",
           "table"
@@ -53854,6 +53867,10 @@
               "$ref": "#/components/schemas/PermissionField"
             }
           },
+          "open": {
+            "description": "Where the ask's subject is read whole, as a link under its title: a\nmemory proposal's file on its project's Memory view (\"Open in memory\").\nAbsent for every other ask.",
+            "type": "string"
+          },
           "project": {
             "description": "The project the asker works in, by name; absent for a session in none. The card's head reads \"Caw · cockpit\".",
             "type": "string"
@@ -54708,6 +54725,25 @@
             "type": "string",
             "enum": [
               "blocks.changed"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "projectId"
+        ]
+      },
+      "MemoryChangedFrame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Hub-originated: a project's memory changed (a note, a sort, a proposal\nmade or answered, a brief that carried fact lines): its Memory view\nreads it again.",
+            "type": "string",
+            "enum": [
+              "memory.changed"
             ]
           },
           "projectId": {

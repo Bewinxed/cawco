@@ -1,0 +1,420 @@
+/**
+ * A project's memory as its Memory view reads it (hub memory-view.ts, the
+ * dashboard's ViewMemory): the pipeline the hub runs, drawn from its own
+ * data. Notes come into the inbox; Jev and the curator sort them into
+ * dated fact lines in `knowledge/`; briefs carry the lines that bear on
+ * their task. Every number here is the hub's: the parsers' counts, the
+ * thresholds it acts on, each brief's record of what it carried.
+ *
+ * Read with `GET /api/projects/:id/memory` (the page),
+ * `GET /api/projects/:id/memory/file?path=` (one file, line by line) and
+ * `GET /api/projects/:id/memory/notes/:note` (one note, whole). The view
+ * reads them again on `memory.changed`.
+ */
+
+/** How Jev's sort says a note bears on a fact line (hub memory.ts `Sort`). */
+export type MemorySort = "corroborates" | "changes" | "conflicts";
+
+/** A fact line's place in its file (memory-facts.ts `FactSection`), or a line that does not read. */
+export type MemoryMark = "current" | "formerly" | "conflict" | "unreadable";
+
+/** What a proposal does, as its card names it. */
+export type MemoryProposalKind =
+  | "sort"
+  | "fold"
+  | "archive"
+  | "reshape"
+  | "retire"
+  | "rewrite"
+  | "withdraw"
+  | "change";
+
+/** One note in the inbox, as its row draws it. */
+export interface MemoryNoteRow {
+  /** When it was written, ms epoch. */
+  at: number;
+  /** Who wrote it: the session's board title. */
+  author: string;
+  id: string;
+  /** The open proposal citing it, by id: its card lands under the row. */
+  proposal: string | null;
+  /** The day its writer said it became true, when before the note's own. */
+  since: string | null;
+  /**
+   * Jev's clear sort of it against one fact line, from the proposal Jev's
+   * sort made; null while the curator has it (or Jev is off).
+   */
+  sort: { file: string; kind: MemorySort; name: string } | null;
+  /** Its words, whole. */
+  text: string;
+}
+
+/** A fact file's row in Facts. */
+export interface MemoryFileRow {
+  /** Its last commit, ms epoch; null when the folder's git has none. */
+  changedAt: number | null;
+  /** Bytes of words: what the fold's threshold counts. */
+  chars: number;
+  conflicts: number;
+  current: number;
+  /** Its first line: what it holds. */
+  description: string;
+  formerly: number;
+  /** Every line in file order, as one mark each: the row's line run. */
+  marks: MemoryMark[];
+  /** Its name, the path's last part without `.md`. */
+  name: string;
+  path: string;
+  /** Open proposals that change it, by id. */
+  proposals: string[];
+  /** Written as prose before fact lines: its rewrite as fact lines waits for the curator's run. */
+  prose: boolean;
+  unreadable: number;
+  /** The newest brief that carried a line of it, ms epoch; null when none has. */
+  usedAt: number | null;
+  /** Briefs that carried a line of it, per day, the oldest of 14 first, today last. */
+  uses14: number[];
+}
+
+/** The person's own notes: AGENTS.md's `## Notes`, which every session loads. */
+export interface MemoryYourNotes {
+  /** AGENTS.md's last commit, ms epoch. */
+  changedAt: number | null;
+  count: number;
+}
+
+/** One brief that carried fact lines, newest first. */
+export interface MemoryBriefRow {
+  /** When the brief was made, ms epoch. */
+  at: number;
+  /** Characters the lines it carried took. */
+  chars: number;
+  lines: number;
+  /** The share of the brief's memory budget its lines took, 0 to 1. */
+  share: number;
+  taskId: string;
+  title: string;
+}
+
+/** An open proposal, as the view lands it on its row. */
+export interface MemoryProposalRow {
+  by: string;
+  /** Every file it changes, in the card's order. */
+  files: string[];
+  id: string;
+  kind: MemoryProposalKind;
+  /** Notes it cites. */
+  notes: string[];
+  /** Jev's sorts it carries, one per note. */
+  sorts: { file: string; kind: MemorySort; line: number; note: string }[];
+  /** Proposed when, ms epoch. */
+  time: number;
+  why: string;
+}
+
+/** The project's curator routine, as Inbox's head says it. */
+export interface MemoryCurator {
+  /** Its schedule, as the routine keeps it: the empty Facts block says when it runs. */
+  cron: string;
+  enabled: boolean;
+  /** The newest run, or null before its first. */
+  last: {
+    endedAt: number | null;
+    /** Where the run's session reads: its session page, once it has one. */
+    href: string | null;
+    outcome: "delivered" | "silent" | "failed" | "cancelled" | null;
+    /** The hub's sentence: why it failed, was skipped, or did nothing. */
+    reason: string | null;
+    startedAt: number;
+    state: "starting" | "running" | "queued" | "skipped" | "ended";
+  } | null;
+  /** Its next scheduled run, ms epoch. */
+  nextSlot: number;
+  routineId: string;
+  timeZone: string;
+}
+
+/** The numbers the hub acts on. */
+export interface MemoryThresholds {
+  /** Days unused before a line is proposed for the archive (config MEMORY_ARCHIVE_DAYS). */
+  archiveDays: number;
+  /** What one brief carries of all its context (memory.ts CONTEXT_CHARS). */
+  budgetChars: number;
+  /** A fact file past this many characters is proposed for a fold (config MEMORY_FILE_CHARS). */
+  fileChars: number;
+  /** Past this many fact files the curator is asked for a reshape (memory.ts RESHAPE_ABOVE). */
+  reshapeAbove: number;
+}
+
+/** `GET /api/projects/:id/memory`. */
+export interface MemoryPage {
+  /** The archive: `knowledge/archive/` files and their lines. */
+  archive: { lines: number; path: string }[];
+  briefs: MemoryBriefRow[];
+  /** Null until the project's first note makes its curator. */
+  curator: MemoryCurator | null;
+  /** Fact files: those with a conflict or an unreadable line first, then the most recently used. */
+  files: MemoryFileRow[];
+  inbox: MemoryNoteRow[];
+  /** Jev is on: it sorts the inbox as a run starts. */
+  jev: boolean;
+  /** The hub's clock as it answered, ms epoch: what the 14 days end on. */
+  now: number;
+  proposals: MemoryProposalRow[];
+  thresholds: MemoryThresholds;
+  yours: MemoryYourNotes;
+}
+
+/** A note a fact line rests on, as its source chip lists it. */
+export interface MemorySourceNote {
+  at: number | null;
+  author: string;
+  id: string;
+  /** The note's first line. */
+  text: string;
+  /** Where it is: still in the inbox, archived, or a file's prose before fact lines. */
+  where: "inbox" | "archive" | "prose" | "gone";
+}
+
+/** One fact line of an open file. */
+export interface MemoryFactView {
+  /** Within `## Conflict`: the lines that disagree with each other share it. */
+  conflictGroup: number | null;
+  from: MemorySourceNote[];
+  key: string;
+  line: number;
+  replacedBy: string | null;
+  ruling: string | null;
+  section: "current" | "formerly" | "conflict";
+  since: string;
+  text: string;
+  until: string | null;
+  /** The briefs that carried it, newest first. */
+  uses: { at: number; taskId: string; title: string }[];
+  why: string | null;
+}
+
+/** `GET /api/projects/:id/memory/file?path=` for a fact file. */
+export interface MemoryFactFile {
+  changedAt: number | null;
+  chars: number;
+  /** Its words, whole: a prose file is drawn as markdown. */
+  content: string;
+  description: string;
+  facts: MemoryFactView[];
+  kind: "facts";
+  marks: MemoryMark[];
+  name: string;
+  path: string;
+  proposals: string[];
+  prose: boolean;
+  thresholds: MemoryThresholds;
+  unreadable: { line: number; text: string; why: string }[];
+  usedAt: number | null;
+  uses14: number[];
+}
+
+/** One of the person's notes in AGENTS.md's `## Notes`. */
+export interface MemoryYourNote {
+  /** When its line was committed (git blame), ms epoch. */
+  at: number | null;
+  /** Its words, as the section holds them. */
+  text: string;
+}
+
+/** `GET /api/projects/:id/memory/file?path=AGENTS.md`: the person's notes. */
+export interface MemoryNotesFile {
+  changedAt: number | null;
+  kind: "notes";
+  name: string;
+  notes: MemoryYourNote[];
+  path: string;
+}
+
+export type MemoryFileView = MemoryFactFile | MemoryNotesFile;
+
+/** `GET /api/projects/:id/memory/notes/:note`. */
+export interface MemoryNoteView {
+  at: number | null;
+  author: string;
+  id: string;
+  /** What came of it, once archived (`applied <sha>`, `rejected`, `withdrawn`). */
+  outcome: string | null;
+  role: string;
+  since: string | null;
+  source: string;
+  task: string | null;
+  text: string;
+  where: "inbox" | "archive";
+}
+
+/** `POST /api/projects/:id/memory/curate`, `…/propose/fold`, `…/propose/reshape`: the curator's run, started. */
+export interface MemoryRunStarted {
+  reason: string | null;
+  routineId: string;
+  runId: string;
+  /** Its state as filed: a run still going skips the next. */
+  state: "starting" | "running" | "queued" | "skipped" | "ended";
+}
+
+/** `POST /api/projects/:id/memory/propose/archive`: the proposals made, by id. */
+export interface MemoryArchiveProposed {
+  proposals: string[];
+}
+
+/** The Memory view's address: the file open beside it, and the proposal it lands on. */
+export const memoryHref = (
+  projectId: string,
+  place: { file?: string | null; proposal?: string | null } = {}
+): string => {
+  const query = new URLSearchParams({ view: "memory" });
+  if (place.file) {
+    query.set("file", place.file);
+  }
+  if (place.proposal) {
+    query.set("proposal", place.proposal);
+  }
+  return `/project/${encodeURIComponent(projectId)}?${query.toString()}`;
+};
+
+/** The days a use sparkline draws. */
+export const MEMORY_USE_DAYS = 14;
+
+/** What the Memory view says (report 1 §2, report 2). No ids, no cost. */
+export const memoryViewWords = {
+  tab: "Memory",
+  inbox: "Inbox",
+  facts: "Facts",
+  briefs: "In briefs",
+  curateNow: "Curate now",
+  curating: "Curating…",
+  makeNote: "Make a note",
+  fold: "Fold",
+  archiveUnused: "Archive unused",
+  reshape: "Reshape",
+  withdraw: "Withdraw",
+  openRaw: "Open raw",
+  history: "History",
+  noHistory: "The project's history keeps no commit of it yet.",
+  open: "Open",
+  openRun: "Open run",
+  runAgain: "Run again",
+  retry: "Retry",
+  openInMemory: "Open in memory",
+  approve: "Approve",
+  reject: "Reject",
+  cancel: "Cancel",
+  approving: "Approving…",
+  rejecting: "Rejecting…",
+  tryAgain: "Try again",
+  folding: "Folding…",
+  archiving: "Archiving…",
+  reshaping: "Reshaping…",
+  withdrawing: "Withdrawing…",
+  adding: "Adding…",
+  jevOff: "Jev off",
+  jevOffTitle:
+    "Jev is off: the curator sorts every note on its run, so each waits for it.",
+  columnNote: "Note",
+  columnFrom: "From",
+  columnSorted: "Sorted",
+  columnFile: "File",
+  columnLines: "Lines",
+  columnUsed: "Used 14d",
+  columnChanged: "Changed",
+  columnBrief: "Brief",
+  columnWhen: "When",
+  columnActions: "Actions",
+  sorts: {
+    corroborates: "corroborates",
+    changes: "changes",
+    conflicts: "conflicts",
+  },
+  waiting: "waiting for curator",
+  ruling: "ruling",
+  formerly: "Formerly",
+  current: "Current",
+  conflict: "Conflict",
+  notRead: "not read",
+  yourNotes: "Your notes",
+  everyBrief: "every brief",
+  addPlaceholder: "Add to your notes…",
+  addLabel: "Add to your notes",
+  archive: "Archive",
+  /** Counts and meta. */
+  lines: (n: number) => `${n} ${n === 1 ? "line" : "lines"}`,
+  notes: (n: number) => `${n} ${n === 1 ? "note" : "notes"}`,
+  fromNotes: (n: number) => `from ${n} ${n === 1 ? "note" : "notes"}`,
+  since: (day: string) => `since ${day}`,
+  until: (day: string) => `until ${day}`,
+  replacedBy: "replaced by the line above",
+  used: (n: number, last: string) => `used ${n} · last ${last}`,
+  notUsed: "not used yet",
+  changed: (ago: string) => `changed ${ago}`,
+  conflicts: (n: number) => `${n} ${n === 1 ? "conflict" : "conflicts"}`,
+  notReadCount: (n: number) => `${n} ${n === 1 ? "line" : "lines"} not read`,
+  archiveRow: (n: number) => `Archive · ${n} ${n === 1 ? "line" : "lines"}`,
+  loadedByEvery: "loaded by every session",
+  you: "you",
+  morePast: (n: number) => `+${n}`,
+  usedHover: (n: number, last: string | null) =>
+    last
+      ? `${n} ${n === 1 ? "brief" : "briefs"} in 14 days · last ${last}`
+      : "No brief in 14 days",
+  budgetHover: (lines: number, share: number) =>
+    `${lines} ${lines === 1 ? "line" : "lines"}, ${Math.round(share * 100)}% of the budget`,
+  sizeHover: (chars: string, limit: string) =>
+    `${chars} of ${limit} characters: past it, a fold is proposed`,
+  /** The block heads' run status. */
+  runningSince: (time: string) => `Running since ${time}`,
+  running: "Running",
+  justNow: "just now",
+  neverRun: "Not run yet",
+  /** Proposal card heads: the kind, then why. */
+  kind: {
+    sort: "Sort",
+    fold: "Fold",
+    archive: "Archive",
+    reshape: "Reshape",
+    retire: "Retire",
+    rewrite: "Rewrite",
+    withdraw: "Withdraw",
+    change: "Change",
+  } as Record<string, string>,
+  sortWhy: (notes: number, kind: string, file: string) =>
+    `from ${notes} ${notes === 1 ? "note" : "notes"} · ${kind} a line in ${file}`,
+  foldProposed: (name: string, lines: number) =>
+    `Fold proposed · ${name} · from ${lines} lines`,
+  /** Empty states. */
+  emptyTitle: "Nothing remembered yet",
+  emptyLine:
+    "Agents leave notes here as they work. The curator sorts them into dated facts, and each brief carries the lines that bear on its task.",
+  noFacts: (when: string) => `No facts yet. The curator runs ${when}.`,
+  noFactsUnscheduled: "No facts yet. The curator runs with the first note.",
+  noBriefs: "No brief has carried a line yet.",
+  noInbox: "No note waits. Agents' notes land here as they work.",
+  conflictLine: "Both hold for the same period. A note from you settles it.",
+  /** Asks, in the page. */
+  foldAsk: (name: string) => `Fold ${name}?`,
+  foldAskLine:
+    "The curator rewrites it shorter. You approve the result before it lands.",
+  archiveAsk: "Archive the lines unused for 90 days?",
+  archiveAskLine: "They move to the archive once you approve.",
+  reshapeAsk: "Reshape the fact files?",
+  reshapeAskLine:
+    "The curator proposes a new set; nothing moves until you approve.",
+  withdrawAsk: "Withdraw this note?",
+  withdrawAskLine: "It leaves the inbox and is kept in the notes archive.",
+  withdrawYoursAsk: "Withdraw this note?",
+  withdrawYoursAskLine: "It leaves AGENTS.md; the project's history keeps it.",
+  reshapeOffered: (n: number) => `Reshape is offered past ${n} files`,
+  /** Failures. */
+  runFailed: (time: string, reason: string) =>
+    `The curator's run failed at ${time}. ${reason} The inbox is as it was.`,
+  unavailable: "Memory is not available",
+  unavailableLine: (project: string, reason: string) =>
+    `Memory for ${project} couldn't be read. ${reason} Nothing was changed.`,
+  fileUnavailable: (name: string, reason: string) =>
+    `${name} couldn't be read. ${reason} Nothing was changed.`,
+  lineNotRead: (why: string) => `not read: ${why}`,
+} as const;

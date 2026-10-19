@@ -1,0 +1,314 @@
+{
+  "now": "2026-10-19T12:00:00.000Z",
+  "project": "cockpit",
+  "projectId": "fixture-cockpit",
+  "jev": true,
+  "curator": {
+    "routineId": "r-curator",
+    "enabled": true,
+    "cron": "0 6 * * *",
+    "timeZone": "UTC",
+    "nextSlot": "2026-10-20T06:00:00.000Z",
+    "last": {
+      "state": "ended",
+      "outcome": "failed",
+      "reason": "Jev answered 503: its route is down, so the inbox was not sorted.",
+      "startedAt": "2026-10-19T06:00:00.000Z",
+      "endedAt": "2026-10-19T06:01:00.000Z",
+      "href": "/session/i-curator-run"
+    }
+  },
+  "briefs": [
+    {
+      "taskId": "t-41",
+      "title": "Fix the iOS crash loop",
+      "at": "2026-10-19T11:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-38",
+      "title": "Build Mobbin search",
+      "at": "2026-10-19T08:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-38",
+      "title": "Build Mobbin search",
+      "at": "2026-10-19T08:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone"
+    },
+    {
+      "taskId": "t-38",
+      "title": "Build Mobbin search",
+      "at": "2026-10-19T08:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "A workspace writes only its own clone, $TMPDIR and the package cache"
+    },
+    {
+      "taskId": "t-38",
+      "title": "Build Mobbin search",
+      "at": "2026-10-19T08:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "No namespace starts inside a workspace boundary"
+    },
+    {
+      "taskId": "t-36",
+      "title": "Orchestrate cockpit",
+      "at": "2026-10-19T07:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-36",
+      "title": "Orchestrate cockpit",
+      "at": "2026-10-19T07:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone"
+    },
+    {
+      "taskId": "t-36",
+      "title": "Orchestrate cockpit",
+      "at": "2026-10-19T07:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "The scratch hub listens on 127.0.0.1 only"
+    },
+    {
+      "taskId": "t-36",
+      "title": "Orchestrate cockpit",
+      "at": "2026-10-19T07:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "A workspace writes only its own clone, $TMPDIR and the package cache"
+    },
+    {
+      "taskId": "t-36",
+      "title": "Orchestrate cockpit",
+      "at": "2026-10-19T07:00:00.000Z",
+      "path": "knowledge/memory.md",
+      "fact": "A fold never rewords a fact line"
+    },
+    {
+      "taskId": "t-33",
+      "title": "Preview tool rework",
+      "at": "2026-10-18T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-33",
+      "title": "Preview tool rework",
+      "at": "2026-10-18T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone"
+    },
+    {
+      "taskId": "t-33",
+      "title": "Preview tool rework",
+      "at": "2026-10-18T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "The scratch hub listens on 127.0.0.1 only"
+    },
+    {
+      "taskId": "t-33",
+      "title": "Preview tool rework",
+      "at": "2026-10-18T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Releases are cut from main every Tuesday"
+    },
+    {
+      "taskId": "t-30",
+      "title": "Research live browsers",
+      "at": "2026-10-18T10:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-30",
+      "title": "Research live browsers",
+      "at": "2026-10-18T10:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "A workspace writes only its own clone, $TMPDIR and the package cache"
+    },
+    {
+      "taskId": "t-25",
+      "title": "Wire the curator's run",
+      "at": "2026-10-16T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-25",
+      "title": "Wire the curator's run",
+      "at": "2026-10-16T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone"
+    },
+    {
+      "taskId": "t-25",
+      "title": "Wire the curator's run",
+      "at": "2026-10-16T09:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "A workspace writes only its own clone, $TMPDIR and the package cache"
+    },
+    {
+      "taskId": "t-25",
+      "title": "Wire the curator's run",
+      "at": "2026-10-16T09:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "No namespace starts inside a workspace boundary"
+    },
+    {
+      "taskId": "t-25",
+      "title": "Wire the curator's run",
+      "at": "2026-10-16T09:00:00.000Z",
+      "path": "knowledge/memory.md",
+      "fact": "A fold never rewords a fact line"
+    },
+    {
+      "taskId": "t-26",
+      "title": "Purge a session's notes",
+      "at": "2026-10-15T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-26",
+      "title": "Purge a session's notes",
+      "at": "2026-10-15T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone"
+    },
+    {
+      "taskId": "t-26",
+      "title": "Purge a session's notes",
+      "at": "2026-10-15T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "The scratch hub listens on 127.0.0.1 only"
+    },
+    {
+      "taskId": "t-27",
+      "title": "Fold deploy",
+      "at": "2026-10-13T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-27",
+      "title": "Fold deploy",
+      "at": "2026-10-13T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone"
+    },
+    {
+      "taskId": "t-27",
+      "title": "Fold deploy",
+      "at": "2026-10-13T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "The scratch hub listens on 127.0.0.1 only"
+    },
+    {
+      "taskId": "t-27",
+      "title": "Fold deploy",
+      "at": "2026-10-13T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Releases are cut from main every Tuesday"
+    },
+    {
+      "taskId": "t-27",
+      "title": "Fold deploy",
+      "at": "2026-10-13T09:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "A workspace writes only its own clone, $TMPDIR and the package cache"
+    },
+    {
+      "taskId": "t-27",
+      "title": "Fold deploy",
+      "at": "2026-10-13T09:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "No namespace starts inside a workspace boundary"
+    },
+    {
+      "taskId": "t-28",
+      "title": "Reshape knowledge",
+      "at": "2026-10-12T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-28",
+      "title": "Reshape knowledge",
+      "at": "2026-10-12T09:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "A workspace writes only its own clone, $TMPDIR and the package cache"
+    },
+    {
+      "taskId": "t-28",
+      "title": "Reshape knowledge",
+      "at": "2026-10-12T09:00:00.000Z",
+      "path": "knowledge/memory.md",
+      "fact": "A fold never rewords a fact line"
+    },
+    {
+      "taskId": "t-29",
+      "title": "Archive unused lines",
+      "at": "2026-10-09T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-29",
+      "title": "Archive unused lines",
+      "at": "2026-10-09T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone"
+    },
+    {
+      "taskId": "t-30",
+      "title": "Read the memory route",
+      "at": "2026-10-07T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "Preview ports are picked outside the kernel's ephemeral range"
+    },
+    {
+      "taskId": "t-30",
+      "title": "Read the memory route",
+      "at": "2026-10-07T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone"
+    },
+    {
+      "taskId": "t-30",
+      "title": "Read the memory route",
+      "at": "2026-10-07T09:00:00.000Z",
+      "path": "knowledge/deploy.md",
+      "fact": "The scratch hub listens on 127.0.0.1 only"
+    },
+    {
+      "taskId": "t-30",
+      "title": "Read the memory route",
+      "at": "2026-10-07T09:00:00.000Z",
+      "path": "knowledge/boundary.md",
+      "fact": "A workspace writes only its own clone, $TMPDIR and the package cache"
+    }
+  ],
+  "changed": {
+    "AGENTS.md": "2026-10-18T12:00:00.000Z",
+    "knowledge/deploy.md": "2026-10-17T12:00:00.000Z",
+    "knowledge/boundary.md": "2026-10-10T12:00:00.000Z",
+    "knowledge/apple.md": "2026-10-05T12:00:00.000Z",
+    "knowledge/routines.md": "2026-09-28T12:00:00.000Z",
+    "knowledge/memory.md": "2026-10-18T12:00:00.000Z",
+    "knowledge/ios.md": "2026-09-07T12:00:00.000Z",
+    "knowledge/caw.md": "2026-09-07T12:00:00.000Z",
+    "knowledge/archive/deploy.md": "2026-10-01T12:00:00.000Z"
+  },
+  "notesAt": [
+    "2026-10-18T12:00:00.000Z",
+    "2026-10-17T12:00:00.000Z",
+    "2026-10-03T12:00:00.000Z",
+    "2026-09-20T12:00:00.000Z",
+    "2026-09-12T12:00:00.000Z"
+  ]
+}

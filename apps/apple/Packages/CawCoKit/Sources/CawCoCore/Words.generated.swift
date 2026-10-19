@@ -1707,8 +1707,10 @@ public enum Words {
 
             public static let routines = "Routines"
 
+            public static let memory = "Memory"
+
             /// Each word by the key it stands under, for a lookup by data value.
-            public static let byKey: [String: String] = ["board": board, "table": table, "pipeline": pipeline, "routines": routines]
+            public static let byKey: [String: String] = ["board": board, "table": table, "pipeline": pipeline, "routines": routines, "memory": memory]
         }
     }
 

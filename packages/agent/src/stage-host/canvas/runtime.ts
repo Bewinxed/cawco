@@ -183,6 +183,10 @@ export interface Section {
   standIns: HTMLElement[];
 }
 
+/** Whether an animation ends: `finish()` throws on one that loops for ever. */
+const finite = (one: Animation): boolean =>
+  Number.isFinite(Number(one.effect?.getComputedTiming().endTime ?? 0));
+
 const frameTick = () =>
   new Promise<void>((done) =>
     requestAnimationFrame(() => requestAnimationFrame(() => done()))
@@ -1139,7 +1143,8 @@ export function boot(options: BootOptions): void {
         await frameTick();
         const fired = body.getAnimations({ subtree: true });
         const animations = fired.map((one) => readAnimation(one, t0));
-        for (const one of fired) {
+        // A loop (a spinner, a breathing glyph) has no end to finish at: it runs on.
+        for (const one of fired.filter(finite)) {
           one.finish();
         }
         const changed = deltaOf(before, snapshot(body), root);
@@ -1147,7 +1152,9 @@ export function boot(options: BootOptions): void {
           body.classList.remove(allClass(state));
         }
         await frameTick();
-        for (const one of body.getAnimations({ subtree: true })) {
+        for (const one of body
+          .getAnimations({ subtree: true })
+          .filter(finite)) {
           one.finish();
         }
         result.delta.set(interaction, { animations, changed });

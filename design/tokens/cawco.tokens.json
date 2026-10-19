@@ -4368,6 +4368,70 @@
       },
       "$description": "The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and \"23h ago\", or \"Tomorrow 13:30\", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say."
     },
+    "c-memory-mark": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$description": "One fact line's mark in a memory file's line run (the Memory view's Facts row and file card): 4px wide, in its section's hue, one per line in file order."
+    },
+    "c-memory-mark-gap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "The pitch between a memory line run's marks, and between the run and its size meter under it."
+    },
+    "c-memory-spark-bar": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "One day's bar in a fact file's 14-day use sparkline (the Memory view's Used column)."
+    },
+    "c-memory-spark-gap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1,
+        "unit": "px"
+      },
+      "$description": "The pitch between a use sparkline's day bars: fourteen bars and their gaps stand 41px wide."
+    },
+    "c-memory-spark-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
+      "$description": "A use sparkline's height: its busiest day's bar; a day no brief used it stands at 1px, the baseline."
+    },
+    "c-memory-meter-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "The Memory view's thin meters: a fact file's size against the fold's threshold, a brief's share of its memory budget."
+    },
+    "c-memory-lines-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "rem"
+      },
+      "$description": "The Memory view's Facts ledger's Lines column on a wide ledger: a file's line run of 24 marks, its size meter and its count, so every row's sparkline starts on one edge."
+    },
+    "c-memory-age-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3,
+        "unit": "rem"
+      },
+      "$description": "The Memory view's Facts ledger's Changed column: \"23h ago\" at most, in meta, set to the row's end."
+    },
     "c-grid-4": {
       "$type": "dimension",
       "$value": {
@@ -4383,6 +4447,14 @@
         "unit": "rem"
       },
       "$description": "The page width from which a project page's blocks stand on two columns (a 1024 window: a 750px page, 366px columns); under it, one column in the person's order."
+    },
+    "c-block-memory": {
+      "$type": "dimension",
+      "$value": {
+        "value": 17,
+        "unit": "rem"
+      },
+      "$description": "The Memory page's Inbox and In briefs blocks' measure: one column of a 1440 window's four (278px), so Inbox, Facts (--c-block-routines, two columns) and In briefs stand side by side as the pipeline runs."
     },
     "c-block-routines": {
       "$type": "dimension",

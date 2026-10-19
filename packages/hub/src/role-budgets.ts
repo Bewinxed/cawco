@@ -424,6 +424,7 @@ export const measureRoles = (): RoleSize[] => {
         park: () => undefined,
         settle: () => undefined,
         threadOf: () => undefined,
+        used: () => undefined,
         watch: createTurnWatch({
           fleetHosts: () => [],
           get: () => undefined,

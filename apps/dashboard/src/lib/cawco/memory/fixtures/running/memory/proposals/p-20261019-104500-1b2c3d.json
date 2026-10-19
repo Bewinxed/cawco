@@ -1,0 +1,17 @@
+{
+  "id": "p-20261019-104500-1b2c3d",
+  "projectId": "fixture-cockpit",
+  "base": "",
+  "by": "Memory curator",
+  "files": [
+    {
+      "path": "knowledge/deploy.md",
+      "before": "Deploy: how the hub and its previews go out.\n\n- Preview ports are picked outside the kernel's ephemeral range (ruling 2026-10-19)\n  Why: a bind refused for its address said so\n- A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone (since 2026-10-17, from n-20261017-100000-a7b8c9 n-20261017-110000-b8c9d0, used 2026-10-19)\n- The scratch hub listens on 127.0.0.1 only (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-18)\n- Releases are cut from main every Tuesday (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-16)\n- the hub (since, from)\n\n## Conflict\n\n- Previews bind on the hub's address only (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-13)\n- Previews bind on the machine's tailnet address (since 2026-10-11, from n-20261011-090000-e5f6a7 n-20261017-090000-f6a7b8, used 2026-10-16)\n\n## Formerly\n\n- The scratch hub's ports came from the ephemeral range (since 2026-10-02, until 2026-10-19, from n-20261003-090000-d4e5f6, replaced by n-20261019-100000-a1b2c3)\n",
+      "content": "Deploy: how the hub and its previews go out.\n\n- Preview ports are picked outside the kernel's ephemeral range (ruling 2026-10-19)\n- A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone (since 2026-10-17, from n-20261017-100000-a7b8c9 n-20261017-110000-b8c9d0, used 2026-10-19)\n- The scratch hub listens on 127.0.0.1 only (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-18)\n- Releases are cut from main every Tuesday (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-16)\n- the hub (since, from)\n\n## Conflict\n\n- Previews bind on the hub's address only (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-13)\n- Previews bind on the machine's tailnet address (since 2026-10-11, from n-20261011-090000-e5f6a7 n-20261017-090000-f6a7b8, used 2026-10-16)\n\n## Formerly\n\n- The scratch hub's ports came from the ephemeral range (since 2026-10-02, until 2026-10-19, from n-20261003-090000-d4e5f6, replaced by n-20261019-100000-a1b2c3)\n"
+    }
+  ],
+  "notes": [],
+  "why": "deploy is past its budget: its Why: lines are cut, every fact line kept word for word",
+  "session": "s-curator",
+  "time": "2026-10-19T10:45:00.000Z"
+}
