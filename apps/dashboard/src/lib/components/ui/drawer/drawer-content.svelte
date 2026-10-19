@@ -17,13 +17,23 @@
           "pb-(--safe-bottom) vaul-drawer-direction-bottom:pb-(--safe-bottom)",
         "sheet-safe-bottom": "vaul-drawer-direction-bottom:pb-(--safe-bottom)",
       },
-      /** A sheet in a column that may shrink below its content. */
-      height: { shrink: "min-h-0" },
+      /** A sheet in a column that may shrink below its content; or one that
+          stands at its cap from the first frame (its own --drawer-max-height,
+          else the recipe's), whatever it holds, so vaul's stops, shares of
+          the screen's height, each hold one height (Files). The placed
+          sheet's max-height keeps it inside the visible area (app.css). */
+      height: {
+        shrink: "min-h-0",
+        cap: "h-[var(--drawer-max-height,var(--c-sheet-max-h))]",
+      },
       /** The new-session card: the dialog's theme, no outline or margin,
-          and no motion of its own under reduced motion (over vaul's). */
+          and under reduced motion none of vaul's settling transform (its
+          fade is the base's). `!`: vaul writes that transition inline
+          (use-drawer-root.svelte.js), which only an important
+          declaration outranks;
+          https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier */
       look: {
-        "new-session":
-          "ns-theme m-0 outline-off motion-reduce:animate-none! motion-reduce:transition-none!",
+        "new-session": "ns-theme m-0 outline-off motion-reduce:transition-none!",
       },
     },
   });
@@ -143,10 +153,15 @@
   <!-- The surface is drawn on ::before, inset from the sheet's box. A bottom
        sheet's is full-bleed: edge to edge and flush on the screen's foot,
        its corners rounded and its hairline drawn along the top edge only.
-       Its foot keeps the safe area clear, the same for every sheet. -->
+       Its foot keeps the safe area clear, the same for every sheet. Under
+       reduced motion it fades in and out over --dur-control instead of
+       sliding (DESIGN.md, Sheet: "with reduced motion it fades over
+       120ms"); `!` because vaul's slide is an unlayered global sheet
+       (vaul-svelte drawer.svelte), which no layered utility outranks:
+       https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier -->
   <DrawerPrimitive.Content
     class={cn(
-      "group/drawer-content fixed z-50 flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label before:absolute before:inset-2 before:-z-10 before:rounded-[var(--radius-lg)] before:border before:border-border before:bg-[var(--surface-raised)] data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(1rem+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
+      "motion-reduce:sheet-fade! group/drawer-content fixed z-50 flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label before:absolute before:inset-2 before:-z-10 before:rounded-[var(--radius-lg)] before:border before:border-border before:bg-[var(--surface-raised)] data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(1rem+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
       drawerContentVariants({ pad, height, look }),
       className
     )}

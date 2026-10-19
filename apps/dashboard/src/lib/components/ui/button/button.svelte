@@ -25,11 +25,11 @@
       variant: {
         default:
           "border-transparent bg-[image:var(--action-surface)] bg-[var(--action-solid)] text-[var(--on-action)] hover:bg-[image:var(--action-surface-hover)] hover:bg-[var(--action-hover)]",
-        outline: "aria-expanded:bg-[var(--surface-hover)]",
+        outline: "aria-expanded:not-aria-current-page:bg-[var(--surface-hover)]",
         secondary:
           "border-[var(--border-hairline)] bg-[var(--surface-recess)] hover:bg-[var(--surface-hover)]",
         ghost:
-          "border-transparent bg-transparent aria-expanded:bg-[var(--surface-hover)]",
+          "border-transparent bg-transparent aria-expanded:not-aria-current-page:bg-[var(--surface-hover)]",
         destructive:
           "border-[var(--error-9)] bg-transparent text-[var(--error-11)] hover:bg-[var(--error-3)]",
         /* A grant wider than what was asked (DESIGN.md, The Consequential
@@ -72,9 +72,9 @@
         "approve-edge":
           "border-status-done-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-done-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink aria-invalid:hover:border-status-done-ink",
         "deny-strong":
-          "border-status-fail-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail-ink",
+          "border-status-fail-ink bg-surface-recess text-ink-strong not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail-ink",
         "approve-strong":
-          "border-status-done-ink bg-surface-recess text-ink-strong! not-aria-expanded:hover:bg-surface-recess aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink",
+          "border-status-done-ink bg-surface-recess text-ink-strong not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink",
       },
       /** No edge of its own. */
       edge: { none: "border-transparent" },
@@ -109,6 +109,12 @@
           "coarse:opacity-100 opacity-0 not-disabled:focus-visible:opacity-100 coarse:disabled:opacity-100 disabled:opacity-0 disabled:focus-visible:opacity-100 group-[:hover]/value:not-disabled:opacity-100 group-[:hover]/value:disabled:opacity-100",
         "row-hover":
           "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
+        /* In reach whenever its row (the `group`) is under the pointer or
+           holds the focus anywhere in it, not only on the button itself
+           (Files' Show in conversation, DESIGN.md Files: "shown on the
+           row's hover and focus and always under a finger"). */
+        "row-reach":
+          "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:group-focus-within:not-disabled:opacity-100 can-hover:group-hover:not-disabled:opacity-100",
       },
       /** Open, it draws no fill while the pointer is off it (its words and
           chevron say it is open). */
@@ -127,13 +133,19 @@
           tabular figures and subtle ink under the button's own. */
       head: { count: "count" },
       /** While its page is open (`aria-current="page"`), the selected tint
-          (filling under the edge) and ink over every state, as its caller's
-          own rule held them, crossing over --dur-control; its press scales
-          at once. */
+          (filling under the edge) and ink, at rest and under the pointer,
+          crossing over --dur-control; its press scales at once, and the
+          press tint still darkens it (The Press Rule). */
       current: {
         selected:
-          "[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)] aria-current-page:bg-selected-bg! aria-current-page:bg-clip-border aria-current-page:text-selected-ink!",
+          "[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)] aria-current-page:bg-selected-bg aria-current-page:bg-clip-border aria-current-page:text-selected-ink aria-current-page:hover:bg-selected-bg aria-current-page:hover:text-selected-ink",
       },
+      /** Inside a surface that sets its own type and ink (the new-session
+          dialog, `ns-theme`): the button takes the surface's font and ink as
+          every button there does, over the kit's own; a variant's hover
+          still draws. Its transition is the press's own (`press`), which is
+          the control's colours and, with motion, the press's transform. */
+      skin: { surface: "font-inherit text-inherit" },
     },
     defaultVariants: {
       variant: "default",
@@ -213,6 +225,7 @@
     figures,
     head,
     current,
+    skin,
     ref = $bindable(null),
     href,
     type = "button",
@@ -251,6 +264,7 @@
         figures,
         head,
         current,
+        skin,
       }),
       className
     )
